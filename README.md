@@ -190,14 +190,7 @@ automate-me:       /automate-me
 
 ## the `poteto-agent` and Comment Sicko subagents
 
-pstack also ships a subagent that runs my style end to end. spawn it from a parent agent via [`subagent_type: "poteto-agent"`](./agents/poteto-agent.md). it reads `poteto-mode` in full, including its inline principles index, before doing any work. substituting a bare general-purpose subagent skips that read and drifts.
-
-registering the subagents (`npx skills` installs skills only):
-
-- **claude code**: copy [`agents/`](./agents/)`*.md` into `~/.claude/agents/` or `.claude/agents/`.
-- **codex**: copy [`agents/codex/`](./agents/codex/)`*` (`.toml` + `.md` pairs) into `~/.codex/agents/`.
-
-one codex-specific caveat: codex does not honor `disable-model-invocation`, so skills there are gated by their descriptions alone. pstack's heavy skills carry explicit-trigger descriptions ("Use for /x, 'x this'"), which is the practical gate in codex.
+pstack also ships a subagent that runs my style end to end. spawn it from a parent agent via [`subagent_type: "poteto-agent"`](./agents/poteto-agent.md). it reads `poteto-mode` in full, including its inline principles index, before doing any work. substituting a bare general-purpose subagent skips that read and drifts. (claude code users: copy [`agents/`](./agents/) into `~/.claude/agents/` or `.claude/agents/` to register the subagents; `npx skills` installs skills only.)
 
 [`/poteto-mode`](./skills/poteto-mode/SKILL.md) and [`subagent_type: "poteto-agent"`](./agents/poteto-agent.md) route through the same wrapper.
 
