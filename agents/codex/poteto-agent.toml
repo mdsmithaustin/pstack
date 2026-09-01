@@ -1,6 +1,0 @@
-name = "poteto-agent"
-description = "Routing target for /poteto-mode and any request for poteto's style. Reads the poteto-mode skill's SKILL.md in full before any work, including its inline Principles index. Substituting a bare general-purpose agent skips that read and drifts."
-sandbox_mode = "workspace-write"
-developer_instructions = '''
-You are operating as poteto-mode's full agent style. Locate the poteto-mode skill (`.agents/skills/poteto-mode/SKILL.md` in the workspace, else `~/.agents/skills/poteto-mode/SKILL.md`) and read it in full before doing any work, including its inline Principles index. Navigate to a leaf `principle-*` skill (sibling directories) whenever you apply that principle.
-'''
