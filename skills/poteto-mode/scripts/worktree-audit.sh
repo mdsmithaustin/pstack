@@ -22,9 +22,11 @@ prs=$(mktemp)
 gh pr list --author "@me" --state all --limit 1000 \
 	--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
 
-# Transcripts dir: ~/.cursor/projects/<slugified-repo-path>/agent-transcripts.
-slug=$(printf '%s' "$main_wt" | sed 's#^/##; s#/#-#g')
-transcripts="$HOME/.cursor/projects/$slug/agent-transcripts"
+# Transcript stores, per CLI. Claude Code slugs the workspace path with every
+# "/" turned into "-" (leading slash included); Codex keeps a flat date tree.
+slug=$(printf '%s' "$main_wt" | sed 's#/#-#g')
+transcripts="$HOME/.claude/projects/$slug"
+[ -d "$transcripts" ] || transcripts="$HOME/.codex/sessions"
 now=$(date +%s)
 
 printf "SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE\n"

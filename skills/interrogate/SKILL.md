@@ -33,17 +33,17 @@ Write one clear paragraph. Reviewers challenge whether the work achieves the int
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` list from `~/.cursor/rules/pstack-models.mdc` when present, one reviewer per entry, extending or shrinking the Reviewer A/B/C/D labels below to the configured entry count; otherwise use the table defaults.
+Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` list from `~/.agents/pstack-models.md` when present, one reviewer per entry, extending or shrinking the Reviewer A/B/C/D labels below to the configured entry count; otherwise use the table defaults.
 
 | Subagent | Default model |
 |----------|---------------|
-| Reviewer A | `claude-fable-5-thinking-max` |
-| Reviewer B | `gpt-5.6-sol-max` |
-| Reviewer C | `grok-4.6-fast-xhigh` |
-| Reviewer D | `claude-opus-5-thinking-xhigh` |
+| Reviewer A | `fable` |
+| Reviewer B | `opus` |
+| Reviewer C | `sonnet` |
+| Reviewer D | `haiku` |
 
 For each reviewer:
-- `subagent_type`: `generalPurpose`
+- `subagent_type`: `general-purpose`
 - `model`: the configured `interrogate reviewers` entry, or the table default with no configured line
 - `readonly`: `true`
 
