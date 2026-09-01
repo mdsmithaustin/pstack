@@ -30,7 +30,7 @@ Identify the scope. If ambiguous, state your best-guess interpretation before ex
 - **Simple** (a single module, a small utility, a narrow question like "how does function X work"): skip explorer agents; the explainer explores and explains in a single pass. Go to Step 2b.
 - **Complex** (a subsystem spanning multiple files/services, a cross-cutting feature, a full architectural overview): spawn parallel explorer agents first, then hand off to the explainer. Go to Step 2a.
 
-When in doubt, lean simple. You can always spawn explorers if the explainer hits a wall.
+When in doubt, lean simple. You can always spawn explorers if the explainer hits a wall. Spawning, model, and read-only mechanics for this CLI: the **harness** skill.
 
 ### Step 2a. Explore (complex questions only)
 
