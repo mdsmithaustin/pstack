@@ -2,7 +2,7 @@
 
 **You own the skill's voice.** Agent-facing prose has a higher bar than human prose; unhelpful sentences become instructions.
 
-1. Author the `SKILL.md` per the [agentskills.io](https://agentskills.io) format: YAML frontmatter with `name` (kebab-case, matching the directory) and a `description` that names the concrete triggers — the words a user or task would actually contain — not generic keywords; then a body that opens with when-to-use, keeps steps imperative, and pushes bulk detail into `references/` files read on demand. Place project skills in `.agents/skills/<name>/`, personal ones in `~/.agents/skills/<name>/`, and symlink project skills into `.claude/skills/` and `.codex/skills/` so every CLI discovers them.
+1. Author the `SKILL.md` per the [agentskills.io](https://agentskills.io) format: YAML frontmatter with `name` (kebab-case, matching the directory) and a `description` that names the concrete triggers — the words a user or task would actually contain — not generic keywords; then a body that opens with when-to-use, keeps steps imperative, and pushes bulk detail into `references/` files read on demand. Place project skills in `.agents/skills/<name>/`, personal ones in `~/.agents/skills/<name>/`, then link each project skill into whatever directories the CLIs in use discover skills from (what `npx skills` maintains on install) so every CLI finds it.
 2. Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve.
 3. Test cases if structural; skip if subjective.
 4. Run **Opening a PR**.
