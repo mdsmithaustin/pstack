@@ -22,6 +22,7 @@ Remaining triggers:
 - Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing.
 - Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
 - Any subagent spawn, per-subagent model pick, or structured question, when unsure how this CLI does it → the **pstack-harness** skill maps the mechanics (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent).
+- Working in a GSD-managed repo (`.planning/` with `STATE.md` exists) → GSD owns the project lifecycle: milestones, phases, planning, project state. Route lifecycle requests to the matching `/gsd-*` command instead of the Multi-phase plan or Orchestrate machinery, and never write `.planning/` state yourself. Poteto-mode still governs how any individual task executes: rigor, verification, subagents, prose.
 - Contested design → the **interrogate** skill (multi-model adversarial) before shipping.
 - Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
 - Any prose surface → the **unslop** skill. Your reply is a prose surface; write it per **Writing the reply**. Agent-facing prose also follows the authoring guidance in `playbooks/authoring-a-skill.md`.

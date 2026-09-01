@@ -23,6 +23,12 @@ Upstream is the source of truth for the workflows themselves. This file records 
 | `.cursor-plugin/plugin.json` | removed; `npx skills` discovers `skills/*/SKILL.md` directly |
 | Cursor `Task` semantics (`subagent_type`, `model`, `readonly`, `environment: "cloud"`) assumed everywhere | a new **pstack-harness** skill (`skills/pstack-harness/`) maps spawning, per-subagent models, parallelism, read-only posture, structured questions, loops, and transcript access to Claude Code (`Task` tool), Codex (`codex exec` subprocesses, sequential fallback), and Hermes (delegation toolset, `hermes -z` subprocesses, `hermes sessions export`); fan-out skills point to it |
 
+## Port additions beyond substitution
+
+- Upstream's `tdd` and `teach` skills are renamed `poteto-tdd` and `poteto-teach` so a global install cannot clobber identically named skills a user already has; the bug-fix playbook, README, and guide reference the new names.
+- poteto-mode carries a GSD coexistence rule: in a repo with `.planning/STATE.md`, project lifecycle (milestones, phases, planning, state) routes to the matching `/gsd-*` command and poteto-mode never writes `.planning/`; it keeps task-level execution rigor.
+- The **pstack-harness** skill (see the substitution map) is new in this port.
+
 ## What deliberately did not change
 
 - Skill bodies, playbooks, and principles: the engineering content is upstream's, verbatim wherever no Cursor primitive was involved.
