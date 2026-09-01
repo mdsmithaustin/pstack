@@ -7,13 +7,13 @@ description: Configure which models pstack uses per role. Detects your available
 
 Write `~/.agents/pstack-models.md`, a config file that sets pstack's model per role. The skills read it on demand and fall back to their inline defaults when a line is absent, so this is an override layer, not a requirement.
 
-The inline defaults (and the shape in step 5) use Claude Code's subagent model aliases: `fable`, `opus`, `sonnet`, `haiku`. In a CLI where a slug is not valid for subagents (Codex, Hermes), treat it as `inherit-parent`: the role runs on the session model, and multi-model panels become same-model panels with differentiated briefs.
+The inline defaults (and the shape in step 5) are written as short model aliases (`fable`, `opus`, `sonnet`, `haiku`). Any value your harness does not accept for subagents means `inherit-parent`: the role runs on the session model, and multi-model panels become same-model panels with differentiated briefs.
 
 ## Steps
 
 ### 1. Detect available models
 
-Enumerate the model slugs you can pass to a subagent in this session (the `Task` tool's `model` values in Claude Code; the delegation tool's or `-m`'s accepted models in Hermes; the exec model flag in Codex — the **harness** skill maps the mechanics); that is the dependable source. If your CLI also exposes a models API or command that lists the user's entitled models, prefer it for completeness. If you cannot detect any, ask the user to paste the slugs they have access to. Never write a real slug you have not confirmed is available. The aliases `inherit-parent` and `auto` are always valid even though they are not detected slugs.
+Enumerate the model values your session's spawn mechanism accepts (find the mechanism per the **harness** skill); that is the dependable source. If your CLI also exposes a models API or command that lists the user's entitled models, prefer it for completeness. If you cannot detect any, ask the user to paste the slugs they have access to. Never write a real slug you have not confirmed is available. The aliases `inherit-parent` and `auto` are always valid even though they are not detected slugs.
 
 ### 2. Load current state
 

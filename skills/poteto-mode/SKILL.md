@@ -21,7 +21,7 @@ Remaining triggers:
 - Any code → name the data shape first, and choose its organizing structure per **principle-model-the-domain**.
 - Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing.
 - Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
-- Any subagent spawn, per-subagent model pick, or structured question, when unsure how this CLI does it → the **harness** skill maps the mechanics (Claude Code, Codex, Hermes).
+- Any subagent spawn, per-subagent model pick, or structured question, when unsure how this CLI does it → the **harness** skill maps the mechanics.
 - Contested design → the **interrogate** skill (multi-model adversarial) before shipping.
 - Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
 - Any prose surface → the **unslop** skill. Your reply is a prose surface; write it per **Writing the reply**. Agent-facing prose also follows the authoring guidance in `playbooks/authoring-a-skill.md`.
