@@ -243,6 +243,8 @@ upstream leans on cursor-only pieces. this port swaps them for self-contained eq
 
 your CLI already has a plan mode which works great with pstack. but personally, i don't believe in planning. the best spec is code. if you do want to make a plan, [`/poteto-mode`](./skills/poteto-mode/SKILL.md) covers it, but it's not a default. 
 
+> **running gsd too?** (port addition) they coexist by ownership: gsd owns the project lifecycle (`.planning/`, milestones, phases, planning); poteto-mode owns task-level execution rigor. in a gsd-managed repo, poteto-mode routes lifecycle work to the matching `/gsd-*` command and never touches `.planning/` itself.
+
 ## make it yours
 
 `poteto-mode` is my style. you may not want exactly that.
