@@ -251,7 +251,7 @@ your CLI already has a plan mode which works great with pstack. but personally, 
 
 type [`/automate-me`](./skills/automate-me/SKILL.md). it mines your recent transcripts, drafts a `<your-name>-mode` skill from how you've actually worked, and routes through pstack underneath. you keep pstack as the base and end up with your own routing skill alongside `poteto-mode`.
 
-models are configurable too. type [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it detects the models you have access to and writes a small config file (`~/.agents/pstack-models.md`) mapping each role (code, judgment, the review panels) to a model. every skill reads it and falls back to sensible defaults when the file is absent, so you override only what you want.
+models are configurable too. type [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it detects the models you have access to and writes a small config file mapping each role (code, judgment, the review panels) to a model — user-level at `~/.agents/pstack-models.md`, with an optional per-repo override at `.agents/pstack-models.md` whose lines win role-by-role. every skill reads the layered config and falls back to sensible defaults when no line matches, so you override only what you want. one config serves every CLI: values a harness can't use just mean inherit-parent there.
 
 ## automations
 
