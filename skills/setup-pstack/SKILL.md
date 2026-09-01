@@ -13,7 +13,7 @@ The inline defaults (and the shape in step 5) are written as short model aliases
 
 ### 1. Detect available models
 
-Enumerate the model values your session's spawn mechanism accepts (find the mechanism per the **harness** skill); that is the dependable source. If your CLI also exposes a models API or command that lists the user's entitled models, prefer it for completeness. If you cannot detect any, ask the user to paste the slugs they have access to. Never write a real slug you have not confirmed is available. The aliases `inherit-parent` and `auto` are always valid even though they are not detected slugs.
+Enumerate the model values your session's spawn mechanism accepts (find the mechanism per the **pstack-harness** skill); that is the dependable source. If your CLI also exposes a models API or command that lists the user's entitled models, prefer it for completeness. If you cannot detect any, ask the user to paste the slugs they have access to. Never write a real slug you have not confirmed is available. The aliases `inherit-parent` and `auto` are always valid even though they are not detected slugs.
 
 ### 2. Load current state
 

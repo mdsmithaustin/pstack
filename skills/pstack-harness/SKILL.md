@@ -1,6 +1,6 @@
 ---
-name: harness
-description: How pstack's delegation primitives map to whatever CLI is running them — spawning subagents, per-subagent models, parallelism, read-only posture, structured questions, loops, and transcript access. Read whenever a pstack skill says spawn, Task, subagent, or model and you are unsure how to realize that in the current harness.
+name: pstack-harness
+description: Maps pstack's delegation primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness) — how to spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, or AskQuestion and you are unsure how to realize that in this harness.
 ---
 
 # Harness adapters
