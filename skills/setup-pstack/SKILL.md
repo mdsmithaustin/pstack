@@ -5,7 +5,7 @@ description: Configure which models pstack uses per role. Detects your available
 
 # Setup pstack
 
-Write `~/.agents/pstack-models.md`, a config file that sets pstack's model per role. The skills read it on demand and fall back to their inline defaults when a line is absent, so this is an override layer, not a requirement.
+Write the pstack models config, a file that sets pstack's model per role. The skills read it on demand, layered workspace-first: a role line in `.agents/pstack-models.md` (workspace) overrides the same role in `~/.agents/pstack-models.md` (user), and roles absent from both fall back to each skill's inline default — so this is an override layer, not a requirement.
 
 The inline defaults (and the shape in step 5) are written as short model aliases (`fable`, `opus`, `sonnet`, `haiku`). Any value your harness does not accept for subagents means `inherit-parent`: the role runs on the session model, and multi-model panels become same-model panels with differentiated briefs.
 
@@ -17,7 +17,7 @@ Enumerate the model values your session's spawn mechanism accepts (find the mech
 
 ### 2. Load current state
 
-The default role-to-model mapping is the file shape shown in step 5 below. If `~/.agents/pstack-models.md` already exists, read it and treat its values as the current choices. Otherwise start from those defaults.
+The default role-to-model mapping is the file shape shown in step 5 below. Read both config layers when they exist — workspace `.agents/pstack-models.md`, then `~/.agents/pstack-models.md` — and treat the merged values (workspace winning per role) as the current choices. Otherwise start from those defaults. Unless the user asked for a per-repo override, the user-level file is the one being configured.
 
 ### 3. Map and confirm
 
@@ -29,7 +29,9 @@ Every *newly chosen* real slug must be in the detected set; `inherit-parent` and
 
 ### 5. Write the config
 
-Write `~/.agents/pstack-models.md` with one line per role, using the same labels poteto-mode uses. Rewrite the whole file so re-runs stay idempotent, but carry forward every existing line the user did not change — including values this harness could not validate; overwriting another CLI's choices with `inherit-parent` is the one failure mode to avoid. Shape:
+The target is `~/.agents/pstack-models.md`, or workspace `.agents/pstack-models.md` when the user asked for a per-repo override (only write roles the user actually wants pinned for this repo — every workspace line shadows the user-level one). If your file tool cannot write the target (a harness that scopes writes to the workspace), fall back in order: write it through your shell tool; else write the workspace file and say the config is project-local until copied to `~/.agents/`; else print the final content for the user to save. Never silently drop the write.
+
+Write the file with one line per role, using the same labels poteto-mode uses. Rewrite the whole file so re-runs stay idempotent, but carry forward every existing line the user did not change — including values this harness could not validate; overwriting another CLI's choices with `inherit-parent` is the one failure mode to avoid. Shape:
 
 ```
 ---

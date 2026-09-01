@@ -41,7 +41,7 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 
 ## Universal rules
 
-- **Panels degrade by model, never by count.** A four-model panel in a one-model harness is still four arms (parallel or sequential), each with a genuinely different brief; the list length in `~/.agents/pstack-models.md` sets the count.
+- **Panels degrade by model, never by count.** A four-model panel in a one-model harness is still four arms (parallel or sequential), each with a genuinely different brief; the configured list length sets the count.
 - **Cursor-era `Task` parameters describe intent.** `readonly`, `environment: "cloud"`, and `is_background` in a skill's text are not literal arguments unless your tool has them: realize them as a read-only brief, worktree isolation, and background execution.
-- **Config**: `~/.agents/pstack-models.md` maps roles to models. Any value not valid in the current harness is `inherit-parent`.
+- **Config**: the pstack models config maps roles to models, layered workspace-first — a role line in `.agents/pstack-models.md` (workspace) overrides the same role in `~/.agents/pstack-models.md` (user); roles absent from both fall back to each skill's inline default. Any value not valid in the current harness is `inherit-parent`.
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used.
