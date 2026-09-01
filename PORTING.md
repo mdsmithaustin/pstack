@@ -21,7 +21,7 @@ Upstream is the source of truth for the workflows themselves. This file records 
 | Cursor `/loop` | Claude Code `/loop`; in a CLI without one, re-prompt on an interval or run a watcher subagent |
 | Cursor automations / `api2.cursor.sh` webhooks (benny) | any scheduled agent runner (Claude Code scheduled agents, cron-driven CI job) exposing a webhook or schedule; paths move from `.cursor/automations/` to `.agents/automations/` |
 | `.cursor-plugin/plugin.json` | removed; `npx skills` discovers `skills/*/SKILL.md` directly |
-| Cursor `Task` semantics (`subagent_type`, `model`, `readonly`, `environment: "cloud"`) assumed everywhere | a new **harness** skill (`skills/harness/`) maps spawning, per-subagent models, parallelism, read-only posture, structured questions, loops, and transcript access to Claude Code (`Task` tool), Codex (`codex exec` subprocesses, sequential fallback), and Hermes (delegation toolset, `hermes -z` subprocesses, `hermes sessions export`); fan-out skills point to it |
+| Cursor `Task` semantics (`subagent_type`, `model`, `readonly`, `environment: "cloud"`) assumed everywhere | a new **pstack-harness** skill (`skills/pstack-harness/`) maps spawning, per-subagent models, parallelism, read-only posture, structured questions, loops, and transcript access to Claude Code (`Task` tool), Codex (`codex exec` subprocesses, sequential fallback), and Hermes (delegation toolset, `hermes -z` subprocesses, `hermes sessions export`); fan-out skills point to it |
 
 ## What deliberately did not change
 
