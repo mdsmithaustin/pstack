@@ -22,7 +22,7 @@ Skip when the conversation is trivial, off-topic, or already covered by an exist
 
 ### 1. Locate the active transcript
 
-The parent finds its own transcript file before fanning out: the newest session in this workspace's transcript store (locate it per the **harness** skill). Do not read other workspaces' transcript stores. That crosses workspace boundaries and reads private chats from unrelated projects.
+The parent finds its own transcript file before fanning out: the newest session in this workspace's transcript store (locate it per the **pstack-harness** skill). Do not read other workspaces' transcript stores. That crosses workspace boundaries and reads private chats from unrelated projects.
 
 ```bash
 ls -t <agent-transcripts>/*.jsonl <agent-transcripts>/*/*.jsonl <agent-transcripts>/*/subagents/*.jsonl 2>/dev/null | head -10
@@ -34,7 +34,7 @@ For each candidate, read the first JSONL line and check that `message.content[0]
 
 ### 2. Spawn three reviewers in parallel
 
-One message, three `Task` calls, `subagent_type: general-purpose`, explicit `model:` on each, agent mode (`readonly: false`). Reviewers need MCP access for context lookups (tickets, chat threads, observability traces referenced in the transcript); readonly strips MCPs. The prompt forbids file writes; the parent applies edits. Spawning, model, and read-only mechanics for this CLI: the **harness** skill.
+One message, three `Task` calls, `subagent_type: general-purpose`, explicit `model:` on each, agent mode (`readonly: false`). Reviewers need MCP access for context lookups (tickets, chat threads, observability traces referenced in the transcript); readonly strips MCPs. The prompt forbids file writes; the parent applies edits. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
 
 | Lens | `model` | Prompt template |
 |---|---|---|
