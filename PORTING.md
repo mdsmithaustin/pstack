@@ -28,6 +28,7 @@ Upstream is the source of truth for the workflows themselves. This file records 
 - Upstream's `tdd` and `teach` skills are renamed `poteto-tdd` and `poteto-teach` so a global install cannot clobber identically named skills a user already has; the bug-fix playbook, README, and guide reference the new names.
 - poteto-mode carries a GSD coexistence rule: in a repo with `.planning/STATE.md`, project lifecycle (milestones, phases, planning, state) routes to the matching `/gsd-*` command and poteto-mode never writes `.planning/`; it keeps task-level execution rigor.
 - The **pstack-harness** skill (see the substitution map) is new in this port.
+- Codex does not honor `disable-model-invocation`, so every skill that sets it also carries `agents/openai.yaml` with `policy.allow_implicit_invocation: false` — the Codex-standard analog. The two flags must stay in sync: adding or removing one means adding or removing the other.
 - The models config is layered workspace-first: a role line in `.agents/pstack-models.md` overrides `~/.agents/pstack-models.md`; setup-pstack preserves values it cannot validate (another harness's choices) and has a write-fallback ladder (shell tool → workspace file → print) for harnesses that cannot write to the home directory.
 
 ## What deliberately did not change
