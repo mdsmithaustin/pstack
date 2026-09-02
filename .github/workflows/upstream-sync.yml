@@ -1,0 +1,99 @@
+name: Upstream pstack sync
+
+on:
+  schedule:
+    - cron: '23 14 */2 * *' # every 2 days, 14:23 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gate on new upstream pstack commits
+        id: gate
+        run: |
+          git remote add upstream https://github.com/cursor/plugins.git
+          git fetch upstream main --quiet
+          latest=$(git rev-list -1 upstream/main -- pstack)
+          recorded=$(cat .github/upstream-sha)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "recorded=$recorded" >> "$GITHUB_OUTPUT"
+          if [ "$latest" = "$recorded" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Upstream unchanged at $latest; nothing to do."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if a sync PR is already open
+        id: dup
+        if: steps.gate.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh pr list --state open --search 'head:sync/upstream' --json number --jq length)
+          echo "open=$open" >> "$GITHUB_OUTPUT"
+          [ "$open" = "0" ] || echo "A sync PR is already open; skipping until it lands."
+
+      - name: Port upstream changes
+        if: steps.gate.outputs.changed == 'true' && steps.dup.outputs.open == '0'
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--allowedTools "Bash,Read,Write,Edit,Glob,Grep"'
+          prompt: |
+            You are in mdsmithaustin/pstack, a CLI-agnostic port of the
+            `pstack/` directory of cursor/plugins. PORTING.md at the repo root
+            is the porting contract: read it in full first — the substitution
+            map, the port additions, and the sync procedure all bind you.
+
+            The `upstream` remote is fetched. Last synced upstream commit:
+            ${{ steps.gate.outputs.recorded }} (in .github/upstream-sha).
+            Latest upstream commit touching pstack/:
+            ${{ steps.gate.outputs.latest }}.
+
+            Task: stage the upstream changes as a draft PR, transformed for
+            this port.
+
+            1. Study `git log` and `git diff ${{ steps.gate.outputs.recorded }}..upstream/main -- pstack/`.
+            2. Path mapping: upstream `pstack/skills/<x>` -> `skills/<x>`,
+               except upstream `tdd` -> `poteto-tdd` and `teach` ->
+               `poteto-teach`. Upstream docs map to this repo's root files
+               where they exist.
+            3. Apply each incoming hunk with the PORTING.md substitution map
+               (model slugs, paths, Cursor primitives). Merge into our files
+               — never wholesale-overwrite: this fork's additions (GitNexus
+               nudges, pstack-harness pointers, the GSD coexistence rule,
+               agents/openai.yaml files, renamed skill references) must
+               survive. If upstream adds or removes `disable-model-invocation`
+               on a skill, add or remove that skill's `agents/openai.yaml`
+               (policy: allow_implicit_invocation: false) to match.
+            4. Every SKILL.md frontmatter `name:` must equal its directory
+               name. Verify after editing.
+            5. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
+            6. If there are portable changes: create branch
+               `sync/upstream-<YYYYMMDD>`, commit with a message summarizing
+               the upstream commits ported, push it, and open a DRAFT PR to
+               main with `gh pr create --draft`. The PR body lists each
+               upstream commit, what transformation was applied, and anything
+               that needs human judgment. If nothing is portable (upstream
+               churn with no effect on this port), commit only the
+               .github/upstream-sha bump directly to main and push.
+
+            Never force-push. Never push to main except the SHA-only bump.
+            If you are unsure whether a change is portable, include it in the
+            draft PR with a "needs judgment" note rather than dropping it.
