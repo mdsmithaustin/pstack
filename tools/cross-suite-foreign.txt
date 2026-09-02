@@ -1,0 +1,32 @@
+# Skills that belong to other suites. This port must run without them, so a
+# skill file may name one only as an optional capability with a stated
+# fallback (see tools/check-cross-suite-references.py).
+# Matt Pocock skills (mattpocock/skills)
+code-review
+codebase-design
+diagnosing-bugs
+domain-modeling
+grill-me
+grill-with-docs
+grilling
+handoff
+implement
+improve-codebase-architecture
+loop-me
+prototype
+research
+resolving-merge-conflicts
+setup-matt-pocock-skills
+tdd
+teach
+to-spec
+to-tickets
+triage
+wayfinder
+# agent-loop-runner suite (mdsmithaustin/agent-loop-runner)
+acceptance-loop
+campaign-loop
+loop-runner
+research-loop
+# GSD (any gsd-* skill)
+prefix:gsd-

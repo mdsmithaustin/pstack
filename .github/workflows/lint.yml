@@ -1,0 +1,17 @@
+name: lint
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Frontmatter name matches directory, description present
+        run: python3 tools/check-skill-frontmatter.py skills
+      - name: No unconditional dependency on another suite's skills
+        run: python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
