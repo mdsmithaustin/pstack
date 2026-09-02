@@ -5,7 +5,7 @@ import {
   mapRollupNode,
   orderStack,
   parsePullRequest,
-  parseReviewThreads,
+  parseReviewState,
   resolveChecks,
   resolveContext,
 } from "./github.ts";
@@ -192,68 +192,174 @@ describe("closed enum parsing", () => {
   });
 });
 
-it("annotates Bugbot threads with distinct review-pass counts", () => {
-  const response = {
+function reviewStateResponse(args: {
+  readonly threads?: readonly unknown[];
+  readonly reviews?: readonly unknown[];
+  readonly reviewRequests?: readonly unknown[];
+}) {
+  return {
     data: {
       repository: {
         pullRequest: {
-          reviewThreads: {
+          reviewThreads: { nodes: args.threads ?? [] },
+          reviews: { nodes: args.reviews ?? [] },
+          reviewRequests: { nodes: args.reviewRequests ?? [] },
+        },
+      },
+    },
+  };
+}
+
+describe("parseReviewState", () => {
+  it("annotates Bugbot threads with distinct review-pass counts", () => {
+    const response = reviewStateResponse({
+      threads: [
+        {
+          id: "one",
+          isResolved: false,
+          comments: {
             nodes: [
               {
-                id: "one",
-                isResolved: false,
-                comments: {
-                  nodes: [
-                    {
-                      body: "RUN_ID: run-1",
-                      createdAt: "now",
-                      path: "a.ts",
-                      line: 1,
-                      author: { login: "bugbot" },
-                    },
-                  ],
-                },
+                body: "RUN_ID: run-1",
+                createdAt: "now",
+                path: "a.ts",
+                line: 1,
+                author: { login: "bugbot", __typename: "User" },
               },
+            ],
+          },
+        },
+        {
+          id: "two",
+          isResolved: false,
+          comments: {
+            nodes: [
               {
-                id: "two",
-                isResolved: false,
-                comments: {
-                  nodes: [
-                    {
-                      body: "CURSOR_AUTOMATION_ID: run-2 severity high",
-                      createdAt: "now",
-                      path: null,
-                      line: null,
-                      author: { login: "cursor" },
-                    },
-                  ],
-                },
+                body: "CURSOR_AUTOMATION_ID: run-2 severity high",
+                createdAt: "now",
+                path: null,
+                line: null,
+                author: { login: "cursor", __typename: "User" },
               },
+            ],
+          },
+        },
+        {
+          id: "resolved",
+          isResolved: true,
+          comments: {
+            nodes: [
               {
-                id: "resolved",
-                isResolved: true,
-                comments: {
-                  nodes: [
-                    {
-                      body: "RUN_ID: run-3",
-                      createdAt: "now",
-                      path: null,
-                      line: null,
-                      author: { login: "bugbot" },
-                    },
-                  ],
+                body: "RUN_ID: run-3",
+                createdAt: "now",
+                path: null,
+                line: null,
+                author: { login: "bugbot", __typename: "User" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const state = parseReviewState(response);
+    expect(state.threads).toHaveLength(2);
+    expect(state.threads.map((thread) => thread.bot)).toEqual([
+      { login: "bugbot", passes: 3 },
+      { login: "bugbot", passes: 3 },
+    ]);
+    expect(state.pendingBots).toEqual([]);
+  });
+
+  it("classifies a first comment from a GitHub Bot author as that bot, counting its reviews", () => {
+    const response = reviewStateResponse({
+      threads: [
+        {
+          id: "copilot-thread",
+          isResolved: false,
+          comments: {
+            nodes: [
+              {
+                body: "Consider renaming this variable.",
+                createdAt: "now",
+                path: "a.ts",
+                line: 3,
+                author: {
+                  login: "copilot-pull-request-reviewer",
+                  __typename: "Bot",
                 },
               },
             ],
           },
         },
-      },
-    },
-  };
-  const threads = parseReviewThreads(response);
-  expect(threads).toHaveLength(2);
-  expect(threads.map((thread) => thread.isBugbot)).toEqual([true, true]);
-  expect(threads.map((thread) => thread.bugbotReviewPasses)).toEqual([3, 3]);
+      ],
+      reviews: [
+        {
+          author: {
+            login: "copilot-pull-request-reviewer",
+            __typename: "Bot",
+          },
+        },
+        {
+          author: {
+            login: "copilot-pull-request-reviewer",
+            __typename: "Bot",
+          },
+        },
+        { author: { login: "octocat", __typename: "User" } },
+      ],
+    });
+    const state = parseReviewState(response);
+    expect(state.threads).toHaveLength(1);
+    expect(state.threads[0].bot).toEqual({
+      login: "copilot-pull-request-reviewer",
+      passes: 2,
+    });
+  });
+
+  it("leaves a human-authored thread's bot null", () => {
+    const response = reviewStateResponse({
+      threads: [
+        {
+          id: "human-thread",
+          isResolved: false,
+          comments: {
+            nodes: [
+              {
+                body: "Please add a test for this.",
+                createdAt: "now",
+                path: "a.ts",
+                line: 5,
+                author: { login: "octocat", __typename: "User" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const state = parseReviewState(response);
+    expect(state.threads[0].bot).toBeNull();
+  });
+
+  it("collects pending Bot review requests, ignoring human requests", () => {
+    const response = reviewStateResponse({
+      reviewRequests: [
+        {
+          requestedReviewer: {
+            __typename: "Bot",
+            login: "copilot-pull-request-reviewer",
+          },
+        },
+        { requestedReviewer: { __typename: "User" } },
+      ],
+    });
+    expect(parseReviewState(response).pendingBots).toEqual([
+      "copilot-pull-request-reviewer",
+    ]);
+  });
+
+  it("reports no pending review bots when there are no review requests", () => {
+    expect(parseReviewState(reviewStateResponse({})).pendingBots).toEqual([]);
+  });
 });
 
 describe("context and stack discovery", () => {
