@@ -34,19 +34,19 @@ For each candidate, read the first JSONL line and check that `message.content[0]
 
 ### 2. Spawn three reviewers in parallel
 
-One message, three `Task` calls, `subagent_type: general-purpose`, explicit `model:` on each, agent mode (`readonly: false`). Reviewers need MCP access for context lookups (tickets, chat threads, observability traces referenced in the transcript); readonly strips MCPs. The prompt forbids file writes; the parent applies edits. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
+One message, three `Task` calls, `subagent_type: general-purpose`, explicit `model:` and effort on each (resolved per the **pstack-harness** skill), agent mode (`readonly: false`). Reviewers need MCP access for context lookups (tickets, chat threads, observability traces referenced in the transcript); readonly strips MCPs. The prompt forbids file writes; the parent applies edits. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
 
 | Lens | `model` | Prompt template |
 |---|---|---|
-| Judgment | your configured reflect-judgment model (default `fable`) | `references/judgment-reviewer.md` |
-| Tooling | your configured reflect-tooling model (default `opus`) | `references/tooling-reviewer.md` |
-| Divergent | your configured reflect-judgment model (default `fable`) | `references/divergent-reviewer.md` |
+| Judgment | your configured reflect-judgment model and effort (default `fable`) | `references/judgment-reviewer.md` |
+| Tooling | your configured reflect-tooling model and effort (default `opus`) | `references/tooling-reviewer.md` |
+| Divergent | your configured reflect-divergent model and effort (default `fable`) | `references/divergent-reviewer.md` |
 
 Pass each template verbatim, substituting the transcript path or digest where marked. Reviewers return findings in the `Task` response body.
 
 ### 3. Synthesize
 
-One `Task` call, `subagent_type: general-purpose`, using your configured reflect-judgment model (default `fable`), agent mode (`readonly: false`). The synthesizer's quality check includes spot-verifying citations, which can require MCP access; readonly strips MCPs. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.
+One `Task` call, `subagent_type: general-purpose`, using your configured reflect-synthesizer model and effort (default `fable`), agent mode (`readonly: false`). The synthesizer's quality check includes spot-verifying citations, which can require MCP access; readonly strips MCPs. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.
 
 ### 4. Structural enforcement check
 
