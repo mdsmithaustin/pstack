@@ -32,7 +32,7 @@ Identify the scope. If ambiguous, state your best-guess interpretation before ex
 
 When in doubt, lean simple. You can always spawn explorers if the explainer hits a wall. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
 
-If the repo has a GitNexus index (`.gitnexus/` exists), seed exploration with it: `gitnexus query "<concept>"` for execution flows, `gitnexus context <symbol>` for callers/callees, `gitnexus trace <from> <to>` for the path between two symbols. Graph results choose where to read; the code itself remains the source of truth — the index is a snapshot and can lag the working tree.
+If the repo has a GitNexus index (`.gitnexus/` exists), seed exploration with it: `gitnexus query "<concept>"` for execution flows, `gitnexus context <symbol>` for callers/callees, `gitnexus trace <from> <to>` for the path between two symbols. Graph results choose where to read; the code itself remains the source of truth — the index is a snapshot and can lag the working tree. No index? Explore normally; after answering a complex question, you may suggest `gitnexus analyze` to the user once for repos worth exploring again — never run it yourself (it writes `.gitnexus/` into the working tree and can take minutes).
 
 ### Step 2a. Explore (complex questions only)
 
