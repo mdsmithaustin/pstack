@@ -1,6 +1,6 @@
 ---
 name: pstack-harness
-description: Maps pstack's delegation primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness) — how to spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), open a todolist, loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or todolist and you are unsure how to realize that in this harness.
+description: Maps pstack's delegation primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness) — how to spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), open a todolist, loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or todolist and you are unsure how to realize that in this harness, or names a sibling skill you cannot find in your tool inventory.
 ---
 
 # Harness adapters
@@ -44,6 +44,7 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 ## Universal rules
 
 - **Panels degrade by model, never by count.** A four-model panel in a one-model harness is still four arms (parallel or sequential), each with a genuinely different brief; the configured list length sets the count.
+- **Named sibling skills are files.** When a pstack skill says "the architect skill" or "read the leaf skill", it names a sibling directory under the same installed skills root. Most pstack skills are gated against model invocation, so they appear in no tool inventory and their descriptions are not in context — that never means missing. Read the named skill's SKILL.md (and any files it references) directly and follow it; record that you applied it by file read. Never edit a skill's gating to make it invocable.
 - **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a todolist, and Cursor-era parameters like `readonly`, `environment: "cloud"`, and `is_background` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief, worktree isolation, background execution). A missing tool never cancels the step — find the equivalent, and never report a step blocked on a tool name.
 - **Config**: the pstack models config maps roles to models, layered workspace-first — a role line in `.agents/pstack-models.md` (workspace) overrides the same role in `~/.agents/pstack-models.md` (user); roles absent from both fall back to each skill's inline default. Any value not valid in the current harness is `inherit-parent`.
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used.

@@ -38,7 +38,7 @@ Remaining triggers:
 
 ## Principles
 
-Read the leaf skill in full for any principle you apply. Each entry names when it applies.
+Read the leaf skill in full for any principle you apply. Each entry names when it applies. Leaf and sibling skills named in this suite are mostly gated against model invocation, so they are absent from your tool inventory: that never means missing — read the named skill's directory under the installed skills root directly (the **pstack-harness** skill maps this).
 
 **Core**
 
