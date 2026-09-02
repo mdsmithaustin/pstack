@@ -8,4 +8,4 @@ Apply it in the GitHub UI under Settings, Rules, Rulesets, "Import a ruleset", o
 gh api --method POST repos/<owner>/<repo>/rulesets --input .github/rulesets/copilot-code-review.json
 ```
 
-Re-running the command creates a duplicate; edit the existing ruleset instead.
+Re-running the command creates a duplicate; edit the existing ruleset instead. Applied to pstack and agent-loop-runner on 2026-09-02.
