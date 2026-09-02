@@ -29,6 +29,7 @@ Upstream is the source of truth for the workflows themselves. This file records 
 - poteto-mode carries a GSD coexistence rule: in a repo with `.planning/STATE.md`, project lifecycle (milestones, phases, planning, state) routes to the matching `/gsd-*` command and poteto-mode never writes `.planning/`; it keeps task-level execution rigor.
 - The **pstack-harness** skill (see the substitution map) is new in this port.
 - Codex does not honor `disable-model-invocation`, so every skill that sets it also carries `agents/openai.yaml` with `policy.allow_implicit_invocation: false` — the Codex-standard analog. The two flags must stay in sync: adding or removing one means adding or removing the other.
+- The **how** skill (SKILL.md and `references/explorer-prompt.md`) carries a conditional GitNexus nudge: when `.gitnexus/` exists in the repo, exploration is seeded with `gitnexus query`/`context`/`trace` before grepping, with the code itself remaining the source of truth. No-op on hosts and repos without GitNexus.
 - The models config is layered workspace-first: a role line in `.agents/pstack-models.md` overrides `~/.agents/pstack-models.md`; setup-pstack preserves values it cannot validate (another harness's choices) and has a write-fallback ladder (shell tool → workspace file → print) for harnesses that cannot write to the home directory.
 
 ## What deliberately did not change
