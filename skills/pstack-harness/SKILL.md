@@ -50,12 +50,13 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 - **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a todolist, and Cursor-era parameters like `readonly`, `environment: "cloud"`, and `is_background` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief, worktree isolation, background execution). A missing tool never cancels the step — find the equivalent, and never report a step blocked on a tool name.
 - **Config**: roles resolve to a model and an effort per **The models config** below. A value the current harness cannot use is `inherit-parent` for that field only.
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used.
+- **No improvised models**: every spawn resolves through a named role. A spawn whose skill names no role resolves through the `default` line, then `inherit-parent`. Never pick a model that neither the config nor the skill's inline default names, and say which role the model came from.
 
 ## The models config
 
 `~/.agents/pstack-models.md` (user) and `.agents/pstack-models.md` (workspace) map each role to a model and a reasoning effort. `setup-pstack` writes and lints the file; its shipped default is `examples/pstack-models.md` next to that skill.
 
-**Grammar.** `role: entry`, or `role, role: entry` to bind several roles at once. Panel roles (`how critics`, `arena runners`, `arena cross-judge pool`, `architect runners`, `interrogate reviewers`) take a comma list, one arm per entry. An entry is `model` or `model@effort`. Efforts are `none`, `low`, `medium`, `high`, `xhigh`, `max`; `ultra` is Codex's Pro mode and is valid only on `gpt-5.6-sol`. `inherit-parent` and `auto`, with or without `@effort`, run the arm on the parent chat model. A `## codex`, `## claude-code`, or `## hermes` header starts a section whose lines apply to that harness only; lines above any header apply everywhere.
+**Grammar.** `role: entry`, or `role, role: entry` to bind several roles at once. Panel roles (`how critics`, `arena runners`, `arena cross-judge pool`, `architect runners`, `interrogate reviewers`) take a comma list, one arm per entry. An entry is `model` or `model@effort`. Efforts are `none`, `low`, `medium`, `high`, `xhigh`, `max`; `ultra` is Codex's Pro mode and is valid only on `gpt-5.6-sol`. `inherit-parent` and `auto`, with or without `@effort`, run the arm on the parent chat model. A `## codex`, `## claude-code`, or `## hermes` header starts a section whose lines apply to that harness only; lines above any header apply everywhere. Two roles are special. `trail reviewer` is the show-me-your-work reviewer and must differ from the model that did the work. `default` is the entry for any spawn whose skill names no role; it ships as `inherit-parent`.
 
 **Precedence.** Resolve the model and the effort of a role separately, taking the first level that has a value:
 
@@ -64,11 +65,12 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 3. user file, this harness's section
 4. user file, flat lines
 5. the skill's inline default for the model; the effort policy below for the effort
-6. `inherit-parent`: the value is `inherit-parent` or `auto`, the harness has no way to set that field, or the harness rejected the value
+6. the `default` line, searched through levels 1 to 4, for a spawn whose skill names no role or whose role has no inline default
+7. `inherit-parent`: the value is `inherit-parent` or `auto`, the harness has no way to set that field, or the harness rejected the value
 
 A section never leaks into another harness. A workspace flat line beats a user harness line, so the old rule "workspace wins per role" still holds.
 
-**Codex alias translation.** On Codex, a Claude alias that reaches step 6 translates instead of inheriting:
+**Codex alias translation.** On Codex, a Claude alias that reaches step 7 translates instead of inheriting:
 
 | alias | Codex entry | why |
 |---|---|---|
@@ -79,4 +81,4 @@ A section never leaks into another harness. A workspace flat line beats a user h
 
 The translated effort belongs to the alias and stands unless the entry wrote its own `@effort`. Hermes has no translation table yet; an alias there is `inherit-parent`, as before.
 
-**Effort policy.** When no `@effort` is written: floor `high` for every role. `xhigh` for hardest tasks, judgment and prose, bug-fix, perf-issue, hillclimb, how explainer, how critics, why synthesizer, reflect judgment, divergent and synthesizer, arena cross-judge pool, and architect runners. Nothing in this policy produces `max` or `ultra`; those come only from an explicit `@max` or `@ultra` on a line, from the Codex translation of `fable`, or from an explicit escalation in the task. Effort never changes an arm count or a model choice.
+**Effort policy.** When no `@effort` is written: floor `high` for every role. `xhigh` for hardest tasks, judgment and prose, bug-fix, perf-issue, hillclimb, how explainer, how critics, why synthesizer, reflect judgment, divergent and synthesizer, arena cross-judge pool, architect runners, and trail reviewer. Nothing in this policy produces `max` or `ultra`; those come only from an explicit `@max` or `@ultra` on a line, from the Codex translation of `fable`, or from an explicit escalation in the task. Effort never changes an arm count or a model choice.
