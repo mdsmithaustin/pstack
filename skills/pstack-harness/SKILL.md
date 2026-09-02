@@ -1,6 +1,6 @@
 ---
 name: pstack-harness
-description: Maps pstack's delegation primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness) — how to spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, or AskQuestion and you are unsure how to realize that in this harness.
+description: Maps pstack's delegation primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness) — how to spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), open a todolist, loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or todolist and you are unsure how to realize that in this harness.
 ---
 
 # Harness adapters
@@ -25,6 +25,8 @@ Each writer gets its own git worktree, whichever mechanism spawns it.
 
 **Structured questions (`AskQuestion`).** Your harness's structured-question tool if it has one; otherwise ask in plain chat.
 
+**Open a todolist.** Your harness's todo or plan-tracking tool if it has one; otherwise keep the list visible another way — a checklist in your reply updated as items land, or a scratch `TODO.md` in the worktree. Missing the tool never cancels the practice: the full plan stated up front, one item in progress at a time, skips marked with a reason, nothing silently dropped.
+
 **Loops and wake-ups.** Your harness's loop or scheduling facility; otherwise a re-invoking wrapper (script, cron, CI).
 
 **Transcripts.** Every harness keeps this workspace's session record somewhere — log files under its data directory, or a database with an export command. Locate yours before reading, and stay inside the current workspace's sessions; other projects' transcripts are private.
@@ -42,6 +44,6 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 ## Universal rules
 
 - **Panels degrade by model, never by count.** A four-model panel in a one-model harness is still four arms (parallel or sequential), each with a genuinely different brief; the configured list length sets the count.
-- **Cursor-era `Task` parameters describe intent.** `readonly`, `environment: "cloud"`, and `is_background` in a skill's text are not literal arguments unless your tool has them: realize them as a read-only brief, worktree isolation, and background execution.
+- **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a todolist, and Cursor-era parameters like `readonly`, `environment: "cloud"`, and `is_background` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief, worktree isolation, background execution). A missing tool never cancels the step — find the equivalent, and never report a step blocked on a tool name.
 - **Config**: the pstack models config maps roles to models, layered workspace-first — a role line in `.agents/pstack-models.md` (workspace) overrides the same role in `~/.agents/pstack-models.md` (user); roles absent from both fall back to each skill's inline default. Any value not valid in the current harness is `inherit-parent`.
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used.
