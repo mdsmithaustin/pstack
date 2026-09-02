@@ -40,7 +40,7 @@ Upstream is the source of truth for the workflows themselves. This file records 
 
 ## Syncing from upstream
 
-Automated: `.github/workflows/upstream-sync.yml` runs every 2 days, gates on new upstream commits touching `pstack/` (baseline in `.github/upstream-sha`), and has Claude apply the substitution map and port additions to the incoming diff, staging a draft PR. Requires the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (`claude setup-token`).
+The upstream sync workflow is available through the manual-dispatch GitHub Action in `.github/workflows/upstream-sync.yml`. Local schedules, machine paths, logs, and maintainer-specific tooling are intentionally not documented in this repository.
 
 Manually:
 
