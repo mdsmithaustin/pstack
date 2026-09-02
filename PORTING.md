@@ -40,7 +40,7 @@ Upstream is the source of truth for the workflows themselves. This file records 
 
 ## Syncing from upstream
 
-Automated: `.github/workflows/upstream-sync.yml` runs every 2 days, gates on new upstream commits touching `pstack/` (baseline in `.github/upstream-sha`), and has Claude apply the substitution map and port additions to the incoming diff, staging a draft PR. Requires the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (`claude setup-token`).
+Automated: a launchd agent on the maintainer's machine (`~/.local/bin/pstack-upstream-sync.sh` + `~/Library/LaunchAgents/com.mdsmithaustin.pstack-upstream-sync.plist`, logs in `~/.local/state/pstack-sync/`) checks daily at 9:23 local. The gate is a free fetch + SHA compare against `.github/upstream-sha`; only when upstream's `pstack/` moved does it invoke the local OAuth-authenticated `claude -p` to apply the substitution map and port additions and stage a draft PR (skipped while a `sync/upstream-*` PR is open). `.github/workflows/upstream-sync.yml` is a manual-dispatch fallback that does the same in CI; it needs the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (`claude setup-token`).
 
 Manually:
 
