@@ -89,7 +89,9 @@ jobs:
             6. If there are portable changes: create branch
                `sync/upstream-<YYYYMMDD>`, commit with a message summarizing
                the upstream commits ported, push it, and open a DRAFT PR to
-               main with `gh pr create --draft`. The PR body lists each
+               main with `gh pr create --draft --repo mdsmithaustin/pstack`
+               (required: the upstream remote otherwise hijacks base-repo
+               resolution). The PR body lists each
                upstream commit, what transformation was applied, and anything
                that needs human judgment. If nothing is portable (upstream
                churn with no effect on this port), commit only the
