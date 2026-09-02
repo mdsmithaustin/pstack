@@ -63,7 +63,7 @@ export async function readSnapshot(args: {
     return { kind: "merged", context: args.context, facts };
   if (facts.state === "CLOSED")
     return { kind: "closed", context: args.context, facts };
-  const threads = await args.reader.reviewThreads(args.context);
+  const reviewState = await args.reader.reviewState(args.context);
   const checks = await resolveChecks(args.reader, args.context);
   const failed = nonEmpty(
     checks.checks.filter(
@@ -123,15 +123,17 @@ export async function readSnapshot(args: {
     kind: "open",
     context: args.context,
     facts,
-    threads,
+    threads: reviewState.threads,
     ci,
-    reviewAutomationRunning: checks.checks.some(
-      (check) =>
-        check.kind === "pending" &&
-        AUTOMATION_TOKENS.some((token) =>
-          check.name.toLowerCase().includes(token)
-        )
-    ),
+    reviewAutomationRunning:
+      checks.checks.some(
+        (check) =>
+          check.kind === "pending" &&
+          AUTOMATION_TOKENS.some((token) =>
+            check.name.toLowerCase().includes(token)
+          )
+      ) || reviewState.pendingBots.length > 0,
+    pendingReviewBots: reviewState.pendingBots,
   };
 }
 const conflictBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
@@ -190,6 +192,7 @@ function readyContribution(
     row.kind !== "open" ||
     row.ci.kind !== "ci-clean" ||
     row.threads.length !== 0 ||
+    row.pendingReviewBots.length !== 0 ||
     conflictBlocker(row) !== null ||
     gateReason(row, allowDraft) !== null
   )
@@ -223,7 +226,20 @@ export function classifyPr(
   ])
     if (blocker !== null) return { kind: "blocker", blocker };
   if (row.kind === "open" && row.ci.kind === "ci-pending")
-    return { kind: "waiting", frontier: row.context, pending: row.ci.pending };
+    return {
+      kind: "waiting",
+      frontier: row.context,
+      reason: { kind: "pending-checks", pending: row.ci.pending },
+    };
+  if (row.kind === "open") {
+    const bots = nonEmpty(row.pendingReviewBots);
+    if (bots !== null)
+      return {
+        kind: "waiting",
+        frontier: row.context,
+        reason: { kind: "pending-review-bots", bots },
+      };
+  }
   const ready = readyContribution(row, allowDraft);
   if (ready === null) throw new Error("snapshot has no classified decision");
   return ready.kind === "merged-pr"
@@ -248,8 +264,18 @@ export function selectTierMajorStackDecision(
       return {
         kind: "waiting",
         frontier: row.context,
-        pending: row.ci.pending,
+        reason: { kind: "pending-checks", pending: row.ci.pending },
       };
+  for (const row of rows) {
+    if (row.kind !== "open") continue;
+    const bots = nonEmpty(row.pendingReviewBots);
+    if (bots !== null)
+      return {
+        kind: "waiting",
+        frontier: row.context,
+        reason: { kind: "pending-review-bots", bots },
+      };
+  }
   const prs = nonEmpty(
     rows
       .map((row) => readyContribution(row, allowDraft))
@@ -491,7 +517,7 @@ export async function runSimple(args: {
         kind: "WAITING",
         terminal: false,
         frontier: decision.frontier,
-        reason: { kind: "pending-checks", pending: decision.pending },
+        reason: decision.reason,
       })
     );
     return {
@@ -502,7 +528,7 @@ export async function runSimple(args: {
           kind: "TIMEOUT",
           terminal: true,
           exitCode: 5,
-          reason: { kind: "pending-checks", pending: decision.pending },
+          reason: decision.reason,
         }),
     };
   };
