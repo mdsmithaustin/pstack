@@ -23,6 +23,8 @@ arena cross-judge pool: fable, opus, sonnet, haiku
 swarm workers: sonnet
 architect runners: fable, opus, sonnet, haiku
 interrogate reviewers: fable, opus, sonnet, haiku
+trail reviewer: opus
+default: inherit-parent
 
 ## codex
 feature, refactoring: gpt-5.6-terra@high
@@ -43,3 +45,4 @@ arena cross-judge pool: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high, 
 swarm workers: gpt-5.6-terra@high
 architect runners: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high, gpt-5.6-luna@high
 interrogate reviewers: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high, gpt-5.6-luna@high
+trail reviewer: gpt-5.6-terra@xhigh
