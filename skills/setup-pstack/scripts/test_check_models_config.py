@@ -113,11 +113,17 @@ class ErrorRules(unittest.TestCase):
         errs = errors_of(findings)
         self.assertTrue(any("empty entry" in e[2] for e in errs))
 
-    def test_minimal_on_gpt56_model(self):
-        _, findings = cmc.parse("bug-fix: gpt-5.6-terra@minimal\n")
+    def test_minimal_is_not_an_effort(self):
+        sections, findings = cmc.parse("bug-fix: gpt-5.6-terra@minimal\n")
         errs = errors_of(findings)
         self.assertEqual(len(errs), 1)
-        self.assertIn("not supported", errs[0][2])
+        self.assertIn("unknown effort", errs[0][2])
+        self.assertNotIn("bug-fix", sections[""])
+
+    def test_invalid_entries_are_omitted_from_sections(self):
+        sections, findings = cmc.parse("arena runners: gpt-5.6-terra@ultra, sonnet@high\n")
+        self.assertEqual(len(errors_of(findings)), 1)
+        self.assertEqual(sections[""]["arena runners"], [("sonnet", "high")])
 
     def test_ultra_on_gpt56_terra(self):
         _, findings = cmc.parse("bug-fix: gpt-5.6-terra@ultra\n")
