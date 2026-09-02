@@ -20,7 +20,7 @@ Other explorers are investigating different slices of the same subsystem in para
 
 Start by finding the relevant code. Use Glob to find directories and files, Grep to find key symbols, Read to understand the actual implementation. Don't guess from names. Read the code.
 
-If the repo has a GitNexus index (`.gitnexus/` exists), seed your search with it before grepping: `gitnexus query "<concept>"` for execution flows, `gitnexus context <symbol>` for callers/callees, `gitnexus trace <from> <to>` for the path between two symbols. Use graph results to pick where to read; verify everything in the actual code — the index is a snapshot and can lag the working tree. If there is no index, skip this; never run `gitnexus analyze` yourself.
+If the repo has a GitNexus index (`.gitnexus/` exists), seed your search with it before grepping: `gitnexus query "<concept>"` for execution flows, `gitnexus context <symbol>` for callers/callees, `gitnexus trace <from> <to>` for the path between two symbols. Use graph results to pick where to read; verify everything in the actual code — the index reflects the last analyzed commit and never sees uncommitted edits. If there is no index, skip this. Never run `gitnexus analyze` yourself: the lead refreshes the index before spawning you, and parallel runs can corrupt it.
 
 Follow this pattern:
 1. **Find the entry point.** What triggers this behavior? A user action, an API call, a scheduled job? Find where it starts.
