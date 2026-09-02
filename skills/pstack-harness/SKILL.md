@@ -19,6 +19,8 @@ Each writer gets its own git worktree, whichever mechanism spawns it.
 
 **Set an arm's model.** Pass the model through whatever the spawn mechanism accepts — a tool parameter, a CLI flag. Only pass a value this session has confirmed the mechanism accepts; anything unconfirmed or rejected means `inherit-parent`: omit the model and let the arm run on the session model.
 
+**Set an arm's effort.** Every role resolves to a model and a reasoning effort (see **The models config** below). Pass the effort through the spawn mechanism when it has a field or flag for it. When it has none, or the harness rejects the value, the effort alone becomes `inherit-parent`: keep the model, keep the arm, and say in the reply that the effort was inherited. An effort problem never drops a model or an arm.
+
 **Parallelism.** Real where the mechanism allows it (independent tool calls in one message, concurrent subprocesses); otherwise sequential with the same arm count.
 
 **Read-only.** Use an enforcing option if the spawn mechanism has one; otherwise state it plainly in the brief ("read-only: do not edit or write files").
@@ -35,16 +37,46 @@ Each writer gets its own git worktree, whichever mechanism spawns it.
 
 Observed circa 2026-09. Treat as starting points, not contracts — verify against your live session before relying on any of them, and prefer what you find over what is written here.
 
-| harness | spawn | transcripts |
-|---|---|---|
-| Claude Code | `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases | JSONL under `~/.claude/projects/<slug>/`, `<slug>` = workspace path with `/` → `-` |
-| Codex | had no in-session subagent tool; `codex exec` was the subprocess route | JSONL under `~/.codex/sessions/` by date |
-| Hermes | a delegation toolset when enabled; `hermes -z` for one-shot subprocess runs | SQLite store; `hermes sessions` subcommands list and export |
+| harness | spawn | effort | transcripts |
+|---|---|---|---|
+| Claude Code | `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases | no per-call field; only the `effort` frontmatter key of a custom agent file. A subagent inherits the session effort (`--effort`, `effortLevel`), so the effort is `inherit-parent` here | JSONL under `~/.claude/projects/<slug>/`, `<slug>` = workspace path with `/` → `-` |
+| Codex | `spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn; custom roles live in `~/.codex/agents/*.md` or `.codex/agents/*.md` with `model` and `model_reasoning_effort`; `codex exec` is the subprocess route | the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (medium on the GPT-5.6 family), not the parent's, so always pass one | JSONL under `~/.codex/sessions/` by date |
+| Hermes | a delegation toolset when enabled; `hermes -z` for one-shot subprocess runs | `--reasoning <value>` on `hermes -z`; config `agent.reasoning_effort` and per-model `agent.reasoning_overrides`. Whether the delegation toolset takes an effort field is unverified: check its schema in session | SQLite store; `hermes sessions` subcommands list and export |
 
 ## Universal rules
 
 - **Panels degrade by model, never by count.** A four-model panel in a one-model harness is still four arms (parallel or sequential), each with a genuinely different brief; the configured list length sets the count.
 - **Named sibling skills are files.** When a pstack skill says "the architect skill" or "read the leaf skill", it names a sibling directory under the same installed skills root. Most pstack skills are gated against model invocation, so they appear in no tool inventory and their descriptions are not in context — that never means missing. Read the named skill's SKILL.md (and any files it references) directly and follow it; record that you applied it by file read. Never edit a skill's gating to make it invocable.
 - **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a todolist, and Cursor-era parameters like `readonly`, `environment: "cloud"`, and `is_background` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief, worktree isolation, background execution). A missing tool never cancels the step — find the equivalent, and never report a step blocked on a tool name.
-- **Config**: the pstack models config maps roles to models, layered workspace-first — a role line in `.agents/pstack-models.md` (workspace) overrides the same role in `~/.agents/pstack-models.md` (user); roles absent from both fall back to each skill's inline default. Any value not valid in the current harness is `inherit-parent`.
+- **Config**: roles resolve to a model and an effort per **The models config** below. A value the current harness cannot use is `inherit-parent` for that field only.
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used.
+
+## The models config
+
+`~/.agents/pstack-models.md` (user) and `.agents/pstack-models.md` (workspace) map each role to a model and a reasoning effort. `setup-pstack` writes and lints the file; its shipped default is `examples/pstack-models.md` next to that skill.
+
+**Grammar.** `role: entry`, or `role, role: entry` to bind several roles at once. Panel roles (`how critics`, `arena runners`, `arena cross-judge pool`, `architect runners`, `interrogate reviewers`) take a comma list, one arm per entry. An entry is `model` or `model@effort`. Efforts are `none`, `low`, `medium`, `high`, `xhigh`, `max`; `ultra` is Codex's Pro mode and is valid only on `gpt-5.6-sol`. `inherit-parent` and `auto`, with or without `@effort`, run the arm on the parent chat model. A `## codex`, `## claude-code`, or `## hermes` header starts a section whose lines apply to that harness only; lines above any header apply everywhere.
+
+**Precedence.** Resolve the model and the effort of a role separately, taking the first level that has a value:
+
+1. workspace file, this harness's section
+2. workspace file, flat lines
+3. user file, this harness's section
+4. user file, flat lines
+5. the skill's inline default for the model; the effort policy below for the effort
+6. `inherit-parent`: the value is `inherit-parent` or `auto`, the harness has no way to set that field, or the harness rejected the value
+
+A section never leaks into another harness. A workspace flat line beats a user harness line, so the old rule "workspace wins per role" still holds.
+
+**Codex alias translation.** On Codex, a Claude alias that reaches step 6 translates instead of inheriting:
+
+| alias | Codex entry | why |
+|---|---|---|
+| `fable` | `gpt-5.6-sol@max` | Sol at max is the Fable-parity tier |
+| `opus` | `gpt-5.6-sol@xhigh` | Sol at high or xhigh matches Opus |
+| `sonnet` | `gpt-5.6-terra@high` | Terra is the balanced, mini-like tier, Sonnet's role |
+| `haiku` | `gpt-5.6-luna@high` | Luna is the high-throughput, nano-like tier; the floor keeps it at high |
+
+The translated effort belongs to the alias and stands unless the entry wrote its own `@effort`. Hermes has no translation table yet; an alias there is `inherit-parent`, as before.
+
+**Effort policy.** When no `@effort` is written: floor `high` for every role. `xhigh` for hardest tasks, judgment and prose, bug-fix, perf-issue, hillclimb, how explainer, how critics, why synthesizer, reflect judgment, divergent and synthesizer, arena cross-judge pool, and architect runners. Nothing in this policy produces `max` or `ultra`; those come only from an explicit `@max` or `@ultra` on a line, from the Codex translation of `fable`, or from an explicit escalation in the task. Effort never changes an arm count or a model choice.
