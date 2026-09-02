@@ -62,11 +62,18 @@ export interface ReviewComment {
   readonly line: number | null;
   readonly createdAt: string;
 }
+export interface ReviewBot {
+  readonly login: string;
+  readonly passes: number;
+}
 export interface ReviewThread {
   readonly id: string;
   readonly firstComment: ReviewComment | null;
-  readonly isBugbot: boolean;
-  readonly bugbotReviewPasses: number;
+  readonly bot: ReviewBot | null;
+}
+export interface ReviewState {
+  readonly threads: readonly ReviewThread[];
+  readonly pendingBots: readonly string[];
 }
 interface CheckDetails {
   readonly name: string;
@@ -155,6 +162,7 @@ export type PrSnapshot =
       readonly threads: readonly ReviewThread[];
       readonly ci: CiState;
       readonly reviewAutomationRunning: boolean;
+      readonly pendingReviewBots: readonly string[];
     };
 export interface ReadyPr {
   readonly kind: "ready-pr";
@@ -240,10 +248,13 @@ export type QueryFailure =
  * checks do not block the frontier's merge. That is the Python watcher's
  * contract, not an attribution bug.
  */
+export type WaitReason =
+  | { readonly kind: "pending-checks"; readonly pending: NonEmpty<PendingCheck> }
+  | { readonly kind: "pending-review-bots"; readonly bots: NonEmpty<string> };
 export interface WaitingDecision {
   readonly kind: "waiting";
   readonly frontier: PrContext;
-  readonly pending: NonEmpty<PendingCheck>;
+  readonly reason: WaitReason;
 }
 export type PrDecision =
   | { readonly kind: "blocker"; readonly blocker: MergeBlocker }
@@ -285,10 +296,7 @@ export type ProgressVerdict =
   | (Progress<"WAITING"> & {
       readonly frontier: PrContext;
       readonly reason:
-        | {
-            readonly kind: "pending-checks";
-            readonly pending: NonEmpty<PendingCheck>;
-          }
+        | WaitReason
         | { readonly kind: "merge-queue"; readonly unmergedCount: number };
     })
   | (Progress<"ADVANCE", "queued-stack"> & {
@@ -332,10 +340,7 @@ export type BlockerVerdict =
     });
 export type TimeoutVerdict = Terminal<"TIMEOUT", 5> & {
   readonly reason:
-    | {
-        readonly kind: "pending-checks";
-        readonly pending: NonEmpty<PendingCheck>;
-      }
+    | WaitReason
     | { readonly kind: "status-unavailable"; readonly failure: QueryFailure }
     | {
         readonly kind: "queued-stack";
@@ -389,7 +394,7 @@ export interface GitHubReader {
     context: PrContext,
     after: string | null
   ): Promise<RollupPage>;
-  reviewThreads(context: PrContext): Promise<readonly ReviewThread[]>;
+  reviewState(context: PrContext): Promise<ReviewState>;
   commitRollups(context: PrContext): Promise<readonly CommitRollup[]>;
 }
 export interface PollingOptions {
