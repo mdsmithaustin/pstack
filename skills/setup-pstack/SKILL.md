@@ -40,9 +40,9 @@ description: pstack per-role model choices (overrides skill defaults)
 # pstack model configuration. One line per role. Delete a line to fall back to the skill default.
 # `inherit-parent` or `auto` as a value: the role runs on the parent chat model (omit the model). Alias entries in a panel list still count toward its fan-out.
 feature, refactoring: sonnet
-bug-fix: opus
-perf-issue: opus
-hillclimb: opus
+bug-fix: fable
+perf-issue: fable
+hillclimb: fable
 judgment and prose: fable
 hardest tasks: fable
 how explorer: sonnet
