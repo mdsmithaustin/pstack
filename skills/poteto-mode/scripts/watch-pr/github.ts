@@ -384,19 +384,24 @@ export function parseReviewState(value: unknown): T.ReviewState {
   const reviewLogins = list(
     at(pullRequest, ["reviews", "nodes"]),
     "reviews.nodes"
-  ).map((node, index) => {
-    const author = record(
-      at(node, ["author"]),
-      `reviews.nodes[${index}].author`
-    );
-    return string(author.login, `reviews.nodes[${index}].author.login`);
+  ).flatMap((node, index) => {
+    const author = at(node, ["author"]);
+    if (author === null) return [];
+    return [
+      string(
+        record(author, `reviews.nodes[${index}].author`).login,
+        `reviews.nodes[${index}].author.login`
+      ),
+    ];
   });
   const pendingBots = list(
     at(pullRequest, ["reviewRequests", "nodes"]),
     "reviewRequests.nodes"
   ).flatMap((node, index) => {
+    const reviewer = at(node, ["requestedReviewer"]);
+    if (reviewer === null) return [];
     const requested = record(
-      at(node, ["requestedReviewer"]),
+      reviewer,
       `reviewRequests.nodes[${index}].requestedReviewer`
     );
     const typename = string(

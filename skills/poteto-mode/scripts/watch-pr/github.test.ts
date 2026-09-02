@@ -211,6 +211,41 @@ function reviewStateResponse(args: {
 }
 
 describe("parseReviewState", () => {
+  it("ignores reviews and review requests whose account was deleted", () => {
+    const state = parseReviewState(
+      reviewStateResponse({
+        threads: [
+          {
+            id: "one",
+            isResolved: false,
+            comments: {
+              nodes: [
+                {
+                  body: "looks off",
+                  createdAt: "now",
+                  path: "a.ts",
+                  line: 1,
+                  author: {
+                    login: "copilot-pull-request-reviewer",
+                    __typename: "Bot",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        reviews: [
+          { author: null },
+          { author: { login: "copilot-pull-request-reviewer", __typename: "Bot" } },
+        ],
+        reviewRequests: [{ requestedReviewer: null }],
+      })
+    );
+    expect(state.pendingBots).toEqual([]);
+    expect(state.threads.map((thread) => thread.bot)).toEqual([
+      { login: "copilot-pull-request-reviewer", passes: 1 },
+    ]);
+  });
   it("annotates Bugbot threads with distinct review-pass counts", () => {
     const response = reviewStateResponse({
       threads: [
