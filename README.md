@@ -31,7 +31,7 @@ two steps:
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs.
 
-that's it. the other skills are situational; the mode skill uses them for you as needed. out of the box the mode splits work by model strength (using claude code's subagent model aliases): precisely-specified code, prose, and judgment go to fable, while fast mechanical code goes to sonnet. the default panel is fable / opus / sonnet / haiku. in a CLI that can't switch models per subagent (codex, hermes), everything runs on your session model. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) changes any of it.
+that's it. the other skills are situational; the mode skill uses them for you as needed. out of the box the mode splits work by model strength (using claude code's subagent model aliases): precisely-specified code, prose, and judgment go to fable, while fast mechanical code goes to sonnet. the default panel is fable / opus / sonnet / haiku. on codex the same aliases translate to the gpt-5.6 family (sol at max for fable, sol at xhigh for opus, terra for sonnet, luna for haiku) with a reasoning-effort floor of high; on hermes everything runs on your session model. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) changes any of it.
 
 ## usage
 
@@ -253,7 +253,7 @@ your CLI already has a plan mode which works great with pstack. but personally, 
 
 type [`/automate-me`](./skills/automate-me/SKILL.md). it mines your recent transcripts, drafts a `<your-name>-mode` skill from how you've actually worked, and routes through pstack underneath. you keep pstack as the base and end up with your own routing skill alongside `poteto-mode`.
 
-models are configurable too. type [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it detects the models you have access to and writes a small config file mapping each role (code, judgment, the review panels) to a model — user-level at `~/.agents/pstack-models.md`, with an optional per-repo override at `.agents/pstack-models.md` whose lines win role-by-role. every skill reads the layered config and falls back to sensible defaults when no line matches, so you override only what you want. one config serves every CLI: values a harness can't use just mean inherit-parent there.
+models are configurable too. type [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it detects the models you have access to and writes a small config file mapping each role (code, judgment, the review panels) to a model — user-level at `~/.agents/pstack-models.md`, with an optional per-repo override at `.agents/pstack-models.md` whose lines win role-by-role. every skill reads the layered config and falls back to sensible defaults when no line matches, so you override only what you want. a role can pin a reasoning effort with `model@effort`, and `## codex`, `## claude-code`, or `## hermes` sections hold per-CLI picks in the same file. one config serves every CLI: a value a harness can't use just means inherit-parent there, and a claude alias on codex becomes its gpt-5.6 tier.
 
 ## automations
 
