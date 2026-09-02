@@ -10,6 +10,7 @@ import {
   queryBackoffSeconds,
   readSnapshot,
   runQueued,
+  runSimple,
   selectTierMajorStackDecision,
 } from "./policy.ts";
 import {
@@ -106,7 +107,7 @@ describe("snapshot query planning", () => {
     expect(snapshot.ci.kind).toBe("ci-pending");
     expect(reader.calls).toEqual([
       "pullRequest",
-      "reviewThreads",
+      "reviewState",
       "checksFastPath",
     ]);
   });
@@ -193,7 +194,7 @@ it("attributes a stack wait to the PR whose checks are pending, not the bottom",
   expect(decision).toMatchObject({
     kind: "waiting",
     frontier: { number: 21 },
-    pending: [{ name: "upstack-build" }],
+    reason: { kind: "pending-checks", pending: [{ name: "upstack-build" }] },
   });
 });
 
@@ -218,6 +219,134 @@ it("waits on a draft while checks are pending, then reports the draft gate", asy
   expect(classifyPr(settled)).toMatchObject({
     kind: "blocker",
     blocker: { kind: "merge-gate", reason: "draft-pr" },
+  });
+});
+
+describe("pending review bots", () => {
+  it("waits for a pending review bot on an otherwise-ready PR", async () => {
+    const snapshot = await readSnapshot({
+      reader: fakeReader({ pendingBots: ["copilot-pull-request-reviewer"] }),
+      context: context(70),
+      pendingHistory: "include",
+      allowDraft: false,
+    });
+    expect(classifyPr(snapshot)).toMatchObject({
+      kind: "waiting",
+      frontier: { number: 70 },
+      reason: {
+        kind: "pending-review-bots",
+        bots: ["copilot-pull-request-reviewer"],
+      },
+    });
+  });
+
+  it("lets pending CI checks outrank a pending review bot", async () => {
+    const snapshot = await readSnapshot({
+      reader: fakeReader({
+        fastPath: { kind: "checks", checks: [pendingCheck()] },
+        pendingBots: ["copilot-pull-request-reviewer"],
+      }),
+      context: context(71),
+      pendingHistory: "omit",
+      allowDraft: false,
+    });
+    expect(classifyPr(snapshot)).toMatchObject({
+      kind: "waiting",
+      reason: { kind: "pending-checks" },
+    });
+  });
+
+  it("lets an unresolved review thread outrank a pending review bot", async () => {
+    const snapshot = await readSnapshot({
+      reader: fakeReader({
+        threads: [{ id: "t1", firstComment: null, bot: null }],
+        pendingBots: ["copilot-pull-request-reviewer"],
+      }),
+      context: context(72),
+      pendingHistory: "include",
+      allowDraft: false,
+    });
+    expect(classifyPr(snapshot)).toMatchObject({
+      kind: "blocker",
+      blocker: { kind: "review-threads" },
+    });
+  });
+
+  it("stays ready when there are no pending review bots", async () => {
+    const snapshot = await readSnapshot({
+      reader: fakeReader({ pendingBots: [] }),
+      context: context(73),
+      pendingHistory: "include",
+      allowDraft: false,
+    });
+    expect(classifyPr(snapshot).kind).toBe("ready");
+  });
+
+  it("waits on the stack row with a pending review bot", async () => {
+    const readyBottom = await readSnapshot({
+      reader: fakeReader(),
+      context: context(80),
+      pendingHistory: "omit",
+      allowDraft: false,
+    });
+    const botUpstack = await readSnapshot({
+      reader: fakeReader({ pendingBots: ["copilot-pull-request-reviewer"] }),
+      context: context(81),
+      pendingHistory: "omit",
+      allowDraft: false,
+    });
+    const decision = selectTierMajorStackDecision([readyBottom, botUpstack]);
+    expect(decision).toMatchObject({
+      kind: "waiting",
+      frontier: { number: 81 },
+      reason: {
+        kind: "pending-review-bots",
+        bots: ["copilot-pull-request-reviewer"],
+      },
+    });
+  });
+
+  it("waits for a pending review bot once, then reports READY once it submits", async () => {
+    const base = fakeReader();
+    let pending = true;
+    const reader = {
+      ...base,
+      async reviewState() {
+        const bots = pending ? ["copilot-pull-request-reviewer"] : [];
+        pending = false;
+        return { threads: [], pendingBots: bots };
+      },
+    } satisfies GitHubReader;
+    const emitted: ProgressVerdict[] = [];
+    let now = 0;
+    const verdict = await runSimple({
+      dependencies: {
+        reader,
+        clock: {
+          now: () => now,
+          observedAt: () => "2026-07-26T00:00:00.000Z",
+          async sleep(seconds) {
+            now += seconds;
+          },
+        },
+        emit(v) {
+          emitted.push(v);
+        },
+      },
+      contexts: [context(90)],
+      mode: "single",
+      statusOnly: false,
+      options,
+    });
+    expect(emitted.map((event) => event.kind)).toEqual(["WAITING"]);
+    expect(emitted[0]).toMatchObject({
+      kind: "WAITING",
+      reason: {
+        kind: "pending-review-bots",
+        bots: ["copilot-pull-request-reviewer"],
+      },
+    });
+    expect(verdict.kind).toBe("READY");
   });
 });
 
