@@ -24,7 +24,7 @@ PANEL_ROLES = {
 }
 REFLECT_SHORTHANDS = {"divergent", "synthesizer", "tooling", "judgment"}
 
-ALLOWED_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+ALLOWED_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max", "ultra"}
 NOTICE_EFFORTS = {"max", "ultra"}
 GPT56_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max"}
 GPT56_SOL_EFFORTS = GPT56_EFFORTS | {"ultra"}
@@ -81,13 +81,15 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
         if effort is not None:
             if not effort:
                 findings.append((line_no, "error", f"empty effort in entry {entry!r}"))
-            elif effort not in ALLOWED_EFFORTS:
+                continue
+            if effort not in ALLOWED_EFFORTS:
                 findings.append((line_no, "error", f"unknown effort {effort!r} for model {model!r}"))
-            else:
-                if _model_effort_allowed(model, effort) is False:
-                    findings.append((line_no, "error", f"effort {effort!r} not supported by model {model!r}"))
-                if effort in NOTICE_EFFORTS:
-                    findings.append((line_no, "notice", f"{model}@{effort} pins an expensive tier"))
+                continue
+            if _model_effort_allowed(model, effort) is False:
+                findings.append((line_no, "error", f"effort {effort!r} not supported by model {model!r}"))
+                continue
+            if effort in NOTICE_EFFORTS:
+                findings.append((line_no, "notice", f"{model}@{effort} pins an expensive tier"))
         entries.append((model, effort))
     return entries
 
