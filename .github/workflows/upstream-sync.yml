@@ -1,8 +1,9 @@
 name: Upstream pstack sync
 
+# Manual fallback only. The primary sync is a launchd job on the maintainer's
+# machine using the local OAuth-authenticated claude CLI (see PORTING.md).
+# Dispatching this workflow requires the CLAUDE_CODE_OAUTH_TOKEN repo secret.
 on:
-  schedule:
-    - cron: '23 14 */2 * *' # every 2 days, 14:23 UTC
   workflow_dispatch: {}
 
 permissions:
