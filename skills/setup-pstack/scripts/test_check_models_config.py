@@ -146,6 +146,32 @@ class ReflectShorthand(unittest.TestCase):
         self.assertEqual(sections[""]["reflect synthesizer"], [("fable", None)])
 
 
+class TrailReviewerAndDefaultRoles(unittest.TestCase):
+    def test_lint_clean_in_flat_section(self):
+        text = "trail reviewer: opus\ndefault: inherit-parent\n"
+        sections, findings = cmc.parse(text)
+        self.assertEqual(errors_of(findings), [])
+        self.assertEqual(sections[""]["trail reviewer"], [("opus", None)])
+        self.assertEqual(sections[""]["default"], [("inherit-parent", None)])
+
+    def test_lint_clean_in_codex_section(self):
+        text = (
+            "## codex\n"
+            "trail reviewer: gpt-5.6-terra@xhigh\n"
+            "default: gpt-5.6-terra@high\n"
+        )
+        sections, findings = cmc.parse(text)
+        self.assertEqual(errors_of(findings), [])
+        self.assertEqual(sections["codex"]["trail reviewer"], [("gpt-5.6-terra", "xhigh")])
+        self.assertEqual(sections["codex"]["default"], [("gpt-5.6-terra", "high")])
+
+    def test_default_rejects_list(self):
+        _, findings = cmc.parse("default: opus, sonnet\n")
+        errs = errors_of(findings)
+        self.assertEqual(len(errs), 1)
+        self.assertIn("given a list", errs[0][2])
+
+
 class CliExitCodes(unittest.TestCase):
     def _run(self, text):
         with tempfile.TemporaryDirectory() as tmp:
