@@ -40,6 +40,10 @@ Upstream is the source of truth for the workflows themselves. This file records 
 
 ## Syncing from upstream
 
+Automated: `.github/workflows/upstream-sync.yml` runs every 2 days, gates on new upstream commits touching `pstack/` (baseline in `.github/upstream-sha`), and has Claude apply the substitution map and port additions to the incoming diff, staging a draft PR. Requires the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (`claude setup-token`).
+
+Manually:
+
 1. `git remote add upstream https://github.com/cursor/plugins.git` (sparse-checkout `pstack`).
-2. Diff upstream's `pstack/` against the import commit of this repo.
-3. Reapply the substitution map to the incoming hunks.
+2. Diff upstream's `pstack/` against the SHA in `.github/upstream-sha` (originally the import commit).
+3. Reapply the substitution map to the incoming hunks, keep the port additions intact, and bump `.github/upstream-sha`.
