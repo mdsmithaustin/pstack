@@ -19,7 +19,7 @@ Name the scope, the surface, and the stop predicate, in that order.
 
 **Stop predicate.** A budget and a floor, both written down before the first probe. "Twenty probes per entry point, or two hours, whichever comes first" is the shape. When a loop-governance suite is installed, hand it the outer loop and keep this skill as the method that loop runs; otherwise this predicate bounds the run.
 
-Open a `findings.tsv` through the **show-me-your-work** skill, one row per probe: id, entry point, category, probe, observed, reproduces, state, reason. `state` holds one of the four values below. `reason` carries the dismissal reason, the guard name on a gap, or the open question on an escalation. Keep it out of the tree so it survives reverts.
+Open a `findings.tsv` through the **show-me-your-work** skill, one row per probe: id, entry point, category, probe, observed, reproduces, state, reason. A probe that produced no finding is `pass`, `not run`, or `unclassified`. Otherwise the row carries that finding's state from Pass 2. `reason` carries the dismissal reason, the guard name on a gap, or the open question on an escalation. Keep it out of the tree so it survives reverts.
 
 ## Pass 1: probe
 
