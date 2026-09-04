@@ -118,6 +118,18 @@ class FenceHandling(Tree):
         for script in (CONTENT, FRONTMATTER):
             compile(script.read_text(encoding="utf-8"), str(script), "exec")
 
+    def test_only_one_function_reads_the_fence_rule(self) -> None:
+        import ast
+
+        tree = ast.parse(CONTENT.read_text(encoding="utf-8"))
+        readers = [
+            fn.name
+            for fn in ast.walk(tree)
+            if isinstance(fn, ast.FunctionDef)
+            and any(isinstance(n, ast.Name) and n.id == "FENCE" for n in ast.walk(fn))
+        ]
+        self.assertEqual(readers, ["scan_blocks"], "a second fence walker will drift from the first")
+
     def test_four_backtick_fence_survives_an_inner_fence(self) -> None:
         code, out = self.body("````\n```\nSee [x](../gone/n.md).\n```\n````")
         self.assertEqual(code, 0, out)

@@ -3,17 +3,19 @@
 
 A relative markdown link whose target ends in .md must resolve to a file. A
 relative path written in inline code must resolve to something on disk, whatever
-its extension. Fenced blocks and inline-code spans are skipped, so an example showing a broken
-path is not a finding. A fence at any indentation counts, since telling a nested
-fence from an indented code block needs container tracking this does not do. A
-fence that is never closed is itself a finding, because it would otherwise
-silently hide the rest of the file.
+its extension, so inline code is checked rather than skipped for links.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
 reads as one only when "skill" appears on the same line. On a line mentioning a
 principle, a bare name also resolves against its principle- directory, which is
-how the suite writes "the **model-the-domain** principle skill".
+how the suite writes "the **model-the-domain** principle skill". Here inline
+code IS skipped, so a bolded word quoted inside backticks is not a reference.
+
+Fenced blocks are skipped for both checks. A fence at any indentation counts,
+since telling a nested fence from an indented code block needs container
+tracking this does not do. A fence that is never closed is itself a finding,
+because it would otherwise silently hide the rest of the file.
 """
 from __future__ import annotations
 
