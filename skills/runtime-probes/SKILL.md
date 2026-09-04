@@ -1,6 +1,6 @@
 ---
 name: runtime-probes
-description: "Apply when asked to probe, stress, fuzz, or chaos-test a running product, feature, or PR for defects nobody has reported, or to go hunting for bugs against a live surface. Two passes: a probe pass over a closed taxonomy of entry-point shapes, and a promotion gate that keeps only findings a real caller can reach. Promoted findings leave a committed regression test behind. The rest are dismissed with a reason, carried as an explicit gap, or escalated when the call is not the agent's to make."
+description: "Apply when asked to probe, stress, fuzz, or chaos-test a running product, feature, or PR for defects nobody has reported, or to go hunting for bugs against a live surface. Two passes: a probe pass over a closed category taxonomy, and a promotion gate that keeps only findings a real caller can reach. Promoted findings leave a committed regression test behind. The rest are dismissed with a reason, carried as an explicit gap, or escalated when the call is not the agent's to make."
 ---
 
 # Runtime probes
@@ -17,7 +17,7 @@ Name the scope, the surface, and the stop predicate, in that order.
 
 **Surface.** Probes run against the real thing through the project's `verify-<app>` driver, which the **create-verification-skill** skill builds when the project has none. A probe that never reached the running surface is `not run`, never a pass.
 
-**Stop predicate.** A budget and a floor, both written down before the first probe. "Twenty probes per entry point, or two hours, whichever comes first" is the shape. When a loop-governance suite is installed, hand it the outer loop and keep this skill as the method that loop runs; otherwise this predicate bounds the run.
+**Stop predicate.** A budget and a floor, both written down before the first probe. "Two hours or four hundred probes, whichever comes first, and never fewer than ten probes per entry point" is the shape. The budget ends a run that is finding nothing. The floor stops a run ending early because it got lucky on probe three. When a loop-governance suite is installed, hand it the outer loop and keep this skill as the method that loop runs; otherwise this predicate bounds the run.
 
 Open a `findings.tsv` through the **show-me-your-work** skill, one row per probe: id, entry point, category, probe, observed, reproduces, state, reason. A probe that produced no finding is `pass`, `not run`, or `unclassified`. Otherwise the row carries that finding's state from Pass 2. `reason` carries the dismissal reason, the guard name on a gap, or the open question on an escalation. Keep it out of the tree so it survives reverts.
 
@@ -48,7 +48,7 @@ Every worker finding is a hypothesis. Judge each on your configured `judgment an
 2. **A real caller can reach it.** Name the caller and the path from a real entry point to the failure. Strict reachability means a defect behind a guard no caller gets past does not promote.
 3. **A maintainer would take the fix.** The consequence is user-visible, data-affecting, or crosses a security or privacy boundary. Internal untidiness is not a defect.
 
-Triage the rest against the `fix` / `dismiss` / `ask` rubric in `../poteto-mode/references/bugbot-triage.md`, whose three verdicts are tagged on the states below. Record a learned dismissal pattern there in its own format instead of re-deriving it next run.
+Triage every finding against the `fix` / `dismiss` / `ask` rubric in `../poteto-mode/references/bugbot-triage.md`, whose three verdicts are tagged on the states below. Record a learned dismissal pattern there in its own format instead of re-deriving it next run.
 
 Each finding ends the run in exactly one state.
 
