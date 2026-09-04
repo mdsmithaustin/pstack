@@ -102,11 +102,6 @@ def main() -> int:
         ap.error("no foreign names: pass --foreign or --foreign-file")
     pat = reference_pattern(names, prefixes)
     root = Path(args.root)
-    prefixes = [p for p in args.foreign_prefix.split(",") if p] + prefixes_extra
-    if not names and not prefixes:
-        ap.error("no foreign names: pass --foreign or --foreign-file")
-    pat = reference_pattern(names, prefixes)
-    root = Path(args.root)
     violations: list[str] = []
     mentions = 0
     adapter_mentions = 0

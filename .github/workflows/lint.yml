@@ -15,6 +15,10 @@ jobs:
         run: python3 tools/check-skill-frontmatter.py skills
       - name: No unconditional dependency on another suite's skills
         run: python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
+      - name: Relative links resolve, bolded skill references exist
+        run: python3 tools/check-skill-content.py skills
+      - name: skill-content lint tests
+        run: python3 -m unittest discover -s tools -p 'test_*.py'
       - name: pstack-models.md lint tests
         run: python3 -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'
       - name: pstack-models.md shipped default lints clean
