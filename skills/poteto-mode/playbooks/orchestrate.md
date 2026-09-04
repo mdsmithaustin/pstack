@@ -10,7 +10,7 @@ Three rules carry the rest.
 - Every spawn and every resume carries the standing orders verbatim.
 - The brief is the product. A vague brief fails quietly, because a worker cannot ask you a question.
 
-Open a todolist with the steps below copied in verbatim. A step you skip stays listed with `skip: <reason>`.
+Open a todolist with the steps below copied in verbatim, resolving the tool per the **pstack-harness** skill rather than assuming this harness has none. A step you skip stays listed with `skip: <reason>`.
 
 #### Roles and placement
 
