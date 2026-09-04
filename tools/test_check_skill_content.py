@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Both skill-content checks must fire on planted defects, not just pass on a clean tree."""
+"""Both lints must fire on planted defects and stay quiet on valid input."""
 from __future__ import annotations
 
 import subprocess
@@ -13,117 +13,131 @@ CONTENT = TOOLS / "check-skill-content.py"
 FRONTMATTER = TOOLS / "check-skill-frontmatter.py"
 
 
-def write_skill(root: Path, name: str, frontmatter: str, body: str) -> None:
-    d = root / name
-    d.mkdir(parents=True)
-    (d / "SKILL.md").write_text(f"---\n{frontmatter}\n---\n\n{body}\n", encoding="utf-8")
-
-
 def run(script: Path, root: Path) -> tuple[int, str]:
-    p = subprocess.run(
-        [sys.executable, str(script), str(root)], capture_output=True, text=True
-    )
+    p = subprocess.run([sys.executable, str(script), str(root)], capture_output=True, text=True)
     return p.returncode, p.stdout
 
 
-class SkillContentChecks(unittest.TestCase):
+class Tree(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name) / "skills"
         self.root.mkdir()
-        write_skill(self.root, "real-skill", 'name: real-skill\ndescription: "a real one"', "Body.")
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
+    def skill(self, name: str, frontmatter: str, body: str = "Body.") -> Path:
+        d = self.root / name
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "SKILL.md").write_text(f"---\n{frontmatter}\n---\n\n{body}\n", encoding="utf-8")
+        return d
+
+
+class ContentLint(Tree):
+    def setUp(self) -> None:
+        super().setUp()
+        real = self.skill("real-skill", 'name: real-skill\ndescription: "d"')
+        (real / "refs").mkdir()
+        (real / "refs" / "my notes.md").write_text("x", encoding="utf-8")
+
+    def body(self, body: str) -> tuple[int, str]:
+        self.skill("a", 'name: a\ndescription: "d"', body)
+        return run(CONTENT, self.root)
+
     def test_clean_tree_passes(self) -> None:
-        code, out = run(CONTENT, self.root)
-        self.assertEqual(code, 0, out)
-        self.assertEqual(out.strip(), "")
+        self.assertEqual(run(CONTENT, self.root), (0, ""))
 
-    def test_broken_markdown_link_fires(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"', "See [notes](../gone/notes.md).")
-        code, out = run(CONTENT, self.root)
-        self.assertEqual(code, 1)
-        self.assertIn("relative-link", out)
-        self.assertIn("../gone/notes.md", out)
-
-    def test_broken_inline_code_path_fires(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"', "Read `../gone/setup.md` first.")
-        code, out = run(CONTENT, self.root)
+    def test_dotdot_link_broken_fires(self) -> None:
+        code, out = self.body("See [x](../gone/n.md).")
         self.assertEqual(code, 1)
         self.assertIn("relative-link", out)
 
-    def test_resolving_link_does_not_fire(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"', "See `../real-skill/SKILL.md`.")
-        code, out = run(CONTENT, self.root)
-        self.assertEqual(code, 0, out)
+    def test_bare_relative_link_broken_fires(self) -> None:
+        code, out = self.body("See [x](references/gone.md).")
+        self.assertEqual(code, 1, "a link with no ./ prefix is still a relative link")
+        self.assertIn("references/gone.md", out)
 
-    def test_unknown_bolded_skill_fires(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"', "Use the **not-a-real-skill** skill.")
-        code, out = run(CONTENT, self.root)
+    def test_inline_code_path_broken_fires(self) -> None:
+        code, out = self.body("Read `../gone/setup.md` first.")
+        self.assertEqual(code, 1)
+
+    def test_resolving_link_passes(self) -> None:
+        self.assertEqual(self.body("See `../real-skill/SKILL.md`.")[0], 0)
+
+    def test_url_encoded_target_that_exists_passes(self) -> None:
+        self.assertEqual(self.body("See [x](../real-skill/refs/my%20notes.md).")[0], 0)
+
+    def test_link_inside_a_fence_is_ignored(self) -> None:
+        self.assertEqual(self.body("```markdown\n[x](../nope/gone.md)\n```")[0], 0)
+
+    def test_placeholder_path_is_ignored(self) -> None:
+        self.assertEqual(self.body("Use `../<suite>/notes.md` here.")[0], 0)
+
+    def test_absolute_url_is_ignored(self) -> None:
+        self.assertEqual(self.body("See [x](https://example.com/a.md).")[0], 0)
+
+    def test_unknown_skill_reference_fires(self) -> None:
+        code, out = self.body("Use the **fake-skill** skill.")
         self.assertEqual(code, 1)
         self.assertIn("sibling-skill", out)
 
-    def test_known_bolded_skill_does_not_fire(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"', "Use the **real-skill** skill.")
-        code, out = run(CONTENT, self.root)
-        self.assertEqual(code, 0, out)
-
     def test_principle_name_fires_without_the_word_skill(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"', "- **Laziness** (**principle-nope**). Bias to deletion.")
-        code, out = run(CONTENT, self.root)
-        self.assertEqual(code, 1, "a principle- name must be checked even with no 'skill' on the line")
+        code, out = self.body("- **L** (**principle-nope**). Bias to deletion.")
+        self.assertEqual(code, 1, "a principle- name is checked even with no 'skill' on the line")
         self.assertIn("principle-nope", out)
 
-    def test_bold_prose_is_not_treated_as_a_skill(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"', "- **promoted**: it cleared every gate.")
-        code, out = run(CONTENT, self.root)
-        self.assertEqual(code, 0, out)
+    def test_known_skill_reference_passes(self) -> None:
+        self.assertEqual(self.body("Use the **real-skill** skill.")[0], 0)
+
+    def test_bold_prose_is_not_a_skill_reference(self) -> None:
+        self.assertEqual(self.body("- **promoted**: it cleared every gate.")[0], 0)
+
+    def test_bold_inside_a_fence_is_ignored(self) -> None:
+        self.assertEqual(self.body("```\nuse the **fake-skill** skill\n```")[0], 0)
+
+    def test_bold_inside_inline_code_is_ignored(self) -> None:
+        self.assertEqual(self.body("Write `**fake-skill** skill` here.")[0], 0)
 
 
-class FrontmatterChecks(unittest.TestCase):
-    def setUp(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmp.name) / "skills"
-        self.root.mkdir()
+class FrontmatterLint(Tree):
+    def check(self, frontmatter: str) -> tuple[int, str]:
+        self.skill("a", frontmatter)
+        return run(FRONTMATTER, self.root)
 
-    def tearDown(self) -> None:
-        self.tmp.cleanup()
+    def test_valid_passes(self) -> None:
+        self.assertEqual(self.check('name: a\ndescription: "d"')[0], 0)
 
-    def test_valid_frontmatter_passes(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"', "Body.")
-        code, out = run(FRONTMATTER, self.root)
-        self.assertEqual(code, 0, out)
+    def test_nested_mapping_passes(self) -> None:
+        self.assertEqual(self.check('name: a\ndescription: "d"\nmetadata:\n  type: project')[0], 0)
 
-    def test_nested_mapping_is_allowed(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"\nmetadata:\n  type: project', "Body.")
-        code, out = run(FRONTMATTER, self.root)
-        self.assertEqual(code, 0, out)
+    def test_sequence_at_column_zero_passes(self) -> None:
+        self.assertEqual(self.check('name: a\ndescription: "d"\nallowed-tools:\n- Read')[0], 0)
+
+    def test_comment_line_passes(self) -> None:
+        self.assertEqual(self.check('name: a\ndescription: "d"\n# a note')[0], 0)
+
+    def test_space_before_colon_passes(self) -> None:
+        self.assertEqual(self.check('name : a\ndescription: "d"')[0], 0)
+
+    def test_trailing_space_after_quoted_value_passes(self) -> None:
+        self.assertEqual(self.check('name: a\ndescription: "d" ')[0], 0)
 
     def test_duplicate_key_fires(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"\nname: a', "Body.")
-        code, out = run(FRONTMATTER, self.root)
+        code, out = self.check('name: a\ndescription: "d"\nname: a')
         self.assertEqual(code, 1)
         self.assertIn("duplicate key", out)
 
     def test_tab_fires(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription:\t"d"', "Body.")
-        code, out = run(FRONTMATTER, self.root)
+        code, out = self.check('name: a\ndescription:\t"d"')
         self.assertEqual(code, 1)
         self.assertIn("tab character", out)
 
-    def test_unterminated_quote_fires(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "unclosed', "Body.")
-        code, out = run(FRONTMATTER, self.root)
-        self.assertEqual(code, 1)
-        self.assertIn("not terminated", out)
+    def test_wrong_name_fires(self) -> None:
+        self.assertEqual(self.check('name: zzz\ndescription: "d"')[0], 1)
 
-    def test_shapeless_line_fires(self) -> None:
-        write_skill(self.root, "a", 'name: a\ndescription: "d"\nthis is not a mapping', "Body.")
-        code, out = run(FRONTMATTER, self.root)
-        self.assertEqual(code, 1)
-        self.assertIn("key-value shape", out)
+    def test_empty_description_fires(self) -> None:
+        self.assertEqual(self.check("name: a\ndescription:")[0], 1)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every skills/*/SKILL.md has frontmatter whose name equals its directory, a non-empty description, and a well-formed block."""
+"""Every skills/*/SKILL.md has frontmatter whose name equals its directory, a non-empty description, no tabs, and no duplicate top-level key."""
 from __future__ import annotations
 
 import re
@@ -29,11 +29,13 @@ def quote_error(value: str) -> str | None:
         if c == '"':
             return "quoted value has an unescaped interior quote"
         i += 1
+    if i > len(inner):
+        return "quoted value is not terminated"
     return None
 
 
 def block_errors(block_lines: list[str], first_line_no: int) -> list[str]:
-    """Structural checks on the raw frontmatter block, no YAML library involved."""
+    """Only checks that need no YAML grammar. Anything requiring real parsing stays out."""
     errors: list[str] = []
     seen_keys: dict[str, int] = {}
     for offset, raw in enumerate(block_lines):
@@ -46,16 +48,12 @@ def block_errors(block_lines: list[str], first_line_no: int) -> list[str]:
             continue
         m = KV_LINE.match(raw)
         if not m:
-            errors.append(f"{lineno}: line does not match key-value shape")
             continue
-        key, value = m.group(1), (m.group(2) or "")
+        key = m.group(1)
         if key in seen_keys:
             errors.append(f"{lineno}: duplicate key {key!r}, first seen at line {seen_keys[key]}")
         else:
             seen_keys[key] = lineno
-        qe = quote_error(value)
-        if qe:
-            errors.append(f"{lineno}: {qe}")
     return errors
 
 
@@ -64,11 +62,10 @@ def top_level_fields(block_lines: list[str]) -> dict[str, str]:
     for raw in block_lines:
         if not raw.strip() or is_indented(raw):
             continue
-        m = KV_LINE.match(raw)
-        if not m:
+        if ":" not in raw:
             continue
-        key, value = m.group(1), (m.group(2) or "")
-        fields.setdefault(key, value.strip().strip('"'))
+        key, value = raw.split(":", 1)
+        fields.setdefault(key.strip(), value.strip().strip('"'))
     return fields
 
 

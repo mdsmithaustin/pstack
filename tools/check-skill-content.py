@@ -4,7 +4,9 @@
 Every relative markdown link target must exist on disk. Every bolded name that
 reads as a skill reference must name a real directory under the skills root. A
 principle- prefix always reads as one. Any other kebab name reads as one only
-when "skill" appears on the same line.
+when "skill" appears on the same line. On a line mentioning a principle, a bare
+name also resolves against its principle- directory, which is how the suite
+writes "the **model-the-domain** principle skill".
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterator
+from urllib.parse import unquote
 
 ROOT = Path("skills")
 IGNORE: frozenset[str] = frozenset()
@@ -36,19 +39,34 @@ class ParsedFile:
     lines: list[str]
 
 
-LINK_TARGET = re.compile(r"\]\((\.\.?/[^\s)]+)\)")
-CODE_TARGET = re.compile(r"`(\.\.?/[^`\s]+)`")
+LINK_TARGET = re.compile(r"\]\(([^)\s<>]+\.md(?:#[^)\s]*)?)\)")
+CODE_TARGET = re.compile(r"`(\.\.?/[^`\s<>]+)`")
+INLINE_CODE = re.compile(r"`[^`]*`")
+FENCE = re.compile(r"^\s*(```|~~~)")
+SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
+
+
+def outside_fences(lines: list[str]) -> Iterator[tuple[int, str]]:
+    marker: str | None = None
+    for lineno, line in enumerate(lines, start=1):
+        m = FENCE.match(line)
+        if m:
+            marker = None if marker == m.group(1) else (marker or m.group(1))
+            continue
+        if marker is None:
+            yield lineno, line
 
 
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
-    for lineno, line in enumerate(parsed.lines, start=1):
+    for lineno, line in outside_fences(parsed.lines):
         for pattern in (LINK_TARGET, CODE_TARGET):
             for m in pattern.finditer(line):
-                target = m.group(1).split("#", 1)[0]
-                if not target:
+                target = unquote(m.group(1).split("#", 1)[0])
+                if not target or SCHEME.match(target) or target.startswith("/"):
                     continue
-                resolved = (parsed.path.parent / target).resolve()
-                if not resolved.exists():
+                resolved = parsed.path.parent / target
+                ok = resolved.is_file() if target.endswith(".md") else resolved.exists()
+                if not ok:
                     yield Finding(
                         parsed.path,
                         lineno,
@@ -61,7 +79,8 @@ BOLD_NAME = re.compile(r"\*\*([a-z][a-z0-9-]*)\*\*")
 
 
 def check_sibling_skill(parsed: ParsedFile) -> Iterator[Finding]:
-    for lineno, line in enumerate(parsed.lines, start=1):
+    for lineno, raw in outside_fences(parsed.lines):
+        line = INLINE_CODE.sub("``", raw)
         near_skill = "skill" in line
         principle_hint = "principle" in line
         for m in BOLD_NAME.finditer(line):
