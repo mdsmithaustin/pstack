@@ -62,6 +62,11 @@ class ContentLint(Tree):
         code, out = self.body("Read `../gone/setup.md` first.")
         self.assertEqual(code, 1)
 
+    def test_broken_non_md_inline_path_fires(self) -> None:
+        code, out = self.body("Run `../real-skill/gone.sh` first.")
+        self.assertEqual(code, 1, "inline code paths are checked whatever the extension")
+        self.assertIn("relative-link", out)
+
     def test_resolving_link_passes(self) -> None:
         self.assertEqual(self.body("See `../real-skill/SKILL.md`.")[0], 0)
 

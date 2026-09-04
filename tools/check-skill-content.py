@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Fail on broken content inside skills/**/*.md.
 
-Every relative markdown link whose target ends in .md must resolve to a file. Every bolded name that
-reads as a skill reference must name a real directory under the skills root. A
-principle- prefix always reads as one. Any other kebab name reads as one only
-when "skill" appears on the same line. On a line mentioning a principle, a bare
-name also resolves against its principle- directory, which is how the suite
-writes "the **model-the-domain** principle skill".
+A relative markdown link whose target ends in .md must resolve to a file. A
+relative path written in inline code must resolve to something on disk, whatever
+its extension. Fenced blocks and inline-code spans are skipped when looking for
+skill references, so an example that shows a broken path is not a finding.
+
+A bolded name that reads as a skill reference must name a real directory under
+the skills root. A principle- prefix always reads as one. Any other kebab name
+reads as one only when "skill" appears on the same line. On a line mentioning a
+principle, a bare name also resolves against its principle- directory, which is
+how the suite writes "the **model-the-domain** principle skill".
 """
 from __future__ import annotations
 
