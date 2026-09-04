@@ -3,14 +3,19 @@
 
 A relative markdown link whose target ends in .md must resolve to a file. A
 relative path written in inline code must resolve to something on disk, whatever
-its extension. Fenced blocks and inline-code spans are skipped when looking for
-skill references, so an example that shows a broken path is not a finding.
+its extension, so inline code is checked rather than skipped for links.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
 reads as one only when "skill" appears on the same line. On a line mentioning a
 principle, a bare name also resolves against its principle- directory, which is
-how the suite writes "the **model-the-domain** principle skill".
+how the suite writes "the **model-the-domain** principle skill". Here inline
+code IS skipped, so a bolded word quoted inside backticks is not a reference.
+
+Fenced blocks are skipped for both checks. A fence at any indentation counts,
+since telling a nested fence from an indented code block needs container
+tracking this does not do. A fence that is never closed is itself a finding,
+because it would otherwise silently hide the rest of the file.
 """
 from __future__ import annotations
 
@@ -40,29 +45,38 @@ class Finding:
 @dataclass(frozen=True)
 class ParsedFile:
     path: Path
-    lines: list[str]
+    prose: list[tuple[int, str]]
+    unclosed_fence: int | None
 
 
-LINK_TARGET = re.compile(r"\]\(([^)\s<>]+\.md(?:#[^)\s]*)?)\)")
+LINK_TARGET = re.compile(r'\]\(([^)\s<>]+\.md(?:#[^)\s]*)?)(?:\s+"[^"]*")?\)')
 CODE_TARGET = re.compile(r"`(\.\.?/[^`\s<>]+)`")
 INLINE_CODE = re.compile(r"`[^`]*`")
-FENCE = re.compile(r"^\s*(```|~~~)")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*(.*)$")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 
 
-def outside_fences(lines: list[str]) -> Iterator[tuple[int, str]]:
-    marker: str | None = None
+def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
+    """One fence walk for every caller, so no two checks can disagree about what is code."""
+    prose: list[tuple[int, str]] = []
+    fence: str | None = None
+    opened = 0
     for lineno, line in enumerate(lines, start=1):
         m = FENCE.match(line)
         if m:
-            marker = None if marker == m.group(1) else (marker or m.group(1))
+            run, info = m.group(1), m.group(2).strip()
+            if fence is None:
+                fence, opened = run, lineno
+            elif run[0] == fence[0] and len(run) >= len(fence) and not info:
+                fence = None
             continue
-        if marker is None:
-            yield lineno, line
+        if fence is None:
+            prose.append((lineno, line))
+    return prose, (opened if fence else None)
 
 
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
-    for lineno, line in outside_fences(parsed.lines):
+    for lineno, line in parsed.prose:
         for pattern in (LINK_TARGET, CODE_TARGET):
             for m in pattern.finditer(line):
                 target = unquote(m.group(1).split("#", 1)[0])
@@ -83,7 +97,7 @@ BOLD_NAME = re.compile(r"\*\*([a-z][a-z0-9-]*)\*\*")
 
 
 def check_sibling_skill(parsed: ParsedFile) -> Iterator[Finding]:
-    for lineno, raw in outside_fences(parsed.lines):
+    for lineno, raw in parsed.prose:
         line = INLINE_CODE.sub("``", raw)
         near_skill = "skill" in line
         principle_hint = "principle" in line
@@ -108,9 +122,21 @@ def check_sibling_skill(parsed: ParsedFile) -> Iterator[Finding]:
             )
 
 
+def check_unclosed_fence(parsed: ParsedFile) -> Iterator[Finding]:
+    opened = parsed.unclosed_fence
+    if opened is not None:
+        yield Finding(
+            parsed.path,
+            opened,
+            "unclosed-fence",
+            "fence opened here is never closed, so the rest of the file goes unchecked",
+        )
+
+
 REGISTRY: list[tuple[str, Callable[[ParsedFile], Iterator[Finding]]]] = [
     ("relative-link", check_relative_links),
     ("sibling-skill", check_sibling_skill),
+    ("unclosed-fence", check_unclosed_fence),
 ]
 
 
@@ -134,7 +160,8 @@ def main() -> int:
     files_checked = 0
     for path in iter_markdown_files(ROOT):
         files_checked += 1
-        parsed = ParsedFile(path, path.read_text(encoding="utf-8").splitlines())
+        prose, unclosed = scan_blocks(path.read_text(encoding="utf-8").splitlines())
+        parsed = ParsedFile(path, prose, unclosed)
         for _name, check in REGISTRY:
             findings.extend(check(parsed))
 
