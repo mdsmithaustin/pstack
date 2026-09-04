@@ -1,6 +1,6 @@
 ---
 name: runtime-probes
-description: "Apply when asked to probe, stress, fuzz, or chaos-test a running product, feature, or PR for defects nobody has reported, or to go hunting for bugs against a live surface. Two passes: a probe pass over a closed taxonomy of entry-point shapes, and a promotion gate that keeps only findings a real caller can reach. Promoted findings leave a committed regression test behind; the rest are dismissed with a reason or carried as an explicit gap."
+description: "Apply when asked to probe, stress, fuzz, or chaos-test a running product, feature, or PR for defects nobody has reported, or to go hunting for bugs against a live surface. Two passes: a probe pass over a closed taxonomy of entry-point shapes, and a promotion gate that keeps only findings a real caller can reach. Promoted findings leave a committed regression test behind. The rest are dismissed with a reason, carried as an explicit gap, or escalated when the call is not the agent's to make."
 ---
 
 # Runtime probes
