@@ -105,6 +105,50 @@ class ContentLint(Tree):
         self.assertEqual(self.body("Write `**fake-skill** skill` here.")[0], 0)
 
 
+class FenceHandling(Tree):
+    def setUp(self) -> None:
+        super().setUp()
+        self.skill("real-skill", 'name: real-skill\ndescription: "d"')
+
+    def body(self, body: str) -> tuple[int, str]:
+        self.skill("a", 'name: a\ndescription: "d"', body)
+        return run(CONTENT, self.root)
+
+    def test_scripts_parse(self) -> None:
+        for script in (CONTENT, FRONTMATTER):
+            compile(script.read_text(encoding="utf-8"), str(script), "exec")
+
+    def test_four_backtick_fence_survives_an_inner_fence(self) -> None:
+        code, out = self.body("````\n```\nSee [x](../gone/n.md).\n```\n````")
+        self.assertEqual(code, 0, out)
+
+    def test_tilde_fence_is_skipped(self) -> None:
+        self.assertEqual(self.body("~~~\n[x](../gone/n.md)\n~~~")[0], 0)
+
+    def test_fence_with_info_string_is_skipped(self) -> None:
+        self.assertEqual(self.body("```markdown\n[x](../gone/n.md)\n```")[0], 0)
+
+    def test_a_line_with_an_info_string_does_not_close_a_fence(self) -> None:
+        code, out = self.body("```markdown\n```json\nSee [x](../gone/n.md).\n```")
+        self.assertEqual(code, 0, "only a bare fence closes one, so the link stays inside the block")
+
+    def test_content_after_a_closed_fence_is_checked(self) -> None:
+        self.assertEqual(self.body("```\nx\n```\n\nSee [x](../gone/n.md).")[0], 1)
+
+    def test_unclosed_fence_is_reported(self) -> None:
+        code, out = self.body("```\nx\n\nSee [x](../gone/n.md).")
+        self.assertEqual(code, 1, "an unclosed fence hides the rest of the file")
+        self.assertIn("unclosed-fence", out)
+
+    def test_indented_code_block_is_skipped(self) -> None:
+        self.assertEqual(self.body("Example:\n\n    See [x](../gone/n.md).")[0], 0)
+
+    def test_link_with_a_title_attribute_is_checked(self) -> None:
+        code, out = self.body('See [x](../gone/n.md "Title").')
+        self.assertEqual(code, 1, "a title attribute does not make the target unreachable")
+        self.assertIn("../gone/n.md", out)
+
+
 class FrontmatterLint(Tree):
     def check(self, frontmatter: str) -> tuple[int, str]:
         self.skill("a", frontmatter)
