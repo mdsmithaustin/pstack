@@ -3,9 +3,11 @@
 
 A relative markdown link whose target ends in .md must resolve to a file. A
 relative path written in inline code must resolve to something on disk, whatever
-its extension. Fenced blocks, indented code blocks and inline-code spans are skipped, so an
-example showing a broken path is not a finding. A fence that is never closed is
-itself a finding, because it would silently hide the rest of the file.
+its extension. Fenced blocks and inline-code spans are skipped, so an example showing a broken
+path is not a finding. A fence at any indentation counts, since telling a nested
+fence from an indented code block needs container tracking this does not do. A
+fence that is never closed is itself a finding, because it would otherwise
+silently hide the rest of the file.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
@@ -48,8 +50,7 @@ class ParsedFile:
 LINK_TARGET = re.compile(r'\]\(([^)\s<>]+\.md(?:#[^)\s]*)?)(?:\s+"[^"]*")?\)')
 CODE_TARGET = re.compile(r"`(\.\.?/[^`\s<>]+)`")
 INLINE_CODE = re.compile(r"`[^`]*`")
-FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*(.*)$")
-INDENTED_CODE = re.compile(r"^ {4,}\S")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*(.*)$")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 
 
@@ -58,8 +59,6 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
     prose: list[tuple[int, str]] = []
     fence: str | None = None
     opened = 0
-    prev_blank = True
-    indented = False
     for lineno, line in enumerate(lines, start=1):
         m = FENCE.match(line)
         if m:
@@ -68,14 +67,9 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
                 fence, opened = run, lineno
             elif run[0] == fence[0] and len(run) >= len(fence) and not info:
                 fence = None
-            prev_blank, indented = False, False
             continue
-        blank = not line.strip()
-        if not blank:
-            indented = (indented or prev_blank) if INDENTED_CODE.match(line) else False
-        if fence is None and not indented:
+        if fence is None:
             prose.append((lineno, line))
-        prev_blank = blank
     return prose, (opened if fence else None)
 
 
