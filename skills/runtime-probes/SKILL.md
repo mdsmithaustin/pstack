@@ -19,7 +19,7 @@ Name the scope, the surface, and the stop predicate, in that order.
 
 **Stop predicate.** A budget and a floor, both written down before the first probe. "Twenty probes per entry point, or two hours, whichever comes first" is the shape. When a loop-governance suite is installed, hand it the outer loop and keep this skill as the method that loop runs; otherwise this predicate bounds the run.
 
-Open a `findings.tsv` through the **show-me-your-work** skill, one row per probe: id, entry point, category, probe, observed, reproduces, verdict, reason. Keep it out of the tree so it survives reverts.
+Open a `findings.tsv` through the **show-me-your-work** skill, one row per probe: id, entry point, category, probe, observed, reproduces, state, reason. `state` holds one of the four values below. `reason` carries the dismissal reason, the guard name on a gap, or the open question on an escalation. Keep it out of the tree so it survives reverts.
 
 ## Pass 1: probe
 
@@ -50,12 +50,12 @@ Every worker finding is a hypothesis. Judge each on your configured `judgment an
 
 Triage the rest against the `fix` / `dismiss` / `ask` rubric in `../poteto-mode/references/bugbot-triage.md`, whose three verdicts are tagged on the states below. Record a learned dismissal pattern there in its own format instead of re-deriving it next run.
 
-Each finding ends in exactly one state.
+Each finding ends the run in exactly one state.
 
 - **promoted** (`fix`): it clears all three conditions. It earns a regression test and a row in the issue list.
 - **dismissed** (`dismiss`), with a reason. "Unreachable, the one caller validates this field against a bounded enum" is valid. Silence is not.
-- **gap**: it reproduces but fails condition 2, and the row names the guard that makes it unreachable. Strict reachability buys a finding list nobody has to re-litigate. It costs you this row. Delete that guard later and the gap goes live, so the guard's name is the whole value of keeping the row. This state is produced by condition 2, not by the rubric, so it carries no verdict tag.
-- **escalated** (`ask`): you cannot settle condition 2 or 3 yourself, and the finding touches security, privacy, auth, billing, data retention, or a permission boundary. Ask the user. Never spend an unsure call on a dismissal in those categories, which is that rubric's own standing rule.
+- **gap**: it reproduces but fails condition 2, and the row names the guard that makes it unreachable. Strict reachability buys a finding list nobody has to re-litigate. It costs you this row. Delete that guard later and the gap goes live, so the guard's name is the whole value of keeping the row. This state is produced by condition 2, not by the rubric, so it carries no rubric tag.
+- **escalated** (`ask`): you cannot settle condition 2 or 3 yourself, and the finding touches security, privacy, auth, billing, data retention, or a permission boundary. Ask the user. Never spend an unsure call on a dismissal in those categories, which is that rubric's own standing rule. The run ends here for that finding, not the finding itself. Once the answer comes back it becomes promoted, dismissed, or a gap.
 
 ## Residue
 
