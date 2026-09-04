@@ -7,31 +7,19 @@ import sys
 from pathlib import Path
 
 FM = re.compile(r"\A---\n(.*?)\n---\n", re.S)
-KV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*):(?:[ \t]+(.*))?$")
+KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
 
 
 def is_indented(line: str) -> bool:
     return line[:1] in (" ", "\t")
 
 
-def quote_error(value: str) -> str | None:
-    if not value.startswith('"'):
+def top_level_key(raw: str) -> str | None:
+    """One reader for both checks, so a form one accepts the other cannot silently ignore."""
+    if ":" not in raw:
         return None
-    if len(value) < 2 or not value.endswith('"'):
-        return "quoted value is not terminated"
-    inner = value[1:-1]
-    i = 0
-    while i < len(inner):
-        c = inner[i]
-        if c == "\\":
-            i += 2
-            continue
-        if c == '"':
-            return "quoted value has an unescaped interior quote"
-        i += 1
-    if i > len(inner):
-        return "quoted value is not terminated"
-    return None
+    key = raw.split(":", 1)[0].strip()
+    return key if KEY.fullmatch(key) else None
 
 
 def block_errors(block_lines: list[str], first_line_no: int) -> list[str]:
@@ -46,10 +34,9 @@ def block_errors(block_lines: list[str], first_line_no: int) -> list[str]:
             continue
         if is_indented(raw):
             continue
-        m = KV_LINE.match(raw)
-        if not m:
+        key = top_level_key(raw)
+        if key is None:
             continue
-        key = m.group(1)
         if key in seen_keys:
             errors.append(f"{lineno}: duplicate key {key!r}, first seen at line {seen_keys[key]}")
         else:
@@ -62,10 +49,10 @@ def top_level_fields(block_lines: list[str]) -> dict[str, str]:
     for raw in block_lines:
         if not raw.strip() or is_indented(raw):
             continue
-        if ":" not in raw:
+        key = top_level_key(raw)
+        if key is None:
             continue
-        key, value = raw.split(":", 1)
-        fields.setdefault(key.strip(), value.strip().strip('"'))
+        fields.setdefault(key, raw.split(":", 1)[1].strip().strip('"'))
     return fields
 
 

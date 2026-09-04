@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail on broken content inside skills/**/*.md.
 
-Every relative markdown link target must exist on disk. Every bolded name that
+Every relative markdown link whose target ends in .md must resolve to a file. Every bolded name that
 reads as a skill reference must name a real directory under the skills root. A
 principle- prefix always reads as one. Any other kebab name reads as one only
 when "skill" appears on the same line. On a line mentioning a principle, a bare

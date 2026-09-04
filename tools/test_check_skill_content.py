@@ -128,6 +128,11 @@ class FrontmatterLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("duplicate key", out)
 
+    def test_duplicate_key_with_space_before_colon_fires(self) -> None:
+        code, out = self.check('name: a\ndescription: "d"\nname : a')
+        self.assertEqual(code, 1, "extraction accepts this form, so duplicate detection must too")
+        self.assertIn("duplicate key", out)
+
     def test_tab_fires(self) -> None:
         code, out = self.check('name: a\ndescription:\t"d"')
         self.assertEqual(code, 1)
