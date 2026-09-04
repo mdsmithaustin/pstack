@@ -143,6 +143,20 @@ class FenceHandling(Tree):
     def test_indented_code_block_is_skipped(self) -> None:
         self.assertEqual(self.body("Example:\n\n    See [x](../gone/n.md).")[0], 0)
 
+    def test_multi_line_indented_code_block_is_skipped(self) -> None:
+        code, out = self.body("Example:\n\n    line one\n    [x](../gone/n.md)")
+        self.assertEqual(code, 0, "every line of the block is code, not just the first")
+
+    def test_blank_line_inside_an_indented_block_does_not_end_it(self) -> None:
+        self.assertEqual(self.body("Example:\n\n    one\n\n    [x](../gone/n.md)")[0], 0)
+
+    def test_content_after_an_indented_block_is_checked(self) -> None:
+        self.assertEqual(self.body("Example:\n\n    code\n\ntext [x](../gone/n.md)")[0], 1)
+
+    def test_indented_line_not_after_a_blank_stays_prose(self) -> None:
+        code, _ = self.body("text\n    [x](../gone/n.md)")
+        self.assertEqual(code, 1, "an indented code block cannot interrupt a paragraph")
+
     def test_link_with_a_title_attribute_is_checked(self) -> None:
         code, out = self.body('See [x](../gone/n.md "Title").')
         self.assertEqual(code, 1, "a title attribute does not make the target unreachable")

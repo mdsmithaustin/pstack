@@ -59,6 +59,7 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
     fence: str | None = None
     opened = 0
     prev_blank = True
+    indented = False
     for lineno, line in enumerate(lines, start=1):
         m = FENCE.match(line)
         if m:
@@ -67,10 +68,12 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
                 fence, opened = run, lineno
             elif run[0] == fence[0] and len(run) >= len(fence) and not info:
                 fence = None
-            prev_blank = False
+            prev_blank, indented = False, False
             continue
         blank = not line.strip()
-        if fence is None and not (prev_blank and INDENTED_CODE.match(line)):
+        if not blank:
+            indented = (indented or prev_blank) if INDENTED_CODE.match(line) else False
+        if fence is None and not indented:
             prose.append((lineno, line))
         prev_blank = blank
     return prose, (opened if fence else None)
