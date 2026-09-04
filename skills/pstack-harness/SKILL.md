@@ -1,6 +1,6 @@
 ---
 name: pstack-harness
-description: Maps pstack's delegation primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness) — how to spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), open a todolist, loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or todolist and you are unsure how to realize that in this harness, or names a sibling skill you cannot find in your tool inventory.
+description: Maps pstack's delegation primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness). Covers how to spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), open a todolist, loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or todolist, or names a sibling skill you cannot find in your tool inventory. Every primitive is named differently per harness, so read this before concluding your harness has no such tool.
 ---
 
 # Harness adapters
@@ -27,7 +27,7 @@ Each writer gets its own git worktree, whichever mechanism spawns it.
 
 **Structured questions (`AskQuestion`).** Your harness's structured-question tool if it has one; otherwise ask in plain chat.
 
-**Open a todolist.** Your harness's todo or plan-tracking tool if it has one; otherwise keep the list visible another way — a checklist in your reply updated as items land, or a scratch `TODO.md` in the worktree. Missing the tool never cancels the practice: the full plan stated up front, one item in progress at a time, skips marked with a reason, nothing silently dropped.
+**Open a todolist.** Harnesses name this tool inconsistently, so resolve it by looking, never by recall. Claude Code calls it `TodoWrite`, Codex calls it `update_plan`, Hermes ships it as the `todo` toolset. Search your inventory by shape, a tool that tracks a plan or a task list, not by the literal word "todo"; `update_plan` is the name that gets missed. Some harnesses defer tool schemas, so a tool absent from the visible inventory may still be loadable through a tool-search facility. Query that before you conclude there is none. Only a look that came up empty licenses the fallback, in this order: a scratch `TODO.md` when you have a filesystem, otherwise a checklist in your reply updated as items land. Missing the tool never cancels the practice: the full plan stated up front, one item in progress at a time, skips marked with a reason, nothing silently dropped. Name the mechanism you used in your reply.
 
 **Loops and wake-ups.** Your harness's loop or scheduling facility; otherwise a re-invoking wrapper (script, cron, CI).
 
@@ -37,11 +37,11 @@ Each writer gets its own git worktree, whichever mechanism spawns it.
 
 Observed circa 2026-09. Treat as starting points, not contracts — verify against your live session before relying on any of them, and prefer what you find over what is written here.
 
-| harness | spawn | effort | transcripts |
-|---|---|---|---|
-| Claude Code | `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases | no per-call field; only the `effort` frontmatter key of a custom agent file. A subagent inherits the session effort (`--effort`, `effortLevel`), so the effort is `inherit-parent` here | JSONL under `~/.claude/projects/<slug>/`, `<slug>` = workspace path with `/` → `-` |
-| Codex | `spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn; custom roles live in `~/.codex/agents/*.md` or `.codex/agents/*.md` with `model` and `model_reasoning_effort`; `codex exec` is the subprocess route | the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (medium on the GPT-5.6 family), not the parent's, so always pass one | JSONL under `~/.codex/sessions/` by date |
-| Hermes | a delegation toolset when enabled; `hermes -z` for one-shot subprocess runs | `--reasoning <value>` on `hermes -z`; config `agent.reasoning_effort` and per-model `agent.reasoning_overrides`. Whether the delegation toolset takes an effort field is unverified: check its schema in session | SQLite store; `hermes sessions` subcommands list and export |
+| harness | spawn | todolist | effort | transcripts |
+|---|---|---|---|---|
+| Claude Code | `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases | `TodoWrite`. Absent from some builds and permission modes, and it is not always in the deferred-tool list either, so an empty look here is real and the fallback applies | no per-call field; only the `effort` frontmatter key of a custom agent file. A subagent inherits the session effort (`--effort`, `effortLevel`), so the effort is `inherit-parent` here | JSONL under `~/.claude/projects/<slug>/`, `<slug>` = workspace path with `/` → `-` |
+| Codex | `spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn; custom roles live in `~/.codex/agents/*.md` or `.codex/agents/*.md` with `model` and `model_reasoning_effort`; `codex exec` is the subprocess route | `update_plan`. No "todo" in the name, so a keyword scan misses it | the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (medium on the GPT-5.6 family), not the parent's, so always pass one | JSONL under `~/.codex/sessions/` by date |
+| Hermes | a delegation toolset when enabled; `hermes -z` for one-shot subprocess runs | the `todo` toolset, listed as "Task Planning" and enabled by default. Confirm with `hermes tools list`, then read the tool's live schema for the call shape | `--reasoning <value>` on `hermes -z`; config `agent.reasoning_effort` and per-model `agent.reasoning_overrides`. Whether the delegation toolset takes an effort field is unverified: check its schema in session | SQLite store; `hermes sessions` subcommands list and export |
 
 ## Universal rules
 
