@@ -48,13 +48,14 @@ Every worker finding is a hypothesis. Judge each on your configured `judgment an
 2. **A real caller can reach it.** Name the caller and the path from a real entry point to the failure. Strict reachability means a defect behind a guard no caller gets past does not promote.
 3. **A maintainer would take the fix.** The consequence is user-visible, data-affecting, or crosses a security or privacy boundary. Internal untidiness is not a defect.
 
-Triage the rest against the `fix` / `dismiss` / `ask` rubric in `../poteto-mode/references/bugbot-triage.md`, and record a learned dismissal pattern there in its own format instead of re-deriving it next run.
+Triage the rest against the `fix` / `dismiss` / `ask` rubric in `../poteto-mode/references/bugbot-triage.md`, whose three verdicts are tagged on the states below. Record a learned dismissal pattern there in its own format instead of re-deriving it next run.
 
 Each finding ends in exactly one state.
 
-- **promoted**: it clears all three. It earns a regression test and a row in the issue list.
-- **dismissed**, with a reason. "Unreachable, the one caller validates this field against a bounded enum" is valid. Silence is not.
-- **gap**: it reproduces but fails condition 2, and the row names the guard that makes it unreachable. Strict reachability buys a finding list nobody has to re-litigate. It costs you this row. Delete that guard later and the gap goes live, so the guard's name is the whole value of keeping the row.
+- **promoted** (`fix`): it clears all three conditions. It earns a regression test and a row in the issue list.
+- **dismissed** (`dismiss`), with a reason. "Unreachable, the one caller validates this field against a bounded enum" is valid. Silence is not.
+- **gap**: it reproduces but fails condition 2, and the row names the guard that makes it unreachable. Strict reachability buys a finding list nobody has to re-litigate. It costs you this row. Delete that guard later and the gap goes live, so the guard's name is the whole value of keeping the row. This state is produced by condition 2, not by the rubric, so it carries no verdict tag.
+- **escalated** (`ask`): you cannot settle condition 2 or 3 yourself, and the finding touches security, privacy, auth, billing, data retention, or a permission boundary. Ask the user. Never spend an unsure call on a dismissal in those categories, which is that rubric's own standing rule.
 
 ## Residue
 
@@ -64,4 +65,4 @@ Each promoted finding becomes one failing test staged before its fix per the **p
 
 A promoted test asserts an invariant, not a transcript. "Rejects a quantity below zero" survives a refactor. "Returns this exact error string for this exact byte sequence" does not. Put every promoted test through the **verify-commands** skill before it lands, because a generated test that passes green while measuring nothing is worse than no test at all.
 
-**Reply:** scope and surface, the stop predicate and whether it was met, probes run per entry point, each promoted finding on one line with its test, the dismissed count, every gap with its named guard, and the `findings.tsv` path.
+**Reply:** scope and surface, the stop predicate and whether it was met, probes run per entry point, each promoted finding on one line with its test, the dismissed count, every gap with its named guard, every escalated finding with the question it needs answered, and the `findings.tsv` path.
