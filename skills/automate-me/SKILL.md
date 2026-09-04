@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 A guided flow for turning the user's working conventions into a skill agents will follow. The output is one `-mode` skill tailored to them (e.g. `jay-mode`, `priya-mode`).
 
-This skill orchestrates three others: an inline mining pass (see step 1), the authoring guidance in `poteto-mode`'s `playbooks/authoring-a-skill.md`, and the **unslop** skill (prose discipline). It sequences them; it doesn't replace them.
+This skill orchestrates three others: an inline mining pass (see step 1), the authoring guidance in `../poteto-mode/playbooks/authoring-a-skill.md`, and the **unslop** skill (prose discipline). It sequences them; it doesn't replace them.
 
 ## Flow
 
@@ -64,7 +64,7 @@ The **poteto-mode** skill shows the shape. Read it for granularity. Don't copy i
 
 ### 4. Draft the skill
 
-Author the skill per `poteto-mode`'s `playbooks/authoring-a-skill.md`. Placement:
+Author the skill per `../poteto-mode/playbooks/authoring-a-skill.md`. Placement:
 
 - Path: preserve an existing mode skill's category. For a new mode, use `.agents/skills/<handle>/<handle>-mode/SKILL.md` when the repo has an established personal category for that handle; otherwise default to `.agents/skills/<handle>-mode/SKILL.md` in the project (or `~/.agents/skills/<handle>-mode/` if the user prefers a personal skill).
 - Handle: the user's first name or chosen identifier.
@@ -106,4 +106,4 @@ Run a description-optimization loop only if the skill's trigger accuracy turns o
 
 - The **poteto-mode** skill: example of the output shape.
 - The **unslop** skill: prose discipline for every line.
-- `poteto-mode`'s `playbooks/authoring-a-skill.md`: skill authoring process and writing guidelines.
+- `../poteto-mode/playbooks/authoring-a-skill.md`: skill authoring process and writing guidelines.
