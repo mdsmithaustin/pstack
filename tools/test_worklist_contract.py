@@ -19,13 +19,25 @@ class WorklistContract(unittest.TestCase):
         }
         self.assertEqual(states, {"pending", "in progress", "completed", "skipped"})
 
+        cases = [(state, True) for state in states]
+        cases.extend((f"deploy {state}", True) for state in states)
+        cases.extend((label, False) for label in (
+            "skip", "n/a", "progress", "deploy skip", "notskipped", "deploy n/a",
+        ))
         for caller in ("poteto-mode/SKILL.md", "poteto-mode/playbooks/feature.md"):
             with self.subTest(caller=caller):
                 content = (SKILLS / caller).read_text(encoding="utf-8")
                 labels = re.findall(r"`([^`]+): <reason>`", content)
                 self.assertTrue(labels, "caller must retain an explicit reason state")
-                used_states = {label.split()[-1] for label in labels}
-                self.assertEqual(used_states - states, set(), "undeclared worklist states")
+                cases.extend((label, True) for label in labels)
+
+        for label, expected in cases:
+            with self.subTest(label=label):
+                valid = any(
+                    label == state or label.endswith(f" {state}")
+                    for state in states
+                )
+                self.assertEqual(valid, expected)
 
 
 if __name__ == "__main__":
