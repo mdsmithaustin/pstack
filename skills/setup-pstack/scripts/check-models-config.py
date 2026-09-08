@@ -13,14 +13,14 @@ HARNESSES = {"codex", "claude-code", "hermes"}
 ROLES = {
     "feature", "refactoring", "bug-fix", "perf-issue", "hillclimb",
     "judgment and prose", "hardest tasks", "how explorer", "how explainer",
-    "how critics", "why investigators", "why synthesizer", "reflect tooling",
+    "why investigators", "why synthesizer", "reflect tooling",
     "reflect judgment", "reflect divergent", "reflect synthesizer",
     "arena runners", "arena cross-judge pool", "swarm workers",
     "architect runners", "interrogate reviewers",
     "trail reviewer", "default",
 }
 PANEL_ROLES = {
-    "how critics", "arena runners", "arena cross-judge pool",
+    "arena runners", "arena cross-judge pool",
     "architect runners", "interrogate reviewers",
 }
 REFLECT_SHORTHANDS = {"divergent", "synthesizer", "tooling", "judgment"}

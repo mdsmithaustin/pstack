@@ -13,7 +13,6 @@ judgment and prose: fable
 hardest tasks: fable
 how explorer: sonnet
 how explainer: fable
-how critics: fable, opus, sonnet, haiku
 why investigators: sonnet
 why synthesizer: fable
 reflect tooling: opus
@@ -35,7 +34,6 @@ judgment and prose: gpt-5.6-sol@max
 hardest tasks: gpt-5.6-sol@max
 how explorer: gpt-5.6-terra@high
 how explainer: gpt-5.6-sol@max
-how critics: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high, gpt-5.6-luna@high
 why investigators: gpt-5.6-terra@high
 why synthesizer: gpt-5.6-sol@max
 reflect tooling: gpt-5.6-sol@xhigh
