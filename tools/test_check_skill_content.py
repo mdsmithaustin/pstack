@@ -104,6 +104,32 @@ class ContentLint(Tree):
     def test_bold_inside_inline_code_is_ignored(self) -> None:
         self.assertEqual(self.body("Write `**fake-skill** skill` here.")[0], 0)
 
+    def test_old_monorepo_path_fires_in_prose_and_fenced_templates(self) -> None:
+        code, out = self.body(
+            "Read pstack/skills/example/SKILL.md.\n\n"
+            "````markdown\n"
+            "```sh\n"
+            "node pstack/skills/example/check.mjs\n"
+            "```\n"
+            "````"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:5: port-substitution", out)
+        self.assertIn("SKILL.md:9: port-substitution", out)
+
+    def test_retired_deslop_command_fires_in_prose_and_fenced_templates(self) -> None:
+        code, out = self.body(
+            "Run /deslop before the commit.\n\n"
+            "````markdown\n"
+            "```text\n"
+            "/deslop\n"
+            "```\n"
+            "````"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:5: port-substitution", out)
+        self.assertIn("SKILL.md:9: port-substitution", out)
+
 
 class FenceHandling(Tree):
     def setUp(self) -> None:
