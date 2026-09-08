@@ -13,6 +13,8 @@ jobs:
           python-version: "3.12"
       - name: Frontmatter name matches directory, description present
         run: python3 tools/check-skill-frontmatter.py skills
+      - name: Reject PII
+        run: python3 tools/check-pii.py
       - name: No unconditional dependency on another suite's skills
         run: python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
       - name: Relative links resolve, bolded skill references exist

@@ -1,0 +1,4 @@
+pre-commit:
+  commands:
+    pii:
+      run: python3 tools/check-pii.py --staged
