@@ -131,7 +131,7 @@ def check_unclosed_fence(parsed: ParsedFile) -> Iterator[Finding]:
             parsed.path,
             opened,
             "unclosed-fence",
-            "fence opened here is never closed, so the rest of the file goes unchecked",
+            "fence opened here is never closed, so link and sibling checks skip the rest of the file",
         )
 
 

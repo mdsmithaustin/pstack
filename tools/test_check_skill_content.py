@@ -174,9 +174,11 @@ class FenceHandling(Tree):
         self.assertEqual(self.body("```\nx\n```\n\nSee [x](../gone/n.md).")[0], 1)
 
     def test_unclosed_fence_is_reported(self) -> None:
-        code, out = self.body("```\nx\n\nSee [x](../gone/n.md).")
+        code, out = self.body("```\nx\n\nSee [x](../gone/n.md).\nRun /deslop.")
         self.assertEqual(code, 1, "an unclosed fence hides the rest of the file")
         self.assertIn("unclosed-fence", out)
+        self.assertIn("link and sibling checks skip the rest of the file", out)
+        self.assertIn("port-substitution", out, "raw port checks still inspect text after an unclosed fence")
 
     def test_fence_indented_inside_a_nested_list_is_still_a_fence(self) -> None:
         code, out = self.body("- a\n  - b\n\n    ```\n    See [x](../gone/n.md).\n    ```")
