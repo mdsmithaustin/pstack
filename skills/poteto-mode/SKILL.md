@@ -115,7 +115,7 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
 
 ## Playbooks
 
-Open a worklist whose first items are the matched playbook's steps, copied in verbatim, before any task-specific items. The **pstack-harness** skill selects the best native carrier from live capability descriptions, without depending on a product-specific tool name. A step you choose not to do stays in the list with a one-line `skip: <reason>`. Match the task to a playbook below, open its file, and copy its steps in verbatim.
+Open a worklist whose first items are the matched playbook's steps, copied verbatim, before any task-specific items. The **pstack-harness** skill selects the best native carrier from live capability descriptions, without depending on a product-specific tool name. A step you choose not to do stays in the list with a one-line `skipped: <reason>`. Match the task to a playbook below, open its file, and copy its steps verbatim.
 
 A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
 
