@@ -10,7 +10,7 @@ Fan out N parallel attempts at the same task. Read every candidate end to end. P
 
 ## Start
 
-Open a todolist with one entry per phase before launching anything.
+Open a worklist with one entry per phase before launching anything.
 
 1. Frame
 2. Fan out

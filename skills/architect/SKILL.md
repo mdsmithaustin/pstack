@@ -10,7 +10,7 @@ Design before implementing. Sketch types, function signatures, class shapes, and
 
 ## Start
 
-Open a todolist with one entry per phase before starting.
+Open a worklist with one entry per phase before starting.
 
 1. Ground
 2. Sketch
