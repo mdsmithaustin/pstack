@@ -19,7 +19,7 @@ export PSTACK_SKILLS_ROOT
 
 ## Resolve the pstack source root
 
-Run this block only before a fresh pstack trunk read. Set `PSTACK_SOURCE_ROOT` before the block when the program already has an explicit checkout. The block rejects a supplied checkout with the wrong origin. Without one, it considers the loaded skill's physical Git ancestry. A copied installation has no verified source ancestry, so the block creates a private shallow clone. Git URL rewrites in the host configuration are trusted transport settings. The configured `origin` value must still name the canonical repository.
+Initialize this block once per program or new execution environment, before the first fresh pstack trunk read. In the same execution environment, later ticks and resumes restore both `PSTACK_SOURCE_ROOT` and `PSTACK_TEMP_ROOT`, then run the documented fetch and read directly. Do not rerun this block because it resets `PSTACK_TEMP_ROOT`. Set `PSTACK_SOURCE_ROOT` before initialization when the program already has an explicit checkout. The block rejects a supplied checkout with the wrong origin. Without one, it considers the loaded skill's physical Git ancestry. A copied installation has no verified source ancestry, so the block creates a private shallow clone. Git URL rewrites in the host configuration are trusted transport settings. The configured `origin` value must still name the canonical repository.
 
 ```sh
 PSTACK_TEMP_ROOT=
