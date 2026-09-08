@@ -104,6 +104,32 @@ class ContentLint(Tree):
     def test_bold_inside_inline_code_is_ignored(self) -> None:
         self.assertEqual(self.body("Write `**fake-skill** skill` here.")[0], 0)
 
+    def test_old_monorepo_path_fires_in_prose_and_fenced_templates(self) -> None:
+        code, out = self.body(
+            "Read pstack/skills/example/SKILL.md.\n\n"
+            "````markdown\n"
+            "```sh\n"
+            "node pstack/skills/example/check.mjs\n"
+            "```\n"
+            "````"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:6: port-substitution", out)
+        self.assertIn("SKILL.md:10: port-substitution", out)
+
+    def test_retired_deslop_command_fires_in_prose_and_fenced_templates(self) -> None:
+        code, out = self.body(
+            "Run /deslop before the commit.\n\n"
+            "````markdown\n"
+            "```text\n"
+            "/deslop\n"
+            "```\n"
+            "````"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:6: port-substitution", out)
+        self.assertIn("SKILL.md:10: port-substitution", out)
+
 
 class FenceHandling(Tree):
     def setUp(self) -> None:
@@ -148,9 +174,11 @@ class FenceHandling(Tree):
         self.assertEqual(self.body("```\nx\n```\n\nSee [x](../gone/n.md).")[0], 1)
 
     def test_unclosed_fence_is_reported(self) -> None:
-        code, out = self.body("```\nx\n\nSee [x](../gone/n.md).")
+        code, out = self.body("```\nx\n\nSee [x](../gone/n.md).\nRun /deslop.")
         self.assertEqual(code, 1, "an unclosed fence hides the rest of the file")
         self.assertIn("unclosed-fence", out)
+        self.assertIn("link and sibling checks skip the rest of the file", out)
+        self.assertIn("port-substitution", out, "raw port checks still inspect text after an unclosed fence")
 
     def test_fence_indented_inside_a_nested_list_is_still_a_fence(self) -> None:
         code, out = self.body("- a\n  - b\n\n    ```\n    See [x](../gone/n.md).\n    ```")

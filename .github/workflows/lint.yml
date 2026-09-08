@@ -11,15 +11,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
       - name: Frontmatter name matches directory, description present
         run: python3 tools/check-skill-frontmatter.py skills
       - name: Reject PII
         run: python3 tools/check-pii.py
       - name: No unconditional dependency on another suite's skills
         run: python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
-      - name: Relative links resolve, bolded skill references exist
+      - name: Skill links, references, and port substitutions are valid
         run: python3 tools/check-skill-content.py skills
-      - name: skill-content lint tests
+      - name: Skill lint and runtime command tests
         run: python3 -m unittest discover -s tools -p 'test_*.py'
       - name: pstack-models.md lint tests
         run: python3 -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'

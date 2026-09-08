@@ -12,10 +12,11 @@ principle, a bare name also resolves against its principle- directory, which is
 how the suite writes "the **model-the-domain** principle skill". Here inline
 code IS skipped, so a bolded word quoted inside backticks is not a reference.
 
-Fenced blocks are skipped for both checks. A fence at any indentation counts,
-since telling a nested fence from an indented code block needs container
-tracking this does not do. A fence that is never closed is itself a finding,
-because it would otherwise silently hide the rest of the file.
+Fenced blocks are skipped for link and sibling checks. Port substitution checks
+scan every raw line, including templates inside fences. A fence at any
+indentation counts, since telling a nested fence from an indented code block
+needs container tracking this does not do. A fence that is never closed is
+itself a finding, because it would otherwise silently hide the rest of the file.
 """
 from __future__ import annotations
 
@@ -45,6 +46,7 @@ class Finding:
 @dataclass(frozen=True)
 class ParsedFile:
     path: Path
+    raw: list[tuple[int, str]]
     prose: list[tuple[int, str]]
     unclosed_fence: int | None
 
@@ -129,14 +131,28 @@ def check_unclosed_fence(parsed: ParsedFile) -> Iterator[Finding]:
             parsed.path,
             opened,
             "unclosed-fence",
-            "fence opened here is never closed, so the rest of the file goes unchecked",
+            "fence opened here is never closed, so link and sibling checks skip the rest of the file",
         )
+
+
+PORT_SUBSTITUTIONS = {
+    "pstack/skills/": "use the installed or verified-source root instead of the upstream monorepo path",
+    "/deslop": "use the bundled unslop skill instead of the retired command",
+}
+
+
+def check_port_substitutions(parsed: ParsedFile) -> Iterator[Finding]:
+    for lineno, line in parsed.raw:
+        for old, replacement in PORT_SUBSTITUTIONS.items():
+            if old in line:
+                yield Finding(parsed.path, lineno, "port-substitution", replacement)
 
 
 REGISTRY: list[tuple[str, Callable[[ParsedFile], Iterator[Finding]]]] = [
     ("relative-link", check_relative_links),
     ("sibling-skill", check_sibling_skill),
     ("unclosed-fence", check_unclosed_fence),
+    ("port-substitution", check_port_substitutions),
 ]
 
 
@@ -160,8 +176,9 @@ def main() -> int:
     files_checked = 0
     for path in iter_markdown_files(ROOT):
         files_checked += 1
-        prose, unclosed = scan_blocks(path.read_text(encoding="utf-8").splitlines())
-        parsed = ParsedFile(path, prose, unclosed)
+        raw = list(enumerate(path.read_text(encoding="utf-8").splitlines(), start=1))
+        prose, unclosed = scan_blocks([line for _lineno, line in raw])
+        parsed = ParsedFile(path, raw, prose, unclosed)
         for _name, check in REGISTRY:
             findings.extend(check(parsed))
 
