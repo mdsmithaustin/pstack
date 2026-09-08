@@ -1,11 +1,15 @@
 ---
 name: pstack-harness
-description: Maps pstack's delegation primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness). Covers how to spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), open a todolist, loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or todolist, or names a sibling skill you cannot find in your tool inventory. Every primitive is named differently per harness, so read this before concluding your harness has no such tool.
+description: Maps pstack's delegation and portable resource primitives to the current CLI (Claude Code, Codex, Hermes, or any other harness). Covers how to locate installed skills and fresh trunk resources, spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), open a todolist, loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or todolist, names a sibling skill you cannot find, or runs a path from a playbook. Every primitive is named differently per harness, so read this before concluding your harness has no such tool or resource.
 ---
 
 # Harness adapters
 
 pstack skills describe delegation abstractly: "spawn a subagent on model X", "launch N in parallel in one message", "readonly", "AskQuestion". Each is an intent, not a tool name. Satisfy the intent with whatever your session actually provides — your live tool inventory and your CLI's own help are the authority, not this file. Never invent a tool, and say in your reply which mechanism you used.
+
+## Resolve portable resources
+
+When a pstack workflow uses a `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, or `PROJECT_ROOT` command, read the [portable resource path contract](references/portable-paths.md) in full. These commands run bundled scripts, address installed resources, read fresh pstack trunk, or read a consumer control skill. Resolve only the roots that the next command needs. Keep the exact command forms in generated plans and restore the recorded roots across owners, delegates, wake-ups, and later ticks.
 
 ## The primitives
 

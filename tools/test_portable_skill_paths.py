@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Execute the portable resource commands exactly as the skills document them."""
 from __future__ import annotations
 
 import os
@@ -12,7 +11,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HARNESS = ROOT / "skills/pstack-harness/SKILL.md"
+PORTABLE_PATHS = ROOT / "skills/pstack-harness/references/portable-paths.md"
 AUTOPILOT = ROOT / "skills/poteto-mode/playbooks/autopilot-full.md"
+AUTOPILOT_STACK = ROOT / "skills/poteto-mode/playbooks/autopilot-stack.md"
 PLAN_PLAYBOOK = ROOT / "skills/poteto-mode/playbooks/multi-phase-plan.md"
 
 
@@ -154,6 +155,9 @@ class PortableSkillPaths(unittest.TestCase):
         self.env = os.environ.copy()
         self.env["GIT_CONFIG_GLOBAL"] = str(self.git_config)
         self.env["GIT_CONFIG_NOSYSTEM"] = "1"
+        self.program_temp = self.base / "program temp"
+        self.program_temp.mkdir()
+        self.env["TMPDIR"] = str(self.program_temp)
         git(self.seed, "push", "-u", "origin", "main", env=self.env)
 
         self.source = self.base / "source checkout"
@@ -177,18 +181,22 @@ class PortableSkillPaths(unittest.TestCase):
         harness = self.seed / "skills/pstack-harness/SKILL.md"
         harness.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(HARNESS, harness)
+        portable_paths = self.seed / "skills/pstack-harness/references/portable-paths.md"
+        portable_paths.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(PORTABLE_PATHS, portable_paths)
         checker = self.seed / "skills/poteto-mode/scripts/check-plan.mjs"
         checker.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / "skills/poteto-mode/scripts/check-plan.mjs", checker)
-        playbook = self.seed / "skills/poteto-mode/playbooks/autopilot-full.md"
-        playbook.parent.mkdir(parents=True, exist_ok=True)
-        playbook.write_text(f"{sentinel}\n", encoding="utf-8")
+        playbooks = self.seed / "skills/poteto-mode/playbooks"
+        playbooks.mkdir(parents=True, exist_ok=True)
+        for name in ("autopilot-full.md", "autopilot-stack.md"):
+            (playbooks / name).write_text(f"{sentinel}\n", encoding="utf-8")
         unslop = self.seed / "skills/unslop/SKILL.md"
         unslop.parent.mkdir(parents=True, exist_ok=True)
         unslop.write_text("unslop fixture\n", encoding="utf-8")
 
     def _root_script(self) -> str:
-        return shell_block(HARNESS, "## Resolve the portable roots")
+        return shell_block(PORTABLE_PATHS, "## Resolve the installed skills root")
 
     def _run_contract(
         self,
@@ -196,6 +204,8 @@ class PortableSkillPaths(unittest.TestCase):
         extra: str,
         source: Path | None = None,
         env: dict[str, str] | None = None,
+        needs_source: bool = False,
+        needs_project: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         values = (env or self.env).copy()
         values["PSTACK_HARNESS_SKILL"] = str(invoked)
@@ -203,7 +213,13 @@ class PortableSkillPaths(unittest.TestCase):
             values["PSTACK_SOURCE_ROOT"] = str(source)
         else:
             values.pop("PSTACK_SOURCE_ROOT", None)
-        script = f"set -eu\n{self._root_script()}\n{extra}\n"
+        blocks = ["set -eu", self._root_script()]
+        if needs_source:
+            blocks.append(shell_block(PORTABLE_PATHS, "## Resolve the pstack source root"))
+        if needs_project:
+            blocks.append(shell_block(PORTABLE_PATHS, "## Resolve the consumer project root"))
+        blocks.append(extra)
+        script = "\n".join(blocks) + "\n"
         return run(["sh", "-c", script], self.consumer, values)
 
     def _linked_install(self) -> Path:
@@ -219,43 +235,68 @@ class PortableSkillPaths(unittest.TestCase):
         return root
 
     def test_documented_validator_command_runs_in_source_linked_and_copied_layouts(self) -> None:
-        command = inline_command(HARNESS, "check-plan.mjs")
+        commands = [
+            inline_command(PORTABLE_PATHS, "check-plan.mjs"),
+            inline_command(PLAN_PLAYBOOK, "check-plan.mjs"),
+        ]
         plan = self.consumer / "valid plan.md"
         plan.write_text(valid_plan(), encoding="utf-8")
         for skills_root in (self.source / "skills", self._linked_install(), self._copied_install()):
-            with self.subTest(skills_root=skills_root):
-                invoked = skills_root / "pstack-harness/SKILL.md"
-                result = self._run_contract(invoked, f'PLAN_PATH={shlex_quote(plan)}\n{command}')
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertIn("1 PR sections, 0 problems", result.stdout)
+            for command in commands:
+                with self.subTest(skills_root=skills_root, command=command):
+                    invoked = skills_root / "pstack-harness/SKILL.md"
+                    values = self.env
+                    if skills_root.name == "copied install skills":
+                        broken_config = self.base / "offline-gitconfig"
+                        broken_config.write_text(
+                            '[url "file:///definitely/missing/pstack.git"]\n\tinsteadOf = https://github.com/mdsmithaustin/pstack.git\n',
+                            encoding="utf-8",
+                        )
+                        values = self.env.copy()
+                        values["GIT_CONFIG_GLOBAL"] = str(broken_config)
+                    result = self._run_contract(
+                        invoked,
+                        f'PLAN_PATH={shlex_quote(plan)}\n{command}',
+                        env=values,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("1 PR sections, 0 problems", result.stdout)
+        self.assertEqual(list(self.program_temp.iterdir()), [], "local validation must not clone pstack source")
 
     def test_documented_tick_fetches_fresh_pstack_trunk_not_consumer_trunk(self) -> None:
         command = inline_command(AUTOPILOT, "autopilot-full.md")
         first = self._run_contract(
             self.source / "skills/pstack-harness/SKILL.md",
             command,
+            needs_source=True,
         )
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         self.assertIn("pstack-v1", first.stdout)
         self.assertNotIn("consumer-only", first.stdout)
 
         self._write_source("pstack-v2")
-        git(self.seed, "add", "skills/poteto-mode/playbooks/autopilot-full.md")
+        git(self.seed, "add", "skills/poteto-mode/playbooks/autopilot-full.md", "skills/poteto-mode/playbooks/autopilot-stack.md")
         git(self.seed, "commit", "-m", "fixture v2")
         git(self.seed, "push", "origin", "main", env=self.env)
-        second = self._run_contract(
-            self.source / "skills/pstack-harness/SKILL.md",
+        git(self.source, "config", "remote.origin.fetch", "+refs/heads/unrelated:refs/remotes/origin/unrelated")
+        restored = self.env.copy()
+        restored["PSTACK_SOURCE_ROOT"] = str(self.source)
+        for tick in (
             command,
-        )
-        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
-        self.assertIn("pstack-v2", second.stdout)
-        self.assertNotIn("pstack-v1", second.stdout)
+            inline_command(AUTOPILOT_STACK, "autopilot-stack.md"),
+        ):
+            with self.subTest(tick=tick):
+                second = run(["sh", "-c", f"set -eu\n{tick}\n"], self.consumer, restored)
+                self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+                self.assertIn("pstack-v2", second.stdout)
+                self.assertNotIn("pstack-v1", second.stdout)
 
     def test_control_skill_read_uses_the_consumer_root(self) -> None:
         command = inline_command(PLAN_PLAYBOOK, "CONTROL_SKILL_PATH")
         result = self._run_contract(
             self.source / "skills/pstack-harness/SKILL.md",
             f"CONTROL_SKILL_PATH=control.md\n{command}",
+            needs_project=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout.strip(), "consumer-only")
@@ -265,7 +306,8 @@ class PortableSkillPaths(unittest.TestCase):
         command = inline_command(AUTOPILOT, "autopilot-full.md")
         result = self._run_contract(
             copied / "pstack-harness/SKILL.md",
-            f'{command}\nprintf "temp=%s\\n" "$PSTACK_TEMP_ROOT"\n{shell_block(HARNESS, "## Clean up a program-owned source clone")}',
+            f'{command}\nprintf "temp=%s\\n" "$PSTACK_TEMP_ROOT"\n{shell_block(PORTABLE_PATHS, "## Clean up a program-owned source clone")}',
+            needs_source=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("pstack-v1", result.stdout)
@@ -282,6 +324,7 @@ class PortableSkillPaths(unittest.TestCase):
             copied / "pstack-harness/SKILL.md",
             "printf 'installed-fallback\\n'",
             source=wrong,
+            needs_source=True,
         )
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("canonical mdsmithaustin/pstack origin", rejected.stderr)
@@ -298,13 +341,14 @@ class PortableSkillPaths(unittest.TestCase):
             copied / "pstack-harness/SKILL.md",
             "printf 'installed-fallback\\n'",
             env=broken_env,
+            needs_source=True,
         )
         self.assertNotEqual(failed.returncode, 0)
         self.assertIn("could not clone canonical pstack source", failed.stderr)
         self.assertNotIn("installed-fallback", failed.stdout)
 
     def test_documented_validator_command_rejects_a_structurally_invalid_plan(self) -> None:
-        command = inline_command(HARNESS, "check-plan.mjs")
+        command = inline_command(PORTABLE_PATHS, "check-plan.mjs")
         plan = self.consumer / "invalid plan.md"
         plan.write_text(valid_plan().replace("### Spawn owners", "### Missing owners"), encoding="utf-8")
         result = self._run_contract(

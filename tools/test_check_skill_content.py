@@ -114,8 +114,8 @@ class ContentLint(Tree):
             "````"
         )
         self.assertEqual(code, 1)
-        self.assertIn("SKILL.md:5: port-substitution", out)
-        self.assertIn("SKILL.md:9: port-substitution", out)
+        self.assertIn("SKILL.md:6: port-substitution", out)
+        self.assertIn("SKILL.md:10: port-substitution", out)
 
     def test_retired_deslop_command_fires_in_prose_and_fenced_templates(self) -> None:
         code, out = self.body(
@@ -127,8 +127,8 @@ class ContentLint(Tree):
             "````"
         )
         self.assertEqual(code, 1)
-        self.assertIn("SKILL.md:5: port-substitution", out)
-        self.assertIn("SKILL.md:9: port-substitution", out)
+        self.assertIn("SKILL.md:6: port-substitution", out)
+        self.assertIn("SKILL.md:10: port-substitution", out)
 
 
 class FenceHandling(Tree):
