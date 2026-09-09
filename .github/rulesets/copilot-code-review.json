@@ -6,7 +6,7 @@
   "rules": [
     {
       "type": "copilot_code_review",
-      "parameters": { "review_draft_pull_requests": false, "review_on_push": true }
+      "parameters": { "review_draft_pull_requests": true, "review_on_push": true }
     },
     {
       "type": "pull_request",

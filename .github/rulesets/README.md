@@ -1,6 +1,6 @@
 # Repository rulesets
 
-`copilot-code-review.json` records the desired default-branch ruleset. It keeps Copilot review and permits merge, squash, and rebase after the required GitHub Actions `skills` check succeeds. The rule requires a pull request, no human approvals, resolved review threads, stale-review dismissal after a push, and protection from deletion or force pushes.
+`copilot-code-review.json` records the desired default-branch ruleset. It asks Copilot to review every pull request, including drafts, and to review again after each push. It permits merge, squash, and rebase after the required GitHub Actions `skills` check succeeds. The rule requires a pull request, no human approvals, resolved review threads, stale-review dismissal after a push, and protection from deletion or force pushes.
 
 Do not create a second ruleset. Update existing ruleset `22124319` only after the pull request has a successful `skills` check for its exact head from GitHub Actions app `15368`.
 
