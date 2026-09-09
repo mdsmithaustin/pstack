@@ -215,6 +215,41 @@ class SubagentCommands(unittest.TestCase):
         self.native(expected=1)
         self.assertEqual(sorted(item.name for item in outside.iterdir()), ["personal.toml"])
 
+    def test_destination_swap_after_preflight_does_not_create_outside_directories(self):
+        driver = self.root / "swap before install.py"
+        driver.write_text("""import importlib.util
+import sys
+
+script, outside, *arguments = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("subagents_race", script)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+install = module.install_files
+
+def swap_before_install(files, destination):
+    destination.directory.parent.symlink_to(outside, target_is_directory=True)
+    return install(files, destination)
+
+module.install_files = swap_before_install
+sys.argv = [script, *arguments]
+sys.exit(module.main())
+""")
+        for harness in ("claude-code", "codex"):
+            outside = self.root / (harness + " unintended directory")
+            outside.mkdir()
+            (outside / "personal.txt").write_text("keep this file")
+            with self.subTest(harness=harness):
+                result = self.run_cli(
+                    self.script, outside, "install", "--harness", harness,
+                    "--project", self.project, script=driver, expected=1,
+                )
+                self.assertIn("nonsymlink directory", json.loads(result.stdout)["error"])
+                self.assertEqual(sorted(path.name for path in outside.iterdir()), ["personal.txt"])
+            self.role_path(harness=harness).parent.parent.unlink()
+            self.native(harness)
+            self.assertIn("# Comment Sicko", self.role_path(harness=harness).read_text())
+
     def test_invalid_cli_arguments_do_not_write(self):
         for arguments in (
             ("install",),

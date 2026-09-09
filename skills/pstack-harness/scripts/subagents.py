@@ -152,6 +152,7 @@ def inspect_native(role: Role, destination: Destination, brief: str) -> NativeFi
 
 
 def install_files(files: tuple[NativeFile, ...], destination: Destination) -> None:
+    validate_destination(destination)
     destination.directory.mkdir(parents=True, exist_ok=True)
     validate_destination(destination)
     for item in files:
