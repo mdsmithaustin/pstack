@@ -1,6 +1,6 @@
 # Repository rulesets
 
-`copilot-code-review.json` asks Copilot to review every pull request against the default branch and to review again on each push, so the Babysit watcher's `pending-review-bots` wait also covers fix pushes. Drafts are skipped.
+`copilot-code-review.json` asks Copilot to review every pull request against the default branch, including drafts, and to review again on each push, so the Babysit watcher's `pending-review-bots` wait also covers fix pushes.
 
 Apply it in the GitHub UI under Settings, Rules, Rulesets, "Import a ruleset", or from a shell:
 
