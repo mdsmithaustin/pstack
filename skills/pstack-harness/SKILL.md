@@ -11,6 +11,10 @@ pstack skills describe delegation abstractly: "spawn a subagent on model X", "la
 
 When a pstack workflow uses a `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, or `PROJECT_ROOT` command, read the [portable resource path contract](references/portable-paths.md) in full. These commands run bundled scripts, address installed resources, read fresh pstack trunk, or read a consumer control skill. Resolve only the roots that the next command needs. Keep the exact command forms in generated plans and restore the recorded roots across owners, delegates, wake-ups, and later ticks.
 
+## Resolve named personas
+
+When a workflow requests `poteto-agent` or `Comment Sicko`, read the [named-role contract](references/named-roles.md) before delegation. The installed bundle supplies the full upstream persona and local skill paths. Confirm a current native registration against the live role catalog, or supply the complete briefing through a generic delegate, own-CLI subprocess, or sequential arm. Persona identity and model-role configuration are separate.
+
 ## The primitives
 
 **Spawn a subagent.** In order of preference:
@@ -52,7 +56,7 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 | harness | spawn | worklist carrier | effort | transcripts |
 |---|---|---|---|---|
 | Claude Code | `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases | Prefer any exposed structured task-tracking capability; otherwise use normal progress updates | no per-call field; only the `effort` frontmatter key of a custom agent file. A subagent inherits the session effort (`--effort`, `effortLevel`), so the effort is `inherit-parent` here | JSONL under `~/.claude/projects/<slug>/`, `<slug>` = workspace path with `/` → `-` |
-| Codex | `spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn; custom roles live in `~/.codex/agents/*.md` or `.codex/agents/*.md` with `model` and `model_reasoning_effort`; `codex exec` is the subprocess route | Prefer any exposed structured plan-tracking capability; otherwise use normal progress updates in the commentary channel. Goal lifecycle tools are not work tracking unless the user explicitly asked to create a goal | the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (medium on the GPT-5.6 family), not the parent's, so always pass one | JSONL under `~/.codex/sessions/` by date |
+| Codex | `spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn; custom roles use TOML in `~/.codex/agents/` or `.codex/agents/` with `name`, `description`, and `developer_instructions`; generated pstack roles leave model and effort unset; `codex exec` is the subprocess route | Prefer any exposed structured plan-tracking capability; otherwise use normal progress updates in the commentary channel. Goal lifecycle tools are not work tracking unless the user explicitly asked to create a goal | the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (medium on the GPT-5.6 family), not the parent's, so always pass one | JSONL under `~/.codex/sessions/` by date |
 | Hermes | a delegation toolset when enabled; `hermes -z` for one-shot subprocess runs | Prefer any exposed structured task-planning capability; otherwise use normal progress updates | `--reasoning <value>` on `hermes -z`; config `agent.reasoning_effort` and per-model `agent.reasoning_overrides`. Whether the delegation toolset takes an effort field is unverified: check its schema in session | SQLite store; `hermes sessions` subcommands list and export |
 
 ## Universal rules

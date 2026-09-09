@@ -10,7 +10,7 @@ From your project root, run:
 npx skills add mdsmithaustin/pstack
 ```
 
-The installer confirms the skills are in place and links them where Claude Code, Codex, and Hermes can find them.
+Choose the targets you use, including `hermes-agent` for Hermes. The installer delivers the skills and bundled personas. Hermes requires trust for project skills, and its project link can be skipped when `.hermes` does not exist. For global Hermes use, install into its native skills directory or configure `skills.external_dirs` for the shared `~/.agents/skills` directory. Confirm discovery in your installed version.
 
 ## Pick your models
 
@@ -20,7 +20,9 @@ Run:
 /setup-pstack
 ```
 
-[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) detects the models you have access to, shows you each role (code delegates, judgment, the review panels), and asks what you want. Answer the questions. It writes `~/.agents/pstack-models.md`, a small rule every pstack skill reads. Each role maps to a model and, when you want to pin it, a reasoning effort (`sonnet@high`). A `## codex` section holds the picks that apply only on Codex, so one file serves every CLI you use.
+[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex. Choose project or user scope if you want native role files. Setup preserves existing user-managed roles and reports payload readiness, native files, and live role loading separately. A generic delegate can receive the complete persona while native loading remains unverified. Hermes uses that briefing through delegation context.
+
+Setup then detects the models you have access to, shows you each role (code delegates, judgment, the review panels), and asks what you want. Answer the questions. It writes `~/.agents/pstack-models.md`, a small rule every pstack skill reads. Each role maps to a model and, when you want to pin it, a reasoning effort (`sonnet@high`). A `## codex` section holds the picks that apply only on Codex, so one file serves every CLI you use.
 
 You only override what you care about. A role with no line in the rule keeps the skill's default. To restore a default later, delete that role's line, or just run `/setup-pstack` again.
 
@@ -32,7 +34,7 @@ At the end of setup, `/setup-pstack` looks for a way to prove app behavior in yo
 
 Say yes and it writes `.agents/skills/verify-<app>/`, a project-local skill that teaches agents to drive your app the way a user does. It proves the skill works once before handing it over. Say no and setup moves on. You can run `/create-verification-skill` yourself any time. [Verify and ship](./06-verify-and-ship.md#create-a-project-verification-skill) covers when it earns its place.
 
-After setup, start a new chat. The model rule applies to new sessions.
+Skills read the model configuration when they next run. Codex project roles also require project trust. After registering native roles, start a fresh session and confirm that its live role catalog includes them. Setup does not change trust settings.
 
 ## Run your first task
 
