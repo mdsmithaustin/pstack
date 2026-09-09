@@ -1374,11 +1374,15 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   const seen = new Set<string>([selected.branches]);
   let cursor = selected;
   while (true) {
+    const baseCandidates = byBranch.get(cursor.base) ?? [];
+    if (baseCandidates.some((row) => row.isCrossRepository)) {
+      throw new UserError(
+        "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+      );
+    }
     const parent = singleBranchRow({
       branch: cursor.base,
-      candidates: (byBranch.get(cursor.base) ?? []).filter(
-        (row) => !row.isCrossRepository
-      ),
+      candidates: baseCandidates,
       description: "base branch",
     });
     if (parent === undefined) {

@@ -603,6 +603,38 @@ describe("Store", () => {
     });
   });
 
+  it("rejects a cross-repository base in the GitHub fallback", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([
+        {
+          number: 11,
+          state: "OPEN",
+          headRefName: "stack/open",
+          headRefOid: stack.openSha,
+          baseRefName: "stack/closed",
+          isCrossRepository: false,
+        },
+        {
+          number: 13,
+          state: "OPEN",
+          headRefName: "stack/closed",
+          headRefOid: stack.closedSha,
+          baseRefName: "main",
+          isCrossRepository: true,
+        },
+      ]),
+      operation: async () => {
+        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+          "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+        );
+      },
+    });
+  });
+
   it("rejects unparseable Graphite output loudly", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
