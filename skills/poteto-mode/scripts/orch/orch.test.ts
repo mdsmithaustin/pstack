@@ -218,6 +218,20 @@ esac
   }
 }
 
+async function withoutGtOrGh<T>(operation: () => Promise<T>): Promise<T> {
+  const originalPath = process.env.PATH;
+  process.env.PATH = "/usr/bin:/bin";
+  try {
+    return await operation();
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = originalPath;
+    }
+  }
+}
+
 function runCli(
   args: readonly string[],
   env: Readonly<Record<string, string | undefined>> = process.env
@@ -632,6 +646,17 @@ describe("Store", () => {
           "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
         );
       },
+    });
+  });
+
+  it("explains how to resolve a missing GitHub CLI fallback", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withoutGtOrGh(async () => {
+      await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+        "GitHub frontier fallback requires gh; install GitHub CLI or Graphite"
+      );
     });
   });
 

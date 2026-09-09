@@ -1172,15 +1172,6 @@ function branchSha({
   return sha;
 }
 
-function commandIsMissing(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { readonly code?: unknown }).code === "ENOENT"
-  );
-}
-
 function graphiteIsAvailable(repo: string): boolean {
   try {
     execFileSync("gt", ["--version"], {
@@ -1191,7 +1182,7 @@ function graphiteIsAvailable(repo: string): boolean {
     });
     return true;
   } catch (error) {
-    if (commandIsMissing(error)) {
+    if (errorCode(error) === "ENOENT") {
       return false;
     }
     throw new UserError(`gt --version failed: ${errorMessage(error)}`);
@@ -1293,6 +1284,11 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
       }
     );
   } catch (error) {
+    if (errorCode(error) === "ENOENT") {
+      throw new UserError(
+        "GitHub frontier fallback requires gh; install GitHub CLI or Graphite"
+      );
+    }
     throw new UserError(`gh pr list failed: ${errorMessage(error)}`);
   }
 
