@@ -6,6 +6,7 @@ import {
   readFile,
   readdir,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { realpathSync } from "node:fs";
@@ -218,9 +219,22 @@ esac
   }
 }
 
-async function withoutGtOrGh<T>(operation: () => Promise<T>): Promise<T> {
+async function withoutGtOrGh<T>({
+  directory,
+  operation,
+}: {
+  directory: string;
+  operation: () => Promise<T>;
+}): Promise<T> {
+  const bin = join(directory, "no-frontier-bin");
+  const gitPath = Bun.which("git");
+  if (gitPath === null) {
+    throw new Error("git is required for the fixture");
+  }
+  await mkdir(bin);
+  await symlink(gitPath, join(bin, "git"));
   const originalPath = process.env.PATH;
-  process.env.PATH = "/usr/bin:/bin";
+  process.env.PATH = bin;
   try {
     return await operation();
   } finally {
@@ -653,10 +667,13 @@ describe("Store", () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
 
-    await withoutGtOrGh(async () => {
-      await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
-        "GitHub frontier fallback requires gh; install GitHub CLI or Graphite"
-      );
+    await withoutGtOrGh({
+      directory,
+      operation: async () => {
+        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+          "GitHub frontier fallback requires gh; install GitHub CLI or Graphite"
+        );
+      },
     });
   });
 
