@@ -48,11 +48,14 @@ class FrontmatterChecker(unittest.TestCase):
         self.skill()
         self.assertEqual(self.check()[0], 0)
 
-    def test_valid_block_scalar_and_interface_only_openai_file_pass(self) -> None:
+    def test_valid_block_scalar_and_omitted_openai_policy_pass(self) -> None:
         self.skill(frontmatter="name: a\ndescription: >-\n  Valid block scalar description\nmetadata:\n  owner: tools")
         policy = self.root / "a" / "agents"
         policy.mkdir()
-        (policy / "openai.yaml").write_text("interface: chat\n", encoding="utf-8")
+        policy_path = policy / "openai.yaml"
+        policy_path.write_text("interface: chat\n", encoding="utf-8")
+        self.assertEqual(self.check()[0], 0)
+        policy_path.write_text("interface: chat\npolicy: {}\n", encoding="utf-8")
         self.assertEqual(self.check()[0], 0)
 
     def test_empty_inventory_fails(self) -> None:
@@ -117,14 +120,27 @@ class FrontmatterChecker(unittest.TestCase):
             with self.subTest(source=source):
                 policy_path.write_text(source, encoding="utf-8")
                 self.assertEqual(self.check()[0], expected)
+        policy_path.write_text("policy:\n  allow_implicit_invocation: false\n", encoding="utf-8")
         self.skill("b", 'name: b\ndescription: "d"')
         (self.root / "b" / "agents").mkdir()
-        (self.root / "b" / "agents" / "openai.yaml").write_text("policy:\n  allow_implicit_invocation: false\n", encoding="utf-8")
-        self.assertEqual(self.check()[0], 1)
+        b_policy_path = self.root / "b" / "agents" / "openai.yaml"
+        b_policy_path.write_text("policy:\n  allow_implicit_invocation: false\n", encoding="utf-8")
+        code, output = self.check()
+        self.assertEqual(code, 1)
+        self.assertEqual(output, f"{b_policy_path}: policy.allow_implicit_invocation must match disable-model-invocation\n")
 
     def test_missing_disabled_policy_and_orphan_file_fail(self) -> None:
         self.skill(frontmatter='name: a\ndescription: "d"\ndisable-model-invocation: true')
-        self.assertEqual(self.check()[0], 1)
+        policy_path = self.root / "a" / "agents" / "openai.yaml"
+        code, output = self.check()
+        self.assertEqual(code, 1)
+        self.assertEqual(output, f"{policy_path}: missing policy.allow_implicit_invocation: false\n")
+        policy = policy_path.parent
+        policy.mkdir()
+        policy_path.write_text("interface: chat\npolicy: {}\n", encoding="utf-8")
+        code, output = self.check()
+        self.assertEqual(code, 1)
+        self.assertEqual(output, f"{policy_path}: missing policy.allow_implicit_invocation: false\n")
         (self.root / "orphan" / "agents").mkdir(parents=True)
         (self.root / "orphan" / "agents" / "openai.yaml").write_text("policy: {}\n", encoding="utf-8")
         code, output = self.check()

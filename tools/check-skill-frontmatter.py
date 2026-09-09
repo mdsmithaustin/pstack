@@ -140,7 +140,9 @@ def check_invocation_policy(skill: SkillMetadata) -> list[Diagnostic]:
     policy = fields["policy"]
     if not isinstance(policy, dict):
         return [Diagnostic(path, "policy must be a mapping")]
-    allowed = policy.get("allow_implicit_invocation", True)
+    if "allow_implicit_invocation" not in policy:
+        return [] if skill.implicit_allowed else [Diagnostic(path, "missing policy.allow_implicit_invocation: false")]
+    allowed = policy["allow_implicit_invocation"]
     if type(allowed) is not bool:
         return [Diagnostic(path, "policy.allow_implicit_invocation must be a boolean")]
     if allowed != skill.implicit_allowed:
