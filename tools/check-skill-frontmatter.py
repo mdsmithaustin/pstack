@@ -199,6 +199,9 @@ def check_trigger_declarations(skills: dict[str, SkillMetadata], corpus_path: Pa
             errors.append(Diagnostic(corpus_path, f"duplicate trigger declaration for {skill!r}"))
             continue
         seen.add(skill)
+        metadata = skills.get(skill)
+        if metadata is None:
+            errors.append(Diagnostic(corpus_path, f"stale trigger declaration for {skill!r}"))
         if not isinstance(request, str) or not request.strip():
             errors.append(Diagnostic(corpus_path, f"{label}.example_request must be a nonblank string"))
         if type(allowed) is not bool:
@@ -209,9 +212,7 @@ def check_trigger_declarations(skills: dict[str, SkillMetadata], corpus_path: Pa
         if any(not isinstance(anchor, str) or not normalize(anchor) for anchor in anchors):
             errors.append(Diagnostic(corpus_path, f"{label}.description_contains entries must be nonblank strings"))
             continue
-        metadata = skills.get(skill)
         if metadata is None:
-            errors.append(Diagnostic(corpus_path, f"stale trigger declaration for {skill!r}"))
             continue
         description = normalize(metadata.description)
         for anchor in anchors:

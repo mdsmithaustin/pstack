@@ -161,6 +161,22 @@ class FrontmatterChecker(unittest.TestCase):
             with self.subTest(entries=entries):
                 self.assertEqual(self.check(self.corpus(entries))[0], 1)
 
+    def test_stale_trigger_and_missing_description_anchors_both_fail(self) -> None:
+        self.skill()
+        corpus = self.corpus(
+            [
+                {"skill": "a", "example_request": "x", "description_contains": ["valid"], "implicit_allowed": True},
+                {"skill": "gone", "example_request": "x", "implicit_allowed": True},
+            ]
+        )
+        code, output = self.check(corpus)
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            output,
+            f"{corpus}: stale trigger declaration for 'gone'\n"
+            f"{corpus}: trigger declaration 2.description_contains must be a nonempty list\n",
+        )
+
     def test_malformed_json_duplicate_keys_and_unsupported_version_fail(self) -> None:
         self.skill()
         corpus = self.corpus()
