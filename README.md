@@ -20,13 +20,13 @@ fork it. improve it. make it yours. PRs are welcome!
 npx skills add mdsmithaustin/pstack
 ```
 
-pick the agents you want at the prompt (claude code, codex, and more). hermes picks the skills up through the universal `.agents/skills/` directory the installer maintains, so it needs no target of its own. `-g` installs user-level instead of per-project.
+pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project. hermes project skills require project trust; confirm discovery in your installed version. for global hermes use, install into its native skills directory or configure `skills.external_dirs` to include the shared `~/.agents/skills` directory. the installer may skip a project hermes symlink when `.hermes` does not exist.
 
 ## get started
 
 two steps:
 
-1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md) and choose which models you want.
+1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md) to check the bundled personas, optionally register native roles, and choose which models you want.
 2. use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) whenever you're doing anything that requires rigor.
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs.
@@ -193,11 +193,13 @@ automate-me:       /automate-me
 
 ## the `poteto-agent` and Comment Sicko subagents
 
-pstack also ships a subagent that runs my style end to end. spawn it from a parent agent via [`subagent_type: "poteto-agent"`](./agents/poteto-agent.md). it reads `poteto-mode` in full, including its inline principles index, before doing any work. substituting a bare general-purpose subagent skips that read and drifts. (claude code users: copy [`agents/`](./agents/) into `~/.claude/agents/` or `.claude/agents/` to register the subagents; `npx skills` installs skills only.)
+pstack ships both complete personas inside the installed `pstack-harness` skill. `npx skills` delivers these payloads with the skills; it does not register native agents. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) checks them and can install native registrations into an explicit project or user destination.
 
-[`/poteto-mode`](./skills/poteto-mode/SKILL.md) and [`subagent_type: "poteto-agent"`](./agents/poteto-agent.md) route through the same wrapper.
+[`poteto-agent`](./agents/poteto-agent.md) reads `poteto-mode` in full, including its inline Principles index, before work. [Comment Sicko](./agents/comment-sicko.md), usually invoked through [`/no-comments`](./skills/no-comments/SKILL.md), edits scoped comments and reports application-code refactor targets. it does not write application code.
 
-pstack also ships [Comment Sicko](./agents/comment-sicko.md), a read-only comment reviewer available as `subagent_type: "Comment Sicko"`. usually invoke it through [`/no-comments`](./skills/no-comments/SKILL.md), not directly.
+The [named-role contract](./skills/pstack-harness/references/named-roles.md) uses a confirmed current native role or supplies the complete persona to a generic delegate. Claude uses Markdown registrations, and Codex uses TOML. Hermes receives the full persona through delegation context. The normalized native names are `poteto-agent` and `comment-sicko`; `Comment Sicko` remains a supported logical alias. Model and effort choices still come from pstack's existing model policy.
+
+A ready payload, an installed native file, and a role loaded in the current session are separate states. Setup reports each separately. The skill's `agents/openai.yaml` controls Codex skill invocation policy; it does not register a subagent.
 
 ## principles
 
