@@ -206,6 +206,8 @@ def check_trigger_declarations(skills: dict[str, SkillMetadata], corpus_path: Pa
             errors.append(Diagnostic(corpus_path, f"{label}.example_request must be a nonblank string"))
         if type(allowed) is not bool:
             errors.append(Diagnostic(corpus_path, f"{label}.implicit_allowed must be a boolean"))
+        if metadata is not None and type(allowed) is bool and allowed != metadata.implicit_allowed:
+            errors.append(Diagnostic(corpus_path, f"{label}.implicit_allowed does not match {skill!r}"))
         if not isinstance(anchors, list) or not anchors:
             errors.append(Diagnostic(corpus_path, f"{label}.description_contains must be a nonempty list"))
             continue
@@ -218,8 +220,6 @@ def check_trigger_declarations(skills: dict[str, SkillMetadata], corpus_path: Pa
         for anchor in anchors:
             if normalize(anchor) not in description:
                 errors.append(Diagnostic(corpus_path, f"{label} anchor {anchor!r} is absent from {skill!r} description"))
-        if type(allowed) is bool and allowed != metadata.implicit_allowed:
-            errors.append(Diagnostic(corpus_path, f"{label}.implicit_allowed does not match {skill!r}"))
     for skill in sorted(set(skills) - seen):
         errors.append(Diagnostic(corpus_path, f"missing trigger declaration for {skill!r}"))
     return errors
