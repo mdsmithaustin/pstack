@@ -10,7 +10,7 @@ Upstream is the source of truth for the workflows themselves. This file records 
 |---|---|
 | `~/.cursor/rules/pstack-models.mdc` (always-applied rule) | `~/.agents/pstack-models.md` (plain file; skills read it on demand) |
 | Model slugs `claude-fable-5-thinking-max`, `gpt-5.6-sol-max`, `grok-4.6-fast-xhigh`, `claude-opus-5-thinking-xhigh` | `fable`, `opus`, `sonnet`, `haiku` (Claude Code subagent model aliases). In a CLI where a slug is not valid (Codex, Hermes), treat it as `inherit-parent`: the subagent runs on the session model and multi-model panels become same-model panels with differentiated briefs. |
-| Project skills at `.cursor/skills/`, user skills at `~/.cursor/skills/` | `.agents/skills/` and `~/.agents/skills/`. Hermes reads `.agents/skills` directly; for Claude Code and Codex, symlink a newly created skill into `.claude/skills/` and `.codex/skills/` (what `npx skills` does on install). |
+| Project skills at `.cursor/skills/`, user skills at `~/.cursor/skills/` | `.agents/skills/` and `~/.agents/skills/`. Codex uses the shared directory. Claude Code also uses its installer-created `.claude/skills/` links. Hermes project skills require trust; global shared skills need `skills.external_dirs` or a native Hermes installation. The installer supports the `hermes-agent` target and may skip its project link when `.hermes` is absent. |
 | Plugin-installed skill paths under `~/.cursor/plugins/` | installed skill paths under `~/.agents/skills/`, `~/.claude/skills/`, `~/.codex/skills/` |
 | Runtime paths under `pstack/skills/` | Local sibling reads use the logical `PSTACK_SKILLS_ROOT`. Fresh pstack trunk reads use a verified `PSTACK_SOURCE_ROOT` and fetch `+refs/heads/main:refs/remotes/origin/main` before `git show origin/main:skills/...`. Consumer control skill reads use `PROJECT_ROOT`. All three are absolute and quoted. |
 | Workspace transcripts: `agent-transcripts/` dir named by the system prompt; `~/.cursor/projects/<slug>/agent-transcripts/` | Per-CLI session stores. Claude Code: `~/.claude/projects/<slug>/*.jsonl` where `<slug>` is the workspace path with every `/` turned into `-` (so `/Users/you/proj` becomes `-Users-you-proj`). Codex: `~/.codex/sessions/<year>/<month>/<day>/rollout-*.jsonl`. Hermes: its session-log directory (check its data dir). The privacy rule carries over: stay inside the current workspace's sessions; never glob across other projects. |
@@ -45,11 +45,23 @@ Upstream is the source of truth for the workflows themselves. This file records 
 - `.claude/settings.json` is fork-only and sets `attribution.sessionUrl` to `false`. Claude Code otherwise appends a `Claude-Session:` trailer carrying a private session URL to commits and pull request bodies made from a cloud or Remote Control session, on by default. That scoping is why only four sessions left traces rather than all of them. Nothing in this repository's skills or tooling caused it and nothing there could suppress it, because the control is a harness setting, which is what this file supplies. It reached 41 commits here across four sessions before anyone noticed and this repository is public, so the history was rewritten and the trailers removed. The file drops only the URL and leaves `Co-Authored-By` intact. Shared project settings outrank user settings in Claude Code's precedence order, so this beats whatever a contributor has in their own `~/.claude/settings.json`; only their `.claude/settings.local.json` or an organization's managed settings outrank it. Being Claude Code specific is not new ground for the port, which already ships `agents/openai.yaml` for Codex and a `.github/` directory. On sync, keep the file.
 - `.github/workflows/lint.yml`, `tools/check-skill-frontmatter.py`, and `tools/check-cross-suite-references.py` are fork-only CI. The second check enforces the port's independence rule: a skill may name a skill from another suite (Matt Pocock's, agent-loop-runner's, GSD's) only as an optional capability with a stated fallback, or inside an adapter file. The roster of foreign names is `tools/cross-suite-foreign.txt`.
 
+## Named-agent portability
+
+Root `agents/*.md` owns upstream persona text and metadata. `tools/generate-subagents.py` owns the explicit port mapping and generates `skills/pstack-harness/references/subagents/roles.json`. The installed `pstack-harness/scripts/subagents.py` reads this bundle without Git, network access, or a source checkout. Do not hand-edit generated payloads.
+
+Native Claude wrappers use normalized names and translate upstream `is_background` to `background`. Codex wrappers use TOML with `name`, `description`, and `developer_instructions`. Both contain complete persona briefings and installed skill paths. They leave model, effort, tool, and sandbox policy unset. Comment Sicko may edit comments; preserve its ban on application-code edits. Hermes has no confirmed arbitrary custom-agent-file loader, so its delegate receives the complete briefing through context.
+
+The named-role contract preserves the aliases `poteto-agent` and `Comment Sicko`. A native registration requires matching generated bytes and live catalog confirmation. Otherwise generic native delegation, own-CLI subprocesses, and sequential arms receive the same full persona. Keep the configured arm count and existing model policy. Native installation is optional, uses an explicit project or user destination, and refuses user-managed or edited role files. Payload checks never claim actual native activation.
+
+After every upstream agent change, run `python3 tools/generate-subagents.py`. Failure signal: nonzero exit for unsupported source input. Then run `python3 tools/generate-subagents.py --check`. Failure signal: nonzero exit for source-to-bundle drift. Commit the upstream source and generated payload together. Reapply the named-role callsite and setup instructions during sync.
+
+Run `python3 -m unittest discover -s tools -p 'test_subagents.py'` with Python 3.12. Failure signal: nonzero exit or zero collected tests. Run `python3 tools/probe-subagent-install.py` for actual pinned project installations with symlinks and copies. Failure signal: nonzero exit; the JSON report identifies the failed case. The probe uses temporary roots and never registers roles into the user's real configuration. Native loader and child-behavior checks require separate live-session evidence.
+
 ## What deliberately did not change
 
 - Skill bodies, playbooks, and principles: the engineering content is upstream's, verbatim wherever no Cursor primitive was involved.
 - Frontmatter extras (`mode`, `icon`, `color`, `reminder`, `disable-model-invocation`): Cursor-flavored but harmless; CLIs that don't know a key ignore it.
-- `agents/` (poteto-agent, comment-sicko): kept as-is. Claude Code users can copy them into `~/.claude/agents/`.
+- `agents/` remains unchanged upstream text. The port generates an installed bundle and native wrappers from it, as described above.
 
 ## Syncing from upstream
 
@@ -59,4 +71,4 @@ Manually:
 
 1. `git remote add upstream https://github.com/cursor/plugins.git` (sparse-checkout `pstack`).
 2. Diff upstream's `pstack/` against the SHA in `.github/upstream-sha` (originally the import commit).
-3. Reapply the substitution map to the incoming hunks, keep the port additions intact, and bump `.github/upstream-sha`.
+3. Reapply the substitution map to the incoming hunks, keep the port additions intact, regenerate and check the role bundle, and bump `.github/upstream-sha`.

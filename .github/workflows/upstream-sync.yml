@@ -83,8 +83,14 @@ jobs:
                (policy: allow_implicit_invocation: false) to match.
             4. Every SKILL.md frontmatter `name:` must equal its directory
                name. Verify after editing.
-            5. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
-            6. If there are portable changes: create branch
+            5. Preserve root agents/*.md as upstream source. After any agent
+               change, run python3 tools/generate-subagents.py and then
+               python3 tools/generate-subagents.py --check. Both commands
+               must exit zero. Commit the generated installed role bundle
+               with its source. Keep the named-role adapter, native format
+               translations, safe optional setup, and full persona briefings.
+            6. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
+            7. If there are portable changes: create branch
                `sync/upstream-<YYYYMMDD>`, commit with a message summarizing
                the upstream commits ported, push it, and open a DRAFT PR to
                main with `gh pr create --draft --repo mdsmithaustin/pstack`

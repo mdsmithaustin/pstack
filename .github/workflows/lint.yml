@@ -28,8 +28,12 @@ jobs:
         run: python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
       - name: Skill links, references, and port substitutions are valid
         run: python3 tools/check-skill-content.py skills
+      - name: Installed subagent bundle matches upstream sources
+        run: python3 tools/generate-subagents.py --check
       - name: Skill lint and runtime command tests
         run: python3 -m unittest discover -s tools -p 'test_*.py'
+      - name: Real npx skill installations preserve complete personas
+        run: python3 tools/probe-subagent-install.py
       - name: pstack-models.md lint tests
         run: python3 -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'
       - name: pstack-models.md shipped default lints clean

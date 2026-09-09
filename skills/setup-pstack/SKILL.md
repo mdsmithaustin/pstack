@@ -1,6 +1,6 @@
 ---
 name: setup-pstack
-description: Configure which models pstack uses per role. Detects your available models and writes a config file that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", or changing pstack's model choices.
+description: Check installed pstack personas, optionally register native roles, and configure which models pstack uses per role. Detects your available models and writes a config file that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", or changing pstack's model choices.
 ---
 
 # Setup pstack
@@ -10,6 +10,20 @@ Write the pstack models config, a file that sets pstack's model and reasoning ef
 The inline defaults are written as short model aliases (`fable`, `opus`, `sonnet`, `haiku`); on Codex they translate to the GPT-5.6 tiers per the **pstack-harness** skill. Any other value your harness does not accept for subagents means `inherit-parent`: the role runs on the session model, and multi-model panels become same-model panels with differentiated briefs. An entry may pin a reasoning effort as `model@effort`, and `## codex`, `## claude-code`, or `## hermes` sections hold lines that apply to one harness only. The grammar, precedence, and effort policy are defined once, in the **pstack-harness** skill.
 
 ## Steps
+
+### 0. Check personas and optional native registration
+
+Read the **pstack-harness** skill's [named-role contract](../pstack-harness/references/named-roles.md). Resolve its logical installed skills root through [portable-paths.md](../pstack-harness/references/portable-paths.md), then run:
+
+```sh
+python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" check
+```
+
+Failure signal: nonzero exit. Repair missing payloads or sibling skills before reporting persona readiness. A ready payload lets a generic delegate receive the full persona without native registration.
+
+Offer native registration for Claude Code or Codex when the user wants it. Use the already-authorized scope if the session provides one; otherwise ask for project or user scope once. Run the contract's `install` command with the chosen absolute root. Never overwrite a conflict or change model settings to register a role. For Hermes, use the full briefing through delegation context; do not create native agent files.
+
+Report payload readiness, native-file status, and live role loading separately. Check the requested destination and inspect the live role catalog before claiming native availability. Filesystem output always leaves activation unverified. Codex project registrations require project trust. Do not edit trust settings automatically. Check a fresh session after registration changes; when a loader requires a restart, say so and use full-brief delegation until loading is confirmed. Keep these observations separate from the model choices below.
 
 ### 1. Detect available models and efforts
 
