@@ -1002,6 +1002,20 @@ interface GtFrontierEntry extends GtPullRequest {
   readonly branches: string;
 }
 
+interface GithubPullRequest {
+  readonly pr: number;
+  readonly branches: string;
+  readonly sha: string;
+  readonly state: FrontierPrState;
+  readonly base: string;
+  readonly isCrossRepository: boolean;
+}
+
+interface FrontierResolution {
+  readonly source: "gt" | "GitHub";
+  readonly prs: readonly FrontierPr[];
+}
+
 function parseGtPullRequest({
   branch,
   detail,
@@ -1158,19 +1172,289 @@ function branchSha({
   return sha;
 }
 
-function resolveFrontier(repo: string): readonly FrontierPr[] {
-  return graphiteFrontier(repo).map((row) => ({
+function graphiteIsAvailable(repo: string): boolean {
+  try {
+    execFileSync("gt", ["--version"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: { ...process.env, NO_COLOR: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return true;
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") {
+      return false;
+    }
+    throw new UserError(`gt --version failed: ${errorMessage(error)}`);
+  }
+}
+
+function requireGitRepository(repo: string): void {
+  let raw: string;
+  try {
+    raw = execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    throw new UserError(
+      `repo directory is not an accessible Git worktree: ${errorMessage(error)}`
+    );
+  }
+  if (raw.trim() !== "true") {
+    throw new UserError(`repo directory is not a Git worktree: ${repo}`);
+  }
+}
+
+function currentBranch(repo: string): string {
+  let raw: string;
+  try {
+    raw = execFileSync("git", ["branch", "--show-current"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    throw new UserError(
+      `git branch --show-current failed: ${errorMessage(error)}`
+    );
+  }
+  const branch = raw.trim();
+  if (branch.length === 0) {
+    throw new UserError(
+      "GitHub frontier fallback requires a checked out branch"
+    );
+  }
+  return branch;
+}
+
+function githubPullRequest(value: unknown): GithubPullRequest {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new UserError("gh pr list returned a malformed pull request row");
+  }
+  const row = value as Record<string, unknown>;
+  const pr = row.number;
+  const branches = row.headRefName;
+  const sha = row.headRefOid;
+  const base = row.baseRefName;
+  const state = row.state;
+  const isCrossRepository = row.isCrossRepository;
+  if (
+    typeof pr !== "number" ||
+    !Number.isSafeInteger(pr) ||
+    pr < 1 ||
+    typeof branches !== "string" ||
+    branches.length === 0 ||
+    typeof sha !== "string" ||
+    !/^[0-9a-f]{40,64}$/i.test(sha) ||
+    typeof base !== "string" ||
+    base.length === 0 ||
+    typeof isCrossRepository !== "boolean" ||
+    (state !== "OPEN" && state !== "MERGED" && state !== "CLOSED")
+  ) {
+    throw new UserError("gh pr list returned a malformed pull request row");
+  }
+  return { pr, branches, sha, base, state, isCrossRepository };
+}
+
+function githubFrontier(repo: string): readonly FrontierPr[] {
+  let raw: string;
+  try {
+    const { GH_REPO: _ignoredRepo, ...env } = process.env;
+    raw = execFileSync(
+      "gh",
+      [
+        "pr",
+        "list",
+        "--state",
+        "all",
+        "--limit",
+        "1000",
+        "--json",
+        "number,state,headRefName,headRefOid,baseRefName,isCrossRepository",
+      ],
+      {
+        cwd: repo,
+        encoding: "utf8",
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") {
+      throw new UserError(
+        "GitHub frontier fallback requires gh; install GitHub CLI or Graphite"
+      );
+    }
+    throw new UserError(`gh pr list failed: ${errorMessage(error)}`);
+  }
+
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(raw);
+  } catch (error) {
+    throw new UserError(`gh pr list returned invalid JSON: ${errorMessage(error)}`);
+  }
+  if (!Array.isArray(decoded)) {
+    throw new UserError("gh pr list returned an invalid response");
+  }
+  if (decoded.length === 1000) {
+    throw new UserError(
+      "gh pr list reached its 1000 PR limit; install Graphite or reduce repository history before resolving the frontier"
+    );
+  }
+
+  const byBranch = new Map<string, GithubPullRequest[]>();
+  const byPr = new Set<number>();
+  for (const value of decoded) {
+    const row = githubPullRequest(value);
+    if (byPr.has(row.pr)) {
+      throw new UserError(`gh pr list returned duplicate PR #${row.pr}`);
+    }
+    byPr.add(row.pr);
+    const rows = byBranch.get(row.branches) ?? [];
+    rows.push(row);
+    byBranch.set(row.branches, rows);
+  }
+
+  const children = new Map<string, GithubPullRequest[]>();
+  for (const rows of byBranch.values()) {
+    for (const row of rows) {
+      const childrenForBase = children.get(row.base) ?? [];
+      childrenForBase.push(row);
+      children.set(row.base, childrenForBase);
+    }
+  }
+
+  const singleBranchRow = ({
+    branch,
+    candidates,
+    description,
+  }: {
+    branch: string;
+    candidates: readonly GithubPullRequest[];
+    description: string;
+  }): GithubPullRequest | undefined => {
+    if (candidates.length === 0) {
+      return undefined;
+    }
+    if (candidates.length > 1) {
+      throw new UserError(
+        `GitHub frontier fallback found multiple PRs for ${description} ${branch}`
+      );
+    }
+    return candidates[0];
+  };
+
+  const branch = currentBranch(repo);
+  const selected = singleBranchRow({
+    branch,
+    candidates: byBranch.get(branch) ?? [],
+    description: "checked out branch",
+  });
+  if (selected === undefined) {
+    throw new UserError(
+      `GitHub frontier fallback found no PR for checked out branch ${branch}; checkout a branch in the stack or install Graphite`
+    );
+  }
+  if (selected.isCrossRepository) {
+    throw new UserError(
+      "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+    );
+  }
+
+  const ancestors: GithubPullRequest[] = [];
+  const seen = new Set<string>([selected.branches]);
+  let cursor = selected;
+  while (true) {
+    const baseCandidates = byBranch.get(cursor.base) ?? [];
+    if (baseCandidates.some((row) => row.isCrossRepository)) {
+      throw new UserError(
+        "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+      );
+    }
+    const parent = singleBranchRow({
+      branch: cursor.base,
+      candidates: baseCandidates,
+      description: "base branch",
+    });
+    if (parent === undefined) {
+      break;
+    }
+    if (seen.has(parent.branches)) {
+      throw new UserError("gh pr list contains a cyclic stack");
+    }
+    seen.add(parent.branches);
+    ancestors.unshift(parent);
+    cursor = parent;
+  }
+
+  for (const row of [...ancestors, selected]) {
+    if ((children.get(row.branches) ?? []).length > 1) {
+      throw new UserError(
+        `GitHub frontier fallback found a branched stack above ${row.branches}`
+      );
+    }
+  }
+  const descendants: GithubPullRequest[] = [];
+  cursor = selected;
+  while (true) {
+    const candidates = children.get(cursor.branches) ?? [];
+    if (candidates.length === 0) {
+      break;
+    }
+    if (candidates.length > 1) {
+      throw new UserError(
+        `GitHub frontier fallback found a branched stack above ${cursor.branches}`
+      );
+    }
+    const child = candidates[0];
+    if (child === undefined) {
+      break;
+    }
+    if (child.isCrossRepository) {
+      throw new UserError(
+        "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+      );
+    }
+    if (seen.has(child.branches)) {
+      throw new UserError("gh pr list contains a cyclic stack");
+    }
+    seen.add(child.branches);
+    descendants.push(child);
+    cursor = child;
+  }
+
+  return [...ancestors, selected, ...descendants].map(
+    ({ base: _base, isCrossRepository: _isCrossRepository, ...row }) => row
+  );
+}
+
+function resolveFrontier(repo: string): FrontierResolution {
+  requireGitRepository(repo);
+  if (!graphiteIsAvailable(repo)) {
+    return { source: "GitHub", prs: githubFrontier(repo) };
+  }
+  return {
+    source: "gt",
+    prs: graphiteFrontier(repo).map((row) => ({
     ...row,
     sha: branchSha({ branch: row.branches, repo }),
-  }));
+    })),
+  };
 }
 
 function validateFrontierPin({
   actual,
   expected,
+  source,
 }: {
   actual: readonly number[];
   expected: readonly number[];
+  source: "gt" | "GitHub";
 }): void {
   if (
     actual.length === expected.length &&
@@ -1184,14 +1468,14 @@ function validateFrontierPin({
   const extra = actual.filter((pr) => !expectedSet.has(pr));
   const drift: string[] = [];
   if (missing.length > 0) {
-    drift.push(`missing from gt: ${missing.join(",")}`);
+    drift.push(`missing from ${source}: ${missing.join(",")}`);
   }
   if (extra.length > 0) {
-    drift.push(`extra in gt: ${extra.join(",")}`);
+    drift.push(`extra in ${source}: ${extra.join(",")}`);
   }
   if (missing.length === 0 && extra.length === 0) {
     drift.push(
-      `order differs: expected ${expected.join(",")}; gt ${actual.join(",")}`
+      `order differs: expected ${expected.join(",")}; ${source} ${actual.join(",")}`
     );
   }
   throw new UserError(`frontier pin mismatch: ${drift.join("; ")}`);
@@ -1492,17 +1776,19 @@ export function openStore(
           throw new UserError("--prs must not contain duplicates");
         }
         const old = await readFrontier(store);
-        const prs = resolveFrontier(repo);
+        const frontier = resolveFrontier(repo);
         if (pin !== undefined) {
           validateFrontierPin({
-            actual: prs.map((row) => row.pr),
+            actual: frontier.prs.map((row) => row.pr),
             expected: pin,
+            source: frontier.source,
           });
         }
         const value: Frontier = {
           generation: old.generation + 1,
-          prs,
-          lowestUnmerged: prs.find((row) => row.state === "OPEN")?.pr ?? null,
+          prs: frontier.prs,
+          lowestUnmerged:
+            frontier.prs.find((row) => row.state === "OPEN")?.pr ?? null,
         };
         await atomicWrite(
           join(store, "frontier.json"),
