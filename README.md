@@ -268,6 +268,39 @@ pstack also ships a dormant [benny automation pack](./automations/benny/). benny
 
 to set it up, point your agent at [`FOR_AGENTS.md`](./automations/benny/FOR_AGENTS.md). setup copies the pack into the target repository at `.agents/automations/benny/`, enables pstack there for shared skills, and keeps user configuration outside the copied pack. benny needs a scheduled agent runner (claude code scheduled agents, or any cron-driven job that invokes your CLI).
 
+## contributor checks
+
+Use Python 3.12 and Bun 1.4.0. Create the local virtual environment, install the hook, and let the fast pre-commit checks run before each commit.
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r tools/requirements.txt
+lefthook install
+```
+
+Run the full CI-equivalent checks from the repository root:
+
+```sh
+.venv/bin/python tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json
+.venv/bin/python tools/check-pii.py
+.venv/bin/python tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
+.venv/bin/python tools/check-skill-content.py skills
+.venv/bin/python tools/generate-subagents.py --check
+.venv/bin/python -m unittest discover -s tools -p 'test_*.py'
+.venv/bin/python tools/probe-subagent-install.py
+.venv/bin/python -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'
+.venv/bin/python skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
+bun install --cwd skills/poteto-mode/scripts --frozen-lockfile
+bun run --cwd skills/poteto-mode/scripts test
+bun run --cwd skills/poteto-mode/scripts typecheck
+lefthook validate
+git diff --check
+```
+
+Each command exits nonzero when its check fails. The two unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses `.venv/bin/python` and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
+
+`tools/skill-trigger-cases.json` checks deterministic trigger declaration coverage. It confirms that every shipped skill has a realistic request, literal description anchors, and the expected invocation policy. It does not measure model-routing accuracy.
+
 ## license
 
 MIT

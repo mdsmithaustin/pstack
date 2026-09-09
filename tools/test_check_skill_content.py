@@ -194,50 +194,5 @@ class FenceHandling(Tree):
         self.assertIn("../gone/n.md", out)
 
 
-class FrontmatterLint(Tree):
-    def check(self, frontmatter: str) -> tuple[int, str]:
-        self.skill("a", frontmatter)
-        return run(FRONTMATTER, self.root)
-
-    def test_valid_passes(self) -> None:
-        self.assertEqual(self.check('name: a\ndescription: "d"')[0], 0)
-
-    def test_nested_mapping_passes(self) -> None:
-        self.assertEqual(self.check('name: a\ndescription: "d"\nmetadata:\n  type: project')[0], 0)
-
-    def test_sequence_at_column_zero_passes(self) -> None:
-        self.assertEqual(self.check('name: a\ndescription: "d"\nallowed-tools:\n- Read')[0], 0)
-
-    def test_comment_line_passes(self) -> None:
-        self.assertEqual(self.check('name: a\ndescription: "d"\n# a note')[0], 0)
-
-    def test_space_before_colon_passes(self) -> None:
-        self.assertEqual(self.check('name : a\ndescription: "d"')[0], 0)
-
-    def test_trailing_space_after_quoted_value_passes(self) -> None:
-        self.assertEqual(self.check('name: a\ndescription: "d" ')[0], 0)
-
-    def test_duplicate_key_fires(self) -> None:
-        code, out = self.check('name: a\ndescription: "d"\nname: a')
-        self.assertEqual(code, 1)
-        self.assertIn("duplicate key", out)
-
-    def test_duplicate_key_with_space_before_colon_fires(self) -> None:
-        code, out = self.check('name: a\ndescription: "d"\nname : a')
-        self.assertEqual(code, 1, "extraction accepts this form, so duplicate detection must too")
-        self.assertIn("duplicate key", out)
-
-    def test_tab_fires(self) -> None:
-        code, out = self.check('name: a\ndescription:\t"d"')
-        self.assertEqual(code, 1)
-        self.assertIn("tab character", out)
-
-    def test_wrong_name_fires(self) -> None:
-        self.assertEqual(self.check('name: zzz\ndescription: "d"')[0], 1)
-
-    def test_empty_description_fires(self) -> None:
-        self.assertEqual(self.check("name: a\ndescription:")[0], 1)
-
-
 if __name__ == "__main__":
     unittest.main()

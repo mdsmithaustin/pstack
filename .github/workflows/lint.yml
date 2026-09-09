@@ -1,4 +1,6 @@
 name: lint
+permissions:
+  contents: read
 on:
   push:
     branches: [main]
@@ -7,15 +9,19 @@ jobs:
   skills:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - name: Install Python lint dependency
+        run: python3 -m pip install --require-hashes -r tools/requirements.txt
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: "24"
-      - name: Frontmatter name matches directory, description present
-        run: python3 tools/check-skill-frontmatter.py skills
+          bun-version: "1.4.0"
+      - name: Skill metadata and trigger declarations
+        run: python3 tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json
       - name: Reject PII
         run: python3 tools/check-pii.py
       - name: No unconditional dependency on another suite's skills
@@ -32,3 +38,12 @@ jobs:
         run: python3 -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'
       - name: pstack-models.md shipped default lints clean
         run: python3 skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
+      - name: Install poteto-mode script dependencies
+        working-directory: skills/poteto-mode/scripts
+        run: bun install --frozen-lockfile
+      - name: poteto-mode script tests
+        working-directory: skills/poteto-mode/scripts
+        run: bun run test
+      - name: poteto-mode script typecheck
+        working-directory: skills/poteto-mode/scripts
+        run: bun run typecheck
