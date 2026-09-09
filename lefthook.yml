@@ -1,4 +1,10 @@
 pre-commit:
   commands:
+    skill-metadata:
+      run: .venv/bin/python tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json
+    skill-content:
+      run: .venv/bin/python tools/check-skill-content.py skills
+    cross-suite-references:
+      run: .venv/bin/python tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
     pii:
-      run: python3 tools/check-pii.py --staged
+      run: .venv/bin/python tools/check-pii.py --staged
