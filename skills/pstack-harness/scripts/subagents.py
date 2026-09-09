@@ -126,6 +126,8 @@ def managed(content: bytes, role_id: str, harness: str) -> bool:
 def validate_destination(destination: Destination) -> None:
     if destination.root.is_symlink() or not destination.root.is_dir():
         raise ValueError(f"destination root must be an existing nonsymlink directory: {destination.root}")
+    if destination.harness == "hermes":
+        return
     for path in (destination.directory.parent, destination.directory):
         if path.is_symlink() or (path.exists() and not path.is_dir()):
             raise ValueError(f"destination must be a nonsymlink directory: {path}")
@@ -213,8 +215,9 @@ def main() -> int:
             return 0
         briefs = {role.id: render_brief(role, skills_root) for role in roles}
         report["payload"] = "ready"
-        if destination and destination.harness != "hermes":
+        if destination:
             validate_destination(destination)
+        if destination and destination.harness != "hermes":
             files = tuple(inspect_native(role, destination, briefs[role.id]) for role in roles)
             report["roles"] = [{"id": role.id, "native_file": item.status, "path": str(item.path)} for role, item in zip(roles, files)]
             if args.command == "install" and not any(item.status == "conflict" for item in files):

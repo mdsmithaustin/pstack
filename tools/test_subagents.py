@@ -237,6 +237,22 @@ class SubagentCommands(unittest.TestCase):
         self.assertFalse((self.project / ".hermes").exists())
         self.assertIn("# Comment Sicko", self.run_cli("brief", "Comment Sicko").stdout)
 
+    def test_every_harness_rejects_invalid_destination_roots(self):
+        missing = self.root / "missing"
+        regular_file = self.root / "regular file"
+        regular_file.write_text("keep this file")
+        symlink = self.root / "symlink root"
+        symlink.symlink_to(self.project, target_is_directory=True)
+        for harness in ("claude-code", "codex", "hermes"):
+            for scope in ("--project", "--user"):
+                for root in (missing, regular_file, symlink):
+                    with self.subTest(harness=harness, scope=scope, root=root.name):
+                        result = self.run_cli("check", "--harness", harness, scope, root, expected=1)
+                        self.assertIn("existing nonsymlink directory", json.loads(result.stdout)["error"])
+        self.assertFalse(missing.exists())
+        self.assertEqual(regular_file.read_text(), "keep this file")
+        self.assertEqual(list(self.project.iterdir()), [])
+
     def test_invalid_bundles_fail_without_partial_output(self):
         original = self.bundle.read_text()
         for change in ("version", "duplicate", "traversal", "empty", "wrong-type"):
