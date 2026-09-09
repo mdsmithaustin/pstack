@@ -112,7 +112,7 @@ def render_native(role: Role, destination: Destination, brief: str) -> bytes:
 
 
 def managed(content: bytes, role_id: str, harness: str) -> bool:
-    prefix, separator, last = content.rstrip(b"\n").rpartition(b"\n")
+    prefix, separator, last = content[:-1].rpartition(b"\n")
     if not separator or not content.endswith(b"\n"):
         return False
     if harness == "claude-code":

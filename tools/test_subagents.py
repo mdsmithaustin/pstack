@@ -173,6 +173,15 @@ class SubagentCommands(unittest.TestCase):
             self.assertEqual(path.read_text(), changed)
             self.assertEqual(other.read_bytes(), before)
 
+    def test_bytes_appended_after_marker_are_user_edits(self):
+        for harness in ("claude-code", "codex"):
+            self.native(harness)
+            path = self.role_path("poteto-agent", harness)
+            changed = path.read_bytes() + b"\n"
+            path.write_bytes(changed)
+            self.native(harness, expected=1)
+            self.assertEqual(path.read_bytes(), changed)
+
     def test_unmarked_collision_preflights_both_roles(self):
         path = self.role_path("poteto-agent")
         path.parent.mkdir(parents=True)
