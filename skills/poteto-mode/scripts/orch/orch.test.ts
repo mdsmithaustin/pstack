@@ -125,6 +125,9 @@ if [ "$(pwd -P)" != "${realpathSync(join(directory, "repo"))}" ]; then
   exit 2
 fi
 case "$*" in
+  "--version")
+    printf 'gt test fixture\\n'
+    ;;
   "--no-interactive log short --stack --reverse")
     cat "${outputPath}"
     ;;
@@ -144,12 +147,68 @@ case "$*" in
 esac
 `
   );
+  await writeFile(
+    join(bin, "gh"),
+    `#!/usr/bin/env bash
+printf 'gh must not run while gt is available\\n' >&2
+exit 2
+`
+  );
   await chmod(gt, 0o755);
+  await chmod(join(bin, "gh"), 0o755);
 
   const originalPath = process.env.PATH;
   process.env.PATH = `${bin}:${originalPath ?? ""}`;
   try {
     return await operation(outputPath);
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = originalPath;
+    }
+  }
+}
+
+async function withFakeGithub<T>({
+  directory,
+  operation,
+  output,
+}: {
+  directory: string;
+  operation: () => Promise<T>;
+  output: string;
+}): Promise<T> {
+  const bin = join(directory, "github-bin");
+  const outputPath = join(directory, "github-output.json");
+  await mkdir(bin);
+  await writeFile(outputPath, output);
+  const gh = join(bin, "gh");
+  await writeFile(
+    gh,
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [ "$(pwd -P)" != "${realpathSync(join(directory, "repo"))}" ]; then
+  printf 'gh ran outside the fixture repo: %s\\n' "$(pwd -P)" >&2
+  exit 2
+fi
+case "$*" in
+  "pr list --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
+    cat "${outputPath}"
+    ;;
+  *)
+    printf 'unexpected gh arguments: %s\\n' "$*" >&2
+    exit 2
+    ;;
+esac
+`
+  );
+  await chmod(gh, 0o755);
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${bin}:/usr/bin:/bin`;
+  try {
+    return await operation();
   } finally {
     if (originalPath === undefined) {
       delete process.env.PATH;
@@ -474,6 +533,72 @@ describe("Store", () => {
             prs: [10, 10],
           })
         ).rejects.toThrow("--prs must not contain duplicates");
+      },
+    });
+  });
+
+  it("falls back to the checked-out GitHub stack when gt is unavailable", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([
+        {
+          number: 11,
+          state: "OPEN",
+          headRefName: "stack/open",
+          headRefOid: stack.openSha,
+          baseRefName: "stack/closed",
+          isCrossRepository: false,
+        },
+        {
+          number: 10,
+          state: "MERGED",
+          headRefName: "stack/merged",
+          headRefOid: stack.mergedSha,
+          baseRefName: "main",
+          isCrossRepository: false,
+        },
+        {
+          number: 13,
+          state: "CLOSED",
+          headRefName: "stack/closed",
+          headRefOid: stack.closedSha,
+          baseRefName: "stack/merged",
+          isCrossRepository: false,
+        },
+      ]),
+      operation: async () => {
+        expect(await store.frontier.set({ repo: stack.repo })).toEqual({
+          generation: 1,
+          prs: [
+            {
+              pr: 10,
+              branches: "stack/merged",
+              sha: stack.mergedSha,
+              state: "MERGED",
+            },
+            {
+              pr: 13,
+              branches: "stack/closed",
+              sha: stack.closedSha,
+              state: "CLOSED",
+            },
+            {
+              pr: 11,
+              branches: "stack/open",
+              sha: stack.openSha,
+              state: "OPEN",
+            },
+          ],
+          lowestUnmerged: 11,
+        });
+        await expect(
+          store.frontier.set({ repo: stack.repo, prs: [10, 11, 12] })
+        ).rejects.toThrow(
+          "frontier pin mismatch: missing from GitHub: 12; extra in GitHub: 13"
+        );
       },
     });
   });
