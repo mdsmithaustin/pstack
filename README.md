@@ -285,7 +285,9 @@ Run the full CI-equivalent checks from the repository root:
 .venv/bin/python tools/check-pii.py
 .venv/bin/python tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
 .venv/bin/python tools/check-skill-content.py skills
+.venv/bin/python tools/generate-subagents.py --check
 .venv/bin/python -m unittest discover -s tools -p 'test_*.py'
+.venv/bin/python tools/probe-subagent-install.py
 .venv/bin/python -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'
 .venv/bin/python skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
 bun install --cwd skills/poteto-mode/scripts --frozen-lockfile
