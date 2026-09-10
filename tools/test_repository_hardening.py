@@ -57,7 +57,7 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn(".venv/bin/python tools/check-cross-suite-references.py", hook)
         self.assertIn(".venv/bin/python tools/check-pii.py --staged", hook)
         manifest = json.loads((ROOT / "skills" / "poteto-mode" / "scripts" / "package.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["devDependencies"]["bun-types"], "1.3.14")
+        self.assertEqual(manifest["devDependencies"]["bun-types"], "1.4.2")
         self.assertEqual(manifest["devDependencies"]["typescript"], "7.0.2")
 
 
