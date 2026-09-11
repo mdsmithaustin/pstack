@@ -58,7 +58,7 @@ The GSD instruction audit contributed these port additions. Preserve each owner 
 | Acceptance proof must use prerequisites production establishes or real callers supply. | `principle-test-behavior-not-implementation`. |
 | Tie proof to the integrated artifact and environment; justify replacements for required checks. | `principle-prove-it-works`; Feature links to it. |
 | Rebuild generated views from source records while preserving history and annotations. | `principle-make-operations-idempotent`. |
-| Route external and domain evidence gathering through core pstack. | Research playbook, linked from poteto-mode and Investigation; reuses Why's epistemics reference. Do not register a separate `research` skill. Preserve the default brief path and the answer-only exceptions in Opening a PR, the dispatcher, and README. |
+| Route external and domain evidence gathering through core pstack. | Research playbook, linked from poteto-mode and Investigation; reuses Why's epistemics reference. Do not register a separate `research` skill. Preserve its default brief path and answer-only behavior. Keep PR creation conditional on the matched playbook in Opening a PR, the dispatcher, and README. |
 | Cover relevant UI states in the existing feature map. | `create-verification-skill`. |
 | Reconcile declared threats with mitigation evidence or an explicit disposition. | `principle-prove-it-works`; Interrogate's Security rubric links to it. |
 
