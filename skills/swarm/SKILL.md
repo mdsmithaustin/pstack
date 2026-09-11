@@ -33,7 +33,7 @@ When a worker must start from a non-default pushed branch, pass `cloud_base_bran
 
 Every brief stands alone. Include the goal, scope, exact slice or race arm, how to verify, and what to report. Reports use `PASS`, `ISSUES`, or `BLOCKED` with evidence.
 
-If a worker drops out, proceed with N-1 and note it.
+For races, apply [Arena's required-arm rule](../arena/SKILL.md#required-arms). For coverage, a missing required slice makes the report incomplete. Retain useful results and record the gap. A discretionary worker may drop out with a recorded limitation.
 
 ## Phase C: Aggregate
 

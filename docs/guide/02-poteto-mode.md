@@ -1,6 +1,6 @@
 # Route work through `/poteto-mode`
 
-`/poteto-mode` is the front door. You give it a goal, it matches one of twenty-three playbooks, copies that playbook's steps into the todo list, and calls the other skills as the steps need them. In this page you learn what a good prompt looks like, and how little of one you actually need.
+`/poteto-mode` is the front door. You give it a goal, it matches one of twenty-four playbooks, copies that playbook's steps into the todo list, and calls the other skills as the steps need them. In this page you learn what a good prompt looks like, and how little of one you actually need.
 
 ![A dispatcher pulls a switch lever to route robots on rail handcars toward lit gates, under a /poteto-mode departure board listing BUG FIX, FEATURE, and INVESTIGATION.](./images/router.jpg)
 
@@ -11,13 +11,15 @@ flowchart TD
     A[Your prompt] --> B[poteto-mode]
     B --> C[Read the Principles section]
     C --> D{Match the task}
-    D -->|Read-only question| E[Investigation]
+    D -->|Code or history question| E[Investigation]
+    D -->|External or domain evidence| R[Research]
     D -->|Defect| F[Bug fix]
     D -->|New behavior| G[Feature]
     D -->|Structure only| H[Refactoring]
     D -->|Measured slowness| I[Perf issue]
     D -->|Large work or no match| J[figure-it-out]
     E --> K[Verify and report]
+    R --> K
     F --> K
     G --> K
     H --> K
