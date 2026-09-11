@@ -25,7 +25,7 @@ When a workflow requests `poteto-agent` or `Comment Sicko`, read the [named-role
 
 Each writer gets its own git worktree, whichever mechanism spawns it.
 
-**Set an arm's model.** Pass the model through whatever the spawn mechanism accepts — a tool parameter, a CLI flag. Only pass a value this session has confirmed the mechanism accepts; anything unconfirmed or rejected means `inherit-parent`: omit the model and let the arm run on the session model.
+**Set an arm's model.** Pass a model value this session has confirmed the spawn mechanism accepts. If the value is unconfirmed or rejected, omit it and let the arm inherit the session model. Report the substitution. For explicitly requested models, apply [Arena's required-arm rule](../arena/SKILL.md#required-arms).
 
 **Set an arm's effort.** Every role resolves to a model and a reasoning effort (see **The models config** below). Pass the effort through the spawn mechanism when it has a field or flag for it. When it has none, or the harness rejects the value, the effort alone becomes `inherit-parent`: keep the model, keep the arm, and say in the reply that the effort was inherited. An effort problem never drops a model or an arm.
 
@@ -61,7 +61,7 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 
 ## Universal rules
 
-- **Panels degrade by model, never by count.** A four-model panel in a one-model harness is still four arms (parallel or sequential), each with a genuinely different brief; the configured list length sets the count.
+- **Panels keep their configured arm count.** Run a four-model panel as four arms even in a one-model harness. Give each arm a different brief and run them in parallel or sequentially. For exact model requests, apply the required-arm rule above.
 - **Named sibling skills are files.** When a pstack skill says "the architect skill" or "read the leaf skill", it names a sibling directory under the same installed skills root. Most pstack skills are gated against model invocation, so they appear in no tool inventory and their descriptions are not in context — that never means missing. Read the named skill's SKILL.md (and any files it references) directly and follow it; record that you applied it by file read. Never edit a skill's gating to make it invocable.
 - **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a worklist, and Cursor-era parameters like `readonly`, `environment: "cloud"`, and `is_background` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief, worktree isolation, background execution). Capability selection follows live descriptions, not recalled names. A missing optional tool never cancels the step and needs no announcement.
 - **Config**: roles resolve to a model and an effort per **The models config** below. A value the current harness cannot use is `inherit-parent` for that field only.

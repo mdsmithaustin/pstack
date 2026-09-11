@@ -17,7 +17,7 @@ The Principles section below grounds every trigger. In your reply, name each pri
 Remaining triggers:
 
 - Nontrivial change, architecture decision, or "are we sure?" → the **how** skill.
-- About to `AskQuestion` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle.
+- About to `AskQuestion` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation or Research whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle.
 - Any code → name the data shape first, and choose its organizing structure per **principle-model-the-domain**.
 - Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing.
 - Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
@@ -120,7 +120,8 @@ Open a worklist whose first items are the matched playbook's steps, copied verba
 
 A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
 
-- **Investigation.** Read-only question: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. `playbooks/investigation.md`.
+- **Investigation.** Read-only question about current code or its history: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. `playbooks/investigation.md`.
+- **Research.** External, domain, or dependency evidence for a decision: check current support, compare documented approaches, or investigate an unfamiliar domain. `playbooks/research.md`.
 - **Bug fix.** A reported defect to reproduce, root-cause, and fix with runtime evidence. `playbooks/bug-fix.md`.
 - **Perf issue.** A measured slowness to trace and improve against a baseline. `playbooks/perf-issue.md`.
 - **Hillclimb.** Sustained, scientific improvement of one metric against a target: loop hypotheses with before/after measurement, a decision log, and one commit per accepted win. Distinct from Perf issue, which is a one-off fix. `playbooks/hillclimb.md`.

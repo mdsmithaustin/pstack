@@ -75,3 +75,4 @@ Only flag security issues you can actually trace through the code. "This could b
 - Authentication/authorization gaps in new endpoints
 - Secrets in code, logs, or error messages
 - TOCTOU (time-of-check-time-of-use) in security-critical paths
+- When the supplied context declares threats, reconcile each with mitigation evidence or an explicit disposition per [Prove It Works](../../principle-prove-it-works/SKILL.md).

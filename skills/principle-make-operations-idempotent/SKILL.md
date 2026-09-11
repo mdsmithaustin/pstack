@@ -16,6 +16,8 @@ Design operations so they converge to the correct state regardless of how many t
 - Self-healing locks: use PID-based stale lock detection
 - Idempotent scheduling: failed work respawns cleanly, fresh input regenerated after each cycle
 
+For generated reports, indexes, and calibration files, rebuild from attributed source records and replace the generated output. Preserve source facts, append-only history, and human annotations. Report missing inputs rather than inventing samples or carrying stale derived values forward.
+
 **The test:**
 1. What happens if this runs twice in a row?
 2. What happens if the previous run crashed at every possible point?

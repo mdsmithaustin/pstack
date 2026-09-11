@@ -26,6 +26,18 @@ Code and features:
 Delegation: trust artifacts, not self-reports.
 When verifying delegated work, inspect the actual output artifact (git diff, file contents, runtime behavior), not the delegate's summary.
 
+## Account for the accepted scope
+
+Check against the original accepted requirements. A plan, summary, or delegation cannot silently narrow them. Link each requirement to evidence or an explicit gap in the existing task record. An unmet requirement prevents a full completion claim. Preserve any `backstop` or `judgment` tags and record authorized scope changes separately. Reuse a runner's record when one exists.
+
+When the work includes a threat model or security review, reconcile every declared threat with mitigation evidence at the threatened boundary. A claim of mitigation is not evidence. Record accepted risk with its authorized owner, transferred responsibility with its owner and evidence, or an open gap. Unresolved threats stay visible in the completion verdict.
+
+## Tie proof to the result
+
+Record the artifact each check exercised, its revision when applicable, and the relevant environment. After combining changes, rerun checks for the affected paths on the integrated result. Separate passing branches do not prove their combination.
+
+Run a named acceptance helper when the task or project requires it. If it cannot run, report the gap. Justify any replacement against the same acceptance criteria before treating it as equivalent.
+
 ## Script the check when you can
 
 The strongest proof is a deterministic script that re-runs the same comparison, not a one-time eyeball. Write the script, run it, and keep its output as an artifact a reviewer can re-run instead of trusting your word.

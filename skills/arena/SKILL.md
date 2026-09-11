@@ -24,7 +24,7 @@ Open a worklist with one entry per phase before launching anything.
 The N candidates will receive the same prompt, so the prompt is the contract.
 
 1. State the artifact each candidate is producing.
-2. Derive the rubric. State what success looks like for *this* task, then turn it into 3-6 concrete gradeable criteria. The rubric is the picker's tool in Phase D. Candidates only see the task.
+2. Derive the rubric. State what success looks like for *this* task, then turn it into 3-6 concrete gradeable criteria. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). The rubric is the picker's tool in Phase D. Candidates only see the task.
 3. Pick the runners. Use `arena runners` from the pstack models config, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation). Otherwise default to one each on `fable`, `opus`, `sonnet`, `haiku`. Spawn more when the arena covers multiple design directions. Same model N times when the work is generation-bound rather than judgment-sensitive. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
 4. Assign output paths. Each candidate writes to its own location (a git worktree where possible, otherwise `/tmp/arena-<slug>/candidate-<n>/`), per the **separate-before-serializing-shared-state** principle skill.
 
@@ -34,7 +34,9 @@ Spawn all N subagents in one message with `run_in_background: true`, each with t
 
 Each rationale names the alternatives the candidate considered and what it rejected.
 
-If a candidate fails to produce output, proceed with N-1 and note the dropout in the synthesis record.
+### Required arms
+
+An arm or exact model requested for this task remains an obligation. If it cannot return a result, retain useful outputs but report the requested comparison as incomplete. Disclose substitutions and the models that actually ran. A replacement does not fulfill an exact model request. Configured defaults and role aliases resolve through the harness as usual. A default or discretionary candidate may drop out with a recorded limitation.
 
 ## Phase C: Cross-judge
 

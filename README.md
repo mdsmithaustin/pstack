@@ -39,7 +39,7 @@ use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) at the start of a task. it r
 
 ### just use [`/poteto-mode`](./skills/poteto-mode/SKILL.md)
 
-this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-three playbooks:
+this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-four playbooks:
 
 ```
 /poteto-mode this pr has a subtle bug where the scroll drifts every 750ms even when idle. repro
@@ -52,11 +52,12 @@ morning.
 ```
 
 <details>
-<summary>the twenty-three playbooks</summary>
+<summary>the twenty-four playbooks</summary>
 
 | playbook | for |
 |---|---|
 | [investigation](./skills/poteto-mode/playbooks/investigation.md) | a read-only question. how does x work, why was y built this way, are we sure. |
+| [research](./skills/poteto-mode/playbooks/research.md) (port addition) | external, domain, or dependency evidence for a decision, with sources and explicit gaps. |
 | [bug fix](./skills/poteto-mode/playbooks/bug-fix.md) | reproduce a defect, root-cause it, and fix with runtime evidence. |
 | [perf](./skills/poteto-mode/playbooks/perf-issue.md) | trace a measured slowness and improve it against a baseline. |
 | [hillclimb](./skills/poteto-mode/playbooks/hillclimb.md) | sustained, scientific improvement of one metric against a target, looping hypotheses with before/after measurement and one commit per accepted win. |

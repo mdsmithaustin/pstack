@@ -23,3 +23,5 @@ The check: before you keep a test, ask whether it would still pass if every func
 **The fix:** call the subject inside the test body with one concrete input and assert the literal output or the observable effect, `expect(slugify("Hello, World!")).toBe("hello-world")`. For an absence, assert the presence on the other input in the same test. For a constant, test the mechanism that reads it with one input instead of restating the value. For a mock, assert the payload it received or the state after the call, not that it was called. When no such assertion exists, delete the test.
 
 **Keep** a test of a relation across a table's rows (a key present in two tables, a parent that exists), and a compile-time check in a `*.test-d.ts` file.
+
+**Production prerequisites.** An acceptance test must not pass because its setup establishes state or ordering that production never establishes. Exercise the real initialization path or prove that the caller supplies the prerequisite. Ordinary fixture inputs that real callers can supply are valid.

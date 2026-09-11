@@ -45,6 +45,23 @@ Upstream is the source of truth for the workflows themselves. This file records 
 - `.claude/settings.json` is fork-only and sets `attribution.sessionUrl` to `false`. Claude Code otherwise appends a `Claude-Session:` trailer carrying a private session URL to commits and pull request bodies made from a cloud or Remote Control session, on by default. That scoping is why only four sessions left traces rather than all of them. Nothing in this repository's skills or tooling caused it and nothing there could suppress it, because the control is a harness setting, which is what this file supplies. It reached 41 commits here across four sessions before anyone noticed and this repository is public, so the history was rewritten and the trailers removed. The file drops only the URL and leaves `Co-Authored-By` intact. Shared project settings outrank user settings in Claude Code's precedence order, so this beats whatever a contributor has in their own `~/.claude/settings.json`; only their `.claude/settings.local.json` or an organization's managed settings outrank it. Being Claude Code specific is not new ground for the port, which already ships `agents/openai.yaml` for Codex and a `.github/` directory. On sync, keep the file.
 - `.github/workflows/lint.yml`, `tools/check-skill-frontmatter.py`, and `tools/check-cross-suite-references.py` are fork-only CI. The second check enforces the port's independence rule: a skill may name a skill from another suite (Matt Pocock's, agent-loop-runner's, GSD's) only as an optional capability with a stated fallback, or inside an adapter file. The roster of foreign names is `tools/cross-suite-foreign.txt`.
 
+## Harvested instruction rules
+
+The GSD instruction audit contributed these port additions. Preserve each owner and its consumer links during sync. These rules add no GSD lifecycle or companion-suite dependency.
+
+| Rule | Owner |
+|---|---|
+| Preserve accepted requirements through plans, handoffs, and proof. | `principle-prove-it-works`; Multi-phase plan links to it. |
+| Test the assumption that could invalidate later work first. | `principle-sequence-verifiable-units`; Prototype and Architect link to it. |
+| Define passing and failing eval behavior, calibrate subjective judgments, and account for unmeasured dimensions. | Eval; Arena links to it for subjective criteria. |
+| An unavailable arm or exact model requested for the task leaves the comparison incomplete. | Arena; Swarm and `pstack-harness` link to it. Configured defaults and aliases still resolve normally. |
+| Acceptance proof must use prerequisites production establishes or real callers supply. | `principle-test-behavior-not-implementation`. |
+| Tie proof to the integrated artifact and environment; justify replacements for required checks. | `principle-prove-it-works`; Feature links to it. |
+| Rebuild generated views from source records while preserving history and annotations. | `principle-make-operations-idempotent`. |
+| Route external and domain evidence gathering through core pstack. | Research playbook, linked from poteto-mode and Investigation; reuses Why's epistemics reference. Do not register a separate `research` skill. |
+| Cover relevant UI states in the existing feature map. | `create-verification-skill`. |
+| Reconcile declared threats with mitigation evidence or an explicit disposition. | `principle-prove-it-works`; Interrogate's Security rubric links to it. |
+
 ## Named-agent portability
 
 Root `agents/*.md` owns upstream persona text and metadata. `tools/generate-subagents.py` owns the explicit port mapping and generates `skills/pstack-harness/references/subagents/roles.json`. The installed `pstack-harness/scripts/subagents.py` reads this bundle without Git, network access, or a source checkout. Do not hand-edit generated payloads.
@@ -59,7 +76,7 @@ Run `python3 -m unittest discover -s tools -p 'test_subagents.py'` with Python 3
 
 ## What deliberately did not change
 
-- Skill bodies, playbooks, and principles: the engineering content is upstream's, verbatim wherever no Cursor primitive was involved.
+- Skill bodies, playbooks, and principles retain upstream engineering content except for the substitutions and port additions recorded above.
 - Frontmatter extras (`mode`, `icon`, `color`, `reminder`, `disable-model-invocation`): Cursor-flavored but harmless; CLIs that don't know a key ignore it.
 - `agents/` remains unchanged upstream text. The port generates an installed bundle and native wrappers from it, as described above.
 

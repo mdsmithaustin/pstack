@@ -22,6 +22,14 @@ Ask the question you actually have. [`/how`](../../skills/how/SKILL.md) reads th
 
 The two compose naturally. `do why first then how` is a perfectly good prompt when you suspect the history explains the mess.
 
+## Research an external decision
+
+```text
+/poteto-mode check whether the current client supports resumable uploads. compare the official docs and release notes before we choose it.
+```
+
+The [Research playbook](../../skills/poteto-mode/playbooks/research.md) checks primary sources, versions, and conflicting evidence. It distinguishes missing documentation from evidence that a capability is absent. Use it for external, domain, or dependency questions. How and Why keep the code and history questions. Research ships inside poteto-mode and needs no companion skill.
+
 ## Actually understand it with `/poteto-teach`
 
 ```text
