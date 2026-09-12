@@ -29,6 +29,8 @@ flowchart TD
 
 The diagram shows the common routes. There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, visual parity, authoring and evaluating skills, autonomous runs, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup. The [playbook directory](../../skills/poteto-mode/playbooks/) has the full set.
 
+For unresolved decisions across sessions or issue intake before implementation is accepted, poteto-mode can use available companion skills when they offer a likely engineering gain. The [routing rules](../../skills/poteto-mode/SKILL.md#playbooks) define those cases. When no companion matches, work continues through pstack. No companion installation is required.
+
 ## Say the goal, not the ceremony
 
 You don't write a spec. You say what's wrong or what you want, plus anything you already know that saves the agent time:
