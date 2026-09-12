@@ -49,11 +49,11 @@ Write the file with one line per role, using the same labels poteto-mode uses. S
 
 ```
 feature, refactoring: sonnet
-bug-fix: fable
+bug-fix: sonnet
 
 ## codex
 feature, refactoring: gpt-5.6-terra@high
-bug-fix: gpt-5.6-sol@xhigh
+bug-fix: gpt-5.6-terra@xhigh
 ```
 
 ### 6. Confirm
