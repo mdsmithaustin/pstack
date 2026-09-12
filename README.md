@@ -31,7 +31,7 @@ two steps:
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs.
 
-that's it. the other skills are situational; the mode skill uses them for you as needed. out of the box the mode splits work by model strength (using claude code's subagent model aliases): precisely-specified code, prose, and judgment go to fable, while fast mechanical code goes to sonnet. the default panel is fable / opus / sonnet / haiku. on codex the same aliases translate to the gpt-5.6 family (sol at max for fable, sol at xhigh for opus, terra for sonnet, luna for haiku) with a reasoning-effort floor of high; on hermes everything runs on your session model. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) changes any of it.
+that's it. the other skills are situational; the mode skill uses them for you as needed. out of the box the mode splits work by model strength (using claude code's subagent model aliases): code delegates (feature, refactoring, bug fix, perf, hillclimb) go to sonnet, while the hardest changes, prose, and judgment go to fable. the default panel is fable / opus / sonnet / haiku. on codex the same aliases translate to the gpt-5.6 family (sol at max for fable, sol at xhigh for opus, terra for sonnet, luna for haiku) with a reasoning-effort floor of high; on hermes everything runs on your session model. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) changes any of it.
 
 ## usage
 

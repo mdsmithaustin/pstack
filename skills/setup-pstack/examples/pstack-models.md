@@ -6,9 +6,9 @@ description: pstack per-role model choices (overrides skill defaults)
 # `model@effort` pins the reasoning effort (none, low, medium, high, xhigh, max; ultra only on gpt-5.6-sol). No suffix: the harness skill's policy applies (floor high).
 # `## codex`, `## claude-code`, `## hermes` sections override the lines above for that harness only.
 feature, refactoring: sonnet
-bug-fix: fable
-perf-issue: fable
-hillclimb: fable
+bug-fix: sonnet
+perf-issue: sonnet
+hillclimb: sonnet
 judgment and prose: fable
 hardest tasks: fable
 how explorer: sonnet
@@ -27,9 +27,9 @@ default: inherit-parent
 
 ## codex
 feature, refactoring: gpt-5.6-terra@high
-bug-fix: gpt-5.6-sol@xhigh
-perf-issue: gpt-5.6-sol@xhigh
-hillclimb: gpt-5.6-sol@xhigh
+bug-fix: gpt-5.6-terra@xhigh
+perf-issue: gpt-5.6-terra@xhigh
+hillclimb: gpt-5.6-terra@xhigh
 judgment and prose: gpt-5.6-sol@max
 hardest tasks: gpt-5.6-sol@max
 how explorer: gpt-5.6-terra@high
