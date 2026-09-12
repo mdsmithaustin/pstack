@@ -7,6 +7,7 @@
     {"skill":"blast-radius","example_request":"What could this change break?","description_contains":["Find what a change"],"implicit_allowed":false},
     {"skill":"bro","example_request":"Restate that plainly.","description_contains":["Restate the last"],"implicit_allowed":false},
     {"skill":"create-verification-skill","example_request":"Create a verification skill.","description_contains":["Generate a project-local"],"implicit_allowed":false},
+    {"skill":"documentation-impact","example_request":"Does this change need documentation updates?","description_contains":["Check documentation impact"],"implicit_allowed":true},
     {"skill":"figure-it-out","example_request":"Complete this migration.","description_contains":["Design an auditable"],"implicit_allowed":false},
     {"skill":"how","example_request":"How does this work?","description_contains":["how does X work"],"implicit_allowed":true},
     {"skill":"interrogate","example_request":"Review this adversarially.","description_contains":["adversarial review"],"implicit_allowed":false},
