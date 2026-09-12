@@ -50,6 +50,21 @@ Apps change and feature maps rot. When yours drifts, run:
 
 [`/maintain-verification-skill`](../../skills/maintain-verification-skill/SKILL.md) audits the generated skill: one read-only source reader per feature in parallel, then one live pass that drives every mapped feature. It ends in exactly one of three outcomes. `clean` means full coverage and nothing to ship. `changed` means one PR of proven corrections, confined to the verification skill's own directory. `blocked` names the blocker. It never edits product code. If the live pass catches a product regression, it reports the regression instead of papering over it in docs.
 
+## Check documentation impact
+
+Before Poteto reports a substantive code or public workflow change complete, it runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md). The author checks which reader tasks changed and updates the affected docs. A different agent reviews the resulting artifact without editing it. This also applies when the work ends without a PR.
+
+The pass checks applicable README instructions, references, examples, upgrade guidance, release notes, and diagrams against the implementation. It records the examined revision or local snapshot and the checks run. If existing docs remain correct, an evidenced no-change result is enough. No new spec or documentation tree is required.
+
+You can request either mode directly:
+
+```text
+/documentation-impact update the docs affected by this change.
+/documentation-impact review this change's documentation coverage without editing files.
+```
+
+Babysit reports documentation readiness alongside forge status. A status-only request reports a missing verdict as pending. Shipping requires a current independent pass and rechecks it after relevant changes, including a rebase that changes documentation context.
+
 ## Open the PR
 
 ```text
