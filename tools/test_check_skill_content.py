@@ -40,6 +40,7 @@ class ContentLint(Tree):
         real = self.skill("real-skill", 'name: real-skill\ndescription: "d"')
         (real / "refs").mkdir()
         (real / "refs" / "my notes.md").write_text("x", encoding="utf-8")
+        (real / "refs" / "my").write_text("x", encoding="utf-8")
         (real / "refs" / "diagram(1).svg").write_text("x", encoding="utf-8")
         (real / "refs" / "my#notes.md").write_text("x", encoding="utf-8")
         (real / "refs" / "my?notes.md").write_text("x", encoding="utf-8")
@@ -101,6 +102,11 @@ class ContentLint(Tree):
             "See [reference]."
         )
         self.assertEqual(self.body(body)[0], 0)
+
+    def test_placeholder_prefix_with_balanced_suffix_is_a_filename(self) -> None:
+        code, out = self.body("See [missing]({url}(tail)).")
+        self.assertEqual(code, 1)
+        self.assertIn("{url}(tail)", out)
 
     def test_percent_encoded_placeholder_is_a_filename(self) -> None:
         code, out = self.body("See [missing](%7Burl%7D).")
@@ -237,6 +243,13 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("SKILL.md:6: relative-link", out)
         self.assertIn("SKILL.md:9: relative-link", out)
+
+    def test_code_path_inside_multiline_link_label_reports_its_line(self) -> None:
+        code, out = self.body(
+            "[label\n`../MISSING-NESTED-LABEL.md`](https://example.com)"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:7: relative-link", out)
 
     def test_skill_after_multiline_code_span_reports_its_own_line(self) -> None:
         code, out = self.body(
