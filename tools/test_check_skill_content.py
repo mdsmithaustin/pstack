@@ -127,10 +127,10 @@ class ContentLint(Tree):
         self.assertEqual(code, 1, "inline code paths are checked whatever the extension")
         self.assertIn("relative-link", out)
 
-    def test_inline_code_paths_may_contain_spaces(self) -> None:
+    def test_quoted_inline_code_paths_may_contain_spaces(self) -> None:
         code, out = self.body(
-            "Use `../real-skill/refs/my notes.md` and "
-            "`../real-skill/refs/MISSING FILE.md`."
+            "Use `\"../real-skill/refs/my notes.md\"` and "
+            "`\"../real-skill/refs/MISSING FILE.md\"`."
         )
         self.assertEqual(code, 1)
         self.assertIn("MISSING FILE.md", out)
@@ -148,6 +148,12 @@ class ContentLint(Tree):
     def test_inline_command_with_options_is_not_a_path(self) -> None:
         self.assertEqual(
             self.body("Run `../real-skill/run.sh --check`.")[0],
+            0,
+        )
+
+    def test_unquoted_spaced_inline_content_is_not_a_path(self) -> None:
+        self.assertEqual(
+            self.body("Use `../real-skill/refs/MISSING FILE.md`.")[0],
             0,
         )
 
@@ -252,7 +258,7 @@ class ContentLint(Tree):
 
     def test_spaced_inline_code_path_inside_image_alt_is_checked(self) -> None:
         code, out = self.body(
-            "![`../MISSING IMAGE ALT.md`](../real-skill/LICENSE)"
+            "![`\"../MISSING IMAGE ALT.md\"`](../real-skill/LICENSE)"
         )
         self.assertEqual(code, 1)
         self.assertIn("../MISSING IMAGE ALT.md", out)

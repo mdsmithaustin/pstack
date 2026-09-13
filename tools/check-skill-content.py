@@ -2,9 +2,9 @@
 """Fail on broken content inside skills/**/*.md.
 
 Relative destinations in CommonMark links and reference definitions must resolve
-to something on disk. Paths beginning `./` or `../` and occupying an entire
-inline-code span follow the same rule. Explicit project placeholders such as
-`[PR]({url})` are skipped.
+to something on disk. Whitespace-free paths beginning `./` or `../` and quoted
+paths with spaces that occupy an entire inline-code span follow the same rule.
+Explicit project placeholders such as `[PR]({url})` are skipped.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
@@ -102,8 +102,12 @@ class ParsedFile:
     duplicate_references: list[dict[str, Any]]
 
 
-CODE_PATH = re.compile(r"\.\.?/[^\r\n<>]+")
-SHELL_OPTION = re.compile(r"\s-{1,2}[a-z0-9]", re.I)
+CODE_PATH = re.compile(r"\.\.?/[^\s<>]+")
+QUOTED_CODE_PATH = re.compile(
+    r"(?P<quote>[\"'])"
+    r"(?P<path>\.\.?/[^\r\n<>]+)"
+    r"(?P=quote)"
+)
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 SKILL_NAME = re.compile(r"[a-z][a-z0-9-]*")
 INLINE_PLACEHOLDER = re.compile(
@@ -154,14 +158,11 @@ def relative_target(href: str, *, markdown: bool) -> str | None:
     return None if target.startswith("/") else target
 
 
-def inline_code_path(parsed: ParsedFile, content: str) -> str | None:
-    if not CODE_PATH.fullmatch(content) or SHELL_OPTION.search(content):
-        return None
-    if any(character.isspace() for character in content):
-        command = content.split(maxsplit=1)[0]
-        if (parsed.path.parent / command).exists():
-            return None
-    return content
+def inline_code_path(content: str) -> str | None:
+    if CODE_PATH.fullmatch(content):
+        return content
+    quoted = QUOTED_CODE_PATH.fullmatch(content)
+    return quoted.group("path") if quoted else None
 
 
 def finding_for_target(
@@ -241,7 +242,7 @@ def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
                     for code, offset in nested_image_code_spans(
                         child.children, image_offset
                     ):
-                        if (path := inline_code_path(parsed, code.content)) is not None:
+                        if (path := inline_code_path(code.content)) is not None:
                             finding = finding_for_target(
                                 parsed,
                                 token_line(parent, code, offset),
@@ -251,7 +252,7 @@ def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
                             if finding is not None:
                                 yield finding
             elif child.type == "code_inline" and (
-                path := inline_code_path(parsed, child.content)
+                path := inline_code_path(child.content)
             ) is not None:
                 finding = finding_for_target(
                     parsed, line, path, markdown=False
