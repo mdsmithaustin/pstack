@@ -9,12 +9,12 @@ Match the documentation to the behavior people will use. Inspect the actual chan
 
 ## Choose the mode and scope
 
-Use `author` when the task authorizes documentation updates. Use `review` for an audit, independent verdict, status request, or other read-only task. Honor the caller's mode. If update authority is unclear, inspect and report in `review` mode.
+Use `author` when the task authorizes documentation updates. Use `review` for an audit, independent review, status request, or other read-only task. Honor the caller's mode. If update authority is unclear, inspect and report in `review` mode.
 
 - In `author` mode, update affected documentation within the authorized change. Leave unrelated edits alone.
 - In `review` mode, inspect without editing the artifact you judge. Return findings to its author. Do not fix a document and certify your own fix.
 
-The calling workflow owns delegation, model selection, continuation, and human gates. When it requires an independent verdict, the reviewer must be a different agent from the author. Reuse an existing independent reviewer when possible. Do not spawn another coordinator or start a publication workflow here.
+The calling workflow owns delegation, model selection, continuation, and human gates. Do not spawn another coordinator or start a publication workflow here.
 
 Use the accepted request, issue, or existing work brief. Do not require a new spec, ticket, docs tree, or work ledger.
 
@@ -56,6 +56,17 @@ In `review` mode, derive the affected reader tasks from the implementation yours
 
 Use the repository's existing diagram format when a diagram explains an affected relationship better than prose. Check each changed actor, edge, direction, and boundary against the implementation. Optional visual tools can help present findings if available. Otherwise use Markdown or the existing diagram source. Do not install a visual dependency, require branding input, or wait for annotation feedback to complete this pass.
 
+## Decide whether author mode requires review
+
+An author pass returns exactly one result:
+
+- `independent review required` when documentation changed, a public workflow or documented contract changed, or a documentation gap remains unresolved.
+- `independent review not required` only when evidence shows that an internal change has no documentation impact.
+
+`independent review not required` is invalid for a public workflow or documentation change. Record the evidence that supports the author result with the examined artifact. A completion or shipping workflow can start an independent review only when the author result is `independent review required`.
+
+When independent review is required, a different agent reviews the resulting artifact without editing it. The independent review verdict is `pass`, `needs changes`, or `unverified`. After repairs, the reviewer checks the resulting artifact before returning `pass`. Reuse the verdict only while its examined change, docs, and relevant surrounding context still match. A matching stable patch-id after a rebase does not establish that the documentation context is unchanged. Recheck that context or rerun the pass.
+
 ## Verify and return the result
 
 Run the relevant repository documentation checks and exercise changed examples against the actual implementation when safe within the task's authority. Apply **verify-commands** to commands used as completion evidence. In review mode, run checks without modifying the reviewed files, using a disposable copy if the check writes output.
@@ -67,6 +78,6 @@ Return a compact result in the conversation or the existing work record:
 - The mode, scope, and examined revision or snapshot, including relevant local changes.
 - The affected reader tasks and document paths, with updates made or evidence for leaving them unchanged.
 - The checks actually run, their outcomes, and any remaining findings or verification gaps.
-- In review mode, a verdict of `pass`, `needs changes`, or `unverified`. Use `needs changes` for established omissions or incorrect claims. Use `unverified` when missing evidence prevents a decision. A supported no-change conclusion can pass.
+- In author mode, the author result and its evidence. In review mode, return `pass`, `needs changes`, or `unverified`. Use `needs changes` for established omissions or incorrect claims. Use `unverified` when missing evidence prevents a decision.
 
-An author's update report is not an independent review verdict. After repairs, the reviewer checks the resulting artifact before it passes. Reuse a verdict only while its examined change, docs, and relevant surrounding context still match. A matching stable patch-id after a rebase does not establish that the documentation context is unchanged. Recheck that context or rerun the pass.
+An author result is not an independent review verdict.

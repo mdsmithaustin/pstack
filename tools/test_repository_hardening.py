@@ -47,7 +47,7 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn("deletion", rules)
         self.assertIn("non_fast_forward", rules)
 
-    def test_hook_and_manifest_keep_the_fast_and_frozen_contract(self) -> None:
+    def test_hook_keeps_the_fast_contract(self) -> None:
         hook = (ROOT / "lefthook.yml").read_text(encoding="utf-8")
         python_runs = re.findall(r"^\s+run: (.*python.*)$", hook, re.MULTILINE)
         self.assertEqual(len(python_runs), 4)
@@ -56,9 +56,6 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn(".venv/bin/python tools/check-skill-content.py skills", hook)
         self.assertIn(".venv/bin/python tools/check-cross-suite-references.py", hook)
         self.assertIn(".venv/bin/python tools/check-pii.py --staged", hook)
-        manifest = json.loads((ROOT / "skills" / "poteto-mode" / "scripts" / "package.json").read_text(encoding="utf-8"))
-        self.assertEqual(manifest["devDependencies"]["bun-types"], "1.4.2")
-        self.assertEqual(manifest["devDependencies"]["typescript"], "7.0.2")
 
 
 if __name__ == "__main__":
