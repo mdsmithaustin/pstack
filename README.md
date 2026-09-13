@@ -197,7 +197,7 @@ automate-me:       /automate-me
 
 pstack ships both complete personas inside the installed `pstack-harness` skill. `npx skills` delivers these payloads with the skills; it does not register native agents. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) checks them and can install native registrations into an explicit project or user destination.
 
-[`poteto-agent`](./agents/poteto-agent.md) reads `poteto-mode` in full, including its inline Principles index, before work. [Comment Sicko](./agents/comment-sicko.md), usually invoked through [`/no-comments`](./skills/no-comments/SKILL.md), edits scoped comments and reports application-code refactor targets. it does not write application code.
+[`poteto-agent`](./agents/poteto-agent.md) is a scoped delegate for one unit of a playbook step. It reads `poteto-mode` in full, including its inline Principles index, before work. The main conversation runs `/poteto-mode` and owns the plan. It spawns one delegate per unit and does not resume a delegate across phases. [Comment Sicko](./agents/comment-sicko.md), usually invoked through [`/no-comments`](./skills/no-comments/SKILL.md), edits scoped comments and reports application-code refactor targets. it does not write application code.
 
 The [named-role contract](./skills/pstack-harness/references/named-roles.md) uses a confirmed current native role or supplies the complete persona to a generic delegate. Claude uses Markdown registrations, and Codex uses TOML. Hermes receives the full persona through delegation context. The normalized native names are `poteto-agent` and `comment-sicko`; `Comment Sicko` remains a supported logical alias. Model and effort choices still come from pstack's existing model policy.
 
