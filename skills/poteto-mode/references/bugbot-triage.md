@@ -113,10 +113,10 @@ Append new candidate learnings here during or after babysitting when they look t
 - Source: one prose-pinning PR with eight Bugbot passes; the claim was real on
   pass 7 despite every earlier pass being fixed-and-resolved.
 
-### Stale security-review finding already fixed later in the same PR
+### Stale automated security finding already fixed later in the same PR
 
 - Confidence: candidate
-- Skip when: An agentic security review (or similar) claims a missing authz/validation call, and the current PR tip clearly includes that exact gate (with tests), typically added in a later hardening commit after the review ran.
+- Skip when: An automated security reviewer claims a missing authz/validation call, and the current PR tip clearly includes that exact gate (with tests), typically added in a later hardening commit after the review ran.
 - Do not skip when: The cited helper is a no-op for the principal under discussion, the check runs after the side effect it guards, or coverage for the claimed principal is missing.
 - Example signal: A HIGH "missing authorization check" finding while the exact guard is already called before the side effect on the tip.
 - Source: one webhook-endpoint PR whose hardening commit postdated the review run.
