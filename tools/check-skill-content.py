@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Fail on broken content inside skills/**/*.md.
 
-A relative Markdown destination in an inline link or reference definition must
-resolve to something on disk. A relative path written in inline code follows
-the same rule. Explicit placeholders such as `[PR]({url})` are not filesystem
-paths.
+A relative Markdown destination in a same-line inline link or single-line
+reference definition must resolve to something on disk. A relative path written
+in inline code follows the same rule. Explicit placeholders such as
+`[PR]({url})` are not filesystem paths.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
@@ -14,11 +14,10 @@ how the suite writes "the **model-the-domain** principle skill". Here inline
 code IS skipped, so a bolded word quoted inside backticks is not a reference.
 
 Fenced blocks are skipped for link and sibling checks. Port substitution checks
-scan every raw line, including templates inside fences. Blockquote and list
-prefixes are removed before fence detection. A fence at any remaining
-indentation counts, since telling it from an indented code block needs container
-tracking this does not do. A fence that is never closed is itself a finding,
-because it would otherwise silently hide the rest of the file.
+scan every raw line, including templates inside fences. Fence scanning tracks
+blockquote and list containers, including their continuation indentation. A
+fence that is never closed is itself a finding because it would otherwise
+silently hide the rest of the file.
 """
 from __future__ import annotations
 
