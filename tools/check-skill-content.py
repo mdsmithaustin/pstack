@@ -301,9 +301,12 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
 
 
 def skip_markdown_title(line: str, pos: int) -> int | None:
+    destination_end = pos
     while pos < len(line) and line[pos].isspace():
         pos += 1
     if pos == len(line):
+        return pos
+    if pos == destination_end:
         return pos
     if line[pos] not in {'"', "'", "("}:
         return pos

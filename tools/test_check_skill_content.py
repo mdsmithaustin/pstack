@@ -387,6 +387,28 @@ class ContentLint(Tree):
         self.assertIn("MISSING-SINGLE", out)
         self.assertIn("MISSING-PAREN", out)
 
+    def test_inline_angle_destination_requires_space_before_title(self) -> None:
+        for title in ('"Title"', "'Title'", "(Title)"):
+            with self.subTest(title=title):
+                adjacent = f"See [invalid](<MISSING-ADJACENT.svg>{title})."
+                self.assertEqual(self.body(adjacent)[0], 0)
+
+                spaced = f"See [valid](<MISSING-SPACED.svg> {title})."
+                code, out = self.body(spaced)
+                self.assertEqual(code, 1)
+                self.assertIn("MISSING-SPACED.svg", out)
+
+    def test_reference_angle_destination_requires_space_before_title(self) -> None:
+        for title in ('"Title"', "'Title'", "(Title)"):
+            with self.subTest(title=title):
+                adjacent = f"[invalid]: <MISSING-ADJACENT.svg>{title}"
+                self.assertEqual(self.body(adjacent)[0], 0)
+
+                spaced = f"[valid]: <MISSING-SPACED.svg> {title}"
+                code, out = self.body(spaced)
+                self.assertEqual(code, 1)
+                self.assertIn("MISSING-SPACED.svg", out)
+
     def test_escaped_closing_marker_is_ignored_but_a_real_peer_fires(self) -> None:
         code, out = self.body(r"See [example\](ESCAPED-CLOSE) and [bad](MISSING).")
         self.assertEqual(code, 1)
