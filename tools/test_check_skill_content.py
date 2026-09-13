@@ -197,6 +197,24 @@ class ContentLint(Tree):
     def test_indented_code_is_not_a_reference_definition(self) -> None:
         self.assertEqual(self.body("    [example]: MISSING")[0], 0)
 
+    def test_reference_definitions_inside_block_containers_are_checked(self) -> None:
+        code, out = self.body(
+            "> [existing]: ../real-skill/LICENSE\n"
+            "- [missing]: references/MISSING.svg\n\n"
+            "> See [existing].\n"
+            "- See [missing]."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("references/MISSING.svg", out)
+        self.assertNotIn("../real-skill/LICENSE", out)
+
+    def test_trailing_prose_does_not_form_a_reference_definition(self) -> None:
+        body = (
+            "[plain]: MISSING.svg trailing prose\n"
+            '[titled]: MISSING.svg "Title" garbage'
+        )
+        self.assertEqual(self.body(body)[0], 0)
+
     def test_markdown_title_forms_share_one_destination(self) -> None:
         body = (
             'See [double](../real-skill/LICENSE "Double"), '

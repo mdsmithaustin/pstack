@@ -58,6 +58,7 @@ INLINE_CODE = re.compile(r"`[^`]*`")
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*(.*)$")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 PLACEHOLDER_TARGET = re.compile(r"^\{[a-z][a-z0-9_-]*\}$", re.I)
+LIST_MARKER = re.compile(r"(?:[*+-]|\d{1,9}[.)])(?=[ \t])")
 
 
 def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
@@ -187,12 +188,52 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             cursor = start
 
 
+def reference_content(line: str) -> str:
+    pos = 0
+    while pos < len(line):
+        level = pos
+        while pos < len(line) and line[pos] == " " and pos - level < 4:
+            pos += 1
+        if pos - level == 4:
+            return line[level:]
+        if pos < len(line) and line[pos] == ">":
+            pos += 1
+        else:
+            marker = LIST_MARKER.match(line, pos)
+            if marker is None:
+                return line[pos:]
+            pos = marker.end()
+        if pos < len(line) and line[pos] in " \t":
+            pos += 1
+    return ""
+
+
+def complete_reference_definition(line: str, pos: int) -> bool:
+    while pos < len(line) and line[pos].isspace():
+        pos += 1
+    if pos == len(line):
+        return True
+    if line[pos] not in {'"', "'", "("}:
+        return False
+
+    closing = ")" if line[pos] == "(" else line[pos]
+    pos += 1
+    while pos < len(line) and line[pos] != closing:
+        if line[pos] == "\\" and pos + 1 < len(line):
+            pos += 2
+            continue
+        pos += 1
+    if pos == len(line):
+        return False
+    return not line[pos + 1 :].strip()
+
+
 def iter_reference_targets(line: str) -> Iterator[str]:
-    start = len(line) - len(line.lstrip(" "))
-    if start > 3 or start >= len(line) or line[start] != "[":
+    line = reference_content(line)
+    if not line or line[0] != "[":
         return
 
-    pos = start + 1
+    pos = 1
     while pos < len(line):
         if line[pos] == "\\" and pos + 1 < len(line):
             pos += 2
@@ -200,14 +241,14 @@ def iter_reference_targets(line: str) -> Iterator[str]:
         if line[pos] == "]":
             break
         pos += 1
-    if pos == start + 1 or pos + 1 >= len(line) or line[pos + 1] != ":":
+    if pos == 1 or pos + 1 >= len(line) or line[pos + 1] != ":":
         return
 
     pos += 2
     while pos < len(line) and line[pos].isspace():
         pos += 1
     parsed = parse_markdown_destination(line, pos)
-    if parsed is not None and parsed[0]:
+    if parsed is not None and parsed[0] and complete_reference_definition(line, parsed[1]):
         yield parsed[0]
 
 
