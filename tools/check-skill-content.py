@@ -55,6 +55,10 @@ def source_positioned(
                             item.type in {"softbreak", "hardbreak"}
                             for item in created
                         )
+                        rendered_breaks += sum(
+                            int(item.meta.get("line_advance", 0))
+                            for item in created
+                        )
                         for item in reversed(created):
                             if item.type == "link_close":
                                 item.meta["line_advance"] = max(
@@ -175,9 +179,21 @@ def inline_children(parsed: ParsedFile) -> Iterator[tuple[Token, list[Token]]]:
             yield token, token.children or []
 
 
-def token_line(parent: Token, child: Token) -> int:
-    offset = int(child.meta.get("source_offset", 0))
+def token_line(parent: Token, child: Token, offset: int | None = None) -> int:
+    if offset is None:
+        offset = int(child.meta.get("source_offset", 0))
     return parent.map[0] + parent.content.count("\n", 0, offset) + 1
+
+
+def nested_image_code_spans(
+    children: list[Token], base_offset: int
+) -> Iterator[tuple[Token, int]]:
+    for child in children:
+        offset = base_offset + int(child.meta.get("source_offset", 0))
+        if child.type == "code_inline":
+            yield child, offset
+        elif child.type == "image" and child.children:
+            yield from nested_image_code_spans(child.children, offset + 2)
 
 
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
@@ -208,6 +224,20 @@ def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
                     finding = finding_for_target(parsed, line, href)
                     if finding is not None:
                         yield finding
+                if child.type == "image" and child.children:
+                    image_offset = int(child.meta.get("source_offset", 0)) + 2
+                    for code, offset in nested_image_code_spans(
+                        child.children, image_offset
+                    ):
+                        if CODE_PATH.fullmatch(code.content):
+                            finding = finding_for_target(
+                                parsed,
+                                token_line(parent, code, offset),
+                                code.content,
+                                markdown=False,
+                            )
+                            if finding is not None:
+                                yield finding
             elif child.type == "code_inline" and CODE_PATH.fullmatch(child.content):
                 finding = finding_for_target(
                     parsed, line, child.content, markdown=False
@@ -275,7 +305,9 @@ def check_sibling_skill(parsed: ParsedFile) -> Iterator[Finding]:
 
 def check_unclosed_fence(parsed: ParsedFile) -> Iterator[Finding]:
     for token in parsed.tokens:
-        if token.type != "fence" or token.map is None or token.level > 0:
+        if token.type != "fence" or token.map is None:
+            continue
+        if token.level > 0 and token.map[1] < len(parsed.raw):
             continue
         source_lines = token.map[1] - token.map[0]
         content_lines = len(token.content.splitlines())

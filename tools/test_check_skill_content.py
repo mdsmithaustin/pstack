@@ -204,6 +204,26 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("SKILL.md:7: sibling-skill", out)
 
+    def test_nested_multiline_tokens_advance_the_line_once(self) -> None:
+        cases = (
+            "[``code\ncontinued``](https://example.com) then "
+            "**fake-skill** skill.",
+            "[![alt\ncontinued](../real-skill/LICENSE)](https://example.com) "
+            "then **fake-skill** skill.",
+        )
+        for body in cases:
+            with self.subTest(body=body):
+                code, out = self.body(body)
+                self.assertEqual(code, 1)
+                self.assertIn("SKILL.md:7: sibling-skill", out)
+
+    def test_inline_code_path_inside_image_alt_is_checked(self) -> None:
+        code, out = self.body(
+            "![`../MISSING-IN-ALT.md`](../real-skill/LICENSE)"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("../MISSING-IN-ALT.md", out)
+
     def test_code_spans_stop_at_markdown_block_boundaries(self) -> None:
         cases = {
             "blank": "Use `open\n\n[real](MISSING-BLANK.svg)`",
@@ -548,6 +568,17 @@ class ContentLint(Tree):
             with self.subTest(body=body):
                 code, out = self.body(body)
                 self.assertEqual(code, 0, out)
+
+    def test_unclosed_container_fence_at_eof_is_reported(self) -> None:
+        cases = (
+            "> ```markdown\n> hidden\n> Use **fake-skill** skill.",
+            "- ```markdown\n  hidden\n  Use **fake-skill** skill.",
+        )
+        for body in cases:
+            with self.subTest(body=body):
+                code, out = self.body(body)
+                self.assertEqual(code, 1)
+                self.assertIn("unclosed-fence", out)
 
     def test_bullet_list_continuation_fence_is_ignored(self) -> None:
         body = "- item\n\n  ```markdown\n  [example]: MISSING\n  ```"
