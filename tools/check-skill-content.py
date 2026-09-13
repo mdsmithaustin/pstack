@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Fail on broken content inside skills/**/*.md.
 
-A relative markdown link whose target looks like a filesystem path must resolve
-to something on disk. A relative path written in inline code follows the same
-rule. Explicit placeholders such as `[PR]({url})` are not filesystem paths.
+A relative Markdown destination in an inline link or reference definition must
+resolve to something on disk. A relative path written in inline code follows
+the same rule. Explicit placeholders such as `[PR]({url})` are not filesystem
+paths.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
@@ -78,6 +79,48 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
     return prose, (opened if fence else None)
 
 
+def parse_markdown_destination(line: str, start: int) -> tuple[str, int] | None:
+    pos = start
+    target: list[str] = []
+
+    if pos < len(line) and line[pos] == "<":
+        pos += 1
+        while pos < len(line) and line[pos] != ">":
+            if line[pos] == "\\" and pos + 1 < len(line):
+                target.extend((line[pos], line[pos + 1]))
+                pos += 2
+                continue
+            target.append(line[pos])
+            pos += 1
+        if pos >= len(line):
+            return None
+        return "".join(target), pos + 1
+
+    depth = 0
+    while pos < len(line):
+        char = line[pos]
+        if char == "\\" and pos + 1 < len(line):
+            target.extend((char, line[pos + 1]))
+            pos += 2
+            continue
+        if char == "(":
+            depth += 1
+            target.append(char)
+        elif char == ")":
+            if depth == 0:
+                break
+            depth -= 1
+            target.append(char)
+        elif char.isspace() and depth == 0:
+            break
+        else:
+            target.append(char)
+        pos += 1
+    if depth:
+        return None
+    return "".join(target), pos
+
+
 def iter_markdown_targets(line: str) -> Iterator[str]:
     cursor = 0
     while (marker := line.find("](", cursor)) >= 0:
@@ -115,46 +158,11 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             cursor = start
             continue
 
-        pos = start
-        target: list[str] = []
-
-        if pos < len(line) and line[pos] == "<":
-            pos += 1
-            while pos < len(line) and line[pos] != ">":
-                if line[pos] == "\\" and pos + 1 < len(line):
-                    target.extend((line[pos], line[pos + 1]))
-                    pos += 2
-                    continue
-                target.append(line[pos])
-                pos += 1
-            if pos >= len(line):
-                cursor = start
-                continue
-            pos += 1
-        else:
-            depth = 0
-            while pos < len(line):
-                char = line[pos]
-                if char == "\\" and pos + 1 < len(line):
-                    target.extend((char, line[pos + 1]))
-                    pos += 2
-                    continue
-                elif char == "(":
-                    depth += 1
-                    target.append(char)
-                elif char == ")":
-                    if depth == 0:
-                        break
-                    depth -= 1
-                    target.append(char)
-                elif char.isspace() and depth == 0:
-                    break
-                else:
-                    target.append(char)
-                pos += 1
-            if depth:
-                cursor = start
-                continue
+        parsed = parse_markdown_destination(line, start)
+        if parsed is None:
+            cursor = start
+            continue
+        target, pos = parsed
 
         while pos < len(line) and line[pos].isspace():
             pos += 1
@@ -173,10 +181,34 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
                 pos += 1
 
         if target and pos < len(line) and line[pos] == ")":
-            yield "".join(target)
+            yield target
             cursor = pos + 1
         else:
             cursor = start
+
+
+def iter_reference_targets(line: str) -> Iterator[str]:
+    start = len(line) - len(line.lstrip(" "))
+    if start > 3 or start >= len(line) or line[start] != "[":
+        return
+
+    pos = start + 1
+    while pos < len(line):
+        if line[pos] == "\\" and pos + 1 < len(line):
+            pos += 2
+            continue
+        if line[pos] == "]":
+            break
+        pos += 1
+    if pos == start + 1 or pos + 1 >= len(line) or line[pos + 1] != ":":
+        return
+
+    pos += 2
+    while pos < len(line) and line[pos].isspace():
+        pos += 1
+    parsed = parse_markdown_destination(line, pos)
+    if parsed is not None and parsed[0]:
+        yield parsed[0]
 
 
 def strip_unescaped_suffix(raw_target: str, markdown: bool) -> str:
@@ -231,6 +263,7 @@ def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
     for lineno, line in parsed.prose:
         targets = [
             *((target, True) for target in iter_markdown_targets(line)),
+            *((target, True) for target in iter_reference_targets(line)),
             *((match.group(1), False) for match in CODE_TARGET.finditer(line)),
         ]
         for raw_target, markdown in targets:

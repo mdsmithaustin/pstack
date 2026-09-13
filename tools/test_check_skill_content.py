@@ -174,6 +174,29 @@ class ContentLint(Tree):
         self.assertIn(r"gone\q.md", out)
         self.assertNotIn(r"foo\q.md", out)
 
+    def test_reference_definition_targets_are_checked(self) -> None:
+        code, out = self.body(
+            '[license]: ../real-skill/LICENSE "Terms"\n'
+            "[missing]: references/MISSING.svg 'Diagram'\n\n"
+            "See [license] and [missing]."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("references/MISSING.svg", out)
+        self.assertNotIn("../real-skill/LICENSE", out)
+
+    def test_angle_reference_targets_with_spaces_are_checked(self) -> None:
+        code, out = self.body(
+            "   [existing]: <../real-skill/refs/my notes.md>\n"
+            "[missing]: <../real-skill/refs/gone notes.md>\n\n"
+            "See [existing] and [missing]."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("gone notes.md", out)
+        self.assertNotIn("my notes.md", out)
+
+    def test_indented_code_is_not_a_reference_definition(self) -> None:
+        self.assertEqual(self.body("    [example]: MISSING")[0], 0)
+
     def test_markdown_title_forms_share_one_destination(self) -> None:
         body = (
             'See [double](../real-skill/LICENSE "Double"), '
