@@ -129,6 +129,26 @@ class ContentLint(Tree):
         self.assertNotIn("MISSING-INLINE-EXAMPLE.svg", out)
         self.assertNotIn("MISSING-REFERENCE-EXAMPLE.svg", out)
 
+    def test_even_length_code_span_hides_markdown_examples(self) -> None:
+        body = (
+            "Use ``[example](MISSING-DOUBLE-SPAN.svg)`` and "
+            "see [real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("MISSING-DOUBLE-SPAN.svg", out)
+
+    def test_code_span_mask_does_not_join_a_link_destination(self) -> None:
+        body = (
+            "Use [label]`code`(MISSING-JOINED.svg) and "
+            "see [real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("MISSING-JOINED.svg", out)
+
     def test_resolving_link_passes(self) -> None:
         self.assertEqual(self.body("See `../real-skill/SKILL.md`.")[0], 0)
 
@@ -247,6 +267,17 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("references/MISSING.svg", out)
         self.assertNotIn("../real-skill/LICENSE", out)
+
+    def test_defined_reference_link_precedes_a_literal_parenthesis(self) -> None:
+        body = (
+            "[bar]: ../real-skill/LICENSE\n\n"
+            "Use [foo][bar](MISSING-LITERAL.svg) and "
+            "see [real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("MISSING-LITERAL.svg", out)
 
     def test_ordered_list_continuation_reference_definition_is_checked(self) -> None:
         code, out = self.body(

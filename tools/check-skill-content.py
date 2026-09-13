@@ -59,11 +59,39 @@ class FenceContainer:
 
 
 CODE_TARGET = re.compile(r"`(\.\.?/[^`\s<>]+)`")
-INLINE_CODE = re.compile(r"`[^`]*`")
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*(.*)$")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 PLACEHOLDER_TARGET = re.compile(r"^\{[a-z][a-z0-9_-]*\}$", re.I)
 LIST_MARKER = re.compile(r"(?:[*+-]|\d{1,9}[.)])(?=[ \t])")
+
+
+def mask_code_spans(line: str) -> str:
+    masked = list(line)
+    pos = 0
+    while pos < len(line):
+        if line[pos] != "`":
+            pos += 1
+            continue
+        run_end = pos
+        while run_end < len(line) and line[run_end] == "`":
+            run_end += 1
+        width = run_end - pos
+        closing = run_end
+        while closing < len(line):
+            if line[closing] != "`":
+                closing += 1
+                continue
+            closing_end = closing
+            while closing_end < len(line) and line[closing_end] == "`":
+                closing_end += 1
+            if closing_end - closing == width:
+                masked[pos:closing_end] = " " * (closing_end - pos)
+                pos = closing_end
+                break
+            closing = closing_end
+        else:
+            pos = run_end
+    return "".join(masked)
 
 
 def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
@@ -246,7 +274,31 @@ def parse_markdown_destination(line: str, start: int) -> tuple[str, int] | None:
     return "".join(target), pos
 
 
-def iter_markdown_targets(line: str) -> Iterator[str]:
+def marker_is_escaped(line: str, pos: int) -> bool:
+    backslashes = 0
+    pos -= 1
+    while pos >= 0 and line[pos] == "\\":
+        backslashes += 1
+        pos -= 1
+    return bool(backslashes % 2)
+
+
+def has_full_reference_prefix(line: str, label_pos: int) -> bool:
+    if label_pos < 2 or line[label_pos - 1] != "]" or marker_is_escaped(line, label_pos - 1):
+        return False
+    has_text = False
+    pos = label_pos - 2
+    while pos >= 0:
+        if line[pos] in "[]" and not marker_is_escaped(line, pos):
+            return line[pos] == "[" and has_text
+        has_text = has_text or not line[pos].isspace()
+        pos -= 1
+    return False
+
+
+def iter_markdown_targets(
+    line: str, reference_labels: set[str] | None = None
+) -> Iterator[str]:
     cursor = 0
     while (marker := line.find("](", cursor)) >= 0:
         start = marker + 2
@@ -280,6 +332,14 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
                 label_depth -= 1
             label_pos -= 1
         if not label_open:
+            cursor = start
+            continue
+        if (
+            reference_labels
+            and normalize_reference_label(line[label_pos + 1 : marker])
+            in reference_labels
+            and has_full_reference_prefix(line, label_pos)
+        ):
             cursor = start
             continue
 
@@ -329,10 +389,10 @@ def skip_markdown_title(line: str, pos: int) -> int | None:
     return pos
 
 
-def iter_reference_targets(line: str) -> Iterator[str]:
+def parse_reference_definition(line: str) -> tuple[str, str] | None:
     line = strip_block_container_prefixes(line)
     if not line or line[0] != "[":
-        return
+        return None
 
     pos = 1
     label_length = 0
@@ -344,7 +404,7 @@ def iter_reference_targets(line: str) -> Iterator[str]:
             pos += 2
             continue
         if line[pos] == "[":
-            return
+            return None
         if line[pos] == "]":
             break
         label_length += 1
@@ -356,17 +416,25 @@ def iter_reference_targets(line: str) -> Iterator[str]:
         or pos + 1 >= len(line)
         or line[pos + 1] != ":"
     ):
-        return
+        return None
 
+    label = line[1:pos]
     pos += 2
     while pos < len(line) and line[pos].isspace():
         pos += 1
     parsed = parse_markdown_destination(line, pos)
     if parsed is None or not parsed[0]:
-        return
+        return None
     title_end = skip_markdown_title(line, parsed[1])
     if title_end == len(line):
-        yield parsed[0]
+        return normalize_reference_label(label), parsed[0]
+    return None
+
+
+def iter_reference_targets(line: str) -> Iterator[str]:
+    parsed = parse_reference_definition(line)
+    if parsed is not None:
+        yield parsed[1]
 
 
 def strip_unescaped_suffix(raw_target: str, markdown: bool) -> str:
@@ -403,6 +471,10 @@ def unescape_markdown_target(raw_target: str) -> str:
     return "".join(target)
 
 
+def normalize_reference_label(label: str) -> str:
+    return " ".join(unescape_markdown_target(label).split()).casefold()
+
+
 def relative_target(raw_target: str, *, markdown: bool) -> str | None:
     source = strip_unescaped_suffix(raw_target, markdown)
     if markdown and PLACEHOLDER_TARGET.match(source):
@@ -417,10 +489,19 @@ def relative_target(raw_target: str, *, markdown: bool) -> str | None:
 
 
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
+    reference_labels = {
+        definition[0]
+        for _lineno, line in parsed.prose
+        if (definition := parse_reference_definition(mask_code_spans(line)))
+        is not None
+    }
     for lineno, line in parsed.prose:
-        markdown_line = INLINE_CODE.sub("", line)
+        markdown_line = mask_code_spans(line)
         targets = [
-            *((target, True) for target in iter_markdown_targets(markdown_line)),
+            *(
+                (target, True)
+                for target in iter_markdown_targets(markdown_line, reference_labels)
+            ),
             *((target, True) for target in iter_reference_targets(markdown_line)),
             *((match.group(1), False) for match in CODE_TARGET.finditer(line)),
         ]
@@ -443,7 +524,7 @@ BOLD_NAME = re.compile(r"\*\*([a-z][a-z0-9-]*)\*\*")
 
 def check_sibling_skill(parsed: ParsedFile) -> Iterator[Finding]:
     for lineno, raw in parsed.prose:
-        line = INLINE_CODE.sub("``", raw)
+        line = mask_code_spans(raw)
         near_skill = "skill" in line
         principle_hint = "principle" in line
         for m in BOLD_NAME.finditer(line):
