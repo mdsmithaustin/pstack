@@ -418,9 +418,10 @@ def relative_target(raw_target: str, *, markdown: bool) -> str | None:
 
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
     for lineno, line in parsed.prose:
+        markdown_line = INLINE_CODE.sub("", line)
         targets = [
-            *((target, True) for target in iter_markdown_targets(line)),
-            *((target, True) for target in iter_reference_targets(line)),
+            *((target, True) for target in iter_markdown_targets(markdown_line)),
+            *((target, True) for target in iter_reference_targets(markdown_line)),
             *((match.group(1), False) for match in CODE_TARGET.finditer(line)),
         ]
         for raw_target, markdown in targets:

@@ -117,6 +117,18 @@ class ContentLint(Tree):
         self.assertNotIn("my?notes.md", out)
         self.assertNotIn("my#notes.md", out)
 
+    def test_markdown_examples_inside_inline_code_are_ignored(self) -> None:
+        body = (
+            "Use `[inline](MISSING-INLINE-EXAMPLE.svg)` and "
+            "`[reference]: MISSING-REFERENCE-EXAMPLE.svg`; "
+            "see [real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("MISSING-INLINE-EXAMPLE.svg", out)
+        self.assertNotIn("MISSING-REFERENCE-EXAMPLE.svg", out)
+
     def test_resolving_link_passes(self) -> None:
         self.assertEqual(self.body("See `../real-skill/SKILL.md`.")[0], 0)
 
