@@ -139,6 +139,47 @@ class ContentLint(Tree):
         self.assertIn("MISSING-REAL.svg", out)
         self.assertNotIn("MISSING-DOUBLE-SPAN.svg", out)
 
+    def test_even_length_code_span_still_checks_a_filesystem_path(self) -> None:
+        code, out = self.body("Use ``../real-skill/refs/gone.svg``.")
+        self.assertEqual(code, 1)
+        self.assertIn("../real-skill/refs/gone.svg", out)
+
+    def test_escaped_backticks_do_not_hide_a_real_link(self) -> None:
+        code, out = self.body(r"Use \`[real](MISSING-ESCAPED-TICKS.svg)\`.")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-ESCAPED-TICKS.svg", out)
+
+    def test_multiline_code_span_hides_markdown_examples(self) -> None:
+        body = (
+            "Use ``code\n"
+            "[example](MISSING-MULTILINE-SPAN.svg)\n"
+            "code`` and see [real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("MISSING-MULTILINE-SPAN.svg", out)
+
+    def test_line_leading_triple_code_span_is_not_a_fence(self) -> None:
+        body = (
+            "```[example](MISSING-TRIPLE-SPAN.svg)```\n"
+            "See [real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("MISSING-TRIPLE-SPAN.svg", out)
+
+    def test_unequal_code_span_delimiters_do_not_create_a_path(self) -> None:
+        body = (
+            "Use `../real-skill/refs/gone.md`` as literal prose; "
+            "see [real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("gone.md", out)
+
     def test_code_span_mask_does_not_join_a_link_destination(self) -> None:
         body = (
             "Use [label]`code`(MISSING-JOINED.svg) and "
@@ -278,6 +319,19 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("MISSING-REAL.svg", out)
         self.assertNotIn("MISSING-LITERAL.svg", out)
+
+    def test_collapsed_and_nested_reference_links_precede_parentheses(self) -> None:
+        body = (
+            "[bar]: ../real-skill/LICENSE\n\n"
+            "Use [bar][](MISSING-COLLAPSED.svg), "
+            "[foo [nested]][bar](MISSING-NESTED-REFERENCE.svg), and "
+            "[real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("MISSING-COLLAPSED.svg", out)
+        self.assertNotIn("MISSING-NESTED-REFERENCE.svg", out)
 
     def test_ordered_list_continuation_reference_definition_is_checked(self) -> None:
         code, out = self.body(
