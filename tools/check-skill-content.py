@@ -14,10 +14,11 @@ how the suite writes "the **model-the-domain** principle skill". Here inline
 code IS skipped, so a bolded word quoted inside backticks is not a reference.
 
 Fenced blocks are skipped for link and sibling checks. Port substitution checks
-scan every raw line, including templates inside fences. A fence at any
-indentation counts, since telling a nested fence from an indented code block
-needs container tracking this does not do. A fence that is never closed is
-itself a finding, because it would otherwise silently hide the rest of the file.
+scan every raw line, including templates inside fences. Blockquote and list
+prefixes are removed before fence detection. A fence at any remaining
+indentation counts, since telling it from an indented code block needs container
+tracking this does not do. A fence that is never closed is itself a finding,
+because it would otherwise silently hide the rest of the file.
 """
 from __future__ import annotations
 
@@ -67,7 +68,7 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
     fence: str | None = None
     opened = 0
     for lineno, line in enumerate(lines, start=1):
-        m = FENCE.match(line)
+        m = FENCE.match(reference_content(line))
         if m:
             run, info = m.group(1), m.group(2).strip()
             if fence is None:
@@ -165,21 +166,10 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             continue
         target, pos = parsed
 
-        while pos < len(line) and line[pos].isspace():
-            pos += 1
-        if pos < len(line) and line[pos] in {'"', "'", "("}:
-            closing = ")" if line[pos] == "(" else line[pos]
-            pos += 1
-            while pos < len(line) and line[pos] != closing:
-                if line[pos] == "\\" and pos + 1 < len(line):
-                    pos += 1
-                pos += 1
-            if pos >= len(line):
-                cursor = start
-                continue
-            pos += 1
-            while pos < len(line) and line[pos].isspace():
-                pos += 1
+        pos = skip_markdown_title(line, pos)
+        if pos is None:
+            cursor = start
+            continue
 
         if target and pos < len(line) and line[pos] == ")":
             yield target
@@ -208,13 +198,13 @@ def reference_content(line: str) -> str:
     return ""
 
 
-def complete_reference_definition(line: str, pos: int) -> bool:
+def skip_markdown_title(line: str, pos: int) -> int | None:
     while pos < len(line) and line[pos].isspace():
         pos += 1
     if pos == len(line):
-        return True
+        return pos
     if line[pos] not in {'"', "'", "("}:
-        return False
+        return pos
 
     closing = ")" if line[pos] == "(" else line[pos]
     pos += 1
@@ -224,8 +214,11 @@ def complete_reference_definition(line: str, pos: int) -> bool:
             continue
         pos += 1
     if pos == len(line):
-        return False
-    return not line[pos + 1 :].strip()
+        return None
+    pos += 1
+    while pos < len(line) and line[pos].isspace():
+        pos += 1
+    return pos
 
 
 def iter_reference_targets(line: str) -> Iterator[str]:
@@ -248,7 +241,10 @@ def iter_reference_targets(line: str) -> Iterator[str]:
     while pos < len(line) and line[pos].isspace():
         pos += 1
     parsed = parse_markdown_destination(line, pos)
-    if parsed is not None and parsed[0] and complete_reference_definition(line, parsed[1]):
+    if parsed is None or not parsed[0]:
+        return
+    title_end = skip_markdown_title(line, parsed[1])
+    if title_end == len(line):
         yield parsed[0]
 
 

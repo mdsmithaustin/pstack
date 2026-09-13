@@ -208,6 +208,14 @@ class ContentLint(Tree):
         self.assertIn("references/MISSING.svg", out)
         self.assertNotIn("../real-skill/LICENSE", out)
 
+    def test_reference_definition_inside_blockquote_fence_is_ignored(self) -> None:
+        body = "> ```markdown\n> [example]: MISSING\n> ```"
+        self.assertEqual(self.body(body)[0], 0)
+
+    def test_reference_definition_inside_list_fence_is_ignored(self) -> None:
+        body = "- ```markdown\n  [example]: MISSING\n  ```"
+        self.assertEqual(self.body(body)[0], 0)
+
     def test_trailing_prose_does_not_form_a_reference_definition(self) -> None:
         body = (
             "[plain]: MISSING.svg trailing prose\n"
