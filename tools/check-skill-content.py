@@ -136,34 +136,68 @@ def strip_block_container_prefixes(line: str) -> str:
     return line[leading:] if leading <= 3 else line
 
 
+def continue_list_container(
+    line: str, container: FenceContainer
+) -> tuple[str, FenceContainer] | None:
+    for end in range(len(container.tokens), 0, -1):
+        tokens = container.tokens[:end]
+        if not any(kind == "list" for kind, _width in tokens):
+            continue
+        candidate = FenceContainer(tokens)
+        content = continued_fence_content(line, candidate)
+        if content is not None:
+            return content, candidate
+    return None
+
+
 def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
     """One fence walk for every caller, so no two checks can disagree about what is code."""
     prose: list[tuple[int, str]] = []
     fence: str | None = None
-    container: FenceContainer | None = None
+    fence_container: FenceContainer | None = None
+    list_container: FenceContainer | None = None
     opened = 0
     for lineno, line in enumerate(lines, start=1):
         if fence is not None:
-            assert container is not None
-            content = continued_fence_content(line, container)
+            assert fence_container is not None
+            content = continued_fence_content(line, fence_container)
             if content is not None:
                 indentation = len(content) - len(content.lstrip(" "))
-                m = None if container.tokens and indentation >= 4 else FENCE.match(content)
+                m = (
+                    None
+                    if fence_container.tokens and indentation >= 4
+                    else FENCE.match(content)
+                )
                 if m:
                     run, info = m.group(1), m.group(2).strip()
                     if run[0] == fence[0] and len(run) >= len(fence) and not info:
                         fence = None
-                        container = None
+                        fence_container = None
                 continue
             fence = None
-            container = None
+            fence_container = None
 
-        content, next_container = opening_fence_content(line)
+        inherited = (
+            continue_list_container(line, list_container)
+            if list_container is not None
+            else None
+        )
+        if inherited is None:
+            content, container = opening_fence_content(line)
+        else:
+            inherited_content, parent = inherited
+            content, nested = opening_fence_content(inherited_content)
+            container = FenceContainer(parent.tokens + nested.tokens)
+
         indentation = len(content) - len(content.lstrip(" "))
-        m = None if next_container.tokens and indentation >= 4 else FENCE.match(content)
+        m = None if container.tokens and indentation >= 4 else FENCE.match(content)
+        if any(kind == "list" for kind, _width in container.tokens):
+            list_container = container
+        elif line.strip():
+            list_container = None
         if m:
             run = m.group(1)
-            fence, container, opened = run, next_container, lineno
+            fence, fence_container, opened = run, container, lineno
             continue
         prose.append((lineno, line))
     return prose, (opened if fence else None)

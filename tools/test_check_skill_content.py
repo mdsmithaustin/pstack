@@ -233,6 +233,26 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("MISSING.svg", out)
 
+    def test_bullet_list_continuation_fence_is_ignored(self) -> None:
+        body = "- item\n\n  ```markdown\n  [example]: MISSING\n  ```"
+        self.assertEqual(self.body(body)[0], 0)
+
+    def test_bullet_list_continuation_fence_ends_on_deindent(self) -> None:
+        body = "- item\n\n  ```markdown\n  example\n\n[bad]: MISSING-BULLET.svg"
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-BULLET.svg", out)
+
+    def test_ordered_list_continuation_fence_is_ignored(self) -> None:
+        body = "1. item\n\n   ```markdown\n   [example]: MISSING\n   ```"
+        self.assertEqual(self.body(body)[0], 0)
+
+    def test_ordered_list_continuation_fence_ends_on_deindent(self) -> None:
+        body = "1. item\n\n   ```markdown\n   example\n\n[bad]: MISSING-ORDERED.svg"
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-ORDERED.svg", out)
+
     def test_list_blockquote_fence_keeps_reference_examples_hidden(self) -> None:
         body = "- > ```markdown\n  > [example]: MISSING\n  > ```"
         self.assertEqual(self.body(body)[0], 0)
