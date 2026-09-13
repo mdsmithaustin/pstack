@@ -25,11 +25,56 @@ from typing import Any, Callable, Iterator
 from urllib.parse import unquote
 
 from markdown_it import MarkdownIt
+from markdown_it.rules_inline import image, link
+from markdown_it.rules_inline.backticks import backtick
+from markdown_it.rules_inline.state_inline import StateInline
 from markdown_it.token import Token
 
 ROOT = Path("skills")
 IGNORE: frozenset[str] = frozenset()
 MARKDOWN = MarkdownIt("commonmark")
+
+
+def source_positioned(
+    rule: Callable[[StateInline, bool], bool], token_type: str
+) -> Callable[[StateInline, bool], bool]:
+    """Attach an inline source offset to tokens used in diagnostics."""
+
+    def wrapped(state: StateInline, silent: bool) -> bool:
+        start = state.pos
+        token_count = len(state.tokens)
+        matched = rule(state, silent)
+        if matched and not silent:
+            created = state.tokens[token_count:]
+            for token in created:
+                if token.type == token_type:
+                    token.meta["source_offset"] = start
+                    source_newlines = state.src[start : state.pos].count("\n")
+                    if token_type == "link_open":
+                        rendered_breaks = sum(
+                            item.type in {"softbreak", "hardbreak"}
+                            for item in created
+                        )
+                        for item in reversed(created):
+                            if item.type == "link_close":
+                                item.meta["line_advance"] = max(
+                                    source_newlines - rendered_breaks, 0
+                                )
+                                break
+                    else:
+                        token.meta["line_advance"] = source_newlines
+                    break
+        return matched
+
+    return wrapped
+
+
+for _rule_name, _token_type, _rule in (
+    ("backticks", "code_inline", backtick),
+    ("link", "link_open", link),
+    ("image", "image", image),
+):
+    MARKDOWN.inline.ruler.at(_rule_name, source_positioned(_rule, _token_type))
 
 
 @dataclass(frozen=True)
@@ -49,19 +94,24 @@ class ParsedFile:
     raw: list[tuple[int, str]]
     tokens: list[Token]
     references: dict[str, dict[str, Any]]
+    duplicate_references: list[dict[str, Any]]
 
 
 CODE_PATH = re.compile(r"\.\.?/[^\s<>]+")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 SKILL_NAME = re.compile(r"[a-z][a-z0-9-]*")
 INLINE_PLACEHOLDER = re.compile(
-    r"(?<=\]\()(?P<space>[ \t\r\n]*)\{[a-z][a-z0-9_-]*\}"
+    r"(?<=\]\()(?P<space>[ \t\r\n]*)(?:"
+    r"<\{[a-z][a-z0-9_-]*\}(?:[#?][^>\s]*)?>|"
+    r"\{[a-z][a-z0-9_-]*\}(?:[#?][^)\s]*)?)"
     r"(?=[ \t\r\n]*(?:\)|[\"'(]))",
     re.I,
 )
 REFERENCE_PLACEHOLDER = re.compile(
     r"(?m)(?<=\]:)(?P<space>[ \t]*(?:\r?\n[ \t]+)?)"
-    r"\{[a-z][a-z0-9_-]*\}(?=[ \t]*(?:$|[\"'(]))",
+    r"(?:<\{[a-z][a-z0-9_-]*\}(?:[#?][^>\s]*)?>|"
+    r"\{[a-z][a-z0-9_-]*\}(?:[#?][^\s]*)?)"
+    r"(?=[ \t]*(?:$|[\"'(]))",
     re.I,
 )
 
@@ -86,6 +136,7 @@ def parse_file(path: Path) -> ParsedFile:
         raw=list(enumerate(text.splitlines(), start=1)),
         tokens=tokens,
         references=references,
+        duplicate_references=env.get("duplicate_refs", []),
     )
 
 
@@ -124,6 +175,11 @@ def inline_children(parsed: ParsedFile) -> Iterator[tuple[Token, list[Token]]]:
             yield token, token.children or []
 
 
+def token_line(parent: Token, child: Token) -> int:
+    offset = int(child.meta.get("source_offset", 0))
+    return parent.map[0] + parent.content.count("\n", 0, offset) + 1
+
+
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
     reference_hrefs: set[str] = set()
     for definition in parsed.references.values():
@@ -134,10 +190,17 @@ def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
         finding = finding_for_target(parsed, line, href)
         if finding is not None:
             yield finding
+    for definition in parsed.duplicate_references:
+        href = str(definition["href"])
+        source_map = definition.get("map")
+        line = int(source_map[0]) + 1 if source_map else 1
+        finding = finding_for_target(parsed, line, href)
+        if finding is not None:
+            yield finding
 
     for parent, children in inline_children(parsed):
-        line = parent.map[0] + 1
         for child in children:
+            line = token_line(parent, child)
             if child.type in {"link_open", "image"}:
                 attribute = "href" if child.type == "link_open" else "src"
                 href = child.attrGet(attribute) or ""
@@ -151,8 +214,6 @@ def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
                 )
                 if finding is not None:
                     yield finding
-            if child.type in {"softbreak", "hardbreak"}:
-                line += 1
 
 
 def rendered_lines(
@@ -178,6 +239,7 @@ def rendered_lines(
                 pieces.append(child.content)
         elif child.type in {"softbreak", "hardbreak"}:
             line += 1
+        line += int(child.meta.get("line_advance", 0))
 
     return {
         line_number: (
@@ -213,7 +275,7 @@ def check_sibling_skill(parsed: ParsedFile) -> Iterator[Finding]:
 
 def check_unclosed_fence(parsed: ParsedFile) -> Iterator[Finding]:
     for token in parsed.tokens:
-        if token.type != "fence" or token.map is None:
+        if token.type != "fence" or token.map is None or token.level > 0:
             continue
         source_lines = token.map[1] - token.map[0]
         content_lines = len(token.content.splitlines())

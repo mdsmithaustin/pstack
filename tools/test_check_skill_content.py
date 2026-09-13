@@ -91,6 +91,15 @@ class ContentLint(Tree):
         )
         self.assertEqual(self.body(body)[0], 0)
 
+    def test_raw_placeholder_variants_are_ignored(self) -> None:
+        body = (
+            "See [angle](<{url}>), [fragment]({url}#section), and "
+            "[query]({url}?q=1).\n\n"
+            "[reference]: <{issue_url}>\n"
+            "See [reference]."
+        )
+        self.assertEqual(self.body(body)[0], 0)
+
     def test_percent_encoded_placeholder_is_a_filename(self) -> None:
         code, out = self.body("See [missing](%7Burl%7D).")
         self.assertEqual(code, 1)
@@ -171,6 +180,29 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("MISSING-REAL.svg", out)
         self.assertNotIn("MISSING-MULTILINE-SPAN.svg", out)
+
+    def test_link_after_multiline_code_span_reports_its_own_line(self) -> None:
+        code, out = self.body(
+            "Prefix ``code\ncontinued`` then [bad](MISSING-AFTER-CODE.svg)"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:7: relative-link", out)
+
+    def test_links_after_multiline_link_syntax_report_their_lines(self) -> None:
+        code, out = self.body(
+            "[first](\nMISSING-FIRST.svg\n)\n"
+            "[second](MISSING-SECOND.svg)"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:6: relative-link", out)
+        self.assertIn("SKILL.md:9: relative-link", out)
+
+    def test_skill_after_multiline_code_span_reports_its_own_line(self) -> None:
+        code, out = self.body(
+            "Prefix ``code\ncontinued`` then **fake-skill** skill."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:7: sibling-skill", out)
 
     def test_code_spans_stop_at_markdown_block_boundaries(self) -> None:
         cases = {
@@ -351,6 +383,15 @@ class ContentLint(Tree):
         self.assertIn("references/MISSING.svg", out)
         self.assertNotIn("../real-skill/LICENSE", out)
 
+    def test_duplicate_reference_definition_targets_are_checked(self) -> None:
+        code, out = self.body(
+            "[x]: ../real-skill/LICENSE\n"
+            "[x]: references/MISSING-DUPLICATE.svg\n\n"
+            "See [x]."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("references/MISSING-DUPLICATE.svg", out)
+
     def test_angle_reference_targets_with_spaces_are_checked(self) -> None:
         code, out = self.body(
             "   [existing]: <../real-skill/refs/my notes.md>\n"
@@ -498,6 +539,16 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("MISSING.svg", out)
 
+    def test_container_boundary_implicitly_closes_a_fence(self) -> None:
+        cases = (
+            "> ```markdown\n> example\n\nOutside.",
+            "- ```markdown\n  example\n\nOutside.",
+        )
+        for body in cases:
+            with self.subTest(body=body):
+                code, out = self.body(body)
+                self.assertEqual(code, 0, out)
+
     def test_bullet_list_continuation_fence_is_ignored(self) -> None:
         body = "- item\n\n  ```markdown\n  [example]: MISSING\n  ```"
         self.assertEqual(self.body(body)[0], 0)
@@ -507,6 +558,7 @@ class ContentLint(Tree):
         code, out = self.body(body)
         self.assertEqual(code, 1)
         self.assertIn("MISSING-BULLET.svg", out)
+        self.assertNotIn("unclosed-fence", out)
 
     def test_ordered_list_continuation_fence_is_ignored(self) -> None:
         body = "1. item\n\n   ```markdown\n   [example]: MISSING\n   ```"
@@ -517,6 +569,7 @@ class ContentLint(Tree):
         code, out = self.body(body)
         self.assertEqual(code, 1)
         self.assertIn("MISSING-ORDERED.svg", out)
+        self.assertNotIn("unclosed-fence", out)
 
     def test_list_blockquote_fence_keeps_reference_examples_hidden(self) -> None:
         body = "- > ```markdown\n  > [example]: MISSING\n  > ```"
