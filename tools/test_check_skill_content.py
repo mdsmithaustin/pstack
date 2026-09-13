@@ -125,6 +125,15 @@ class ContentLint(Tree):
         self.assertEqual(code, 1, "inline code paths are checked whatever the extension")
         self.assertIn("relative-link", out)
 
+    def test_inline_code_paths_may_contain_spaces(self) -> None:
+        code, out = self.body(
+            "Use `../real-skill/refs/my notes.md` and "
+            "`../real-skill/refs/MISSING FILE.md`."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING FILE.md", out)
+        self.assertNotIn("my notes.md", out)
+
     def test_inline_code_delimiters_remain_part_of_the_filename(self) -> None:
         code, out = self.body(
             "Use `../real-skill/refs/my?notes.md`, "
@@ -223,6 +232,13 @@ class ContentLint(Tree):
         )
         self.assertEqual(code, 1)
         self.assertIn("../MISSING-IN-ALT.md", out)
+
+    def test_spaced_inline_code_path_inside_image_alt_is_checked(self) -> None:
+        code, out = self.body(
+            "![`../MISSING IMAGE ALT.md`](../real-skill/LICENSE)"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("../MISSING IMAGE ALT.md", out)
 
     def test_code_spans_stop_at_markdown_block_boundaries(self) -> None:
         cases = {

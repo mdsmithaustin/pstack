@@ -2,8 +2,9 @@
 """Fail on broken content inside skills/**/*.md.
 
 Relative destinations in CommonMark links and reference definitions must resolve
-to something on disk. Relative paths written as an entire inline-code span follow
-the same rule. Explicit project placeholders such as `[PR]({url})` are skipped.
+to something on disk. Paths beginning `./` or `../` and occupying an entire
+inline-code span follow the same rule. Explicit project placeholders such as
+`[PR]({url})` are skipped.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
@@ -101,7 +102,7 @@ class ParsedFile:
     duplicate_references: list[dict[str, Any]]
 
 
-CODE_PATH = re.compile(r"\.\.?/[^\s<>]+")
+CODE_PATH = re.compile(r"\.\.?/[^\r\n<>]+")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 SKILL_NAME = re.compile(r"[a-z][a-z0-9-]*")
 INLINE_PLACEHOLDER = re.compile(
