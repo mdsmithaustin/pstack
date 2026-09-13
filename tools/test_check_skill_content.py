@@ -233,6 +233,35 @@ class ContentLint(Tree):
         self.assertIn("MISSING-BULLET-CONT.svg", out)
         self.assertNotIn("../real-skill/LICENSE", out)
 
+    def test_reference_label_rejects_unescaped_open_bracket(self) -> None:
+        code, out = self.body(
+            "[draft[note]: MISSING-INVALID-LABEL.svg\n"
+            r"[draft\[note]: MISSING-ESCAPED-LABEL.svg"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-ESCAPED-LABEL.svg", out)
+        self.assertNotIn("MISSING-INVALID-LABEL.svg", out)
+
+    def test_reference_label_requires_non_whitespace_text(self) -> None:
+        code, out = self.body(
+            "[   ]: MISSING-WHITESPACE-LABEL.svg\n"
+            "[x]: MISSING-SINGLE-LABEL.svg"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-SINGLE-LABEL.svg", out)
+        self.assertNotIn("MISSING-WHITESPACE-LABEL.svg", out)
+
+    def test_reference_label_honors_the_999_character_limit(self) -> None:
+        valid = "v" * 999
+        invalid = "i" * 1000
+        code, out = self.body(
+            f"[{valid}]: MISSING-999-LABEL.svg\n"
+            f"[{invalid}]: MISSING-1000-LABEL.svg"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-999-LABEL.svg", out)
+        self.assertNotIn("MISSING-1000-LABEL.svg", out)
+
     def test_reference_definition_inside_blockquote_fence_is_ignored(self) -> None:
         body = "> ```markdown\n> [example]: MISSING\n> ```"
         self.assertEqual(self.body(body)[0], 0)

@@ -329,14 +329,27 @@ def iter_reference_targets(line: str) -> Iterator[str]:
         return
 
     pos = 1
+    label_length = 0
+    label_has_text = False
     while pos < len(line):
         if line[pos] == "\\" and pos + 1 < len(line):
+            label_length += 2
+            label_has_text = True
             pos += 2
             continue
+        if line[pos] == "[":
+            return
         if line[pos] == "]":
             break
+        label_length += 1
+        label_has_text = label_has_text or not line[pos].isspace()
         pos += 1
-    if pos == 1 or pos + 1 >= len(line) or line[pos + 1] != ":":
+    if (
+        not label_has_text
+        or label_length > 999
+        or pos + 1 >= len(line)
+        or line[pos + 1] != ":"
+    ):
         return
 
     pos += 2
