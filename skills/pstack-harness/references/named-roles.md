@@ -36,7 +36,7 @@ For an authorized Codex project install, set `PSTACK_AGENT_DESTINATION` to the c
 python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" install --harness codex --project "${PSTACK_AGENT_DESTINATION:?}"
 ```
 
-Failure signal: nonzero exit. Claude Code uses `--harness claude-code`. For a user install, use `--user` instead of `--project` and set `PSTACK_AGENT_DESTINATION` to the chosen absolute user home. Project roots and user homes both receive `.claude/agents/*.md` or `.codex/agents/*.toml` under that root. Wrappers set neither models nor effort, tools, or sandbox policy. They bind the current logical installed skill paths, so rerun installation after moving the skill installation.
+Failure signal: nonzero exit. Claude Code uses `--harness claude-code`. For a user install, use `--user` instead of `--project` and set `PSTACK_AGENT_DESTINATION` to the chosen absolute user home. Project roots and user homes both receive `.claude/agents/*.md` or `.codex/agents/*.toml` under that root. Wrappers set neither models nor effort, tools, or sandbox policy. They bind the logical installed skill paths of the root that installed them. A check or install from another alias of the same installation, such as a directory of per-skill symlinks, keeps those wrappers. It reports the wrappers current when their bytes match the briefing rendered from the installed root and every named `SKILL.md` resolves to the same file under both roots. Install then reports `unchanged`, and the wrapper keeps its original root. Rerun installation after moving the skill installation.
 
 To inspect the same registration without writing:
 
@@ -57,7 +57,7 @@ Hermes supports `check --harness hermes` with an explicit project or user root, 
 | `not-requested` | Only payloads were checked. |
 | `unsupported` | The harness has no supported native registration format. |
 | `missing` | No native file exists at the requested path. |
-| `current` | Native bytes match this installation's full briefing. |
+| `current` | Native bytes match this installation's full briefing, or the briefing of another skills root whose named `SKILL.md` files resolve to the same files. |
 | `outdated-generated` | An unchanged generated file can be updated. |
 | `conflict` | A user-managed, edited, or symlinked role must remain untouched. |
 
