@@ -52,9 +52,9 @@ Apps change and feature maps rot. When yours drifts, run:
 
 ## Check documentation impact
 
-Before Poteto reports a substantive code or public workflow change complete, it runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md). The author checks which reader tasks changed and updates the affected docs. A different agent reviews the resulting artifact without editing it. This also applies when the work ends without a PR.
+Before Poteto reports a substantive code or public workflow change complete, it runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md) in author mode. The author checks which reader tasks changed and updates the affected docs. The author result decides whether independent review is required. When required, a different agent reviews the artifact without editing it. This also applies when the work ends without a PR.
 
-The pass checks applicable README instructions, references, examples, upgrade guidance, release notes, and diagrams against the implementation. It records the examined revision or local snapshot and the checks run. If existing docs remain correct, an evidenced no-change result is enough. No new spec or documentation tree is required.
+The pass checks applicable README instructions, references, examples, upgrade guidance, release notes, and diagrams against the implementation. It records the examined revision or local snapshot and the checks run. The skill defines the author result and when it requires independent review. No new spec or documentation tree is required.
 
 You can request either mode directly:
 
@@ -63,7 +63,7 @@ You can request either mode directly:
 /documentation-impact review this change's documentation coverage without editing files.
 ```
 
-Babysit reports documentation readiness alongside forge status. A status-only request reports a missing verdict as pending. Shipping requires a current independent pass and rechecks it after relevant changes, including a rebase that changes documentation context.
+Babysit reports documentation readiness alongside forge status. A status-only request reports a missing author result or required independent review as pending. Shipping requires a current independent review verdict of `pass` only when the author result requires it and rechecks current documentation evidence after relevant changes, including a rebase that changes documentation context.
 
 ## Open the PR
 
