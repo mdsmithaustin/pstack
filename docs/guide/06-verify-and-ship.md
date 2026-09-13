@@ -63,7 +63,7 @@ You can request either mode directly:
 /documentation-impact review this change's documentation coverage without editing files.
 ```
 
-Babysit reports documentation readiness alongside forge status. A status-only request reports a missing author result or required independent review as pending. Shipping requires a current independent review verdict of `pass` only when the author result requires it and rechecks current documentation evidence after relevant changes, including a rebase that changes documentation context.
+Babysit reports documentation readiness alongside forge status. A status-only request reports a missing or stale author result or required independent review as pending. Shipping requires a current independent review verdict of `pass` only when the author result requires it and rechecks current documentation evidence after relevant changes, including a rebase that changes documentation context.
 
 ## Open the PR
 
