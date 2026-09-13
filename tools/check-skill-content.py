@@ -104,9 +104,8 @@ class ParsedFile:
 
 CODE_PATH = re.compile(r"\.\.?/[^\s<>]+")
 QUOTED_CODE_PATH = re.compile(
-    r"(?P<quote>[\"'])"
-    r"(?P<path>\.\.?/[^\r\n<>]+)"
-    r"(?P=quote)"
+    r'(?:"(?P<double>\.\.?/[^"\r\n<>]+)"|'
+    r"'(?P<single>\.\.?/[^'\r\n<>]+)')"
 )
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 SKILL_NAME = re.compile(r"[a-z][a-z0-9-]*")
@@ -162,7 +161,7 @@ def inline_code_path(content: str) -> str | None:
     if CODE_PATH.fullmatch(content):
         return content
     quoted = QUOTED_CODE_PATH.fullmatch(content)
-    return quoted.group("path") if quoted else None
+    return (quoted.group("double") or quoted.group("single")) if quoted else None
 
 
 def finding_for_target(

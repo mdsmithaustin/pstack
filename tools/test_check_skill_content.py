@@ -157,6 +157,15 @@ class ContentLint(Tree):
             0,
         )
 
+    def test_multiple_quoted_tokens_are_not_one_path(self) -> None:
+        cases = (
+            '`"../real-skill/LICENSE" "../MISSING.md"`',
+            "`'../real-skill/LICENSE' '../MISSING.md'`",
+        )
+        for body in cases:
+            with self.subTest(body=body):
+                self.assertEqual(self.body(body)[0], 0)
+
     def test_inline_code_delimiters_remain_part_of_the_filename(self) -> None:
         code, out = self.body(
             "Use `../real-skill/refs/my?notes.md`, "
