@@ -408,6 +408,16 @@ class ContentLint(Tree):
         self.assertIn("MISSING-PADDED.svg", out)
         self.assertNotIn("../real-skill/LICENSE", out)
 
+    def test_inline_angle_destination_rejects_unescaped_open_angle(self) -> None:
+        body = (
+            "See [invalid](<MISSING<INVALID.svg>) and "
+            r"[escaped](<MISSING\<ESCAPED.svg>)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING<ESCAPED.svg", out)
+        self.assertNotIn("MISSING<INVALID.svg", out)
+
     def test_reference_angle_destination_requires_space_before_title(self) -> None:
         for title in ('"Title"', "'Title'", "(Title)"):
             with self.subTest(title=title):
@@ -418,6 +428,16 @@ class ContentLint(Tree):
                 code, out = self.body(spaced)
                 self.assertEqual(code, 1)
                 self.assertIn("MISSING-SPACED.svg", out)
+
+    def test_reference_angle_destination_rejects_unescaped_open_angle(self) -> None:
+        body = (
+            "[invalid]: <MISSING<INVALID.svg>\n"
+            r"[escaped]: <MISSING\<ESCAPED.svg>"
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING<ESCAPED.svg", out)
+        self.assertNotIn("MISSING<INVALID.svg", out)
 
     def test_escaped_closing_marker_is_ignored_but_a_real_peer_fires(self) -> None:
         code, out = self.body(r"See [example\](ESCAPED-CLOSE) and [bad](MISSING).")

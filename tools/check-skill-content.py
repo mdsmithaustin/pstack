@@ -214,6 +214,8 @@ def parse_markdown_destination(line: str, start: int) -> tuple[str, int] | None:
                 target.extend((line[pos], line[pos + 1]))
                 pos += 2
                 continue
+            if line[pos] == "<":
+                return None
             target.append(line[pos])
             pos += 1
         if pos >= len(line):
