@@ -54,6 +54,12 @@ class ParsedFile:
     unclosed_fence: int | None
 
 
+@dataclass(frozen=True)
+class FenceContainer:
+    quote_depth: int
+    list_indent: int
+
+
 CODE_TARGET = re.compile(r"`(\.\.?/[^`\s<>]+)`")
 INLINE_CODE = re.compile(r"`[^`]*`")
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*(.*)$")
@@ -62,22 +68,93 @@ PLACEHOLDER_TARGET = re.compile(r"^\{[a-z][a-z0-9_-]*\}$", re.I)
 LIST_MARKER = re.compile(r"(?:[*+-]|\d{1,9}[.)])(?=[ \t])")
 
 
+def strip_quote_prefixes(line: str, required: int | None = None) -> tuple[str, int] | None:
+    pos = 0
+    depth = 0
+    while required is None or depth < required:
+        level = pos
+        while pos < len(line) and line[pos] == " " and pos - level < 4:
+            pos += 1
+        if pos - level == 4 or pos >= len(line) or line[pos] != ">":
+            pos = level
+            break
+        pos += 1
+        if pos < len(line) and line[pos] in " \t":
+            pos += 1
+        depth += 1
+    if required is not None and depth != required:
+        return None
+    return line[pos:], depth
+
+
+def strip_opening_list_prefixes(line: str) -> tuple[str, int]:
+    pos = 0
+    found = False
+    while pos < len(line):
+        level = pos
+        while pos < len(line) and line[pos] == " " and pos - level < 4:
+            pos += 1
+        if pos - level == 4:
+            break
+        marker = LIST_MARKER.match(line, pos)
+        if marker is None:
+            return (line, 0) if not found else (line[pos:], pos)
+        pos = marker.end() + 1
+        found = True
+    return (line, 0) if not found else (line[pos:], pos)
+
+
+def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
+    quoted = strip_quote_prefixes(line)
+    assert quoted is not None
+    content, quote_depth = quoted
+    content, list_indent = strip_opening_list_prefixes(content)
+    return content, FenceContainer(quote_depth, list_indent)
+
+
+def continued_fence_content(line: str, container: FenceContainer) -> str | None:
+    quoted = strip_quote_prefixes(line, container.quote_depth)
+    if quoted is None:
+        return None
+    content = quoted[0]
+    if not container.list_indent:
+        return content
+    if not content.strip():
+        return ""
+    indent = len(content) - len(content.lstrip(" "))
+    if indent < container.list_indent:
+        return None
+    return content[container.list_indent:]
+
+
 def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
     """One fence walk for every caller, so no two checks can disagree about what is code."""
     prose: list[tuple[int, str]] = []
     fence: str | None = None
+    container: FenceContainer | None = None
     opened = 0
     for lineno, line in enumerate(lines, start=1):
-        m = FENCE.match(reference_content(line))
+        if fence is not None:
+            assert container is not None
+            content = continued_fence_content(line, container)
+            if content is not None:
+                m = FENCE.match(content)
+                if m:
+                    run, info = m.group(1), m.group(2).strip()
+                    if run[0] == fence[0] and len(run) >= len(fence) and not info:
+                        fence = None
+                        container = None
+                continue
+            fence = None
+            container = None
+
+        content, next_container = opening_fence_content(line)
+        m = FENCE.match(content)
         if m:
-            run, info = m.group(1), m.group(2).strip()
-            if fence is None:
-                fence, opened = run, lineno
-            elif run[0] == fence[0] and len(run) >= len(fence) and not info:
-                fence = None
+            run = m.group(1)
+            fence, container, opened = run, next_container, lineno
             continue
-        if fence is None:
-            prose.append((lineno, line))
+        prose.append((lineno, line))
     return prose, (opened if fence else None)
 
 
@@ -178,7 +255,7 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             cursor = start
 
 
-def reference_content(line: str) -> str:
+def strip_block_container_prefixes(line: str) -> str:
     pos = 0
     while pos < len(line):
         level = pos
@@ -222,7 +299,7 @@ def skip_markdown_title(line: str, pos: int) -> int | None:
 
 
 def iter_reference_targets(line: str) -> Iterator[str]:
-    line = reference_content(line)
+    line = strip_block_container_prefixes(line)
     if not line or line[0] != "[":
         return
 
