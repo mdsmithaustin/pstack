@@ -43,7 +43,9 @@ class ContentLint(Tree):
         (real / "refs" / "diagram(1).svg").write_text("x", encoding="utf-8")
         (real / "refs" / "my#notes.md").write_text("x", encoding="utf-8")
         (real / "refs" / "my?notes.md").write_text("x", encoding="utf-8")
+        (real / "refs" / "literal%20name.md").write_text("x", encoding="utf-8")
         (real / "refs" / r"foo\q.md").write_text("x", encoding="utf-8")
+        (real / "run.sh").write_text("x", encoding="utf-8")
         (real / "LICENSE").write_text("x", encoding="utf-8")
 
     def body(self, body: str) -> tuple[int, str]:
@@ -133,6 +135,21 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("MISSING FILE.md", out)
         self.assertNotIn("my notes.md", out)
+
+    def test_inline_code_percent_escapes_are_literal(self) -> None:
+        code, out = self.body(
+            "Use `../real-skill/refs/literal%20name.md` and "
+            "`../real-skill/refs/MISSING%20LITERAL.md`."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING%20LITERAL.md", out)
+        self.assertNotIn("literal%20name.md", out)
+
+    def test_inline_command_with_options_is_not_a_path(self) -> None:
+        self.assertEqual(
+            self.body("Run `../real-skill/run.sh --check`.")[0],
+            0,
+        )
 
     def test_inline_code_delimiters_remain_part_of_the_filename(self) -> None:
         code, out = self.body(
