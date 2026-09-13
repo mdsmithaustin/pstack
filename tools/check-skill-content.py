@@ -36,6 +36,16 @@ IGNORE: frozenset[str] = frozenset()
 MARKDOWN = MarkdownIt("commonmark")
 
 
+def rendered_newlines(tokens: list[Token]) -> int:
+    total = 0
+    for token in tokens:
+        total += token.type in {"softbreak", "hardbreak"}
+        total += int(token.meta.get("line_advance", 0))
+        if token.type == "image" and token.children:
+            total += rendered_newlines(token.children)
+    return total
+
+
 def source_positioned(
     rule: Callable[[StateInline, bool], bool], token_type: str
 ) -> Callable[[StateInline, bool], bool]:
@@ -52,20 +62,18 @@ def source_positioned(
                     token.meta["source_offset"] = start
                     source_newlines = state.src[start : state.pos].count("\n")
                     if token_type == "link_open":
-                        rendered_breaks = sum(
-                            item.type in {"softbreak", "hardbreak"}
-                            for item in created
-                        )
-                        rendered_breaks += sum(
-                            int(item.meta.get("line_advance", 0))
-                            for item in created
-                        )
+                        represented = rendered_newlines(created)
                         for item in reversed(created):
                             if item.type == "link_close":
                                 item.meta["line_advance"] = max(
-                                    source_newlines - rendered_breaks, 0
+                                    source_newlines - represented, 0
                                 )
                                 break
+                    elif token_type == "image":
+                        represented = rendered_newlines(token.children or [])
+                        token.meta["line_advance"] = max(
+                            source_newlines - represented, 0
+                        )
                     else:
                         token.meta["line_advance"] = source_newlines
                     break
@@ -268,22 +276,28 @@ def rendered_lines(
     strong: list[tuple[int, list[str]]] = []
     line = first_line
 
-    for child in children:
-        if child.type == "strong_open":
-            strong.append((line, []))
-        elif child.type == "strong_close":
-            if strong:
-                opened, pieces = strong.pop()
-                name = "".join(pieces)
-                if opened == line and SKILL_NAME.fullmatch(name):
-                    names_by_line.setdefault(line, []).append(name)
-        elif child.type == "text":
-            text_by_line.setdefault(line, []).append(child.content)
-            for _opened, pieces in strong:
-                pieces.append(child.content)
-        elif child.type in {"softbreak", "hardbreak"}:
-            line += 1
-        line += int(child.meta.get("line_advance", 0))
+    def consume(tokens: list[Token], current_line: int) -> int:
+        for child in tokens:
+            if child.type == "strong_open":
+                strong.append((current_line, []))
+            elif child.type == "strong_close":
+                if strong:
+                    opened, pieces = strong.pop()
+                    name = "".join(pieces)
+                    if opened == current_line and SKILL_NAME.fullmatch(name):
+                        names_by_line.setdefault(current_line, []).append(name)
+            elif child.type == "text":
+                text_by_line.setdefault(current_line, []).append(child.content)
+                for _opened, pieces in strong:
+                    pieces.append(child.content)
+            elif child.type == "image" and child.children:
+                current_line = consume(child.children, current_line)
+            elif child.type in {"softbreak", "hardbreak"}:
+                current_line += 1
+            current_line += int(child.meta.get("line_advance", 0))
+        return current_line
+
+    consume(children, line)
 
     return {
         line_number: (

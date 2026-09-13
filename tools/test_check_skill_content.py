@@ -272,6 +272,20 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("../MISSING IMAGE ALT.md", out)
 
+    def test_skill_reference_inside_image_alt_is_checked(self) -> None:
+        code, out = self.body(
+            "![Use the **fake-skill** skill.](../real-skill/LICENSE)"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("sibling-skill", out)
+
+    def test_multiline_image_alt_skill_reports_its_own_line(self) -> None:
+        code, out = self.body(
+            "![alt\nUse the **fake-skill** skill.](../real-skill/LICENSE)"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:7: sibling-skill", out)
+
     def test_code_spans_stop_at_markdown_block_boundaries(self) -> None:
         cases = {
             "blank": "Use `open\n\n[real](MISSING-BLANK.svg)`",
