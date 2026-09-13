@@ -199,7 +199,7 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
             run = m.group(1)
             fence, fence_container, opened = run, container, lineno
             continue
-        prose.append((lineno, line))
+        prose.append((lineno, content))
     return prose, (opened if fence else None)
 
 

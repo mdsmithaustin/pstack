@@ -213,6 +213,26 @@ class ContentLint(Tree):
         self.assertIn("references/MISSING.svg", out)
         self.assertNotIn("../real-skill/LICENSE", out)
 
+    def test_ordered_list_continuation_reference_definition_is_checked(self) -> None:
+        code, out = self.body(
+            "10. item\n\n"
+            "    [existing]: ../real-skill/LICENSE\n"
+            "    [missing]: MISSING-ORDERED-CONT.svg"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-ORDERED-CONT.svg", out)
+        self.assertNotIn("../real-skill/LICENSE", out)
+
+    def test_bullet_list_continuation_reference_definition_is_checked(self) -> None:
+        code, out = self.body(
+            "-    item\n\n"
+            "     [existing]: ../real-skill/LICENSE\n"
+            "     [missing]: MISSING-BULLET-CONT.svg"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-BULLET-CONT.svg", out)
+        self.assertNotIn("../real-skill/LICENSE", out)
+
     def test_reference_definition_inside_blockquote_fence_is_ignored(self) -> None:
         body = "> ```markdown\n> [example]: MISSING\n> ```"
         self.assertEqual(self.body(body)[0], 0)
