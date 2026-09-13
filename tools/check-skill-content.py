@@ -63,6 +63,7 @@ FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*(.*)$")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
 PLACEHOLDER_TARGET = re.compile(r"^\{[a-z][a-z0-9_-]*\}$", re.I)
 LIST_MARKER = re.compile(r"(?:[*+-]|\d{1,9}[.)])(?=[ \t])")
+ATX_HEADING = re.compile(r"^#{1,6}(?:[ \t]|$)")
 
 
 def scan_code_spans(text: str) -> tuple[str, list[tuple[int, str]]]:
@@ -94,10 +95,6 @@ def scan_code_spans(text: str) -> tuple[str, list[tuple[int, str]]]:
         else:
             pos = run_end
     return "".join(masked), spans
-
-
-def mask_code_spans(text: str) -> str:
-    return scan_code_spans(text)[0]
 
 
 def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
@@ -291,15 +288,45 @@ def marker_is_escaped(line: str, pos: int) -> bool:
     return bool(backslashes % 2)
 
 
+def starts_new_inline_block(
+    previous_raw: str,
+    previous_content: str,
+    current_raw: str,
+    current_content: str,
+) -> bool:
+    if not previous_content.strip() or not current_content.strip():
+        return True
+    _previous_text, previous_container = opening_fence_content(previous_raw)
+    _current_text, current_container = opening_fence_content(current_raw)
+    previous_quotes = sum(kind == "quote" for kind, _width in previous_container.tokens)
+    current_quotes = sum(kind == "quote" for kind, _width in current_container.tokens)
+    if previous_quotes != current_quotes:
+        return True
+    if any(kind == "list" for kind, _width in current_container.tokens):
+        return True
+    return bool(ATX_HEADING.match(previous_content) or ATX_HEADING.match(current_content))
+
+
 def scan_prose_code_spans(
-    prose: list[tuple[int, str]],
+    parsed: ParsedFile,
 ) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
+    prose = parsed.prose
+    raw_by_line = dict(parsed.raw)
     masked: list[tuple[int, str]] = []
     paths: list[tuple[int, str]] = []
     start = 0
     while start < len(prose):
         end = start + 1
-        while end < len(prose) and prose[end][0] == prose[end - 1][0] + 1:
+        while (
+            end < len(prose)
+            and prose[end][0] == prose[end - 1][0] + 1
+            and not starts_new_inline_block(
+                raw_by_line[prose[end - 1][0]],
+                prose[end - 1][1],
+                raw_by_line[prose[end][0]],
+                prose[end][1],
+            )
+        ):
             end += 1
         block = "\n".join(line for _lineno, line in prose[start:end])
         masked_block, spans = scan_code_spans(block)
@@ -319,12 +346,16 @@ def scan_prose_code_spans(
     return masked, paths
 
 
-def preceding_link_text(line: str, label_pos: int) -> str | None:
-    if label_pos < 2 or line[label_pos - 1] != "]" or marker_is_escaped(line, label_pos - 1):
+def preceding_bracket_group(line: str, end: int) -> tuple[int, str] | None:
+    if (
+        end < 2
+        or line[end - 1] != "]"
+        or marker_is_escaped(line, end - 1)
+    ):
         return None
-    closing = label_pos - 1
+    closing = end - 1
     depth = 0
-    pos = label_pos - 2
+    pos = end - 2
     while pos >= 0:
         if line[pos] in "[]" and not marker_is_escaped(line, pos):
             if line[pos] == "]":
@@ -332,8 +363,7 @@ def preceding_link_text(line: str, label_pos: int) -> str | None:
             elif depth:
                 depth -= 1
             else:
-                text = line[pos + 1 : closing]
-                return text if text.strip() else None
+                return pos, line[pos + 1 : closing]
         pos -= 1
     return None
 
@@ -377,15 +407,17 @@ def iter_markdown_targets(
             cursor = start
             continue
         if reference_labels:
-            prefix = preceding_link_text(line, label_pos)
-            label = line[label_pos + 1 : marker] or prefix
-            if (
-                prefix is not None
-                and label is not None
-                and normalize_reference_label(label) in reference_labels
-            ):
-                cursor = start
-                continue
+            prefix = preceding_bracket_group(line, label_pos)
+            label = line[label_pos + 1 : marker]
+            if prefix is not None:
+                prior = preceding_bracket_group(line, prefix[0])
+                reference_label = label or prefix[1]
+                if (
+                    normalize_reference_label(reference_label) in reference_labels
+                    and (not label or prior is None)
+                ):
+                    cursor = start
+                    continue
 
         while start < len(line) and line[start].isspace():
             start += 1
@@ -533,7 +565,7 @@ def relative_target(raw_target: str, *, markdown: bool) -> str | None:
 
 
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
-    masked_prose, code_paths = scan_prose_code_spans(parsed.prose)
+    masked_prose, code_paths = scan_prose_code_spans(parsed)
     code_paths_by_line: dict[int, list[str]] = {}
     for lineno, path in code_paths:
         code_paths_by_line.setdefault(lineno, []).append(path)
@@ -569,7 +601,7 @@ BOLD_NAME = re.compile(r"\*\*([a-z][a-z0-9-]*)\*\*")
 
 
 def check_sibling_skill(parsed: ParsedFile) -> Iterator[Finding]:
-    masked_prose, _code_paths = scan_prose_code_spans(parsed.prose)
+    masked_prose, _code_paths = scan_prose_code_spans(parsed)
     for lineno, line in masked_prose:
         near_skill = "skill" in line
         principle_hint = "principle" in line

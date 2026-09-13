@@ -160,6 +160,19 @@ class ContentLint(Tree):
         self.assertIn("MISSING-REAL.svg", out)
         self.assertNotIn("MISSING-MULTILINE-SPAN.svg", out)
 
+    def test_code_spans_stop_at_markdown_block_boundaries(self) -> None:
+        cases = {
+            "blank": "Use `open\n\n[real](MISSING-BLANK.svg)`",
+            "quote": "> Start `open\n[real](MISSING-QUOTE.svg)`",
+            "list": "- Start `open\n- [real](MISSING-LIST.svg)`",
+            "heading": "# Start `open\n[real](MISSING-HEADING.svg)`",
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name):
+                code, out = self.body(body)
+                self.assertEqual(code, 1)
+                self.assertIn(f"MISSING-{name.upper()}.svg", out)
+
     def test_line_leading_triple_code_span_is_not_a_fence(self) -> None:
         body = (
             "```[example](MISSING-TRIPLE-SPAN.svg)```\n"
@@ -332,6 +345,29 @@ class ContentLint(Tree):
         self.assertIn("MISSING-REAL.svg", out)
         self.assertNotIn("MISSING-COLLAPSED.svg", out)
         self.assertNotIn("MISSING-NESTED-REFERENCE.svg", out)
+
+    def test_empty_text_reference_links_precede_parentheses(self) -> None:
+        body = (
+            "[bar]: ../real-skill/LICENSE\n\n"
+            "Use [][bar](MISSING-EMPTY.svg), "
+            "![][bar](MISSING-EMPTY-IMAGE.svg), and "
+            "[real](MISSING-REAL.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-REAL.svg", out)
+        self.assertNotIn("MISSING-EMPTY.svg", out)
+        self.assertNotIn("MISSING-EMPTY-IMAGE.svg", out)
+
+    def test_reference_chain_leaves_the_final_inline_link_active(self) -> None:
+        body = (
+            "[baz]: ../real-skill/LICENSE\n"
+            "[bar]: ../real-skill/LICENSE\n\n"
+            "Use [foo][baz][bar](MISSING-FINAL-INLINE.svg)."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-FINAL-INLINE.svg", out)
 
     def test_ordered_list_continuation_reference_definition_is_checked(self) -> None:
         code, out = self.body(
