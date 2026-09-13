@@ -52,7 +52,7 @@ Apps change and feature maps rot. When yours drifts, run:
 
 ## Check documentation impact
 
-Before Poteto reports a substantive code or public workflow change complete, it runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md) in author mode. The author checks which reader tasks changed and updates the affected docs. The author result decides whether independent review is required. When required, a different agent reviews the artifact without editing it. This also applies when the work ends without a PR.
+Before Poteto reports a substantive code or public workflow change complete, it runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md) in author mode. The author checks which reader tasks changed and updates the affected docs. The author result decides whether independent review is required. When required, a different agent reviews the artifact without editing it, and completion waits for a current verdict of `pass`. Findings are repaired and reviewed again. This also applies when the work ends without a PR.
 
 The pass checks applicable README instructions, references, examples, upgrade guidance, release notes, and diagrams against the implementation. It records the examined revision or local snapshot and the checks run. The skill defines the author result and when it requires independent review. No new spec or documentation tree is required.
 
