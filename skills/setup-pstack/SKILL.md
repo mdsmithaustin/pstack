@@ -1,6 +1,6 @@
 ---
 name: setup-pstack
-description: Check installed pstack personas, optionally register native roles, and configure which models pstack uses per role. Detects your available models and writes a config file that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", or changing pstack's model choices.
+description: Check installed pstack personas, optionally register native roles, and configure which models pstack uses per role and at what reasoning budget. Detects your available models and writes a config file that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", "pstack budget", or changing pstack's model choices.
 ---
 
 # Setup pstack
@@ -31,11 +31,21 @@ Enumerate the model values your session's spawn mechanism accepts, and the reaso
 
 ### 2. Load current state
 
-The default mapping is `examples/pstack-models.md` next to this skill. Read both config layers when they exist — workspace `.agents/pstack-models.md`, then `~/.agents/pstack-models.md` — including their harness sections, and treat the merged values (workspace winning per role, a harness section winning over flat lines within a file) as the current choices. Otherwise start from those defaults. Unless the user asked for a per-repo override, the user-level file is the one being configured.
+The default mapping is `examples/pstack-models.md` next to this skill. Read both config layers when they exist — workspace `.agents/pstack-models.md`, then `~/.agents/pstack-models.md` — including their harness sections, and treat the merged values (workspace winning per role, a harness section winning over flat lines within a file) and the `# budget` line of the file being configured as the current choices. Otherwise start from those defaults. Unless the user asked for a per-repo override, the user-level file is the one being configured.
 
-### 3. Map and confirm
+### 3. Budget, map, and confirm
 
-The file is shared across CLIs, so a value this harness cannot validate is not wrong — it is another harness's choice (it reads as `inherit-parent` here). Show every role with its current model and effort for this harness, marking values outside the detected set as "(set for another harness — kept unless you change it)" rather than as needing a choice. Ask whether to accept as-is or change specific roles, offering the detected models plus `inherit-parent` and `auto` (both mean: this role runs on the parent chat model, which is how Auto users stay on Auto) as the options. Prefer AskQuestion over free text. For panel roles (arena runners, architect runners, interrogate reviewers) the value is a list, and one subagent runs per entry, alias entries included, so the list length sets the count. `arena cross-judge pool` is also a list, but Arena selects one value from it whose model family or capability tier differs from the parent's when possible. `swarm workers` is the default model for every worker unless a race or comparison assigns another model per arm. `trail reviewer` is the show-me-your-work reviewer; the skill steps it down one tier whenever it resolves to the model doing the work, so a value that matches the model of another role is fine. `default` is the entry for any spawn whose skill names no role; keep it `inherit-parent` unless the user wants unmapped spawns on a specific model.
+**(a) Ask for a budget.** Prefer AskQuestion over free text. Offer these five options with these exact labels, and name the current budget when the file records one. The first is a port addition. `unlimited` is upstream's `keep max` under a port label, and the other three match upstream.
+
+- `default — keep as written`
+- `unlimited — max reasoning`
+- `large — xhigh reasoning`
+- `medium — high reasoning`
+- `small — medium reasoning`
+
+**(b) Apply it.** Build the working table from `examples/pstack-models.md`, and on a re-run keep any role the user changed by model, effort, list, alias (`inherit-parent`, `auto`), or harness section. `default` applies no budget: every written `@effort` suffix stands and unsuffixed entries keep the **pstack-harness** skill's effort policy. `unlimited`, `large`, `medium`, and `small` set the `@effort` of every real entry, panel entries and harness sections included, to `max`, `xhigh`, `high`, or `medium`, adding the suffix where none was written. If the lint in step 4 rejects that effort for the model, use the model's highest supported effort at or below the target. An entry whose model the lint cannot classify keeps its written effort, or stays unsuffixed, and step (c) names it as untouched. An alias with a written suffix, such as `auto@max`, gets the same rewrite on its suffix, since Codex honors a suffix on an alias. A bare `inherit-parent` or `auto` does not change. No budget changes a model or a list length. So `small` turns `fable` into `fable@medium` and `gpt-5.6-sol@max` into `gpt-5.6-sol@medium`, and `unlimited` turns both back into `fable@max` and `gpt-5.6-sol@max`. When this harness passes no per-spawn effort (the Claude Code case), say so: the suffixes govern Codex and Hermes reading the same file, while subagents here inherit the session effort.
+
+**(c) Show the roles and confirm.** The file is shared across CLIs, so a value this harness cannot validate is not wrong — it is another harness's choice (it reads as `inherit-parent` here). Show every role with its model and effort for this harness, marking values outside the detected set as "(set for another harness — kept unless you change it)" rather than as needing a choice. Ask whether to accept as-is or change specific roles, offering the detected models plus `inherit-parent` and `auto` (both mean: this role runs on the parent chat model, which is how Auto users stay on Auto) as the options. Prefer AskQuestion over free text. For panel roles (arena runners, architect runners, interrogate reviewers) the value is a list, and one subagent runs per entry, alias entries included, so the list length sets the count. `arena cross-judge pool` is also a list, but Arena selects one value from it whose model family or capability tier differs from the parent's when possible. `swarm workers` is the default model for every worker unless a race or comparison assigns another model per arm. `trail reviewer` is the show-me-your-work reviewer; the skill steps it down one tier whenever it resolves to the model doing the work, so a value that matches the model of another role is fine. `default` is the entry for any spawn whose skill names no role; keep it `inherit-parent` unless the user wants unmapped spawns on a specific model.
 
 ### 4. Validate
 
@@ -43,11 +53,12 @@ Run the lint on the file you are about to write, before writing it: `python3 <th
 
 ### 5. Write the config
 
-The target is `~/.agents/pstack-models.md`, or workspace `.agents/pstack-models.md` when the user asked for a per-repo override (only write roles the user actually wants pinned for this repo — every workspace line shadows the user-level one). If your file tool cannot write the target (a harness that scopes writes to the workspace), fall back in order: write it through your shell tool; else write the workspace file and say the config is project-local until copied to `~/.agents/`; else print the final content for the user to save. Never silently drop the write.
+The target is `~/.agents/pstack-models.md`, or workspace `.agents/pstack-models.md` when the user asked for a per-repo override (only write roles the user actually wants pinned for this repo — every workspace line shadows the user-level one). A workspace file's `# budget` line covers only the roles written in that file. Roles that still resolve from `~/.agents/pstack-models.md` keep that file's budget. If your file tool cannot write the target (a harness that scopes writes to the workspace), fall back in order: write it through your shell tool; else write the workspace file and say the config is project-local until copied to `~/.agents/`; else print the final content for the user to save. Never silently drop the write.
 
-Write the file with one line per role, using the same labels poteto-mode uses. Start from `examples/pstack-models.md` next to this skill and keep its header comments. Rewrite the whole file so re-runs stay idempotent, but carry forward every existing line the user did not change — including sections and values this harness could not validate; overwriting another CLI's choices with `inherit-parent` is the one failure mode to avoid. Put a harness-specific pick under its `## <harness>` section and leave the flat lines for the other CLIs. Shape (excerpt):
+Write the file with a `# budget` line holding the chosen label and its target effort, and one line per role, using the same labels poteto-mode uses. Start from `examples/pstack-models.md` next to this skill and keep its header comments, replacing the value on its budget line. Rewrite the whole file so re-runs stay idempotent, but carry forward every existing line the user did not change — including sections and values this harness could not validate; overwriting another CLI's choices with `inherit-parent` is the one failure mode to avoid. Put a harness-specific pick under its `## <harness>` section and leave the flat lines for the other CLIs. Shape (excerpt):
 
 ```
+# budget: default (keep as written)
 feature, refactoring: sonnet
 bug-fix: sonnet
 

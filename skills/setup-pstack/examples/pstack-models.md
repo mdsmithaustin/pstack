@@ -5,6 +5,7 @@ description: pstack per-role model choices (overrides skill defaults)
 # `inherit-parent` or `auto` as a value: the role runs on the parent chat model (omit the model). Alias entries in a panel list still count toward its fan-out.
 # `model@effort` pins the reasoning effort (none, low, medium, high, xhigh, max; ultra only on gpt-5.6-sol). No suffix: the harness skill's policy applies (floor high).
 # `## codex`, `## claude-code`, `## hermes` sections override the lines above for that harness only.
+# budget: default (keep as written)
 feature, refactoring: sonnet
 bug-fix: sonnet
 perf-issue: sonnet
