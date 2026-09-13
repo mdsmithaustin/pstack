@@ -56,8 +56,7 @@ class ParsedFile:
 
 @dataclass(frozen=True)
 class FenceContainer:
-    quote_depth: int
-    list_indent: int
+    tokens: tuple[tuple[str, int], ...]
 
 
 CODE_TARGET = re.compile(r"`(\.\.?/[^`\s<>]+)`")
@@ -68,63 +67,61 @@ PLACEHOLDER_TARGET = re.compile(r"^\{[a-z][a-z0-9_-]*\}$", re.I)
 LIST_MARKER = re.compile(r"(?:[*+-]|\d{1,9}[.)])(?=[ \t])")
 
 
-def strip_quote_prefixes(line: str, required: int | None = None) -> tuple[str, int] | None:
+def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
     pos = 0
-    depth = 0
-    while required is None or depth < required:
-        level = pos
-        while pos < len(line) and line[pos] == " " and pos - level < 4:
-            pos += 1
-        if pos - level == 4 or pos >= len(line) or line[pos] != ">":
-            pos = level
-            break
-        pos += 1
-        if pos < len(line) and line[pos] in " \t":
-            pos += 1
-        depth += 1
-    if required is not None and depth != required:
-        return None
-    return line[pos:], depth
-
-
-def strip_opening_list_prefixes(line: str) -> tuple[str, int]:
-    pos = 0
-    found = False
+    tokens: list[tuple[str, int]] = []
     while pos < len(line):
         level = pos
         while pos < len(line) and line[pos] == " " and pos - level < 4:
             pos += 1
         if pos - level == 4:
-            break
+            content = line[level:] if tokens else line
+            return content, FenceContainer(tuple(tokens))
+        if line[pos] == ">":
+            tokens.append(("quote", 0))
+            pos += 1
+            if pos < len(line) and line[pos] in " \t":
+                pos += 1
+            continue
         marker = LIST_MARKER.match(line, pos)
-        if marker is None:
-            return (line, 0) if not found else (line[pos:], pos)
-        pos = marker.end() + 1
-        found = True
-    return (line, 0) if not found else (line[pos:], pos)
-
-
-def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
-    quoted = strip_quote_prefixes(line)
-    assert quoted is not None
-    content, quote_depth = quoted
-    content, list_indent = strip_opening_list_prefixes(content)
-    return content, FenceContainer(quote_depth, list_indent)
+        if marker is not None:
+            pos = marker.end() + 1
+            tokens.append(("list", pos - level))
+            continue
+        content = line[pos:] if tokens else line
+        return content, FenceContainer(tuple(tokens))
+    return "", FenceContainer(tuple(tokens))
 
 
 def continued_fence_content(line: str, container: FenceContainer) -> str | None:
-    quoted = strip_quote_prefixes(line, container.quote_depth)
-    if quoted is None:
-        return None
-    content = quoted[0]
-    if not container.list_indent:
+    pos = 0
+    for index, (kind, width) in enumerate(container.tokens):
+        if not line[pos:].strip():
+            remaining = container.tokens[index:]
+            return "" if all(token[0] == "list" for token in remaining) else None
+        level = pos
+        if kind == "quote":
+            while pos < len(line) and line[pos] == " " and pos - level < 4:
+                pos += 1
+            if pos - level == 4 or pos >= len(line) or line[pos] != ">":
+                return None
+            pos += 1
+            if pos < len(line) and line[pos] in " \t":
+                pos += 1
+            continue
+        while pos < len(line) and line[pos] == " " and pos - level < width:
+            pos += 1
+        if pos - level != width:
+            return None
+    return line[pos:]
+
+
+def strip_block_container_prefixes(line: str) -> str:
+    content, container = opening_fence_content(line)
+    if container.tokens:
         return content
-    if not content.strip():
-        return ""
-    indent = len(content) - len(content.lstrip(" "))
-    if indent < container.list_indent:
-        return None
-    return content[container.list_indent:]
+    leading = len(line) - len(line.lstrip(" "))
+    return line[leading:] if leading <= 3 else line
 
 
 def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
@@ -253,26 +250,6 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             cursor = pos + 1
         else:
             cursor = start
-
-
-def strip_block_container_prefixes(line: str) -> str:
-    pos = 0
-    while pos < len(line):
-        level = pos
-        while pos < len(line) and line[pos] == " " and pos - level < 4:
-            pos += 1
-        if pos - level == 4:
-            return line[level:]
-        if pos < len(line) and line[pos] == ">":
-            pos += 1
-        else:
-            marker = LIST_MARKER.match(line, pos)
-            if marker is None:
-                return line[pos:]
-            pos = marker.end()
-        if pos < len(line) and line[pos] in " \t":
-            pos += 1
-    return ""
 
 
 def skip_markdown_title(line: str, pos: int) -> int | None:

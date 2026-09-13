@@ -228,6 +228,14 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("MISSING.svg", out)
 
+    def test_list_blockquote_fence_keeps_reference_examples_hidden(self) -> None:
+        body = "- > ```markdown\n  > [example]: MISSING\n  > ```"
+        self.assertEqual(self.body(body)[0], 0)
+
+    def test_blockquote_list_fence_keeps_reference_examples_hidden(self) -> None:
+        body = "> - ```markdown\n>   [example]: MISSING\n>   ```"
+        self.assertEqual(self.body(body)[0], 0)
+
     def test_trailing_prose_does_not_form_a_reference_definition(self) -> None:
         body = (
             "[plain]: MISSING.svg trailing prose\n"
