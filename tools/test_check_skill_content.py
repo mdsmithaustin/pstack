@@ -40,6 +40,10 @@ class ContentLint(Tree):
         real = self.skill("real-skill", 'name: real-skill\ndescription: "d"')
         (real / "refs").mkdir()
         (real / "refs" / "my notes.md").write_text("x", encoding="utf-8")
+        (real / "refs" / "diagram(1).svg").write_text("x", encoding="utf-8")
+        (real / "refs" / "my#notes.md").write_text("x", encoding="utf-8")
+        (real / "refs" / "my?notes.md").write_text("x", encoding="utf-8")
+        (real / "LICENSE").write_text("x", encoding="utf-8")
 
     def body(self, body: str) -> tuple[int, str]:
         self.skill("a", 'name: a\ndescription: "d"', body)
@@ -58,6 +62,23 @@ class ContentLint(Tree):
         self.assertEqual(code, 1, "a link with no ./ prefix is still a relative link")
         self.assertIn("references/gone.md", out)
 
+    def test_broken_non_md_markdown_link_fires(self) -> None:
+        code, out = self.body("See [diagram](references/gone.svg).")
+        self.assertEqual(code, 1, "markdown links are checked whatever the extension")
+        self.assertIn("references/gone.svg", out)
+
+    def test_explicit_placeholder_does_not_hide_a_broken_extensionless_link(self) -> None:
+        code, out = self.body("See [PR]({url}) and [license](MISSING).")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING", out)
+        self.assertNotIn("{url}", out)
+
+    def test_existing_extensionless_link_does_not_hide_a_broken_peer(self) -> None:
+        code, out = self.body("See [license](../real-skill/LICENSE) and [bad](MISSING).")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING", out)
+        self.assertNotIn("../real-skill/LICENSE", out)
+
     def test_inline_code_path_broken_fires(self) -> None:
         code, out = self.body("Read `../gone/setup.md` first.")
         self.assertEqual(code, 1)
@@ -72,6 +93,101 @@ class ContentLint(Tree):
 
     def test_url_encoded_target_that_exists_passes(self) -> None:
         self.assertEqual(self.body("See [x](../real-skill/refs/my%20notes.md).")[0], 0)
+
+    def test_angle_bracket_target_with_spaces_does_not_hide_a_broken_peer(self) -> None:
+        code, out = self.body(
+            "See [x](<../real-skill/refs/my notes.md>) and [bad](<../real-skill/refs/gone notes.md>)."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("gone notes.md", out)
+        self.assertNotIn("my notes.md", out)
+
+    def test_balanced_parentheses_resolve_before_the_link_closes(self) -> None:
+        code, out = self.body(
+            "See [x](../real-skill/refs/diagram(1).svg) and [bad](../real-skill/refs/diagram(2).svg)."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("diagram(2).svg", out)
+        self.assertNotIn("diagram(1).svg", out)
+
+    def test_literal_delimiters_are_removed_before_percent_decoding(self) -> None:
+        code, out = self.body(
+            "See [hash](../real-skill/refs/my%23notes.md) and "
+            "[query](../real-skill/refs/my%3Fnotes.md) and "
+            "[bad](../missing?version=1)."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("../missing", out)
+        self.assertNotIn("my#notes.md", out)
+        self.assertNotIn("my?notes.md", out)
+
+    def test_literal_fragment_is_removed_from_existing_and_missing_targets(self) -> None:
+        code, out = self.body(
+            "See [license](../real-skill/LICENSE#terms) and [bad](MISSING#section)."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING", out)
+        self.assertNotIn("#section", out)
+        self.assertNotIn("../real-skill/LICENSE", out)
+
+    def test_missing_percent_encoded_delimiter_targets_fire(self) -> None:
+        code, out = self.body(
+            "See [hash](../real-skill/refs/gone%23notes.md) and "
+            "[query](../real-skill/refs/gone%3Fnotes.md)."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("gone#notes.md", out)
+        self.assertIn("gone?notes.md", out)
+
+    def test_markdown_title_forms_share_one_destination(self) -> None:
+        body = (
+            'See [double](../real-skill/LICENSE "Double"), '
+            "[single](../real-skill/LICENSE 'Single'), "
+            "[paren](../real-skill/LICENSE (Paren)), and [bad](MISSING \"Bad\")."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertEqual(out.count("MISSING"), 1)
+
+    def test_each_markdown_title_form_reports_a_missing_destination(self) -> None:
+        body = (
+            'See [double](MISSING-DOUBLE "Double"), '
+            "[single](MISSING-SINGLE 'Single'), and "
+            "[paren](MISSING-PAREN (Paren))."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-DOUBLE", out)
+        self.assertIn("MISSING-SINGLE", out)
+        self.assertIn("MISSING-PAREN", out)
+
+    def test_escaped_closing_marker_is_ignored_but_a_real_peer_fires(self) -> None:
+        code, out = self.body(r"See [example\](ESCAPED-CLOSE) and [bad](MISSING).")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING", out)
+        self.assertNotIn("ESCAPED-CLOSE", out)
+
+    def test_even_backslashes_leave_the_closing_marker_active(self) -> None:
+        code, out = self.body(r"See [example\\](MISSING-EVEN).")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-EVEN", out)
+
+    def test_link_requires_an_unescaped_opening_bracket(self) -> None:
+        code, out = self.body(r"See \[example](ESCAPED-OPEN) and [bad](MISSING).")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING", out)
+        self.assertNotIn("ESCAPED-OPEN", out)
+
+    def test_bare_closing_marker_is_ignored(self) -> None:
+        code, out = self.body("See prose ](BARE-TOKEN) and [bad](MISSING).")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING", out)
+        self.assertNotIn("BARE-TOKEN", out)
+
+    def test_nested_label_reports_a_missing_destination(self) -> None:
+        code, out = self.body("See [outer [inner]](MISSING-NESTED).")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-NESTED", out)
 
     def test_link_inside_a_fence_is_ignored(self) -> None:
         self.assertEqual(self.body("```markdown\n[x](../nope/gone.md)\n```")[0], 0)

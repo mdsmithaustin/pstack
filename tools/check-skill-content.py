@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Fail on broken content inside skills/**/*.md.
 
-A relative markdown link whose target ends in .md must resolve to a file. A
-relative path written in inline code must resolve to something on disk, whatever
-its extension, so inline code is checked rather than skipped for links.
+A relative markdown link whose target looks like a filesystem path must resolve
+to something on disk. A relative path written in inline code follows the same
+rule. Explicit placeholders such as `[PR]({url})` are not filesystem paths.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
@@ -51,11 +51,11 @@ class ParsedFile:
     unclosed_fence: int | None
 
 
-LINK_TARGET = re.compile(r'\]\(([^)\s<>]+\.md(?:#[^)\s]*)?)(?:\s+"[^"]*")?\)')
 CODE_TARGET = re.compile(r"`(\.\.?/[^`\s<>]+)`")
 INLINE_CODE = re.compile(r"`[^`]*`")
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*(.*)$")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
+PLACEHOLDER_TARGET = re.compile(r"^\{[a-z][a-z0-9_-]*\}$", re.I)
 
 
 def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
@@ -77,13 +77,122 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
     return prose, (opened if fence else None)
 
 
+def iter_markdown_targets(line: str) -> Iterator[str]:
+    cursor = 0
+    while (marker := line.find("](", cursor)) >= 0:
+        start = marker + 2
+        backslashes = 0
+        before = marker - 1
+        while before >= 0 and line[before] == "\\":
+            backslashes += 1
+            before -= 1
+        if backslashes % 2:
+            cursor = start
+            continue
+
+        label_depth = 0
+        label_pos = marker - 1
+        label_open = False
+        while label_pos >= 0:
+            label_backslashes = 0
+            before_label = label_pos - 1
+            while before_label >= 0 and line[before_label] == "\\":
+                label_backslashes += 1
+                before_label -= 1
+            if label_backslashes % 2:
+                label_pos = before_label
+                continue
+            if line[label_pos] == "]":
+                label_depth += 1
+            elif line[label_pos] == "[":
+                if label_depth == 0:
+                    label_open = True
+                    break
+                label_depth -= 1
+            label_pos -= 1
+        if not label_open:
+            cursor = start
+            continue
+
+        pos = start
+        target: list[str] = []
+
+        if pos < len(line) and line[pos] == "<":
+            pos += 1
+            while pos < len(line) and line[pos] != ">":
+                if line[pos] == "\\" and pos + 1 < len(line):
+                    pos += 1
+                target.append(line[pos])
+                pos += 1
+            if pos >= len(line):
+                cursor = start
+                continue
+            pos += 1
+        else:
+            depth = 0
+            while pos < len(line):
+                char = line[pos]
+                if char == "\\" and pos + 1 < len(line):
+                    pos += 1
+                    target.append(line[pos])
+                elif char == "(":
+                    depth += 1
+                    target.append(char)
+                elif char == ")":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                    target.append(char)
+                elif char.isspace() and depth == 0:
+                    break
+                else:
+                    target.append(char)
+                pos += 1
+            if depth:
+                cursor = start
+                continue
+
+        while pos < len(line) and line[pos].isspace():
+            pos += 1
+        if pos < len(line) and line[pos] in {'"', "'", "("}:
+            closing = ")" if line[pos] == "(" else line[pos]
+            pos += 1
+            while pos < len(line) and line[pos] != closing:
+                if line[pos] == "\\" and pos + 1 < len(line):
+                    pos += 1
+                pos += 1
+            if pos >= len(line):
+                cursor = start
+                continue
+            pos += 1
+            while pos < len(line) and line[pos].isspace():
+                pos += 1
+
+        if target and pos < len(line) and line[pos] == ")":
+            yield "".join(target)
+            cursor = pos + 1
+        else:
+            cursor = start
+
+
+def relative_target(raw_target: str) -> str | None:
+    target = unquote(raw_target.split("#", 1)[0].split("?", 1)[0])
+    if (
+        not target
+        or SCHEME.match(target)
+        or target.startswith("/")
+        or PLACEHOLDER_TARGET.match(target)
+    ):
+        return None
+    return target
+
+
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
     for lineno, line in parsed.prose:
-        for pattern in (LINK_TARGET, CODE_TARGET):
-            for m in pattern.finditer(line):
-                target = unquote(m.group(1).split("#", 1)[0])
-                if not target or SCHEME.match(target) or target.startswith("/"):
-                    continue
+        targets = [*iter_markdown_targets(line), *(m.group(1) for m in CODE_TARGET.finditer(line))]
+        for raw_target in targets:
+            target = relative_target(raw_target)
+            if target is not None:
                 resolved = parsed.path.parent / target
                 ok = resolved.is_file() if target.endswith(".md") else resolved.exists()
                 if not ok:
