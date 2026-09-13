@@ -43,6 +43,7 @@ class ContentLint(Tree):
         (real / "refs" / "diagram(1).svg").write_text("x", encoding="utf-8")
         (real / "refs" / "my#notes.md").write_text("x", encoding="utf-8")
         (real / "refs" / "my?notes.md").write_text("x", encoding="utf-8")
+        (real / "refs" / r"foo\q.md").write_text("x", encoding="utf-8")
         (real / "LICENSE").write_text("x", encoding="utf-8")
 
     def body(self, body: str) -> tuple[int, str]:
@@ -138,6 +139,40 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("gone#notes.md", out)
         self.assertIn("gone?notes.md", out)
+
+    def test_percent_encoded_colon_remains_a_relative_filename(self) -> None:
+        skill = self.skill(
+            "a",
+            'name: a\ndescription: "d"',
+            "See [existing](foo%3Abar.md) and [missing](gone%3Abar.md).",
+        )
+        (skill / "foo:bar.md").write_text("x", encoding="utf-8")
+        code, out = run(CONTENT, self.root)
+        self.assertEqual(code, 1)
+        self.assertIn("gone:bar.md", out)
+        self.assertNotIn("foo:bar.md", out)
+
+    def test_escaped_delimiters_remain_part_of_the_filename(self) -> None:
+        code, out = self.body(
+            r"See [hash](../real-skill/refs/my\#notes.md), "
+            r"[query](../real-skill/refs/my\?notes.md), "
+            r"[bad-hash](../real-skill/refs/gone\#notes.md), and "
+            r"[bad-query](../real-skill/refs/gone\?notes.md)."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("gone#notes.md", out)
+        self.assertIn("gone?notes.md", out)
+        self.assertNotIn("my#notes.md", out)
+        self.assertNotIn("my?notes.md", out)
+
+    def test_backslash_before_non_punctuation_is_preserved(self) -> None:
+        code, out = self.body(
+            r"See [existing](<../real-skill/refs/foo\q.md>) and "
+            r"[missing](<../real-skill/refs/gone\q.md>)."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn(r"gone\q.md", out)
+        self.assertNotIn(r"foo\q.md", out)
 
     def test_markdown_title_forms_share_one_destination(self) -> None:
         body = (

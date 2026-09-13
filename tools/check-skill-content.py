@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import string
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -121,7 +122,9 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             pos += 1
             while pos < len(line) and line[pos] != ">":
                 if line[pos] == "\\" and pos + 1 < len(line):
-                    pos += 1
+                    target.extend((line[pos], line[pos + 1]))
+                    pos += 2
+                    continue
                 target.append(line[pos])
                 pos += 1
             if pos >= len(line):
@@ -133,8 +136,9 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             while pos < len(line):
                 char = line[pos]
                 if char == "\\" and pos + 1 < len(line):
-                    pos += 1
-                    target.append(line[pos])
+                    target.extend((char, line[pos + 1]))
+                    pos += 2
+                    continue
                 elif char == "(":
                     depth += 1
                     target.append(char)
@@ -175,12 +179,48 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             cursor = start
 
 
-def relative_target(raw_target: str) -> str | None:
-    target = unquote(raw_target.split("#", 1)[0].split("?", 1)[0])
+def strip_unescaped_suffix(raw_target: str, markdown: bool) -> str:
+    target: list[str] = []
+    pos = 0
+    while pos < len(raw_target):
+        char = raw_target[pos]
+        if markdown and char == "\\" and pos + 1 < len(raw_target):
+            target.extend((char, raw_target[pos + 1]))
+            pos += 2
+            continue
+        if char in "#?":
+            break
+        target.append(char)
+        pos += 1
+    return "".join(target)
+
+
+def unescape_markdown_target(raw_target: str) -> str:
+    target: list[str] = []
+    pos = 0
+    while pos < len(raw_target):
+        char = raw_target[pos]
+        if (
+            char == "\\"
+            and pos + 1 < len(raw_target)
+            and raw_target[pos + 1] in string.punctuation
+        ):
+            target.append(raw_target[pos + 1])
+            pos += 2
+            continue
+        target.append(char)
+        pos += 1
+    return "".join(target)
+
+
+def relative_target(raw_target: str, *, markdown: bool) -> str | None:
+    source = strip_unescaped_suffix(raw_target, markdown)
+    scheme_target = unescape_markdown_target(source) if markdown else source
+    if not scheme_target or SCHEME.match(scheme_target):
+        return None
+    target = unquote(scheme_target)
     if (
-        not target
-        or SCHEME.match(target)
-        or target.startswith("/")
+        target.startswith("/")
         or PLACEHOLDER_TARGET.match(target)
     ):
         return None
@@ -189,9 +229,12 @@ def relative_target(raw_target: str) -> str | None:
 
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
     for lineno, line in parsed.prose:
-        targets = [*iter_markdown_targets(line), *(m.group(1) for m in CODE_TARGET.finditer(line))]
-        for raw_target in targets:
-            target = relative_target(raw_target)
+        targets = [
+            *((target, True) for target in iter_markdown_targets(line)),
+            *((match.group(1), False) for match in CODE_TARGET.finditer(line)),
+        ]
+        for raw_target, markdown in targets:
+            target = relative_target(raw_target, markdown=markdown)
             if target is not None:
                 resolved = parsed.path.parent / target
                 ok = resolved.is_file() if target.endswith(".md") else resolved.exists()
