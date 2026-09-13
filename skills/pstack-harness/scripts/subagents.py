@@ -80,6 +80,10 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
     return tuple(roles)
 
 
+ROOT_GUIDANCE = "Resolve other named sibling skills under this installed skills root: "
+CODEX_BRIEF = "developer_instructions = "
+
+
 def render_brief(role: Role, skills_root: Path) -> str:
     paths = [skills_root / name / "SKILL.md" for name in role.skills]
     for path in paths:
@@ -89,7 +93,7 @@ def render_brief(role: Role, skills_root: Path) -> str:
         "Pstack installed skill paths\n\n"
         "Use these local files when the persona below requires a skill read. "
         "Read each required SKILL.md in full; follow its relative references from its directory. "
-        "Resolve other named sibling skills under this installed skills root: "
+        + ROOT_GUIDANCE
         + json.dumps(str(skills_root), ensure_ascii=False) + ".\n"
     )
     guidance += "".join(f"- {name}: {json.dumps(str(path), ensure_ascii=False)}\n" for name, path in zip(role.skills, paths))
@@ -123,6 +127,30 @@ def managed(content: bytes, role_id: str, harness: str) -> bool:
     return match is not None and hashlib.sha256(prefix + b"\n").hexdigest().encode() == match[1]
 
 
+def installed_root(content: bytes, harness: str) -> Path | None:
+    try:
+        text = content.decode("utf-8")
+        if harness != "claude-code":
+            brief = json.loads(next(line for line in text.split("\n") if line.startswith(CODEX_BRIEF))[len(CODEX_BRIEF):])
+            text = brief if isinstance(brief, str) else ""
+        quoted = next(line.partition(ROOT_GUIDANCE)[2] for line in text.split("\n") if ROOT_GUIDANCE in line)
+        root, _ = json.JSONDecoder().raw_decode(quoted)
+    except (StopIteration, ValueError):
+        return None
+    return Path(root) if isinstance(root, str) else None
+
+
+def render_from_installed_root(role: Role, destination: Destination, skills_root: Path, content: bytes) -> bytes | None:
+    root = installed_root(content, destination.harness)
+    if root is None or root == skills_root:
+        return None
+    for name in role.skills:
+        sibling = root / name / "SKILL.md"
+        if not sibling.is_file() or sibling.resolve() != (skills_root / name / "SKILL.md").resolve():
+            return None
+    return render_native(role, destination, render_brief(role, root))
+
+
 def validate_destination(destination: Destination) -> None:
     if destination.root.is_symlink() or not destination.root.is_dir():
         raise ValueError(f"destination root must be an existing nonsymlink directory: {destination.root}")
@@ -133,16 +161,16 @@ def validate_destination(destination: Destination) -> None:
             raise ValueError(f"destination must be a nonsymlink directory: {path}")
 
 
-def inspect_native(role: Role, destination: Destination, brief: str) -> NativeFile:
+def inspect_native(role: Role, destination: Destination, skills_root: Path) -> NativeFile:
     suffix = ".md" if destination.harness == "claude-code" else ".toml"
     path = destination.directory / (role.id + suffix)
-    expected = render_native(role, destination, brief)
+    expected = render_native(role, destination, render_brief(role, skills_root))
     if path.is_symlink() or (path.exists() and not path.is_file()):
         return NativeFile(path, expected, None, "conflict")
     if not path.exists():
         return NativeFile(path, expected, None, "missing")
     previous = path.read_bytes()
-    if previous == expected:
+    if previous == expected or previous == render_from_installed_root(role, destination, skills_root, previous):
         status = "current"
     elif managed(previous, role.id, destination.harness):
         status = "outdated-generated"
@@ -214,12 +242,13 @@ def main() -> int:
                 parser.error(f"unknown pstack role: {args.role}")
             sys.stdout.write(render_brief(role, skills_root))
             return 0
-        briefs = {role.id: render_brief(role, skills_root) for role in roles}
+        for role in roles:
+            render_brief(role, skills_root)
         report["payload"] = "ready"
         if destination:
             validate_destination(destination)
         if destination and destination.harness != "hermes":
-            files = tuple(inspect_native(role, destination, briefs[role.id]) for role in roles)
+            files = tuple(inspect_native(role, destination, skills_root) for role in roles)
             report["roles"] = [{"id": role.id, "native_file": item.status, "path": str(item.path)} for role, item in zip(roles, files)]
             if args.command == "install" and not any(item.status == "conflict" for item in files):
                 install_files(files, destination)
