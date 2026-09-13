@@ -103,6 +103,16 @@ class ContentLint(Tree):
         )
         self.assertEqual(self.body(body)[0], 0)
 
+    def test_raw_placeholders_with_escaped_uri_delimiters_are_ignored(self) -> None:
+        body = (
+            r"See [fragment]({url}\#section), "
+            r"![query]({url}\?q=1), and [angle](<{url}\#section>)."
+            "\n\n"
+            r"[reference]: <{issue_url}\?q=1>"
+            "\nSee [reference]."
+        )
+        self.assertEqual(self.body(body)[0], 0)
+
     def test_placeholder_prefix_with_balanced_suffix_is_a_filename(self) -> None:
         code, out = self.body("See [missing]({url}(tail)).")
         self.assertEqual(code, 1)
