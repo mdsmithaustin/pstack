@@ -398,6 +398,16 @@ class ContentLint(Tree):
                 self.assertEqual(code, 1)
                 self.assertIn("MISSING-SPACED.svg", out)
 
+    def test_inline_destination_allows_leading_and_trailing_whitespace(self) -> None:
+        body = (
+            "See [existing]( <../real-skill/LICENSE> ) and "
+            "[missing]( <MISSING-PADDED.svg> )."
+        )
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-PADDED.svg", out)
+        self.assertNotIn("../real-skill/LICENSE", out)
+
     def test_reference_angle_destination_requires_space_before_title(self) -> None:
         for title in ('"Title"', "'Title'", "(Title)"):
             with self.subTest(title=title):

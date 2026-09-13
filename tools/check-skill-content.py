@@ -282,6 +282,8 @@ def iter_markdown_targets(line: str) -> Iterator[str]:
             cursor = start
             continue
 
+        while start < len(line) and line[start].isspace():
+            start += 1
         parsed = parse_markdown_destination(line, start)
         if parsed is None:
             cursor = start
