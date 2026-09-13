@@ -22,7 +22,7 @@ Run:
 
 [`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex. Choose project or user scope if you want native role files. Setup preserves existing user-managed roles and reports payload readiness, native files, and live role loading separately. A generic delegate can receive the complete persona while native loading remains unverified. Hermes uses that briefing through delegation context.
 
-Setup then detects the models you have access to, shows you each role (code delegates, judgment, the review panels), and asks what you want. Answer the questions. It writes `~/.agents/pstack-models.md`, a small rule every pstack skill reads. Each role maps to a model and, when you want to pin it, a reasoning effort (`sonnet@high`). A `## codex` section holds the picks that apply only on Codex, so one file serves every CLI you use.
+Setup then detects the models you have access to, asks for a reasoning budget, shows you each role (code delegates, judgment, the review panels), and asks what you want. Answer the questions. It writes `~/.agents/pstack-models.md`, a small rule every pstack skill reads. Each role maps to a model and, when you want to pin it, a reasoning effort (`sonnet@high`). A `## codex` section holds the picks that apply only on Codex, so one file serves every CLI you use.
 
 You only override what you care about. A role with no line in the rule keeps the skill's default. To restore a default later, delete that role's line, or just run `/setup-pstack` again.
 
