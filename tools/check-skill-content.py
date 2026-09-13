@@ -68,6 +68,7 @@ LIST_MARKER = re.compile(r"(?:[*+-]|\d{1,9}[.)])(?=[ \t])")
 
 
 def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
+    line = line.expandtabs(4)
     pos = 0
     tokens: list[tuple[str, int]] = []
     while pos < len(line):
@@ -104,6 +105,7 @@ def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
 
 
 def continued_fence_content(line: str, container: FenceContainer) -> str | None:
+    line = line.expandtabs(4)
     pos = 0
     for index, (kind, width) in enumerate(container.tokens):
         if not line[pos:].strip():
@@ -145,7 +147,8 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
             assert container is not None
             content = continued_fence_content(line, container)
             if content is not None:
-                m = FENCE.match(content)
+                indentation = len(content) - len(content.lstrip(" "))
+                m = None if container.tokens and indentation >= 4 else FENCE.match(content)
                 if m:
                     run, info = m.group(1), m.group(2).strip()
                     if run[0] == fence[0] and len(run) >= len(fence) and not info:
@@ -156,7 +159,8 @@ def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
             container = None
 
         content, next_container = opening_fence_content(line)
-        m = FENCE.match(content)
+        indentation = len(content) - len(content.lstrip(" "))
+        m = None if next_container.tokens and indentation >= 4 else FENCE.match(content)
         if m:
             run = m.group(1)
             fence, container, opened = run, next_container, lineno

@@ -259,6 +259,36 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("MISSING.svg", out)
 
+    def test_tabbed_bullet_fence_uses_the_expanded_content_column(self) -> None:
+        hidden = "-\t```markdown\n    [example]: MISSING\n    ```"
+        self.assertEqual(self.body(hidden)[0], 0)
+
+        exposed = "-\t```markdown\n    example\n   [bad]: MISSING-TAB.svg\n   ```"
+        code, out = self.body(exposed)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-TAB.svg", out)
+
+    def test_tabbed_ordered_fence_uses_the_expanded_content_column(self) -> None:
+        hidden = "1.\t```markdown\n    [example]: MISSING\n    ```"
+        self.assertEqual(self.body(hidden)[0], 0)
+
+        exposed = "1.\t```markdown\n    example\n   [bad]: MISSING-TAB.svg\n   ```"
+        code, out = self.body(exposed)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-TAB.svg", out)
+
+    def test_five_space_bullet_padding_does_not_create_a_fence(self) -> None:
+        body = "-     ```markdown\n  [bad]: MISSING-SHORT.svg\n  ```"
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-SHORT.svg", out)
+
+    def test_five_space_ordered_padding_does_not_create_a_fence(self) -> None:
+        body = "1.     ```markdown\n   [bad]: MISSING-SHORT.svg\n   ```"
+        code, out = self.body(body)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-SHORT.svg", out)
+
     def test_trailing_prose_does_not_form_a_reference_definition(self) -> None:
         body = (
             "[plain]: MISSING.svg trailing prose\n"
