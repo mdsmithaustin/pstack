@@ -79,6 +79,16 @@ class ContentLint(Tree):
         self.assertIn("MISSING", out)
         self.assertNotIn("{url}", out)
 
+    def test_percent_encoded_placeholder_is_a_filename(self) -> None:
+        code, out = self.body("See [missing](%7Burl%7D).")
+        self.assertEqual(code, 1)
+        self.assertIn("target does not exist: {url}", out)
+
+    def test_escaped_placeholder_is_a_filename(self) -> None:
+        code, out = self.body(r"See [missing](\{url\}).")
+        self.assertEqual(code, 1)
+        self.assertIn("target does not exist: {url}", out)
+
     def test_existing_extensionless_link_does_not_hide_a_broken_peer(self) -> None:
         code, out = self.body("See [license](../real-skill/LICENSE) and [bad](MISSING).")
         self.assertEqual(code, 1)
@@ -93,6 +103,19 @@ class ContentLint(Tree):
         code, out = self.body("Run `../real-skill/gone.sh` first.")
         self.assertEqual(code, 1, "inline code paths are checked whatever the extension")
         self.assertIn("relative-link", out)
+
+    def test_inline_code_delimiters_remain_part_of_the_filename(self) -> None:
+        code, out = self.body(
+            "Use `../real-skill/refs/my?notes.md`, "
+            "`../real-skill/refs/my#notes.md`, "
+            "`../real-skill/refs/gone?notes.md`, and "
+            "`../real-skill/refs/gone#notes.md`."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("gone?notes.md", out)
+        self.assertIn("gone#notes.md", out)
+        self.assertNotIn("my?notes.md", out)
+        self.assertNotIn("my#notes.md", out)
 
     def test_resolving_link_passes(self) -> None:
         self.assertEqual(self.body("See `../real-skill/SKILL.md`.")[0], 0)

@@ -379,7 +379,7 @@ def strip_unescaped_suffix(raw_target: str, markdown: bool) -> str:
             target.extend((char, raw_target[pos + 1]))
             pos += 2
             continue
-        if char in "#?":
+        if markdown and char in "#?":
             break
         target.append(char)
         pos += 1
@@ -406,14 +406,13 @@ def unescape_markdown_target(raw_target: str) -> str:
 
 def relative_target(raw_target: str, *, markdown: bool) -> str | None:
     source = strip_unescaped_suffix(raw_target, markdown)
+    if markdown and PLACEHOLDER_TARGET.match(source):
+        return None
     scheme_target = unescape_markdown_target(source) if markdown else source
     if not scheme_target or SCHEME.match(scheme_target):
         return None
     target = unquote(scheme_target)
-    if (
-        target.startswith("/")
-        or PLACEHOLDER_TARGET.match(target)
-    ):
+    if target.startswith("/"):
         return None
     return target
 
