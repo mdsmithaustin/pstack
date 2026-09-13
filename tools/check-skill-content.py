@@ -1,37 +1,35 @@
 #!/usr/bin/env python3
 """Fail on broken content inside skills/**/*.md.
 
-A relative Markdown destination in a same-line inline link or single-line
-reference definition must resolve to something on disk. A relative path written
-in inline code follows the same rule. Explicit placeholders such as
-`[PR]({url})` are not filesystem paths.
+Relative destinations in CommonMark links and reference definitions must resolve
+to something on disk. Relative paths written as an entire inline-code span follow
+the same rule. Explicit project placeholders such as `[PR]({url})` are skipped.
 
 A bolded name that reads as a skill reference must name a real directory under
 the skills root. A principle- prefix always reads as one. Any other kebab name
-reads as one only when "skill" appears on the same line. On a line mentioning a
-principle, a bare name also resolves against its principle- directory, which is
-how the suite writes "the **model-the-domain** principle skill". Here inline
-code IS skipped, so a bolded word quoted inside backticks is not a reference.
+reads as one only when "skill" appears on the same rendered line. On a line that
+mentions a principle, a bare name also resolves against its principle- directory.
 
-Fenced blocks are skipped for link and sibling checks. Port substitution checks
-scan every raw line, including templates inside fences. Fence scanning tracks
-blockquote and list containers, including their continuation indentation. A
-fence that is never closed is itself a finding because it would otherwise
-silently hide the rest of the file.
+CommonMark code blocks are skipped for link and sibling checks. Port substitution
+checks scan every raw line, including templates inside code blocks. An unclosed
+fence is itself a finding because it would otherwise hide the rest of the file.
 """
 from __future__ import annotations
 
 import argparse
 import re
-import string
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Any, Callable, Iterator
 from urllib.parse import unquote
+
+from markdown_it import MarkdownIt
+from markdown_it.token import Token
 
 ROOT = Path("skills")
 IGNORE: frozenset[str] = frozenset()
+MARKDOWN = MarkdownIt("commonmark")
 
 
 @dataclass(frozen=True)
@@ -49,592 +47,183 @@ class Finding:
 class ParsedFile:
     path: Path
     raw: list[tuple[int, str]]
-    prose: list[tuple[int, str]]
-    unclosed_fence: int | None
-
-
-@dataclass(frozen=True)
-class FenceContainer:
-    tokens: tuple[tuple[str, int], ...]
+    tokens: list[Token]
+    references: dict[str, dict[str, Any]]
 
 
 CODE_PATH = re.compile(r"\.\.?/[^\s<>]+")
-FENCE = re.compile(r"^\s*(`{3,}|~{3,})\s*(.*)$")
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
-PLACEHOLDER_TARGET = re.compile(r"^\{[a-z][a-z0-9_-]*\}$", re.I)
-LIST_MARKER = re.compile(r"(?:[*+-]|\d{1,9}[.)])(?=[ \t])")
-ATX_HEADING = re.compile(r"^#{1,6}(?:[ \t]|$)")
+SKILL_NAME = re.compile(r"[a-z][a-z0-9-]*")
+INLINE_PLACEHOLDER = re.compile(
+    r"(?<=\]\()(?P<space>[ \t\r\n]*)\{[a-z][a-z0-9_-]*\}"
+    r"(?=[ \t\r\n]*(?:\)|[\"'(]))",
+    re.I,
+)
+REFERENCE_PLACEHOLDER = re.compile(
+    r"(?m)(?<=\]:)(?P<space>[ \t]*(?:\r?\n[ \t]+)?)"
+    r"\{[a-z][a-z0-9_-]*\}(?=[ \t]*(?:$|[\"'(]))",
+    re.I,
+)
 
 
-def scan_code_spans(text: str) -> tuple[str, list[tuple[int, str]]]:
-    masked = list(text)
-    spans: list[tuple[int, str]] = []
-    pos = 0
-    while pos < len(text):
-        if text[pos] != "`" or marker_is_escaped(text, pos):
-            pos += 1
-            continue
-        run_end = pos
-        while run_end < len(text) and text[run_end] == "`":
-            run_end += 1
-        width = run_end - pos
-        closing = run_end
-        while closing < len(text):
-            if text[closing] != "`":
-                closing += 1
-                continue
-            closing_end = closing
-            while closing_end < len(text) and text[closing_end] == "`":
-                closing_end += 1
-            if closing_end - closing == width:
-                masked[pos:closing_end] = " " * (closing_end - pos)
-                spans.append((pos, text[run_end:closing]))
-                pos = closing_end
-                break
-            closing = closing_end
-        else:
-            pos = run_end
-    return "".join(masked), spans
+def protect_explicit_placeholders(text: str) -> str:
+    """Keep the suite's raw `{name}` destinations out of filesystem checks."""
+
+    def replacement(match: re.Match[str]) -> str:
+        return match.group("space") + "placeholder:ignored"
+
+    text = INLINE_PLACEHOLDER.sub(replacement, text)
+    return REFERENCE_PLACEHOLDER.sub(replacement, text)
 
 
-def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
-    line = line.expandtabs(4)
-    pos = 0
-    tokens: list[tuple[str, int]] = []
-    while pos < len(line):
-        level = pos
-        while pos < len(line) and line[pos] == " " and pos - level < 4:
-            pos += 1
-        if pos - level == 4:
-            content = line[level:] if tokens else line
-            return content, FenceContainer(tuple(tokens))
-        if pos == len(line):
-            content = "" if tokens else line
-            return content, FenceContainer(tuple(tokens))
-        if line[pos] == ">":
-            tokens.append(("quote", 0))
-            pos += 1
-            if pos < len(line) and line[pos] in " \t":
-                pos += 1
-            continue
-        marker = LIST_MARKER.match(line, pos)
-        if marker is not None:
-            padding_start = marker.end()
-            pos = padding_start
-            while pos < len(line) and line[pos] == " " and pos - padding_start < 4:
-                pos += 1
-            if pos == padding_start:
-                pos += 1
-            elif pos < len(line) and line[pos] in " \t":
-                pos = padding_start + 1
-            tokens.append(("list", pos - level))
-            continue
-        content = line[pos:] if tokens else line
-        return content, FenceContainer(tuple(tokens))
-    return "", FenceContainer(tuple(tokens))
+def parse_file(path: Path) -> ParsedFile:
+    text = path.read_text(encoding="utf-8")
+    env: dict[str, Any] = {}
+    tokens = MARKDOWN.parse(protect_explicit_placeholders(text), env)
+    references = env.get("references", {})
+    return ParsedFile(
+        path=path,
+        raw=list(enumerate(text.splitlines(), start=1)),
+        tokens=tokens,
+        references=references,
+    )
 
 
-def continued_fence_content(line: str, container: FenceContainer) -> str | None:
-    line = line.expandtabs(4)
-    pos = 0
-    for index, (kind, width) in enumerate(container.tokens):
-        if not line[pos:].strip():
-            remaining = container.tokens[index:]
-            return "" if all(token[0] == "list" for token in remaining) else None
-        level = pos
-        if kind == "quote":
-            while pos < len(line) and line[pos] == " " and pos - level < 4:
-                pos += 1
-            if pos - level == 4 or pos >= len(line) or line[pos] != ">":
-                return None
-            pos += 1
-            if pos < len(line) and line[pos] in " \t":
-                pos += 1
-            continue
-        while pos < len(line) and line[pos] == " " and pos - level < width:
-            pos += 1
-        if pos - level != width:
-            return None
-    return line[pos:]
-
-
-def strip_block_container_prefixes(line: str) -> str:
-    content, container = opening_fence_content(line)
-    if container.tokens:
-        return content
-    leading = len(line) - len(line.lstrip(" "))
-    return line[leading:] if leading <= 3 else line
-
-
-def continue_list_container(
-    line: str, container: FenceContainer
-) -> tuple[str, FenceContainer] | None:
-    for end in range(len(container.tokens), 0, -1):
-        tokens = container.tokens[:end]
-        if not any(kind == "list" for kind, _width in tokens):
-            continue
-        candidate = FenceContainer(tokens)
-        content = continued_fence_content(line, candidate)
-        if content is not None:
-            return content, candidate
-    return None
-
-
-def scan_blocks(lines: list[str]) -> tuple[list[tuple[int, str]], int | None]:
-    """One fence walk for every caller, so no two checks can disagree about what is code."""
-    prose: list[tuple[int, str]] = []
-    fence: str | None = None
-    fence_container: FenceContainer | None = None
-    list_container: FenceContainer | None = None
-    opened = 0
-    for lineno, line in enumerate(lines, start=1):
-        if fence is not None:
-            assert fence_container is not None
-            content = continued_fence_content(line, fence_container)
-            if content is not None:
-                indentation = len(content) - len(content.lstrip(" "))
-                m = (
-                    None
-                    if fence_container.tokens and indentation >= 4
-                    else FENCE.match(content)
-                )
-                if m:
-                    run, info = m.group(1), m.group(2).strip()
-                    if run[0] == fence[0] and len(run) >= len(fence) and not info:
-                        fence = None
-                        fence_container = None
-                continue
-            fence = None
-            fence_container = None
-
-        inherited = (
-            continue_list_container(line, list_container)
-            if list_container is not None
-            else None
-        )
-        if inherited is None:
-            content, container = opening_fence_content(line)
-        else:
-            inherited_content, parent = inherited
-            content, nested = opening_fence_content(inherited_content)
-            container = FenceContainer(parent.tokens + nested.tokens)
-
-        indentation = len(content) - len(content.lstrip(" "))
-        m = None if container.tokens and indentation >= 4 else FENCE.match(content)
-        if m and m.group(1).startswith("`") and "`" in m.group(2):
-            m = None
-        if any(kind == "list" for kind, _width in container.tokens):
-            list_container = container
-        elif line.strip():
-            list_container = None
-        if m:
-            run = m.group(1)
-            fence, fence_container, opened = run, container, lineno
-            continue
-        prose.append((lineno, content))
-    return prose, (opened if fence else None)
-
-
-def parse_markdown_destination(line: str, start: int) -> tuple[str, int] | None:
-    pos = start
-    target: list[str] = []
-
-    if pos < len(line) and line[pos] == "<":
-        pos += 1
-        while pos < len(line) and line[pos] != ">":
-            if line[pos] == "\\" and pos + 1 < len(line):
-                target.extend((line[pos], line[pos + 1]))
-                pos += 2
-                continue
-            if line[pos] == "<":
-                return None
-            target.append(line[pos])
-            pos += 1
-        if pos >= len(line):
-            return None
-        return "".join(target), pos + 1
-
-    depth = 0
-    while pos < len(line):
-        char = line[pos]
-        if char == "\\" and pos + 1 < len(line):
-            target.extend((char, line[pos + 1]))
-            pos += 2
-            continue
-        if char == "(":
-            depth += 1
-            target.append(char)
-        elif char == ")":
-            if depth == 0:
-                break
-            depth -= 1
-            target.append(char)
-        elif char.isspace() and depth == 0:
-            break
-        else:
-            target.append(char)
-        pos += 1
-    if depth:
+def relative_target(href: str, *, markdown: bool) -> str | None:
+    source = re.split(r"[?#]", href, maxsplit=1)[0] if markdown else href
+    if not source or SCHEME.match(source) or source.startswith("/"):
         return None
-    return "".join(target), pos
+    target = unquote(source)
+    return None if target.startswith("/") else target
 
 
-def marker_is_escaped(line: str, pos: int) -> bool:
-    backslashes = 0
-    pos -= 1
-    while pos >= 0 and line[pos] == "\\":
-        backslashes += 1
-        pos -= 1
-    return bool(backslashes % 2)
-
-
-def starts_new_inline_block(
-    previous_raw: str,
-    previous_content: str,
-    current_raw: str,
-    current_content: str,
-) -> bool:
-    if not previous_content.strip() or not current_content.strip():
-        return True
-    _previous_text, previous_container = opening_fence_content(previous_raw)
-    _current_text, current_container = opening_fence_content(current_raw)
-    previous_quotes = sum(kind == "quote" for kind, _width in previous_container.tokens)
-    current_quotes = sum(kind == "quote" for kind, _width in current_container.tokens)
-    if previous_quotes != current_quotes:
-        return True
-    if any(kind == "list" for kind, _width in current_container.tokens):
-        return True
-    return bool(ATX_HEADING.match(previous_content) or ATX_HEADING.match(current_content))
-
-
-def scan_prose_code_spans(
-    parsed: ParsedFile,
-) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
-    prose = parsed.prose
-    raw_by_line = dict(parsed.raw)
-    masked: list[tuple[int, str]] = []
-    paths: list[tuple[int, str]] = []
-    start = 0
-    while start < len(prose):
-        end = start + 1
-        while (
-            end < len(prose)
-            and prose[end][0] == prose[end - 1][0] + 1
-            and not starts_new_inline_block(
-                raw_by_line[prose[end - 1][0]],
-                prose[end - 1][1],
-                raw_by_line[prose[end][0]],
-                prose[end][1],
-            )
-        ):
-            end += 1
-        block = "\n".join(line for _lineno, line in prose[start:end])
-        masked_block, spans = scan_code_spans(block)
-        block_lines = masked_block.split("\n")
-        masked.extend(
-            (lineno, line)
-            for (lineno, _raw), line in zip(prose[start:end], block_lines)
-        )
-        first_line = prose[start][0]
-        for offset, raw in spans:
-            content = raw.replace("\n", " ")
-            if content.startswith(" ") and content.endswith(" ") and content.strip():
-                content = content[1:-1]
-            if CODE_PATH.fullmatch(content):
-                paths.append((first_line + block.count("\n", 0, offset), content))
-        start = end
-    return masked, paths
-
-
-def preceding_bracket_group(line: str, end: int) -> tuple[int, str] | None:
-    if (
-        end < 2
-        or line[end - 1] != "]"
-        or marker_is_escaped(line, end - 1)
-    ):
+def finding_for_target(
+    parsed: ParsedFile, line: int, href: str, *, markdown: bool = True
+) -> Finding | None:
+    target = relative_target(href, markdown=markdown)
+    if target is None:
         return None
-    closing = end - 1
-    depth = 0
-    pos = end - 2
-    while pos >= 0:
-        if line[pos] in "[]" and not marker_is_escaped(line, pos):
-            if line[pos] == "]":
-                depth += 1
-            elif depth:
-                depth -= 1
-            else:
-                return pos, line[pos + 1 : closing]
-        pos -= 1
-    return None
-
-
-def iter_markdown_targets(
-    line: str, reference_labels: set[str] | None = None
-) -> Iterator[str]:
-    cursor = 0
-    while (marker := line.find("](", cursor)) >= 0:
-        start = marker + 2
-        backslashes = 0
-        before = marker - 1
-        while before >= 0 and line[before] == "\\":
-            backslashes += 1
-            before -= 1
-        if backslashes % 2:
-            cursor = start
-            continue
-
-        label_depth = 0
-        label_pos = marker - 1
-        label_open = False
-        while label_pos >= 0:
-            label_backslashes = 0
-            before_label = label_pos - 1
-            while before_label >= 0 and line[before_label] == "\\":
-                label_backslashes += 1
-                before_label -= 1
-            if label_backslashes % 2:
-                label_pos = before_label
-                continue
-            if line[label_pos] == "]":
-                label_depth += 1
-            elif line[label_pos] == "[":
-                if label_depth == 0:
-                    label_open = True
-                    break
-                label_depth -= 1
-            label_pos -= 1
-        if not label_open:
-            cursor = start
-            continue
-        if reference_labels:
-            prefix = preceding_bracket_group(line, label_pos)
-            label = line[label_pos + 1 : marker]
-            if prefix is not None:
-                prior = preceding_bracket_group(line, prefix[0])
-                reference_label = label or prefix[1]
-                if (
-                    normalize_reference_label(reference_label) in reference_labels
-                    and (not label or prior is None)
-                ):
-                    cursor = start
-                    continue
-
-        while start < len(line) and line[start].isspace():
-            start += 1
-        parsed = parse_markdown_destination(line, start)
-        if parsed is None:
-            cursor = start
-            continue
-        target, pos = parsed
-
-        pos = skip_markdown_title(line, pos)
-        if pos is None:
-            cursor = start
-            continue
-
-        if target and pos < len(line) and line[pos] == ")":
-            yield target
-            cursor = pos + 1
-        else:
-            cursor = start
-
-
-def skip_markdown_title(line: str, pos: int) -> int | None:
-    destination_end = pos
-    while pos < len(line) and line[pos].isspace():
-        pos += 1
-    if pos == len(line):
-        return pos
-    if pos == destination_end:
-        return pos
-    if line[pos] not in {'"', "'", "("}:
-        return pos
-
-    closing = ")" if line[pos] == "(" else line[pos]
-    pos += 1
-    while pos < len(line) and line[pos] != closing:
-        if line[pos] == "\\" and pos + 1 < len(line):
-            pos += 2
-            continue
-        pos += 1
-    if pos == len(line):
+    resolved = parsed.path.parent / target
+    try:
+        ok = resolved.is_file() if target.endswith(".md") else resolved.exists()
+    except (OSError, ValueError):
+        ok = False
+    if ok:
         return None
-    pos += 1
-    while pos < len(line) and line[pos].isspace():
-        pos += 1
-    return pos
+    return Finding(
+        parsed.path,
+        line,
+        "relative-link",
+        f"target does not exist: {target}",
+    )
 
 
-def parse_reference_definition(line: str) -> tuple[str, str] | None:
-    line = strip_block_container_prefixes(line)
-    if not line or line[0] != "[":
-        return None
-
-    pos = 1
-    label_length = 0
-    label_has_text = False
-    while pos < len(line):
-        if line[pos] == "\\" and pos + 1 < len(line):
-            label_length += 2
-            label_has_text = True
-            pos += 2
-            continue
-        if line[pos] == "[":
-            return None
-        if line[pos] == "]":
-            break
-        label_length += 1
-        label_has_text = label_has_text or not line[pos].isspace()
-        pos += 1
-    if (
-        not label_has_text
-        or label_length > 999
-        or pos + 1 >= len(line)
-        or line[pos + 1] != ":"
-    ):
-        return None
-
-    label = line[1:pos]
-    pos += 2
-    while pos < len(line) and line[pos].isspace():
-        pos += 1
-    parsed = parse_markdown_destination(line, pos)
-    if parsed is None or not parsed[0]:
-        return None
-    title_end = skip_markdown_title(line, parsed[1])
-    if title_end == len(line):
-        return normalize_reference_label(label), parsed[0]
-    return None
-
-
-def iter_reference_targets(line: str) -> Iterator[str]:
-    parsed = parse_reference_definition(line)
-    if parsed is not None:
-        yield parsed[1]
-
-
-def strip_unescaped_suffix(raw_target: str, markdown: bool) -> str:
-    target: list[str] = []
-    pos = 0
-    while pos < len(raw_target):
-        char = raw_target[pos]
-        if markdown and char == "\\" and pos + 1 < len(raw_target):
-            target.extend((char, raw_target[pos + 1]))
-            pos += 2
-            continue
-        if markdown and char in "#?":
-            break
-        target.append(char)
-        pos += 1
-    return "".join(target)
-
-
-def unescape_markdown_target(raw_target: str) -> str:
-    target: list[str] = []
-    pos = 0
-    while pos < len(raw_target):
-        char = raw_target[pos]
-        if (
-            char == "\\"
-            and pos + 1 < len(raw_target)
-            and raw_target[pos + 1] in string.punctuation
-        ):
-            target.append(raw_target[pos + 1])
-            pos += 2
-            continue
-        target.append(char)
-        pos += 1
-    return "".join(target)
-
-
-def normalize_reference_label(label: str) -> str:
-    return " ".join(unescape_markdown_target(label).split()).casefold()
-
-
-def relative_target(raw_target: str, *, markdown: bool) -> str | None:
-    source = strip_unescaped_suffix(raw_target, markdown)
-    if markdown and PLACEHOLDER_TARGET.match(source):
-        return None
-    scheme_target = unescape_markdown_target(source) if markdown else source
-    if not scheme_target or SCHEME.match(scheme_target):
-        return None
-    target = unquote(scheme_target)
-    if target.startswith("/"):
-        return None
-    return target
+def inline_children(parsed: ParsedFile) -> Iterator[tuple[Token, list[Token]]]:
+    for token in parsed.tokens:
+        if token.type == "inline" and token.map is not None:
+            yield token, token.children or []
 
 
 def check_relative_links(parsed: ParsedFile) -> Iterator[Finding]:
-    masked_prose, code_paths = scan_prose_code_spans(parsed)
-    code_paths_by_line: dict[int, list[str]] = {}
-    for lineno, path in code_paths:
-        code_paths_by_line.setdefault(lineno, []).append(path)
-    reference_labels = {
-        definition[0]
-        for _lineno, line in masked_prose
-        if (definition := parse_reference_definition(line)) is not None
+    reference_hrefs: set[str] = set()
+    for definition in parsed.references.values():
+        href = str(definition["href"])
+        reference_hrefs.add(href)
+        source_map = definition.get("map")
+        line = int(source_map[0]) + 1 if source_map else 1
+        finding = finding_for_target(parsed, line, href)
+        if finding is not None:
+            yield finding
+
+    for parent, children in inline_children(parsed):
+        line = parent.map[0] + 1
+        for child in children:
+            if child.type in {"link_open", "image"}:
+                attribute = "href" if child.type == "link_open" else "src"
+                href = child.attrGet(attribute) or ""
+                if href not in reference_hrefs:
+                    finding = finding_for_target(parsed, line, href)
+                    if finding is not None:
+                        yield finding
+            elif child.type == "code_inline" and CODE_PATH.fullmatch(child.content):
+                finding = finding_for_target(
+                    parsed, line, child.content, markdown=False
+                )
+                if finding is not None:
+                    yield finding
+            if child.type in {"softbreak", "hardbreak"}:
+                line += 1
+
+
+def rendered_lines(
+    children: list[Token], first_line: int
+) -> dict[int, tuple[str, list[str]]]:
+    text_by_line: dict[int, list[str]] = {}
+    names_by_line: dict[int, list[str]] = {}
+    strong: list[tuple[int, list[str]]] = []
+    line = first_line
+
+    for child in children:
+        if child.type == "strong_open":
+            strong.append((line, []))
+        elif child.type == "strong_close":
+            if strong:
+                opened, pieces = strong.pop()
+                name = "".join(pieces)
+                if opened == line and SKILL_NAME.fullmatch(name):
+                    names_by_line.setdefault(line, []).append(name)
+        elif child.type == "text":
+            text_by_line.setdefault(line, []).append(child.content)
+            for _opened, pieces in strong:
+                pieces.append(child.content)
+        elif child.type in {"softbreak", "hardbreak"}:
+            line += 1
+
+    return {
+        line_number: (
+            "".join(text_by_line.get(line_number, [])),
+            names_by_line.get(line_number, []),
+        )
+        for line_number in text_by_line.keys() | names_by_line.keys()
     }
-    for lineno, markdown_line in masked_prose:
-        targets = [
-            *(
-                (target, True)
-                for target in iter_markdown_targets(markdown_line, reference_labels)
-            ),
-            *((target, True) for target in iter_reference_targets(markdown_line)),
-            *((path, False) for path in code_paths_by_line.get(lineno, [])),
-        ]
-        for raw_target, markdown in targets:
-            target = relative_target(raw_target, markdown=markdown)
-            if target is not None:
-                resolved = parsed.path.parent / target
-                ok = resolved.is_file() if target.endswith(".md") else resolved.exists()
-                if not ok:
-                    yield Finding(
-                        parsed.path,
-                        lineno,
-                        "relative-link",
-                        f"target does not exist: {target}",
-                    )
-
-
-BOLD_NAME = re.compile(r"\*\*([a-z][a-z0-9-]*)\*\*")
 
 
 def check_sibling_skill(parsed: ParsedFile) -> Iterator[Finding]:
-    masked_prose, _code_paths = scan_prose_code_spans(parsed)
-    for lineno, line in masked_prose:
-        near_skill = "skill" in line
-        principle_hint = "principle" in line
-        for m in BOLD_NAME.finditer(line):
-            name = m.group(1)
-            if name in IGNORE:
-                continue
-            # A principle- prefix names a skill unambiguously. Any other bolded
-            # kebab word needs "skill" nearby, or ordinary emphasis in prose
-            # (glossary terms, enum bullets) would flood the findings.
-            if not name.startswith("principle-") and not near_skill:
-                continue
-            if (ROOT / name).is_dir():
-                continue
-            if principle_hint and (ROOT / f"principle-{name}").is_dir():
-                continue
-            yield Finding(
-                parsed.path,
-                lineno,
-                "sibling-skill",
-                f"**{name}** has no matching directory under {ROOT}/",
-            )
+    for parent, children in inline_children(parsed):
+        lines = rendered_lines(children, parent.map[0] + 1)
+        for line, (visible, names) in lines.items():
+            near_skill = "skill" in visible
+            principle_hint = "principle" in visible
+            for name in names:
+                if name in IGNORE:
+                    continue
+                if not name.startswith("principle-") and not near_skill:
+                    continue
+                if (ROOT / name).is_dir():
+                    continue
+                if principle_hint and (ROOT / f"principle-{name}").is_dir():
+                    continue
+                yield Finding(
+                    parsed.path,
+                    line,
+                    "sibling-skill",
+                    f"**{name}** has no matching directory under {ROOT}/",
+                )
 
 
 def check_unclosed_fence(parsed: ParsedFile) -> Iterator[Finding]:
-    opened = parsed.unclosed_fence
-    if opened is not None:
-        yield Finding(
-            parsed.path,
-            opened,
-            "unclosed-fence",
-            "fence opened here is never closed, so link and sibling checks skip the rest of the file",
-        )
+    for token in parsed.tokens:
+        if token.type != "fence" or token.map is None:
+            continue
+        source_lines = token.map[1] - token.map[0]
+        content_lines = len(token.content.splitlines())
+        if source_lines != content_lines + 2:
+            yield Finding(
+                parsed.path,
+                token.map[0] + 1,
+                "unclosed-fence",
+                "fence opened here is never closed, so link and sibling checks skip the rest of the file",
+            )
 
 
 PORT_SUBSTITUTIONS = {
@@ -668,7 +257,11 @@ def iter_markdown_files(root: Path) -> Iterator[Path]:
 def main() -> int:
     global ROOT, IGNORE
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ignore", default="", help="comma-separated bolded names to never treat as skill references")
+    ap.add_argument(
+        "--ignore",
+        default="",
+        help="comma-separated bolded names to never treat as skill references",
+    )
     ap.add_argument("root", nargs="?", default="skills")
     args = ap.parse_args()
     ROOT = Path(args.root)
@@ -678,15 +271,13 @@ def main() -> int:
     files_checked = 0
     for path in iter_markdown_files(ROOT):
         files_checked += 1
-        raw = list(enumerate(path.read_text(encoding="utf-8").splitlines(), start=1))
-        prose, unclosed = scan_blocks([line for _lineno, line in raw])
-        parsed = ParsedFile(path, raw, prose, unclosed)
+        parsed = parse_file(path)
         for _name, check in REGISTRY:
             findings.extend(check(parsed))
 
     findings.sort(key=lambda f: (str(f.path), f.line, f.kind))
-    for f in findings:
-        print(f)
+    for finding in findings:
+        print(finding)
     print(f"content: {files_checked} files, {len(findings)} findings", file=sys.stderr)
     return 1 if findings else 0
 

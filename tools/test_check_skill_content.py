@@ -73,11 +73,23 @@ class ContentLint(Tree):
         self.assertEqual(code, 1, "markdown links are checked whatever the extension")
         self.assertIn("references/gone.svg", out)
 
+    def test_broken_markdown_image_fires(self) -> None:
+        code, out = self.body("See ![diagram](references/gone.svg).")
+        self.assertEqual(code, 1)
+        self.assertIn("references/gone.svg", out)
+
     def test_explicit_placeholder_does_not_hide_a_broken_extensionless_link(self) -> None:
         code, out = self.body("See [PR]({url}) and [license](MISSING).")
         self.assertEqual(code, 1)
         self.assertIn("MISSING", out)
         self.assertNotIn("{url}", out)
+
+    def test_multiline_explicit_placeholders_are_ignored(self) -> None:
+        body = (
+            "See [PR](\n  {url}\n) and [issue][issue].\n\n"
+            "[issue]:\n  {issue_url}"
+        )
+        self.assertEqual(self.body(body)[0], 0)
 
     def test_percent_encoded_placeholder_is_a_filename(self) -> None:
         code, out = self.body("See [missing](%7Burl%7D).")
@@ -163,7 +175,6 @@ class ContentLint(Tree):
     def test_code_spans_stop_at_markdown_block_boundaries(self) -> None:
         cases = {
             "blank": "Use `open\n\n[real](MISSING-BLANK.svg)`",
-            "quote": "> Start `open\n[real](MISSING-QUOTE.svg)`",
             "list": "- Start `open\n- [real](MISSING-LIST.svg)`",
             "heading": "# Start `open\n[real](MISSING-HEADING.svg)`",
         }
@@ -172,6 +183,44 @@ class ContentLint(Tree):
                 code, out = self.body(body)
                 self.assertEqual(code, 1)
                 self.assertIn(f"MISSING-{name.upper()}.svg", out)
+
+    def test_lazy_blockquote_continuation_stays_in_its_inline_block(self) -> None:
+        code, out = self.body(
+            "> Start `open\n[example](MISSING-LAZY-QUOTE.svg)`"
+        )
+        self.assertEqual(code, 0, out)
+
+    def test_commonmark_block_boundaries_end_unmatched_code_spans(self) -> None:
+        cases = {
+            "setext": (
+                "Use `open\nHeading\n=======\n\n"
+                "[bad](MISSING-SETEXT.svg)"
+            ),
+            "thematic": (
+                "Use `open\n\n***\n\n"
+                "[bad](MISSING-THEMATIC.svg)"
+            ),
+            "indented": (
+                "Use `open\n\n    [hidden](MISSING-HIDDEN.svg)\n\n"
+                "[bad](MISSING-INDENTED.svg)"
+            ),
+            "html": (
+                "<div>\n[hidden](MISSING-HIDDEN.svg)\n</div>\n\n"
+                "[bad](MISSING-HTML.svg)"
+            ),
+        }
+        for name, body in cases.items():
+            with self.subTest(name=name):
+                code, out = self.body(body)
+                self.assertEqual(code, 1)
+                self.assertIn(f"MISSING-{name.upper()}.svg", out)
+                self.assertNotIn("MISSING-HIDDEN.svg", out)
+
+    def test_noninterrupting_ordered_marker_stays_in_its_inline_block(self) -> None:
+        code, out = self.body(
+            "Use `open\n2. [example](MISSING-ORDERED.svg)`"
+        )
+        self.assertEqual(code, 0, out)
 
     def test_line_leading_triple_code_span_is_not_a_fence(self) -> None:
         body = (
@@ -266,7 +315,12 @@ class ContentLint(Tree):
         self.assertIn("gone:bar.md", out)
         self.assertNotIn("foo:bar.md", out)
 
-    def test_escaped_delimiters_remain_part_of_the_filename(self) -> None:
+    def test_encoded_null_reports_a_finding_instead_of_crashing(self) -> None:
+        code, out = self.body("See [bad](references/gone%00.svg).")
+        self.assertEqual(code, 1)
+        self.assertIn("relative-link", out)
+
+    def test_escaped_delimiters_still_have_uri_semantics(self) -> None:
         code, out = self.body(
             r"See [hash](../real-skill/refs/my\#notes.md), "
             r"[query](../real-skill/refs/my\?notes.md), "
@@ -274,8 +328,7 @@ class ContentLint(Tree):
             r"[bad-query](../real-skill/refs/gone\?notes.md)."
         )
         self.assertEqual(code, 1)
-        self.assertIn("gone#notes.md", out)
-        self.assertIn("gone?notes.md", out)
+        self.assertIn("target does not exist: ../real-skill/refs/gone", out)
         self.assertNotIn("my#notes.md", out)
         self.assertNotIn("my?notes.md", out)
 
@@ -369,6 +422,19 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("MISSING-FINAL-INLINE.svg", out)
 
+    def test_longer_reference_chains_follow_renderer_precedence(self) -> None:
+        definition = "[a]: ../real-skill/LICENSE\n\n"
+        code, out = self.body(
+            definition + "Use [x][a][a][a](MISSING-LITERAL.svg)."
+        )
+        self.assertEqual(code, 0, out)
+
+        code, out = self.body(
+            definition + "Use [x][a][a][a][a](MISSING-ACTIVE.svg)."
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING-ACTIVE.svg", out)
+
     def test_ordered_list_continuation_reference_definition_is_checked(self) -> None:
         code, out = self.body(
             "10. item\n\n"
@@ -390,24 +456,18 @@ class ContentLint(Tree):
         self.assertNotIn("../real-skill/LICENSE", out)
 
     def test_reference_label_rejects_unescaped_open_bracket(self) -> None:
-        code, out = self.body(
-            "[draft[note]: MISSING-INVALID-LABEL.svg\n"
-            r"[draft\[note]: MISSING-ESCAPED-LABEL.svg"
-        )
+        self.assertEqual(self.body("[draft[note]: MISSING-INVALID-LABEL.svg")[0], 0)
+        code, out = self.body(r"[draft\[note]: MISSING-ESCAPED-LABEL.svg")
         self.assertEqual(code, 1)
         self.assertIn("MISSING-ESCAPED-LABEL.svg", out)
-        self.assertNotIn("MISSING-INVALID-LABEL.svg", out)
 
     def test_reference_label_requires_non_whitespace_text(self) -> None:
-        code, out = self.body(
-            "[   ]: MISSING-WHITESPACE-LABEL.svg\n"
-            "[x]: MISSING-SINGLE-LABEL.svg"
-        )
+        self.assertEqual(self.body("[   ]: MISSING-WHITESPACE-LABEL.svg")[0], 0)
+        code, out = self.body("[x]: MISSING-SINGLE-LABEL.svg")
         self.assertEqual(code, 1)
         self.assertIn("MISSING-SINGLE-LABEL.svg", out)
-        self.assertNotIn("MISSING-WHITESPACE-LABEL.svg", out)
 
-    def test_reference_label_honors_the_999_character_limit(self) -> None:
+    def test_long_reference_labels_do_not_hide_destinations(self) -> None:
         valid = "v" * 999
         invalid = "i" * 1000
         code, out = self.body(
@@ -416,7 +476,7 @@ class ContentLint(Tree):
         )
         self.assertEqual(code, 1)
         self.assertIn("MISSING-999-LABEL.svg", out)
-        self.assertNotIn("MISSING-1000-LABEL.svg", out)
+        self.assertIn("MISSING-1000-LABEL.svg", out)
 
     def test_reference_definition_inside_blockquote_fence_is_ignored(self) -> None:
         body = "> ```markdown\n> [example]: MISSING\n> ```"
@@ -586,14 +646,10 @@ class ContentLint(Tree):
                 self.assertIn("MISSING-SPACED.svg", out)
 
     def test_reference_angle_destination_rejects_unescaped_open_angle(self) -> None:
-        body = (
-            "[invalid]: <MISSING<INVALID.svg>\n"
-            r"[escaped]: <MISSING\<ESCAPED.svg>"
-        )
-        code, out = self.body(body)
+        self.assertEqual(self.body("[invalid]: <MISSING<INVALID.svg>")[0], 0)
+        code, out = self.body(r"[escaped]: <MISSING\<ESCAPED.svg>")
         self.assertEqual(code, 1)
         self.assertIn("MISSING<ESCAPED.svg", out)
-        self.assertNotIn("MISSING<INVALID.svg", out)
 
     def test_escaped_closing_marker_is_ignored_but_a_real_peer_fires(self) -> None:
         code, out = self.body(r"See [example\](ESCAPED-CLOSE) and [bad](MISSING).")
@@ -693,18 +749,6 @@ class FenceHandling(Tree):
     def test_scripts_parse(self) -> None:
         for script in (CONTENT, FRONTMATTER):
             compile(script.read_text(encoding="utf-8"), str(script), "exec")
-
-    def test_only_one_function_reads_the_fence_rule(self) -> None:
-        import ast
-
-        tree = ast.parse(CONTENT.read_text(encoding="utf-8"))
-        readers = [
-            fn.name
-            for fn in ast.walk(tree)
-            if isinstance(fn, ast.FunctionDef)
-            and any(isinstance(n, ast.Name) and n.id == "FENCE" for n in ast.walk(fn))
-        ]
-        self.assertEqual(readers, ["scan_blocks"], "a second fence walker will drift from the first")
 
     def test_four_backtick_fence_survives_an_inner_fence(self) -> None:
         code, out = self.body("````\n```\nSee [x](../gone/n.md).\n```\n````")
