@@ -53,6 +53,11 @@ class ContentLint(Tree):
     def test_clean_tree_passes(self) -> None:
         self.assertEqual(run(CONTENT, self.root), (0, ""))
 
+    def test_whitespace_only_line_does_not_hide_a_broken_link(self) -> None:
+        code, out = self.body("Intro.\n   \nSee [bad](MISSING).")
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING", out)
+
     def test_dotdot_link_broken_fires(self) -> None:
         code, out = self.body("See [x](../gone/n.md).")
         self.assertEqual(code, 1)
@@ -235,6 +240,24 @@ class ContentLint(Tree):
     def test_blockquote_list_fence_keeps_reference_examples_hidden(self) -> None:
         body = "> - ```markdown\n>   [example]: MISSING\n>   ```"
         self.assertEqual(self.body(body)[0], 0)
+
+    def test_bullet_fence_uses_its_full_padding_width(self) -> None:
+        hidden = "-  ```markdown\n   [example]: MISSING\n   ```"
+        self.assertEqual(self.body(hidden)[0], 0)
+
+        exposed = "-  ```markdown\n   example\n  [bad]: MISSING.svg\n  ```"
+        code, out = self.body(exposed)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING.svg", out)
+
+    def test_ordered_fence_uses_its_full_padding_width(self) -> None:
+        hidden = "1.  ```markdown\n    [example]: MISSING\n    ```"
+        self.assertEqual(self.body(hidden)[0], 0)
+
+        exposed = "1.  ```markdown\n    example\n   [bad]: MISSING.svg\n   ```"
+        code, out = self.body(exposed)
+        self.assertEqual(code, 1)
+        self.assertIn("MISSING.svg", out)
 
     def test_trailing_prose_does_not_form_a_reference_definition(self) -> None:
         body = (

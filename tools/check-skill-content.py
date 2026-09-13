@@ -77,6 +77,9 @@ def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
         if pos - level == 4:
             content = line[level:] if tokens else line
             return content, FenceContainer(tuple(tokens))
+        if pos == len(line):
+            content = "" if tokens else line
+            return content, FenceContainer(tuple(tokens))
         if line[pos] == ">":
             tokens.append(("quote", 0))
             pos += 1
@@ -85,7 +88,14 @@ def opening_fence_content(line: str) -> tuple[str, FenceContainer]:
             continue
         marker = LIST_MARKER.match(line, pos)
         if marker is not None:
-            pos = marker.end() + 1
+            padding_start = marker.end()
+            pos = padding_start
+            while pos < len(line) and line[pos] == " " and pos - padding_start < 4:
+                pos += 1
+            if pos == padding_start:
+                pos += 1
+            elif pos < len(line) and line[pos] in " \t":
+                pos = padding_start + 1
             tokens.append(("list", pos - level))
             continue
         content = line[pos:] if tokens else line
