@@ -6,8 +6,10 @@ __pycache__/
 *.pyc
 
 # Behavioral eval runs write raw agent transcripts. Never commit them.
-# Leading **/ so the rules reach runs directories beside a skill and under a
-# per-skill evals tree, not only the one at the repository root.
+# Leading **/ so the rules reach a runs directory wherever a run writes one,
+# not only the one at the repository root. That includes the per-skill evals
+# tree tools/test_eval_artifacts.py now forbids, which keeps a transcript out
+# of git even on the layout the lint rejects.
 **/evals/**/runs/
 **/eval-runs/
 

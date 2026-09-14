@@ -301,7 +301,9 @@ git diff --check
 
 Each command exits nonzero when its check fails. The two unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses `.venv/bin/python` and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
 
-Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` directory reappears under `skills/`. `.gitignore` keeps raw run transcripts out of git at every depth.
+Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` directory appears under `skills/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
+
+The commands above do not cover the manifests. CI runs that gate separately, through the `evals-dir` input to `skill-checks`. For every `evals/**/shared-benchmark.json` it runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. The runner is pinned in `runner.lock` in `mdsmithaustin/skill-ci`, so reproduce that gate locally with the build that file names rather than whatever `skill-benchmark` is on your PATH.
 
 `tools/skill-trigger-cases.json` checks deterministic trigger declaration coverage. It confirms that every shipped skill has a realistic request, literal description anchors, and the expected invocation policy. It does not measure model-routing accuracy.
 
