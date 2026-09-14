@@ -6,9 +6,11 @@ __pycache__/
 *.pyc
 
 # Behavioral eval runs write raw agent transcripts. Never commit them.
-evals/runs/
-eval-runs/
+# Leading **/ so the rules reach runs directories beside a skill and under a
+# per-skill evals tree, not only the one at the repository root.
+**/evals/**/runs/
+**/eval-runs/
 
 # Harvest review sheets awaiting a human tick or strike. They quote real user
 # prompts, so they stay out of git until reviewed.
-review-inbox/
+**/review-inbox/
