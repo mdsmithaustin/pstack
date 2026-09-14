@@ -101,6 +101,32 @@ class SubagentCommands(unittest.TestCase):
         self.assertIn(str(logical / "poteto-mode/SKILL.md"), result.stdout)
         self.assertNotIn(str(self.installed), result.stdout)
 
+    def test_aliases_of_one_installation_share_native_files(self):
+        per_skill = self.root / "per-skill links"
+        per_skill.mkdir()
+        for skill in self.installed.iterdir():
+            (per_skill / skill.name).symlink_to(skill, target_is_directory=True)
+        whole = self.root / "whole link"
+        whole.symlink_to(self.installed, target_is_directory=True)
+        copied = self.root / "copied skills"
+        shutil.copytree(self.installed, copied)
+        for harness in ("claude-code", "codex"):
+            self.native(harness)
+            paths = [self.role_path(role, harness) for role in ("comment-sicko", "poteto-agent")]
+            before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+            for alias in (per_skill, whole):
+                with self.subTest(harness=harness, alias=alias.name):
+                    script = alias / "pstack-harness/scripts/subagents.py"
+                    report = json.loads(self.run_cli("check", "--harness", harness, "--project", self.project, script=script).stdout)
+                    self.assertEqual({row["native_file"] for row in report["roles"]}, {"current"})
+                    report = json.loads(self.run_cli("install", "--harness", harness, "--project", self.project, script=script).stdout)
+                    self.assertEqual({row["action"] for row in report["roles"]}, {"unchanged"})
+                    self.assertEqual([(path.read_bytes(), path.stat().st_mtime_ns) for path in paths], before)
+            with self.subTest(harness=harness, alias="copied"):
+                script = copied / "pstack-harness/scripts/subagents.py"
+                report = json.loads(self.run_cli("check", "--harness", harness, "--project", self.project, script=script, expected=1).stdout)
+                self.assertEqual({row["native_file"] for row in report["roles"]}, {"outdated-generated"})
+
     def test_both_native_formats_preserve_full_brief_without_policy_overrides(self):
         for harness in ("claude-code", "codex"):
             self.native(harness, command="check", expected=1)
