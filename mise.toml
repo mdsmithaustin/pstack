@@ -1,0 +1,6 @@
+[env]
+SKILL_CI = "{{ config_root }}/../skill-ci"
+EVALS_DIR = "evals"
+
+[task_config]
+includes = ["../skill-ci/skill-tasks.toml"]

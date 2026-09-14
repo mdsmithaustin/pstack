@@ -301,9 +301,34 @@ git diff --check
 
 Each command exits nonzero when its check fails. The two unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses `.venv/bin/python` and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
 
-Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` directory appears under `skills/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
+Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 
 The commands above do not cover the manifests. CI runs that gate separately, through the `evals-dir` input to `skill-checks`. For every `evals/**/shared-benchmark.json` it runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. The runner is pinned in `runner.lock` in `mdsmithaustin/skill-ci`, so reproduce that gate locally with the build that file names rather than whatever `skill-benchmark` is on your PATH.
+
+`mise.toml` adds local tasks for those runner commands. It expects a checkout of `mdsmithaustin/skill-ci` beside this one and `uv` on your PATH. mise asks you to run `mise trust` once. `uv tool install` puts `skill-benchmark` in `uv tool dir --bin`, so put that directory on your PATH too or the tasks report `command not found` after a successful install.
+
+```sh
+uv tool install "$(grep -v '^#' ../skill-ci/runner.lock | grep -v '^[[:space:]]*$')"
+mise run skill-lint
+mise run skill-validate
+mise run skill-audit
+```
+
+Run that install line first. `skill-validate` and `skill-audit` call whichever `skill-benchmark` your PATH resolves, and neither checks which build that is, so the install is what makes their result come from the same build as CI. `skill-lint` is the exception, because it calls no runner and pins its own dependencies through `uv run`.
+
+Installing the pinned build does not make those two commands complete. Neither resolves `skill_paths` in any build, so both exit 0 on a manifest that names a skill file which does not exist, and `validate` reports `OK`. `skill-benchmark profile-skill <manifest>` is the command that reports that, as `skill_files: 0` with a `missing-skill-file` finding, and `tools/test_eval_artifacts.py` fails when any manifest under `evals/` names a path that is not a file.
+
+`skill-audit` is stricter than CI on one point. CI skips `audit-manifest` for a manifest with no cases, and the task audits every manifest it finds, so an empty manifest fails locally and passes in CI. Nothing in this repository has one today.
+
+`skill-lint` is not a superset of the fenced list above. It runs the frontmatter and content checkers without the trigger declaration corpus, so it reports `52 skills, 0 errors` where the fenced command adds `trigger declaration coverage`.
+
+`skill-trigger <skill>` and `skill-run <skill>` spend model budget on your own logins and never run in CI. Both default their output to `<skill>/eval-runs/`, inside the skills tree. A git install never sees it, because `.gitignore` covers it, but an install from a local working tree copies that directory like any other, which is what the repository-root `evals/` tree prevents. Pass `OUT` to write under `evals/` instead.
+
+```sh
+OUT=evals/unslop/runs/$(date +%Y%m%d-%H%M%S) mise run skill-run skills/unslop
+```
+
+`EVALS_DIR` in `mise.toml` points every task at `evals/`. Delete it and the tasks search `skills/`, find no manifest, and still exit 0, so `tools/test_eval_artifacts.py` pins its value.
 
 `tools/skill-trigger-cases.json` checks deterministic trigger declaration coverage. It confirms that every shipped skill has a realistic request, literal description anchors, and the expected invocation policy. It does not measure model-routing accuracy.
 
