@@ -305,18 +305,17 @@ Behavioral eval manifests and their oracles live at the repository root under `e
 
 The commands above do not cover the manifests. CI runs that gate separately, through the `evals-dir` input to `skill-checks`. For every `evals/**/shared-benchmark.json` it runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. The runner is pinned in `runner.lock` in `mdsmithaustin/skill-ci`, so reproduce that gate locally with the build that file names rather than whatever `skill-benchmark` is on your PATH.
 
-`mise.toml` adds local tasks for those runner commands. It expects a checkout of `mdsmithaustin/skill-ci` beside this one and `uv` on your PATH. mise asks you to run `mise trust` once. `uv tool install` puts `skill-benchmark` in `uv tool dir --bin`, so put that directory on your PATH too or the tasks report `command not found` after a successful install.
+`mise.toml` adds local tasks for those runner commands. It expects a checkout of `mdsmithaustin/skill-ci` beside this one and `uv` on your PATH. mise asks you to run `mise trust` once. Each task reads that checkout's `runner.lock` and invokes the pinned runner in an isolated uv environment. A globally installed runner cannot override the lock.
 
 ```sh
-uv tool install "$(grep -v '^#' ../skill-ci/runner.lock | grep -v '^[[:space:]]*$')"
 mise run skill-lint
 mise run skill-validate
 mise run skill-audit
 ```
 
-Run that install line first. `skill-validate` and `skill-audit` call whichever `skill-benchmark` your PATH resolves, and neither checks which build that is, so the install is what makes their result come from the same build as CI. `skill-lint` is the exception, because it calls no runner and pins its own dependencies through `uv run`.
+Local tasks follow the adjacent skill-ci checkout. CI follows the skill-ci SHA in `.github/workflows/skill-checks.yml`. Update the adjacent checkout to that revision when reproducing CI. The existing GitHub Actions Dependabot entry opens PRs for the workflow pin. Merging one also adopts that revision's runner lock.
 
-Installing the pinned build does not make those two commands complete. Neither resolves `skill_paths` in any build, so both exit 0 on a manifest that names a skill file which does not exist, and `validate` reports `OK`. `skill-benchmark profile-skill <manifest>` is the command that reports that, as `skill_files: 0` with a `missing-skill-file` finding, and `tools/test_eval_artifacts.py` fails when any manifest under `evals/` names a path that is not a file.
+Pinning the runner does not make those two commands complete. Neither resolves `skill_paths` in any build, so both exit 0 on a manifest that names a skill file which does not exist, and `validate` reports `OK`. `skill-benchmark profile-skill <manifest>` is the command that reports that, as `skill_files: 0` with a `missing-skill-file` finding, and `tools/test_eval_artifacts.py` fails when any manifest under `evals/` names a path that is not a file.
 
 `skill-audit` is stricter than CI on one point. CI skips `audit-manifest` for a manifest with no cases, and the task audits every manifest it finds, so an empty manifest fails locally and passes in CI. Nothing in this repository has one today.
 
