@@ -142,7 +142,7 @@ Take the synthesizer's output and present it to the user. You may lightly edit f
 
 The output structure is the one in `references/synthesizer-prompt.md`: The Question, The Code in Question, What We Found, What We Can Reasonably Infer, Competing Hypotheses, What We Don't Know, Sources Consulted, Confidence Summary. Adapt as needed, but keep the confidence separation intact, and keep Sources Consulted as one line per investigator, including the ones that returned nothing or were skipped, with the reason.
 
-After the Sources Consulted block, if the user's `why` question is a precursor to actually changing this code, convert the lineage findings into a Preserve / Change / Avoid / Risk constraint set suitable for planning the change.
+After the Sources Consulted block, if the user's `why` question is a precursor to changing this code, summarize supported constraints as Preserve / Change / Avoid / Risk. Require a documented constraint or demonstrated dependency before saying behavior must be preserved or coordinated. Cite that evidence and retain its confidence level. Put unverified explanations under questions to resolve. Apply the epistemics calibration check to this advice too.
 
 ## Common Failure Modes to Avoid
 

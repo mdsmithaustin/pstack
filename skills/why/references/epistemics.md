@@ -120,13 +120,7 @@ Both may be true (the ticket motivated the work, the PR is the author's framing 
 
 ## When Evidence Is Missing
 
-An honest "we don't know" is one of the most valuable outputs this skill can produce. The user now knows:
-
-- The answer isn't in the obvious places
-- They'll need to ask a human (the original author, the product owner, the team lead) to find out
-- Or they can decide the question isn't worth pursuing further
-
-Failing to mark a gap and filling it with a confident guess actively harms the user. They'll act on the guess.
+Limit absence claims to the sources and results you inspected. A missing connector or remote means you could not inspect that source. It does not mean the source or its records do not exist. Repeated identical search responses do not establish complete coverage.
 
 When you hit a gap, name it concretely:
 - What question you were trying to answer
@@ -134,9 +128,11 @@ When you hit a gap, name it concretely:
 - What you searched for in each
 - What you found (nothing, or only tangentially related material)
 
+Report search counts and source scope from the actual tool results. A file-filtered commit view does not establish which other files the commit changed. If the record does not support a count or completeness claim, omit it or state the limit.
+
 ## Calibration Check Before Finalizing
 
-Before delivering the output, the synthesizer should review every claim in "What We Found" and "What We Can Reasonably Infer" and ask:
+Before delivering the output, review every section, including Sources Consulted and any advice about changing the code, and ask:
 
 1. Does this claim have a citation? If not, either add one or move it to "Inferred" / "Hypotheses".
 2. Is the phrasing calibrated to the tier? (A Direct claim can use "because". An Inferred claim cannot.)
