@@ -1,3 +1,7 @@
+# These four run locally because a pre-commit gate needs a local script and a
+# shared CI workflow cannot provide one. Three of them (skill-metadata,
+# skill-content, pii) are also run in CI from mdsmithaustin/skill-ci, which
+# fails if the copies here have drifted from the shared ones.
 pre-commit:
   commands:
     skill-metadata:

@@ -20,14 +20,8 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.4.0"
-      - name: Skill metadata and trigger declarations
-        run: python3 tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json
-      - name: Reject PII
-        run: python3 tools/check-pii.py
       - name: No unconditional dependency on another suite's skills
         run: python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
-      - name: Skill links, references, and port substitutions are valid
-        run: python3 tools/check-skill-content.py skills
       - name: Installed subagent bundle matches upstream sources
         run: python3 tools/generate-subagents.py --check
       - name: Skill lint and runtime command tests

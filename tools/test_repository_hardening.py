@@ -24,7 +24,6 @@ class RepositoryHardening(unittest.TestCase):
             self.assertRegex(action_reference, r"^[^@\s]+@[0-9a-f]{40}$")
         self.assertIn('python-version: "3.12"', WORKFLOW)
         self.assertIn("pip install --require-hashes -r tools/requirements.txt", WORKFLOW)
-        self.assertIn("check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json", WORKFLOW)
         self.assertIn('bun-version: "1.4.0"', WORKFLOW)
         self.assertIn("bun install --frozen-lockfile", WORKFLOW)
         self.assertIn("bun run test", WORKFLOW)
@@ -37,6 +36,7 @@ class RepositoryHardening(unittest.TestCase):
         self.assertRegex(workflow_references[0], r"^[0-9a-f]{40}$")
         self.assertEqual(re.findall(r"^\s+skill-ci-ref: (\S+)$", SHARED_WORKFLOW, re.MULTILINE), workflow_references)
         self.assertIn("pii-scope: repository", SHARED_WORKFLOW)
+        self.assertIn("trigger-cases: tools/skill-trigger-cases.json", SHARED_WORKFLOW)
 
     def test_ruleset_has_required_branch_protections(self) -> None:
         self.assertEqual(RULESET["enforcement"], "active")
