@@ -28,7 +28,7 @@ For each candidate, read the first JSONL line and check that `message.content[0]
 
 ### 2. Spawn three reviewers in parallel
 
-One message, three `Task` calls, `subagent_type: general-purpose`, explicit `model:` and effort on each (resolved per the **pstack-harness** skill), agent mode (`readonly: false`). Reviewers need MCP access for context lookups (tickets, chat threads, observability traces referenced in the transcript). Readonly strips MCPs. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
+One message, three `Task` calls, `subagent_type: general-purpose`, explicit `model:` and effort on each (resolved per the **pstack-harness** skill), read-only access (`readonly: true`) resolved through **pstack-harness**. Give reviewers the available read tools needed for context lookups (tickets, chat threads, observability traces referenced in the transcript). Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
 
 | Lens | `model` | Prompt template |
 |---|---|---|
@@ -40,7 +40,7 @@ Pass each template verbatim, substituting the transcript path or digest where ma
 
 ### 3. Synthesize
 
-One `Task` call, `subagent_type: general-purpose`, using your configured reflect-synthesizer model and effort (default `fable`), agent mode (`readonly: false`). The synthesizer's quality check includes spot-verifying citations, which can require MCP access. Readonly strips MCPs. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.
+One `Task` call, `subagent_type: general-purpose`, using your configured reflect-synthesizer model and effort (default `fable`), read-only access (`readonly: true`) resolved through **pstack-harness**. Give the synthesizer the available read tools needed to verify citations. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.
 
 ### 4. Structural enforcement check
 
