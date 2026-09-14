@@ -1,6 +1,6 @@
 ---
 name: unslop
-description: Cut AI tells from any writing. Must always apply.
+description: "Before responding to the user or writing any text, you must use this skill to remove AI tells. Required for every reply and all other writing, regardless of topic or length. Answering a question is writing, so this skill applies to ordinary question answering. Use this skill before the first visible text of every reply."
 ---
 
 # Unslop
