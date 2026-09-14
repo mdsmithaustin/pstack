@@ -32,9 +32,10 @@ class RepositoryHardening(unittest.TestCase):
 
     def test_shared_skill_checks_pin_one_reviewed_skill_ci_commit(self) -> None:
         self.assertIn("permissions:\n  contents: read", SHARED_WORKFLOW)
-        workflow_reference = re.search(r"^\s+uses: mdsmithaustin/skill-ci/\.github/workflows/skill-checks\.yml@([0-9a-f]{40})\b", SHARED_WORKFLOW, re.MULTILINE)
-        self.assertIsNotNone(workflow_reference)
-        self.assertEqual(re.findall(r"^\s+skill-ci-ref: (\S+)$", SHARED_WORKFLOW, re.MULTILINE), [workflow_reference[1]])
+        workflow_references = re.findall(r"^\s+uses: mdsmithaustin/skill-ci/\S+@(\S+)", SHARED_WORKFLOW, re.MULTILINE)
+        self.assertEqual(len(workflow_references), 1)
+        self.assertRegex(workflow_references[0], r"^[0-9a-f]{40}$")
+        self.assertEqual(re.findall(r"^\s+skill-ci-ref: (\S+)$", SHARED_WORKFLOW, re.MULTILINE), workflow_references)
         self.assertIn("pii-scope: repository", SHARED_WORKFLOW)
 
     def test_ruleset_has_required_branch_protections(self) -> None:
