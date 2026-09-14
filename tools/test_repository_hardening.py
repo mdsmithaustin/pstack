@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = (ROOT / ".github" / "workflows" / "lint.yml").read_text(encoding="utf-8")
+SHARED_WORKFLOW = (ROOT / ".github" / "workflows" / "skill-checks.yml").read_text(encoding="utf-8")
 RULESET = json.loads((ROOT / ".github" / "rulesets" / "copilot-code-review.json").read_text(encoding="utf-8"))
 
 
@@ -28,6 +29,13 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn("bun install --frozen-lockfile", WORKFLOW)
         self.assertIn("bun run test", WORKFLOW)
         self.assertIn("bun run typecheck", WORKFLOW)
+
+    def test_shared_skill_checks_pin_one_reviewed_skill_ci_commit(self) -> None:
+        self.assertIn("permissions:\n  contents: read", SHARED_WORKFLOW)
+        workflow_reference = re.search(r"^\s+uses: mdsmithaustin/skill-ci/\.github/workflows/skill-checks\.yml@([0-9a-f]{40})\b", SHARED_WORKFLOW, re.MULTILINE)
+        self.assertIsNotNone(workflow_reference)
+        self.assertEqual(re.findall(r"^\s+skill-ci-ref: (\S+)$", SHARED_WORKFLOW, re.MULTILINE), [workflow_reference[1]])
+        self.assertIn("pii-scope: repository", SHARED_WORKFLOW)
 
     def test_ruleset_has_required_branch_protections(self) -> None:
         self.assertEqual(RULESET["enforcement"], "active")
