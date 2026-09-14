@@ -4,3 +4,11 @@ node_modules/
 *.log
 __pycache__/
 *.pyc
+
+# Behavioral eval runs write raw agent transcripts. Never commit them.
+evals/runs/
+eval-runs/
+
+# Harvest review sheets awaiting a human tick or strike. They quote real user
+# prompts, so they stay out of git until reviewed.
+review-inbox/

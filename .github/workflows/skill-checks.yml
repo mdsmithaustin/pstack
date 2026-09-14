@@ -1,0 +1,14 @@
+name: skill-checks
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  skills:
+    uses: mdsmithaustin/skill-ci/.github/workflows/skill-checks.yml@7d9a39ee40e6d47504ef394695a06fca86789f97 # main 2026-09-13
+    with:
+      skills-dir: skills
+      pii-scope: repository
+      skill-ci-ref: 7d9a39ee40e6d47504ef394695a06fca86789f97
