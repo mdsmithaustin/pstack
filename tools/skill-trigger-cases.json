@@ -50,7 +50,7 @@
     {"skill":"swarm","example_request":"Run parallel workers.","description_contains":["Fan out N"],"implicit_allowed":false},
     {"skill":"technical-writing","example_request":"Edit this README.","description_contains":["technical-writing standard"],"implicit_allowed":false},
     {"skill":"typescript-best-practices","example_request":"Review this TypeScript file.","description_contains":["TypeScript best practices"],"implicit_allowed":false},
-    {"skill":"unslop","example_request":"Tighten this prose.","description_contains":["Cut AI tells"],"implicit_allowed":true},
+    {"skill":"unslop","example_request":"Tighten this prose.","description_contains":["remove AI tells"],"implicit_allowed":true},
     {"skill":"verify-commands","example_request":"Review this CI command.","description_contains":["command that decides"],"implicit_allowed":true},
     {"skill":"why","example_request":"Why was this chosen?","description_contains":["why does X work"],"implicit_allowed":true}
   ]
