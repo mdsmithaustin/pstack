@@ -13,6 +13,8 @@ Companion to the `how` skill. `how` answers what the code does and how it works.
 
 Operate as a **careful, cautious, and precise investigator**. Be honest about what you know vs what you're inferring. Read `references/epistemics.md` for the full confidence framework and phrasing guide. The synthesizer must follow it.
 
+Keep investigators and the synthesizer read-only. Resolve tool access and enforcement through **pstack-harness**. Give each agent the available read tools its task needs. Report an unavailable tool or denied access as an evidence gap. Do not widen permissions to work around it.
+
 ## Step 1. Understand the Target and the Question
 
 Parse what the user is asking. The **target** is usually a chunk of code, a pattern, a feature, or a named design decision. The **question** is usually a design rationale, a tradeoff, a motivating edge case, an external constraint, dead code, or a broad history sweep.
@@ -79,7 +81,7 @@ Launch all matching investigators in a single message so they run concurrently. 
 Subagent config (each):
 - `subagent_type`: `general-purpose`
 - `model`: your configured why-investigators model (default `sonnet`), with its configured effort per the **pstack-harness** skill
-- `readonly`: `false` (agent mode). **Do not use readonly/Ask mode.** It strips MCP access, which disables MCP-backed investigators entirely. Investigators still shouldn't write anything.
+- `readonly`: `true`, resolved through **pstack-harness** with the read tools needed for the assigned source
 
 Each investigator gets:
 1. The base prompt from `references/investigator-prompt.md`
@@ -123,7 +125,7 @@ Spawn one synthesizer subagent:
 
 - `subagent_type`: `general-purpose`
 - `model`: your configured why-synthesizer model (default `fable`), with its configured effort per the **pstack-harness** skill
-- `readonly`: `false` (agent mode). The synthesizer's quality check spot-verifies citations, which can require MCP access. Readonly/Ask mode strips MCPs and defeats that.
+- `readonly`: `true`, resolved through **pstack-harness** with the read tools needed to verify citations
 
 The synthesizer gets:
 1. The investigator findings, including any null results and any categories skipped with justification

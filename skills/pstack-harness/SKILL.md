@@ -31,7 +31,7 @@ Each writer gets its own git worktree, whichever mechanism spawns it.
 
 **Parallelism.** Real where the mechanism allows it (independent tool calls in one message, concurrent subprocesses); otherwise sequential with the same arm count.
 
-**Read-only.** Use an enforcing option if the spawn mechanism has one; otherwise state it plainly in the brief ("read-only: do not edit or write files").
+**Read-only.** Give the agent the available read tools its task needs. Use supported controls to restrict file writes and mutating tool calls while retaining those reads. A filesystem sandbox alone does not establish that MCP tools are read-only. If a restriction cannot be enforced, state it in the brief ("do not edit files or modify external state") and report that it is instructed rather than enforced. Do not assume a mode name determines tool access; inspect the active runtime's capabilities.
 
 **Structured questions (`AskQuestion`).** Your harness's structured-question tool if it has one; otherwise ask in plain chat.
 

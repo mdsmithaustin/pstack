@@ -4,15 +4,15 @@
 
 Datadog holds the runtime record, what actually happened in production, as opposed to what was planned or discussed.
 
-- **Metrics.** Counters, gauges, histograms instrumented by the team. A metric's *presence* is itself evidence. Someone thought this number worth watching.
-- **Monitors & alerts.** Conditions the team decided warranted waking someone up. A monitor firing on `rate_limit_hit > 10/min` is direct evidence the team worried about that threshold.
-- **Dashboards.** Curated views. The charts tell you what the team considers important for a subsystem.
+- **Metrics.** Counters, gauges, and histograms. Their presence shows what was measured, not why the target code was written.
+- **Monitors & alerts.** Configured conditions and recorded alerts. A monitor firing on `rate_limit_hit > 10/min` shows that its condition was met. It does not establish why the target code uses a threshold.
+- **Dashboards.** Curated views of a subsystem. Inspect their authorship, dates, and descriptions before connecting them to a code decision.
 - **APM traces & spans.** Request-level runtime data. Useful for "why is this slow" / "why is there a timeout here" questions.
 - **Logs.** High-volume event records. Often contain the error conditions that motivated defensive code.
 - **Incidents.** Formal incident records with timelines and linked postmortems.
 - **Notebooks.** Exploratory investigations. Often contain hypotheses and analyses.
 
-Datadog answers "what was the production reality around the time this code was written?", which often explains the code's shape.
+Datadog provides context about production around the time a change was made. Apply the [confidence framework](../epistemics.md). Direct rationale requires an explicit statement connecting the evidence to the target decision. Matching values or nearby dates alone do not establish intent.
 
 ## How to search it
 
@@ -25,14 +25,14 @@ Use the Datadog MCP. Start broad, then narrow.
    search_datadog_service_dependencies (see upstream/downstream)
    ```
 
-2. **Dashboards and monitors first. They tell you what the team cares about.**
+2. **Inspect dashboards and monitors.**
 
    ```
    search_datadog_dashboards (query: feature name, service name, symbol)
    search_datadog_monitors   (same queries)
    ```
 
-   When a dashboard or monitor covers the target, note its queries and watched thresholds. The threshold is frequently the answer to "why is this clamped at N?"
+   When a dashboard or monitor covers the target, note its queries, watched thresholds, and dates. A matching threshold is a lead. Look for an explicit explanation linking it to the code's value.
 
 3. **Metrics around the target.**
 
@@ -42,7 +42,7 @@ Use the Datadog MCP. Start broad, then narrow.
    get_datadog_metric (timeseries; "was there a spike around the PR date?")
    ```
 
-   Correlating a metric's trajectory with the target's add/change date is strong supporting evidence: "the `payment_timeout` metric spiked 2023-11-03, and the retry logic merged 2023-11-06."
+   Record timing without turning it into a causal claim: "the `payment_timeout` metric spiked 2023-11-03, and the retry logic merged 2023-11-06." Check for an explicit link and other changes in the same window before assigning confidence to an explanation.
 
 4. **Logs. Narrow, don't dump.**
 
@@ -70,7 +70,7 @@ Use the Datadog MCP. Start broad, then narrow.
    get_datadog_incident     (full detail for a specific incident)
    ```
 
-   If the target looks defensive, search for incidents around the time it was added. An incident whose timeline includes "added defensive check for X" is near-direct evidence.
+   If the target looks defensive, search for incidents around the time it was added. A timeline entry saying "added defensive check for X" supports Direct rationale only when it explicitly links the target change to its reason.
 
 ## What good evidence looks like here
 
@@ -83,10 +83,10 @@ Use the Datadog MCP. Start broad, then narrow.
 ## Common pitfalls
 
 - **Correlation is not causation.** A spike before a PR and stabilization after is suggestive, not definitive. Other changes may have landed in the same window. Check neighboring PRs.
-- **Overfitting to the chart you found.** Datadog visualizations are *made* by humans and reflect that human's framing. A chart named "retry success rate" is evidence the team cared about retry success, not that it's why a specific line of code exists.
+- **Overfitting to the chart you found.** A chart named "retry success rate" shows how its author framed the data. It does not establish the team's motivation for a specific line of code.
 - **Vanished telemetry.** Metrics can be renamed, deleted, or have short retention. If you can't find data from the relevant window, that's a gap, not a null result.
 - **Noise at scale.** Searching logs for a common string returns thousands of matches. Narrow by service, tag, and time aggressively. Use `analyze_datadog_logs` to aggregate rather than dumping raw logs.
-- **Instrumented != caused.** A metric's existence tells you someone cared enough to measure something, not that the code was added *because* of it. Cross-reference with commit/PR dates.
+- **Instrumented != caused.** A metric's existence establishes instrumentation, not the reason for the target code. Cross-reference dates and seek an explicit account of the decision.
 
 ## What to return
 
