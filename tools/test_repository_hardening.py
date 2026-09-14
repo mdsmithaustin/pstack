@@ -34,7 +34,7 @@ class RepositoryHardening(unittest.TestCase):
         workflow_references = re.findall(r"^\s+uses: mdsmithaustin/skill-ci/\S+@(\S+)", SHARED_WORKFLOW, re.MULTILINE)
         self.assertEqual(len(workflow_references), 1)
         self.assertRegex(workflow_references[0], r"^[0-9a-f]{40}$")
-        self.assertEqual(re.findall(r"^\s+skill-ci-ref: (\S+)$", SHARED_WORKFLOW, re.MULTILINE), workflow_references)
+        self.assertNotRegex(SHARED_WORKFLOW, r"(?m)^\s+skill-ci-ref:")
         self.assertIn("pii-scope: repository", SHARED_WORKFLOW)
         self.assertIn("evals-dir: evals", SHARED_WORKFLOW)
         self.assertIn("trigger-cases: tools/skill-trigger-cases.json", SHARED_WORKFLOW)
