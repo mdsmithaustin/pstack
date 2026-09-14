@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+SKILLS = ROOT / "skills"
 
 IGNORED = (
     "evals/runs/transcript.jsonl",
@@ -23,6 +24,13 @@ TRACKABLE = (
     "evals/unslop/oracles/check_edited.py",
     "evals/shared-benchmark.json",
     "skills/unslop/SKILL.md",
+)
+
+WHY_EVALS_LIVE_OUTSIDE_SKILLS = (
+    "A skill installer copies a skill directory verbatim and offers no exclude "
+    "mechanism. Eval material placed there reaches everyone who installs the skill. "
+    "Manifests, oracles, and runs belong under the repository-root evals/ tree, which "
+    "skill-checks reads through its evals-dir input."
 )
 
 
@@ -43,6 +51,14 @@ class EvalArtifactsStayOutOfGit(unittest.TestCase):
         for path in TRACKABLE:
             with self.subTest(path=path):
                 self.assertFalse(ignored(path), f"{path} cannot be committed")
+
+    def test_no_skill_ships_an_evals_directory(self) -> None:
+        found = sorted(
+            str(path.relative_to(ROOT))
+            for path in SKILLS.rglob("evals")
+            if path.is_dir()
+        )
+        self.assertEqual(found, [], f"{found} must move out of skills/. {WHY_EVALS_LIVE_OUTSIDE_SKILLS}")
 
 
 if __name__ == "__main__":

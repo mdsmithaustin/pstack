@@ -36,6 +36,7 @@ class RepositoryHardening(unittest.TestCase):
         self.assertRegex(workflow_references[0], r"^[0-9a-f]{40}$")
         self.assertEqual(re.findall(r"^\s+skill-ci-ref: (\S+)$", SHARED_WORKFLOW, re.MULTILINE), workflow_references)
         self.assertIn("pii-scope: repository", SHARED_WORKFLOW)
+        self.assertIn("evals-dir: evals", SHARED_WORKFLOW)
         self.assertIn("trigger-cases: tools/skill-trigger-cases.json", SHARED_WORKFLOW)
 
     def test_ruleset_has_required_branch_protections(self) -> None:

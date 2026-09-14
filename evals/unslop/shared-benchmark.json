@@ -1,0 +1,194 @@
+{
+  "version": 1,
+  "skill_name": "unslop",
+  "skill_description": "Cut AI tells from any writing. Must always apply.",
+  "harness": {
+    "name": "skill-eval-harness",
+    "url": "https://github.com/mdsmithaustin/skill-eval-harness",
+    "version": "git+687094c397a4fc3962ecc08fb986c1e3f71cb1c2"
+  },
+  "skill_paths": [
+    "skills/unslop/SKILL.md"
+  ],
+  "variants": [
+    "with_skill",
+    "without_skill"
+  ],
+  "_note": "Trigger rows live in eval_queries.json beside this manifest, which is untracked while the maintainer reviews the prompts it quotes; every row is should_trigger true because the skill's contract is to apply on every turn. Outcome assertions grade only the text inside the reply's <edited> block, never the whole reply, so a skill that explains its edits is not punished for quoting what it removed. A written file is not used because run-agent discards its workspace (2026-09-13).",
+  "cases": [
+    {
+      "id": "readme-paragraph-tells",
+      "split": "tune",
+      "kind": "positive",
+      "domain": "prose",
+      "difficulty": "medium",
+      "trigger_type": "implicit",
+      "prompt": "Tighten this paragraph for our README. Keep every fact.\n\nIn today's rapidly evolving landscape, Ledger serves as a testament to what a small team can build \u2014 it is important to note that the 0.4 release cut median import time from 41 seconds to 9 seconds. It is not just a parser, but a complete pipeline, fostering reliability, enhancing throughput, and showcasing careful engineering. Let's delve into the details. Certainly, the tapestry of features will delight you. I hope this helps!\n\nWrap the final edited text in <edited> and </edited> tags, with nothing else between them. Put any explanation of what you changed outside those tags.",
+      "expected_behavior": [
+        "Removes AI tells while preserving both numbers and the product name",
+        "Does not add new flourish"
+      ],
+      "assertions": [
+        {
+          "name": "edited-block-present",
+          "type": "script",
+          "severity": "critical",
+          "command": [
+            "python3",
+            "oracles/check_edited.py",
+            "readme-paragraph-tells",
+            "fence",
+            "{output_dir}"
+          ]
+        },
+        {
+          "name": "facts-survive",
+          "type": "script",
+          "severity": "critical",
+          "command": [
+            "python3",
+            "oracles/check_edited.py",
+            "readme-paragraph-tells",
+            "preserved",
+            "{output_dir}"
+          ]
+        },
+        {
+          "name": "tells-removed",
+          "type": "script",
+          "severity": "gate",
+          "command": [
+            "python3",
+            "oracles/check_edited.py",
+            "readme-paragraph-tells",
+            "tells",
+            "{output_dir}"
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "with_skill"
+          ],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": [
+            "without_skill"
+          ],
+          "severity": "gate"
+        },
+        {
+          "name": "reads-human",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {
+              "name": "tells-removed",
+              "scale": "1-5",
+              "rubric": "5 = no stock phrasing, AI vocabulary, or filler remains. 3 = one or two tells survive. 1 = the text still reads as machine written."
+            },
+            {
+              "name": "facts-preserved",
+              "scale": "1-5",
+              "rubric": "5 = every fact and number from the original survives unchanged. 3 = a fact is blurred or reworded into vagueness. 1 = a fact is dropped."
+            },
+            {
+              "name": "nothing-invented",
+              "scale": "1-5",
+              "rubric": "5 = the edit adds no claim the original did not support. 3 = an unsupported qualifier appears. 1 = a new substantive claim appears."
+            },
+            {
+              "name": "reads-human",
+              "scale": "1-5",
+              "rubric": "5 = a careful editor would accept this as written by a person. 3 = it reads as competent but generic. 1 = it needs a rewrite."
+            }
+          ]
+        }
+      ],
+      "success_goals": [
+        "outcome",
+        "style",
+        "process"
+      ]
+    },
+    {
+      "id": "docs-section-protected-constructs",
+      "split": "tune",
+      "kind": "adversarial",
+      "domain": "prose",
+      "difficulty": "hard",
+      "trigger_type": "implicit",
+      "prompt": "Edit this section for a docs page. Fix anything that reads as machine-written but do not change the code block, the list, or the product name.\n\nSupported inputs: CSV, TSV, and Parquet.\n\n**Schema in TypeScript.** Tables live in one file, `schema.ts`, and a column rename fails the build.\n\n```ts\nconst title = \"Q3 \u2014 regional totals\";\n```\n\nThe Landscape Analyzer product reads all three formats. Additionally, it is crucial to underscore that this enhances the intricate interplay of pivotal components.\n\nWrap the final edited text in <edited> and </edited> tags, with nothing else between them. Put any explanation of what you changed outside those tags.",
+      "expected_behavior": [
+        "Leaves the list colon, the bold lead-in, the code block with its em dash, and the product name Landscape Analyzer untouched",
+        "Rewrites only the last sentence"
+      ],
+      "assertions": [
+        {
+          "name": "edited-block-present",
+          "type": "script",
+          "severity": "critical",
+          "command": [
+            "python3",
+            "oracles/check_edited.py",
+            "docs-section-protected-constructs",
+            "fence",
+            "{output_dir}"
+          ]
+        },
+        {
+          "name": "protected-constructs-intact",
+          "type": "script",
+          "severity": "critical",
+          "command": [
+            "python3",
+            "oracles/check_edited.py",
+            "docs-section-protected-constructs",
+            "preserved",
+            "{output_dir}"
+          ]
+        },
+        {
+          "name": "last-sentence-tells-removed",
+          "type": "script",
+          "severity": "gate",
+          "command": [
+            "python3",
+            "oracles/check_edited.py",
+            "docs-section-protected-constructs",
+            "tells",
+            "{output_dir}"
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "with_skill"
+          ],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": [
+            "without_skill"
+          ],
+          "severity": "gate"
+        }
+      ],
+      "success_goals": [
+        "outcome",
+        "process"
+      ]
+    }
+  ]
+}
