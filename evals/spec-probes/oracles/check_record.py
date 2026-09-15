@@ -7,10 +7,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from oracles.record import evaluate
 
 
-def load_events(output_dir: Path) -> list[dict[str, object]] | None:
+def load_events(output_dir: Path) -> list[dict[str, object]]:
     path = output_dir / "events.json"
     if not path.is_file():
-        return None
+        raise ValueError("events.json is missing")
     try:
         envelope = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -31,7 +31,7 @@ def main() -> int:
         text = (root / "output.md").read_text(encoding="utf-8")
         events = load_events(root)
     except (OSError, ValueError) as exc:
-        print(f"cannot read output.md: {exc}", file=sys.stderr)
+        print(f"cannot read evaluation artifacts: {exc}", file=sys.stderr)
         return 2
     errors = evaluate(case_id, text, events)
     print(json.dumps({"score": int(not errors), "max_score": 1, "errors": errors}))

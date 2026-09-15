@@ -150,6 +150,14 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         with self.assertRaisesRegex(CompositionError, "not a directory"):
             compose(self.repo, "demo", self.overlay, output)
 
+    def test_rejects_symlink_as_output_directory(self) -> None:
+        target = self.root / "target"
+        target.mkdir()
+        output = self.root / "composed-link"
+        output.symlink_to(target, target_is_directory=True)
+        with self.assertRaisesRegex(CompositionError, "must not be a symlink"):
+            compose(self.repo, "demo", self.overlay, output)
+
     def test_rejects_incomplete_private_population(self) -> None:
         self.write_overlay(cases=holdback_cases()[:-1])
         with self.assertRaisesRegex(CompositionError, "exactly 4 behavior"):

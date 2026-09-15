@@ -41,7 +41,7 @@ def _compare_counts(coverage: dict[str, Any], items: list[dict[str, Any]], path:
 def _coverage_errors(record: dict[str, Any]) -> list[str]:
     requirements = record.get("requirements")
     if not isinstance(requirements, list):
-        return []
+        requirements = []
     errors: list[str] = []
     all_items: list[dict[str, Any]] = []
     for index, requirement in enumerate(requirements):
@@ -78,6 +78,11 @@ def evaluate_spec(text: str, spec: CaseSpec, events: list[dict[str, Any]] | None
     if spec.incident:
         if mentioned:
             errors.append("a deployed incident must not manufacture requirement IDs")
+        if "<spec-probe-record>" in text:
+            record, import_errors = extract_import_record(text)
+            errors.extend(import_errors)
+            if record is not None:
+                errors.extend(_coverage_errors(record))
         return errors
     missing = [requirement_id for requirement_id in spec.requirement_ids if requirement_id not in mentioned]
     if missing:

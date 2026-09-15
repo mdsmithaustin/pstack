@@ -180,6 +180,10 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         )
         self.assertEqual(runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", planning.path)[0], "PASS")
         permission = self.workspace("gateway-note:clean-replay-2 supports the observation. The caller and authorization policy remain unresolved for the policy owner.")
+        self.assertIn(
+            "gateway-note:clean-replay-2",
+            (Path(__file__).resolve().parent.parent / "fixtures" / "permission-boundary-note.md").read_text(),
+        )
         self.assertEqual(runtime_probe_oracle.evaluate("neg-permission-boundary-escalation", permission.path)[0], "PASS")
 
     def test_non_executable_cases_reject_probe_capable_commands(self) -> None:

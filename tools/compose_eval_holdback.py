@@ -170,6 +170,8 @@ def validate_case_references(
 def compose(repo: Path, skill_name: str, overlay_path: Path, output_root: Path) -> Path:
     repo = repo.resolve()
     overlay_path = overlay_path.resolve()
+    if output_root.is_symlink():
+        raise CompositionError("output path must not be a symlink")
     output_root = output_root.resolve()
     if output_root == repo or repo in output_root.parents:
         raise CompositionError("the composed holdback must be outside the repository")

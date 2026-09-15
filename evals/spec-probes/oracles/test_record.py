@@ -1,11 +1,13 @@
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from oracles.record import evaluate, evaluate_spec, extract_import_record
+from oracles.check_record import load_events
 from oracles.specs import CaseSpec
 
 
@@ -41,6 +43,14 @@ class RecordOracleTests(unittest.TestCase):
         errors = evaluate("pos-unclassified-prose", "HP-201 needs a product decision.", events)
         self.assertEqual(errors, ["pre-build review executed a command"])
 
+    def test_event_envelope_must_exist_but_may_be_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(ValueError, "events.json is missing"):
+                load_events(root)
+            (root / "events.json").write_text('{"events": []}', encoding="utf-8")
+            self.assertEqual(load_events(root), [])
+
     def test_accepts_deployed_incident_scope_refusal_without_fixed_wording(self) -> None:
         first = "This shipped failure belongs with incident response and debugging. I would not redefine the product contract here."
         second = "Route the production duplicate charge to the on-call investigation. No pre-build requirement review applies."
@@ -50,6 +60,13 @@ class RecordOracleTests(unittest.TestCase):
     def test_incident_rejects_manufactured_requirement_ids(self) -> None:
         errors = evaluate("neg-deployed-incident-restraint", "Create requirement BUG-401 for the incident.")
         self.assertEqual(errors, ["a deployed incident must not manufacture requirement IDs"])
+
+    def test_incident_rejects_nonzero_tagged_coverage(self) -> None:
+        text = '<spec-probe-record>{"coverage":{"applicable":1}}</spec-probe-record>'
+        self.assertEqual(
+            evaluate("neg-deployed-incident-restraint", text),
+            ["coverage.applicable must be 0"],
+        )
 
     def test_importer_integration_checks_parseable_coverage_arithmetic(self) -> None:
         record = {
