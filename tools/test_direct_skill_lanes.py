@@ -178,6 +178,15 @@ class ExposureEligibilityTests(unittest.TestCase):
                 {"id": "behavior", "kind": "positive"},
                 {"id": "positive-trigger", "kind": "trigger", "should_trigger": True},
                 {"id": "negative-trigger", "kind": "trigger", "should_trigger": False},
+                {
+                    "id": "restraint",
+                    "kind": "negative",
+                    "assertions": [{
+                        "type": "skill_invoked",
+                        "expected": False,
+                        "variants": ["with_skill"],
+                    }],
+                },
             ]
         }), encoding="utf-8")
 
@@ -208,9 +217,23 @@ class ExposureEligibilityTests(unittest.TestCase):
             self.write_events(case, "old_skill", "architect")
         self.write_events("negative-trigger", "with_skill", None)
         self.write_events("negative-trigger", "old_skill", "architect")
+        self.write_events("restraint", "with_skill", None)
+        self.write_events("restraint", "old_skill", "architect")
         report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
         self.assertTrue(report["eligible"])
         self.assertEqual(report["missing_target_reads"], [])
+
+    def test_non_trigger_restraint_uses_explicit_false_expectation(self) -> None:
+        for case in ("behavior", "positive-trigger"):
+            self.write_events(case, "with_skill", "verify-commands")
+            self.write_events(case, "old_skill", "architect")
+        for case in ("negative-trigger", "restraint"):
+            self.write_events(case, "with_skill", None)
+            self.write_events(case, "old_skill", "architect")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        restraint = next(row for row in report["runs"] if row["case_id"] == "restraint" and row["variant"] == "with_skill")
+        self.assertFalse(restraint["target_read_expected"])
+        self.assertTrue(report["eligible"])
 
     def test_rejects_incomplete_run_pair(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")

@@ -481,6 +481,30 @@ def _event_names_target(event: Any, target_skill: str) -> bool:
     return False
 
 
+def _case_requires_target_read(case: dict[str, Any]) -> bool:
+    declared: list[bool] = []
+    assertions = case.get("assertions", [])
+    if not isinstance(assertions, list):
+        raise LaneError(f"case {case.get('id')} assertions must be a list")
+    for assertion in assertions:
+        if not isinstance(assertion, dict) or assertion.get("type") != "skill_invoked":
+            continue
+        variants = assertion.get("variants")
+        if variants is not None and (
+            not isinstance(variants, list) or "with_skill" not in variants
+        ):
+            continue
+        expected = assertion.get("expected", True)
+        if not isinstance(expected, bool):
+            raise LaneError(f"case {case.get('id')} has a non-boolean skill_invoked expectation")
+        declared.append(expected)
+    if len(set(declared)) > 1:
+        raise LaneError(f"case {case.get('id')} has conflicting with_skill invocation expectations")
+    if declared:
+        return declared[0]
+    return case.get("kind") != "trigger" or case.get("should_trigger") is True
+
+
 def exposure_report(runs: Path, manifest_path: Path, target_skill: str) -> dict[str, Any]:
     manifest = _read_json(manifest_path)
     cases = manifest.get("cases")
@@ -491,7 +515,7 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str) -> dict[
         for case in cases
         if isinstance(case, dict)
         and isinstance(case.get("id"), str)
-        and (case.get("kind") != "trigger" or case.get("should_trigger") is True)
+        and _case_requires_target_read(case)
     }
     rows: list[dict[str, Any]] = []
     for events_path in sorted(runs.rglob("events.json")):
