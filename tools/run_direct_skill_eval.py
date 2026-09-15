@@ -291,7 +291,7 @@ def main() -> int:
             judge_runs=args.judge_runs,
             timeout=args.timeout,
             lane=args.lane,
-            helper=source_repo / "tools" / "direct_skill_lanes.py",
+            helper=eval_repo / "tools" / "direct_skill_lanes.py",
         )
     except ValueError as exc:
         parser.error(str(exc))

@@ -49,6 +49,8 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         self.assertEqual(manifest["optional_variants"], ["old_skill"])
         self.assertEqual(len(manifest["skill_paths"]), len(manifest["old_skill_paths"]) + 1)
         self.assertEqual(manifest["skill_paths"][0], "arms/treatment/skills/verify-commands/SKILL.md")
+        self.assertTrue((self.shadow / "tools" / "direct_skill_lanes.py").is_file())
+        self.assertIn("tools/direct_skill_lanes.py", self.receipt["source"]["helpers"])
 
     def test_receipt_verifies_untampered_materialization(self) -> None:
         verified = verify_materialized_lane(ROOT, self.shadow, "verify-commands")
@@ -110,8 +112,10 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         fake_repo = Path(self.temp.name) / "source"
         (fake_repo / ".github").mkdir(parents=True)
         (fake_repo / "evals").mkdir()
+        (fake_repo / "tools").mkdir()
         shutil.copy2(ROOT / ".gitignore", fake_repo / ".gitignore")
         shutil.copy2(ROOT / ".github" / "upstream-sha", fake_repo / ".github" / "upstream-sha")
+        shutil.copy2(ROOT / "tools" / "direct_skill_lanes.py", fake_repo / "tools" / "direct_skill_lanes.py")
         shutil.copy2(
             ROOT / "evals" / "direct-skills-experiment.json",
             fake_repo / "evals" / "direct-skills-experiment.json",

@@ -30,7 +30,7 @@ Deterministic gates own facts that the runner can execute or recompute. A fluent
 
 The oracles do not require one application-style response schema.
 
-- `verify-commands` accepts a natural answer with one fenced shell artifact and brief prose. It runs the artifact against fresh healthy and defective fixture states inside a locked container. An in-container evidence service authenticates each required interpreter, argument vector, and working directory. A hidden operation failure repeats an otherwise passing fixture to prove that the plan propagates the check result. Candidate bytes enter through standard input. They never become host shell arguments, environment values, image names, or paths. There is no host-execution fallback.
+- `verify-commands` accepts a natural answer with one fenced shell artifact and brief prose. It runs the artifact against fresh healthy and defective fixture states inside a locked container. The candidate process has no writable home or shared-memory scratch space and cannot create regular files. An in-container evidence service authenticates each required interpreter, argument vector, and working directory against the root-owned fixture. A hidden operation failure repeats an otherwise passing fixture to prove that the plan propagates the check result. Candidate bytes enter through standard input. They never become host shell arguments, environment values, image names, or paths. There is no host-execution fallback.
 - `spec-probes` accepts natural prose and Markdown tables. Its oracle checks source requirement anchors, non-mutation, and arithmetic consistency when the answer includes tagged coverage data. A cross-family comparison judge decides which answer is more complete, grounded, and applicable.
 - `runtime-probes` accepts natural prose and findings tables. Its oracle checks that the trusted driver ran as required, the trace contains fresh target-specific evidence, the driver facts match the fixture, the answer cites actual evidence IDs, and the fixture was not mutated. A cross-family comparison judge decides whether the answer's claims agree with those facts and which answer has better diagnostic quality.
 
@@ -66,7 +66,7 @@ mise exec -- python3 tools/direct_skill_lanes.py verify \
   --repo "$source_repo" --skill verify-commands --shadow-repo "$shadow"
 ```
 
-`verify` rejects a changed source revision or experiment contract, an altered receipt, a roster mismatch, a path escape, a symlink, and any arm difference beyond the selected target.
+`verify` rejects a changed source revision, experiment contract, or lane helper, an altered receipt, a roster mismatch, a path escape, a symlink, and any arm difference beyond the selected target. Integrated runs invoke the helper copy recorded in the materialized lane rather than mutable caller-checkout bytes.
 
 ## Integrated headline runs
 

@@ -16,6 +16,7 @@ from typing import Any, Iterable
 
 
 CONFIG_PATH = Path("evals/direct-skills-experiment.json")
+HELPER_PATH = Path("tools/direct_skill_lanes.py")
 RECEIPT_NAME = "integrated-lane-receipt.json"
 PAIRED_VARIANTS = ("with_skill", "old_skill")
 
@@ -195,6 +196,27 @@ def _copy_skill(repo: Path, destination: Path, name: str) -> None:
     _copy_tracked_tree(repo, Path("skills") / name, destination / "skills" / name)
 
 
+def _tracked_file_digest(repo: Path, relative: Path) -> str:
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", relative.as_posix()],
+        cwd=repo,
+        capture_output=True,
+        check=False,
+    )
+    source = repo / relative
+    if tracked.returncode != 0 or source.is_symlink() or not source.is_file():
+        raise LaneError(f"lane helper must be a tracked regular file: {source}")
+    return _sha256(source)
+
+
+def _copy_tracked_file(repo: Path, relative: Path, destination: Path) -> str:
+    digest = _tracked_file_digest(repo, relative)
+    source = repo / relative
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return digest
+
+
 def _materialize_at(
     repo: Path,
     target_skill: str,
@@ -219,6 +241,7 @@ def _materialize_at(
     _copy_skill(repo, treatment_root, target_skill)
     suite_destination = output / "evals" / target_skill
     _copy_tracked_tree(repo, suite_relative, suite_destination)
+    helper_digest = _copy_tracked_file(repo, HELPER_PATH, output / HELPER_PATH)
 
     manifest_path = suite_destination / "shared-benchmark.json"
     manifest = _read_json(manifest_path)
@@ -263,6 +286,7 @@ def _materialize_at(
             "local_cli_port_map": integrated["local_cli_port_map"],
             "skills": source_skill_inventory,
             "eval_suite": _tracked_tree_inventory(repo, suite_relative),
+            "helpers": {HELPER_PATH.as_posix(): helper_digest},
         },
         "arms": {
             "control": {
@@ -346,6 +370,8 @@ def verify_materialized_lane(repo: Path, shadow_repo: Path, target_skill: str) -
         raise LaneError("integrated lane source skill inventory changed after materialization")
     if source.get("eval_suite") != _tracked_tree_inventory(repo, Path("evals") / target_skill):
         raise LaneError("integrated lane source eval inventory changed after materialization")
+    if source.get("helpers") != {HELPER_PATH.as_posix(): _tracked_file_digest(repo, HELPER_PATH)}:
+        raise LaneError("integrated lane source helper changed after materialization")
 
     with tempfile.TemporaryDirectory(prefix="direct-skill-verify-") as expected_name:
         expected_receipt = _materialize_at(
