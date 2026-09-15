@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -18,6 +19,17 @@ from direct_skill_lanes import (
 
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def canonical_digest(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
 class IntegratedLaneMaterializationTests(unittest.TestCase):
@@ -46,6 +58,18 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         path = self.shadow / "arms" / "control" / "skills" / "architect" / "SKILL.md"
         path.write_text(path.read_text(encoding="utf-8") + "\ntampered\n", encoding="utf-8")
         with self.assertRaisesRegex(LaneError, "inventory"):
+            verify_materialized_lane(ROOT, self.shadow, "verify-commands")
+
+    def test_receipt_cannot_authorize_an_added_shadow_file(self) -> None:
+        injected = self.shadow / "evals" / "verify-commands" / "injected.json"
+        injected.write_text("{}\n", encoding="utf-8")
+        receipt_path = self.shadow / "integrated-lane-receipt.json"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt["files"]["evals/verify-commands/injected.json"] = (
+            f"sha256:{hashlib.sha256(injected.read_bytes()).hexdigest()}"
+        )
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "does not match its source"):
             verify_materialized_lane(ROOT, self.shadow, "verify-commands")
 
     def test_nonempty_output_is_rejected(self) -> None:
@@ -218,16 +242,62 @@ class ExposureEligibilityTests(unittest.TestCase):
             ]
         }), encoding="utf-8")
 
-    def write_events(self, case: str, variant: str, skill: str | None) -> None:
-        run = self.root / "runs" / case / variant / "run-1"
+    def write_design(self, identities: list[dict[str, object]]) -> None:
+        identities.sort(key=lambda row: (
+            row["case_id"], str(row["model"] or ""), row["variant"], row["run_number"]
+        ))
+        payload = {
+            "schema_version": 2,
+            "population": "answer",
+            "eval_contract_sha256": f"sha256:{'0' * 64}",
+            "identities": identities,
+        }
+        design = {**payload, "design_sha256": canonical_digest(payload)}
+        runs = self.root / "runs"
+        runs.mkdir(exist_ok=True)
+        (runs / "answer-design.json").write_text(json.dumps(design), encoding="utf-8")
+
+    def plan_run(self, case: str, variant: str, run_number: int = 1) -> str:
+        design_path = self.root / "runs" / "answer-design.json"
+        identities = []
+        if design_path.exists():
+            identities = json.loads(design_path.read_text(encoding="utf-8"))["identities"]
+        suffix = [] if run_number == 1 else [f"run-{run_number}"]
+        run_dir = "/".join([case, variant, *suffix])
+        identities.append({
+            "case_id": case,
+            "model": None,
+            "variant": variant,
+            "run_number": run_number,
+            "run_dir": run_dir,
+            "task_sha256": f"sha256:{'1' * 64}",
+            "case_input_sha256": f"sha256:{'2' * 64}",
+            "instruction_sha256": f"sha256:{'3' * 64}",
+            "planned_skill_tree_hash": "4" * 64,
+            "fixture_tree_hash": "5" * 64,
+        })
+        self.write_design(identities)
+        return run_dir
+
+    def write_events(
+        self,
+        case: str,
+        variant: str,
+        skill: str | None,
+        *,
+        event: dict[str, object] | None = None,
+        run_number: int = 1,
+    ) -> None:
+        run = self.root / "runs" / self.plan_run(case, variant, run_number)
         run.mkdir(parents=True)
-        events = [] if skill is None else [{
+        events = [] if skill is None else [event or {
             "type": "skill_load",
+            "name": "Read",
             "input_summary": f"./skills/{skill}/SKILL.md",
             "status": "completed",
         }]
         (run / "events.json").write_text(json.dumps({
-            "schema_version": 3,
+            "schema_version": 2,
             "source": "test",
             "events": events,
         }), encoding="utf-8")
@@ -238,6 +308,103 @@ class ExposureEligibilityTests(unittest.TestCase):
         report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
         self.assertFalse(report["eligible"])
         self.assertEqual(report["missing_target_reads"][0]["case_id"], "behavior")
+
+    def test_echo_or_search_text_cannot_satisfy_a_target_read(self) -> None:
+        forged = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": "rg ./skills/verify-commands/SKILL.md",
+            "status": "completed",
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=forged)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        self.assertFalse(report["eligible"])
+        self.assertEqual(len(report["missing_target_reads"]), 1)
+
+    def test_completed_reader_command_counts_as_target_read(self) -> None:
+        command = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": "sed -n '1,240p' ./skills/verify-commands/SKILL.md",
+            "output_summary": "---\nname: verify-commands\n---",
+            "status": "completed",
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=command)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        self.assertTrue(report["eligible"])
+
+    def test_shell_wrapped_reader_command_counts_as_target_read(self) -> None:
+        command = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": "/bin/zsh -lc \"sed -n '1,240p' ./skills/verify-commands/SKILL.md\"",
+            "output_summary": "---\nname: verify-commands\n---",
+            "status": "completed",
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=command)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        self.assertTrue(report["eligible"])
+
+    def test_reader_command_without_returned_content_does_not_count(self) -> None:
+        command = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": "cat ./skills/verify-commands/SKILL.md >/dev/null",
+            "output_summary": "",
+            "status": "completed",
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=command)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        self.assertFalse(report["eligible"])
+
+    def test_target_read_requires_completed_exact_skill_path(self) -> None:
+        incomplete = {
+            "type": "skill_load",
+            "name": "Read",
+            "input_summary": "./skills/verify-commands/SKILL.md.backup",
+            "status": "in_progress",
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=incomplete)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        self.assertFalse(report["eligible"])
+        self.assertEqual(len(report["missing_target_reads"]), 1)
+
+    def test_native_skill_activation_counts_without_a_file_path(self) -> None:
+        native = {
+            "type": "skill_load",
+            "name": "Skill",
+            "input_summary": "verify-commands",
+            "status": "completed",
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=native)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        self.assertTrue(report["eligible"])
+
+    def test_malformed_answer_design_identity_is_rejected(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        design_path = self.root / "runs" / "answer-design.json"
+        design = json.loads(design_path.read_text(encoding="utf-8"))
+        del design["identities"][0]["fixture_tree_hash"]
+        self.write_design(design["identities"])
+        with self.assertRaisesRegex(LaneError, "invalid shape"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+
+    def test_dot_answer_design_run_directory_is_rejected(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        design_path = self.root / "runs" / "answer-design.json"
+        design = json.loads(design_path.read_text(encoding="utf-8"))
+        design["identities"][0]["run_dir"] = "."
+        self.write_design(design["identities"])
+        with self.assertRaisesRegex(LaneError, "safe relative path"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands")
 
     def test_negative_trigger_may_omit_target(self) -> None:
         for case in ("behavior", "positive-trigger"):
@@ -265,7 +432,61 @@ class ExposureEligibilityTests(unittest.TestCase):
 
     def test_rejects_incomplete_run_pair(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
-        with self.assertRaisesRegex(LaneError, "run population mismatch"):
+        self.plan_run("behavior", "old_skill")
+        with self.assertRaisesRegex(LaneError, "differs from answer design"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+
+    def test_rejects_run_missing_from_both_arms(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        self.plan_run("behavior", "with_skill", 2)
+        self.plan_run("behavior", "old_skill", 2)
+        with self.assertRaisesRegex(
+            LaneError,
+            "missing=.*behavior/old_skill/run-2.*behavior/with_skill/run-2",
+        ):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+
+    def test_rejects_coordinate_absent_from_answer_design(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        extra = self.root / "runs" / "behavior" / "old_skill" / "run-2"
+        extra.mkdir(parents=True)
+        (extra / "events.json").write_text(json.dumps({"events": []}), encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "extra=.*run-2"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+
+    def test_rejects_unsupported_event_envelope(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        envelope = json.loads(events_path.read_text(encoding="utf-8"))
+        envelope["schema_version"] = 3
+        events_path.write_text(json.dumps(envelope), encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "harness event envelope"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+
+    def test_rejects_non_object_event(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        envelope = json.loads(events_path.read_text(encoding="utf-8"))
+        envelope["events"].append("not an event")
+        events_path.write_text(json.dumps(envelope), encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "harness event envelope"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+
+    def test_rejects_duplicate_answer_design_coordinate(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        design_path = self.root / "runs" / "answer-design.json"
+        design = json.loads(design_path.read_text(encoding="utf-8"))
+        identities = design["identities"]
+        duplicate = dict(next(row for row in identities if row["variant"] == "with_skill"))
+        duplicate["run_dir"] = "behavior/with_skill/run-1"
+        identities.append(duplicate)
+        self.write_design(identities)
+        with self.assertRaisesRegex(LaneError, "duplicate answer design run coordinate"):
             exposure_report(self.root / "runs", self.manifest, "verify-commands")
 
 

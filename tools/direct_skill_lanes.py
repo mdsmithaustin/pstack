@@ -5,10 +5,13 @@ import argparse
 import hashlib
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, Iterable
 
 
@@ -344,13 +347,22 @@ def verify_materialized_lane(repo: Path, shadow_repo: Path, target_skill: str) -
     if source.get("eval_suite") != _tracked_tree_inventory(repo, Path("evals") / target_skill):
         raise LaneError("integrated lane source eval inventory changed after materialization")
 
-    expected_files = receipt.get("files")
-    if not isinstance(expected_files, dict):
-        raise LaneError("integrated lane receipt has no file inventory")
+    with tempfile.TemporaryDirectory(prefix="direct-skill-verify-") as expected_name:
+        expected_receipt = _materialize_at(
+            repo,
+            target_skill,
+            Path(expected_name),
+            contract,
+            integrated,
+            baseline_skills,
+        )
+    expected_files = expected_receipt["files"]
+    if receipt.get("files") != expected_files:
+        raise LaneError("integrated lane receipt file inventory does not match its source")
     actual_files = _inventory(shadow_repo)
     actual_files.pop(RECEIPT_NAME, None)
     if actual_files != expected_files:
-        raise LaneError("integrated lane file inventory does not match its receipt")
+        raise LaneError("integrated lane file inventory does not match its source")
 
     arms = receipt.get("arms")
     if not isinstance(arms, dict) or not isinstance(arms.get("control"), dict) or not isinstance(arms.get("treatment"), dict):
@@ -467,17 +479,193 @@ def filter_prepared_tasks(source: Path, destination: Path, variants: Iterable[st
     return counts
 
 
+def _reader_command_names_target(command: str, target_skill: str, depth: int = 0) -> bool:
+    if depth > 2:
+        return False
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return False
+    if not argv or any(token in {"|", "||", "&&", ";"} for token in argv):
+        return False
+    while argv and ("=" in argv[0] and not argv[0].startswith(("/", "./", "../"))):
+        argv.pop(0)
+    if argv and Path(argv[0]).name == "env":
+        argv.pop(0)
+        while argv and (argv[0].startswith("-") or "=" in argv[0]):
+            argv.pop(0)
+    if not argv:
+        return False
+    executable = Path(argv[0]).name
+    if executable in {"bash", "sh", "zsh"}:
+        shell_args = argv[1:]
+        options: list[str] = []
+        while shell_args and shell_args[0].startswith("-"):
+            options.append(shell_args.pop(0))
+        if len(shell_args) != 1 or not any("c" in option.lstrip("-") for option in options):
+            return False
+        return _reader_command_names_target(shell_args[0], target_skill, depth + 1)
+    if executable not in {"cat", "sed", "head", "tail"}:
+        return False
+    return any(
+        PurePosixPath(argument.replace("\\", "/")).parts[-3:]
+        == ("skills", target_skill, "SKILL.md")
+        for argument in argv[1:]
+    )
+
+
 def _event_names_target(event: Any, target_skill: str) -> bool:
     if not isinstance(event, dict):
         return False
-    if event.get("status") not in (None, "completed", "success"):
+    if event.get("status") != "completed" or event.get("is_error") is True:
         return False
-    needle = f"/skills/{target_skill}/SKILL.md"
-    for key in ("path", "command", "input_summary", "name"):
-        value = event.get(key)
-        if isinstance(value, str) and needle in value.replace("\\", "/"):
-            return True
-    return False
+    if event.get("type") == "command":
+        command = event.get("input_summary")
+        output = event.get("output_summary")
+        exit_code = event.get("exit_code")
+        return (
+            isinstance(command, str)
+            and isinstance(output, str)
+            and bool(output.strip())
+            and exit_code in (None, 0)
+            and _reader_command_names_target(command, target_skill)
+        )
+    if event.get("type") != "skill_load":
+        return False
+    name = event.get("name")
+    if name not in (None, "Read", "read", "read_file", "Skill", "skill", "activate_skill"):
+        return False
+    otel = event.get("otel")
+    value = otel.get("file.path") if isinstance(otel, dict) else None
+    if not isinstance(value, str):
+        value = event.get("input_summary")
+    if not isinstance(value, str):
+        return False
+    if name in ("Skill", "skill", "activate_skill") and value == target_skill:
+        return True
+    parts = PurePosixPath(value.replace("\\", "/")).parts
+    return parts[-3:] == ("skills", target_skill, "SKILL.md")
+
+
+def _canonical_json_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _expected_exposure_runs(
+    runs: Path,
+    manifest_case_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    design = _read_json(runs / "answer-design.json")
+    identities = design.get("identities")
+    if design.get("schema_version") != 2 or design.get("population") != "answer":
+        raise LaneError("answer design has an unsupported identity")
+    contract_digest = design.get("eval_contract_sha256")
+    if not isinstance(contract_digest, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", contract_digest) is None:
+        raise LaneError("answer design has an invalid eval contract digest")
+    if not isinstance(identities, list):
+        raise LaneError("answer design identities must be a list")
+
+    expected: dict[str, dict[str, Any]] = {}
+    populations = {variant: set() for variant in PAIRED_VARIANTS}
+    seen_coordinates: set[tuple[str, str | None, str, int]] = set()
+    normalized_identities: list[dict[str, Any]] = []
+    invariant_by_case: dict[str, tuple[str, str]] = {}
+    treatment_by_coordinate: dict[tuple[str, str | None, str], tuple[str, str, str | None]] = {}
+    for identity in identities:
+        required_fields = {
+            "case_id", "model", "variant", "run_number", "run_dir",
+            "task_sha256", "case_input_sha256", "instruction_sha256",
+            "planned_skill_tree_hash", "fixture_tree_hash",
+        }
+        if not isinstance(identity, dict) or set(identity) != required_fields:
+            raise LaneError("answer design identity has an invalid shape")
+        case_id = identity["case_id"]
+        model = identity["model"]
+        variant = identity["variant"]
+        run_number = identity["run_number"]
+        run_dir = identity["run_dir"]
+        task_digest = identity["task_sha256"]
+        case_digest = identity["case_input_sha256"]
+        instruction_digest = identity["instruction_sha256"]
+        skill_digest = identity["planned_skill_tree_hash"]
+        fixture_digest = identity["fixture_tree_hash"]
+        if not isinstance(case_id, str) or not case_id or case_id not in manifest_case_ids:
+            raise LaneError(f"answer design contains a case absent from the manifest: {case_id}")
+        if variant not in PAIRED_VARIANTS:
+            raise LaneError(f"answer design contains an unexpected variant: {variant}")
+        if model is not None and (not isinstance(model, str) or not model):
+            raise LaneError("answer design model must be null or a non-empty string")
+        if isinstance(run_number, bool) or not isinstance(run_number, int) or run_number < 1:
+            raise LaneError("answer design run number must be a positive integer")
+        if not isinstance(run_dir, str) or not run_dir:
+            raise LaneError("answer design run directory must be a non-empty string")
+        if any(
+            not isinstance(value, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None
+            for value in (task_digest, case_digest, instruction_digest)
+        ):
+            raise LaneError("answer design identity has an invalid task digest")
+        if (
+            skill_digest is not None
+            and (not isinstance(skill_digest, str) or re.fullmatch(r"[0-9a-f]{64}", skill_digest) is None)
+        ):
+            raise LaneError("answer design identity has an invalid skill digest")
+        if not isinstance(fixture_digest, str) or re.fullmatch(r"[0-9a-f]{64}", fixture_digest) is None:
+            raise LaneError("answer design identity has an invalid fixture digest")
+        run_path = PurePosixPath(run_dir)
+        if (
+            run_path.is_absolute()
+            or not run_path.parts
+            or run_path == PurePosixPath(".")
+            or ".." in run_path.parts
+            or "." in run_path.parts
+        ):
+            raise LaneError("answer design run directory must be a safe relative path")
+        expected_parts = [str(case_id)]
+        if model is not None:
+            expected_parts.append(model)
+        expected_parts.append(str(variant))
+        if run_number > 1 or run_path.parts[-1].startswith("run-"):
+            expected_parts.append(f"run-{run_number}")
+        if run_path.parts != tuple(expected_parts):
+            raise LaneError("answer design run directory disagrees with its coordinate")
+        coordinate = (str(case_id), model, str(variant), run_number)
+        if coordinate in seen_coordinates or run_dir in expected:
+            raise LaneError(f"duplicate answer design run coordinate: {coordinate}")
+        seen_coordinates.add(coordinate)
+        pair_coordinate = (str(case_id), model, run_number)
+        populations[str(variant)].add(pair_coordinate)
+        expected[run_dir] = identity
+        case_value = (case_digest, fixture_digest)
+        previous_case = invariant_by_case.setdefault(case_id, case_value)
+        if previous_case != case_value:
+            raise LaneError(f"answer design case input or fixtures differ across coordinates: {case_id}")
+        treatment_key = (case_id, model, variant)
+        treatment_value = (task_digest, instruction_digest, skill_digest)
+        previous_treatment = treatment_by_coordinate.setdefault(treatment_key, treatment_value)
+        if previous_treatment != treatment_value:
+            raise LaneError(f"answer design treatment differs across repetitions: {treatment_key}")
+        normalized_identities.append(dict(identity))
+    if not expected or populations["with_skill"] != populations["old_skill"]:
+        raise LaneError("answer design population mismatch for with_skill and old_skill")
+    normalized_identities.sort(key=lambda row: (
+        row["case_id"], str(row["model"] or ""), row["variant"], row["run_number"]
+    ))
+    payload = {
+        "schema_version": 2,
+        "population": "answer",
+        "eval_contract_sha256": contract_digest,
+        "identities": normalized_identities,
+    }
+    if design.get("design_sha256") != _canonical_json_sha256(payload):
+        raise LaneError("answer design digest does not match its identities")
+    return expected
 
 
 def _case_requires_target_read(case: dict[str, Any]) -> bool:
@@ -509,6 +697,14 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str) -> dict[
     cases = manifest.get("cases")
     if not isinstance(cases, list):
         raise LaneError("manifest cases must be a list")
+    case_ids = [case.get("id") for case in cases if isinstance(case, dict)]
+    if (
+        len(case_ids) != len(cases)
+        or not all(isinstance(case_id, str) and case_id for case_id in case_ids)
+        or len(case_ids) != len(set(case_ids))
+    ):
+        raise LaneError("manifest case ids must be non-empty and unique")
+    expected_runs = _expected_exposure_runs(runs, set(case_ids))
     must_read = {
         case.get("id")
         for case in cases
@@ -516,40 +712,50 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str) -> dict[
         and isinstance(case.get("id"), str)
         and _case_requires_target_read(case)
     }
-    rows: list[dict[str, Any]] = []
+    event_files: dict[str, Path] = {}
     for events_path in sorted(runs.rglob("events.json")):
         relative = events_path.relative_to(runs)
-        parts = relative.parts
-        variant = next((value for value in PAIRED_VARIANTS if value in parts), None)
-        if variant is None or not parts:
-            continue
-        case_id = parts[0]
+        run_dir = relative.parent.as_posix()
+        if run_dir in event_files:
+            raise LaneError(f"duplicate exposure run directory: {run_dir}")
+        event_files[run_dir] = events_path
+    expected_paths = set(expected_runs)
+    observed_paths = set(event_files)
+    if expected_paths != observed_paths:
+        missing = sorted(expected_paths - observed_paths)
+        extra = sorted(observed_paths - expected_paths)
+        raise LaneError(f"exposure run population differs from answer design; missing={missing}; extra={extra}")
+
+    rows: list[dict[str, Any]] = []
+    for run_dir in sorted(expected_runs):
+        identity = expected_runs[run_dir]
+        events_path = event_files[run_dir]
         try:
             payload = json.loads(events_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise LaneError(f"cannot read exposure events from {events_path}: {exc}") from exc
-        if not isinstance(payload, dict) or not isinstance(payload.get("events"), list):
+        if (
+            not isinstance(payload, dict)
+            or type(payload.get("schema_version")) is not int
+            or payload["schema_version"] != 2
+            or not isinstance(payload.get("source"), str)
+            or not payload["source"]
+            or not isinstance(payload.get("events"), list)
+            or not all(isinstance(event, dict) for event in payload["events"])
+        ):
             raise LaneError(f"exposure events must use the harness event envelope: {events_path}")
         events = payload["events"]
         observed = any(_event_names_target(event, target_skill) for event in events)
+        case_id = identity["case_id"]
+        variant = identity["variant"]
         expected = variant == "with_skill" and case_id in must_read
-        pair_parts = tuple(part for part in relative.parent.parts if part != variant)
         rows.append({
             "case_id": case_id,
             "variant": variant,
-            "run": relative.parent.as_posix(),
-            "pair_key": "/".join(pair_parts),
+            "run": run_dir,
             "target_read_expected": expected,
             "target_read_observed": observed,
         })
-    if not rows:
-        raise LaneError(f"no paired run events found under {runs}")
-    populations = {
-        variant: {row["pair_key"] for row in rows if row["variant"] == variant}
-        for variant in PAIRED_VARIANTS
-    }
-    if not populations["with_skill"] or populations["with_skill"] != populations["old_skill"]:
-        raise LaneError("exposure run population mismatch for with_skill and old_skill")
     missing = [row for row in rows if row["target_read_expected"] and not row["target_read_observed"]]
     unexpected = [
         row for row in rows
