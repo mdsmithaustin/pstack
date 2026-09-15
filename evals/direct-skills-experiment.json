@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "baseline": {
+    "repository": "https://github.com/cursor/plugins.git#pstack",
+    "commit": "5bf2b1544db739998121a306340631963c2ff3de",
+    "target_skills_absent": [
+      "runtime-probes",
+      "spec-probes",
+      "verify-commands"
+    ],
+    "behavioral_arm": "without_skill"
+  },
+  "targets": [
+    "verify-commands",
+    "spec-probes",
+    "runtime-probes"
+  ],
+  "answer_models": [
+    {
+      "agent": "codex",
+      "model": "gpt-5.6-luna"
+    },
+    {
+      "agent": "codex",
+      "model": "gpt-5.6-sol"
+    },
+    {
+      "agent": "codex",
+      "model": "gpt-5.6-terra"
+    },
+    {
+      "agent": "claude",
+      "model": "opus"
+    }
+  ],
+  "priority": [
+    "quality",
+    "tokens",
+    "elapsed_time"
+  ],
+  "judging": {
+    "repetitions": 3,
+    "answer_and_judge_families_must_differ": true,
+    "codex_answers": {
+      "agent": "claude",
+      "model": "opus"
+    },
+    "claude_answers": {
+      "agent": "codex",
+      "model": "gpt-6-astra"
+    }
+  },
+  "promotion": {
+    "finalist_repetitions": 3,
+    "hard_gates_require_full_pass": true,
+    "no_model_regression": true,
+    "aggregate": "median",
+    "numeric_threshold_source": "repeated-incumbent-variance",
+    "private_behavior_cases_per_skill": 4,
+    "private_positive_trigger_cases_per_skill": 4,
+    "private_negative_trigger_cases_per_skill": 4,
+    "user_approval_required": true
+  },
+  "climb": {
+    "separate_trigger_and_behavior": true,
+    "maximum_cycles_per_metric": 5,
+    "stop_after_consecutive_no_gain_cycles": 2,
+    "maximum_live_branches": 2,
+    "combined_candidate_must_beat_each_parent": true,
+    "compression_is_separate": true
+  }
+}

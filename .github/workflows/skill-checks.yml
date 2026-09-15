@@ -11,5 +11,6 @@ jobs:
     with:
       skills-dir: skills
       evals-dir: evals
+      require-manifests: true
       trigger-cases: tools/skill-trigger-cases.json
       pii-scope: repository
