@@ -33,6 +33,16 @@ def _is_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _reject_symlink_chain(root: Path, relative: Path) -> None:
+    if relative.is_absolute() or ".." in relative.parts:
+        raise LaneError(f"lane source path must stay below its repository: {relative}")
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise LaneError(f"lane source path contains a symlink: {current}")
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -170,6 +180,7 @@ def _tracked_tree_files(repo: Path, tree_relative: Path) -> list[Path]:
         except ValueError as exc:
             raise LaneError(f"tracked path escapes its tree: {relative}") from exc
         source = repo / relative
+        _reject_symlink_chain(repo, relative)
         if source.is_symlink() or not source.is_file():
             raise LaneError(f"tracked lane source must be a regular file: {source}")
         files.append(tree_file)
@@ -204,6 +215,7 @@ def _tracked_file_digest(repo: Path, relative: Path) -> str:
         check=False,
     )
     source = repo / relative
+    _reject_symlink_chain(repo, relative)
     if tracked.returncode != 0 or source.is_symlink() or not source.is_file():
         raise LaneError(f"lane helper must be a tracked regular file: {source}")
     return _sha256(source)
@@ -586,7 +598,7 @@ def _canonical_json_sha256(value: Any) -> str:
 
 def _expected_exposure_runs(
     runs: Path,
-    manifest_case_ids: set[str],
+    expected_case_ids: set[str],
 ) -> dict[str, dict[str, Any]]:
     design = _read_json(runs / "answer-design.json")
     identities = design.get("identities")
@@ -622,7 +634,7 @@ def _expected_exposure_runs(
         instruction_digest = identity["instruction_sha256"]
         skill_digest = identity["planned_skill_tree_hash"]
         fixture_digest = identity["fixture_tree_hash"]
-        if not isinstance(case_id, str) or not case_id or case_id not in manifest_case_ids:
+        if not isinstance(case_id, str) or not case_id or case_id not in expected_case_ids:
             raise LaneError(f"answer design contains a case absent from the manifest: {case_id}")
         if variant not in PAIRED_VARIANTS:
             raise LaneError(f"answer design contains an unexpected variant: {variant}")
@@ -680,6 +692,11 @@ def _expected_exposure_runs(
         normalized_identities.append(dict(identity))
     if not expected or populations["with_skill"] != populations["old_skill"]:
         raise LaneError("answer design population mismatch for with_skill and old_skill")
+    observed_case_ids = {identity["case_id"] for identity in identities}
+    if observed_case_ids != expected_case_ids:
+        missing = sorted(expected_case_ids - observed_case_ids)
+        extra = sorted(observed_case_ids - expected_case_ids)
+        raise LaneError(f"answer design case population differs from the selected split; missing={missing}; extra={extra}")
     normalized_identities.sort(key=lambda row: (
         row["case_id"], str(row["model"] or ""), row["variant"], row["run_number"]
     ))
@@ -718,7 +735,7 @@ def _case_requires_target_read(case: dict[str, Any]) -> bool:
     return case.get("kind") != "trigger" or case.get("should_trigger") is True
 
 
-def exposure_report(runs: Path, manifest_path: Path, target_skill: str) -> dict[str, Any]:
+def exposure_report(runs: Path, manifest_path: Path, target_skill: str, split: str) -> dict[str, Any]:
     manifest = _read_json(manifest_path)
     cases = manifest.get("cases")
     if not isinstance(cases, list):
@@ -730,10 +747,17 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str) -> dict[
         or len(case_ids) != len(set(case_ids))
     ):
         raise LaneError("manifest case ids must be non-empty and unique")
-    expected_runs = _expected_exposure_runs(runs, set(case_ids))
+    selected_cases = [
+        case for case in cases
+        if isinstance(case, dict) and case.get("split") == split and case.get("kind") != "trigger"
+    ]
+    selected_case_ids = {case["id"] for case in selected_cases}
+    if not selected_case_ids:
+        raise LaneError(f"manifest has no answer cases in split {split!r}")
+    expected_runs = _expected_exposure_runs(runs, selected_case_ids)
     must_read = {
         case.get("id")
-        for case in cases
+        for case in selected_cases
         if isinstance(case, dict)
         and isinstance(case.get("id"), str)
         and _case_requires_target_read(case)
@@ -821,6 +845,7 @@ def main() -> int:
     exposure.add_argument("--runs", type=Path, required=True)
     exposure.add_argument("--manifest", type=Path, required=True)
     exposure.add_argument("--skill", required=True)
+    exposure.add_argument("--split", required=True)
     exposure.add_argument("--out", type=Path, required=True)
 
     args = parser.parse_args()
@@ -837,7 +862,7 @@ def main() -> int:
             counts = filter_prepared_tasks(args.input, args.out)
             print(json.dumps(counts, sort_keys=True))
             return 0
-        report = exposure_report(args.runs, args.manifest, args.skill)
+        report = exposure_report(args.runs, args.manifest, args.skill, args.split)
         _write_json(args.out, report)
         if not report["eligible"]:
             print(json.dumps({

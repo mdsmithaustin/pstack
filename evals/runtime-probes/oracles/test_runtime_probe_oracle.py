@@ -56,6 +56,22 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         workspace.add_driver("verify_order_service.py", target, "a" * 24, ORDER_OBSERVATIONS, reachability=ORDER_REACHABILITY)
         workspace.add_driver("verify_order_service.py", target, "b" * 24, ORDER_OBSERVATIONS, reachability=ORDER_REACHABILITY)
 
+    def test_event_loader_rejects_non_object_envelopes_and_events(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "trace.jsonl").write_text("", encoding="utf-8")
+            for envelope in (
+                [],
+                {"events": []},
+                {"schema_version": 2.0, "source": "test", "events": []},
+                {"schema_version": 2, "source": "test", "events": [42]},
+            ):
+                (root / "events.json").write_text(json.dumps(envelope), encoding="utf-8")
+                with self.subTest(envelope=envelope), self.assertRaises(
+                    runtime_probe_oracle.InfrastructureFailure
+                ):
+                    runtime_probe_oracle.load_events(root)
+
     def test_accepts_natural_findings_table_and_structurally_different_prose(self) -> None:
         table = "| Evidence | Result |\n| --- | --- |\n| aaaaaaaaaaaaaaaaaaaaaaaa | first run |\n| bbbbbbbbbbbbbbbbbbbbbbbb | clean replay |"
         prose = "The initial run is aaaaaaaaaaaaaaaaaaaaaaaa. A fresh replay produced bbbbbbbbbbbbbbbbbbbbbbbb. The duplicate is reachable through checkout and affects customer orders."

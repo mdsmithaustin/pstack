@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from run_direct_skill_eval import command_plan
+from run_direct_skill_eval import command_plan, main
 
 
 class DirectSkillEvalRunnerTests(unittest.TestCase):
@@ -93,6 +97,8 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
         self.assertIn("--allow-scripts", commands[5])
         self.assertIn("--variant", commands[5])
         self.assertIn("check-exposure", commands[6])
+        self.assertIn("--split", commands[6])
+        self.assertIn("tune", commands[6])
         self.assertIn("--primary", commands[7])
         self.assertIn("with_skill", commands[7])
         self.assertIn("--baseline", commands[7])
@@ -113,6 +119,30 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
         }), encoding="utf-8")
         commands = self.plan(lane="integrated", judge_backend=None, judge_model=None)
         self.assertTrue(any("compare-tasks" in command for command in commands))
+
+    def test_main_rejects_a_symlinked_output_before_resolving_it(self) -> None:
+        target = self.root / "target"
+        target.mkdir()
+        output = self.root / "linked-output"
+        output.symlink_to(target, target_is_directory=True)
+        argv = [
+            "run_direct_skill_eval.py",
+            "--skill",
+            "demo",
+            "--agent",
+            "codex",
+            "--model",
+            "candidate",
+            "--out",
+            str(output),
+        ]
+        with (
+            mock.patch.object(sys, "argv", argv),
+            contextlib.redirect_stderr(io.StringIO()),
+            self.assertRaises(SystemExit) as raised,
+        ):
+            main()
+        self.assertEqual(raised.exception.code, 2)
 
 
 if __name__ == "__main__":

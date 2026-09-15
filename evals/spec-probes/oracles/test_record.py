@@ -48,8 +48,24 @@ class RecordOracleTests(unittest.TestCase):
             root = Path(directory)
             with self.assertRaisesRegex(ValueError, "events.json is missing"):
                 load_events(root)
-            (root / "events.json").write_text('{"events": []}', encoding="utf-8")
+            (root / "events.json").write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
             self.assertEqual(load_events(root), [])
+
+    def test_event_loader_rejects_non_object_envelopes_and_events(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for envelope in (
+                [],
+                {"events": []},
+                {"schema_version": 2.0, "source": "test", "events": []},
+                {"schema_version": 2, "source": "test", "events": [42]},
+            ):
+                (root / "events.json").write_text(json.dumps(envelope), encoding="utf-8")
+                with self.subTest(envelope=envelope), self.assertRaises(ValueError):
+                    load_events(root)
 
     def test_accepts_deployed_incident_scope_refusal_without_fixed_wording(self) -> None:
         first = "This shipped failure belongs with incident response and debugging. I would not redefine the product contract here."

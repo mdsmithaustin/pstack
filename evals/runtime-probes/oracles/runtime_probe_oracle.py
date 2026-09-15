@@ -46,14 +46,22 @@ def load_events(output_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
         envelope = json.loads(events_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise InfrastructureFailure(f"events.json is unreadable: {error}") from error
+    if (
+        not isinstance(envelope, dict)
+        or type(envelope.get("schema_version")) is not int
+        or envelope["schema_version"] != 2
+        or not isinstance(envelope.get("source"), str)
+        or not envelope["source"]
+    ):
+        raise InfrastructureFailure("events.json must contain a version 2 envelope with a source")
     events = envelope.get("events")
-    if not isinstance(events, list):
+    if not isinstance(events, list) or not all(isinstance(item, dict) for item in events):
         raise InfrastructureFailure("events.json does not contain an events list")
     try:
         trace = trace_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError as error:
         raise InfrastructureFailure(f"trace.jsonl is unreadable: {error}") from error
-    return [item for item in events if isinstance(item, dict)], trace
+    return events, trace
 
 
 def _unquoted(token: str) -> tuple[str, bool]:

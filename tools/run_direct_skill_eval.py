@@ -151,6 +151,8 @@ def command_plan(
                 str(manifest),
                 "--skill",
                 skill,
+                "--split",
+                split,
                 "--out",
                 str(output / "exposure.json"),
             ],
@@ -256,6 +258,8 @@ def main() -> int:
 
     repo = args.repo.resolve()
     skill_ci = args.skill_ci.resolve()
+    if args.out.is_symlink():
+        parser.error("output must not be a symlink")
     output = args.out.resolve()
     if args.runs < 1 or args.judge_runs < 1 or args.timeout < 1:
         parser.error("runs, judge-runs, and timeout must be positive")

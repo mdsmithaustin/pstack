@@ -79,7 +79,7 @@ mise exec -- python3 tools/run_direct_skill_eval.py \
   --out /secure/results/verify-commands-integrated-luna --dry-run
 ```
 
-Remove `--dry-run` to execute one answer-model arm. Integrated mode validates the generated manifest, audits it, prepares paired `with_skill` and `old_skill` tasks, removes unused variants before dispatch, runs the answer model, applies deterministic grades, checks target-specific exposure, and exports blinded comparison tasks.
+Remove `--dry-run` to execute one answer-model arm. Integrated mode validates and audits the generated manifest. It prepares paired `with_skill` and `old_skill` tasks, removes unused variants, and runs the answer model. It applies deterministic grades, checks target-specific exposure for every behavior case in the selected split, and exports blinded comparison tasks. The result directory must not be a symlink and must stay outside the immutable shadow repository.
 
 The checked-in runner stops after `compare-tasks`. It does not automate semantic judging. Give `compare-tasks.jsonl` to a judge from the other model family. Save its verdicts as JSON Lines outside Git, then import them.
 

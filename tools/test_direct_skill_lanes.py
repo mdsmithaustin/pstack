@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from direct_skill_lanes import (
     LaneError,
+    _tracked_tree_files,
     exposure_report,
     filter_prepared_tasks,
     materialize_integrated_lane,
@@ -181,6 +182,25 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
             / "node_modules"
         ).exists())
 
+    def test_tracked_file_below_symlinked_ancestor_is_rejected(self) -> None:
+        source = Path(self.temp.name) / "symlink-source"
+        outside = Path(self.temp.name) / "outside"
+        (source / "tree").mkdir(parents=True)
+        outside.mkdir()
+        (source / "tree" / "file.txt").write_text("tracked", encoding="utf-8")
+        subprocess.run(["git", "init", "-q"], cwd=source, check=True)
+        subprocess.run(["git", "add", "."], cwd=source, check=True)
+        subprocess.run(
+            ["git", "-c", "user.name=Lane Test", "-c", "user.email=lane-test", "commit", "-qm", "fixture"],
+            cwd=source,
+            check=True,
+        )
+        shutil.move(source / "tree" / "file.txt", outside / "file.txt")
+        (source / "tree").rmdir()
+        (source / "tree").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(LaneError, "contains a symlink"):
+            _tracked_tree_files(source, Path("tree"))
+
 
 class PreparedTaskFilterTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -231,12 +251,13 @@ class ExposureEligibilityTests(unittest.TestCase):
         self.manifest = self.root / "manifest.json"
         self.manifest.write_text(json.dumps({
             "cases": [
-                {"id": "behavior", "kind": "positive"},
-                {"id": "positive-trigger", "kind": "trigger", "should_trigger": True},
-                {"id": "negative-trigger", "kind": "trigger", "should_trigger": False},
+                {"id": "behavior", "kind": "positive", "split": "tune"},
+                {"id": "positive-trigger", "kind": "trigger", "split": "tune", "should_trigger": True},
+                {"id": "negative-trigger", "kind": "trigger", "split": "tune", "should_trigger": False},
                 {
                     "id": "restraint",
                     "kind": "negative",
+                    "split": "holdback",
                     "assertions": [{
                         "type": "skill_invoked",
                         "expected": False,
@@ -309,7 +330,7 @@ class ExposureEligibilityTests(unittest.TestCase):
     def test_requires_the_target_not_any_skill_event(self) -> None:
         self.write_events("behavior", "with_skill", "architect")
         self.write_events("behavior", "old_skill", "architect")
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertFalse(report["eligible"])
         self.assertEqual(report["missing_target_reads"][0]["case_id"], "behavior")
 
@@ -322,7 +343,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         }
         self.write_events("behavior", "with_skill", "verify-commands", event=forged)
         self.write_events("behavior", "old_skill", None)
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertFalse(report["eligible"])
         self.assertEqual(len(report["missing_target_reads"]), 1)
 
@@ -336,7 +357,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         }
         self.write_events("behavior", "with_skill", "verify-commands", event=command)
         self.write_events("behavior", "old_skill", None)
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertTrue(report["eligible"])
 
     def test_shell_wrapped_reader_command_counts_as_target_read(self) -> None:
@@ -349,7 +370,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         }
         self.write_events("behavior", "with_skill", "verify-commands", event=command)
         self.write_events("behavior", "old_skill", None)
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertTrue(report["eligible"])
 
     def test_reader_command_without_returned_content_does_not_count(self) -> None:
@@ -362,7 +383,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         }
         self.write_events("behavior", "with_skill", "verify-commands", event=command)
         self.write_events("behavior", "old_skill", None)
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertFalse(report["eligible"])
 
     def test_target_read_requires_completed_exact_skill_path(self) -> None:
@@ -374,7 +395,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         }
         self.write_events("behavior", "with_skill", "verify-commands", event=incomplete)
         self.write_events("behavior", "old_skill", None)
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertFalse(report["eligible"])
         self.assertEqual(len(report["missing_target_reads"]), 1)
 
@@ -387,7 +408,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         }
         self.write_events("behavior", "with_skill", "verify-commands", event=native)
         self.write_events("behavior", "old_skill", None)
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertTrue(report["eligible"])
 
     def test_malformed_answer_design_identity_is_rejected(self) -> None:
@@ -398,7 +419,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         del design["identities"][0]["fixture_tree_hash"]
         self.write_design(design["identities"])
         with self.assertRaisesRegex(LaneError, "invalid shape"):
-            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
     def test_dot_answer_design_run_directory_is_rejected(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
@@ -408,28 +429,28 @@ class ExposureEligibilityTests(unittest.TestCase):
         design["identities"][0]["run_dir"] = "."
         self.write_design(design["identities"])
         with self.assertRaisesRegex(LaneError, "safe relative path"):
-            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
-    def test_negative_trigger_may_omit_target(self) -> None:
-        for case in ("behavior", "positive-trigger"):
-            self.write_events(case, "with_skill", "verify-commands")
-            self.write_events(case, "old_skill", "architect")
-        self.write_events("negative-trigger", "with_skill", None)
-        self.write_events("negative-trigger", "old_skill", "architect")
-        self.write_events("restraint", "with_skill", None)
-        self.write_events("restraint", "old_skill", "architect")
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+    def test_answer_population_excludes_trigger_cases(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", "architect")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertTrue(report["eligible"])
         self.assertEqual(report["missing_target_reads"], [])
 
+    def test_rejects_a_manifest_case_missing_from_both_arms(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"].append({"id": "second-behavior", "kind": "positive", "split": "tune"})
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", "architect")
+        with self.assertRaisesRegex(LaneError, "case population differs.*second-behavior"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
     def test_non_trigger_restraint_uses_explicit_false_expectation(self) -> None:
-        for case in ("behavior", "positive-trigger"):
-            self.write_events(case, "with_skill", "verify-commands")
-            self.write_events(case, "old_skill", "architect")
-        for case in ("negative-trigger", "restraint"):
-            self.write_events(case, "with_skill", None)
-            self.write_events(case, "old_skill", "architect")
-        report = exposure_report(self.root / "runs", self.manifest, "verify-commands")
+        self.write_events("restraint", "with_skill", None)
+        self.write_events("restraint", "old_skill", "architect")
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "holdback")
         restraint = next(row for row in report["runs"] if row["case_id"] == "restraint" and row["variant"] == "with_skill")
         self.assertFalse(restraint["target_read_expected"])
         self.assertTrue(report["eligible"])
@@ -438,7 +459,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         self.write_events("behavior", "with_skill", "verify-commands")
         self.plan_run("behavior", "old_skill")
         with self.assertRaisesRegex(LaneError, "differs from answer design"):
-            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
     def test_rejects_run_missing_from_both_arms(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
@@ -449,7 +470,7 @@ class ExposureEligibilityTests(unittest.TestCase):
             LaneError,
             "missing=.*behavior/old_skill/run-2.*behavior/with_skill/run-2",
         ):
-            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
     def test_rejects_coordinate_absent_from_answer_design(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
@@ -458,7 +479,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         extra.mkdir(parents=True)
         (extra / "events.json").write_text(json.dumps({"events": []}), encoding="utf-8")
         with self.assertRaisesRegex(LaneError, "extra=.*run-2"):
-            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
     def test_rejects_unsupported_event_envelope(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
@@ -468,7 +489,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         envelope["schema_version"] = 3
         events_path.write_text(json.dumps(envelope), encoding="utf-8")
         with self.assertRaisesRegex(LaneError, "harness event envelope"):
-            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
     def test_rejects_non_object_event(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
@@ -478,7 +499,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         envelope["events"].append("not an event")
         events_path.write_text(json.dumps(envelope), encoding="utf-8")
         with self.assertRaisesRegex(LaneError, "harness event envelope"):
-            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
     def test_rejects_duplicate_answer_design_coordinate(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
@@ -491,7 +512,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         identities.append(duplicate)
         self.write_design(identities)
         with self.assertRaisesRegex(LaneError, "duplicate answer design run coordinate"):
-            exposure_report(self.root / "runs", self.manifest, "verify-commands")
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
 
 if __name__ == "__main__":

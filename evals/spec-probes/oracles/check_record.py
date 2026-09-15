@@ -15,10 +15,18 @@ def load_events(output_dir: Path) -> list[dict[str, object]]:
         envelope = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"cannot read events.json: {exc}") from exc
+    if (
+        not isinstance(envelope, dict)
+        or type(envelope.get("schema_version")) is not int
+        or envelope["schema_version"] != 2
+        or not isinstance(envelope.get("source"), str)
+        or not envelope["source"]
+    ):
+        raise ValueError("events.json must contain a version 2 envelope with a source")
     events = envelope.get("events")
-    if not isinstance(events, list):
+    if not isinstance(events, list) or not all(isinstance(event, dict) for event in events):
         raise ValueError("events.json does not contain an events list")
-    return [event for event in events if isinstance(event, dict)]
+    return events
 
 
 def main() -> int:
