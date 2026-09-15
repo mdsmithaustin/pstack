@@ -1,0 +1,189 @@
+{
+  "valid_live_alternative": {
+    "case_id": "pos-live-order-replay",
+    "scope": {
+      "availability": "available",
+      "entry_point": "checkout_client -> POST /orders",
+      "surface": "verify_order_service.py",
+      "target": "order_service.py"
+    },
+    "stop": {
+      "budget": "two driver runs",
+      "floor": "one initial run and one fresh replay",
+      "met": true
+    },
+    "probes": [
+      {
+        "id": "duplicate-order",
+        "category": "repeat_and_replay",
+        "state": "finding",
+        "observed": {
+          "charges_created": 2,
+          "duplicate_requests": 1,
+          "orders_created": 2
+        },
+        "evidence_ids": ["aaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbb"],
+        "promotion": {
+          "state": "promoted",
+          "reproduces": true,
+          "caller": {
+            "name": "checkout_client",
+            "path": "checkout_client -> POST /orders",
+            "reachable": true,
+            "guard": null
+          },
+          "consequence": {
+            "kind": "user_visible",
+            "description": "A retry creates two orders and two charges."
+          },
+          "regression_invariant": "A repeated request ID cannot create a second order or charge.",
+          "reason": "The clean replay reaches the public caller and duplicates customer data."
+        }
+      }
+    ],
+    "authority": {
+      "mode": "diagnostic_only",
+      "mutations_made": false,
+      "next_action": "Stage the invariant as a failing regression check after approval."
+    }
+  },
+  "valid_guarded": {
+    "case_id": "neg-guarded-order-import",
+    "scope": {
+      "availability": "available",
+      "entry_point": "import_client -> POST /orders/import",
+      "surface": "verify_order_service.py",
+      "target": "order_service.py"
+    },
+    "stop": {
+      "budget": "two driver runs",
+      "floor": "one initial run and one fresh replay",
+      "met": true
+    },
+    "probes": [
+      {
+        "id": "negative-quantity-handler",
+        "category": "malformed_input",
+        "state": "finding",
+        "observed": {
+          "direct_handler_accepted": true,
+          "guard": "validate_quantity_range",
+          "handler_called": false,
+          "status": 400
+        },
+        "evidence_ids": ["aaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbb"],
+        "promotion": {
+          "state": "gap",
+          "reproduces": true,
+          "caller": {
+            "name": "import_client",
+            "path": "import_client -> POST /orders/import -> validate_quantity_range",
+            "reachable": false,
+            "guard": "validate_quantity_range"
+          },
+          "consequence": null,
+          "regression_invariant": null,
+          "reason": "The public caller stops at the named quantity guard."
+        }
+      }
+    ],
+    "authority": {
+      "mode": "diagnostic_only",
+      "mutations_made": false,
+      "next_action": "Keep the guard-bound gap in the investigation record."
+    }
+  },
+  "valid_dependency": {
+    "case_id": "pos-billing-dependency-boundary",
+    "scope": {
+      "availability": "available",
+      "entry_point": "checkout_client -> POST /charges",
+      "surface": "verify_billing_service.py",
+      "target": "billing_service.py"
+    },
+    "stop": {
+      "budget": "two driver runs",
+      "floor": "one initial run and one fresh replay",
+      "met": true
+    },
+    "probes": [
+      {
+        "id": "provider-error",
+        "category": "dependency_failure",
+        "state": "pass",
+        "observed": {
+          "body": "payment temporarily unavailable",
+          "provider_called": true,
+          "status": 503
+        },
+        "evidence_ids": ["aaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbb"],
+        "promotion": {"state": "not_assessed"}
+      },
+      {
+        "id": "provider-delay",
+        "category": "dependency_slowness",
+        "state": "pass",
+        "observed": {
+          "body": "payment provider timeout",
+          "elapsed_ms_at_least": 20,
+          "provider_called": true,
+          "status": 504
+        },
+        "evidence_ids": ["aaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbb"],
+        "promotion": {"state": "not_assessed"}
+      }
+    ],
+    "authority": {
+      "mode": "diagnostic_only",
+      "mutations_made": false,
+      "next_action": "Record both passing boundary probes."
+    }
+  },
+  "valid_permission": {
+    "case_id": "neg-permission-boundary-escalation",
+    "scope": {
+      "availability": "supplied_observation",
+      "entry_point": "unknown caller -> POST /exports",
+      "surface": "gateway replay note",
+      "target": "export authorization boundary"
+    },
+    "stop": {
+      "budget": "the two supplied clean replays",
+      "floor": "two supplied observations",
+      "met": true
+    },
+    "probes": [
+      {
+        "id": "export-email-disclosure",
+        "category": "repeat_and_replay",
+        "state": "finding",
+        "observed": {
+          "response_contains": "account email addresses",
+          "runs": 2
+        },
+        "evidence_ids": ["gateway-note:clean-replay-2"],
+        "promotion": {
+          "state": "escalated",
+          "reproduces": true,
+          "caller": {
+            "name": null,
+            "path": "unknown caller -> POST /exports",
+            "reachable": null,
+            "guard": null
+          },
+          "consequence": {
+            "kind": "privacy",
+            "description": "The response contains account email addresses."
+          },
+          "regression_invariant": null,
+          "reason": "The missing route and authorization policy prevent a reachability decision."
+        }
+      }
+    ],
+    "authority": {
+      "mode": "diagnostic_only",
+      "mutations_made": false,
+      "next_action": "Ask the authorization owner which caller and policy apply."
+    }
+  }
+}
