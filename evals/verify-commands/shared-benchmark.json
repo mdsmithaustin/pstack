@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "skill_name": "verify-commands",
+  "skill_description": "Apply whenever you write or review a command that decides whether work is done: a test invocation, an acceptance check, a CI gate, a shell assertion, a grep-based verify step. Names the failure signal, grounds paths, and catches the shapes that pass green while measuring nothing.",
+  "harness": {
+    "name": "skill-eval-harness",
+    "url": "https://github.com/mdsmithaustin/skill-eval-harness",
+    "version": "git+c2a1735983fd7827491ad4d89f9bebe9e8e229a0"
+  },
+  "skill_paths": ["skills/verify-commands/SKILL.md"],
+  "variants": ["with_skill", "without_skill"],
+  "judge": {"model": "gpt-6-astra"},
+  "split_policy": {
+    "tune": "All committed public cases run during ordinary local checks.",
+    "holdback": "A separate ignored overlay supplies sealed cases after this public corpus is frozen."
+  },
+  "cases": [
+    {
+      "id": "pos-stale-summary",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "completion-gate",
+      "difficulty": "core",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Our release note pipes `npm run verify` into a search for `714 checks passed`, but the number changes when checks are added. Run the attached bootstrap with `python3 inputs/stale_summary.py . current`, inspect the project it creates, and return a safer paste-ready plan for a runbook importer. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "files": ["oracles/projects/stale_summary.py"],
+      "expected_behavior": ["Runs the existing verification operation without treating a recalled count as the contract.", "Propagates the operation's non-zero exit and names that observable release blocker."],
+      "assertions": [
+        {"name": "release-operation-survives-real-state-changes", "type": "script", "command": ["python3", "oracles/check_plan.py", "stale-summary", "{output_dir}"], "severity": "gate", "oracle": "strong"},
+        {
+          "name": "release-plan-explains-its-boundary",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {"name": "command-grounding", "scale": "1-5", "rubric": "5 = the script uses the created project's existing verification operation and remains correct when its success count changes. 1 = it relies on the recalled count, invents an unrelated operation, or hides the upstream exit."},
+            {"name": "failure-explanation", "scale": "1-5", "rubric": "5 = failure_signals identifies the verification process's non-zero exit as the release blocker. 1 = it gives a generic error claim, names only missing prose, or omits the blocking direction."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["stale-count", "executable-fixture"]
+    },
+    {
+      "id": "pos-empty-selection",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "completion-gate",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Our scenario runner uses substring selection and exits zero when it selects nothing. The required scenario is `checkout_rejects_expired_card`. Run the attached bootstrap with `python3 inputs/empty_selection.py . present`, inspect the project it creates, and return a paste-ready release plan that proves the exact scenario exists before running it. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "files": ["oracles/projects/empty_selection.py"],
+      "expected_behavior": ["Discovers and matches the exact scenario before execution.", "Blocks on a missing exact name and on the selected scenario's non-zero exit."],
+      "assertions": [
+        {"name": "selection-and-run-are-observed", "type": "script", "command": ["python3", "oracles/check_plan.py", "empty-selection", "{output_dir}"], "severity": "gate", "oracle": "strong"},
+        {
+          "name": "selection-plan-explains-both-blockers",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {"name": "exact-selection", "scale": "1-5", "rubric": "5 = the plan distinguishes the exact required name from a longer substring match before running it. 1 = it trusts substring selection, allows an empty selection, or checks only final prose."},
+            {"name": "failure-explanation", "scale": "1-5", "rubric": "5 = failure_signals separately names an absent exact scenario and a non-zero selected run. 1 = either blocker is absent or described only as a generic failure."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["zero-selection", "exact-name", "executable-fixture"]
+    },
+    {
+      "id": "pos-defaulted-parity",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "shell-assertion",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "A release gate currently turns either missing generated total into zero, then approves when the two zeroes match. Run the attached bootstrap with `python3 inputs/defaulted_parity.py . equal`, inspect the project it creates, and build a paste-ready gate from `tools/reference_total.py` and `tools/current_total.py`. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "files": ["oracles/projects/defaulted_parity.py"],
+      "expected_behavior": ["Preserves failures from both total producers instead of defaulting them.", "Blocks when successful producer values differ."],
+      "assertions": [
+        {"name": "parity-gate-runs-both-producers", "type": "script", "command": ["python3", "oracles/check_plan.py", "defaulted-parity", "{output_dir}"], "severity": "gate", "oracle": "strong"},
+        {
+          "name": "parity-plan-explains-each-direction",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {"name": "missing-input-safety", "scale": "1-5", "rubric": "5 = either producer's non-zero exit reaches the gate and unavailable values cannot become equal defaults. 1 = an error remains suppressed, a fallback can approve missing data, or a producer is skipped in the normal path."},
+            {"name": "failure-explanation", "scale": "1-5", "rubric": "5 = failure_signals identifies reference failure, current failure, and unequal totals as separate blockers. 1 = any direction is omitted or reduced to a generic error statement."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["silent-default", "parity", "executable-fixture"]
+    },
+    {
+      "id": "pos-package-path",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "path-grounding",
+      "difficulty": "core",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "The root package has a decoy `verify` script. The release check belongs to `packages/web`, whose package file defines its own `verify` script. Run the attached bootstrap with `python3 inputs/package_path.py . healthy`, inspect the workspace it creates, and return the portable command for the web package. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "files": ["oracles/projects/package_path.py"],
+      "expected_behavior": ["Targets the observed web package rather than the root decoy or an invented directory.", "Names the package verification process's non-zero exit as the blocker."],
+      "assertions": [
+        {"name": "web-package-operation-is-observed", "type": "script", "command": ["python3", "oracles/check_plan.py", "package-path", "{output_dir}"], "severity": "gate", "oracle": "strong"},
+        {
+          "name": "package-plan-is-grounded",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {"name": "path-grounding", "scale": "1-5", "rubric": "5 = the script targets packages/web from the stated project root and uses the package's declared verification operation. 1 = it runs the root decoy, invents another path, or relies on an unstated caller directory."},
+            {"name": "failure-explanation", "scale": "1-5", "rubric": "5 = failure_signals ties a non-zero web-package verification exit to stopping release. 1 = it omits that direction or gives only a generic error claim."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["workspace", "package-manager", "executable-fixture"]
+    },
+    {
+      "id": "pos-scoped-source",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "completion-gate",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Only `legacy_fetch` must stop using `legacyClient`; `compatibility_probe` must retain it for this release. The API package already exposes the exact scenario `legacy_fetch_uses_new_client`. Run the attached bootstrap with `python3 inputs/scoped_source.py . migrated`, inspect the project it creates, and replace our file-wide negative search with a paste-ready signoff. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "files": ["oracles/projects/scoped_source.py"],
+      "expected_behavior": ["Runs the existing exact scenario for the migrated function.", "Allows the required compatibility call while blocking a target regression."],
+      "assertions": [
+        {"name": "targeted-scenario-is-observed", "type": "script", "command": ["python3", "oracles/check_plan.py", "scoped-source", "{output_dir}"], "severity": "gate", "oracle": "strong"},
+        {
+          "name": "source-plan-respects-scope",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {"name": "scope-correctness", "scale": "1-5", "rubric": "5 = the script exercises only legacy_fetch through the supplied exact scenario and permits compatibility_probe's required legacy call. 1 = it performs a file-wide ban, checks the wrong region, or ignores the supplied scenario."},
+            {"name": "failure-explanation", "scale": "1-5", "rubric": "5 = failure_signals names the targeted scenario's non-zero exit as the signoff blocker. 1 = it relies on quoted source text, omits the exit direction, or states only a generic error."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["scoped-source", "negative-search", "executable-fixture"]
+    },
+    {
+      "id": "healthy-control",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "completion-gate",
+      "difficulty": "core",
+      "trigger_type": "near-miss",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Our release runbook already uses `python3 tools/verify-release.py`, and that program exits non-zero when release is unsafe. Run the attached bootstrap with `python3 inputs/healthy_control.py . healthy`, inspect the project it creates, and put the existing check into the runbook import shape without adding unrelated machinery. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "files": ["oracles/projects/healthy_control.py"],
+      "expected_behavior": ["Preserves the already meaningful command.", "Names its non-zero exit without manufacturing another gate."],
+      "assertions": [
+        {"name": "healthy-command-remains-meaningful", "type": "script", "command": ["python3", "oracles/check_plan.py", "healthy-control", "{output_dir}"], "severity": "gate", "oracle": "strong"},
+        {
+          "name": "healthy-plan-shows-restraint",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {"name": "command-preservation", "scale": "1-5", "rubric": "5 = the script preserves the supplied direct command or a semantically identical invocation. 1 = it replaces the meaningful operation with prose matching, a no-op, or unrelated scaffolding."},
+            {"name": "failure-explanation", "scale": "1-5", "rubric": "5 = failure_signals identifies the program's non-zero exit and adds no invented blocker. 1 = it omits the observable direction or adds unsupported criteria."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["healthy-control", "restraint", "executable-fixture"]
+    },
+    {
+      "id": "neg-explain-pipefail",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "restraint",
+      "difficulty": "core",
+      "trigger_type": "near-miss",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Explain what `set -o pipefail` changes in a shell pipeline. Keep the answer brief; I am learning the shell and am not asking you to design or review a completion gate.",
+      "expected_behavior": ["Answers the shell-language question directly and accurately.", "Does not turn a bounded explanation into a verification plan or release process."],
+      "assertions": [
+        {"name": "pipefail-explanation-stays-in-scope", "type": "script", "command": ["python3", "oracles/check_restraint.py", "pipefail", "{output_dir}"], "severity": "gate", "oracle": "strong"},
+        {
+          "name": "pipefail-explanation-is-useful",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {"name": "technical-accuracy", "scale": "1-5", "rubric": "5 = accurately explains that a pipeline can fail when an earlier command fails, rather than depending only on the last command's status. 1 = reverses the behavior, confuses it with immediate exit, or does not answer the question."},
+            {"name": "restraint", "scale": "1-5", "rubric": "5 = gives a compact explanation without inventing a release gate, verification plan, or unrelated workflow. 1 = ignores the requested explanation or expands it into an unsolicited process."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["near-miss", "education", "restraint"]
+    },
+    {
+      "id": "neg-format-command",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "restraint",
+      "difficulty": "core",
+      "trigger_type": "near-miss",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Put the exact command `docker ps --format '{{.Names}}'` in a fenced shell block, followed by one sentence saying that it prints container names. Do not alter the command.",
+      "expected_behavior": ["Preserves the requested command byte-for-byte in a shell fence.", "Does not reinterpret a formatting task as a request for a verification gate."],
+      "assertions": [
+        {"name": "formatted-command-is-preserved", "type": "script", "command": ["python3", "oracles/check_restraint.py", "format-command", "{output_dir}"], "severity": "gate", "oracle": "strong"},
+        {
+          "name": "formatting-response-is-faithful",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {"name": "instruction-fidelity", "scale": "1-5", "rubric": "5 = reproduces the exact command once in a shell fence and follows it with the requested one-sentence description. 1 = changes the command, omits the fence or description, or adds executable steps."},
+            {"name": "restraint", "scale": "1-5", "rubric": "5 = performs only the requested formatting task without adding a verification plan, completion criteria, or release advice. 1 = substitutes an unsolicited workflow or materially expands the scope."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["near-miss", "formatting", "restraint"]
+    },
+    {"id": "trigger-review-release-pipe", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "core", "trigger_type": "implicit", "success_goals": ["trigger"], "should_trigger": true, "prompt": "Can you review this release signoff before I paste it into the runbook? `npm run verify | grep '714 checks passed'`", "expected_behavior": ["Loads for review of a command that decides release completion."], "tags": ["positive", "review"]},
+    {"id": "trigger-write-merge-gate", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "core", "trigger_type": "implicit", "success_goals": ["trigger"], "should_trigger": true, "prompt": "Write the shell check that should decide whether generated API files are current enough to merge.", "expected_behavior": ["Loads when asked to author a merge-deciding check."], "tags": ["positive", "authoring"]},
+    {"id": "trigger-zero-selection", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "extended", "trigger_type": "implicit", "success_goals": ["trigger"], "should_trigger": true, "prompt": "Our scenario runner exits zero when a name filter selects nothing. Please repair the command used for release signoff.", "expected_behavior": ["Loads for a green-on-no-work completion gate."], "tags": ["positive", "zero-selection"]},
+    {"id": "trigger-terse-signoff", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "extended", "trigger_type": "ambiguous", "success_goals": ["trigger"], "should_trigger": true, "prompt": "Is `npm --prefix packages/web run verify | grep ready` enough for web release signoff?", "expected_behavior": ["Loads when a terse question asks whether a command is sufficient for signoff."], "tags": ["positive", "ambiguous"]},
+    {"id": "neg-trigger-shell-education", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "core", "trigger_type": "near-miss", "success_goals": ["trigger"], "should_trigger": false, "prompt": "What does `grep -E` mean in a shell command?", "expected_behavior": ["Stays quiet for general shell syntax education."], "tags": ["negative", "education"]},
+    {"id": "neg-trigger-local-server", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "core", "trigger_type": "near-miss", "success_goals": ["trigger"], "should_trigger": false, "prompt": "What command starts the local development server?", "expected_behavior": ["Stays quiet for a routine command that makes no completion decision."], "tags": ["negative", "routine-command"]},
+    {"id": "neg-trigger-format-snippet", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "core", "trigger_type": "near-miss", "success_goals": ["trigger"], "should_trigger": false, "prompt": "Put `docker ps --format '{{.Names}}'` in a fenced shell block.", "expected_behavior": ["Stays quiet for Markdown formatting of a command."], "tags": ["negative", "formatting"]},
+    {"id": "neg-trigger-explain-output", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "extended", "trigger_type": "ambiguous", "success_goals": ["trigger"], "should_trigger": false, "prompt": "Why does `docker ps` put a header above the container rows? I only need an explanation of the output format.", "expected_behavior": ["Stays quiet for explanation of command output that is not a completion gate."], "tags": ["negative", "ambiguous"]}
+  ],
+  "ablations": []
+}
