@@ -6,10 +6,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from runtime_probe_oracle import evaluate
+import runtime_probe_oracle
 
 SAMPLES = json.loads(
     (Path(__file__).parent / "samples" / "records.json").read_text(encoding="utf-8")
@@ -52,8 +53,15 @@ class OracleWorkspace:
         self.write_record(record)
         self.events: list[dict[str, object]] = []
         self.serialized_events: list[str] = []
+        self._event_loader = mock.patch.object(
+            runtime_probe_oracle,
+            "load_events",
+            return_value=(self.events, self.serialized_events),
+        )
+        self._event_loader.start()
 
     def close(self) -> None:
+        self._event_loader.stop()
         self._temporary.cleanup()
 
     def write_record(self, record: dict[str, object]) -> None:
@@ -105,13 +113,6 @@ class OracleWorkspace:
     def add_event(self, event: dict[str, object]) -> None:
         self.events.append(event)
 
-    def finish(self) -> None:
-        (self.path / "events.json").write_text(
-            json.dumps({"events": self.events}), encoding="utf-8"
-        )
-        (self.path / "trace.jsonl").write_text("\n".join(self.serialized_events), encoding="utf-8")
-
-
 class RuntimeProbeOracleTests(unittest.TestCase):
     def workspace(self, sample: str) -> OracleWorkspace:
         workspace = OracleWorkspace(copy.deepcopy(SAMPLES[sample]))
@@ -129,9 +130,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
     def test_structurally_different_valid_live_record_passes(self) -> None:
         workspace = self.workspace("valid_live_alternative")
         self.add_order_replays(workspace)
-        workspace.finish()
         self.assertEqual(
-            evaluate("pos-live-order-replay", workspace.path),
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path),
             ("PASS", "pos-live-order-replay record matches trusted evidence and scope"),
         )
 
@@ -145,14 +145,12 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         )
         workspace.write_record(record)
         self.add_order_replays(workspace)
-        workspace.finish()
-        self.assertEqual(evaluate("pos-live-order-replay", workspace.path)[0], "PASS")
+        self.assertEqual(runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "PASS")
 
     def test_valid_guarded_gap_passes(self) -> None:
         workspace = self.workspace("valid_guarded")
         self.add_order_replays(workspace)
-        workspace.finish()
-        self.assertEqual(evaluate("neg-guarded-order-import", workspace.path)[0], "PASS")
+        self.assertEqual(runtime_probe_oracle.evaluate("neg-guarded-order-import", workspace.path)[0], "PASS")
 
     def test_valid_dependency_passes_without_inventing_findings(self) -> None:
         workspace = self.workspace("valid_dependency")
@@ -168,16 +166,14 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             "b" * 24,
             BILLING_OBSERVATIONS,
         )
-        workspace.finish()
         self.assertEqual(
-            evaluate("pos-billing-dependency-boundary", workspace.path)[0], "PASS"
+            runtime_probe_oracle.evaluate("pos-billing-dependency-boundary", workspace.path)[0], "PASS"
         )
 
     def test_valid_sensitive_boundary_escalation_passes(self) -> None:
         workspace = self.workspace("valid_permission")
-        workspace.finish()
         self.assertEqual(
-            evaluate("neg-permission-boundary-escalation", workspace.path)[0], "PASS"
+            runtime_probe_oracle.evaluate("neg-permission-boundary-escalation", workspace.path)[0], "PASS"
         )
 
     def test_parrot_only_prose_fails(self) -> None:
@@ -187,9 +183,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.add_order_replays(workspace)
-        workspace.finish()
         self.assertEqual(
-            evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
         )
 
     def test_fabricated_driver_evidence_fails(self) -> None:
@@ -200,9 +195,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         workspace.add_driver(
             "verify_order_service.py", "order_service.py", "d" * 24, ORDER_OBSERVATIONS
         )
-        workspace.finish()
         self.assertEqual(
-            evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
         )
 
     def test_echoed_driver_output_is_missing_measurement(self) -> None:
@@ -221,9 +215,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             ORDER_OBSERVATIONS,
             command="printf python3 inputs/verify_order_service.py",
         )
-        workspace.finish()
         self.assertEqual(
-            evaluate("pos-live-order-replay", workspace.path)[0], "MISSING_MEASUREMENT"
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "MISSING_MEASUREMENT"
         )
 
     def test_malicious_extra_command_fails_diagnostic_authority(self) -> None:
@@ -237,9 +230,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
                 "input_summary": "rm inputs/order_service.py",
             }
         )
-        workspace.finish()
         self.assertEqual(
-            evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
         )
 
     def test_file_change_event_fails_diagnostic_authority(self) -> None:
@@ -252,9 +244,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
                 "input_summary": "order_service.py",
             }
         )
-        workspace.finish()
         self.assertEqual(
-            evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
         )
 
     def test_invented_caller_fails(self) -> None:
@@ -263,9 +254,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         workspace_record["probes"][0]["promotion"]["caller"]["name"] = "admin_console"
         workspace.write_record(workspace_record)
         self.add_order_replays(workspace)
-        workspace.finish()
         self.assertEqual(
-            evaluate("neg-guarded-order-import", workspace.path)[0], "CANDIDATE_FAILURE"
+            runtime_probe_oracle.evaluate("neg-guarded-order-import", workspace.path)[0], "CANDIDATE_FAILURE"
         )
 
     def test_incorrect_promotion_fails(self) -> None:
@@ -274,9 +264,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         workspace_record["probes"][0]["promotion"]["state"] = "dismissed"
         workspace.write_record(workspace_record)
         self.add_order_replays(workspace)
-        workspace.finish()
         self.assertEqual(
-            evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE"
         )
 
     def test_reader_command_is_allowed_when_probe_execution_is_forbidden(self) -> None:
@@ -334,9 +323,8 @@ class RuntimeProbeOracleTests(unittest.TestCase):
                 "input_summary": "rg -- 'checkout_client -> POST' inputs/order-service-note.md",
             }
         )
-        workspace.finish()
         self.assertEqual(
-            evaluate("neg-plan-order-service-unavailable", workspace.path)[0], "PASS"
+            runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", workspace.path)[0], "PASS"
         )
 
 
