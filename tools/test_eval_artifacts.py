@@ -27,6 +27,7 @@ TRACKABLE = (
     "evals/README.md",
     "evals/direct-skills-experiment.json",
     "evals/private-holdback.template.json",
+    "tools/direct_skill_lanes.py",
     "tools/run_direct_skill_eval.py",
     "evals/unslop/shared-benchmark.json",
     "evals/unslop/oracles/check_edited.py",
@@ -158,12 +159,46 @@ class DirectSkillExperimentContract(unittest.TestCase):
 
     def test_baseline_matches_last_synced_upstream_change(self) -> None:
         recorded = (ROOT / ".github" / "upstream-sha").read_text(encoding="utf-8").strip()
+        self.assertEqual(self.contract["version"], 2)
         self.assertEqual(self.contract["baseline"]["commit"], recorded)
-        self.assertEqual(self.contract["baseline"]["behavioral_arm"], "without_skill")
+        self.assertEqual(self.contract["baseline"]["repository"], "https://github.com/cursor/plugins.git")
+        self.assertEqual(self.contract["baseline"]["subdirectory"], "pstack")
         self.assertEqual(sorted(self.contract["targets"]), sorted(DIRECT_EVAL_SKILLS))
         self.assertEqual(sorted(self.contract["baseline"]["target_skills_absent"]), sorted(DIRECT_EVAL_SKILLS))
+        self.assertEqual(self.contract["lanes"]["isolated"]["control_variant"], "without_skill")
+        self.assertFalse(self.contract["lanes"]["isolated"]["headline_eligible"])
+        self.assertEqual(self.contract["lanes"]["integrated"]["control_variant"], "old_skill")
+        self.assertEqual(self.contract["lanes"]["integrated"]["treatment_variant"], "with_skill")
+        self.assertTrue(self.contract["lanes"]["integrated"]["headline_eligible"])
         self.assertTrue(self.contract["judging"]["answer_and_judge_families_must_differ"])
         self.assertEqual(self.contract["judging"]["repetitions"], 3)
+
+    def test_integrated_roster_maps_exactly_to_local_port(self) -> None:
+        lane = self.contract["lanes"]["integrated"]
+        mapping = lane["local_cli_port_map"]
+        mapped = {mapping.get(name, name) for name in lane["upstream_skill_roster"]}
+        additions = set(lane["port_additions_absent_upstream"])
+        actual = {path.parent.name for path in SKILLS.glob("*/SKILL.md")}
+        self.assertEqual(mapping, {"tdd": "poteto-tdd", "teach": "poteto-teach"})
+        self.assertEqual(actual, mapped | additions)
+        self.assertTrue(set(DIRECT_EVAL_SKILLS).issubset(additions))
+        self.assertTrue({"documentation-impact", "pstack-harness"}.issubset(additions))
+        self.assertTrue(mapped.isdisjoint(additions))
+
+    def test_integrated_roster_matches_pinned_git_object_when_available(self) -> None:
+        commit = self.contract["baseline"]["commit"]
+        result = subprocess.run(
+            ["git", "ls-tree", "-d", "--name-only", f"{commit}:pstack/skills"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            self.skipTest("the shallow checkout does not contain the pinned upstream Git object")
+        self.assertEqual(
+            self.contract["lanes"]["integrated"]["upstream_skill_roster"],
+            result.stdout.splitlines(),
+        )
 
     def test_agreed_experiment_policy_is_frozen(self) -> None:
         self.assertEqual(

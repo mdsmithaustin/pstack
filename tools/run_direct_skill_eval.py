@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shlex
 import subprocess
 from pathlib import Path
+
+from direct_skill_lanes import LaneError, verify_materialized_lane
 
 
 def adapter_arguments(agent: str, skill_ci: Path) -> list[str]:
@@ -26,14 +29,18 @@ def command_plan(
     split: str,
     agent: str,
     model: str,
-    judge_backend: str,
-    judge_model: str,
+    judge_backend: str | None,
+    judge_model: str | None,
     output: Path,
     runs: int,
     judge_runs: int,
     timeout: int,
+    lane: str = "isolated",
+    helper: Path | None = None,
 ) -> list[list[str]]:
-    if agent == judge_backend:
+    if lane == "isolated" and (judge_backend is None or judge_model is None):
+        raise ValueError("the isolated lane requires a judge backend and model")
+    if lane == "isolated" and agent == judge_backend:
         raise ValueError("answer and judge backends must be from different model families")
     manifest = repo / "evals" / skill / "shared-benchmark.json"
     runner = skill_ci / "tools" / "run_runner.py"
@@ -41,6 +48,21 @@ def command_plan(
         raise ValueError(f"missing manifest: {manifest}")
     if not runner.is_file():
         raise ValueError(f"missing pinned runner: {runner}")
+    if lane not in {"isolated", "integrated"}:
+        raise ValueError(f"unsupported lane: {lane}")
+    if lane == "integrated":
+        try:
+            manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"cannot read integrated manifest: {exc}") from exc
+        if (
+            manifest_data.get("optional_variants") != ["old_skill"]
+            or not manifest_data.get("old_skill_paths")
+            or not manifest_data.get("skill_paths")
+        ):
+            raise ValueError("integrated manifest must define with_skill and old_skill path sets")
+        if helper is None or not helper.is_file():
+            raise ValueError(f"missing integrated lane helper: {helper}")
     prefix = ["uv", "run", "--no-project", "python", str(runner), "skill-benchmark"]
     tasks = output / "tasks.jsonl"
     answer_runs = output / "answers"
@@ -50,7 +72,21 @@ def command_plan(
     if split == "holdback":
         validation.append("--strict-holdback")
     validation.append(str(manifest))
-    return [
+    prepare_tasks = output / ("tasks.all.jsonl" if lane == "integrated" else "tasks.jsonl")
+    prepare = [
+        *prefix,
+        "prepare",
+        str(manifest),
+        "--split",
+        split,
+        "--runs-per-variant",
+        str(runs),
+        "--out",
+        str(prepare_tasks),
+    ]
+    if lane == "integrated":
+        prepare.append("--include-old-skill")
+    shared = [
         validation,
         [
             *prefix,
@@ -59,32 +95,86 @@ def command_plan(
             "--strict-judge",
             str(manifest),
         ],
-        [
-            *prefix,
-            "prepare",
-            str(manifest),
-            "--split",
-            split,
-            "--runs-per-variant",
-            str(runs),
-            "--out",
-            str(tasks),
-        ],
-        [
-            *prefix,
-            "run-agent",
-            "--agent",
-            agent,
-            "--model",
-            model,
-            *adapter_arguments(agent, skill_ci),
-            "--tasks",
-            str(tasks),
-            "--runs",
-            str(answer_runs),
-            "--timeout",
-            str(timeout),
-        ],
+        prepare,
+    ]
+    run_agent = [
+        *prefix,
+        "run-agent",
+        "--agent",
+        agent,
+        "--model",
+        model,
+        *adapter_arguments(agent, skill_ci),
+        "--tasks",
+        str(tasks),
+        "--runs",
+        str(answer_runs),
+        "--timeout",
+        str(timeout),
+    ]
+    if lane == "integrated":
+        return [
+            *shared,
+            [
+                "python3",
+                str(helper),
+                "filter-tasks",
+                "--input",
+                str(prepare_tasks),
+                "--out",
+                str(tasks),
+            ],
+            run_agent,
+            [
+                *prefix,
+                "grade",
+                str(manifest),
+                "--runs",
+                str(answer_runs),
+                "--split",
+                split,
+                "--variant",
+                "with_skill",
+                "--variant",
+                "old_skill",
+                "--allow-scripts",
+                "--out",
+                str(output / "grade.json"),
+            ],
+            [
+                "python3",
+                str(helper),
+                "check-exposure",
+                "--runs",
+                str(answer_runs),
+                "--manifest",
+                str(manifest),
+                "--skill",
+                skill,
+                "--out",
+                str(output / "exposure.json"),
+            ],
+            [
+                *prefix,
+                "compare-tasks",
+                str(manifest),
+                "--runs",
+                str(answer_runs),
+                "--split",
+                split,
+                "--primary",
+                "with_skill",
+                "--baseline",
+                "old_skill",
+                "--out",
+                str(output / "compare-tasks.jsonl"),
+                "--truth-out",
+                str(output / "compare-truth.json"),
+            ],
+        ]
+    return [
+        *shared,
+        run_agent,
         [
             *prefix,
             "grade",
@@ -108,10 +198,10 @@ def command_plan(
             "--judge-backend",
             judge_backend,
             "--judge-model",
-            judge_model,
+            str(judge_model),
             "--judge-runs",
             str(judge_runs),
-            *adapter_arguments(judge_backend, skill_ci),
+            *adapter_arguments(str(judge_backend), skill_ci),
             "--transcripts",
             str(output / "judge-transcripts"),
             "--out",
@@ -148,13 +238,15 @@ def main() -> int:
     source_repo = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description="Run one direct-skill answer and cross-family judge arm.")
     parser.add_argument("--repo", type=Path, default=source_repo)
+    parser.add_argument("--lane", choices=("isolated", "integrated"), default="isolated")
+    parser.add_argument("--shadow-repo", type=Path)
     parser.add_argument("--skill-ci", type=Path, default=source_repo.parent / "skill-ci")
     parser.add_argument("--skill", required=True)
     parser.add_argument("--split", choices=("tune", "holdback"), default="tune")
     parser.add_argument("--agent", choices=("claude", "codex"), required=True)
     parser.add_argument("--model", required=True)
-    parser.add_argument("--judge-backend", choices=("claude", "codex"), required=True)
-    parser.add_argument("--judge-model", required=True)
+    parser.add_argument("--judge-backend", choices=("claude", "codex"))
+    parser.add_argument("--judge-model")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--judge-runs", type=int, default=3)
@@ -169,9 +261,24 @@ def main() -> int:
         parser.error("runs, judge-runs, and timeout must be positive")
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         parser.error(f"output must be a new or empty directory: {output}")
+    eval_repo = repo
+    if args.lane == "integrated":
+        if args.shadow_repo is None:
+            parser.error("--shadow-repo is required for the integrated lane")
+        eval_repo = args.shadow_repo.resolve()
+        try:
+            verify_materialized_lane(repo, eval_repo, args.skill)
+        except LaneError as exc:
+            parser.error(str(exc))
+        try:
+            output.relative_to(eval_repo)
+        except ValueError:
+            pass
+        else:
+            parser.error("integrated output must be outside the immutable shadow repository")
     try:
         commands = command_plan(
-            repo=repo,
+            repo=eval_repo,
             skill_ci=skill_ci,
             skill=args.skill,
             split=args.split,
@@ -183,16 +290,22 @@ def main() -> int:
             runs=args.runs,
             judge_runs=args.judge_runs,
             timeout=args.timeout,
+            lane=args.lane,
+            helper=source_repo / "tools" / "direct_skill_lanes.py",
         )
     except ValueError as exc:
         parser.error(str(exc))
     if args.dry_run:
         for command in commands:
             print(shlex.join(command))
+        if args.lane == "integrated":
+            print("Pairwise judging remains external. Judge compare-tasks.jsonl blind, then import verdicts with compare-results.")
         return 0
     output.mkdir(parents=True, exist_ok=True)
     for command in commands:
-        subprocess.run(command, cwd=repo, check=True)
+        subprocess.run(command, cwd=eval_repo, check=True)
+    if args.lane == "integrated":
+        print("Pairwise judging remains external. Judge compare-tasks.jsonl blind, then import verdicts with compare-results.")
     return 0
 
 

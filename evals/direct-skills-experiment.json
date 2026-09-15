@@ -1,14 +1,94 @@
 {
-  "version": 1,
+  "version": 2,
   "baseline": {
-    "repository": "https://github.com/cursor/plugins.git#pstack",
+    "repository": "https://github.com/cursor/plugins.git",
     "commit": "5bf2b1544db739998121a306340631963c2ff3de",
+    "subdirectory": "pstack",
     "target_skills_absent": [
       "runtime-probes",
       "spec-probes",
       "verify-commands"
-    ],
-    "behavioral_arm": "without_skill"
+    ]
+  },
+  "lanes": {
+    "isolated": {
+      "purpose": "Diagnostic causal lift from the selected target alone.",
+      "control_variant": "without_skill",
+      "treatment_variant": "with_skill",
+      "skill_context": "selected_target_only",
+      "headline_eligible": false
+    },
+    "integrated": {
+      "purpose": "Additive value and routing compatibility inside the local CLI-compatible port of the pinned upstream pstack roster.",
+      "control_variant": "old_skill",
+      "treatment_variant": "with_skill",
+      "headline_eligible": true,
+      "upstream_skill_roster": [
+        "architect",
+        "arena",
+        "automate-me",
+        "blast-radius",
+        "bro",
+        "create-verification-skill",
+        "figure-it-out",
+        "how",
+        "interrogate",
+        "maintain-verification-skill",
+        "make-bot-ui",
+        "no-comments",
+        "poteto-mode",
+        "principle-attack-the-premise",
+        "principle-boundary-discipline",
+        "principle-build-the-lever",
+        "principle-encode-lessons-in-structure",
+        "principle-exhaust-the-design-space",
+        "principle-experience-first",
+        "principle-fix-root-causes",
+        "principle-foundational-thinking",
+        "principle-guard-the-context-window",
+        "principle-laziness-protocol",
+        "principle-make-operations-idempotent",
+        "principle-migrate-callers-then-delete-legacy-apis",
+        "principle-minimize-reader-load",
+        "principle-model-the-domain",
+        "principle-never-block-on-the-human",
+        "principle-outcome-oriented-execution",
+        "principle-prove-it-works",
+        "principle-redesign-from-first-principles",
+        "principle-separate-before-serializing-shared-state",
+        "principle-sequence-verifiable-units",
+        "principle-subtract-before-you-add",
+        "principle-test-behavior-not-implementation",
+        "principle-type-system-discipline",
+        "recall",
+        "reflect",
+        "setup-pstack",
+        "show-me-your-work",
+        "swarm",
+        "tdd",
+        "teach",
+        "technical-writing",
+        "typescript-best-practices",
+        "unslop",
+        "why"
+      ],
+      "local_cli_port_map": {
+        "tdd": "poteto-tdd",
+        "teach": "poteto-teach"
+      },
+      "port_additions_absent_upstream": [
+        "documentation-impact",
+        "pstack-harness",
+        "runtime-probes",
+        "spec-probes",
+        "verify-commands"
+      ],
+      "pairwise_judging": {
+        "task_export_command": "compare-tasks",
+        "result_import_command": "compare-results",
+        "external_cross_family_judge_required": true
+      }
+    }
   },
   "targets": [
     "verify-commands",
