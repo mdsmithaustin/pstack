@@ -1,78 +1,72 @@
+import json
+import sys
 import unittest
 from pathlib import Path
-import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from oracles.record import evaluate
-
-
-SAMPLES = Path(__file__).with_name("samples")
+from oracles.record import evaluate, evaluate_spec, extract_import_record
+from oracles.specs import CaseSpec
 
 
 class RecordOracleTests(unittest.TestCase):
-    def sample(self, name: str) -> str:
-        return (SAMPLES / name).read_text(encoding="utf-8")
+    def test_accepts_markdown_table_and_structurally_different_prose(self) -> None:
+        table = """| Source | Open decision |\n| --- | --- |\n| SP-101 | Which rounding rule applies? |\n| SP-102 | Do touching windows merge? |\n| SP-103 | What counts as a character? |\n| SP-104 | Which overlapping worker effect wins? |"""
+        prose = "SP-104 leaves concurrent effects open. SP-102 does not define touching windows. Character counting remains open in SP-103, while SP-101 omits its rounding rule."
+        self.assertEqual(evaluate("pos-mixed-shapes", table), [])
+        self.assertEqual(evaluate("pos-mixed-shapes", prose), [])
 
-    def test_accepts_two_grounded_resolutions_of_open_choices(self) -> None:
-        self.assertEqual(evaluate("pos-open-product-choice", self.sample("open-valid-a.md")), [])
-        self.assertEqual(evaluate("pos-open-product-choice", self.sample("open-valid-b.md")), [])
+    def test_reordered_requirements_and_paraphrased_questions_keep_the_verdict(self) -> None:
+        first = "CH-401 leaves adjacent windows undecided. CH-402 needs a definition of character."
+        second = "How should the product count a display-name symbol under CH-402? Must abutting availability periods combine under CH-401?"
+        self.assertEqual(evaluate("pos-open-product-choice", first), [])
+        self.assertEqual(evaluate("pos-open-product-choice", second), [])
 
-    def test_accepts_fixture_bound_records_for_each_spec_shape(self) -> None:
-        cases = {
-            "pos-mixed-shapes": "mixed-valid.md",
-            "pos-unclassified-prose": "unclassified-valid.md",
-            "pos-bespoke-reminder": "reminder-valid.md",
+    def test_consistent_requirement_rename_keeps_the_verdict(self) -> None:
+        spec = CaseSpec(("AC-17", "AC-29"))
+        original = evaluate_spec("AC-17 has one open decision. AC-29 has another.", spec)
+        renamed_spec = CaseSpec(("ZX-4", "ZX-8"))
+        renamed = evaluate_spec("ZX-4 has one open decision. ZX-8 has another.", renamed_spec)
+        self.assertEqual(original, [])
+        self.assertEqual(renamed, original)
+
+    def test_rejects_parrot_and_forged_source_anchors(self) -> None:
+        parrot = "Review the specification before implementation and report coverage."
+        forged = "ZZ-999 is the only requirement that needs review."
+        self.assertIn("missing source requirement anchors", evaluate("pos-open-product-choice", parrot)[0])
+        self.assertIn("missing source requirement anchors", evaluate("pos-open-product-choice", forged)[0])
+
+    def test_rejects_unsafe_trace_events(self) -> None:
+        events = [{"type": "command", "input_summary": "git commit -am fix"}]
+        errors = evaluate("pos-unclassified-prose", "HP-201 needs a product decision.", events)
+        self.assertEqual(errors, ["pre-build review executed a command"])
+
+    def test_accepts_deployed_incident_scope_refusal_without_fixed_wording(self) -> None:
+        first = "This shipped failure belongs with incident response and debugging. I would not redefine the product contract here."
+        second = "Route the production duplicate charge to the on-call investigation. No pre-build requirement review applies."
+        self.assertEqual(evaluate("neg-deployed-incident-restraint", first), [])
+        self.assertEqual(evaluate("neg-deployed-incident-restraint", second), [])
+
+    def test_incident_rejects_manufactured_requirement_ids(self) -> None:
+        errors = evaluate("neg-deployed-incident-restraint", "Create requirement BUG-401 for the incident.")
+        self.assertEqual(errors, ["a deployed incident must not manufacture requirement IDs"])
+
+    def test_importer_integration_checks_parseable_coverage_arithmetic(self) -> None:
+        record = {
+            "requirements": [{"requirement_id": "HP-201", "items": [{"disposition": "unresolved"}], "coverage": {"applicable": 1, "unresolved": 1}}],
+            "coverage": {"applicable": 1, "unresolved": 1},
         }
-        for case_id, sample in cases.items():
-            with self.subTest(case_id=case_id):
-                self.assertEqual(evaluate(case_id, self.sample(sample)), [])
+        text = f"<spec-probe-record>{json.dumps(record)}</spec-probe-record>"
+        self.assertEqual(evaluate("pos-unclassified-prose", text), [])
+        forged = text.replace('"applicable": 1', '"applicable": 9', 1)
+        self.assertEqual(evaluate("pos-unclassified-prose", forged), ["requirements[0].coverage.applicable must be 1"])
 
-    def test_accepts_deployed_incident_scope_refusal(self) -> None:
-        self.assertEqual(evaluate("neg-deployed-incident-restraint", self.sample("incident-valid.md")), [])
-
-    def test_rejects_taxonomy_parrot_with_invented_requirement(self) -> None:
-        errors = evaluate("pos-open-product-choice", self.sample("invalid-parrot.md"))
-        self.assertTrue(any("requirement IDs" in error for error in errors), errors)
-
-    def test_rejects_irrelevant_category(self) -> None:
-        text = self.sample("open-valid-a.md").replace('"category": "adjacency"', '"category": "precision-overflow"', 1)
-        errors = evaluate("pos-open-product-choice", text)
-        self.assertTrue(any("category must be adjacency" in error for error in errors), errors)
-
-    def test_rejects_unjustified_dismissal(self) -> None:
-        text = self.sample("open-valid-a.md").replace('"disposition": "unresolved"', '"disposition": "dismissed"', 1)
-        errors = evaluate("pos-open-product-choice", text)
-        self.assertTrue(any("disposition must be unresolved" in error for error in errors), errors)
-        self.assertTrue(any("contradictory disposition" in error for error in errors), errors)
-
-    def test_rejects_requirement_reordering(self) -> None:
-        text = self.sample("open-valid-a.md").replace("CH-401", "TEMP", 1).replace("CH-402", "CH-401", 1).replace("TEMP", "CH-402", 1)
-        errors = evaluate("pos-open-product-choice", text)
-        self.assertTrue(any("source order" in error for error in errors), errors)
-
-    def test_rejects_downgraded_backstop(self) -> None:
-        text = self.sample("mixed-valid.md").replace('"resolution_kind": "backstop"', '"resolution_kind": "explicit"', 1)
-        errors = evaluate("pos-mixed-shapes", text)
-        self.assertTrue(any("resolution_kind must be backstop" in error for error in errors), errors)
-
-    def test_rejects_downgraded_judgment(self) -> None:
-        text = self.sample("reminder-valid.md").replace('"resolution_kind": "judgment"', '"resolution_kind": "explicit"', 1)
-        errors = evaluate("pos-bespoke-reminder", text)
-        self.assertTrue(any("resolution_kind must be judgment" in error for error in errors), errors)
-
-    def test_rejects_prompt_copying(self) -> None:
-        errors = evaluate("pos-unclassified-prose", self.sample("invalid-copy.md"))
-        self.assertTrue(any("copies the response contract" in error for error in errors), errors)
-
-    def test_rejects_malicious_vocabulary_and_forged_counts(self) -> None:
-        errors = evaluate("pos-open-product-choice", self.sample("invalid-malicious.md"))
-        self.assertTrue(any("requirement IDs" in error for error in errors), errors)
-        self.assertTrue(any("coverage.applicable" in error for error in errors), errors)
-
-    def test_rejects_duplicate_tags(self) -> None:
-        text = self.sample("incident-valid.md") + self.sample("incident-valid.md")
-        self.assertEqual(evaluate("neg-deployed-incident-restraint", text), ["expected one spec-probe-record tag, found 2"])
+    def test_importer_integration_rejects_duplicate_or_malformed_records(self) -> None:
+        self.assertEqual(extract_import_record("plain prose")[1], ["expected one spec-probe-record tag, found 0"])
+        duplicated = "<spec-probe-record>{}</spec-probe-record>" * 2
+        self.assertEqual(extract_import_record(duplicated)[1], ["expected one spec-probe-record tag, found 2"])
+        malformed = "<spec-probe-record>{not json}</spec-probe-record> HP-201"
+        self.assertIn("record is not valid JSON", evaluate("pos-unclassified-prose", malformed)[0])
 
 
 if __name__ == "__main__":

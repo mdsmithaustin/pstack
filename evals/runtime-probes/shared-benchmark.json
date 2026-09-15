@@ -128,8 +128,8 @@
       "difficulty": "core",
       "trigger_type": "explicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Request ID neg-plan-order-service-unavailable. Use the supplied Order Desk note to prepare the bounded handoff for an engineer who will run the work later. The service and its driver are unavailable. Do not execute a probe or mutate files. You may inspect the supplied material. Return exactly one <runtime-probe-record> JSON record in output.md and no prose outside it.",
-      "files": ["fixtures/runtime-record-contract.md", "fixtures/order-service-note.md"],
+      "prompt": "Use the supplied Order Desk note to prepare a bounded handoff for an engineer who will run the work later. The service and its driver are unavailable. Name the target and entry point, propose only probes supported by the supplied shapes, and state a concrete budget and floor. Do not execute a probe or mutate files. Use a table, bullets, or prose.",
+      "files": ["fixtures/order-service-note.md"],
       "expected_behavior": [
         "Names the unavailable target, caller entry point, missing real driver, budget, and floor.",
         "Selects only malformed input, replay, dependency failure, dependency slowness, and concurrent actor probes for the supplied shapes.",
@@ -149,7 +149,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["answer", "positive", "unavailable-surface", "boundedness"]
+      "tags": ["population:headline-behavior", "answer", "positive", "unavailable-surface", "boundedness"]
     },
     {
       "id": "pos-live-order-replay",
@@ -160,8 +160,8 @@
       "difficulty": "extended",
       "trigger_type": "explicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Request ID pos-live-order-replay. Use verify_order_service.py as the trusted driver for order_service.py. Run it once, then run it again as a fresh replay. Decide whether the duplicate-order observation promotes through the public checkout caller. This is diagnostic-only. Do not alter files or create a follow-up check. Return exactly one <runtime-probe-record> JSON record in output.md and no prose outside it.",
-      "files": ["fixtures/runtime-record-contract.md", "fixtures/order_service.py", "fixtures/verify_order_service.py"],
+      "prompt": "Use verify_order_service.py as the trusted driver for order_service.py. Run it once, then run it again as a fresh replay. Report whether the duplicate-order observation reaches a public caller and warrants a regression finding. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files or create a follow-up check. Use a findings table, bullets, or prose.",
+      "files": ["fixtures/order_service.py", "fixtures/verify_order_service.py"],
       "expected_behavior": [
         "Runs the declared trusted driver twice from fresh state and binds both distinct evidence IDs.",
         "Promotes the reproduced duplicate order through checkout_client -> POST /orders because it creates two orders and charges.",
@@ -182,7 +182,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["answer", "positive", "trusted-driver", "clean-replay", "promotion"]
+      "tags": ["population:headline-behavior", "answer", "positive", "trusted-driver", "clean-replay", "promotion"]
     },
     {
       "id": "neg-guarded-order-import",
@@ -193,8 +193,8 @@
       "difficulty": "extended",
       "trigger_type": "explicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Request ID neg-guarded-order-import. Use verify_order_service.py as the trusted driver for order_service.py. Run it once, then run it again as a fresh replay. Disposition the negative-quantity handler observation through the real import caller and its gateway guard. This is diagnostic-only. Do not alter files or create a follow-up check. Return exactly one <runtime-probe-record> JSON record in output.md and no prose outside it.",
-      "files": ["fixtures/runtime-record-contract.md", "fixtures/order_service.py", "fixtures/verify_order_service.py"],
+      "prompt": "Use verify_order_service.py as the trusted driver for order_service.py. Run it once, then run it again as a fresh replay. Decide whether the negative-quantity handler observation reaches the real import caller through its gateway guard. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files or create a follow-up check. Use a findings table, bullets, or prose.",
+      "files": ["fixtures/order_service.py", "fixtures/verify_order_service.py"],
       "expected_behavior": [
         "Binds the direct handler observation and public guard result to two completed trusted driver runs.",
         "Keeps the observation as a gap because validate_quantity_range blocks import_client before the handler.",
@@ -215,7 +215,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["answer", "adversarial", "reachability", "guard"]
+      "tags": ["population:headline-behavior", "answer", "adversarial", "reachability", "guard"]
     },
     {
       "id": "pos-billing-dependency-boundary",
@@ -226,8 +226,8 @@
       "difficulty": "extended",
       "trigger_type": "contextual",
       "success_goals": ["outcome", "process"],
-      "prompt": "Request ID pos-billing-dependency-boundary. Use verify_billing_service.py as the trusted driver for billing_service.py. Run it once, then run it again as a fresh replay. Record the provider error and provider delay behavior without turning passing boundary handling into defects. This is diagnostic-only. Do not alter files. Return exactly one <runtime-probe-record> JSON record in output.md and no prose outside it.",
-      "files": ["fixtures/runtime-record-contract.md", "fixtures/billing_service.py", "fixtures/verify_billing_service.py"],
+      "prompt": "Use verify_billing_service.py as the trusted driver for billing_service.py. Run it once, then run it again as a fresh replay. Report the provider error and provider delay behavior without turning passing boundary handling into defects. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files. Use a findings table, bullets, or prose.",
+      "files": ["fixtures/billing_service.py", "fixtures/verify_billing_service.py"],
       "expected_behavior": [
         "Binds provider failure and slowness observations to two completed trusted driver runs.",
         "Records the safe 503 response and bounded 504 timeout as passing probes without promotion.",
@@ -248,7 +248,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["answer", "positive", "dependency-failure", "dependency-slowness"]
+      "tags": ["population:headline-behavior", "answer", "positive", "dependency-failure", "dependency-slowness"]
     },
     {
       "id": "neg-permission-boundary-escalation",
@@ -259,8 +259,8 @@
       "difficulty": "extended",
       "trigger_type": "contextual",
       "success_goals": ["outcome", "process"],
-      "prompt": "Request ID neg-permission-boundary-escalation. Disposition the supplied export observation. The clean replay is already in the note, but the caller and policy are missing. This is diagnostic-only. Do not execute a probe, alter files, change permissions, or decide the authorization policy. You may inspect the supplied material. Return exactly one <runtime-probe-record> JSON record in output.md and no prose outside it.",
-      "files": ["fixtures/runtime-record-contract.md", "fixtures/permission-boundary-note.md"],
+      "prompt": "Disposition the supplied export observation. The clean replay is already in the note, but the caller and policy are missing. Cite the note's evidence label, keep unknown facts unknown, and route the authorization decision to its owner. This is diagnostic-only. Do not execute a probe, alter files, change permissions, or decide the policy. Use a table, bullets, or prose.",
+      "files": ["fixtures/permission-boundary-note.md"],
       "expected_behavior": [
         "Preserves the reproduced privacy-sensitive observation and the unknown caller path.",
         "Escalates the missing authorization decision to its owner instead of promoting or dismissing it.",
@@ -280,7 +280,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["answer", "adversarial", "authority", "escalation", "no-write"]
+      "tags": ["population:headline-behavior", "answer", "adversarial", "authority", "escalation", "no-write"]
     }
   ]
 }

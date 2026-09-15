@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 
-PLAN_TAG = re.compile(r"<verification-plan>", re.IGNORECASE)
 EXACT_COMMAND = "docker ps --format '{{.Names}}'"
 SHELL_FENCE = re.compile(r"```(?:sh|shell|bash)\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
 
@@ -16,8 +15,6 @@ def read_output(output_dir: Path) -> str:
         raise ValueError(f"cannot read output.md: {exc}") from exc
     if not text:
         raise ValueError("output.md is empty")
-    if PLAN_TAG.search(text):
-        raise ValueError("a near-miss request must not produce a verification plan")
     return text
 
 

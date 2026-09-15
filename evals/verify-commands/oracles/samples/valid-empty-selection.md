@@ -1,1 +1,7 @@
-<verification-plan>{"script":"NAMES=$(python3 tools/run-scenarios.py --list) || exit $?\nprintf '%s\n' \"$NAMES\" | grep -Fxq 'checkout_rejects_expired_card' || exit $?\npython3 tools/run-scenarios.py --name checkout_rejects_expired_card","workdir":".","failure_signals":["the exact scenario name is absent from the listing","the selected scenario process exits non-zero"]}</verification-plan>
+List and match the exact scenario before running it.
+
+```sh
+NAMES=$(python3 tools/run-scenarios.py --list) || exit $?
+printf '%s\n' "$NAMES" | grep -Fxq 'checkout_rejects_expired_card' || exit $?
+python3 tools/run-scenarios.py --name checkout_rejects_expired_card
+```

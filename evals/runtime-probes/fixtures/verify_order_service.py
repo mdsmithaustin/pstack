@@ -28,6 +28,14 @@ def main() -> int:
                 "status": public["status"],
             },
         },
+        "reachability": {
+            "duplicate_order": {"caller": "checkout_client", "reachable": True},
+            "guarded_import": {
+                "caller": "import_client",
+                "guard": public["guard"],
+                "reachable": public["handler_called"],
+            },
+        },
         "target": "order_service.py",
     }
     print(json.dumps(report, sort_keys=True))

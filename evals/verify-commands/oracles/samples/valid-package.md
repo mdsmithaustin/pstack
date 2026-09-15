@@ -1,1 +1,5 @@
-<verification-plan>{"script":"npm --prefix packages/web run verify","workdir":".","failure_signals":["the web package verification process exits non-zero"]}</verification-plan>
+Run the operation declared by the web package.
+
+```sh
+npm --prefix packages/web run verify
+```

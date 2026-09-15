@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 IMAGE = "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
-TAG_PATTERN = re.compile(r"\A<verification-plan>(.*?)</verification-plan>\Z", re.DOTALL)
+SHELL_FENCE = re.compile(r"```(?:bash|sh|shell)\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
 CONTAINER_PROGRAM = r'''
 import json
 import os
@@ -79,9 +79,22 @@ def run_case(root, plan, definition, bootstrap):
             "PATH": f"{project / 'bin'}:/usr/local/bin:/usr/bin:/bin",
             "PYTHONDONTWRITEBYTECODE": "1",
         }
+        candidate_cwd = project / plan["workdir"]
+        if not candidate_cwd.is_dir():
+            results.append({
+                "state": state["name"],
+                "exit": None,
+                "expected": state["exit"],
+                "exit_matches": False,
+                "timed_out": False,
+                "missing_operations": state["required_operations"],
+                "stdout": "",
+                "stderr": "candidate working directory does not exist",
+            })
+            continue
         process = subprocess.Popen(
             ["/bin/sh", str(root / "input" / "plan.sh")],
-            cwd=project / plan["workdir"],
+            cwd=candidate_cwd,
             env=environment,
             text=True,
             stdout=subprocess.PIPE,
@@ -136,29 +149,14 @@ print(json.dumps({"status": "measured", "states": results}, sort_keys=True))
 
 
 def parse_plan(text: str) -> dict:
-    match = TAG_PATTERN.fullmatch(text.strip())
-    if not match:
-        raise ValueError("output must contain only one verification-plan record")
-    try:
-        plan = json.loads(match.group(1))
-    except json.JSONDecodeError as error:
-        raise ValueError(f"verification-plan is not valid JSON: {error.msg}") from error
-    if not isinstance(plan, dict) or set(plan) != {"script", "workdir", "failure_signals"}:
-        raise ValueError("verification-plan needs exactly script, workdir, and failure_signals")
+    fences = SHELL_FENCE.findall(text)
+    if len(fences) != 1:
+        raise ValueError("output must contain exactly one fenced shell artifact")
+    plan = {"script": fences[0], "workdir": "."}
     if not isinstance(plan["script"], str) or not plan["script"].strip():
-        raise ValueError("script must be a non-empty string")
+        raise ValueError("shell artifact must be non-empty")
     if len(plan["script"].encode()) > 16384 or "\0" in plan["script"]:
         raise ValueError("script is too large or contains a NUL byte")
-    if plan["workdir"] != ".":
-        raise ValueError("workdir must be the project root represented by a dot")
-    signals = plan["failure_signals"]
-    if not isinstance(signals, list) or not signals or not all(
-        isinstance(signal, str) and signal.strip() for signal in signals
-    ):
-        raise ValueError("failure_signals must be a non-empty string list")
-    refused = {"none", "n/a", "tbd", "the command fails", "an error occurs"}
-    if any(signal.strip().casefold() in refused for signal in signals):
-        raise ValueError("failure_signals contains a non-observable placeholder")
     return plan
 
 
@@ -207,20 +205,7 @@ def archive_bytes(plan: dict, definition: dict, bootstrap: Path) -> bytes:
     return stream.getvalue()
 
 
-def evaluate(case_id: str, output_dir: Path) -> tuple[int, dict]:
-    output = output_dir / "output.md"
-    if not output.is_file():
-        return 1, {"status": "candidate_failure", "reason": f"missing {output.name}"}
-    try:
-        plan = parse_plan(output.read_text(encoding="utf-8"))
-        definition, bootstrap = load_case(case_id)
-    except (OSError, ValueError) as error:
-        return 1, {"status": "candidate_failure", "reason": str(error)}
-    if len(plan["failure_signals"]) < definition["minimum_signals"]:
-        return 1, {
-            "status": "candidate_failure",
-            "reason": f"expected at least {definition['minimum_signals']} failure signals",
-        }
+def replay(plan: dict, definition: dict, bootstrap: Path) -> tuple[int, dict]:
     if shutil.which("docker") is None:
         return 2, {"status": "infrastructure", "reason": "docker is unavailable"}
     try:
@@ -255,6 +240,18 @@ def evaluate(case_id: str, output_dir: Path) -> tuple[int, dict]:
         "states": [state["state"] for state in measured["states"]],
         "operation_evidence": "observed in container process table",
     }
+
+
+def evaluate(case_id: str, output_dir: Path) -> tuple[int, dict]:
+    output = output_dir / "output.md"
+    if not output.is_file():
+        return 1, {"status": "candidate_failure", "reason": f"missing {output.name}"}
+    try:
+        plan = parse_plan(output.read_text(encoding="utf-8"))
+        definition, bootstrap = load_case(case_id)
+    except (OSError, ValueError) as error:
+        return 1, {"status": "candidate_failure", "reason": str(error)}
+    return replay(plan, definition, bootstrap)
 
 
 def main() -> int:

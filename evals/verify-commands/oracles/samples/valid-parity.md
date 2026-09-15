@@ -1,1 +1,7 @@
-<verification-plan>{"script":"EXPECTED=$(python3 tools/reference_total.py) || exit $?\nACTUAL=$(python3 tools/current_total.py) || exit $?\n[ \"$EXPECTED\" = \"$ACTUAL\" ]","workdir":".","failure_signals":["the reference producer exits non-zero","the current producer exits non-zero","the successful totals are unequal"]}</verification-plan>
+Preserve each producer's exit status, then compare successful results.
+
+```bash
+EXPECTED=$(python3 tools/reference_total.py) || exit $?
+ACTUAL=$(python3 tools/current_total.py) || exit $?
+[ "$EXPECTED" = "$ACTUAL" ]
+```

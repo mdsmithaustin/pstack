@@ -28,11 +28,6 @@ class CheckRestraintTests(unittest.TestCase):
         text = "`set -o pipefail` makes a pipeline return non-zero when an earlier command fails, even if the last command succeeds."
         MODULE.check_pipefail(MODULE.read_output(self.write_output(text)))
 
-    def test_rejects_verification_plan_for_near_miss(self) -> None:
-        path = self.write_output("<verification-plan>{}</verification-plan>")
-        with self.assertRaisesRegex(ValueError, "must not produce"):
-            MODULE.read_output(path)
-
     def test_accepts_exact_formatted_command(self) -> None:
         text = "```sh\ndocker ps --format '{{.Names}}'\n```\n\nIt prints container names."
         MODULE.check_format_command(MODULE.read_output(self.write_output(text)))

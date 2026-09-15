@@ -24,7 +24,7 @@
       "difficulty": "core",
       "trigger_type": "implicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Our release note pipes `npm run verify` into a search for `714 checks passed`, but the number changes when checks are added. Run the attached bootstrap with `python3 inputs/stale_summary.py . current`, inspect the project it creates, and return a safer paste-ready plan for a runbook importer. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "prompt": "Our release note pipes `npm run verify` into a search for `714 checks passed`, but the number changes when checks are added. Run the attached bootstrap with `python3 inputs/stale_summary.py . current`, inspect the project it creates, and return a safer paste-ready check in a fenced shell block. Briefly name the observable result that blocks release.",
       "files": ["oracles/projects/stale_summary.py"],
       "expected_behavior": ["Runs the existing verification operation without treating a recalled count as the contract.", "Propagates the operation's non-zero exit and names that observable release blocker."],
       "assertions": [
@@ -41,7 +41,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["stale-count", "executable-fixture"]
+      "tags": ["population:headline-behavior", "stale-count", "executable-fixture"]
     },
     {
       "id": "pos-empty-selection",
@@ -52,7 +52,7 @@
       "difficulty": "extended",
       "trigger_type": "implicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Our scenario runner uses substring selection and exits zero when it selects nothing. The required scenario is `checkout_rejects_expired_card`. Run the attached bootstrap with `python3 inputs/empty_selection.py . present`, inspect the project it creates, and return a paste-ready release plan that proves the exact scenario exists before running it. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "prompt": "Our scenario runner uses substring selection and exits zero when it selects nothing. The required scenario is `checkout_rejects_expired_card`. Run the attached bootstrap with `python3 inputs/empty_selection.py . present`, inspect the project it creates, and return a paste-ready release check in a fenced shell block. Briefly explain how it blocks an empty selection and a failing scenario.",
       "files": ["oracles/projects/empty_selection.py"],
       "expected_behavior": ["Discovers and matches the exact scenario before execution.", "Blocks on a missing exact name and on the selected scenario's non-zero exit."],
       "assertions": [
@@ -69,7 +69,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["zero-selection", "exact-name", "executable-fixture"]
+      "tags": ["population:headline-behavior", "zero-selection", "exact-name", "executable-fixture"]
     },
     {
       "id": "pos-defaulted-parity",
@@ -80,7 +80,7 @@
       "difficulty": "extended",
       "trigger_type": "implicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "A release gate currently turns either missing generated total into zero, then approves when the two zeroes match. Run the attached bootstrap with `python3 inputs/defaulted_parity.py . equal`, inspect the project it creates, and build a paste-ready gate from `tools/reference_total.py` and `tools/current_total.py`. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "prompt": "A release gate currently turns either missing generated total into zero, then approves when the two zeroes match. Run the attached bootstrap with `python3 inputs/defaulted_parity.py . equal`, inspect the project it creates, and return a paste-ready gate in a fenced shell block. Briefly describe what stops release.",
       "files": ["oracles/projects/defaulted_parity.py"],
       "expected_behavior": ["Preserves failures from both total producers instead of defaulting them.", "Blocks when successful producer values differ."],
       "assertions": [
@@ -97,7 +97,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["silent-default", "parity", "executable-fixture"]
+      "tags": ["population:headline-behavior", "silent-default", "parity", "executable-fixture"]
     },
     {
       "id": "pos-package-path",
@@ -108,7 +108,7 @@
       "difficulty": "core",
       "trigger_type": "implicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "The root package has a decoy `verify` script. The release check belongs to `packages/web`, whose package file defines its own `verify` script. Run the attached bootstrap with `python3 inputs/package_path.py . healthy`, inspect the workspace it creates, and return the portable command for the web package. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "prompt": "The root package has a decoy `verify` script. The release check belongs to `packages/web`, whose package file defines its own `verify` script. Run the attached bootstrap with `python3 inputs/package_path.py . healthy`, inspect the workspace it creates, and return the portable command in a fenced shell block. Briefly name the blocking result.",
       "files": ["oracles/projects/package_path.py"],
       "expected_behavior": ["Targets the observed web package rather than the root decoy or an invented directory.", "Names the package verification process's non-zero exit as the blocker."],
       "assertions": [
@@ -125,7 +125,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["workspace", "package-manager", "executable-fixture"]
+      "tags": ["population:headline-behavior", "workspace", "package-manager", "executable-fixture"]
     },
     {
       "id": "pos-scoped-source",
@@ -136,7 +136,7 @@
       "difficulty": "extended",
       "trigger_type": "implicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Only `legacy_fetch` must stop using `legacyClient`; `compatibility_probe` must retain it for this release. The API package already exposes the exact scenario `legacy_fetch_uses_new_client`. Run the attached bootstrap with `python3 inputs/scoped_source.py . migrated`, inspect the project it creates, and replace our file-wide negative search with a paste-ready signoff. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "prompt": "Only `legacy_fetch` must stop using `legacyClient`; `compatibility_probe` must retain it for this release. The API package already exposes the exact scenario `legacy_fetch_uses_new_client`. Run the attached bootstrap with `python3 inputs/scoped_source.py . migrated`, inspect the project it creates, and replace our file-wide negative search with a paste-ready signoff in a fenced shell block. Briefly name the blocking result.",
       "files": ["oracles/projects/scoped_source.py"],
       "expected_behavior": ["Runs the existing exact scenario for the migrated function.", "Allows the required compatibility call while blocking a target regression."],
       "assertions": [
@@ -153,7 +153,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["scoped-source", "negative-search", "executable-fixture"]
+      "tags": ["population:headline-behavior", "scoped-source", "negative-search", "executable-fixture"]
     },
     {
       "id": "healthy-control",
@@ -164,7 +164,7 @@
       "difficulty": "core",
       "trigger_type": "near-miss",
       "success_goals": ["outcome", "process"],
-      "prompt": "Our release runbook already uses `python3 tools/verify-release.py`, and that program exits non-zero when release is unsafe. Run the attached bootstrap with `python3 inputs/healthy_control.py . healthy`, inspect the project it creates, and put the existing check into the runbook import shape without adding unrelated machinery. Your entire answer must be exactly one `<verification-plan>` JSON record with the string fields `script` and `workdir`, plus a `failure_signals` string array. Use `.` for the project-root workdir.",
+      "prompt": "Our release runbook already uses `python3 tools/verify-release.py`, and that program exits non-zero when release is unsafe. Run the attached bootstrap with `python3 inputs/healthy_control.py . healthy`, inspect the project it creates, and return the check in a fenced shell block without adding unrelated machinery. Briefly name the blocking result.",
       "files": ["oracles/projects/healthy_control.py"],
       "expected_behavior": ["Preserves the already meaningful command.", "Names its non-zero exit without manufacturing another gate."],
       "assertions": [
@@ -181,7 +181,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["healthy-control", "restraint", "executable-fixture"]
+      "tags": ["population:headline-behavior", "healthy-control", "restraint", "executable-fixture"]
     },
     {
       "id": "neg-explain-pipefail",
@@ -208,7 +208,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["near-miss", "education", "restraint"]
+      "tags": ["population:headline-behavior", "near-miss", "education", "restraint"]
     },
     {
       "id": "neg-format-command",
@@ -235,7 +235,7 @@
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
-      "tags": ["near-miss", "formatting", "restraint"]
+      "tags": ["population:headline-behavior", "near-miss", "formatting", "restraint"]
     },
     {"id": "trigger-review-release-pipe", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "core", "trigger_type": "implicit", "success_goals": ["trigger"], "should_trigger": true, "prompt": "Can you review this release signoff before I paste it into the runbook? `npm run verify | grep '714 checks passed'`", "expected_behavior": ["Loads for review of a command that decides release completion."], "tags": ["positive", "review"]},
     {"id": "trigger-write-merge-gate", "split": "tune", "kind": "trigger", "domain": "activation", "difficulty": "core", "trigger_type": "implicit", "success_goals": ["trigger"], "should_trigger": true, "prompt": "Write the shell check that should decide whether generated API files are current enough to merge.", "expected_behavior": ["Loads when asked to author a merge-deciding check."], "tags": ["positive", "authoring"]},

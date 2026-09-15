@@ -1,1 +1,5 @@
-<verification-plan>{"script":"npm --prefix packages/api run verify -- legacy_fetch_uses_new_client","workdir":".","failure_signals":["the legacy_fetch scenario exits non-zero"]}</verification-plan>
+Exercise the targeted scenario and leave the compatibility function alone.
+
+```shell
+npm --prefix packages/api run verify -- legacy_fetch_uses_new_client
+```

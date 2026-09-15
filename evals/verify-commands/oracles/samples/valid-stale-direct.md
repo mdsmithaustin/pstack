@@ -1,1 +1,8 @@
-<verification-plan>{"script":"python3 tools/run-checks.py","workdir":".","failure_signals":["the check process exits with a non-zero status"]}</verification-plan>
+The runbook can call the project script directly.
+
+```bash
+python3 tools/run-checks.py
+```
+
+- Continue only when the process exits zero.
+- Do not compare its summary text with a stored count.

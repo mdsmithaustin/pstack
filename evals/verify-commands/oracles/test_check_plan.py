@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import json
 import shutil
 import tarfile
 import tempfile
@@ -95,13 +96,28 @@ class PlanReplayTests(unittest.TestCase):
         self.assertIn("65534:65534", arguments)
         self.assertIn(MODULE.IMAGE, arguments)
 
-    def test_record_shape_is_exact(self):
-        with self.assertRaisesRegex(ValueError, "only one verification-plan"):
-            MODULE.parse_plan("prose <verification-plan>{}</verification-plan>")
-        with self.assertRaisesRegex(ValueError, "exactly script"):
-            MODULE.parse_plan(
-                '<verification-plan>{"script":":","workdir":".","failure_signals":["non-zero exit"],"note":"extra"}</verification-plan>'
+    def test_natural_shell_responses_allow_different_prose_and_shell_spelling(self):
+        first = MODULE.parse_plan((ROOT / "samples" / "valid-stale-npm.md").read_text())
+        second = MODULE.parse_plan((ROOT / "samples" / "valid-stale-direct.md").read_text())
+        self.assertEqual(first, {"script": "npm run verify", "workdir": "."})
+        self.assertEqual(second, {"script": "python3 tools/run-checks.py", "workdir": "."})
+
+    def test_rejects_ambiguous_artifacts(self):
+        with self.assertRaisesRegex(ValueError, "exactly one fenced shell artifact"):
+            MODULE.parse_plan("```sh\ntrue\n```\n```sh\nfalse\n```")
+
+    def test_consistent_path_rename_and_paraphrase_preserve_replay_verdict(self):
+        code, _ = self.evaluate_sample("stale-summary", "valid-stale-direct.md")
+        definition, source = MODULE.load_case("stale-summary")
+        renamed_definition = json.loads(json.dumps(definition).replace("run-checks.py", "validate-build.py"))
+        with tempfile.TemporaryDirectory() as directory:
+            bootstrap = Path(directory) / "renamed.py"
+            bootstrap.write_text(source.read_text().replace("run-checks.py", "validate-build.py"))
+            renamed = MODULE.parse_plan(
+                "Delivery uses this command.\n```shell\npython3 tools/validate-build.py\n```\nStop when it fails."
             )
+            renamed_code, result = MODULE.replay(renamed, renamed_definition, bootstrap)
+        self.assertEqual((code, renamed_code, result["status"]), (0, 0, "pass"))
 
 
 if __name__ == "__main__":

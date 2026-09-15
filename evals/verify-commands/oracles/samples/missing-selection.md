@@ -1,1 +1,3 @@
-<verification-plan>{"script":"python3 tools/run-scenarios.py --name checkout_rejects_expired_card","workdir":".","failure_signals":["the exact scenario is absent","the selected scenario exits non-zero"]}</verification-plan>
+```sh
+python3 tools/run-scenarios.py --name checkout_rejects_expired_card
+```
