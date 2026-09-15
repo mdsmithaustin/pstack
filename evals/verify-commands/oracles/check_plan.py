@@ -11,59 +11,168 @@ from pathlib import Path
 IMAGE = "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
 SHELL_FENCE = re.compile(r"```(?:bash|sh|shell)\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
 CONTAINER_PROGRAM = r'''
+import ctypes
 import json
 import os
-import re
+import secrets
+import select
+import shutil
+import socket
+import struct
 import subprocess
 import sys
 import tarfile
-import threading
-import time
 from pathlib import Path
 
 
-def descendants(root_pid):
-    parents = {}
-    for entry in Path("/proc").iterdir():
-        if not entry.name.isdigit():
-            continue
-        try:
-            fields = (entry / "stat").read_text().split()
-            parents[int(entry.name)] = int(fields[3])
-        except (FileNotFoundError, PermissionError, ValueError, IndexError):
-            continue
-    found = {root_pid}
-    changed = True
-    while changed:
-        changed = False
-        for pid, parent in parents.items():
-            if parent in found and pid not in found:
-                found.add(pid)
-                changed = True
-    return found - {root_pid}
+TRACE_PROLOGUE = """
+import os as _pstack_os
+import socket as _pstack_socket
+import sys as _pstack_sys
+with _pstack_socket.socket(_pstack_socket.AF_UNIX, _pstack_socket.SOCK_STREAM) as _pstack_client:
+    _pstack_client.connect(_pstack_os.environ["PSTACK_EVIDENCE_SOCKET"])
+    _pstack_client.sendall(b"ready\\n")
+    _pstack_reply = _pstack_client.recv(1024).decode("ascii", "strict").strip()
+if _pstack_reply.startswith("EXIT "):
+    raise SystemExit(int(_pstack_reply.split()[1]))
+if _pstack_reply != "OK":
+    print(_pstack_reply, file=_pstack_sys.stderr)
+    raise SystemExit(125)
+"""
+PR_SET_DUMPABLE = 4
 
 
-def observe_processes(process, sink):
-    while process.poll() is None:
-        for pid in descendants(process.pid) | {process.pid}:
-            try:
-                raw = (Path("/proc") / str(pid) / "cmdline").read_bytes()
-                command = raw.replace(b"\0", b" ").decode("utf-8", "replace").strip()
-                cwd = os.readlink(Path("/proc") / str(pid) / "cwd")
-            except (FileNotFoundError, PermissionError, ProcessLookupError):
-                continue
-            if command:
-                sink.add(f"{cwd} :: {command}")
-        time.sleep(0.002)
+def peer_process(connection):
+    pid, _, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+    process = Path("/proc") / str(pid)
+    raw = (process / "cmdline").read_bytes()
+    arguments = tuple(part.decode("utf-8", "replace") for part in raw.split(b"\0") if part)
+    cwd = Path(os.readlink(process / "cwd")).resolve()
+    executable = Path(os.readlink(process / "exe")).resolve()
+    return cwd, executable, arguments
+
+
+def operation_matches(specification, event, project):
+    program = specification.get("program")
+    expected_arguments = specification.get("args")
+    if program != "python" or not isinstance(expected_arguments, list):
+        raise RuntimeError("invalid required operation")
+    cwd, executable, arguments = event
+    return (
+        cwd == project.resolve()
+        and executable == Path(sys.executable).resolve()
+        and list(arguments[1:]) == expected_arguments
+    )
+
+
+def serve_evidence(listener, stop_reader, result_writer, specifications, project, forced_exit):
+    events = set()
+    try:
+        while True:
+            readable, _, _ = select.select([listener, stop_reader], [], [])
+            if stop_reader in readable:
+                break
+            connection, _ = listener.accept()
+            with connection:
+                connection.settimeout(1)
+                try:
+                    connection.recv(64)
+                    event = peer_process(connection)
+                    trusted = any(operation_matches(specification, event, project) for specification in specifications)
+                except (OSError, ValueError):
+                    trusted = False
+                if trusted:
+                    events.add(event)
+                    reply = f"EXIT {forced_exit}" if forced_exit is not None else "OK"
+                else:
+                    reply = "REJECT"
+                try:
+                    connection.sendall((reply + "\n").encode("ascii"))
+                except BrokenPipeError:
+                    pass
+        payload = {
+            "events": [
+                {"cwd": str(cwd), "executable": str(executable), "arguments": list(arguments)}
+                for cwd, executable, arguments in sorted(events)
+            ]
+        }
+    except BaseException as error:
+        payload = {"events": [], "error": f"{type(error).__name__}: {error}"}
+    os.write(result_writer, json.dumps(payload).encode("utf-8"))
+
+
+def start_evidence_server(listener, specifications, project, forced_exit):
+    stop_reader, stop_writer = os.pipe()
+    result_reader, result_writer = os.pipe()
+    server_pid = os.fork()
+    if server_pid == 0:
+        os.close(stop_writer)
+        os.close(result_reader)
+        os.setgroups([])
+        os.setgid(65534)
+        os.setuid(65534)
+        if ctypes.CDLL(None).prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0:
+            os._exit(126)
+        serve_evidence(listener, stop_reader, result_writer, specifications, project, forced_exit)
+        os._exit(0)
+    os.close(stop_reader)
+    os.close(result_writer)
+    return server_pid, stop_writer, result_reader
+
+
+def finish_evidence_server(server_pid, stop_writer, result_reader):
+    os.write(stop_writer, b"stop")
+    os.close(stop_writer)
+    chunks = []
+    while True:
+        chunk = os.read(result_reader, 4096)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    os.close(result_reader)
+    _, status = os.waitpid(server_pid, 0)
+    payload = json.loads(b"".join(chunks))
+    if status != 0 or "error" in payload:
+        raise RuntimeError(payload.get("error", f"evidence server exited with status {status}"))
+    return {
+        (Path(event["cwd"]), Path(event["executable"]), tuple(event["arguments"]))
+        for event in payload["events"]
+    }
+
+
+def instrument_operations(project, specifications):
+    paths = {specification["args"][0] for specification in specifications}
+    for relative in paths:
+        target = project / relative
+        target.write_text(TRACE_PROLOGUE + target.read_text())
+
+
+def operation_seen(specification, events, project):
+    return any(operation_matches(specification, event, project) for event in events)
 
 
 def run_case(root, plan, definition, bootstrap):
     results = []
-    for state in definition["states"]:
-        project = root / "runs" / state["name"] / "project"
+    base_state = next(state for state in definition["states"] if state["exit"] == "zero")
+    forced_state = {
+        "name": "forced-operation-failure",
+        "bootstrap_state": base_state["name"],
+        "exit": "nonzero",
+        "required_operations": base_state["required_operations"][:1],
+        "force_exit": 97,
+    }
+    states = [*definition["states"], forced_state]
+    expected_order = {state["name"]: index for index, state in enumerate(states)}
+    secrets.SystemRandom().shuffle(states)
+    for state in states:
+        run_root = root / "run"
+        project = run_root / "project"
         project.mkdir(parents=True)
+        home = run_root / "home"
+        home.mkdir()
+        home.chmod(0o777)
         setup = subprocess.run(
-            [sys.executable, str(bootstrap), str(project), state["name"]],
+            [sys.executable, "-c", bootstrap, str(project), state.get("bootstrap_state", state["name"])],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -72,11 +181,21 @@ def run_case(root, plan, definition, bootstrap):
         )
         if setup.returncode != 0:
             raise RuntimeError(f"setup failed for {state['name']}: {setup.stderr}")
+        instrument_operations(project, state["required_operations"])
         seen = set()
+        evidence_path = run_root / "evidence.sock"
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(evidence_path))
+        evidence_path.chmod(0o666)
+        listener.listen()
+        server_pid, stop_writer, result_reader = start_evidence_server(
+            listener, state["required_operations"], project, state.get("force_exit")
+        )
         environment = {
-            "HOME": "/work/home",
+            "HOME": str(home),
             "LANG": "C.UTF-8",
             "PATH": f"{project / 'bin'}:/usr/local/bin:/usr/bin:/bin",
+            "PSTACK_EVIDENCE_SOCKET": str(evidence_path),
             "PYTHONDONTWRITEBYTECODE": "1",
         }
         candidate_cwd = project / plan["workdir"]
@@ -91,6 +210,9 @@ def run_case(root, plan, definition, bootstrap):
                 "stdout": "",
                 "stderr": "candidate working directory does not exist",
             })
+            seen = finish_evidence_server(server_pid, stop_writer, result_reader)
+            listener.close()
+            shutil.rmtree(run_root)
             continue
         process = subprocess.Popen(
             ["/bin/sh", str(root / "input" / "plan.sh")],
@@ -99,23 +221,30 @@ def run_case(root, plan, definition, bootstrap):
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            user=65534,
+            group=65534,
+            extra_groups=[],
+            start_new_session=True,
         )
-        watcher = threading.Thread(target=observe_processes, args=(process, seen))
-        watcher.start()
         timed_out = False
         try:
             stdout, stderr = process.communicate(timeout=state.get("timeout_seconds", 5))
         except subprocess.TimeoutExpired:
             timed_out = True
-            process.kill()
+            os.killpg(process.pid, 9)
             stdout, stderr = process.communicate()
-        watcher.join()
+        try:
+            os.killpg(process.pid, 9)
+        except ProcessLookupError:
+            pass
+        seen = finish_evidence_server(server_pid, stop_writer, result_reader)
+        listener.close()
         expected_zero = state["exit"] == "zero"
         exit_matches = not timed_out and ((process.returncode == 0) == expected_zero)
         missing_operations = [
-            pattern
-            for pattern in state["required_operations"]
-            if not any(re.search(pattern, event) for event in seen)
+            specification
+            for specification in state["required_operations"]
+            if not operation_seen(specification, seen, project)
         ]
         results.append({
             "state": state["name"],
@@ -124,15 +253,18 @@ def run_case(root, plan, definition, bootstrap):
             "exit_matches": exit_matches,
             "timed_out": timed_out,
             "missing_operations": missing_operations,
+            "observed_commands": [list(arguments) for _, _, arguments in sorted(seen)],
             "stdout": stdout[-1000:],
             "stderr": stderr[-1000:],
         })
-    return results
+        shutil.rmtree(run_root)
+    return sorted(results, key=lambda result: expected_order[result["state"]])
 
 
 root = Path("/work")
 input_root = root / "input"
 input_root.mkdir()
+payloads = {}
 with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
     for member in archive:
         if member.name not in {"plan.sh", "bootstrap.py", "definition.json"} or not member.isfile():
@@ -140,10 +272,13 @@ with tarfile.open(fileobj=sys.stdin.buffer, mode="r|*") as archive:
         source = archive.extractfile(member)
         if source is None:
             raise RuntimeError("missing archive member")
-        (input_root / member.name).write_bytes(source.read())
+        payloads[member.name] = source.read()
 
-plan = json.loads((input_root / "definition.json").read_text())
-results = run_case(root, plan["artifact"], plan["case"], input_root / "bootstrap.py")
+(input_root / "plan.sh").write_bytes(payloads["plan.sh"])
+plan = json.loads(payloads["definition.json"])
+bootstrap = payloads["bootstrap.py"].decode("utf-8")
+root.chmod(0o711)
+results = run_case(root, plan["artifact"], plan["case"], bootstrap)
 print(json.dumps({"status": "measured", "states": results}, sort_keys=True))
 '''
 
@@ -176,8 +311,10 @@ def docker_command() -> list[str]:
         "--network", "none",
         "--read-only",
         "--cap-drop", "ALL",
+        "--cap-add", "SETUID",
+        "--cap-add", "SETGID",
+        "--cap-add", "KILL",
         "--security-opt", "no-new-privileges",
-        "--user", "65534:65534",
         "--pids-limit", "64",
         "--memory", "128m",
         "--cpus", "0.5",
@@ -238,7 +375,7 @@ def replay(plan: dict, definition: dict, bootstrap: Path) -> tuple[int, dict]:
     return 0, {
         "status": "pass",
         "states": [state["state"] for state in measured["states"]],
-        "operation_evidence": "observed in container process table",
+        "operation_evidence": "authenticated by the container evidence server",
     }
 
 

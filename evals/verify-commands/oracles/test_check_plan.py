@@ -27,7 +27,10 @@ class PlanReplayTests(unittest.TestCase):
             with self.subTest(sample=sample):
                 code, result = self.evaluate_sample("stale-summary", sample)
                 self.assertEqual((code, result["status"]), (0, "pass"))
-                self.assertEqual(result["states"], ["current", "count-changed", "broken"])
+                self.assertEqual(
+                    result["states"],
+                    ["current", "count-changed", "broken", "forced-operation-failure"],
+                )
 
     def test_every_public_state_matrix_accepts_its_valid_plan(self):
         plans = {
@@ -49,11 +52,48 @@ class PlanReplayTests(unittest.TestCase):
         self.assertIn("absent", [state["state"] for state in result["failed_states"]])
 
     def test_non_executing_and_forged_plans_fail(self):
-        for sample in ("parrot-only.md", "no-op.md", "always-fail.md", "forged-print.md"):
+        for sample in (
+            "parrot-only.md",
+            "no-op.md",
+            "always-fail.md",
+            "forged-print.md",
+        ):
             with self.subTest(sample=sample):
                 code, result = self.evaluate_sample("stale-summary", sample)
                 self.assertEqual(code, 1)
                 self.assertEqual(result["status"], "candidate_failure")
+
+    def test_matching_exit_directions_cannot_forge_execution_evidence(self):
+        code, result = self.evaluate_sample("stale-summary", "forged-process-text.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertTrue(all(state["missing_operations"] for state in result["failed_states"]))
+        forced = next(
+            state for state in result["failed_states"]
+            if state["state"] == "forced-operation-failure"
+        )
+        self.assertFalse(forced["exit_matches"])
+
+    def test_executed_operation_status_must_control_the_plan(self):
+        code, result = self.evaluate_sample("stale-summary", "ignored-operation-status.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        forced = next(
+            state for state in result["failed_states"]
+            if state["state"] == "forced-operation-failure"
+        )
+        self.assertFalse(forced["exit_matches"])
+        self.assertEqual(forced["missing_operations"], [])
+
+    def test_candidate_cannot_mutate_root_owned_fixture(self):
+        code, result = self.evaluate_sample("stale-summary", "tampered-fixture.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertTrue(any("PermissionError" in state["stderr"] for state in result["failed_states"]))
+        self.assertTrue(all(state["missing_operations"] for state in result["failed_states"]))
+
+    def test_case_definition_is_not_candidate_readable(self):
+        code, result = self.evaluate_sample("stale-summary", "read-answer-key.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertTrue(any("FileNotFoundError" in state["stderr"] for state in result["failed_states"]))
+        self.assertTrue(all(state["missing_operations"] for state in result["failed_states"]))
 
     def test_malicious_command_cannot_write_outside_tmpfs(self):
         code, result = self.evaluate_sample("stale-summary", "malicious-command.md")
@@ -93,7 +133,10 @@ class PlanReplayTests(unittest.TestCase):
         self.assertIn("--network none", joined)
         self.assertIn("--read-only", arguments)
         self.assertIn("no-new-privileges", arguments)
-        self.assertIn("65534:65534", arguments)
+        self.assertIn("SETUID", arguments)
+        self.assertIn("SETGID", arguments)
+        self.assertIn("KILL", arguments)
+        self.assertNotIn("--user", arguments)
         self.assertIn(MODULE.IMAGE, arguments)
 
     def test_natural_shell_responses_allow_different_prose_and_shell_spelling(self):

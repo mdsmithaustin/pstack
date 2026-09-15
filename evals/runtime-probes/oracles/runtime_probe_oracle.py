@@ -2,18 +2,12 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
 
 
-MUTATION = re.compile(
-    r"(?:\bapply_patch\b|\b(?:rm|mv|cp|touch|mkdir|chmod)\s|"
-    r"\bgit\s+(?:add|commit|push|reset|checkout|switch)\b|"
-    r"\bsed\s+[^\n]*(?:\s-i\b|--in-place)|\btee\s|\bpython3?\s+-c\b|"
-    r"<<|(?<![-=0-9])>>?(?!\s*/dev/null))",
-    re.IGNORECASE,
-)
 PROBE_COMMAND = re.compile(
     r"(?:^|[;&|\"']\s*)(?:(?:/usr)?/bin/)?(?:python3?|node|bash|sh|curl|wget|docker)\b",
     re.IGNORECASE,
@@ -65,6 +59,67 @@ def load_events(output_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
     return [item for item in events if isinstance(item, dict)], trace
 
 
+def _unquoted(token: str) -> tuple[str, bool]:
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'}:
+        return token[1:-1], False
+    return token, True
+
+
+def _command_tokens(command: str) -> list[str]:
+    lexer = shlex.shlex(command, posix=False, punctuation_chars="|&;<>")
+    lexer.whitespace_split = True
+    return list(lexer)
+
+
+def _mutates(command: str) -> bool:
+    try:
+        tokens = _command_tokens(command)
+    except ValueError:
+        return True
+    for index, token in enumerate(tokens):
+        value, active = _unquoted(token)
+        if not active or ">" not in value:
+            continue
+        target = _unquoted(tokens[index + 1])[0] if index + 1 < len(tokens) else ""
+        if value in {">", ">>"} and (target == "/dev/null" or target == "&"):
+            continue
+        return True
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        value, active = _unquoted(token)
+        if active and value in {";", "&&", "||", "|", "&"}:
+            segments.append([])
+        else:
+            segments[-1].append(token)
+    for segment in segments:
+        argv = [_unquoted(token)[0] for token in segment]
+        while argv and "=" in argv[0] and not argv[0].startswith(("/", "./")):
+            argv.pop(0)
+        if not argv:
+            continue
+        executable = argv[0]
+        name = Path(executable).name.lower()
+        if name == "env":
+            nested = argv[1:]
+            while nested and (nested[0].startswith("-") or "=" in nested[0]):
+                nested.pop(0)
+            if not nested or _mutates(shlex.join(nested)):
+                return True
+            continue
+        if name in {"apply_patch", "rm", "mv", "cp", "touch", "mkdir", "chmod", "tee"}:
+            return True
+        if name == "git" and len(argv) > 1 and argv[1] in {"add", "commit", "push", "reset", "checkout", "switch"}:
+            return True
+        if name == "sed" and any(argument == "--in-place" or argument.startswith("-i") for argument in argv[1:]):
+            return True
+        if re.fullmatch(r"python3?(?:\.\d+)?", name) and len(argv) > 1 and argv[1] == "-c":
+            return True
+        if name in {"bash", "dash", "sh", "zsh"} and len(argv) >= 3 and argv[1] in {"-c", "-lc"}:
+            if _mutates(argv[2]):
+                return True
+    return False
+
+
 def ensure_diagnostic_only(events: list[dict[str, Any]]) -> None:
     changes = [event for event in events if event.get("type") in {"file_change", "file_write"}]
     fail(not changes, "diagnostic-only task changed a file")
@@ -72,7 +127,7 @@ def ensure_diagnostic_only(events: list[dict[str, Any]]) -> None:
         if event.get("type") != "command":
             continue
         command = str(event.get("input_summary", ""))
-        fail(not MUTATION.search(command), f"diagnostic-only task used a mutating command: {command}")
+        fail(not _mutates(command), f"diagnostic-only task used a mutating command: {command}")
 
 
 def ensure_no_probe_commands(events: list[dict[str, Any]]) -> None:
@@ -84,9 +139,27 @@ def ensure_no_probe_commands(events: list[dict[str, Any]]) -> None:
 
 
 def _trusted_command(command: str, driver: str) -> bool:
-    invocation = rf"(?:^|[\"'])\s*(?:/usr/bin/)?python3\s+inputs/{re.escape(driver)}\s*(?:[\"']|$)"
-    return bool(re.search(invocation, command)) and not re.search(
-        rf"inputs/{re.escape(driver)}\s*(?:;|&&|\|\||\||>|<|\$\(|`)", command
+    try:
+        arguments = shlex.split(command)
+    except ValueError:
+        return False
+    if len(arguments) == 3 and arguments[0] in {"/bin/bash", "/bin/sh", "/bin/zsh"} and arguments[1] in {"-c", "-lc"}:
+        try:
+            arguments = shlex.split(arguments[2])
+        except ValueError:
+            return False
+    if len(arguments) != 2:
+        return False
+    executable = arguments[0]
+    if "/" in executable:
+        path = Path(executable)
+        trusted_interpreter = path.parent.as_posix() in {"/usr/bin", "/usr/local/bin"}
+    else:
+        trusted_interpreter = True
+    return (
+        trusted_interpreter
+        and re.fullmatch(r"python3(?:\.\d+)?", Path(executable).name) is not None
+        and arguments[1] == f"inputs/{driver}"
     )
 
 
