@@ -501,6 +501,16 @@ class ExposureEligibilityTests(unittest.TestCase):
         with self.assertRaisesRegex(LaneError, "harness event envelope"):
             exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
+    def test_rejects_a_symlinked_event_file(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        target = self.root / "replacement-events.json"
+        events_path.replace(target)
+        events_path.symlink_to(target)
+        with self.assertRaisesRegex(LaneError, "contains a symlink"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
     def test_rejects_duplicate_answer_design_coordinate(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
         self.write_events("behavior", "old_skill", None)

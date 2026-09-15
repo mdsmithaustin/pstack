@@ -236,6 +236,25 @@ def command_plan(
     ]
 
 
+def execute_plan(
+    commands: list[list[str]],
+    *,
+    cwd: Path,
+    integrated_repo: Path | None = None,
+    source_repo: Path | None = None,
+    skill: str | None = None,
+) -> None:
+    model_stage_complete = False
+    for command in commands:
+        if model_stage_complete:
+            if integrated_repo is None or source_repo is None or skill is None:
+                raise ValueError("integrated post-model verification needs both repositories and the target skill")
+            verify_materialized_lane(source_repo, integrated_repo, skill)
+        subprocess.run(command, cwd=cwd, check=True)
+        if "run-agent" in command:
+            model_stage_complete = True
+
+
 def main() -> int:
     source_repo = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description="Run one direct-skill answer and cross-family judge arm.")
@@ -306,8 +325,16 @@ def main() -> int:
             print("Pairwise judging remains external. Judge compare-tasks.jsonl blind, then import verdicts with compare-results.")
         return 0
     output.mkdir(parents=True, exist_ok=True)
-    for command in commands:
-        subprocess.run(command, cwd=eval_repo, check=True)
+    try:
+        execute_plan(
+            commands,
+            cwd=eval_repo,
+            integrated_repo=eval_repo if args.lane == "integrated" else None,
+            source_repo=repo if args.lane == "integrated" else None,
+            skill=args.skill if args.lane == "integrated" else None,
+        )
+    except (LaneError, ValueError) as exc:
+        parser.error(str(exc))
     if args.lane == "integrated":
         print("Pairwise judging remains external. Judge compare-tasks.jsonl blind, then import verdicts with compare-results.")
     return 0

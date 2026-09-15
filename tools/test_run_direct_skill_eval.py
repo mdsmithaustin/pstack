@@ -9,7 +9,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from run_direct_skill_eval import command_plan, main
+from direct_skill_lanes import LaneError
+from run_direct_skill_eval import command_plan, execute_plan, main
 
 
 class DirectSkillEvalRunnerTests(unittest.TestCase):
@@ -143,6 +144,48 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
         ):
             main()
         self.assertEqual(raised.exception.code, 2)
+
+    def test_integrated_execution_reverifies_before_each_post_model_stage(self) -> None:
+        commands = [["runner", "run-agent"], ["runner", "grade"], ["helper", "check-exposure"]]
+        events: list[str] = []
+
+        def run(command: list[str], **_: object) -> None:
+            events.append(command[-1])
+
+        with (
+            mock.patch("run_direct_skill_eval.subprocess.run", side_effect=run),
+            mock.patch(
+                "run_direct_skill_eval.verify_materialized_lane",
+                side_effect=lambda *_: events.append("verify"),
+            ),
+        ):
+            execute_plan(
+                commands,
+                cwd=self.repo,
+                integrated_repo=self.repo,
+                source_repo=self.root,
+                skill="demo",
+            )
+        self.assertEqual(events, ["run-agent", "verify", "grade", "verify", "check-exposure"])
+
+    def test_integrated_execution_stops_before_grading_a_changed_shadow(self) -> None:
+        commands = [["runner", "run-agent"], ["runner", "grade"]]
+        with (
+            mock.patch("run_direct_skill_eval.subprocess.run") as run,
+            mock.patch(
+                "run_direct_skill_eval.verify_materialized_lane",
+                side_effect=LaneError("changed shadow"),
+            ),
+            self.assertRaisesRegex(LaneError, "changed shadow"),
+        ):
+            execute_plan(
+                commands,
+                cwd=self.repo,
+                integrated_repo=self.repo,
+                source_repo=self.root,
+                skill="demo",
+            )
+        run.assert_called_once_with(commands[0], cwd=self.repo, check=True)
 
 
 if __name__ == "__main__":

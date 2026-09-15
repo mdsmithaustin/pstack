@@ -765,6 +765,7 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str, split: s
     event_files: dict[str, Path] = {}
     for events_path in sorted(runs.rglob("events.json")):
         relative = events_path.relative_to(runs)
+        _reject_symlink_chain(runs, relative)
         run_dir = relative.parent.as_posix()
         if run_dir in event_files:
             raise LaneError(f"duplicate exposure run directory: {run_dir}")

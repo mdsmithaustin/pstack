@@ -10,6 +10,7 @@ from typing import Any
 
 
 SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+CASE_ID = re.compile(r"^[a-z0-9]+(?:[._-][a-z0-9]+)*$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -109,8 +110,8 @@ def validate_cases(public: dict[str, Any], overlay: dict[str, Any]) -> list[dict
         if not isinstance(case, dict):
             raise CompositionError(f"case #{index + 1} must be an object")
         case_id = case.get("id")
-        if not isinstance(case_id, str) or not case_id:
-            raise CompositionError(f"case #{index + 1} needs a non-empty id")
+        if not isinstance(case_id, str) or CASE_ID.fullmatch(case_id) is None:
+            raise CompositionError(f"case #{index + 1} needs a safe lowercase id")
         kind = case.get("kind")
         if kind not in {"positive", "negative", "adversarial", "behavior", "trigger"}:
             raise CompositionError(f"{case_id} has unsupported kind: {kind!r}")

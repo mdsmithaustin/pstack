@@ -133,6 +133,15 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         with self.assertRaisesRegex(CompositionError, "not unique"):
             compose(self.repo, "demo", self.overlay, self.root / "collision")
 
+    def test_rejects_case_ids_that_are_not_safe_path_segments(self) -> None:
+        for index, case_id in enumerate(("../outside", "foo/bar", "foo\\bar", ".", "..", ".hidden", "ＦＯＯ")):
+            with self.subTest(case_id=case_id):
+                cases = holdback_cases()
+                cases[0]["id"] = case_id
+                self.write_overlay(cases=cases)
+                with self.assertRaisesRegex(CompositionError, "safe lowercase id"):
+                    compose(self.repo, "demo", self.overlay, self.root / f"unsafe-id-{index}")
+
     def test_rejects_non_holdback_private_case(self) -> None:
         cases = holdback_cases()
         cases[0]["split"] = "tune"

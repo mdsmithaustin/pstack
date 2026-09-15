@@ -36,6 +36,8 @@ The oracles do not require one application-style response schema.
 
 Tagged JSON samples remain only in explicitly named importer-integration unit tests. They test parser compatibility and do not contribute to headline behavior results. Metamorphic tests use structurally different valid answers to keep the deterministic gates independent of wording and presentation.
 
+Two runner evidence gaps remain. Normalized path-based skill-read events do not record the temporary workspace root, so a path suffix alone cannot prove that the model read the mounted target. The Claude adapter also permits writes inside its temporary workspace, so command text cannot prove that a runtime driver stayed unchanged before execution. `skill-eval-harness` must record workspace-bound access evidence and post-run fixture integrity before either signal can support promotion.
+
 ## Model-free checks
 
 Run repository tests and pinned harness checks before spending model budget.
@@ -79,7 +81,7 @@ mise exec -- python3 tools/run_direct_skill_eval.py \
   --out /secure/results/verify-commands-integrated-luna --dry-run
 ```
 
-Remove `--dry-run` to execute one answer-model arm. Integrated mode validates and audits the generated manifest. It prepares paired `with_skill` and `old_skill` tasks, removes unused variants, and runs the answer model. It applies deterministic grades, checks target-specific exposure for every behavior case in the selected split, and exports blinded comparison tasks. The result directory must not be a symlink and must stay outside the immutable shadow repository.
+Remove `--dry-run` to execute one answer-model arm. Integrated mode validates and audits the generated manifest. It prepares paired `with_skill` and `old_skill` tasks, removes unused variants, and runs the answer model. Before each later stage, it verifies the shadow against the source and its receipt again. It then applies deterministic grades, checks target-specific exposure for every behavior case in the selected split, and exports blinded comparison tasks. The result directory must not be a symlink and must stay outside the shadow repository.
 
 The checked-in runner stops after `compare-tasks`. It does not automate semantic judging. Give `compare-tasks.jsonl` to a judge from the other model family. Save its verdicts as JSON Lines outside Git, then import them.
 
