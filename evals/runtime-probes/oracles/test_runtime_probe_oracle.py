@@ -51,7 +51,7 @@ class OracleWorkspace:
         self.path = Path(self._temporary.name)
         self.write_record(record)
         self.events: list[dict[str, object]] = []
-        self.trace: list[str] = []
+        self.serialized_events: list[str] = []
 
     def close(self) -> None:
         self._temporary.cleanup()
@@ -91,14 +91,14 @@ class OracleWorkspace:
                 "status": "completed",
             },
         }
-        self.trace.append(json.dumps(raw))
+        self.serialized_events.append(json.dumps(raw))
         self.events.append(
             {
                 "type": "command",
                 "status": "completed",
                 "exit_code": 0,
                 "input_summary": summary,
-                "raw_ref": {"file": "trace.jsonl", "line": len(self.trace)},
+                "raw_ref": {"file": "trace.jsonl", "line": len(self.serialized_events)},
             }
         )
 
@@ -109,7 +109,7 @@ class OracleWorkspace:
         (self.path / "events.json").write_text(
             json.dumps({"events": self.events}), encoding="utf-8"
         )
-        (self.path / "trace.jsonl").write_text("\n".join(self.trace), encoding="utf-8")
+        (self.path / "trace.jsonl").write_text("\n".join(self.serialized_events), encoding="utf-8")
 
 
 class RuntimeProbeOracleTests(unittest.TestCase):
