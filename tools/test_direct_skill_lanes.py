@@ -114,7 +114,7 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
             check=True,
         )
         ignored = fake_repo / "evals" / "verify-commands" / "oracles" / "__pycache__" / "ignored.pyc"
-        ignored.parent.mkdir()
+        ignored.parent.mkdir(exist_ok=True)
         ignored.write_bytes(b"ignored")
         ignored_link = (
             fake_repo
@@ -123,9 +123,9 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
             / "scripts"
             / "node_modules"
             / ".bin"
-            / "tsc"
+            / "ignored-tool"
         )
-        ignored_link.parent.mkdir(parents=True)
+        ignored_link.parent.mkdir(parents=True, exist_ok=True)
         ignored_link.symlink_to("../typescript/bin/tsc")
         self.assertEqual(
             subprocess.run(["git", "check-ignore", "-q", str(ignored)], cwd=fake_repo).returncode,
