@@ -30,7 +30,7 @@ Deterministic gates own facts that the runner can execute or recompute. A fluent
 
 The oracles do not require one application-style response schema.
 
-- `verify-commands` accepts a natural answer with one fenced shell artifact and brief prose. It runs the artifact against fresh healthy and defective fixture states inside a locked container. Candidate bytes enter through standard input. They never become host shell arguments, environment values, image names, or paths. There is no host-execution fallback.
+- `verify-commands` accepts a natural answer with one fenced shell artifact and brief prose. It runs the artifact against fresh healthy and defective fixture states inside a locked container. An in-container evidence service authenticates each required interpreter, argument vector, and working directory. A hidden operation failure repeats an otherwise passing fixture to prove that the plan propagates the check result. Candidate bytes enter through standard input. They never become host shell arguments, environment values, image names, or paths. There is no host-execution fallback.
 - `spec-probes` accepts natural prose and Markdown tables. Its oracle checks source requirement anchors, non-mutation, and arithmetic consistency when the answer includes tagged coverage data. A cross-family comparison judge decides which answer is more complete, grounded, and applicable.
 - `runtime-probes` accepts natural prose and findings tables. Its oracle checks that the trusted driver ran as required, the trace contains fresh target-specific evidence, the driver facts match the fixture, the answer cites actual evidence IDs, and the fixture was not mutated. A cross-family comparison judge decides whether the answer's claims agree with those facts and which answer has better diagnostic quality.
 
@@ -151,7 +151,7 @@ mise exec -- python3 tools/compose_eval_holdback.py \
 
 The holdback composer creates an isolated shadow suite. It does not create the integrated upstream-roster arms. Do not report its `without_skill` arm as an upstream baseline. Integrated holdback use needs a separately verified composition step before it can support a headline claim.
 
-The composer rejects a changed public manifest, skill file, suite tree, or skill tree. It also rejects duplicate case IDs, the wrong population, non-holdback cases, symlinks, payload traversal or collisions, and output paths inside the repository. It never invokes a model.
+The composer rejects a changed public manifest, skill file, suite tree, or skill tree. It also rejects duplicate case IDs, the wrong population, non-holdback cases, symlinks, payload traversal or collisions, and output paths inside the repository. Every `files` and `prompt_ref` value must be a normalized relative path to an existing public or private payload file. The composer validates these references before creating output and never invokes a model.
 
 The holdback lifecycle is operator-enforced. Record the sealed-set identity and disposition outside Git. An infrastructure failure may rerun the same sealed set only if no answer or verdict was disclosed. A candidate failure retires the set. An immediately repairable candidate gets a newly generated sealed holdback. Ambiguous failures count as candidate failures after independent review.
 
