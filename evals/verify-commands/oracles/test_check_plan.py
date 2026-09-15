@@ -95,6 +95,11 @@ class PlanReplayTests(unittest.TestCase):
         self.assertTrue(any("FileNotFoundError" in state["stderr"] for state in result["failed_states"]))
         self.assertTrue(all(state["missing_operations"] for state in result["failed_states"]))
 
+    def test_lookalike_operation_cannot_be_created_outside_the_project(self):
+        code, result = self.evaluate_sample("stale-summary", "lookalike-operation.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertTrue(all(state["missing_operations"] for state in result["failed_states"]))
+
     def test_malicious_command_cannot_write_outside_tmpfs(self):
         code, result = self.evaluate_sample("stale-summary", "malicious-command.md")
         self.assertEqual(code, 1)

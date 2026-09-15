@@ -187,12 +187,30 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         self.assertEqual(runtime_probe_oracle.evaluate("neg-permission-boundary-escalation", permission.path)[0], "PASS")
 
     def test_non_executable_cases_reject_probe_capable_commands(self) -> None:
-        planning = self.workspace("The service is unavailable, so no evidence is claimed.")
-        planning.events.append({"type": "command", "input_summary": "python3 inputs/order_service.py"})
-        self.assertEqual(runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", planning.path)[0], "CANDIDATE_FAILURE")
+        for command in (
+            "python3 inputs/order_service.py",
+            "  /usr/local/bin/python3 inputs/order_service.py",
+            "env -- python3 inputs/order_service.py",
+            "command python3 inputs/order_service.py",
+            "sudo python3 inputs/order_service.py",
+        ):
+            planning = self.workspace("The service is unavailable, so no evidence is claimed.")
+            planning.events.append({"type": "command", "input_summary": command})
+            self.assertEqual(
+                runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", planning.path)[0],
+                "CANDIDATE_FAILURE",
+                command,
+            )
         permission = self.workspace("gateway-note:clean-replay-2 leaves policy unresolved.")
         permission.events.append({"type": "command", "input_summary": "curl https://service.invalid/exports"})
         self.assertEqual(runtime_probe_oracle.evaluate("neg-permission-boundary-escalation", permission.path)[0], "CANDIDATE_FAILURE")
+
+    def test_non_executable_cases_allow_shell_wrapped_static_reads(self) -> None:
+        events = [{
+            "type": "command",
+            "input_summary": "/bin/zsh -lc \"sed -n '1,120p' inputs/order-service-note.md\"",
+        }]
+        runtime_probe_oracle.ensure_no_probe_commands(events)
 
 
 if __name__ == "__main__":

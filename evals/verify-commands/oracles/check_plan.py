@@ -14,6 +14,7 @@ CONTAINER_PROGRAM = r'''
 import ctypes
 import json
 import os
+import resource
 import secrets
 import select
 import shutil
@@ -170,7 +171,10 @@ def run_case(root, plan, definition, bootstrap):
         project.mkdir(parents=True)
         home = run_root / "home"
         home.mkdir()
-        home.chmod(0o777)
+        home.chmod(0o555)
+        shared_memory = Path("/dev/shm")
+        if shared_memory.exists():
+            shared_memory.chmod(0o555)
         setup = subprocess.run(
             [sys.executable, "-c", bootstrap, str(project), state.get("bootstrap_state", state["name"])],
             text=True,
@@ -225,6 +229,7 @@ def run_case(root, plan, definition, bootstrap):
             group=65534,
             extra_groups=[],
             start_new_session=True,
+            preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0)),
         )
         timed_out = False
         try:

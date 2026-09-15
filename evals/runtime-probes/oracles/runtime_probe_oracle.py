@@ -8,10 +8,7 @@ from pathlib import Path
 from typing import Any
 
 
-PROBE_COMMAND = re.compile(
-    r"(?:^|[;&|\"']\s*)(?:(?:/usr)?/bin/)?(?:python3?|node|bash|sh|curl|wget|docker)\b",
-    re.IGNORECASE,
-)
+PROBE_EXECUTABLES = {"curl", "docker", "node", "wget"}
 
 
 class CandidateFailure(ValueError):
@@ -130,12 +127,83 @@ def ensure_diagnostic_only(events: list[dict[str, Any]]) -> None:
         fail(not _mutates(command), f"diagnostic-only task used a mutating command: {command}")
 
 
+def _argv_runs_probe(argv: list[str]) -> bool:
+    while argv and "=" in argv[0] and not argv[0].startswith(("/", "./")):
+        argv.pop(0)
+    if not argv:
+        return False
+    name = Path(argv.pop(0)).name.lower()
+    if name in PROBE_EXECUTABLES or re.fullmatch(r"python3?(?:\.\d+)?", name):
+        return True
+    if name == "sudo":
+        return True
+    if name == "env":
+        while argv:
+            option = argv[0]
+            if option == "--":
+                argv.pop(0)
+                break
+            if option in {"-u", "--unset", "-C", "--chdir"}:
+                if len(argv) < 2:
+                    return True
+                del argv[:2]
+                continue
+            if option.startswith(("--unset=", "--chdir=")) or "=" in option:
+                argv.pop(0)
+                continue
+            if option.startswith("-"):
+                argv.pop(0)
+                continue
+            break
+        return _argv_runs_probe(argv)
+    if name in {"command", "exec", "nohup"}:
+        if name == "command" and argv and argv[0] in {"-v", "-V"}:
+            return False
+        while argv and argv[0].startswith("-"):
+            argv.pop(0)
+        return _argv_runs_probe(argv)
+    if name in {"bash", "dash", "sh", "zsh"}:
+        options: list[str] = []
+        while argv and argv[0].startswith("-"):
+            options.append(argv.pop(0))
+        if len(argv) != 1 or not any("c" in option.lstrip("-") for option in options):
+            return True
+        return _command_runs_probe(argv[0])
+    if name in {"cat", "head", "tail", "wc", "ls", "stat"}:
+        return False
+    if name == "sed":
+        if "-n" not in argv:
+            return True
+        remaining = [argument for argument in argv if argument != "-n"]
+        if remaining and remaining[0] == "-e":
+            remaining.pop(0)
+        return len(remaining) < 2 or re.fullmatch(r"(?:\d+|\$)(?:,(?:\d+|\$))?p", remaining[0]) is None
+    if name in {"rg", "grep"}:
+        return any(argument == "--pre" or argument.startswith("--pre=") for argument in argv)
+    return True
+
+
+def _command_runs_probe(command: str) -> bool:
+    try:
+        tokens = _command_tokens(command)
+    except ValueError:
+        return True
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        value, active = _unquoted(token)
+        if active and value in {";", "&&", "||", "|", "&"}:
+            segments.append([])
+        else:
+            segments[-1].append(token)
+    return any(_argv_runs_probe([_unquoted(token)[0] for token in segment]) for segment in segments)
+
+
 def ensure_no_probe_commands(events: list[dict[str, Any]]) -> None:
     for event in events:
         if event.get("type") != "command":
             continue
         command = str(event.get("input_summary", ""))
-        fail(not PROBE_COMMAND.search(command), f"non-executable task ran a probe-capable command: {command}")
+        fail(not _command_runs_probe(command), f"non-executable task ran a probe-capable command: {command}")
 
 
 def _trusted_command(command: str, driver: str) -> bool:
