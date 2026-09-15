@@ -47,25 +47,6 @@ def _sha256(path: Path) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
-def _validate_regular_tree(root: Path, boundary: Path) -> None:
-    if root.is_symlink():
-        raise LaneError(f"symlinks are not allowed in lane sources: {root}")
-    resolved_root = root.resolve()
-    if not _is_within(resolved_root, boundary.resolve()):
-        raise LaneError(f"path escapes source repository: {root}")
-    if not resolved_root.is_dir():
-        raise LaneError(f"missing source directory: {root}")
-    for parent, directory_names, file_names in os.walk(resolved_root, followlinks=False):
-        parent_path = Path(parent)
-        for name in [*directory_names, *file_names]:
-            path = parent_path / name
-            if path.is_symlink():
-                raise LaneError(f"symlinks are not allowed in lane sources: {path}")
-            if path.is_file() or path.is_dir():
-                continue
-            raise LaneError(f"non-regular lane source is not allowed: {path}")
-
-
 def _inventory(root: Path) -> dict[str, str]:
     files: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
@@ -136,25 +117,39 @@ def _lane_contract(repo: Path) -> tuple[dict[str, Any], dict[str, Any], list[str
         raise LaneError("integrated port mapping aliases two upstream skills to one local skill")
     if set(local_roster) & set(additions):
         raise LaneError("integrated baseline leaks an absent-upstream port addition")
-    _validate_regular_tree(repo / "skills", repo)
-    actual = {path.parent.name for path in (repo / "skills").glob("*/SKILL.md")}
+    skills_root = repo / "skills"
+    if skills_root.is_symlink() or not skills_root.is_dir():
+        raise LaneError("skills source must be a regular directory")
+    skill_files = list(skills_root.glob("*/SKILL.md"))
+    if any(path.is_symlink() or not path.is_file() for path in skill_files):
+        raise LaneError("each local skill must have a regular SKILL.md")
+    actual = {path.parent.name for path in skill_files}
     expected = set(local_roster) | set(additions)
     if actual != expected:
         missing = sorted(expected - actual)
         extra = sorted(actual - expected)
         raise LaneError(f"local skill roster mismatch; missing={missing}; extra={extra}")
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z", "--", "skills/*/SKILL.md"],
+        cwd=repo,
+        capture_output=True,
+        check=False,
+    )
+    if tracked.returncode != 0:
+        raise LaneError(f"cannot list tracked skill manifests: {tracked.stderr.decode(errors='replace').strip()}")
+    tracked_roster = {
+        Path(os.fsdecode(path)).parent.name
+        for path in tracked.stdout.split(b"\0")
+        if path
+    }
+    if tracked_roster != expected:
+        raise LaneError("tracked skill roster does not match the integrated lane contract")
     return contract, integrated, local_roster
 
 
-def _copy_skill(repo: Path, destination: Path, name: str) -> None:
-    source = repo / "skills" / name
-    _validate_regular_tree(source, repo)
-    shutil.copytree(source, destination / "skills" / name)
-
-
-def _tracked_suite_files(repo: Path, suite_relative: Path) -> list[Path]:
+def _tracked_tree_files(repo: Path, tree_relative: Path) -> list[Path]:
     result = subprocess.run(
-        ["git", "ls-files", "-z", "--", suite_relative.as_posix()],
+        ["git", "ls-files", "-z", "--", tree_relative.as_posix()],
         cwd=repo,
         capture_output=True,
         check=False,
@@ -167,30 +162,34 @@ def _tracked_suite_files(repo: Path, suite_relative: Path) -> list[Path]:
             continue
         relative = Path(os.fsdecode(raw))
         try:
-            suite_file = relative.relative_to(suite_relative)
+            tree_file = relative.relative_to(tree_relative)
         except ValueError as exc:
-            raise LaneError(f"tracked eval path escapes its suite: {relative}") from exc
+            raise LaneError(f"tracked path escapes its tree: {relative}") from exc
         source = repo / relative
         if source.is_symlink() or not source.is_file():
-            raise LaneError(f"tracked eval source must be a regular file: {source}")
-        files.append(suite_file)
+            raise LaneError(f"tracked lane source must be a regular file: {source}")
+        files.append(tree_file)
     if not files:
-        raise LaneError(f"eval suite has no tracked files: {suite_relative}")
+        raise LaneError(f"lane source has no tracked files: {tree_relative}")
     return sorted(files)
 
 
-def _tracked_suite_inventory(repo: Path, suite_relative: Path) -> dict[str, str]:
+def _tracked_tree_inventory(repo: Path, tree_relative: Path) -> dict[str, str]:
     return {
-        path.as_posix(): _sha256(repo / suite_relative / path)
-        for path in _tracked_suite_files(repo, suite_relative)
+        path.as_posix(): _sha256(repo / tree_relative / path)
+        for path in _tracked_tree_files(repo, tree_relative)
     }
 
 
-def _copy_tracked_suite(repo: Path, suite_relative: Path, destination: Path) -> None:
-    for relative in _tracked_suite_files(repo, suite_relative):
+def _copy_tracked_tree(repo: Path, tree_relative: Path, destination: Path) -> None:
+    for relative in _tracked_tree_files(repo, tree_relative):
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(repo / suite_relative / relative, target)
+        shutil.copy2(repo / tree_relative / relative, target)
+
+
+def _copy_skill(repo: Path, destination: Path, name: str) -> None:
+    _copy_tracked_tree(repo, Path("skills") / name, destination / "skills" / name)
 
 
 def _materialize_at(
@@ -216,7 +215,7 @@ def _materialize_at(
         _copy_skill(repo, treatment_root, name)
     _copy_skill(repo, treatment_root, target_skill)
     suite_destination = output / "evals" / target_skill
-    _copy_tracked_suite(repo, suite_relative, suite_destination)
+    _copy_tracked_tree(repo, suite_relative, suite_destination)
 
     manifest_path = suite_destination / "shared-benchmark.json"
     manifest = _read_json(manifest_path)
@@ -239,7 +238,7 @@ def _materialize_at(
     if control_files != treatment_without_target:
         raise LaneError("non-target arm mismatch after materialization")
     source_skill_inventory = {
-        name: _inventory(repo / "skills" / name)
+        name: _tracked_tree_inventory(repo, Path("skills") / name)
         for name in [*baseline_skills, target_skill]
     }
     receipt: dict[str, Any] = {
@@ -260,7 +259,7 @@ def _materialize_at(
             "upstream_skill_roster": integrated["upstream_skill_roster"],
             "local_cli_port_map": integrated["local_cli_port_map"],
             "skills": source_skill_inventory,
-            "eval_suite": _tracked_suite_inventory(repo, suite_relative),
+            "eval_suite": _tracked_tree_inventory(repo, suite_relative),
         },
         "arms": {
             "control": {
@@ -337,12 +336,12 @@ def verify_materialized_lane(repo: Path, shadow_repo: Path, target_skill: str) -
     if source.get("experiment_config_sha256") != _sha256(repo / CONFIG_PATH):
         raise LaneError("integrated lane source config changed after materialization")
     expected_source_skills = {
-        name: _inventory(repo / "skills" / name)
+        name: _tracked_tree_inventory(repo, Path("skills") / name)
         for name in [*baseline_skills, target_skill]
     }
     if source.get("skills") != expected_source_skills:
         raise LaneError("integrated lane source skill inventory changed after materialization")
-    if source.get("eval_suite") != _tracked_suite_inventory(repo, Path("evals") / target_skill):
+    if source.get("eval_suite") != _tracked_tree_inventory(repo, Path("evals") / target_skill):
         raise LaneError("integrated lane source eval inventory changed after materialization")
 
     expected_files = receipt.get("files")

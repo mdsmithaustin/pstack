@@ -82,7 +82,7 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         self.assertFalse(failed.exists())
         self.assertEqual(list(Path(self.temp.name).glob(".failed-shadow.*")), [])
 
-    def test_ignored_eval_cache_does_not_enter_receipt(self) -> None:
+    def test_ignored_source_files_do_not_enter_receipt(self) -> None:
         fake_repo = Path(self.temp.name) / "source"
         (fake_repo / ".github").mkdir(parents=True)
         (fake_repo / "evals").mkdir()
@@ -116,14 +116,42 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         ignored = fake_repo / "evals" / "verify-commands" / "oracles" / "__pycache__" / "ignored.pyc"
         ignored.parent.mkdir()
         ignored.write_bytes(b"ignored")
+        ignored_link = (
+            fake_repo
+            / "skills"
+            / "poteto-mode"
+            / "scripts"
+            / "node_modules"
+            / ".bin"
+            / "tsc"
+        )
+        ignored_link.parent.mkdir(parents=True)
+        ignored_link.symlink_to("../typescript/bin/tsc")
         self.assertEqual(
             subprocess.run(["git", "check-ignore", "-q", str(ignored)], cwd=fake_repo).returncode,
+            0,
+        )
+        self.assertEqual(
+            subprocess.run(["git", "check-ignore", "-q", str(ignored_link)], cwd=fake_repo).returncode,
             0,
         )
         shadow = Path(self.temp.name) / "ignored-shadow"
         receipt = materialize_integrated_lane(fake_repo, "verify-commands", shadow)
         self.assertFalse(any("__pycache__" in path for path in receipt["source"]["eval_suite"]))
+        self.assertFalse(any(
+            "node_modules" in path
+            for path in receipt["source"]["skills"]["poteto-mode"]
+        ))
         self.assertFalse((shadow / "evals" / "verify-commands" / "oracles" / "__pycache__").exists())
+        self.assertFalse((
+            shadow
+            / "arms"
+            / "control"
+            / "skills"
+            / "poteto-mode"
+            / "scripts"
+            / "node_modules"
+        ).exists())
 
 
 class PreparedTaskFilterTests(unittest.TestCase):
