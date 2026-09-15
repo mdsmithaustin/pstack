@@ -1,0 +1,403 @@
+{
+  "version": 1,
+  "skill_name": "spec-probes",
+  "skill_description": "Apply before implementation when writing or reviewing a spec, requirement, acceptance criterion, user story, or ticket. Probe only applicable data-shape edges and bespoke prohibitions, and give every raised item an auditable disposition.",
+  "harness": {
+    "name": "skill-eval-harness",
+    "url": "https://github.com/mdsmithaustin/skill-eval-harness",
+    "version": "git+c2a1735983fd7827491ad4d89f9bebe9e8e229a0"
+  },
+  "skill_paths": [
+    "skills/spec-probes/SKILL.md"
+  ],
+  "variants": [
+    "with_skill",
+    "without_skill"
+  ],
+  "judge": {
+    "model": "gpt-6-astra"
+  },
+  "split_policy": {
+    "tune": "The complete public trigger and behavior corpus. Standard local runs exercise every public case.",
+    "holdout": "Unused. Public cases are not represented as secret evidence.",
+    "holdback": "Supplied through an ignored private overlay. No private prompt or answer material belongs in this manifest."
+  },
+  "cases": [
+    {
+      "id": "pos-trigger-acceptance-criteria-review",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "requirements",
+      "difficulty": "core",
+      "trigger_type": "implicit",
+      "success_goals": ["trigger"],
+      "should_trigger": true,
+      "prompt": "Before engineering starts, review these acceptance criteria for a bulk import flow and identify the decisions they leave open."
+    },
+    {
+      "id": "pos-trigger-user-story-challenge",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "user-story",
+      "difficulty": "core",
+      "trigger_type": "implicit",
+      "success_goals": ["trigger"],
+      "should_trigger": true,
+      "prompt": "Challenge this user story before we estimate it. I need the edge conditions and product commitments that are still unstated."
+    },
+    {
+      "id": "pos-trigger-ticket-safety-limits",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "ticket",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["trigger"],
+      "should_trigger": true,
+      "prompt": "We are finalizing a ticket for overdue-payment reminders. What must the ticket decide or rule out before anyone writes code?"
+    },
+    {
+      "id": "pos-trigger-feature-request-prebuild",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "ambiguous",
+      "success_goals": ["trigger"],
+      "should_trigger": true,
+      "prompt": "We have not selected an implementation. Scrutinize this feature request for boundary cases and outcomes the team would regret committing to by accident."
+    },
+    {
+      "id": "trigger-negative-existing-bug",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "debugging",
+      "difficulty": "core",
+      "trigger_type": "near-miss",
+      "success_goals": ["trigger"],
+      "should_trigger": false,
+      "prompt": "The deployed invoice worker duplicates a charge after a timeout. Trace the current code, identify the cause, and patch it with a regression check."
+    },
+    {
+      "id": "trigger-negative-code-walkthrough",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "architecture",
+      "difficulty": "core",
+      "trigger_type": "near-miss",
+      "success_goals": ["trigger"],
+      "should_trigger": false,
+      "prompt": "Explain how the current retry queue deduplicates requests and point me to the files that own the behavior."
+    },
+    {
+      "id": "trigger-negative-launch-copy",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "marketing",
+      "difficulty": "core",
+      "trigger_type": "negative",
+      "success_goals": ["trigger"],
+      "should_trigger": false,
+      "prompt": "Write a short launch announcement for the new payment reminder feature. Keep the tone reassuring and practical."
+    },
+    {
+      "id": "trigger-negative-staging-qa",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "quality-assurance",
+      "difficulty": "extended",
+      "trigger_type": "ambiguous",
+      "success_goals": ["trigger"],
+      "should_trigger": false,
+      "prompt": "The feature is implemented and ready for staging. Exercise the import screen and list the defects you can reproduce."
+    },
+    {
+      "id": "pos-mixed-shapes",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Review billing-spec.md before implementation. Identify the decisions each source requirement leaves open, distinguish them from facts the draft already settles, and give an arithmetic-consistent coverage summary if you use counts. Use a Markdown table, bullets, or prose. Do not choose unstated product behavior.",
+      "files": ["fixtures/billing-spec.md"],
+      "expected_behavior": [
+        "Binds every applicable edge probe to the correct source requirement and data shape.",
+        "Uses explicit, gap, and not-applicable dispositions only where the requirement text supports them.",
+        "Reports internally consistent per-requirement and total coverage."
+      ],
+      "assertions": [
+        {
+          "name": "fixture-bound-record",
+          "type": "script",
+          "command": ["python3", "oracles/check_record.py", "pos-mixed-shapes", "{output_dir}"],
+          "severity": "critical",
+          "oracle": "strong"
+        },
+        {
+          "name": "grounded-questions",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "requirement-grounding",
+              "scale": "1-5",
+              "rubric": "5 = Every question names the exact decision exposed by its requirement and every stated criterion is traceable to supplied text. 4 = One question is imprecise, but none is generic or invented. 3 = Several questions could apply to any specification. 2 = Material questions are detached from their requirements. 1 = The response is a taxonomy recital or copies the prompt instead of reviewing the requirements."
+            },
+            {
+              "name": "completeness-and-restraint",
+              "scale": "1-5",
+              "rubric": "5 = The review covers every material open edge, preserves settled facts and backstops, and does not choose product behavior. 4 = One minor edge is missing, with no wrong disposition. 3 = A material edge is missing or one settled fact is reopened. 2 = Several gaps or dispositions are wrong. 1 = The response is materially incomplete or writes the missing policy itself."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "mixed-shapes"]
+    },
+    {
+      "id": "pos-unclassified-prose",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Review handoff-spec.md before implementation. Turn its vague quality statement into the concrete product decision the team still needs to make. Use a Markdown table, bullets, or prose. Do not invent numeric, collection, text, stateful, or input-output mechanics when the requirement does not support them.",
+      "files": ["fixtures/handoff-spec.md"],
+      "expected_behavior": [
+        "Produces one soft unclassified item for prose with no matching data shape.",
+        "Does not invent numeric, collection, text, stateful, or input-output mechanics."
+      ],
+      "assertions": [
+        {
+          "name": "single-unclassified-record",
+          "type": "script",
+          "command": ["python3", "oracles/check_record.py", "pos-unclassified-prose", "{output_dir}"],
+          "severity": "critical",
+          "oracle": "strong"
+        },
+        {
+          "name": "grounded-question",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "requirement-grounding",
+              "scale": "1-5",
+              "rubric": "5 = The single question turns the supplied phrase into a concrete product decision without inventing a data shape. 4 = The question is grounded but slightly broad. 3 = It is a generic quality question. 2 = It invents mechanics absent from the requirement. 1 = It ignores or copies the requirement."
+            },
+            {
+              "name": "restraint",
+              "scale": "1-5",
+              "rubric": "5 = The response keeps the prose requirement unclassified and asks only for an observable product decision. 4 = The classification is restrained but one phrase is vague. 3 = It adds one weakly supported mechanism. 2 = It invents several data-shape mechanics. 1 = It replaces the requirement with an unrelated taxonomy."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "unclassified"]
+    },
+    {
+      "id": "pos-bespoke-reminder",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "product-guardrails",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Review reminder-spec.md before implementation. Separate ordinary edge questions from concrete limits on what this reminder may become. Tie each item to its source requirement, preserve the trained-reviewer backstop, and refer generic security or compliance topics to their owners instead of expanding them here. Use a Markdown table, bullets, or prose.",
+      "files": ["fixtures/reminder-spec.md"],
+      "expected_behavior": [
+        "Binds edge questions to the requirement whose data shape makes them applicable.",
+        "Raises two or three concrete dignity, privacy, audience, consent, or fairness prohibitions instead of a generic safety catalogue.",
+        "Gives every item a supported disposition and consistent coverage."
+      ],
+      "assertions": [
+        {
+          "name": "edge-and-prohibition-record",
+          "type": "script",
+          "command": ["python3", "oracles/check_record.py", "pos-bespoke-reminder", "{output_dir}"],
+          "severity": "critical",
+          "oracle": "strong"
+        },
+        {
+          "name": "bespoke-prohibitions",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "bespoke-product-restraint",
+              "scale": "1-5",
+              "rubric": "5 = Each prohibition states a concrete unwanted reminder outcome tied to the supplied channel, debt details, or repayment goal, and it is framed as a decision or criterion. 4 = The items are specific, with one minor abstraction. 3 = The list mixes bespoke concerns with generic privacy, fairness, or security slogans. 2 = Most items could be pasted into any product. 1 = No bespoke prohibition is present, or the response invents a legal mandate."
+            },
+            {
+              "name": "edge-coverage-and-state",
+              "scale": "1-5",
+              "rubric": "5 = Every material edge is tied to RR-301 or RR-302, the trained-reviewer backstop remains settled, and open choices remain open. 4 = One minor edge is missing. 3 = A material edge is missing or one disposition is unclear. 2 = Several items are detached from their source. 1 = The response selects policy, removes the backstop, or omits most open decisions."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "bespoke-prohibitions"]
+    },
+    {
+      "id": "pos-open-product-choice",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Review choice-spec.md before implementation. Surface the unresolved product choices under each source requirement without selecting an answer. Keep explicit empty-input behavior settled. Use a Markdown table, bullets, or prose.",
+      "files": ["fixtures/choice-spec.md"],
+      "expected_behavior": [
+        "Keeps touching-window and character-definition choices unresolved.",
+        "Accepts explicit empty-input rules as resolved rather than reopening them.",
+        "Allows different grounded wording for the same unresolved choices."
+      ],
+      "assertions": [
+        {
+          "name": "open-choice-record",
+          "type": "script",
+          "command": ["python3", "oracles/check_record.py", "pos-open-product-choice", "{output_dir}"],
+          "severity": "critical",
+          "oracle": "strong"
+        },
+        {
+          "name": "grounded-open-choices",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "requirement-grounding",
+              "scale": "1-5",
+              "rubric": "5 = Each question states the exact unresolved choice and does not choose for the product owner. 4 = Both choices are grounded, with one imprecise phrase. 3 = Questions are relevant but generic. 2 = A choice is invented or silently selected. 1 = The response parrots categories without reviewing the supplied requirements."
+            },
+            {
+              "name": "settled-fact-restraint",
+              "scale": "1-5",
+              "rubric": "5 = The review covers all material open choices while preserving both explicit empty-input rules. 4 = One minor detail is vague. 3 = One open choice is missed or one settled rule is reopened. 2 = Several states are wrong. 1 = The response chooses an answer or contradicts the supplied behavior."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "open-choice"]
+    },
+    {
+      "id": "neg-deployed-incident-restraint",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "incident-response",
+      "difficulty": "extended",
+      "trigger_type": "near-miss",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Read incident-brief.md. This is a deployed incident, not a pre-build requirements review. Explain the correct next owner and keep the response scoped to the shipped failure. Do not rewrite committed product behavior or manufacture requirements.",
+      "files": ["fixtures/incident-brief.md"],
+      "expected_behavior": [
+        "Returns an incident-triage scope refusal with no manufactured requirements or probes.",
+        "Routes the deployed failure to debugging or incident response with zero coverage counts."
+      ],
+      "assertions": [
+        {
+          "name": "incident-scope-record",
+          "type": "script",
+          "command": ["python3", "oracles/check_record.py", "neg-deployed-incident-restraint", "{output_dir}"],
+          "severity": "critical",
+          "oracle": "strong"
+        },
+        {
+          "name": "incident-scope-quality",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "scope-and-routing",
+              "scale": "1-5",
+              "rubric": "5 = The response treats the duplicate charge as a shipped incident, routes it to debugging or incident response, and does not create new requirements. 4 = The route is correct with one vague phrase. 3 = The route is plausible but mixed with requirements advice. 2 = The response materially expands the task. 1 = It rewrites committed product behavior or ignores the incident."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-not-loaded",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "scope-restraint", "deployed-incident"]
+    }
+  ]
+}

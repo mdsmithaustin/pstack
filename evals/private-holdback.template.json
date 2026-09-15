@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "skill_name": "replace-with-skill-name",
+  "public_manifest_sha256": "replace-with-64-character-lowercase-sha256",
+  "public_skill_sha256": "replace-with-64-character-lowercase-sha256",
+  "public_suite_sha256": "replace-with-64-character-lowercase-sha256",
+  "public_skill_tree_sha256": "replace-with-64-character-lowercase-sha256",
+  "payload_dir": "payload",
+  "cases": [
+    {
+      "id": "replace-with-private-case-id",
+      "split": "holdback",
+      "kind": "positive",
+      "prompt_ref": "prompts/replace-with-private-prompt.txt",
+      "files": [
+        "fixtures/replace-with-private-fixture.json"
+      ],
+      "assertions": []
+    }
+  ]
+}
