@@ -28,8 +28,24 @@ def fail(condition: bool, message: str) -> None:
         raise CandidateFailure(message)
 
 
+def path_contains_symlink(path: Path) -> bool:
+    absolute = path.absolute()
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current /= part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def reject_symlink_artifacts(output_dir: Path, names: tuple[str, ...]) -> None:
+    if any(path_contains_symlink(output_dir / name) for name in names):
+        raise InfrastructureFailure("evaluation artifact paths must not be symlinks")
+
+
 def read_output(output_dir: Path) -> str:
     path = output_dir / "output.md"
+    reject_symlink_artifacts(output_dir, ("output.md",))
     if not path.is_file():
         raise InfrastructureFailure("output.md is missing")
     text = path.read_text(encoding="utf-8", errors="replace").strip()
@@ -40,6 +56,7 @@ def read_output(output_dir: Path) -> str:
 def load_events(output_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
     events_path = output_dir / "events.json"
     trace_path = output_dir / "trace.jsonl"
+    reject_symlink_artifacts(output_dir, ("events.json", "trace.jsonl"))
     if not events_path.is_file() or not trace_path.is_file():
         raise InfrastructureFailure("events.json and trace.jsonl are required")
     try:

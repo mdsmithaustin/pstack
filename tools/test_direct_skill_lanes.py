@@ -206,7 +206,7 @@ class PreparedTaskFilterTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
 
     def test_filters_to_pair_with_equal_population(self) -> None:
         source = self.root / "prepared.jsonl"
@@ -247,7 +247,7 @@ class ExposureEligibilityTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.manifest = self.root / "manifest.json"
         self.manifest.write_text(json.dumps({
             "cases": [
@@ -386,6 +386,20 @@ class ExposureEligibilityTests(unittest.TestCase):
         report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertFalse(report["eligible"])
 
+    def test_boolean_false_exit_code_does_not_count(self) -> None:
+        command = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": "cat ./skills/verify-commands/SKILL.md",
+            "output_summary": "---\nname: verify-commands\n---",
+            "status": "completed",
+            "exit_code": False,
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=command)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+        self.assertFalse(report["eligible"])
+
     def test_target_read_requires_completed_exact_skill_path(self) -> None:
         incomplete = {
             "type": "skill_load",
@@ -510,6 +524,22 @@ class ExposureEligibilityTests(unittest.TestCase):
         events_path.symlink_to(target)
         with self.assertRaisesRegex(LaneError, "contains a symlink"):
             exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_rejects_a_symlinked_runs_root(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        linked_runs = self.root / "linked-runs"
+        linked_runs.symlink_to(self.root / "runs", target_is_directory=True)
+        with self.assertRaisesRegex(LaneError, "contains a symlink"):
+            exposure_report(linked_runs, self.manifest, "verify-commands", "tune")
+
+    def test_rejects_a_runs_root_below_a_symlinked_ancestor(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        alias = self.root / "alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        with self.assertRaisesRegex(LaneError, "contains a symlink"):
+            exposure_report(alias / "runs", self.manifest, "verify-commands", "tune")
 
     def test_rejects_duplicate_answer_design_coordinate(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")

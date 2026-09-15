@@ -26,7 +26,7 @@ BILLING_OBSERVATIONS = {
 class OracleWorkspace:
     def __init__(self, text: str) -> None:
         self._temporary = tempfile.TemporaryDirectory()
-        self.path = Path(self._temporary.name)
+        self.path = Path(self._temporary.name).resolve()
         (self.path / "output.md").write_text(text, encoding="utf-8")
         self.events: list[dict[str, object]] = []
         self.trace: list[str] = []
@@ -58,7 +58,7 @@ class RuntimeProbeOracleTests(unittest.TestCase):
 
     def test_event_loader_rejects_non_object_envelopes_and_events(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             (root / "trace.jsonl").write_text("", encoding="utf-8")
             for envelope in (
                 [],
@@ -71,6 +71,86 @@ class RuntimeProbeOracleTests(unittest.TestCase):
                     runtime_probe_oracle.InfrastructureFailure
                 ):
                     runtime_probe_oracle.load_events(root)
+
+    def test_event_loader_rejects_symlinked_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            for name in ("events.json", "trace.jsonl"):
+                case = root / name.replace(".", "-")
+                case.mkdir()
+                events = case / "events.json"
+                trace = case / "trace.jsonl"
+                events.write_text(
+                    '{"schema_version": 2, "source": "test", "events": []}',
+                    encoding="utf-8",
+                )
+                trace.write_text("", encoding="utf-8")
+                artifact = case / name
+                artifact.unlink()
+                target = case / f"real-{name}"
+                target.write_text(
+                    "" if name == "trace.jsonl" else '{"schema_version": 2, "source": "test", "events": []}',
+                    encoding="utf-8",
+                )
+                artifact.symlink_to(target)
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    runtime_probe_oracle.InfrastructureFailure,
+                    "must not be symlinks",
+                ):
+                    runtime_probe_oracle.load_events(case)
+
+    def test_evaluate_rejects_a_symlinked_output_or_run_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            real_output = root / "real-output.md"
+            real_output.write_text("plain result", encoding="utf-8")
+            (root / "output.md").symlink_to(real_output)
+            (root / "events.json").write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
+            (root / "trace.jsonl").write_text("", encoding="utf-8")
+            result = runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", root)
+            self.assertEqual(result, ("INFRASTRUCTURE_FAILURE", "evaluation artifact paths must not be symlinks"))
+
+            real_run = root / "real-run"
+            real_run.mkdir()
+            (real_run / "output.md").write_text("plain result", encoding="utf-8")
+            (real_run / "events.json").write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
+            (real_run / "trace.jsonl").write_text("", encoding="utf-8")
+            self.assertEqual(
+                runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", real_run)[0],
+                "PASS",
+            )
+            linked_run = root / "linked-run"
+            linked_run.symlink_to(real_run, target_is_directory=True)
+            result = runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", linked_run)
+            self.assertEqual(result, ("INFRASTRUCTURE_FAILURE", "evaluation artifact paths must not be symlinks"))
+
+            real_parent = root / "real-parent"
+            real_parent.mkdir()
+            nested_run = real_parent / "run"
+            nested_run.mkdir()
+            (nested_run / "output.md").write_text("plain result", encoding="utf-8")
+            (nested_run / "events.json").write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
+            (nested_run / "trace.jsonl").write_text("", encoding="utf-8")
+            self.assertEqual(
+                runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", nested_run)[0],
+                "PASS",
+            )
+            alias_parent = root / "alias-parent"
+            alias_parent.symlink_to(real_parent, target_is_directory=True)
+            result = runtime_probe_oracle.evaluate(
+                "neg-plan-order-service-unavailable",
+                alias_parent / "run",
+            )
+            self.assertEqual(result, ("INFRASTRUCTURE_FAILURE", "evaluation artifact paths must not be symlinks"))
 
     def test_accepts_natural_findings_table_and_structurally_different_prose(self) -> None:
         table = "| Evidence | Result |\n| --- | --- |\n| aaaaaaaaaaaaaaaaaaaaaaaa | first run |\n| bbbbbbbbbbbbbbbbbbbbbbbb | clean replay |"

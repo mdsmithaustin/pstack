@@ -7,8 +7,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from oracles.record import evaluate
 
 
+def path_contains_symlink(path: Path) -> bool:
+    absolute = path.absolute()
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current /= part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def reject_symlink_artifacts(output_dir: Path, names: tuple[str, ...]) -> None:
+    if any(path_contains_symlink(output_dir / name) for name in names):
+        raise ValueError("evaluation artifact paths must not be symlinks")
+
+
+def read_output(output_dir: Path) -> str:
+    reject_symlink_artifacts(output_dir, ("output.md",))
+    return (output_dir / "output.md").read_text(encoding="utf-8")
+
+
 def load_events(output_dir: Path) -> list[dict[str, object]]:
     path = output_dir / "events.json"
+    reject_symlink_artifacts(output_dir, ("events.json",))
     if not path.is_file():
         raise ValueError("events.json is missing")
     try:
@@ -36,7 +57,7 @@ def main() -> int:
     case_id, output_dir = sys.argv[1:]
     try:
         root = Path(output_dir)
-        text = (root / "output.md").read_text(encoding="utf-8")
+        text = read_output(root)
         events = load_events(root)
     except (OSError, ValueError) as exc:
         print(f"cannot read evaluation artifacts: {exc}", file=sys.stderr)

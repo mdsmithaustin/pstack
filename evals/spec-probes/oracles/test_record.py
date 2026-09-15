@@ -3,11 +3,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from oracles.record import evaluate, evaluate_spec, extract_import_record
-from oracles.check_record import load_events
+from oracles.check_record import load_events, main as check_record_main
 from oracles.specs import CaseSpec
 
 
@@ -45,7 +46,7 @@ class RecordOracleTests(unittest.TestCase):
 
     def test_event_envelope_must_exist_but_may_be_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             with self.assertRaisesRegex(ValueError, "events.json is missing"):
                 load_events(root)
             (root / "events.json").write_text(
@@ -56,7 +57,7 @@ class RecordOracleTests(unittest.TestCase):
 
     def test_event_loader_rejects_non_object_envelopes_and_events(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             for envelope in (
                 [],
                 {"events": []},
@@ -66,6 +67,64 @@ class RecordOracleTests(unittest.TestCase):
                 (root / "events.json").write_text(json.dumps(envelope), encoding="utf-8")
                 with self.subTest(envelope=envelope), self.assertRaises(ValueError):
                     load_events(root)
+
+    def test_event_loader_rejects_a_symlinked_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "real-events.json"
+            target.write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
+            (root / "events.json").symlink_to(target)
+            with self.assertRaisesRegex(ValueError, "must not be symlinks"):
+                load_events(root)
+
+    def test_check_record_rejects_a_symlinked_output_or_run_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            real_output = root / "real-output.md"
+            real_output.write_text("HP-201 needs a product decision.", encoding="utf-8")
+            (root / "output.md").symlink_to(real_output)
+            (root / "events.json").write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
+            with mock.patch("sys.argv", ["check_record.py", "pos-unclassified-prose", str(root)]):
+                self.assertEqual(check_record_main(), 2)
+
+            real_run = root / "real-run"
+            real_run.mkdir()
+            (real_run / "output.md").write_text("HP-201 needs a product decision.", encoding="utf-8")
+            (real_run / "events.json").write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
+            with mock.patch("sys.argv", ["check_record.py", "pos-unclassified-prose", str(real_run)]):
+                self.assertEqual(check_record_main(), 0)
+            linked_run = root / "linked-run"
+            linked_run.symlink_to(real_run, target_is_directory=True)
+            with mock.patch("sys.argv", ["check_record.py", "pos-unclassified-prose", str(linked_run)]):
+                self.assertEqual(check_record_main(), 2)
+
+            real_parent = root / "real-parent"
+            real_parent.mkdir()
+            nested_run = real_parent / "run"
+            nested_run.mkdir()
+            (nested_run / "output.md").write_text("HP-201 needs a product decision.", encoding="utf-8")
+            (nested_run / "events.json").write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
+            with mock.patch("sys.argv", ["check_record.py", "pos-unclassified-prose", str(nested_run)]):
+                self.assertEqual(check_record_main(), 0)
+            alias_parent = root / "alias-parent"
+            alias_parent.symlink_to(real_parent, target_is_directory=True)
+            with mock.patch(
+                "sys.argv",
+                ["check_record.py", "pos-unclassified-prose", str(alias_parent / "run")],
+            ):
+                self.assertEqual(check_record_main(), 2)
 
     def test_accepts_deployed_incident_scope_refusal_without_fixed_wording(self) -> None:
         first = "This shipped failure belongs with incident response and debugging. I would not redefine the product contract here."

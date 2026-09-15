@@ -36,6 +36,12 @@ def _is_within(path: Path, root: Path) -> bool:
 def _reject_symlink_chain(root: Path, relative: Path) -> None:
     if relative.is_absolute() or ".." in relative.parts:
         raise LaneError(f"lane source path must stay below its repository: {relative}")
+    absolute_root = root.absolute()
+    current_root = Path(absolute_root.anchor)
+    for part in absolute_root.parts[1:]:
+        current_root /= part
+        if current_root.is_symlink():
+            raise LaneError(f"lane source path contains a symlink: {current_root}")
     current = root
     for part in relative.parts:
         current = current / part
@@ -565,7 +571,7 @@ def _event_names_target(event: Any, target_skill: str) -> bool:
             isinstance(command, str)
             and isinstance(output, str)
             and bool(output.strip())
-            and exit_code in (None, 0)
+            and (exit_code is None or (type(exit_code) is int and exit_code == 0))
             and _reader_command_names_target(command, target_skill)
         )
     if event.get("type") != "skill_load":
