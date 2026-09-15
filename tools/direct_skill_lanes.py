@@ -68,12 +68,17 @@ def _sha256(path: Path) -> str:
 
 
 def _inventory(root: Path) -> dict[str, str]:
+    if root.is_symlink() or not root.is_dir():
+        raise LaneError(f"materialized lane root must be a regular directory: {root}")
     files: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         if path.is_symlink():
             raise LaneError(f"symlinks are not allowed in a materialized lane: {path}")
-        if path.is_file():
-            files[path.relative_to(root).as_posix()] = _sha256(path)
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise LaneError(f"special files are not allowed in a materialized lane: {path}")
+        files[path.relative_to(root).as_posix()] = _sha256(path)
     return files
 
 

@@ -77,14 +77,30 @@ def require_digest(overlay: dict[str, Any], field: str, actual: str) -> None:
         raise CompositionError(f"{field} does not match the frozen public input")
 
 
+def path_contains_symlink(path: Path) -> bool:
+    absolute = path.absolute()
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current /= part
+        if current.is_symlink():
+            return True
+    return False
+
+
 def checked_files(root: Path) -> list[Path]:
+    if path_contains_symlink(root):
+        raise CompositionError(f"symlinks are not allowed: {root}")
     if not root.is_dir():
         raise CompositionError(f"missing directory: {root}")
     files: list[Path] = []
     for path in sorted(root.rglob("*")):
         if path.is_symlink():
             raise CompositionError(f"symlinks are not allowed: {path}")
-        if path.is_file() and "__pycache__" not in path.parts and "runs" not in path.parts:
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise CompositionError(f"special files are not allowed: {path}")
+        if "__pycache__" not in path.parts and "runs" not in path.parts:
             files.append(path)
     return files
 

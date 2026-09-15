@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -73,6 +74,11 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         )
         receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
         with self.assertRaisesRegex(LaneError, "does not match its source"):
+            verify_materialized_lane(ROOT, self.shadow, "verify-commands")
+
+    def test_special_file_tampering_is_rejected(self) -> None:
+        os.mkfifo(self.shadow / "tamper.pipe")
+        with self.assertRaisesRegex(LaneError, "special files are not allowed"):
             verify_materialized_lane(ROOT, self.shadow, "verify-commands")
 
     def test_nonempty_output_is_rejected(self) -> None:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,7 +51,7 @@ def holdback_cases() -> list[dict[str, object]]:
 class ComposeEvalHoldbackTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.repo = self.root / "repo"
         self.skill = self.repo / "skills" / "demo" / "SKILL.md"
         self.skill.parent.mkdir(parents=True)
@@ -125,6 +127,25 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         self.skill_reference.write_text("changed", encoding="utf-8")
         with self.assertRaisesRegex(CompositionError, "public_skill_tree_sha256"):
             compose(self.repo, "demo", self.overlay, self.root / "changed-skill-tree")
+
+    def test_rejects_a_symlinked_public_tree_root(self) -> None:
+        outside = self.root / "outside-skill"
+        shutil.move(self.skill.parent, outside)
+        self.skill.parent.symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(CompositionError, "symlinks are not allowed"):
+            public_digests(self.repo, "demo")
+
+    def test_rejects_a_public_tree_below_a_symlinked_ancestor(self) -> None:
+        outside = self.root / "outside-skills"
+        shutil.move(self.repo / "skills", outside)
+        (self.repo / "skills").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(CompositionError, "symlinks are not allowed"):
+            public_digests(self.repo, "demo")
+
+    def test_rejects_special_files_in_a_public_tree(self) -> None:
+        os.mkfifo(self.manifest.parent / "tamper.pipe")
+        with self.assertRaisesRegex(CompositionError, "special files are not allowed"):
+            public_digests(self.repo, "demo")
 
     def test_rejects_public_case_collision(self) -> None:
         cases = holdback_cases()

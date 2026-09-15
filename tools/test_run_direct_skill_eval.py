@@ -187,6 +187,19 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
             )
         run.assert_called_once_with(commands[0], cwd=self.repo, check=True)
 
+    def test_isolated_execution_continues_after_the_model_stage(self) -> None:
+        commands = [["runner", "run-agent"], ["runner", "grade"], ["runner", "report"]]
+        with (
+            mock.patch("run_direct_skill_eval.subprocess.run") as run,
+            mock.patch("run_direct_skill_eval.verify_materialized_lane") as verify,
+        ):
+            execute_plan(commands, cwd=self.repo)
+        self.assertEqual(
+            [call.args[0] for call in run.call_args_list],
+            commands,
+        )
+        verify.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

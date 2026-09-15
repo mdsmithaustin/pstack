@@ -123,8 +123,31 @@ def _mutates(command: str) -> bool:
         name = Path(executable).name.lower()
         if name == "env":
             nested = argv[1:]
-            while nested and (nested[0].startswith("-") or "=" in nested[0]):
-                nested.pop(0)
+            while nested:
+                option = nested[0]
+                if option == "--":
+                    nested.pop(0)
+                    break
+                if option in {"-u", "--unset", "-C", "--chdir"}:
+                    if len(nested) < 2:
+                        return True
+                    del nested[:2]
+                    continue
+                if option.startswith(("--unset=", "--chdir=")) or "=" in option:
+                    nested.pop(0)
+                    continue
+                if option.startswith("-"):
+                    return True
+                break
+            if not nested or _mutates(shlex.join(nested)):
+                return True
+            continue
+        if name in {"command", "exec", "nohup"}:
+            nested = argv[1:]
+            if name == "command" and nested and nested[0] in {"-v", "-V"}:
+                continue
+            if nested and nested[0].startswith("-"):
+                return True
             if not nested or _mutates(shlex.join(nested)):
                 return True
             continue
@@ -134,10 +157,32 @@ def _mutates(command: str) -> bool:
             return True
         if name == "sed" and any(argument == "--in-place" or argument.startswith("-i") for argument in argv[1:]):
             return True
-        if re.fullmatch(r"python3?(?:\.\d+)?", name) and len(argv) > 1 and argv[1] == "-c":
+        if (
+            re.fullmatch(r"python3?(?:\.\d+)?", name)
+            and len(argv) > 1
+            and argv[1].startswith("-c")
+        ):
             return True
-        if name in {"bash", "dash", "sh", "zsh"} and len(argv) >= 3 and argv[1] in {"-c", "-lc"}:
-            if _mutates(argv[2]):
+        if name in {"node", "ruby", "perl"} and any(
+            argument in {"-e", "--eval", "-p", "--print"}
+            or argument.startswith(("--eval=", "--print=", "-e", "-p"))
+            for argument in argv[1:]
+        ):
+            return True
+        if name in {"bash", "dash", "sh", "zsh"}:
+            nested = argv[1:]
+            options: list[str] = []
+            while nested and nested[0].startswith("-"):
+                options.append(nested.pop(0))
+            command_mode = any(
+                option.startswith("-")
+                and not option.startswith("--")
+                and "c" in option[1:]
+                for option in options
+            )
+            if len(nested) != 1 or not command_mode:
+                return True
+            if _mutates(nested[0]):
                 return True
     return False
 

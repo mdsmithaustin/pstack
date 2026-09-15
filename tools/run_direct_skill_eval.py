@@ -244,12 +244,19 @@ def execute_plan(
     source_repo: Path | None = None,
     skill: str | None = None,
 ) -> None:
+    integrated_values = (integrated_repo, source_repo, skill)
+    verification = (
+        (source_repo, integrated_repo, skill)
+        if source_repo is not None and integrated_repo is not None and skill is not None
+        else None
+    )
+    if any(value is not None for value in integrated_values) and verification is None:
+        raise ValueError("integrated post-model verification needs both repositories and the target skill")
     model_stage_complete = False
     for command in commands:
-        if model_stage_complete:
-            if integrated_repo is None or source_repo is None or skill is None:
-                raise ValueError("integrated post-model verification needs both repositories and the target skill")
-            verify_materialized_lane(source_repo, integrated_repo, skill)
+        if model_stage_complete and verification is not None:
+            source, integrated, target = verification
+            verify_materialized_lane(source, integrated, target)
         subprocess.run(command, cwd=cwd, check=True)
         if "run-agent" in command:
             model_stage_complete = True
