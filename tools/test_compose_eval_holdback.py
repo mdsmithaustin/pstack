@@ -87,6 +87,10 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         write_json(self.overlay, value)
 
     def test_composes_public_and_private_inputs_without_mutating_source(self) -> None:
+        cases = holdback_cases()
+        cases[0].pop("prompt")
+        cases[0]["prompt_ref"] = "prompts/secret.json"
+        self.write_overlay(cases=cases)
         before = self.manifest.read_bytes()
         result = compose(self.repo, "demo", self.overlay, self.root / "composed")
         merged = json.loads(result.read_text(encoding="utf-8"))
@@ -164,6 +168,31 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
                 self.write_overlay(payload_dir=value)
                 with self.assertRaisesRegex(CompositionError, "one directory name"):
                     compose(self.repo, "demo", self.overlay, self.root / f"traversal-{value.count('.')}")
+
+    def test_rejects_unsafe_or_missing_case_references(self) -> None:
+        for reference, message in (
+            ("../secret.txt", "unsafe file reference"),
+            ("/tmp/secret.txt", "unsafe file reference"),
+            ("prompts/missing.txt", "missing file"),
+        ):
+            with self.subTest(reference=reference):
+                cases = holdback_cases()
+                cases[0]["files"] = [reference]
+                self.write_overlay(cases=cases)
+                with self.assertRaisesRegex(CompositionError, message):
+                    compose(self.repo, "demo", self.overlay, self.root / f"bad-ref-{len(reference)}")
+
+    def test_rejects_non_string_reference_fields(self) -> None:
+        cases = holdback_cases()
+        cases[0]["files"] = "fixtures/private.json"
+        self.write_overlay(cases=cases)
+        with self.assertRaisesRegex(CompositionError, "files must be a string list"):
+            compose(self.repo, "demo", self.overlay, self.root / "bad-files")
+        cases = holdback_cases()
+        cases[0]["prompt_ref"] = 7
+        self.write_overlay(cases=cases)
+        with self.assertRaisesRegex(CompositionError, "prompt_ref must be a string"):
+            compose(self.repo, "demo", self.overlay, self.root / "bad-prompt-ref")
 
 
 if __name__ == "__main__":

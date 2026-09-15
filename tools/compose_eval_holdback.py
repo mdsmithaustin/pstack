@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -136,6 +136,37 @@ def validate_cases(public: dict[str, Any], overlay: dict[str, Any]) -> list[dict
     return validated
 
 
+def validate_case_references(
+    cases: list[dict[str, Any]],
+    public_files: set[str],
+    private_files: set[str],
+) -> None:
+    available = public_files | private_files
+    for case in cases:
+        case_id = case["id"]
+        files = case.get("files", [])
+        if not isinstance(files, list) or not all(isinstance(value, str) for value in files):
+            raise CompositionError(f"{case_id} files must be a string list")
+        references = list(files)
+        if "prompt_ref" in case:
+            prompt_ref = case["prompt_ref"]
+            if not isinstance(prompt_ref, str):
+                raise CompositionError(f"{case_id} prompt_ref must be a string")
+            references.append(prompt_ref)
+        for reference in references:
+            path = PurePosixPath(reference)
+            if (
+                not reference
+                or "\\" in reference
+                or path.is_absolute()
+                or path.as_posix() != reference
+                or any(part in {".", ".."} for part in path.parts)
+            ):
+                raise CompositionError(f"{case_id} has an unsafe file reference: {reference!r}")
+            if reference not in available:
+                raise CompositionError(f"{case_id} references a missing file: {reference}")
+
+
 def compose(repo: Path, skill_name: str, overlay_path: Path, output_root: Path) -> Path:
     repo = repo.resolve()
     overlay_path = overlay_path.resolve()
@@ -178,6 +209,10 @@ def compose(repo: Path, skill_name: str, overlay_path: Path, output_root: Path) 
     payload = unresolved_payload.resolve()
     if payload.parent != overlay_path.parent:
         raise CompositionError("payload_dir escapes the overlay directory")
+
+    public_files = {path.relative_to(public_suite).as_posix() for path in checked_files(public_suite)}
+    private_files = {path.relative_to(payload).as_posix() for path in checked_files(payload)}
+    validate_case_references(private_cases, public_files, private_files)
 
     output_root.mkdir(parents=True, exist_ok=True)
     output_suite = output_root / "evals" / skill_name
