@@ -13,6 +13,7 @@ SKILLS = ROOT / "skills"
 EVALS = ROOT / "evals"
 
 IGNORED = (
+    "evals/direct-skills-foundation-decisions.tsv",
     "evals/runs/transcript.jsonl",
     "evals/unslop/runs/transcript.jsonl",
     "skills/unslop/evals/runs/transcript.jsonl",
