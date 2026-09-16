@@ -383,9 +383,9 @@
           ]
         },
         {
-          "name": "with-skill-not-loaded",
+          "name": "with-skill-loaded",
           "type": "skill_invoked",
-          "expected": false,
+          "expected": true,
           "variants": ["with_skill"],
           "severity": "gate"
         },

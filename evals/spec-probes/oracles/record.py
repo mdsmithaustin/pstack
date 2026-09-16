@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import json
 import re
+import shlex
 from collections import Counter
 from typing import Any
 
@@ -8,6 +11,67 @@ from .specs import CASE_SPECS, CaseSpec
 
 TAG_PATTERN = re.compile(r"<spec-probe-record>\s*(.*?)\s*</spec-probe-record>", re.DOTALL)
 REQUIREMENT_ID = re.compile(r"\b[A-Z]{2,}-\d+\b")
+READ_ONLY_COMMANDS = {
+    "cat", "echo", "find", "grep", "head", "ls", "printf", "pwd", "rg", "sed", "sort", "stat", "tail", "wc",
+}
+
+
+def _command_segments(command: str) -> list[list[str]] | None:
+    if any(marker in command for marker in ("$(", "`", "<(", ">(", ">", "<")):
+        return None
+    try:
+        lexer = shlex.shlex(command, posix=False, punctuation_chars="|&;")
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        return None
+    segments: list[list[str]] = [[]]
+    for token in tokens:
+        value = token[1:-1] if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'} else token
+        if value in {"|", "&&", ";"}:
+            segments.append([])
+        else:
+            segments[-1].append(value)
+    return segments
+
+
+def _read_only_inspection(command: str) -> bool:
+    segments = _command_segments(command)
+    if segments is None:
+        return False
+    for segment in segments:
+        if not segment:
+            continue
+        executable = segment[0].rsplit("/", 1)[-1]
+        if executable in {"bash", "dash", "sh", "zsh"}:
+            nested = list(segment[1:])
+            while nested and nested[0].startswith("-"):
+                option = nested.pop(0)
+                if "c" not in option[1:]:
+                    return False
+            if len(nested) != 1 or not _read_only_inspection(nested[0]):
+                return False
+            continue
+        if executable not in READ_ONLY_COMMANDS:
+            return False
+        if executable == "find" and any(
+            argument in {"-delete", "-exec", "-execdir", "-fls", "-fprint", "-fprintf", "-ok", "-okdir"}
+            for argument in segment[1:]
+        ):
+            return False
+        if executable == "sort" and any(
+            argument == "-o" or argument.startswith("--output=")
+            for argument in segment[1:]
+        ):
+            return False
+        if executable == "rg" and any(
+            argument == "-r" or argument.startswith("--replace")
+            for argument in segment[1:]
+        ):
+            return False
+        if executable == "sed" and "-n" not in segment[1:]:
+            return False
+    return True
 
 
 def extract_import_record(text: str) -> tuple[dict[str, Any] | None, list[str]]:
@@ -65,7 +129,9 @@ def _trace_errors(events: list[dict[str, Any]] | None) -> list[str]:
     for event in events:
         if event.get("type") in {"file_change", "file_write"}:
             errors.append("pre-build review changed a file")
-        if event.get("type") == "command":
+        if event.get("type") == "command" and not _read_only_inspection(
+            str(event.get("input_summary", ""))
+        ):
             errors.append("pre-build review executed a command")
     return errors
 

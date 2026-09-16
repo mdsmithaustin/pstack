@@ -26,6 +26,10 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
         runner = self.skill_ci / "tools" / "run_runner.py"
         runner.parent.mkdir(parents=True)
         runner.write_text("", encoding="utf-8")
+        (runner.parent / "claude-project-only").write_text("", encoding="utf-8")
+        adapter = self.repo / "tools" / "claude-pstack-eval"
+        adapter.parent.mkdir(parents=True)
+        adapter.write_text("", encoding="utf-8")
 
     def plan(self, **changes: object) -> list[list[str]]:
         values = {
@@ -64,10 +68,12 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
         commands = self.plan()
         self.assertIn("--codex-cmd", commands[3])
         self.assertIn("--claude-bin", commands[5])
+        self.assertIn(str(self.skill_ci / "tools" / "claude-project-only"), commands[5])
 
     def test_claude_answer_uses_codex_judge_adapters(self) -> None:
         commands = self.plan(agent="claude", judge_backend="codex")
         self.assertIn("--claude-bin", commands[3])
+        self.assertIn(str(self.repo / "tools" / "claude-pstack-eval"), commands[3])
         self.assertIn("--codex-cmd", commands[5])
 
     def test_rejects_same_family_answer_and_judge(self) -> None:
@@ -186,6 +192,23 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
                 skill="demo",
             )
         run.assert_called_once_with(commands[0], cwd=self.repo, check=True)
+
+    def test_integrated_execution_keeps_the_external_suite_bound(self) -> None:
+        commands = [["runner", "run-agent"], ["runner", "grade"]]
+        suite = self.root / "external-suite"
+        with (
+            mock.patch("run_direct_skill_eval.subprocess.run"),
+            mock.patch("run_direct_skill_eval.verify_materialized_lane") as verify,
+        ):
+            execute_plan(
+                commands,
+                cwd=self.repo,
+                integrated_repo=self.repo,
+                source_repo=self.root,
+                skill="demo",
+                suite_root=suite,
+            )
+        verify.assert_called_once_with(self.root, self.repo, "demo", suite)
 
     def test_isolated_execution_continues_after_the_model_stage(self) -> None:
         commands = [["runner", "run-agent"], ["runner", "grade"], ["runner", "report"]]

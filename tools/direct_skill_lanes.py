@@ -12,6 +12,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Iterable
@@ -19,12 +20,20 @@ from typing import Any, Iterable
 
 CONFIG_PATH = Path("evals/direct-skills-experiment.json")
 HELPER_PATH = Path("tools/direct_skill_lanes.py")
+CLAUDE_ADAPTER_PATH = Path("tools/claude-pstack-eval")
 RECEIPT_NAME = "integrated-lane-receipt.json"
 PAIRED_VARIANTS = ("with_skill", "old_skill")
 
 
 class LaneError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class ExternalSuite:
+    root: Path
+    eval_inventory: dict[str, str]
+    target_skill_inventory: dict[str, str]
 
 
 def _strict_json_loads(text: str) -> Any:
@@ -142,53 +151,10 @@ def _load_eval_manifest(path: Path) -> dict[str, Any]:
 
 
 def _read_regular_text_below(root: Path, relative: Path) -> str:
-    if relative.is_absolute() or ".." in relative.parts:
-        raise LaneError(f"lane artifact path must stay below its root: {relative}")
-    absolute_root = root.absolute()
-    root_parts = list(absolute_root.parts[1:])
-    canonical_root = Path(absolute_root.anchor)
-    if root_parts and (canonical_root / root_parts[0]).is_symlink():
-        alias = canonical_root / root_parts.pop(0)
-        resolved = alias.resolve(strict=True)
-        if alias.lstat().st_uid != 0 or resolved.stat().st_uid != 0:
-            raise LaneError(f"lane artifact path contains an untrusted symlink: {alias}")
-        canonical_root = resolved
-    for part in root_parts:
-        canonical_root /= part
-        if canonical_root.is_symlink():
-            raise LaneError(f"lane artifact path contains a symlink: {canonical_root}")
-    absolute_root = canonical_root
-    parts = (*absolute_root.parts[1:], *relative.parts)
-    descriptor = -1
     try:
-        descriptor = os.open(absolute_root.anchor, os.O_RDONLY | os.O_DIRECTORY)
-        for index, part in enumerate(parts):
-            final = index == len(parts) - 1
-            flags = os.O_RDONLY | os.O_NOFOLLOW
-            flags |= os.O_NONBLOCK if final else os.O_DIRECTORY
-            next_descriptor = os.open(part, flags, dir_fd=descriptor)
-            os.close(descriptor)
-            descriptor = next_descriptor
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
-            raise LaneError(f"lane artifact is not a regular file: {root / relative}")
-        if metadata.st_nlink != 1:
-            raise LaneError(f"lane artifact must have exactly one hard link: {root / relative}")
-        stream = os.fdopen(descriptor, "r", encoding="utf-8")
-        descriptor = -1
-        with stream:
-            text = stream.read()
-            if os.fstat(stream.fileno()).st_nlink != 1:
-                raise LaneError(f"lane artifact must have exactly one hard link: {root / relative}")
-            return text
-    except (OSError, UnicodeError) as exc:
-        raise LaneError(
-            f"lane artifact path contains a symlink or unreadable component: "
-            f"{root / relative}: {exc}"
-        ) from exc
-    finally:
-        if descriptor >= 0:
-            os.close(descriptor)
+        return _read_regular_bytes_below(root, relative).decode("utf-8")
+    except UnicodeError as exc:
+        raise LaneError(f"lane artifact is not valid UTF-8: {root / relative}: {exc}") from exc
 
 
 def _read_json_below(root: Path, relative: Path, *, object_only: bool) -> Any:
@@ -209,6 +175,59 @@ def _sha256(path: Path) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
+def _sha256_bytes(payload: bytes) -> str:
+    return f"sha256:{hashlib.sha256(payload).hexdigest()}"
+
+
+def _read_regular_bytes_below(root: Path, relative: Path) -> bytes:
+    if relative.is_absolute() or ".." in relative.parts:
+        raise LaneError(f"lane artifact path must stay below its root: {relative}")
+    absolute_root = root.absolute()
+    root_parts = list(absolute_root.parts[1:])
+    canonical_root = Path(absolute_root.anchor)
+    if root_parts and (canonical_root / root_parts[0]).is_symlink():
+        alias = canonical_root / root_parts.pop(0)
+        resolved = alias.resolve(strict=True)
+        if alias.lstat().st_uid != 0 or resolved.stat().st_uid != 0:
+            raise LaneError(f"lane artifact path contains an untrusted symlink: {alias}")
+        canonical_root = resolved
+    for part in root_parts:
+        canonical_root /= part
+        if canonical_root.is_symlink():
+            raise LaneError(f"lane artifact path contains a symlink: {canonical_root}")
+    parts = (*canonical_root.parts[1:], *relative.parts)
+    descriptor = -1
+    try:
+        descriptor = os.open(canonical_root.anchor, os.O_RDONLY | os.O_DIRECTORY)
+        for index, part in enumerate(parts):
+            final = index == len(parts) - 1
+            flags = os.O_RDONLY | os.O_NOFOLLOW
+            flags |= os.O_NONBLOCK if final else os.O_DIRECTORY
+            next_descriptor = os.open(part, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise LaneError(f"lane artifact is not a regular file: {root / relative}")
+        if metadata.st_nlink != 1:
+            raise LaneError(f"lane artifact must have exactly one hard link: {root / relative}")
+        stream = os.fdopen(descriptor, "rb")
+        descriptor = -1
+        with stream:
+            payload = stream.read()
+            if os.fstat(stream.fileno()).st_nlink != 1:
+                raise LaneError(f"lane artifact must have exactly one hard link: {root / relative}")
+            return payload
+    except OSError as exc:
+        raise LaneError(
+            f"lane artifact path contains a symlink or unreadable component: "
+            f"{root / relative}: {exc}"
+        ) from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 def _inventory(root: Path) -> dict[str, str]:
     if root.is_symlink() or not root.is_dir():
         raise LaneError(f"materialized lane root must be a regular directory: {root}")
@@ -222,6 +241,66 @@ def _inventory(root: Path) -> dict[str, str]:
             raise LaneError(f"special files are not allowed in a materialized lane: {path}")
         files[path.relative_to(root).as_posix()] = _sha256(path)
     return files
+
+
+def _external_tree_inventory(root: Path, tree_relative: Path) -> dict[str, str]:
+    tree = root / tree_relative
+    if tree.is_symlink() or not tree.is_dir():
+        raise LaneError(f"external suite tree must be a regular directory: {tree}")
+    files: dict[str, str] = {}
+    for path in sorted(tree.rglob("*")):
+        relative = path.relative_to(root)
+        if path.is_symlink():
+            raise LaneError(f"symlinks are not allowed in an external suite: {path}")
+        if path.is_dir():
+            continue
+        payload = _read_regular_bytes_below(root, relative)
+        files[path.relative_to(tree).as_posix()] = _sha256_bytes(payload)
+    if not files:
+        raise LaneError(f"external suite tree has no files: {tree}")
+    return files
+
+
+def _load_external_suite(repo: Path, target_skill: str, suite_root: Path) -> ExternalSuite:
+    unresolved = suite_root.absolute()
+    if suite_root.is_symlink():
+        raise LaneError(f"external suite root cannot be a symlink: {suite_root}")
+    current = Path(unresolved.anchor)
+    for index, part in enumerate(unresolved.parts[1:]):
+        current /= part
+        if not current.is_symlink():
+            continue
+        resolved = current.resolve(strict=True)
+        if index == 0 and current.lstat().st_uid == 0 and resolved.stat().st_uid == 0:
+            current = resolved
+            continue
+        raise LaneError(f"external suite root contains a symlink: {current}")
+    if _is_within(unresolved, repo):
+        raise LaneError(f"external suite root must be outside the source repository: {suite_root}")
+    try:
+        root = unresolved.resolve(strict=True)
+    except OSError as exc:
+        raise LaneError(f"external suite root is unavailable: {suite_root}: {exc}") from exc
+    if _is_within(root, repo):
+        raise LaneError(f"external suite root must be outside the source repository: {suite_root}")
+    if not root.is_dir():
+        raise LaneError(f"external suite root must be a regular directory: {root}")
+    eval_inventory = _external_tree_inventory(root, Path("evals") / target_skill)
+    target_skill_inventory = _external_tree_inventory(root, Path("skills") / target_skill)
+    expected_skill_inventory = _tracked_tree_inventory(repo, Path("skills") / target_skill)
+    if target_skill_inventory != expected_skill_inventory:
+        raise LaneError("external suite target skill differs from the tracked target skill")
+    return ExternalSuite(root, eval_inventory, target_skill_inventory)
+
+
+def _copy_external_eval_tree(suite: ExternalSuite, tree_relative: Path, destination: Path) -> None:
+    for relative, expected_digest in suite.eval_inventory.items():
+        payload = _read_regular_bytes_below(suite.root, tree_relative / relative)
+        if _sha256_bytes(payload) != expected_digest:
+            raise LaneError(f"external suite file changed while being copied: {tree_relative / relative}")
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
@@ -389,6 +468,7 @@ def _materialize_at(
     contract: dict[str, Any],
     integrated: dict[str, Any],
     baseline_skills: list[str],
+    external_suite: ExternalSuite | None = None,
 ) -> dict[str, Any]:
     targets = list(contract["targets"])
     if target_skill not in targets:
@@ -405,8 +485,20 @@ def _materialize_at(
         _copy_skill(repo, treatment_root, name)
     _copy_skill(repo, treatment_root, target_skill)
     suite_destination = output / "evals" / target_skill
-    _copy_tracked_tree(repo, suite_relative, suite_destination)
+    if external_suite is None:
+        _copy_tracked_tree(repo, suite_relative, suite_destination)
+        eval_suite_inventory = _tracked_tree_inventory(repo, suite_relative)
+    else:
+        _copy_external_eval_tree(external_suite, suite_relative, suite_destination)
+        if _load_external_suite(repo, target_skill, external_suite.root) != external_suite:
+            raise LaneError("external suite changed while being copied")
+        eval_suite_inventory = external_suite.eval_inventory
     helper_digest = _copy_tracked_file(repo, HELPER_PATH, output / HELPER_PATH)
+    claude_adapter_digest = _copy_tracked_file(
+        repo,
+        CLAUDE_ADAPTER_PATH,
+        output / CLAUDE_ADAPTER_PATH,
+    )
 
     manifest_path = suite_destination / "shared-benchmark.json"
     manifest = _read_json(manifest_path)
@@ -432,27 +524,37 @@ def _materialize_at(
         name: _tracked_tree_inventory(repo, Path("skills") / name)
         for name in [*baseline_skills, target_skill]
     }
+    source: dict[str, Any] = {
+        "repository_root": str(repo),
+        "git_head": _git_head(repo),
+        "experiment_config": CONFIG_PATH.as_posix(),
+        "experiment_config_sha256": _sha256(repo / CONFIG_PATH),
+        "upstream": {
+            "repository": contract["baseline"]["repository"],
+            "commit": contract["baseline"]["commit"],
+            "subdirectory": contract["baseline"]["subdirectory"],
+        },
+        "upstream_skill_roster": integrated["upstream_skill_roster"],
+        "local_cli_port_map": integrated["local_cli_port_map"],
+        "skills": source_skill_inventory,
+        "eval_suite": eval_suite_inventory,
+        "helpers": {
+            HELPER_PATH.as_posix(): helper_digest,
+            CLAUDE_ADAPTER_PATH.as_posix(): claude_adapter_digest,
+        },
+    }
+    if external_suite is not None:
+        source["eval_suite_origin"] = {
+            "kind": "external",
+            "root": str(external_suite.root),
+            "target_skill": external_suite.target_skill_inventory,
+        }
     receipt: dict[str, Any] = {
         "version": 1,
         "lane": "integrated",
         "target_skill": target_skill,
         "manifest": manifest_path.relative_to(output).as_posix(),
-        "source": {
-            "repository_root": str(repo),
-            "git_head": _git_head(repo),
-            "experiment_config": CONFIG_PATH.as_posix(),
-            "experiment_config_sha256": _sha256(repo / CONFIG_PATH),
-            "upstream": {
-                "repository": contract["baseline"]["repository"],
-                "commit": contract["baseline"]["commit"],
-                "subdirectory": contract["baseline"]["subdirectory"],
-            },
-            "upstream_skill_roster": integrated["upstream_skill_roster"],
-            "local_cli_port_map": integrated["local_cli_port_map"],
-            "skills": source_skill_inventory,
-            "eval_suite": _tracked_tree_inventory(repo, suite_relative),
-            "helpers": {HELPER_PATH.as_posix(): helper_digest},
-        },
+        "source": source,
         "arms": {
             "control": {
                 "variant": "old_skill",
@@ -471,7 +573,12 @@ def _materialize_at(
     return receipt
 
 
-def materialize_integrated_lane(repo: Path, target_skill: str, output: Path) -> dict[str, Any]:
+def materialize_integrated_lane(
+    repo: Path,
+    target_skill: str,
+    output: Path,
+    suite_root: Path | None = None,
+) -> dict[str, Any]:
     repo = repo.resolve()
     if output.is_symlink():
         raise LaneError(f"integrated lane output cannot be a symlink: {output}")
@@ -481,6 +588,13 @@ def materialize_integrated_lane(repo: Path, target_skill: str, output: Path) -> 
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise LaneError(f"integrated lane output must be a new or empty directory: {output}")
     contract, integrated, baseline_skills = _lane_contract(repo)
+    if target_skill not in contract["targets"]:
+        raise LaneError(f"unsupported target skill: {target_skill}")
+    external_suite = (
+        _load_external_suite(repo, target_skill, suite_root)
+        if suite_root is not None
+        else None
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f".{output.name}.", dir=output.parent) as staging_name:
         staging = Path(staging_name)
@@ -491,6 +605,7 @@ def materialize_integrated_lane(repo: Path, target_skill: str, output: Path) -> 
             contract,
             integrated,
             baseline_skills,
+            external_suite,
         )
         if output.exists():
             output.rmdir()
@@ -498,7 +613,12 @@ def materialize_integrated_lane(repo: Path, target_skill: str, output: Path) -> 
     return receipt
 
 
-def verify_materialized_lane(repo: Path, shadow_repo: Path, target_skill: str) -> dict[str, Any]:
+def verify_materialized_lane(
+    repo: Path,
+    shadow_repo: Path,
+    target_skill: str,
+    suite_root: Path | None = None,
+) -> dict[str, Any]:
     repo = repo.resolve()
     if shadow_repo.is_symlink():
         raise LaneError("integrated shadow repository cannot be a symlink")
@@ -509,6 +629,8 @@ def verify_materialized_lane(repo: Path, shadow_repo: Path, target_skill: str) -
     if receipt.get("lane") != "integrated" or receipt.get("target_skill") != target_skill:
         raise LaneError("integrated lane receipt identity mismatch")
     contract, integrated, baseline_skills = _lane_contract(repo)
+    if target_skill not in contract["targets"]:
+        raise LaneError(f"unsupported target skill: {target_skill}")
     source = receipt.get("source")
     if not isinstance(source, dict):
         raise LaneError("integrated lane receipt has no source identity")
@@ -533,9 +655,32 @@ def verify_materialized_lane(repo: Path, shadow_repo: Path, target_skill: str) -
     }
     if source.get("skills") != expected_source_skills:
         raise LaneError("integrated lane source skill inventory changed after materialization")
-    if source.get("eval_suite") != _tracked_tree_inventory(repo, Path("evals") / target_skill):
+    suite_origin = source.get("eval_suite_origin")
+    external_suite: ExternalSuite | None = None
+    if suite_origin is None:
+        if suite_root is not None:
+            raise LaneError("integrated lane receipt does not bind an external suite root")
+        expected_eval_suite = _tracked_tree_inventory(repo, Path("evals") / target_skill)
+    else:
+        if not isinstance(suite_origin, dict) or set(suite_origin) != {"kind", "root", "target_skill"}:
+            raise LaneError("integrated lane receipt has an invalid external suite origin")
+        if suite_origin.get("kind") != "external":
+            raise LaneError("integrated lane receipt has an unsupported eval suite origin")
+        if suite_root is None:
+            raise LaneError("verification of an external suite lane requires --suite-root")
+        external_suite = _load_external_suite(repo, target_skill, suite_root)
+        if suite_origin.get("root") != str(external_suite.root):
+            raise LaneError("external suite root differs from the materialized lane receipt")
+        if suite_origin.get("target_skill") != external_suite.target_skill_inventory:
+            raise LaneError("external suite target skill inventory changed after materialization")
+        expected_eval_suite = external_suite.eval_inventory
+    if source.get("eval_suite") != expected_eval_suite:
         raise LaneError("integrated lane source eval inventory changed after materialization")
-    if source.get("helpers") != {HELPER_PATH.as_posix(): _tracked_file_digest(repo, HELPER_PATH)}:
+    expected_helpers = {
+        HELPER_PATH.as_posix(): _tracked_file_digest(repo, HELPER_PATH),
+        CLAUDE_ADAPTER_PATH.as_posix(): _tracked_file_digest(repo, CLAUDE_ADAPTER_PATH),
+    }
+    if source.get("helpers") != expected_helpers:
         raise LaneError("integrated lane source helper changed after materialization")
 
     with tempfile.TemporaryDirectory(prefix="direct-skill-verify-") as expected_name:
@@ -546,6 +691,7 @@ def verify_materialized_lane(repo: Path, shadow_repo: Path, target_skill: str) -
             contract,
             integrated,
             baseline_skills,
+            external_suite,
         )
     expected_files = expected_receipt["files"]
     if receipt.get("files") != expected_files:
@@ -1151,11 +1297,13 @@ def main() -> int:
     materialize.add_argument("--repo", type=Path, required=True)
     materialize.add_argument("--skill", required=True)
     materialize.add_argument("--out", type=Path, required=True)
+    materialize.add_argument("--suite-root", type=Path)
 
     verify = subparsers.add_parser("verify")
     verify.add_argument("--repo", type=Path, required=True)
     verify.add_argument("--skill", required=True)
     verify.add_argument("--shadow-repo", type=Path, required=True)
+    verify.add_argument("--suite-root", type=Path)
 
     filter_tasks = subparsers.add_parser("filter-tasks")
     filter_tasks.add_argument("--input", type=Path, required=True)
@@ -1171,11 +1319,21 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "materialize":
-            result = materialize_integrated_lane(args.repo, args.skill, args.out)
+            result = materialize_integrated_lane(
+                args.repo,
+                args.skill,
+                args.out,
+                args.suite_root,
+            )
             print(args.out.resolve() / RECEIPT_NAME)
             return 0 if result else 1
         if args.command == "verify":
-            verify_materialized_lane(args.repo, args.shadow_repo, args.skill)
+            verify_materialized_lane(
+                args.repo,
+                args.shadow_repo,
+                args.skill,
+                args.suite_root,
+            )
             print(args.shadow_repo.resolve() / RECEIPT_NAME)
             return 0
         if args.command == "filter-tasks":

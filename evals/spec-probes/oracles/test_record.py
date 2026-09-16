@@ -68,6 +68,25 @@ class RecordOracleTests(unittest.TestCase):
         errors = evaluate("pos-unclassified-prose", "HP-201 needs a product decision.", events)
         self.assertEqual(errors, ["pre-build review executed a command"])
 
+    def test_allows_read_only_fixture_and_skill_inspection(self) -> None:
+        events = [{
+            "type": "command",
+            "input_summary": "/bin/zsh -lc \"sed -n '1,240p' skills/spec-probes/SKILL.md && sed -n '1,280p' inputs/billing-spec.md\"",
+        }]
+        self.assertEqual(evaluate("pos-mixed-shapes", "SP-101 SP-102 SP-103 SP-104", events), [])
+
+    def test_rejects_mutating_discovery_commands(self) -> None:
+        for command in (
+            "find inputs -type f -delete",
+            "sort -o inputs/changed inputs/source",
+            "sed -i '' 's/a/b/' inputs/spec.md",
+            "rg --replace changed pattern inputs/spec.md",
+        ):
+            with self.subTest(command=command):
+                events = [{"type": "command", "input_summary": command}]
+                errors = evaluate("pos-unclassified-prose", "HP-201 needs a decision.", events)
+                self.assertEqual(errors, ["pre-build review executed a command"])
+
     def test_event_envelope_must_exist_but_may_be_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

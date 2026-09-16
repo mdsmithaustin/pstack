@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "claude-pstack-eval: $1" >&2
+  exit 126
+}
+
+test "$(uname -s)" = "Darwin" || fail "macOS sandbox-exec is required"
+test -x /usr/bin/sandbox-exec || fail "sandbox-exec is unavailable"
+
+workspace=$(pwd -P) || fail "cannot resolve the evaluation workspace"
+test -d "$workspace/inputs" || fail "evaluation workspace has no inputs directory"
+
+claude_bin=$(command -v claude) || fail "claude is unavailable"
+case "$claude_bin" in
+  /*) ;;
+  *) fail "claude must resolve to an absolute path" ;;
+esac
+test -x "$claude_bin" || fail "claude is not executable"
+
+profile='(version 1)
+(allow default)
+(deny file-write* (subpath (param "INPUTS")))
+(deny file-write* (subpath (param "SKILLS")))'
+
+skills="$workspace/skills"
+test -d "$skills" || skills="$workspace/inputs"
+
+exec /usr/bin/sandbox-exec \
+  -D INPUTS="$workspace/inputs" \
+  -D SKILLS="$skills" \
+  -p "$profile" \
+  "$claude_bin" \
+  --setting-sources project \
+  --permission-mode bypassPermissions \
+  "$@"

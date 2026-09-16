@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import direct_skill_lanes as lane_module
+from compose_eval_holdback import compose, public_digests
 from direct_skill_lanes import (
     LaneError,
     _eval_contract_sha256,
@@ -55,7 +56,10 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         self.assertEqual(len(manifest["skill_paths"]), len(manifest["old_skill_paths"]) + 1)
         self.assertEqual(manifest["skill_paths"][0], "arms/treatment/skills/verify-commands/SKILL.md")
         self.assertTrue((self.shadow / "tools" / "direct_skill_lanes.py").is_file())
+        self.assertTrue((self.shadow / "tools" / "claude-pstack-eval").is_file())
         self.assertIn("tools/direct_skill_lanes.py", self.receipt["source"]["helpers"])
+        self.assertIn("tools/claude-pstack-eval", self.receipt["source"]["helpers"])
+        self.assertNotIn("eval_suite_origin", self.receipt["source"])
 
     def test_receipt_verifies_untampered_materialization(self) -> None:
         verified = verify_materialized_lane(ROOT, self.shadow, "verify-commands")
@@ -126,6 +130,7 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         shutil.copy2(ROOT / ".gitignore", fake_repo / ".gitignore")
         shutil.copy2(ROOT / ".github" / "upstream-sha", fake_repo / ".github" / "upstream-sha")
         shutil.copy2(ROOT / "tools" / "direct_skill_lanes.py", fake_repo / "tools" / "direct_skill_lanes.py")
+        shutil.copy2(ROOT / "tools" / "claude-pstack-eval", fake_repo / "tools" / "claude-pstack-eval")
         shutil.copy2(
             ROOT / "evals" / "direct-skills-experiment.json",
             fake_repo / "evals" / "direct-skills-experiment.json",
@@ -209,6 +214,168 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         (source / "tree").symlink_to(outside, target_is_directory=True)
         with self.assertRaisesRegex(LaneError, "contains a symlink"):
             _tracked_tree_files(source, Path("tree"))
+
+
+class ExternalSuiteMaterializationTests(unittest.TestCase):
+    skill_name = "verify-commands"
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.suite = self.root / "suite"
+        self.shadow = self.root / "shadow"
+        lane_module._copy_tracked_tree(
+            ROOT,
+            Path("evals") / self.skill_name,
+            self.suite / "evals" / self.skill_name,
+        )
+        lane_module._copy_tracked_tree(
+            ROOT,
+            Path("skills") / self.skill_name,
+            self.suite / "skills" / self.skill_name,
+        )
+
+    def composed_suite(self) -> Path:
+        private = self.root / "private"
+        payload = private / "payload"
+        payload.mkdir(parents=True)
+        cases = [
+            {
+                "id": f"secret-behavior-{index}",
+                "split": "holdback",
+                "kind": "behavior",
+                "prompt": "Private behavior case",
+            }
+            for index in range(1, 5)
+        ]
+        cases.extend(
+            {
+                "id": f"secret-positive-trigger-{index}",
+                "split": "holdback",
+                "kind": "trigger",
+                "should_trigger": True,
+                "prompt": "Private positive trigger case",
+            }
+            for index in range(1, 5)
+        )
+        cases.extend(
+            {
+                "id": f"secret-negative-trigger-{index}",
+                "split": "holdback",
+                "kind": "trigger",
+                "should_trigger": False,
+                "prompt": "Private negative trigger case",
+            }
+            for index in range(1, 5)
+        )
+        overlay = private / "overlay.json"
+        overlay.write_text(json.dumps({
+            "version": 1,
+            "skill_name": self.skill_name,
+            **public_digests(ROOT, self.skill_name),
+            "payload_dir": "payload",
+            "cases": cases,
+        }), encoding="utf-8")
+        composed = self.root / "composed"
+        compose(ROOT, self.skill_name, overlay, composed)
+        return composed
+
+    def test_composed_suite_materializes_and_verifies_through_the_cli(self) -> None:
+        suite = self.composed_suite()
+        materialize = subprocess.run(
+            [
+                "python3",
+                str(ROOT / "tools" / "direct_skill_lanes.py"),
+                "materialize",
+                "--repo", str(ROOT),
+                "--skill", self.skill_name,
+                "--out", str(self.shadow),
+                "--suite-root", str(suite),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(materialize.returncode, 0, materialize.stderr)
+        verify = subprocess.run(
+            [
+                "python3",
+                str(ROOT / "tools" / "direct_skill_lanes.py"),
+                "verify",
+                "--repo", str(ROOT),
+                "--skill", self.skill_name,
+                "--shadow-repo", str(self.shadow),
+                "--suite-root", str(suite),
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(verify.returncode, 0, verify.stderr)
+        receipt = json.loads((self.shadow / lane_module.RECEIPT_NAME).read_text(encoding="utf-8"))
+        self.assertEqual(receipt["source"]["eval_suite_origin"]["root"], str(suite))
+        manifest = json.loads(
+            (self.shadow / "evals" / self.skill_name / "shared-benchmark.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("secret-behavior-1", {case["id"] for case in manifest["cases"]})
+
+    def test_verification_requires_the_bound_suite_root(self) -> None:
+        materialize_integrated_lane(ROOT, self.skill_name, self.shadow, self.suite)
+        with self.assertRaisesRegex(LaneError, "requires --suite-root"):
+            verify_materialized_lane(ROOT, self.shadow, self.skill_name)
+
+    def test_verification_rejects_a_same_content_suite_at_another_root(self) -> None:
+        materialize_integrated_lane(ROOT, self.skill_name, self.shadow, self.suite)
+        substitute = self.root / "substitute"
+        shutil.copytree(self.suite, substitute)
+        with self.assertRaisesRegex(LaneError, "root differs"):
+            verify_materialized_lane(ROOT, self.shadow, self.skill_name, substitute)
+
+    def test_verification_rejects_changed_suite_bytes(self) -> None:
+        materialize_integrated_lane(ROOT, self.skill_name, self.shadow, self.suite)
+        manifest = self.suite / "evals" / self.skill_name / "shared-benchmark.json"
+        manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "eval inventory changed"):
+            verify_materialized_lane(ROOT, self.shadow, self.skill_name, self.suite)
+
+    def test_materialization_rejects_a_suite_inside_the_source_repository(self) -> None:
+        with self.assertRaisesRegex(LaneError, "outside the source repository"):
+            materialize_integrated_lane(ROOT, self.skill_name, self.shadow, ROOT)
+
+    def test_materialization_rejects_a_symlinked_suite_tree(self) -> None:
+        eval_tree = self.suite / "evals" / self.skill_name
+        outside = self.root / "outside-eval"
+        shutil.move(eval_tree, outside)
+        eval_tree.symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(LaneError, "regular directory"):
+            materialize_integrated_lane(ROOT, self.skill_name, self.shadow, self.suite)
+
+    def test_materialization_rejects_a_suite_below_a_symlinked_directory(self) -> None:
+        real_parent = self.root / "real-parent"
+        real_parent.mkdir()
+        moved_suite = real_parent / "suite"
+        shutil.move(self.suite, moved_suite)
+        alias = self.root / "alias"
+        alias.symlink_to(real_parent, target_is_directory=True)
+        with self.assertRaisesRegex(LaneError, "contains a symlink"):
+            materialize_integrated_lane(
+                ROOT,
+                self.skill_name,
+                self.shadow,
+                alias / "suite",
+            )
+
+    def test_materialization_rejects_a_special_suite_file(self) -> None:
+        os.mkfifo(self.suite / "evals" / self.skill_name / "private.pipe")
+        with self.assertRaisesRegex(LaneError, "not a regular file"):
+            materialize_integrated_lane(ROOT, self.skill_name, self.shadow, self.suite)
+
+    def test_materialization_rejects_a_changed_target_skill(self) -> None:
+        skill = self.suite / "skills" / self.skill_name / "SKILL.md"
+        skill.write_text(skill.read_text(encoding="utf-8") + "\nchanged\n", encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "differs from the tracked target skill"):
+            materialize_integrated_lane(ROOT, self.skill_name, self.shadow, self.suite)
 
 
 class PreparedTaskFilterTests(unittest.TestCase):

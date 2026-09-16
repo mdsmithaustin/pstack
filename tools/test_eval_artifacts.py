@@ -205,9 +205,7 @@ class DirectSkillExperimentContract(unittest.TestCase):
         self.assertEqual(
             [(row["agent"], row["model"]) for row in self.contract["answer_models"]],
             [
-                ("codex", "gpt-5.6-luna"),
                 ("codex", "gpt-5.6-sol"),
-                ("codex", "gpt-5.6-terra"),
                 ("claude", "opus"),
             ],
         )
@@ -251,6 +249,23 @@ class DirectSkillExperimentContract(unittest.TestCase):
                 self.assertGreaterEqual(len(positive), 4)
                 self.assertGreaterEqual(len(negative), 4)
                 self.assertEqual({case.get("split") for case in cases}, {"tune"})
+
+    def test_forced_skill_arm_requires_observed_skill_loading(self) -> None:
+        for skill_name in DIRECT_EVAL_SKILLS:
+            manifest = json.loads(
+                (EVALS / skill_name / "shared-benchmark.json").read_text(encoding="utf-8")
+            )
+            behavior = [case for case in manifest["cases"] if case.get("kind") != "trigger"]
+            for case in behavior:
+                assertions = [
+                    assertion
+                    for assertion in case.get("assertions", [])
+                    if assertion.get("type") == "skill_invoked"
+                    and "with_skill" in assertion.get("variants", [])
+                ]
+                with self.subTest(skill=skill_name, case=case.get("id")):
+                    self.assertEqual(len(assertions), 1)
+                    self.assertTrue(assertions[0]["expected"])
 
 
 if __name__ == "__main__":

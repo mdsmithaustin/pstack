@@ -9,9 +9,22 @@ from pathlib import Path
 from direct_skill_lanes import LaneError, verify_materialized_lane
 
 
-def adapter_arguments(agent: str, skill_ci: Path) -> list[str]:
+def adapter_arguments(
+    agent: str,
+    skill_ci: Path,
+    adapter_repo: Path,
+    *,
+    protect_workspace: bool,
+) -> list[str]:
     if agent == "claude":
-        return ["--claude-bin", str(skill_ci / "tools" / "claude-project-only")]
+        wrapper = (
+            adapter_repo / "tools" / "claude-pstack-eval"
+            if protect_workspace
+            else skill_ci / "tools" / "claude-project-only"
+        )
+        if not wrapper.is_file():
+            raise ValueError(f"missing Claude adapter: {wrapper}")
+        return ["--claude-bin", str(wrapper)]
     if agent == "codex":
         command = skill_ci / "tools" / "codex-project-only"
         return [
@@ -104,7 +117,7 @@ def command_plan(
         agent,
         "--model",
         model,
-        *adapter_arguments(agent, skill_ci),
+        *adapter_arguments(agent, skill_ci, repo, protect_workspace=True),
         "--tasks",
         str(tasks),
         "--runs",
@@ -203,7 +216,12 @@ def command_plan(
             str(judge_model),
             "--judge-runs",
             str(judge_runs),
-            *adapter_arguments(str(judge_backend), skill_ci),
+            *adapter_arguments(
+                str(judge_backend),
+                skill_ci,
+                repo,
+                protect_workspace=False,
+            ),
             "--transcripts",
             str(output / "judge-transcripts"),
             "--out",
@@ -243,10 +261,11 @@ def execute_plan(
     integrated_repo: Path | None = None,
     source_repo: Path | None = None,
     skill: str | None = None,
+    suite_root: Path | None = None,
 ) -> None:
     integrated_values = (integrated_repo, source_repo, skill)
     verification = (
-        (source_repo, integrated_repo, skill)
+        (source_repo, integrated_repo, skill, suite_root)
         if source_repo is not None and integrated_repo is not None and skill is not None
         else None
     )
@@ -255,8 +274,8 @@ def execute_plan(
     model_stage_complete = False
     for command in commands:
         if model_stage_complete and verification is not None:
-            source, integrated, target = verification
-            verify_materialized_lane(source, integrated, target)
+            source, integrated, target, bound_suite = verification
+            verify_materialized_lane(source, integrated, target, bound_suite)
         subprocess.run(command, cwd=cwd, check=True)
         if "run-agent" in command:
             model_stage_complete = True
@@ -268,6 +287,7 @@ def main() -> int:
     parser.add_argument("--repo", type=Path, default=source_repo)
     parser.add_argument("--lane", choices=("isolated", "integrated"), default="isolated")
     parser.add_argument("--shadow-repo", type=Path)
+    parser.add_argument("--suite-root", type=Path)
     parser.add_argument("--skill-ci", type=Path, default=source_repo.parent / "skill-ci")
     parser.add_argument("--skill", required=True)
     parser.add_argument("--split", choices=("tune", "holdback"), default="tune")
@@ -292,12 +312,13 @@ def main() -> int:
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         parser.error(f"output must be a new or empty directory: {output}")
     eval_repo = repo
+    suite_root = args.suite_root.absolute() if args.suite_root is not None else None
     if args.lane == "integrated":
         if args.shadow_repo is None:
             parser.error("--shadow-repo is required for the integrated lane")
         eval_repo = args.shadow_repo.resolve()
         try:
-            verify_materialized_lane(repo, eval_repo, args.skill)
+            verify_materialized_lane(repo, eval_repo, args.skill, suite_root)
         except LaneError as exc:
             parser.error(str(exc))
         try:
@@ -306,6 +327,8 @@ def main() -> int:
             pass
         else:
             parser.error("integrated output must be outside the immutable shadow repository")
+    elif suite_root is not None:
+        parser.error("--suite-root is only valid for the integrated lane")
     try:
         commands = command_plan(
             repo=eval_repo,
@@ -339,6 +362,7 @@ def main() -> int:
             integrated_repo=eval_repo if args.lane == "integrated" else None,
             source_repo=repo if args.lane == "integrated" else None,
             skill=args.skill if args.lane == "integrated" else None,
+            suite_root=suite_root if args.lane == "integrated" else None,
         )
     except (LaneError, ValueError) as exc:
         parser.error(str(exc))

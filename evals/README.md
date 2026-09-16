@@ -20,7 +20,7 @@ The integrated lane represents the pinned upstream pstack roster from `cursor/pl
 
 The integrated manifest uses `old_skill` as the harness transport name for the control arm. It does not mean that the target existed upstream or that the control contains a shipped incumbent. The upstream repository, commit, subdirectory, roster, local name map, and target-only file delta are recorded in `direct-skills-experiment.json` and the generated receipt.
 
-The integrated lane copies only Git-tracked files. It reads their current working-tree bytes and records SHA-256 digests. Commit or stage intended skill and eval files before materialization so the receipt covers the candidate you mean to run.
+The default integrated lane copies only Git-tracked files. It reads their current working-tree bytes and records SHA-256 digests. Commit or stage intended skill and eval files before materialization so the receipt covers the candidate you mean to run. A lane built with `--suite-root` copies every regular file in the validated external eval tree instead.
 
 ## What the oracles decide
 
@@ -36,7 +36,9 @@ The oracles do not require one application-style response schema.
 
 Tagged JSON samples remain only in explicitly named importer-integration unit tests. They test parser compatibility and do not contribute to headline behavior results. Metamorphic tests use structurally different valid answers to keep the deterministic gates independent of wording and presentation.
 
-Two runner evidence gaps remain. Normalized path-based skill-read events do not record the temporary workspace root, so a path suffix alone cannot prove that the model read the mounted target. The Claude adapter also permits writes inside its temporary workspace, so command text cannot prove that a runtime driver stayed unchanged before execution. `skill-eval-harness` must record workspace-bound access evidence and post-run fixture integrity before either signal can support promotion.
+The pinned harness records the answer design, task and instruction digests, fixture and skill-tree hashes, normalized invocation evidence, and committed run artifacts. `tools/direct_skill_eligibility.py` rejects incomplete coordinates, stale attestations, missing artifact commits, incomplete invocation evidence, and target-exposure gaps.
+
+Claude answer runs use `tools/claude-pstack-eval` on macOS. The adapter gives Claude normal scratch access, but `sandbox-exec` blocks writes under `inputs/` and under `skills/` when that directory exists. A control arm can omit `skills/`. The adapter fails when `inputs/`, `sandbox-exec`, or Claude is unavailable. Claude judge runs use the pinned project-only adapter because a judge workspace has no fixture tree.
 
 ## Model-free checks
 
@@ -68,7 +70,22 @@ mise exec -- python3 tools/direct_skill_lanes.py verify \
   --repo "$source_repo" --skill verify-commands --shadow-repo "$shadow"
 ```
 
-`verify` rejects a changed source revision, experiment contract, or lane helper, an altered receipt, a roster mismatch, a path escape, a symlink, and any arm difference beyond the selected target. Integrated runs invoke the helper copy recorded in the materialized lane rather than mutable caller-checkout bytes.
+`verify` rejects a changed source revision, experiment contract, lane helper, or protected Claude adapter. It also rejects an altered receipt, a roster mismatch, a path escape, a symlink, and any arm difference beyond the selected target. Integrated runs invoke the recorded helper and adapter copies from the materialized lane.
+
+To use an external holdback, compose it first and pass the same canonical suite root to materialization, verification, and execution.
+
+```sh
+suite=/secure/runs/verify-commands-holdback
+shadow=/secure/evals/verify-commands-integrated-holdback
+mise exec -- python3 tools/direct_skill_lanes.py materialize \
+  --repo "$source_repo" --skill verify-commands --out "$shadow" \
+  --suite-root "$suite"
+mise exec -- python3 tools/direct_skill_lanes.py verify \
+  --repo "$source_repo" --skill verify-commands --shadow-repo "$shadow" \
+  --suite-root "$suite"
+```
+
+The receipt binds the canonical suite root and the complete eval and target-skill inventories. Verification rejects a missing, substituted, changed, linked, or repository-local suite.
 
 ## Integrated headline runs
 
@@ -77,24 +94,66 @@ Use `--dry-run` first to inspect the pinned command sequence without invoking a 
 ```sh
 mise exec -- python3 tools/run_direct_skill_eval.py \
   --repo "$source_repo" --lane integrated --shadow-repo "$shadow" \
-  --skill verify-commands --agent codex --model gpt-5.6-luna \
-  --out /secure/results/verify-commands-integrated-luna --dry-run
+  --skill verify-commands --agent codex --model gpt-5.6-sol \
+  --out /secure/results/verify-commands-integrated-sol --dry-run
 ```
 
+For an external holdback, add `--suite-root "$suite" --split holdback`. The runner checks the bound suite before every post-model step.
+
 Remove `--dry-run` to execute one answer-model arm. Integrated mode validates and audits the generated manifest. It prepares paired `with_skill` and `old_skill` tasks, removes unused variants, and runs the answer model. Before each later stage, it verifies the shadow against the source and its receipt again. It then applies deterministic grades, checks target-specific exposure for every behavior case in the selected split, and exports blinded comparison tasks. The result directory must not be a symlink and must stay outside the shadow repository.
+
+Before using answer runs in a headline result, run the eligibility check with the exact model, repetition count, split, and behavior cases.
+
+```sh
+result=/secure/results/verify-commands-integrated-sol
+shadow=/secure/evals/verify-commands-integrated
+mise exec -- python3 tools/direct_skill_eligibility.py answer-runs \
+  --runs "$result/answers" \
+  --manifest "$shadow/evals/verify-commands/shared-benchmark.json" \
+  --skill verify-commands --split tune \
+  --model gpt-5.6-sol --repetitions 3 \
+  --case pos-stale-summary \
+  --case pos-empty-selection \
+  --case pos-defaulted-parity \
+  --case pos-package-path \
+  --case pos-scoped-source \
+  --case healthy-control \
+  --case neg-explain-pipefail \
+  --case neg-format-command \
+  --out "$result/answer-eligibility.json"
+```
+
+A nonzero exit means that a candidate failed, a measurement is missing, or the evidence has an infrastructure defect. The JSON report keeps those classes separate.
 
 The checked-in runner stops after `compare-tasks`. It does not automate semantic judging. Give `compare-tasks.jsonl` to a judge from the other model family. Save its verdicts as JSON Lines outside Git, then import them.
 
 ```sh
 uv run --no-project python ../skill-ci/tools/run_runner.py skill-benchmark compare-results \
-  --truth /secure/results/verify-commands-integrated-luna/compare-truth.json \
-  --results /secure/results/verify-commands-integrated-luna/compare-results.jsonl \
-  --out /secure/results/verify-commands-integrated-luna/compare-summary.json
+  --truth /secure/results/verify-commands-integrated-sol/compare-truth.json \
+  --results /secure/results/verify-commands-integrated-sol/compare-results.jsonl \
+  --out /secure/results/verify-commands-integrated-sol/compare-summary.json
 ```
 
-Run the same integrated comparison for Codex Luna, Sol, and Terra, and Claude Opus. Codex answers use Claude Opus as the judge. Claude answers use Codex Astra. The answer and judge families must differ.
+Run the same integrated comparison for Codex Sol and Claude Opus. Codex answers use Claude Opus as the judge. Claude answers use Codex Astra. The answer and judge families must differ.
 
-`compare-results` validates task coverage, comparison hashes, and `A`, `B`, or `TIE` verdicts. It does not record or validate judge identity, model family, prompt, rubric, or calibration. Before using an imported result for promotion, retain an external receipt with the judge backend and model, the comparison-task digest, the judge-prompt and rubric digests, the labeled calibration-set digest, and the calibration outcomes. The current foundation does not generate or validate that receipt. Until that gap is closed, imported pairwise verdicts are diagnostic and cannot support promotion.
+`compare-results` validates task coverage, comparison hashes, and `A`, `B`, or `TIE` verdicts. It does not record judge identity, the model family, the prompt, the rubric, or calibration. Keep those facts in an external judge receipt, then validate the receipt.
+
+```sh
+result=/secure/results/verify-commands-integrated-sol
+mise exec -- python3 tools/direct_skill_eligibility.py judge-receipt \
+  --receipt "$result/judge-receipt.json" \
+  --compare-tasks "$result/compare-tasks.jsonl" \
+  --results "$result/compare-results.jsonl" \
+  --prompt "$result/judge-prompt.md" \
+  --rubric "$result/judge-rubric.md" \
+  --calibration-set "$result/calibration-set.jsonl" \
+  --calibration-results "$result/calibration-results.jsonl" \
+  --order-swap-results "$result/order-swap-results.jsonl" \
+  --answer-family openai --answer-model gpt-5.6-sol \
+  --out "$result/judge-eligibility.json"
+```
+
+The validator binds every file, requires a cross-family judge, recomputes calibration accuracy, checks critical controls, and recomputes answer-order consistency.
 
 ## Isolated diagnostic runs
 
@@ -103,9 +162,9 @@ The isolated lane can screen whether a target changes behavior before the integr
 ```sh
 mise exec -- python3 tools/run_direct_skill_eval.py \
   --lane isolated --skill verify-commands \
-  --agent codex --model gpt-5.6-luna \
+  --agent codex --model gpt-5.6-sol \
   --judge-backend claude --judge-model opus \
-  --out evals/verify-commands/runs/isolated-luna
+  --out evals/verify-commands/runs/isolated-sol
 ```
 
 Use cheaper single repetitions to screen instruction candidates. Use three repetitions only for finalists. Rank quality first. Compare tokens and elapsed time only among candidates inside the quality noise band.
@@ -116,18 +175,18 @@ Use `mise run skill-trigger skills/<skill>` only as a smoke test. Run the pinned
 
 ```sh
 skill=verify-commands
-for model in gpt-5.6-luna gpt-5.6-sol gpt-5.6-terra; do
-  out="evals/$skill/runs/trigger-$model"
-  uv run --no-project python ../skill-ci/tools/run_runner.py skill-trigger-matrix \
-    "evals/$skill/shared-benchmark.json" --agent codex --model "$model" \
-    --codex-cmd "../skill-ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
-    --runs-per-query 3 --trace-runs "$out/traces" --out "$out/matrix.json"
-done
+model=gpt-5.6-sol
+out="evals/$skill/runs/trigger-$model"
+skill_ci="$(cd ../skill-ci && pwd)"
+uv run --no-project python ../skill-ci/tools/run_runner.py skill-trigger-matrix \
+  "evals/$skill/shared-benchmark.json" --agent codex --model "$model" \
+  --codex-cmd "$skill_ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
+  --runs-per-query 3 --trace-runs "$out/traces" --out "$out/matrix.json"
 
 out="evals/$skill/runs/trigger-opus"
 uv run --no-project python ../skill-ci/tools/run_runner.py skill-trigger-matrix \
   "evals/$skill/shared-benchmark.json" --agent claude --model opus \
-  --claude-bin ../skill-ci/tools/claude-project-only \
+  --claude-bin "$skill_ci/tools/claude-project-only" \
   --runs-per-query 3 --trace-runs "$out/traces" --out "$out/matrix.json"
 ```
 
@@ -151,7 +210,7 @@ mise exec -- python3 tools/compose_eval_holdback.py \
   --out /secure/runs/verify-commands-holdback
 ```
 
-The holdback composer creates an isolated shadow suite. It does not create the integrated upstream-roster arms. Do not report its `without_skill` arm as an upstream baseline. Integrated holdback use needs a separately verified composition step before it can support a headline claim.
+The holdback composer creates an external suite. It does not create the integrated upstream-roster arms. Pass its output to `direct_skill_lanes.py materialize --suite-root` to create those arms. Do not report the composer's `without_skill` arm as an upstream baseline.
 
 The composer rejects a changed public manifest, skill file, suite tree, or skill tree. It also rejects duplicate case IDs, the wrong population, non-holdback cases, symlinks, payload traversal or collisions, and output paths inside the repository. Every `files` and `prompt_ref` value must be a normalized relative path to an existing public or private payload file. The composer validates these references before creating output and never invokes a model.
 

@@ -168,10 +168,30 @@ def _command_tokens(command: str) -> list[str]:
     return list(lexer)
 
 
+def _shell_body(command: str) -> str | None:
+    try:
+        arguments = shlex.split(command)
+    except ValueError:
+        return None
+    if (
+        len(arguments) == 3
+        and Path(arguments[0]).name in {"bash", "dash", "sh", "zsh"}
+        and Path(arguments[0]).parent.as_posix() in {".", "/bin", "/usr/bin"}
+        and arguments[1].startswith("-")
+        and "c" in arguments[1][1:]
+    ):
+        return arguments[2]
+    return None
+
+
 def _mutates(command: str) -> bool:
     shell_command = re.sub(r"\\\r?\n", "", command)
     if any(marker in shell_command for marker in ("$(", "`", "<(", ">(")):
         return True
+    shell_body = _shell_body(shell_command)
+    if shell_body is not None:
+        lines = [line for line in shell_body.splitlines() if line.strip()]
+        return not lines or any(_mutates(line) for line in lines)
     try:
         tokens = _command_tokens(shell_command)
     except ValueError:
@@ -251,6 +271,17 @@ def _mutates(command: str) -> bool:
             if _mutates(nested[0]):
                 return True
             continue
+        if name == "find":
+            mutating_find_options = {
+                "-delete", "-exec", "-execdir", "-fls", "-fprint", "-fprintf", "-ok", "-okdir",
+            }
+            if any(argument in mutating_find_options for argument in argv[1:]):
+                return True
+            continue
+        if name == "sort":
+            if any(argument == "-o" or argument.startswith("--output=") for argument in argv[1:]):
+                return True
+            continue
         if re.fullmatch(r"python3?(?:\.\d+)?", name):
             return True
         if name in READ_ONLY_EXECUTABLES:
@@ -258,7 +289,8 @@ def _mutates(command: str) -> bool:
         if name in {"rg", "grep"}:
             allowed_options = {
                 "-F", "-i", "-n", "-w",
-                "--fixed-strings", "--ignore-case", "--line-number", "--word-regexp",
+                "--files", "--files-with-matches", "--fixed-strings", "--ignore-case",
+                "--line-number", "--word-regexp",
             }
             for argument in argv[1:]:
                 if argument == "--":
@@ -355,6 +387,10 @@ def _argv_runs_probe(argv: list[str]) -> bool:
 
 
 def _command_runs_probe(command: str) -> bool:
+    shell_body = _shell_body(command)
+    if shell_body is not None:
+        lines = [line for line in shell_body.splitlines() if line.strip()]
+        return not lines or any(_command_runs_probe(line) for line in lines)
     try:
         tokens = _command_tokens(command)
     except ValueError:
@@ -377,32 +413,44 @@ def ensure_no_probe_commands(events: list[dict[str, Any]]) -> None:
         fail(not _command_runs_probe(command), f"non-executable task ran a probe-capable command: {command}")
 
 
-def _trusted_command(command: str, driver: str) -> bool:
+def _trusted_command_count(command: str, driver: str) -> int:
     try:
         arguments = shlex.split(command)
     except ValueError:
-        return False
+        return 0
     if len(arguments) == 3 and arguments[0] in {"/bin/bash", "/bin/sh", "/bin/zsh"} and arguments[1] in {"-c", "-lc"}:
         try:
-            arguments = shlex.split(arguments[2])
+            arguments = [_unquoted(token)[0] for token in _command_tokens(arguments[2])]
         except ValueError:
-            return False
-    if len(arguments) != 2:
-        return False
-    executable = arguments[0]
-    if "/" in executable:
-        path = Path(executable)
-        trusted_interpreter = path.parent.as_posix() in {"/usr/bin", "/usr/local/bin"}
-    else:
-        trusted_interpreter = True
-    return (
-        trusted_interpreter
-        and re.fullmatch(r"python3(?:\.\d+)?", Path(executable).name) is not None
-        and arguments[1] == f"inputs/{driver}"
-    )
+            return 0
+    arguments = [argument for argument in arguments if argument not in {";", "&&"}]
+    while arguments and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", arguments[0]):
+        arguments.pop(0)
+    if not arguments or len(arguments) % 2:
+        return 0
+    count = 0
+    for index in range(0, len(arguments), 2):
+        executable, script = arguments[index:index + 2]
+        if "/" in executable:
+            path = Path(executable)
+            trusted_interpreter = path.parent.as_posix() in {"/usr/bin", "/usr/local/bin"}
+        else:
+            trusted_interpreter = True
+        if (
+            not trusted_interpreter
+            or re.fullmatch(r"python3(?:\.\d+)?", Path(executable).name) is None
+            or script not in {driver, f"inputs/{driver}"}
+        ):
+            return 0
+        count += 1
+    return count
 
 
-def _trace_payload(trace: list[str], line_number: object, driver: str) -> dict[str, Any]:
+def _trusted_command(command: str, driver: str) -> bool:
+    return _trusted_command_count(command, driver) > 0
+
+
+def _trace_payloads(trace: list[str], line_number: object, driver: str) -> list[dict[str, Any]]:
     if type(line_number) is not int or line_number < 1 or line_number > len(trace):
         raise InfrastructureFailure("completed command points outside trace.jsonl")
     try:
@@ -415,14 +463,17 @@ def _trace_payload(trace: list[str], line_number: object, driver: str) -> dict[s
     if not isinstance(item, dict):
         raise InfrastructureFailure("completed command trace item is malformed")
     output = item.get("aggregated_output") or item.get("output") or item.get("result") or ""
+    payloads: list[dict[str, Any]] = []
     for line in str(output).splitlines():
         try:
             payload = strict_json_loads(line)
         except (json.JSONDecodeError, RecursionError, ValueError):
             continue
         if isinstance(payload, dict) and payload.get("driver") == driver:
-            return payload
-    raise MissingMeasurement(f"completed {driver} command has no driver JSON output")
+            payloads.append(payload)
+    if not payloads:
+        raise MissingMeasurement(f"completed {driver} command has no driver JSON output")
+    return payloads
 
 
 def trusted_replays(output_dir: Path, driver: str, target: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -432,9 +483,14 @@ def trusted_replays(output_dir: Path, driver: str, target: str) -> tuple[list[di
         event
         for event in events
         if event.get("type") == "command"
+        and event.get("status") == "completed"
         and _trusted_command(str(event.get("input_summary", "")), driver)
     ]
-    if len(attempts) != 2:
+    invocation_count = sum(
+        _trusted_command_count(str(event.get("input_summary", "")), driver)
+        for event in attempts
+    )
+    if invocation_count != 2:
         raise MissingMeasurement(f"{driver} must run exactly twice for the bounded replay")
     payloads: list[dict[str, Any]] = []
     for event in attempts:
@@ -444,15 +500,19 @@ def trusted_replays(output_dir: Path, driver: str, target: str) -> tuple[list[di
         raw_ref = event.get("raw_ref")
         if not isinstance(raw_ref, dict):
             raise InfrastructureFailure("completed driver command has no trace reference")
-        payload = _trace_payload(trace, raw_ref.get("line"), driver)
-        fail(payload.get("target") == target, f"driver reported the wrong target: {payload.get('target')}")
-        fail(payload.get("fresh_start") is True, "driver did not report a fresh start")
-        evidence_id = payload.get("evidence_id")
-        fail(
-            isinstance(evidence_id, str) and re.fullmatch(r"[0-9a-f]{24}", evidence_id) is not None,
-            "driver evidence ID is invalid",
-        )
-        payloads.append(payload)
+        expected = _trusted_command_count(str(event.get("input_summary", "")), driver)
+        observed = _trace_payloads(trace, raw_ref.get("line"), driver)
+        if len(observed) != expected:
+            raise MissingMeasurement(f"completed {driver} command output count does not match its invocations")
+        for payload in observed:
+            fail(payload.get("target") == target, f"driver reported the wrong target: {payload.get('target')}")
+            fail(payload.get("fresh_start") is True, "driver did not report a fresh start")
+            evidence_id = payload.get("evidence_id")
+            fail(
+                isinstance(evidence_id, str) and re.fullmatch(r"[0-9a-f]{24}", evidence_id) is not None,
+                "driver evidence ID is invalid",
+            )
+            payloads.append(payload)
     fail(payloads[0]["evidence_id"] != payloads[1]["evidence_id"], "fresh replay reused an evidence ID")
     return payloads, events
 
