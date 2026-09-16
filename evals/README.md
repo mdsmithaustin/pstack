@@ -32,21 +32,28 @@ The oracles do not require one application-style response schema.
 
 - `verify-commands` accepts a natural answer with one fenced shell artifact and brief prose. It runs the artifact against fresh healthy and defective fixture states inside a locked container. The candidate process has no writable home or shared-memory scratch space and cannot create regular files. An in-container evidence service authenticates each required interpreter, argument vector, and working directory against the root-owned fixture. A hidden operation failure repeats an otherwise passing fixture to prove that the plan propagates the check result. Candidate bytes enter through standard input. They never become host shell arguments, environment values, image names, or paths. There is no host-execution fallback.
 - `spec-probes` accepts natural prose and Markdown tables. Its oracle checks source requirement anchors, non-mutation, and arithmetic consistency when the answer includes tagged coverage data. A cross-family comparison judge decides which answer is more complete, grounded, and applicable.
-- `runtime-probes` accepts natural prose and findings tables. Its oracle checks that recorded command evidence identifies the expected driver, the trace contains fresh target-specific evidence, the recorded driver facts match the fixture, the answer cites actual evidence IDs, and the fixture was not mutated. This is not driver-integrity proof on the current Claude path. A cross-family comparison judge decides whether the answer's claims agree with those facts and which answer has better diagnostic quality.
+- `runtime-probes` accepts natural prose and findings tables. Its oracle checks that recorded command evidence names the expected mounted driver and runner-selected Python executable by absolute path. It binds both paths to the runner receipt, checks fresh target-specific evidence, compares the driver facts with the fixture, checks the answer's evidence IDs, and verifies that the files under `inputs/` and `skills/` have the same digest before and after the answer run. A cross-family comparison judge decides whether the answer's claims agree with those facts and which answer has better diagnostic quality.
 
 Tagged JSON samples remain only in explicitly named importer-integration unit tests. They test parser compatibility and do not contribute to headline behavior results. Metamorphic tests use structurally different valid answers to keep the deterministic gates independent of wording and presentation.
 
-Two runner evidence gaps remain. Normalized path-based skill-read events do not record the temporary workspace root, so a path suffix alone cannot prove that the model read the mounted target. The Claude adapter also permits writes inside its temporary workspace, so command text cannot prove that a runtime driver stayed unchanged before execution. `skill-eval-harness` must record workspace-bound access evidence and post-run fixture integrity before either signal can support promotion.
+The pstack answer launcher decorates the pinned harness backend in-process. When the backend returns an outcome, the launcher records the sorted regular-file paths under `inputs/` and `skills/`. After the backend returns, it records SHA-256 hashes of the temporary workspace path and the runner-resolved Python path. It also records digests of the mounted relative paths and file bytes from before and after the invocation.
+
+Exposure requires the receipt to contain `skills/<target>/SKILL.md`, then accepts either a native activation event for that target, a completed provider file-read event, or a completed direct invocation of a trusted system reader with a safe argument form. Read paths must be absolute and resolve below the attested workspace root. Shell-wrapped readers, relative shell reads, reader-named executables outside trusted system paths, option-only invocations, suffix lookalikes, and paths under another working directory cause the result to be classified as unmeasured.
+
+Runtime replay requires the receipt to contain `inputs/<driver>`. Its recorded command must name both the runner-selected Python executable and the mounted driver by absolute path. Parent traversal, other interpreters, other fixture roots, and changed file sets cause the result to be classified as unmeasured. The harness repository and lock pin stay unchanged.
+
+Matching digests show that the recorded file paths and bytes match at the two launcher boundaries. They do not cover permissions or empty directories, and they cannot detect bytes that a writable adapter changes and restores between observations. File-change events reject reported writes, but Claude runs still lack immutable `inputs/` and `skills/` mounts and operation-level file identity.
 
 ## Model-free checks
 
 Run repository tests and pinned harness checks before spending model budget.
 
 ```sh
-mise exec -- python3 -m unittest discover -s tools -p 'test_*.py'
-mise exec -- python3 -m unittest discover -s evals/verify-commands/oracles -p 'test_*.py'
-mise exec -- python3 -m unittest discover -s evals/spec-probes/oracles -p 'test_*.py'
-mise exec -- python3 -m unittest discover -s evals/runtime-probes/oracles -p 'test_*.py'
+mise exec -- python3 tools/run_python_test_suites.py \
+  tools \
+  evals/verify-commands/oracles \
+  evals/spec-probes/oracles \
+  evals/runtime-probes/oracles
 mise run skill-lint
 mise run skill-validate
 for skill in verify-commands spec-probes runtime-probes; do
@@ -68,7 +75,7 @@ mise exec -- python3 tools/direct_skill_lanes.py verify \
   --repo "$source_repo" --skill verify-commands --shadow-repo "$shadow"
 ```
 
-`verify` rejects a changed source revision, experiment contract, or lane helper, an altered receipt, a roster mismatch, a path escape, a symlink, and any arm difference beyond the selected target. Integrated runs invoke the helper copy recorded in the materialized lane rather than mutable caller-checkout bytes.
+`verify` rejects a changed source revision, experiment contract, or lane helper, an altered receipt, a roster mismatch, a path escape, a symlink, and any arm difference beyond the selected target. Integrated runs invoke the helper copies recorded in the materialized lane rather than mutable caller-checkout bytes.
 
 ## Integrated headline runs
 

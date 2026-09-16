@@ -288,7 +288,11 @@ Run the full CI-equivalent checks from the repository root:
 .venv/bin/python tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
 .venv/bin/python tools/check-skill-content.py skills
 .venv/bin/python tools/generate-subagents.py --check
-.venv/bin/python -m unittest discover -s tools -p 'test_*.py'
+.venv/bin/python tools/run_python_test_suites.py \
+  tools \
+  evals/verify-commands/oracles \
+  evals/spec-probes/oracles \
+  evals/runtime-probes/oracles
 .venv/bin/python tools/probe-subagent-install.py
 .venv/bin/python -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'
 .venv/bin/python skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
@@ -299,7 +303,7 @@ lefthook validate
 git diff --check
 ```
 
-Each command exits nonzero when its check fails. The two unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses `.venv/bin/python` and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
+Each command exits nonzero when its check fails. `run_python_test_suites.py` rejects zero tests in any listed directory. The remaining setup-pstack unittest command and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses `.venv/bin/python` and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
 
 Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 

@@ -88,6 +88,18 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         value.update(changes)
         write_json(self.overlay, value)
 
+    def test_rejects_ambiguous_and_nonfinite_overlay_json(self) -> None:
+        for text in (
+            '{"version":1,"version":1}',
+            '{"version":NaN}',
+            '{"version":Infinity}',
+            '{"version":1e400}',
+        ):
+            with self.subTest(text=text):
+                self.overlay.write_text(text, encoding="utf-8")
+                with self.assertRaisesRegex(CompositionError, "cannot read|repeats key"):
+                    compose(self.repo, "demo", self.overlay, self.root / "invalid-json")
+
     def test_composes_public_and_private_inputs_without_mutating_source(self) -> None:
         cases = holdback_cases()
         cases[0].pop("prompt")

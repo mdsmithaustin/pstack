@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 import shlex
 import subprocess
 from pathlib import Path
 
-from direct_skill_lanes import LaneError, verify_materialized_lane
+from direct_skill_lanes import LaneError, _strict_json_loads, verify_materialized_lane
 
 
 def adapter_arguments(agent: str, skill_ci: Path) -> list[str]:
@@ -16,7 +15,14 @@ def adapter_arguments(agent: str, skill_ci: Path) -> list[str]:
         command = skill_ci / "tools" / "codex-project-only"
         return [
             "--codex-cmd",
-            f"{command} exec --json --skip-git-repo-check --sandbox read-only",
+            shlex.join([
+                str(command),
+                "exec",
+                "--json",
+                "--skip-git-repo-check",
+                "--sandbox",
+                "read-only",
+            ]),
         ]
     raise ValueError(f"unsupported agent: {agent}")
 
@@ -52,7 +58,7 @@ def command_plan(
         raise ValueError(f"unsupported lane: {lane}")
     if lane == "integrated":
         try:
-            manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+            manifest_data = _strict_json_loads(manifest.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise ValueError(f"cannot read integrated manifest: {exc}") from exc
         if (
@@ -98,7 +104,16 @@ def command_plan(
         prepare,
     ]
     run_agent = [
-        *prefix,
+        "uv",
+        "run",
+        "--no-project",
+        "python",
+        str(repo / "tools" / "direct_skill_runner.py"),
+        "--skill-ci",
+        str(skill_ci),
+        "--backend",
+        agent,
+        "--",
         "run-agent",
         "--agent",
         agent,

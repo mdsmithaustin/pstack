@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,19 +33,67 @@ class OracleWorkspace:
         (self.path / "output.md").write_text(text, encoding="utf-8")
         self.events: list[dict[str, object]] = []
         self.trace: list[str] = []
+        self.interpreter = Path(sys.executable).absolute().as_posix()
+        self.resolved_interpreter = Path(self.interpreter).resolve(strict=True).as_posix()
+        self.mounts = {
+            "inputs/verify_order_service.py",
+            "inputs/verify_billing_service.py",
+        }
         self._loader = mock.patch.object(runtime_probe_oracle, "load_events", return_value=(self.events, self.trace))
         self._loader.start()
+        self._receipt_loader = mock.patch.object(
+            runtime_probe_oracle,
+            "load_workspace_receipt",
+            side_effect=lambda _: runtime_probe_oracle.WorkspaceReceipt(
+                mounts=frozenset(self.mounts),
+                python_path_sha256=hashlib.sha256(
+                    self.resolved_interpreter.encode("utf-8")
+                ).hexdigest(),
+                workspace_root_sha256=hashlib.sha256(
+                    self.path.as_posix().encode("utf-8")
+                ).hexdigest(),
+            ),
+        )
+        self._receipt_loader.start()
 
     def close(self) -> None:
+        self._receipt_loader.stop()
         self._loader.stop()
         self._temporary.cleanup()
 
     def write(self, text: str) -> None:
         (self.path / "output.md").write_text(text, encoding="utf-8")
 
-    def add_driver(self, driver: str, target: str, evidence_id: str, observations: dict[str, object], command: str | None = None, reachability: dict[str, object] | None = None) -> None:
-        summary = command or f"/bin/zsh -lc 'python3 inputs/{driver}'"
-        self.trace.append(json.dumps({"item": {"aggregated_output": json.dumps({"driver": driver, "target": target, "fresh_start": True, "evidence_id": evidence_id, "observations": observations, "reachability": reachability})}}))
+    def add_driver(
+        self,
+        driver: str,
+        target: str,
+        evidence_id: str,
+        observations: dict[str, object],
+        command: str | None = None,
+        reachability: dict[str, object] | None = None,
+    ) -> None:
+        self.mounts.add(f"inputs/{driver}")
+        driver_path = (self.path / "inputs" / driver).as_posix()
+        summary = command or f"/bin/zsh -lc '{self.interpreter} {driver_path}'"
+        self.trace.append(
+            json.dumps(
+                {
+                    "item": {
+                        "aggregated_output": json.dumps(
+                            {
+                                "driver": driver,
+                                "target": target,
+                                "fresh_start": True,
+                                "evidence_id": evidence_id,
+                                "observations": observations,
+                                "reachability": reachability,
+                            }
+                        )
+                    }
+                }
+            )
+        )
         self.events.append({"type": "command", "status": "completed", "exit_code": 0, "input_summary": summary, "raw_ref": {"line": len(self.trace)}})
 
 
@@ -392,12 +442,95 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             [{"type": "command", "input_summary": "printf '>'"}]
         )
 
-    def test_candidate_owned_interpreters_and_shell_wrappers_are_not_trusted(self) -> None:
+    def test_relative_interpreters_and_shell_wrappers_are_not_trusted(self) -> None:
         for command in (
-            "/tmp/python3 inputs/verify_order_service.py",
             "/tmp/bash -lc 'python3 inputs/verify_order_service.py'",
+            "python3 inputs/verify_order_service.py",
+            "python3 /tmp/decoy/inputs/verify_order_service.py",
+            "cd /tmp/decoy && python3 inputs/verify_order_service.py",
+            "python3\ninputs/verify_order_service.py",
         ):
             self.assertFalse(runtime_probe_oracle._trusted_command(command, "verify_order_service.py"))
+
+    def test_replay_rejects_a_driver_executed_from_a_decoy_working_directory(self) -> None:
+        workspace = self.workspace("aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb")
+        command = (
+            f"{workspace.interpreter} "
+            "/tmp/decoy/inputs/verify_order_service.py"
+        )
+        workspace.add_driver(
+            "verify_order_service.py",
+            "order_service.py",
+            "a" * 24,
+            ORDER_OBSERVATIONS,
+            command=command,
+            reachability=ORDER_REACHABILITY,
+        )
+        workspace.add_driver(
+            "verify_order_service.py",
+            "order_service.py",
+            "b" * 24,
+            ORDER_OBSERVATIONS,
+            command=command,
+            reachability=ORDER_REACHABILITY,
+        )
+
+        self.assertEqual(
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0],
+            "MISSING_MEASUREMENT",
+        )
+
+    def test_replay_rejects_an_interpreter_outside_the_runner_receipt(self) -> None:
+        workspace = self.workspace("aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb")
+        alternative = "/usr/bin/python3"
+        command = (
+            f"{alternative} "
+            f"{workspace.path}/inputs/verify_order_service.py"
+        )
+        workspace.add_driver(
+            "verify_order_service.py",
+            "order_service.py",
+            "a" * 24,
+            ORDER_OBSERVATIONS,
+            command=command,
+            reachability=ORDER_REACHABILITY,
+        )
+        workspace.add_driver(
+            "verify_order_service.py",
+            "order_service.py",
+            "b" * 24,
+            ORDER_OBSERVATIONS,
+            command=command,
+            reachability=ORDER_REACHABILITY,
+        )
+
+        self.assertEqual(
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0],
+            "MISSING_MEASUREMENT",
+        )
+
+    def test_replay_requires_driver_in_unchanged_workspace_receipt(self) -> None:
+        workspace = self.workspace("aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb")
+        self.add_order_replays(workspace)
+        workspace._receipt_loader.stop()
+        workspace._receipt_loader = mock.patch.object(
+            runtime_probe_oracle,
+            "load_workspace_receipt",
+            return_value=runtime_probe_oracle.WorkspaceReceipt(
+                mounts=frozenset({"inputs/unrelated.py"}),
+                python_path_sha256=hashlib.sha256(
+                    workspace.resolved_interpreter.encode("utf-8")
+                ).hexdigest(),
+                workspace_root_sha256=hashlib.sha256(
+                    workspace.path.as_posix().encode("utf-8")
+                ).hexdigest(),
+            ),
+        )
+        workspace._receipt_loader.start()
+        self.assertEqual(
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0],
+            "MISSING_MEASUREMENT",
+        )
 
     def test_planning_and_permission_cases_accept_natural_responses(self) -> None:
         planning = self.workspace("The service is unavailable. Hand the bounded plan to an engineer with the real driver.")

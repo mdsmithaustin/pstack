@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
 from pathlib import Path, PurePosixPath
@@ -27,9 +28,32 @@ def read_json(path: Path) -> dict[str, Any]:
             result[key] = value
         return result
 
+    def reject_nonfinite(value: str) -> None:
+        raise ValueError(f"non-finite numeric constant: {value}")
+
+    def validate(item: Any, *, depth: int = 0) -> None:
+        if depth > 100:
+            raise ValueError("JSON value exceeds the maximum nesting depth")
+        if isinstance(item, str):
+            item.encode("utf-8", errors="strict")
+        if isinstance(item, float) and not math.isfinite(item):
+            raise ValueError(f"non-finite numeric value: {item}")
+        if isinstance(item, list):
+            for child in item:
+                validate(child, depth=depth + 1)
+        if isinstance(item, dict):
+            for key, child in item.items():
+                validate(key, depth=depth)
+                validate(child, depth=depth + 1)
+
     try:
-        value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_object)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        value = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=unique_object,
+            parse_constant=reject_nonfinite,
+        )
+        validate(value)
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise CompositionError(f"cannot read {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise CompositionError(f"{path} must contain one JSON object")

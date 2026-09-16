@@ -1,9 +1,9 @@
-import json
 import re
 from collections import Counter
 from typing import Any
 
 from .specs import CASE_SPECS, CaseSpec
+from .json_contract import strict_json_loads
 
 
 TAG_PATTERN = re.compile(r"<spec-probe-record>\s*(.*?)\s*</spec-probe-record>", re.DOTALL)
@@ -15,9 +15,9 @@ def extract_import_record(text: str) -> tuple[dict[str, Any] | None, list[str]]:
     if len(matches) != 1:
         return None, [f"expected one spec-probe-record tag, found {len(matches)}"]
     try:
-        record = json.loads(matches[0])
-    except json.JSONDecodeError as exc:
-        return None, [f"record is not valid JSON: {exc.msg}"]
+        record = strict_json_loads(matches[0])
+    except (ValueError, RecursionError) as exc:
+        return None, [f"record is not valid JSON: {exc}"]
     if not isinstance(record, dict):
         return None, ["record must be a JSON object"]
     return record, []
