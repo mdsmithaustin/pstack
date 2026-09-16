@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import shutil
 import stat
 import sys
+from importlib import metadata
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -15,6 +17,9 @@ from typing import Any, Sequence
 RUNNER_PREFIX = "git+https://github.com/mdsmithaustin/skill-eval-harness.git@"
 LOCK_PATTERN = re.compile(re.escape(RUNNER_PREFIX) + r"([0-9a-fA-F]{40})\Z")
 RECEIPT_KEY = "pstack_workspace_receipt"
+RUNNER_SPEC_ENV = "PSTACK_PINNED_RUNNER_SPEC"
+RUNNER_DISTRIBUTION = "skill-eval-harness"
+RUNNER_REPOSITORY = "https://github.com/mdsmithaustin/skill-eval-harness.git"
 
 
 class RunnerError(ValueError):
@@ -52,7 +57,6 @@ def pinned_runner_argv(
         "python",
         "-I",
         str(script.resolve()),
-        "--inside-pinned-runner",
         "--backend",
         backend,
         "--",
@@ -157,9 +161,64 @@ def decorate_backend(module: Any, backend_name: str) -> None:
     module.AGENT_BACKENDS[backend_name] = WorkspaceReceiptBackend()
 
 
-def run_inside(backend: str, runner_arguments: Sequence[str]) -> int:
+def _runner_install_root(expected_spec: str) -> Path:
+    match = LOCK_PATTERN.fullmatch(expected_spec)
+    if match is None:
+        raise RunnerError("internal runner handoff does not contain a valid pin")
+    expected_commit = match.group(1).lower()
+    try:
+        distribution = metadata.distribution(RUNNER_DISTRIBUTION)
+        direct_url_text = distribution.read_text("direct_url.json")
+        direct_url = json.loads(direct_url_text or "")
+        if not isinstance(direct_url, dict):
+            raise ValueError("direct_url.json must contain an object")
+        distribution_root = Path(distribution.locate_file("")).resolve(strict=True)
+        prefix = Path(sys.prefix).resolve(strict=True)
+        distribution_root.relative_to(prefix)
+        Path(sys.executable).absolute().relative_to(Path(sys.prefix).absolute())
+    except (
+        AttributeError,
+        json.JSONDecodeError,
+        metadata.PackageNotFoundError,
+        OSError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise RunnerError(f"cannot attest pinned runner provenance: {exc}") from exc
+    if sys.flags.isolated != 1 or Path(sys.prefix).resolve() == Path(sys.base_prefix).resolve():
+        raise RunnerError("pinned runner must use isolated Python in a virtual environment")
+    vcs = direct_url.get("vcs_info") if isinstance(direct_url, dict) else None
+    if (
+        direct_url.get("url") != RUNNER_REPOSITORY
+        or not isinstance(vcs, dict)
+        or vcs.get("vcs") != "git"
+        or str(vcs.get("commit_id", "")).lower() != expected_commit
+        or str(vcs.get("requested_revision", "")).lower() != expected_commit
+    ):
+        raise RunnerError("installed runner provenance does not match runner.lock")
+    return distribution_root
+
+
+def verify_runner_provenance(module: Any, expected_spec: str) -> None:
+    distribution_root = _runner_install_root(expected_spec)
+    try:
+        Path(module.__file__).resolve(strict=True).relative_to(distribution_root)
+    except (AttributeError, OSError, TypeError, ValueError) as exc:
+        raise RunnerError(f"runner module is outside the pinned installation: {exc}") from exc
+
+
+def run_inside(
+    backend: str,
+    runner_arguments: Sequence[str],
+    expected_spec: str,
+) -> int:
+    distribution_root = _runner_install_root(expected_spec)
     import skill_benchmark
 
+    try:
+        Path(skill_benchmark.__file__).resolve(strict=True).relative_to(distribution_root)
+    except (AttributeError, OSError, TypeError, ValueError) as exc:
+        raise RunnerError(f"runner module is outside the pinned installation: {exc}") from exc
     decorate_backend(skill_benchmark, backend)
     sys.argv = ["skill-benchmark", *runner_arguments]
     return int(skill_benchmark.main())
@@ -169,7 +228,6 @@ def parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the pinned direct-skill answer backend with workspace evidence."
     )
-    parser.add_argument("--inside-pinned-runner", action="store_true")
     parser.add_argument("--skill-ci", type=Path)
     parser.add_argument("--backend", choices=("claude", "codex"), required=True)
     parser.add_argument("runner_arguments", nargs=argparse.REMAINDER)
@@ -178,15 +236,17 @@ def parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
         values.runner_arguments = values.runner_arguments[1:]
     if not values.runner_arguments or values.runner_arguments[0] != "run-agent":
         parser.error("expected run-agent followed by pinned runner arguments")
-    if not values.inside_pinned_runner and values.skill_ci is None:
-        parser.error("--skill-ci is required outside the pinned runner")
     return values
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     values = parse_arguments(argv)
-    if values.inside_pinned_runner:
-        return run_inside(values.backend, values.runner_arguments)
+    expected_spec = os.environ.pop(RUNNER_SPEC_ENV, None)
+    if expected_spec is not None:
+        return run_inside(values.backend, values.runner_arguments, expected_spec)
+    if values.skill_ci is None:
+        raise RunnerError("--skill-ci is required outside the pinned runner")
+    expected_spec = runner_spec(values.skill_ci)
     command = pinned_runner_argv(
         Path(__file__),
         values.skill_ci,
@@ -194,6 +254,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         values.runner_arguments,
     )
     try:
+        os.environ[RUNNER_SPEC_ENV] = expected_spec
         os.execvp(command[0], command)
     except FileNotFoundError as exc:
         raise SystemExit("uv is required to run the pinned evaluator") from exc

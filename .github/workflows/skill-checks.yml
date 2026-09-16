@@ -17,15 +17,21 @@ jobs:
   direct-eval-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
       - name: Install test dependencies
         run: python3 -m pip install --require-hashes -r tools/requirements.txt
       - name: Pull pinned replay image
         run: docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
+      - name: Fetch pinned upstream baseline
+        run: git fetch --no-tags --depth=1 https://github.com/cursor/plugins.git "$(cat .github/upstream-sha)"
       - name: Run non-empty direct-evaluation suites
+        env:
+          REQUIRE_PINNED_UPSTREAM_OBJECT: "1"
         run: >-
           python3 tools/run_python_test_suites.py
           tools

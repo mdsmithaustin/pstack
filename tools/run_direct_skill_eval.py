@@ -62,7 +62,8 @@ def command_plan(
         except (OSError, ValueError) as exc:
             raise ValueError(f"cannot read integrated manifest: {exc}") from exc
         if (
-            manifest_data.get("optional_variants") != ["old_skill"]
+            not isinstance(manifest_data, dict)
+            or manifest_data.get("optional_variants") != ["old_skill"]
             or not manifest_data.get("old_skill_paths")
             or not manifest_data.get("skill_paths")
         ):

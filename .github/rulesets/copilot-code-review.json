@@ -26,7 +26,8 @@
       "parameters": {
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "skills", "integration_id": 15368 }
+          { "context": "skills", "integration_id": 15368 },
+          { "context": "direct-eval-tests", "integration_id": 15368 }
         ],
         "strict_required_status_checks_policy": true
       }

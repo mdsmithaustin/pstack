@@ -1,8 +1,8 @@
 # Repository rulesets
 
-`copilot-code-review.json` records the desired default-branch ruleset. It asks Copilot to review every pull request, including drafts, and to review again after each push. It permits merge, squash, and rebase after the required GitHub Actions `skills` check succeeds. The rule requires a pull request, no human approvals, resolved review threads, stale-review dismissal after a push, and protection from deletion or force pushes.
+`copilot-code-review.json` records the desired default-branch ruleset. It asks Copilot to review every pull request, including drafts, and to review again after each push. It permits merge, squash, and rebase after the required GitHub Actions `skills` and `direct-eval-tests` checks succeed. The rule requires a pull request, no human approvals, resolved review threads, stale-review dismissal after a push, and protection from deletion or force pushes.
 
-Do not create a second ruleset. Update existing ruleset `22124319` only after the pull request has a successful `skills` check for its exact head from GitHub Actions app `15368`.
+Do not create a second ruleset. Update existing ruleset `22124319` only after the pull request has successful `skills` and `direct-eval-tests` checks for its exact head from GitHub Actions app `15368`.
 
 Run this from a clean checkout of the reviewed pull-request head after setting `PR_NUMBER` to its number. Each guard exits nonzero on failure, so it stops before the PUT.
 
@@ -19,7 +19,11 @@ gh pr view "$pr" --repo "$repository" --json headRefOid --jq '.headRefOid' > "$w
 test "$(<"$workdir/pr-head")" = "$head"
 gh api "repos/$repository/commits/$head/check-runs?per_page=100" > "$workdir/check-runs.json"
 jq -e --arg head "$head" '
-  any(.check_runs[]; .name == "skills" and .head_sha == $head and .conclusion == "success" and .app.id == 15368)
+  all(["skills", "direct-eval-tests"][] as $name;
+    any(.check_runs[];
+      .name == $name and .head_sha == $head and .conclusion == "success" and .app.id == 15368
+    )
+  )
 ' "$workdir/check-runs.json" >/dev/null
 gh api "repos/$repository/rulesets/$ruleset" > "$workdir/ruleset-before.json"
 jq -e --slurpfile desired .github/rulesets/copilot-code-review.json '

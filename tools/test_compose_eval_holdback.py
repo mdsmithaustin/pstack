@@ -100,6 +100,11 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
                 with self.assertRaisesRegex(CompositionError, "cannot read|repeats key"):
                     compose(self.repo, "demo", self.overlay, self.root / "invalid-json")
 
+    def test_rejects_json_nested_beyond_the_parser_limit(self) -> None:
+        self.overlay.write_text("[" * 2000 + "]" * 2000, encoding="utf-8")
+        with self.assertRaisesRegex(CompositionError, "cannot read"):
+            compose(self.repo, "demo", self.overlay, self.root / "nested-json")
+
     def test_composes_public_and_private_inputs_without_mutating_source(self) -> None:
         cases = holdback_cases()
         cases[0].pop("prompt")
@@ -182,6 +187,33 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         with self.assertRaisesRegex(CompositionError, "split=holdback"):
             compose(self.repo, "demo", self.overlay, self.root / "wrong-split")
 
+    def test_private_case_requires_one_complete_prompt_source(self) -> None:
+        invalid_cases = []
+        missing = holdback_cases()
+        missing[0].pop("prompt")
+        invalid_cases.append(missing)
+        conflicting = holdback_cases()
+        conflicting[0]["prompt_ref"] = "prompts/secret.json"
+        invalid_cases.append(conflicting)
+        empty_turns = holdback_cases()
+        empty_turns[0].pop("prompt")
+        empty_turns[0]["turns"] = []
+        invalid_cases.append(empty_turns)
+        for index, cases in enumerate(invalid_cases):
+            with self.subTest(index=index):
+                self.write_overlay(cases=cases)
+                with self.assertRaisesRegex(CompositionError, "prompt|turns"):
+                    compose(self.repo, "demo", self.overlay, self.root / f"prompt-{index}")
+
+    def test_private_case_accepts_nonempty_turns_as_the_prompt_source(self) -> None:
+        cases = holdback_cases()
+        cases[0].pop("prompt")
+        cases[0]["turns"] = [{"prompt": "First"}, {"prompt": "Second"}]
+        self.write_overlay(cases=cases)
+        result = compose(self.repo, "demo", self.overlay, self.root / "turns")
+        merged = json.loads(result.read_text(encoding="utf-8"))
+        self.assertEqual(len(merged["cases"][1]["turns"]), 2)
+
     def test_rejects_output_inside_repository(self) -> None:
         with self.assertRaisesRegex(CompositionError, "outside the repository"):
             compose(self.repo, "demo", self.overlay, self.repo / "generated")
@@ -214,8 +246,27 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         shutil.copyfile(self.overlay, overlay)
         link = self.root / "private-overlay-link.json"
         link.symlink_to(overlay)
-        with self.assertRaisesRegex(CompositionError, "private overlay must be outside"):
+        with self.assertRaisesRegex(CompositionError, "must not contain symlinks"):
             compose(self.repo, "demo", link, self.root / "composed")
+
+    def test_rejects_external_symlink_to_an_external_overlay(self) -> None:
+        link = self.root / "private-overlay-link.json"
+        link.symlink_to(self.overlay)
+        with self.assertRaisesRegex(CompositionError, "must not contain symlinks"):
+            compose(self.repo, "demo", link, self.root / "composed")
+
+    def test_rejects_hard_linked_overlay_or_payload_files(self) -> None:
+        repository_overlay = self.repo / "private-overlay.json"
+        shutil.copyfile(self.overlay, repository_overlay)
+        external_overlay = self.root / "outside-overlay.json"
+        os.link(repository_overlay, external_overlay)
+        with self.assertRaisesRegex(CompositionError, "regular single-link"):
+            compose(self.repo, "demo", external_overlay, self.root / "linked-overlay")
+
+        payload_file = self.overlay.parent / "payload" / "prompts" / "secret.json"
+        os.link(payload_file, self.root / "linked-payload.json")
+        with self.assertRaisesRegex(CompositionError, "hard-linked files"):
+            compose(self.repo, "demo", self.overlay, self.root / "linked-payload")
 
     def test_rejects_file_as_output_directory(self) -> None:
         output = self.root / "composed"
@@ -270,10 +321,36 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         with self.assertRaisesRegex(CompositionError, "files must be a string list"):
             compose(self.repo, "demo", self.overlay, self.root / "bad-files")
         cases = holdback_cases()
+        cases[0].pop("prompt")
         cases[0]["prompt_ref"] = 7
         self.write_overlay(cases=cases)
         with self.assertRaisesRegex(CompositionError, "prompt_ref must be a string"):
             compose(self.repo, "demo", self.overlay, self.root / "bad-prompt-ref")
+
+    def test_rejects_falsey_non_list_assertion_fields(self) -> None:
+        for index, value in enumerate(("", 0, {}, False)):
+            with self.subTest(value=value):
+                cases = holdback_cases()
+                cases[0]["assertions"] = value
+                self.write_overlay(cases=cases)
+                with self.assertRaisesRegex(CompositionError, "assertions must be a list"):
+                    compose(self.repo, "demo", self.overlay, self.root / f"assertions-{index}")
+
+                cases = holdback_cases()
+                cases[0].pop("prompt")
+                cases[0]["turns"] = [{"prompt": "First", "assertions": value}]
+                self.write_overlay(cases=cases)
+                with self.assertRaisesRegex(CompositionError, "turn assertions must be a list"):
+                    compose(self.repo, "demo", self.overlay, self.root / f"turn-assertions-{index}")
+
+    def test_rejects_non_object_assertion_elements(self) -> None:
+        for index, value in enumerate((False, 0, "", [])):
+            with self.subTest(value=value):
+                cases = holdback_cases()
+                cases[0]["assertions"] = [value]
+                self.write_overlay(cases=cases)
+                with self.assertRaisesRegex(CompositionError, "assertions must contain objects"):
+                    compose(self.repo, "demo", self.overlay, self.root / f"assertion-element-{index}")
 
     def test_accepts_a_private_script_copied_into_the_composed_suite(self) -> None:
         oracle = self.overlay.parent / "payload" / "oracles" / "private_check.py"
@@ -305,7 +382,9 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         golden.parent.mkdir()
         golden.write_text("expected", encoding="utf-8")
         cases = holdback_cases()
+        cases[0].pop("prompt")
         cases[0]["turns"] = [{
+            "prompt": "First",
             "assertions": [{
                 "type": "golden_output",
                 "reference": "golden/answer.md",
@@ -318,7 +397,9 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         for index, reference in enumerate(("/tmp/evil.md", "../evil.md", "golden/missing.md")):
             with self.subTest(reference=reference):
                 cases = holdback_cases()
+                cases[0].pop("prompt")
                 cases[0]["turns"] = [{
+                    "prompt": "First",
                     "assertions": [{
                         "type": "golden_output",
                         "reference": reference,

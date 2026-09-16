@@ -140,6 +140,12 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot read integrated manifest"):
             self.plan(lane="integrated")
 
+    def test_integrated_plan_rejects_non_object_manifest_json(self) -> None:
+        manifest = self.repo / "evals" / "demo" / "shared-benchmark.json"
+        manifest.write_text("[]", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "integrated manifest"):
+            self.plan(lane="integrated")
+
     def test_integrated_plan_does_not_require_an_inline_judge(self) -> None:
         manifest = self.repo / "evals" / "demo" / "shared-benchmark.json"
         manifest.write_text(json.dumps({
