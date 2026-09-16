@@ -112,7 +112,7 @@ def _reject_symlink_chain(root: Path, relative: Path) -> None:
 def _read_json(path: Path) -> dict[str, Any]:
     try:
         value = _strict_json_loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+    except (OSError, json.JSONDecodeError, ValueError, RecursionError) as exc:
         raise LaneError(f"cannot read JSON from {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise LaneError(f"expected a JSON object in {path}")
@@ -150,7 +150,7 @@ def _load_eval_manifest(path: Path) -> dict[str, Any]:
                 continue
             try:
                 rows.append(_strict_json_loads(line))
-            except (json.JSONDecodeError, ValueError) as exc:
+            except (json.JSONDecodeError, ValueError, RecursionError) as exc:
                 raise LaneError(
                     f"manifest dataset line is invalid JSON: {rows_path}:{line_number}: {exc}"
                 ) from exc
@@ -169,7 +169,7 @@ def _read_regular_text_below(root: Path, relative: Path) -> str:
 def _read_json_below(root: Path, relative: Path, *, object_only: bool) -> Any:
     try:
         value = _strict_json_loads(_read_regular_text_below(root, relative))
-    except (json.JSONDecodeError, ValueError) as exc:
+    except (json.JSONDecodeError, ValueError, RecursionError) as exc:
         raise LaneError(f"cannot read JSON from {root / relative}: {exc}") from exc
     if object_only and not isinstance(value, dict):
         raise LaneError(f"expected a JSON object in {root / relative}")
@@ -774,7 +774,7 @@ def filter_prepared_tasks(source: Path, destination: Path, variants: Iterable[st
             continue
         try:
             row = _strict_json_loads(line)
-        except (json.JSONDecodeError, ValueError) as exc:
+        except (json.JSONDecodeError, ValueError, RecursionError) as exc:
             raise LaneError(f"prepared task line {index} is invalid JSON: {exc}") from exc
         if not isinstance(row, dict):
             raise LaneError(f"prepared task line {index} is not an object")

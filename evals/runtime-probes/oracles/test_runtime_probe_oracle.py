@@ -453,6 +453,10 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             "rg --files skills inputs | sort",
             "find skills -maxdepth 4 -type f -print | sort",
             "sed -n '1,280p' inputs/order_service.py",
+            "sort -nr inputs/source",
+            "sort -k 2 -t , inputs/source",
+            "sort --reverse --numeric-sort inputs/source",
+            "sort -- inputs/--output",
         ):
             with self.subTest(command=command):
                 self.assertFalse(runtime_probe_oracle._mutates(command))
@@ -461,10 +465,23 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         for command in (
             "find inputs -type f -delete",
             "find inputs -exec sh -c 'touch changed' ';'",
+            "find inputs -type f -fprint0 outputs/files",
             "sort -o inputs/changed inputs/source",
             "sort -oinputs/changed inputs/source",
+            "sort --output inputs/changed inputs/source",
             "sort --output=inputs/changed inputs/source",
+            "sort --out inputs/changed inputs/source",
+            "sort --out=inputs/changed inputs/source",
+            "sort --o inputs/changed inputs/source",
+            "sort --ou=inputs/changed inputs/source",
             "sort --compress-program=/tmp/mutate inputs/source",
+            "sort --comp=/tmp/mutate inputs/source",
+            "sort --co=/tmp/mutate inputs/source",
+            "sort --com /tmp/mutate inputs/source",
+            "sort -T outputs inputs/source",
+            "sort -Toutputs inputs/source",
+            "sort --temporary-directory=outputs inputs/source",
+            "sort --definitely-unknown inputs/source",
         ):
             with self.subTest(command=command):
                 self.assertTrue(runtime_probe_oracle._mutates(command))

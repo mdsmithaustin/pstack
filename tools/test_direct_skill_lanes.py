@@ -665,6 +665,29 @@ class ExposureEligibilityTests(unittest.TestCase):
                 "tune",
             )
 
+    def test_dataset_file_normalizes_parser_recursion(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "behavior",
+            "template": "matrix",
+            "kind": "positive",
+            "split": "tune",
+        }]
+        manifest["dataset_files"] = {"matrix": "rows.jsonl"}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        nested = "[" * 2000 + "0" + "]" * 2000
+        (self.root / "rows.jsonl").write_text(
+            f'{{"id":"row","value":{nested}}}\n',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(LaneError, "manifest dataset line is invalid JSON"):
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )
+
     def test_event_envelope_rejects_an_ignored_overflowed_number(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
         self.write_events("behavior", "old_skill", None)
@@ -697,6 +720,18 @@ class ExposureEligibilityTests(unittest.TestCase):
             encoding="utf-8",
         )
         with self.assertRaisesRegex(LaneError, "maximum nesting depth"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_event_envelope_normalizes_parser_recursion(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        nested = "[" * 2000 + "0" + "]" * 2000
+        events_path.write_text(
+            f'{{"schema_version":2,"source":"test","events":{nested}}}',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(LaneError, "cannot read JSON"):
             exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
     def plan_run(self, case: str, variant: str, run_number: int = 1) -> str:

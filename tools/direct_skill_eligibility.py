@@ -75,9 +75,15 @@ def _read_json(path: Path) -> Any:
             object_pairs_hook=_pairs,
             parse_constant=_reject_constant,
         )
-    except (OSError, UnicodeError, json.JSONDecodeError, EligibilityError) as exc:
+        _ensure_finite(value)
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        EligibilityError,
+        RecursionError,
+    ) as exc:
         raise EligibilityError(f"cannot read JSON {path}: {exc}") from exc
-    _ensure_finite(value)
     return value
 
 
@@ -98,9 +104,9 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
                 object_pairs_hook=_pairs,
                 parse_constant=_reject_constant,
             )
-        except (json.JSONDecodeError, EligibilityError) as exc:
+            _ensure_finite(row)
+        except (json.JSONDecodeError, EligibilityError, RecursionError) as exc:
             raise EligibilityError(f"invalid JSON Lines row {number} in {path}: {exc}") from exc
-        _ensure_finite(row)
         if not isinstance(row, dict):
             raise EligibilityError(f"JSON Lines row {number} in {path} is not an object")
         rows.append(row)
@@ -543,7 +549,7 @@ def validate_answer_runs(
     evidence["artifact_commits"] = artifact_digests
     try:
         exposure = exposure_report(runs, manifest, target_skill, split)
-    except (LaneError, OSError, ValueError) as exc:
+    except (LaneError, OSError, ValueError, RecursionError) as exc:
         issues.append(_issue("infrastructure_failure", "exposure_invalid", str(exc)))
     else:
         evidence["exposure_report"] = _canonical_sha256(exposure)

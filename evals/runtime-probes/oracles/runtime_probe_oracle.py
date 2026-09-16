@@ -17,6 +17,14 @@ PROBE_EXECUTABLES = {"curl", "docker", "node", "wget"}
 READ_ONLY_EXECUTABLES = {
     "cat", "echo", "head", "ls", "printf", "pwd", "stat", "tail", "wc",
 }
+SORT_SAFE_SHORT_FLAGS = frozenset("bCcdfghiMmnRrsuVz")
+SORT_SAFE_LONG_OPTIONS = {
+    "--check", "--debug", "--dictionary-order", "--field-separator",
+    "--general-numeric-sort", "--human-numeric-sort", "--ignore-case",
+    "--ignore-leading-blanks", "--ignore-nonprinting", "--key", "--month-sort",
+    "--numeric-sort", "--reverse", "--stable", "--unique", "--version-sort",
+    "--zero-terminated",
+}
 WORKSPACE_RECEIPT_KEY = "pstack_workspace_receipt"
 
 
@@ -246,6 +254,32 @@ def _command_tokens(command: str) -> list[str]:
     return list(lexer)
 
 
+def _sort_is_read_only(arguments: list[str]) -> bool:
+    expects_value = False
+    for argument in arguments:
+        if expects_value:
+            expects_value = False
+            continue
+        if argument == "--":
+            return True
+        if argument == "-" or not argument.startswith("-"):
+            continue
+        if argument.startswith("--"):
+            option, separator, _ = argument.partition("=")
+            if option not in SORT_SAFE_LONG_OPTIONS:
+                return False
+            if option in {"--field-separator", "--key"} and not separator:
+                expects_value = True
+            continue
+        options = argument[1:]
+        if options.startswith(("k", "t")):
+            expects_value = len(options) == 1
+            continue
+        if not options or any(option not in SORT_SAFE_SHORT_FLAGS for option in options):
+            return False
+    return True
+
+
 def _mutates(command: str) -> bool:
     shell_command = re.sub(r"\\\r?\n", "", command)
     if "\n" in shell_command or "\r" in shell_command:
@@ -319,19 +353,14 @@ def _mutates(command: str) -> bool:
             return True
         if name == "find":
             mutating_find_options = {
-                "-delete", "-exec", "-execdir", "-fls", "-fprint", "-fprintf", "-ok", "-okdir",
+                "-delete", "-exec", "-execdir", "-fls", "-fprint", "-fprint0",
+                "-fprintf", "-ok", "-okdir",
             }
             if any(argument in mutating_find_options for argument in argv[1:]):
                 return True
             continue
         if name == "sort":
-            if any(
-                argument == "-o"
-                or argument.startswith("-o")
-                or argument == "--compress-program"
-                or argument.startswith(("--output=", "--compress-program="))
-                for argument in argv[1:]
-            ):
+            if not _sort_is_read_only(argv[1:]):
                 return True
             continue
         if re.fullmatch(r"python3?(?:\.\d+)?", name):

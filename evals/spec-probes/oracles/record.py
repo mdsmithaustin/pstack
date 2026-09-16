@@ -14,6 +14,14 @@ REQUIREMENT_ID = re.compile(r"\b[A-Z]{2,}-\d+\b")
 READ_ONLY_COMMANDS = {
     "cat", "echo", "find", "grep", "head", "ls", "printf", "pwd", "rg", "sed", "sort", "stat", "tail", "wc",
 }
+SORT_SAFE_SHORT_FLAGS = frozenset("bCcdfghiMmnRrsuVz")
+SORT_SAFE_LONG_OPTIONS = {
+    "--check", "--debug", "--dictionary-order", "--field-separator",
+    "--general-numeric-sort", "--human-numeric-sort", "--ignore-case",
+    "--ignore-leading-blanks", "--ignore-nonprinting", "--key", "--month-sort",
+    "--numeric-sort", "--reverse", "--stable", "--unique", "--version-sort",
+    "--zero-terminated",
+}
 
 
 def _command_segments(command: str) -> list[list[str]] | None:
@@ -37,6 +45,32 @@ def _command_segments(command: str) -> list[list[str]] | None:
     return segments
 
 
+def _sort_is_read_only(arguments: list[str]) -> bool:
+    expects_value = False
+    for argument in arguments:
+        if expects_value:
+            expects_value = False
+            continue
+        if argument == "--":
+            return True
+        if argument == "-" or not argument.startswith("-"):
+            continue
+        if argument.startswith("--"):
+            option, separator, _ = argument.partition("=")
+            if option not in SORT_SAFE_LONG_OPTIONS:
+                return False
+            if option in {"--field-separator", "--key"} and not separator:
+                expects_value = True
+            continue
+        options = argument[1:]
+        if options.startswith(("k", "t")):
+            expects_value = len(options) == 1
+            continue
+        if not options or any(option not in SORT_SAFE_SHORT_FLAGS for option in options):
+            return False
+    return True
+
+
 def _read_only_inspection(command: str) -> bool:
     segments = _command_segments(command)
     if segments is None:
@@ -44,35 +78,25 @@ def _read_only_inspection(command: str) -> bool:
     for segment in segments:
         if not segment:
             continue
-        executable = segment[0].rsplit("/", 1)[-1]
+        command = segment[0]
+        executable = command.rsplit("/", 1)[-1]
         if executable in {"bash", "dash", "sh", "zsh"}:
-            if segment[0] not in {
-                "/bin/bash", "/bin/dash", "/bin/sh", "/bin/zsh",
-                "/usr/bin/bash", "/usr/bin/dash", "/usr/bin/sh", "/usr/bin/zsh",
-            }:
-                return False
-            nested = list(segment[1:])
-            while nested and nested[0].startswith("-"):
-                option = nested.pop(0)
-                if "c" not in option[1:]:
-                    return False
-            if len(nested) != 1 or not _read_only_inspection(nested[0]):
-                return False
-            continue
+            return False
+        if "/" in command and command.rsplit("/", 1)[0] not in {
+            "/bin", "/usr/bin", "/usr/local/bin",
+        }:
+            return False
         if executable not in READ_ONLY_COMMANDS:
             return False
         if executable == "find" and any(
-            argument in {"-delete", "-exec", "-execdir", "-fls", "-fprint", "-fprintf", "-ok", "-okdir"}
+            argument in {
+                "-delete", "-exec", "-execdir", "-fls", "-fprint", "-fprint0",
+                "-fprintf", "-ok", "-okdir",
+            }
             for argument in segment[1:]
         ):
             return False
-        if executable == "sort" and any(
-            argument == "-o"
-            or argument.startswith("-o")
-            or argument == "--compress-program"
-            or argument.startswith(("--output=", "--compress-program="))
-            for argument in segment[1:]
-        ):
+        if executable == "sort" and not _sort_is_read_only(segment[1:]):
             return False
         if executable == "rg" and any(
             argument == "-r" or argument.startswith("--replace")

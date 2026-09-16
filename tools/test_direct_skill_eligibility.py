@@ -294,6 +294,23 @@ class AnswerRunEligibilityTests(unittest.TestCase):
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["category"], "infrastructure_failure")
 
+    def test_deeply_nested_exposure_artifact_is_infrastructure_failure(self) -> None:
+        run = self.runs / CASE / MODEL / "with_skill" / "run-1"
+        events_path = run / "events.json"
+        nested = "[" * 2000 + "0" + "]" * 2000
+        events_path.write_text(
+            f'{{"schema_version":2,"source":"test","events":{nested}}}',
+            encoding="utf-8",
+        )
+        commit_path = run / "artifact-commit.json"
+        commit = json.loads(commit_path.read_text(encoding="utf-8"))
+        commit["inventory_sha256"]["events.json"] = file_digest(events_path).removeprefix("sha256:")
+        write_json(commit_path, commit)
+        report = self.validate()
+        issues = [issue for issue in report["issues"] if issue["code"] == "exposure_invalid"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["category"], "infrastructure_failure")
+
     def test_answer_cli_writes_report_and_returns_success(self) -> None:
         output = self.root / "answer-eligibility.json"
         result = subprocess.run(
@@ -488,6 +505,15 @@ class JudgeReceiptEligibilityTests(unittest.TestCase):
             text.replace('"schema_version": 1,', '"schema_version": 1,\n  "schema_version": 1,', 1),
             encoding="utf-8",
         )
+        self.assertIn("judge_evidence_unreadable", self.issue_codes(self.validate()))
+
+    def test_deeply_nested_judge_json_is_reported_as_infrastructure_failure(self) -> None:
+        self.receipt.write_text("[" * 1100 + "0" + "]" * 1100, encoding="utf-8")
+        self.assertIn("judge_evidence_unreadable", self.issue_codes(self.validate()))
+
+        nested_row = '{"nested":' + "[" * 1100 + "0" + "]" * 1100 + "}"
+        self.results.write_text(nested_row + "\n", encoding="utf-8")
+        self.write_receipt()
         self.assertIn("judge_evidence_unreadable", self.issue_codes(self.validate()))
 
     def test_stale_task_digest_is_rejected(self) -> None:

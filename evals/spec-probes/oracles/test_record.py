@@ -8,7 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from oracles.record import evaluate, evaluate_spec, extract_import_record
+from oracles.record import _read_only_inspection, evaluate, evaluate_spec, extract_import_record
 from oracles import check_record
 from oracles.check_record import (
     load_events,
@@ -84,16 +84,39 @@ class RecordOracleTests(unittest.TestCase):
     def test_allows_read_only_fixture_and_skill_inspection(self) -> None:
         events = [{
             "type": "command",
-            "input_summary": "/bin/zsh -lc \"sed -n '1,240p' skills/spec-probes/SKILL.md && sed -n '1,280p' inputs/billing-spec.md\"",
+            "input_summary": "sed -n '1,240p' skills/spec-probes/SKILL.md && sed -n '1,280p' inputs/billing-spec.md",
         }]
         self.assertEqual(evaluate("pos-mixed-shapes", "SP-101 SP-102 SP-103 SP-104", events), [])
+
+    def test_allows_common_read_only_sort_forms(self) -> None:
+        for command in (
+            "sort -nr inputs/source",
+            "sort -k 2 -t , inputs/source",
+            "sort --reverse --numeric-sort inputs/source",
+            "sort -- inputs/--output",
+        ):
+            with self.subTest(command=command):
+                self.assertTrue(_read_only_inspection(command))
 
     def test_rejects_mutating_discovery_commands(self) -> None:
         for command in (
             "find inputs -type f -delete",
             "sort -o inputs/changed inputs/source",
             "sort -oinputs/changed inputs/source",
+            "sort --output inputs/changed inputs/source",
+            "sort --out inputs/changed inputs/source",
+            "sort --out=inputs/changed inputs/source",
+            "sort --o inputs/changed inputs/source",
+            "sort --ou=inputs/changed inputs/source",
             "sort --compress-program=/tmp/mutate inputs/source",
+            "sort --comp=/tmp/mutate inputs/source",
+            "sort --co=/tmp/mutate inputs/source",
+            "sort --com /tmp/mutate inputs/source",
+            "sort -T outputs inputs/source",
+            "sort -Toutputs inputs/source",
+            "sort --temporary-directory=outputs inputs/source",
+            "sort --definitely-unknown inputs/source",
+            "find inputs -type f -fprint0 outputs/files",
             "sed -i '' 's/a/b/' inputs/spec.md",
             "sed -n '1,20p' -i inputs/spec.md",
             "rg --replace changed pattern inputs/spec.md",
@@ -102,6 +125,9 @@ class RecordOracleTests(unittest.TestCase):
             "cat inputs/spec.md & rm inputs/spec.md",
             "cat inputs/spec.md\nrm inputs/spec.md",
             "./bash -lc 'cat inputs/spec.md'",
+            "/bin/bash -c 'cat inputs/spec.md'",
+            "./cat inputs/spec.md",
+            "/tmp/cat inputs/spec.md",
         ):
             with self.subTest(command=command):
                 events = [{"type": "command", "input_summary": command}]
