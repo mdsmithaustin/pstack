@@ -93,12 +93,13 @@ class AnswerRunEligibilityTests(unittest.TestCase):
     def write_run(self, identity: dict[str, object], design_digest: str) -> None:
         run_dir = self.runs / str(identity["run_dir"])
         run_dir.mkdir(parents=True, exist_ok=True)
+        workspace_root = "/runner/workspace"
         events = []
         if identity["variant"] == "with_skill":
             events.append({
                 "type": "skill_load",
                 "name": "Read",
-                "input_summary": f"./skills/{SKILL}/SKILL.md",
+                "input_summary": f"{workspace_root}/skills/{SKILL}/SKILL.md",
                 "status": "completed",
             })
         write_json(run_dir / "events.json", {
@@ -147,6 +148,16 @@ class AnswerRunEligibilityTests(unittest.TestCase):
             "process_observation_complete": True,
             "provider_response_complete": True,
             "operation_observation_complete": True,
+            "pstack_workspace_receipt": {
+                "schema_version": 2,
+                "mounts": [f"skills/{SKILL}/SKILL.md"] if identity["variant"] == "with_skill" else [],
+                "pre_sha256": "a" * 64,
+                "post_sha256": "a" * 64,
+                "python_path_sha256": "b" * 64,
+                "workspace_root_sha256": hashlib.sha256(
+                    workspace_root.encode("utf-8")
+                ).hexdigest(),
+            },
             "telemetry_schema_version": 3,
             "telemetry": {
                 "schema_version": 3,
@@ -267,6 +278,19 @@ class AnswerRunEligibilityTests(unittest.TestCase):
         write_json(run / "artifact-commit.json", commit)
         report = self.validate()
         issues = [issue for issue in report["issues"] if issue["code"] == "candidate_invocation_invalid"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["category"], "infrastructure_failure")
+
+    def test_malformed_exposure_artifact_is_infrastructure_failure(self) -> None:
+        run = self.runs / CASE / MODEL / "with_skill" / "run-1"
+        events_path = run / "events.json"
+        events_path.write_text('{"schema_version":2,"events":[],"events":[]}', encoding="utf-8")
+        commit_path = run / "artifact-commit.json"
+        commit = json.loads(commit_path.read_text(encoding="utf-8"))
+        commit["inventory_sha256"]["events.json"] = file_digest(events_path).removeprefix("sha256:")
+        write_json(commit_path, commit)
+        report = self.validate()
+        issues = [issue for issue in report["issues"] if issue["code"] == "exposure_invalid"]
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["category"], "infrastructure_failure")
 
@@ -448,6 +472,24 @@ class JudgeReceiptEligibilityTests(unittest.TestCase):
         self.write_receipt(judge={"family": "openai", "model": "gpt-6-astra"})
         self.assertIn("judge_not_cross_family", self.issue_codes(self.validate()))
 
+    def test_cross_family_judge_may_share_a_model_identifier(self) -> None:
+        self.write_receipt(judge={"family": "anthropic", "model": MODEL})
+        self.assertEqual(self.validate()["status"], "eligible")
+
+    def test_empty_comparison_population_is_rejected(self) -> None:
+        self.write_jsonl(self.tasks, [])
+        self.write_jsonl(self.results, [])
+        self.write_receipt(verdict_coverage={"expected": 0, "observed": 0, "complete": True})
+        self.assertIn("comparison_population_empty", self.issue_codes(self.validate()))
+
+    def test_duplicate_receipt_key_is_reported_as_infrastructure_failure(self) -> None:
+        text = self.receipt.read_text(encoding="utf-8")
+        self.receipt.write_text(
+            text.replace('"schema_version": 1,', '"schema_version": 1,\n  "schema_version": 1,', 1),
+            encoding="utf-8",
+        )
+        self.assertIn("judge_evidence_unreadable", self.issue_codes(self.validate()))
+
     def test_stale_task_digest_is_rejected(self) -> None:
         rows = [json.loads(line) for line in self.results.read_text(encoding="utf-8").splitlines()]
         rows[0]["comparison_task_sha256"] = f"sha256:{'f' * 64}"
@@ -493,6 +535,27 @@ class JudgeReceiptEligibilityTests(unittest.TestCase):
         self.results.write_text(first + "\n", encoding="utf-8")
         self.write_receipt(verdict_coverage={"expected": 2, "observed": 1, "complete": False})
         self.assertIn("verdict_coverage", self.issue_codes(self.validate()))
+
+    def test_float_verdict_return_code_is_rejected(self) -> None:
+        result_rows = [json.loads(line) for line in self.results.read_text().splitlines()]
+        result_rows[0]["returncode"] = 0.0
+        self.write_jsonl(self.results, result_rows)
+        self.write_receipt()
+        self.assertIn("verdict_invalid", self.issue_codes(self.validate()))
+
+    def test_float_calibration_return_code_is_rejected(self) -> None:
+        calibration_rows = [json.loads(line) for line in self.calibration_results.read_text().splitlines()]
+        calibration_rows[0]["returncode"] = 0.0
+        self.write_jsonl(self.calibration_results, calibration_rows)
+        self.write_receipt()
+        self.assertIn("calibration_result_invalid", self.issue_codes(self.validate()))
+
+    def test_float_order_swap_return_code_is_rejected(self) -> None:
+        swap_rows = [json.loads(line) for line in self.order_swap_results.read_text().splitlines()]
+        swap_rows[0]["original_returncode"] = 0.0
+        self.write_jsonl(self.order_swap_results, swap_rows)
+        self.write_receipt()
+        self.assertIn("order_swap_result_invalid", self.issue_codes(self.validate()))
 
     def test_stale_receipt_artifact_digest_is_rejected(self) -> None:
         receipt = json.loads(self.receipt.read_text(encoding="utf-8"))

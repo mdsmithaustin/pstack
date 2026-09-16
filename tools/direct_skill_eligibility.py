@@ -75,7 +75,7 @@ def _read_json(path: Path) -> Any:
             object_pairs_hook=_pairs,
             parse_constant=_reject_constant,
         )
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError, EligibilityError) as exc:
         raise EligibilityError(f"cannot read JSON {path}: {exc}") from exc
     _ensure_finite(value)
     return value
@@ -544,7 +544,7 @@ def validate_answer_runs(
     try:
         exposure = exposure_report(runs, manifest, target_skill, split)
     except (LaneError, OSError, ValueError) as exc:
-        issues.append(_issue("missing_measurement", "exposure_unavailable", str(exc)))
+        issues.append(_issue("infrastructure_failure", "exposure_invalid", str(exc)))
     else:
         evidence["exposure_report"] = _canonical_sha256(exposure)
         counts["exposure_runs"] = len(exposure.get("runs", []))
@@ -691,11 +691,11 @@ def validate_judge_receipt(
         issues.append(_issue(
             "missing_measurement", "judge_identity_missing", "judge family and model are required"
         ))
-    elif judge["family"] == answer_family or judge["model"] == answer_model:
+    elif judge["family"] == answer_family:
         issues.append(_issue(
             "missing_measurement",
             "judge_not_cross_family",
-            "judge family and model must differ from the answer family and model",
+            "judge family must differ from the answer family",
         ))
     receipt_digests = receipt.get("evidence_sha256")
     if not isinstance(receipt_digests, dict):
@@ -728,6 +728,12 @@ def validate_judge_receipt(
     issues.extend(result_issues)
     counts["expected_verdicts"] = len(task_index)
     counts["observed_verdicts"] = len(result_index)
+    if not task_index:
+        issues.append(_issue(
+            "missing_measurement",
+            "comparison_population_empty",
+            "comparison tasks must contain at least one pairwise verdict",
+        ))
     if set(task_index) != set(result_index):
         missing = sorted(set(task_index) - set(result_index))
         extra = sorted(set(result_index) - set(task_index))
@@ -789,7 +795,7 @@ def validate_judge_receipt(
         if (
             result.get("schema_version") != 1
             or result.get("observation_complete") is not True
-            or isinstance(result.get("returncode"), bool)
+            or type(result.get("returncode")) is not int
             or result.get("returncode") != 0
             or result.get("winner") not in {"A", "B", "TIE"}
         ):
@@ -840,7 +846,7 @@ def validate_judge_receipt(
             or calibration_id in calibration_predictions
             or winner not in {"A", "B", "TIE"}
             or row.get("observation_complete") is not True
-            or isinstance(row.get("returncode"), bool)
+            or type(row.get("returncode")) is not int
             or row.get("returncode") != 0
         ):
             issues.append(_issue(
@@ -915,9 +921,9 @@ def validate_judge_receipt(
             or swapped not in inverse
             or row.get("original_observation_complete") is not True
             or row.get("swapped_observation_complete") is not True
-            or isinstance(row.get("original_returncode"), bool)
+            or type(row.get("original_returncode")) is not int
             or row.get("original_returncode") != 0
-            or isinstance(row.get("swapped_returncode"), bool)
+            or type(row.get("swapped_returncode")) is not int
             or row.get("swapped_returncode") != 0
         ):
             issues.append(_issue(

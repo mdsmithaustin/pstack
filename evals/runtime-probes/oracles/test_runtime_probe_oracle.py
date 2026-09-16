@@ -425,8 +425,13 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             "PATH=/tmp cat inputs/order-service-note.md",
             "env PATH=/tmp cat inputs/order-service-note.md",
             "rg --hostname-bin=/tmp/mutate --hyperlink-format='file://{host}{path}' foo inputs/order-service-note.md",
+            "rg --pre /tmp/mutate pattern inputs/order-service-note.md",
             "sed -n -e 1p -i inputs/order-service-note.md",
             "sed -n -e 1p --in-place inputs/order-service-note.md",
+            "cat inputs/order-service-note.md\ntouch /tmp/diagnostic",
+            "./bash -lc 'sed -n 1,20p inputs/order-service-note.md'",
+            "./zsh -lc 'sed -n 1,20p inputs/order-service-note.md'",
+            "bash -lc 'sed -n 1,20p inputs/order-service-note.md'",
             'printf "$(touch /tmp/diagnostic)"',
         ):
             workspace = self.workspace("aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb")
@@ -457,7 +462,9 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             "find inputs -type f -delete",
             "find inputs -exec sh -c 'touch changed' ';'",
             "sort -o inputs/changed inputs/source",
+            "sort -oinputs/changed inputs/source",
             "sort --output=inputs/changed inputs/source",
+            "sort --compress-program=/tmp/mutate inputs/source",
         ):
             with self.subTest(command=command):
                 self.assertTrue(runtime_probe_oracle._mutates(command))

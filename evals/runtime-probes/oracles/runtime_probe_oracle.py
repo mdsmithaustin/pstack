@@ -254,7 +254,7 @@ def _shell_body(command: str) -> str | None:
     if (
         len(arguments) == 3
         and Path(arguments[0]).name in {"bash", "dash", "sh", "zsh"}
-        and Path(arguments[0]).parent.as_posix() in {".", "/bin", "/usr/bin"}
+        and Path(arguments[0]).parent.as_posix() in {"/bin", "/usr/bin"}
         and arguments[1].startswith("-")
         and "c" in arguments[1][1:]
     ):
@@ -270,6 +270,8 @@ def _mutates(command: str) -> bool:
     if shell_body is not None:
         lines = [line for line in shell_body.splitlines() if line.strip()]
         return not lines or any(_mutates(line) for line in lines)
+    if "\n" in shell_command or "\r" in shell_command:
+        return True
     try:
         tokens = _command_tokens(shell_command)
     except ValueError:
@@ -334,6 +336,11 @@ def _mutates(command: str) -> bool:
                 return True
             continue
         if name in {"bash", "dash", "sh", "zsh"}:
+            if executable not in {
+                "/bin/bash", "/bin/dash", "/bin/sh", "/bin/zsh",
+                "/usr/bin/bash", "/usr/bin/dash", "/usr/bin/sh", "/usr/bin/zsh",
+            }:
+                return True
             nested = argv[1:]
             options: list[str] = []
             while nested and nested[0].startswith("-"):
@@ -357,7 +364,13 @@ def _mutates(command: str) -> bool:
                 return True
             continue
         if name == "sort":
-            if any(argument == "-o" or argument.startswith("--output=") for argument in argv[1:]):
+            if any(
+                argument == "-o"
+                or argument.startswith("-o")
+                or argument == "--compress-program"
+                or argument.startswith(("--output=", "--compress-program="))
+                for argument in argv[1:]
+            ):
                 return True
             continue
         if re.fullmatch(r"python3?(?:\.\d+)?", name):

@@ -17,7 +17,9 @@ READ_ONLY_COMMANDS = {
 
 
 def _command_segments(command: str) -> list[list[str]] | None:
-    if any(marker in command for marker in ("$(", "`", "<(", ">(", ">", "<")):
+    if "\n" in command or "\r" in command or any(
+        marker in command for marker in ("$(", "`", "<(", ">(", ">", "<")
+    ):
         return None
     try:
         lexer = shlex.shlex(command, posix=False, punctuation_chars="|&;")
@@ -28,7 +30,7 @@ def _command_segments(command: str) -> list[list[str]] | None:
     segments: list[list[str]] = [[]]
     for token in tokens:
         value = token[1:-1] if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'} else token
-        if value in {"|", "&&", ";"}:
+        if value in {"|", "||", "&&", ";", "&"}:
             segments.append([])
         else:
             segments[-1].append(value)
@@ -44,6 +46,11 @@ def _read_only_inspection(command: str) -> bool:
             continue
         executable = segment[0].rsplit("/", 1)[-1]
         if executable in {"bash", "dash", "sh", "zsh"}:
+            if segment[0] not in {
+                "/bin/bash", "/bin/dash", "/bin/sh", "/bin/zsh",
+                "/usr/bin/bash", "/usr/bin/dash", "/usr/bin/sh", "/usr/bin/zsh",
+            }:
+                return False
             nested = list(segment[1:])
             while nested and nested[0].startswith("-"):
                 option = nested.pop(0)
@@ -60,17 +67,28 @@ def _read_only_inspection(command: str) -> bool:
         ):
             return False
         if executable == "sort" and any(
-            argument == "-o" or argument.startswith("--output=")
+            argument == "-o"
+            or argument.startswith("-o")
+            or argument == "--compress-program"
+            or argument.startswith(("--output=", "--compress-program="))
             for argument in segment[1:]
         ):
             return False
         if executable == "rg" and any(
             argument == "-r" or argument.startswith("--replace")
+            or argument == "--pre" or argument.startswith("--pre=")
             for argument in segment[1:]
         ):
             return False
-        if executable == "sed" and "-n" not in segment[1:]:
-            return False
+        if executable == "sed":
+            if "-n" not in segment[1:] or any(
+                argument == "-i"
+                or argument.startswith("-i")
+                or argument == "--in-place"
+                or argument.startswith("--in-place=")
+                for argument in segment[1:]
+            ):
+                return False
     return True
 
 

@@ -78,7 +78,12 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
 
     def test_codex_adapter_quotes_a_path_with_spaces_and_shell_punctuation(self) -> None:
         root = self.root / "skill ci;still-one-path"
-        arguments = adapter_arguments("codex", root)
+        arguments = adapter_arguments(
+            "codex",
+            root,
+            self.repo,
+            protect_workspace=False,
+        )
         parsed = __import__("shlex").split(arguments[1])
         self.assertEqual(parsed[0], str(root / "tools" / "codex-project-only"))
         self.assertEqual(parsed[1:], [

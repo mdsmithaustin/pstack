@@ -92,8 +92,16 @@ class RecordOracleTests(unittest.TestCase):
         for command in (
             "find inputs -type f -delete",
             "sort -o inputs/changed inputs/source",
+            "sort -oinputs/changed inputs/source",
+            "sort --compress-program=/tmp/mutate inputs/source",
             "sed -i '' 's/a/b/' inputs/spec.md",
+            "sed -n '1,20p' -i inputs/spec.md",
             "rg --replace changed pattern inputs/spec.md",
+            "rg --pre /tmp/mutate pattern inputs/spec.md",
+            "cat inputs/spec.md || rm inputs/spec.md",
+            "cat inputs/spec.md & rm inputs/spec.md",
+            "cat inputs/spec.md\nrm inputs/spec.md",
+            "./bash -lc 'cat inputs/spec.md'",
         ):
             with self.subTest(command=command):
                 events = [{"type": "command", "input_summary": command}]
