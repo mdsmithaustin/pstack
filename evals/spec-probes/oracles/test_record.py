@@ -13,6 +13,7 @@ from oracles import check_record
 from oracles.check_record import (
     load_events,
     main as check_record_main,
+    parse_events,
     read_evaluation_artifacts,
     read_output,
 )
@@ -20,6 +21,22 @@ from oracles.specs import CaseSpec
 
 
 class RecordOracleTests(unittest.TestCase):
+    def test_event_parser_rejects_ambiguous_or_nonfinite_json(self) -> None:
+        for text in (
+            '{"schema_version":2,"source":"test","events":[{"type":"file_change"}],"events":[]}',
+            '{"schema_version":2,"source":"test","events":[{"type":"file_change","type":"message"}]}',
+            '{"schema_version":2,"source":"test","events":[],"ignored":NaN}',
+            '{"schema_version":2,"source":"test","events":[],"ignored":1e400}',
+            '{"schema_version":2,"source":"test","events":[],"ignored":"\\ud800"}',
+            '{"schema_version":2,"source":"test","events":[],"ignored":' + "[" * 101 + "0" + "]" * 101 + "}",
+            '[' * 1100 + '0' + ']' * 1100,
+        ):
+            with self.subTest(text=text), self.assertRaisesRegex(
+                ValueError,
+                "cannot read events.json",
+            ):
+                parse_events(text)
+
     def test_accepts_markdown_table_and_structurally_different_prose(self) -> None:
         table = """| Source | Open decision |\n| --- | --- |\n| SP-101 | Which rounding rule applies? |\n| SP-102 | Do touching windows merge? |\n| SP-103 | What counts as a character? |\n| SP-104 | Which overlapping worker effect wins? |"""
         prose = "SP-104 leaves concurrent effects open. SP-102 does not define touching windows. Character counting remains open in SP-103, while SP-101 omits its rounding rule."

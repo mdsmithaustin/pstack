@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import stat
 import sys
@@ -7,6 +8,46 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from oracles.record import evaluate
+
+
+def strict_json_loads(text: str) -> object:
+    def object_from_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        output: dict[str, object] = {}
+        for key, value in pairs:
+            if key in output:
+                raise ValueError(f"duplicate object key: {key}")
+            output[key] = value
+        return output
+
+    def reject_nonfinite(value: str) -> None:
+        raise ValueError(f"non-finite numeric constant: {value}")
+
+    value = json.loads(
+        text,
+        object_pairs_hook=object_from_pairs,
+        parse_constant=reject_nonfinite,
+    )
+
+    def validate(item: object, *, depth: int = 0) -> None:
+        if depth > 100:
+            raise ValueError("JSON value exceeds the maximum nesting depth")
+        if isinstance(item, str):
+            try:
+                item.encode("utf-8", errors="strict")
+            except UnicodeEncodeError as exc:
+                raise ValueError("JSON value contains a surrogate code point") from exc
+        if isinstance(item, float) and not math.isfinite(item):
+            raise ValueError(f"non-finite numeric value: {item}")
+        if isinstance(item, list):
+            for child in item:
+                validate(child, depth=depth + 1)
+        if isinstance(item, dict):
+            for key, child in item.items():
+                validate(key, depth=depth)
+                validate(child, depth=depth + 1)
+
+    validate(value)
+    return value
 
 
 def open_artifact_root(output_dir: Path) -> int:
@@ -85,8 +126,8 @@ def read_output(output_dir: Path) -> str:
 
 def parse_events(text: str) -> list[dict[str, object]]:
     try:
-        envelope = json.loads(text)
-    except json.JSONDecodeError as exc:
+        envelope = strict_json_loads(text)
+    except (json.JSONDecodeError, RecursionError, ValueError) as exc:
         raise ValueError(f"cannot read events.json: {exc}") from exc
     if (
         not isinstance(envelope, dict)

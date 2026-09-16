@@ -110,11 +110,24 @@ def _load_eval_manifest(path: Path) -> dict[str, Any]:
         raise LaneError("manifest dataset_files must map dataset ids to JSONL paths")
     datasets = dict(manifest.get("datasets") or {})
     for dataset_id, relative in dataset_files.items():
-        rows_path = path.parent / str(relative)
-        if not rows_path.is_file():
-            raise LaneError(f"manifest dataset file does not exist: {rows_path}")
+        if not isinstance(relative, str) or not relative:
+            raise LaneError("manifest dataset file paths must be non-empty strings")
+        relative_path = Path(relative)
+        if (
+            relative_path.is_absolute()
+            or relative_path == Path(".")
+            or ".." in relative_path.parts
+            or "\0" in relative
+            or relative_path.as_posix() != relative
+        ):
+            raise LaneError(f"manifest dataset file path must be normalized below its manifest: {relative}")
+        rows_path = path.parent / relative_path
+        try:
+            rows_text = _read_regular_text_below(path.parent, relative_path)
+        except LaneError as exc:
+            raise LaneError(f"cannot read manifest dataset file {rows_path}: {exc}") from exc
         rows: list[Any] = []
-        for line_number, line in enumerate(rows_path.read_text(encoding="utf-8").splitlines(), 1):
+        for line_number, line in enumerate(rows_text.splitlines(), 1):
             if not line.strip():
                 continue
             try:

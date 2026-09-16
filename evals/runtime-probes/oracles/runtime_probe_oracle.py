@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shlex
@@ -26,6 +27,46 @@ class MissingMeasurement(ValueError):
 
 class InfrastructureFailure(ValueError):
     pass
+
+
+def strict_json_loads(text: str) -> Any:
+    def object_from_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        output: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in output:
+                raise ValueError(f"duplicate object key: {key}")
+            output[key] = value
+        return output
+
+    def reject_nonfinite(value: str) -> None:
+        raise ValueError(f"non-finite numeric constant: {value}")
+
+    value = json.loads(
+        text,
+        object_pairs_hook=object_from_pairs,
+        parse_constant=reject_nonfinite,
+    )
+
+    def validate(item: Any, *, depth: int = 0) -> None:
+        if depth > 100:
+            raise ValueError("JSON value exceeds the maximum nesting depth")
+        if isinstance(item, str):
+            try:
+                item.encode("utf-8", errors="strict")
+            except UnicodeEncodeError as error:
+                raise ValueError("JSON value contains a surrogate code point") from error
+        if isinstance(item, float) and not math.isfinite(item):
+            raise ValueError(f"non-finite numeric value: {item}")
+        if isinstance(item, list):
+            for child in item:
+                validate(child, depth=depth + 1)
+        if isinstance(item, dict):
+            for key, child in item.items():
+                validate(key, depth=depth)
+                validate(child, depth=depth + 1)
+
+    validate(value)
+    return value
 
 
 def fail(condition: bool, message: str) -> None:
@@ -97,8 +138,8 @@ def read_output(output_dir: Path) -> str:
 
 def load_events(output_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
     try:
-        envelope = json.loads(read_regular_artifact(output_dir, "events.json"))
-    except json.JSONDecodeError as error:
+        envelope = strict_json_loads(read_regular_artifact(output_dir, "events.json"))
+    except (json.JSONDecodeError, RecursionError, ValueError) as error:
         raise InfrastructureFailure(f"events.json is unreadable: {error}") from error
     if (
         not isinstance(envelope, dict)
@@ -362,11 +403,11 @@ def _trusted_command(command: str, driver: str) -> bool:
 
 
 def _trace_payload(trace: list[str], line_number: object, driver: str) -> dict[str, Any]:
-    if not isinstance(line_number, int) or line_number < 1 or line_number > len(trace):
+    if type(line_number) is not int or line_number < 1 or line_number > len(trace):
         raise InfrastructureFailure("completed command points outside trace.jsonl")
     try:
-        raw = json.loads(trace[line_number - 1])
-    except json.JSONDecodeError as error:
+        raw = strict_json_loads(trace[line_number - 1])
+    except (json.JSONDecodeError, RecursionError, ValueError) as error:
         raise InfrastructureFailure("completed command trace line is not JSON") from error
     if not isinstance(raw, dict):
         raise InfrastructureFailure("completed command trace line is not an object")
@@ -376,8 +417,8 @@ def _trace_payload(trace: list[str], line_number: object, driver: str) -> dict[s
     output = item.get("aggregated_output") or item.get("output") or item.get("result") or ""
     for line in str(output).splitlines():
         try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
+            payload = strict_json_loads(line)
+        except (json.JSONDecodeError, RecursionError, ValueError):
             continue
         if isinstance(payload, dict) and payload.get("driver") == driver:
             return payload

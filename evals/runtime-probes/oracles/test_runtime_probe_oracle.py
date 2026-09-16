@@ -73,6 +73,25 @@ class RuntimeProbeOracleTests(unittest.TestCase):
                 ):
                     runtime_probe_oracle.load_events(root)
 
+    def test_event_loader_rejects_ambiguous_or_nonfinite_json(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "trace.jsonl").write_text("", encoding="utf-8")
+            for text in (
+                '{"schema_version":2,"source":"test","events":[{"type":"file_change"}],"events":[]}',
+                '{"schema_version":2,"source":"test","events":[{"type":"file_change","type":"message"}]}',
+                '{"schema_version":2,"source":"test","events":[],"ignored":NaN}',
+                '{"schema_version":2,"source":"test","events":[],"ignored":1e400}',
+                '{"schema_version":2,"source":"test","events":[],"ignored":"\\ud800"}',
+                '{"schema_version":2,"source":"test","events":[],"ignored":' + "[" * 101 + "0" + "]" * 101 + "}",
+                '[' * 1100 + '0' + ']' * 1100,
+            ):
+                (root / "events.json").write_text(text, encoding="utf-8")
+                with self.subTest(text=text), self.assertRaises(
+                    runtime_probe_oracle.InfrastructureFailure
+                ):
+                    runtime_probe_oracle.load_events(root)
+
     def test_event_loader_rejects_symlinked_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -306,6 +325,15 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         self.assertEqual(
             runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path),
             ("INFRASTRUCTURE_FAILURE", "completed command trace line is not an object"),
+        )
+
+    def test_boolean_trace_line_reference_is_an_infrastructure_failure(self) -> None:
+        workspace = self.workspace("aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb")
+        self.add_order_replays(workspace)
+        workspace.events[0]["raw_ref"] = {"line": True}
+        self.assertEqual(
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path),
+            ("INFRASTRUCTURE_FAILURE", "completed command points outside trace.jsonl"),
         )
 
     def test_unsafe_command_and_file_change_fail(self) -> None:

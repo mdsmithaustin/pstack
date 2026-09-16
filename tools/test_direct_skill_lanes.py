@@ -343,6 +343,53 @@ class ExposureEligibilityTests(unittest.TestCase):
             )["eligible"]
         )
 
+    def test_dataset_file_path_must_be_normalized_below_the_manifest(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "behavior",
+            "template": "matrix",
+            "kind": "positive",
+            "split": "tune",
+        }]
+        for relative in (
+            "../rows.jsonl",
+            "nested/../rows.jsonl",
+            str(self.root / "rows.jsonl"),
+            "rows\0.jsonl",
+        ):
+            with self.subTest(relative=relative):
+                manifest["dataset_files"] = {"matrix": relative}
+                self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertRaisesRegex(LaneError, "normalized below its manifest"):
+                    exposure_report(
+                        self.root / "runs",
+                        self.manifest,
+                        "verify-commands",
+                        "tune",
+                    )
+
+    def test_dataset_file_path_must_not_cross_a_symlink(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "behavior",
+            "template": "matrix",
+            "kind": "positive",
+            "split": "tune",
+        }]
+        manifest["dataset_files"] = {"matrix": "rows.jsonl"}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        target = self.root / "real-rows.jsonl"
+        target.write_text('{"id":"row"}\n', encoding="utf-8")
+        (self.root / "rows.jsonl").symlink_to(target)
+
+        with self.assertRaisesRegex(LaneError, "symlink"):
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )
+
     def test_dataset_file_rejects_duplicate_keys_like_the_pinned_runner(self) -> None:
         manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
         manifest["cases"] = [{
