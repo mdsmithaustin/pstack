@@ -335,7 +335,8 @@ def trusted_replays(output_dir: Path, driver: str, target: str) -> tuple[list[di
         raise MissingMeasurement(f"{driver} must run exactly twice for the bounded replay")
     payloads: list[dict[str, Any]] = []
     for event in attempts:
-        if event.get("status") != "completed" or event.get("exit_code") != 0:
+        exit_code = event.get("exit_code")
+        if event.get("status") != "completed" or type(exit_code) is not int or exit_code != 0:
             raise MissingMeasurement(f"{driver} did not complete successfully twice")
         raw_ref = event.get("raw_ref")
         if not isinstance(raw_ref, dict):

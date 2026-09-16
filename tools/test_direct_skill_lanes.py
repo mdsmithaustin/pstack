@@ -13,6 +13,8 @@ from unittest.mock import patch
 import direct_skill_lanes as lane_module
 from direct_skill_lanes import (
     LaneError,
+    _eval_contract_sha256,
+    _load_eval_manifest,
     _tracked_tree_files,
     exposure_report,
     filter_prepared_tasks,
@@ -281,13 +283,187 @@ class ExposureEligibilityTests(unittest.TestCase):
         payload = {
             "schema_version": 2,
             "population": "answer",
-            "eval_contract_sha256": f"sha256:{'0' * 64}",
+            "eval_contract_sha256": _eval_contract_sha256(
+                _load_eval_manifest(self.manifest),
+                self.manifest,
+                "tune",
+            ),
             "identities": identities,
         }
         design = {**payload, "design_sha256": canonical_digest(payload)}
         runs = self.root / "runs"
         runs.mkdir(exist_ok=True)
         (runs / "answer-design.json").write_text(json.dumps(design), encoding="utf-8")
+
+    def test_eval_contract_matches_the_pinned_harness_fixture(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        self.assertEqual(
+            _eval_contract_sha256(manifest, self.manifest, "tune"),
+            "sha256:a171c9c0660e59d5bb3e68cdda34d75dc9f6766a2af4a7ad5b5ad711b631ad25",
+        )
+
+    def test_unused_dataset_is_supported_and_bound_into_the_contract(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["datasets"] = {"unused": [{"id": "row", "value": "unused"}]}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        self.assertTrue(
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )["eligible"]
+        )
+
+    def test_dataset_file_cases_use_the_runner_materialization_contract(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "behavior",
+            "template": "matrix",
+            "kind": "positive",
+            "split": "tune",
+            "prompt": "check {value}",
+        }]
+        manifest["dataset_files"] = {"matrix": "rows.jsonl"}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        (self.root / "rows.jsonl").write_text(
+            json.dumps({"id": "row", "value": "dataset"}) + "\n",
+            encoding="utf-8",
+        )
+        self.write_events("behavior-row", "with_skill", "verify-commands")
+        self.write_events("behavior-row", "old_skill", None)
+        self.assertTrue(
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )["eligible"]
+        )
+
+    def test_dataset_file_rejects_duplicate_keys_like_the_pinned_runner(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "behavior",
+            "template": "matrix",
+            "kind": "positive",
+            "split": "tune",
+        }]
+        manifest["dataset_files"] = {"matrix": "rows.jsonl"}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        (self.root / "rows.jsonl").write_text(
+            '{"id":"one","id":"two"}\n',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(LaneError, "duplicate object key"):
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )
+
+    def test_dataset_file_rejects_nonfinite_numbers_like_the_pinned_runner(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "behavior",
+            "template": "matrix",
+            "kind": "positive",
+            "split": "tune",
+        }]
+        manifest["dataset_files"] = {"matrix": "rows.jsonl"}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        (self.root / "rows.jsonl").write_text(
+            '{"id":"row","value":NaN}\n',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(LaneError, "non-finite numeric constant"):
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )
+
+    def test_dataset_file_rejects_overflowed_numbers_like_the_pinned_runner(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "behavior",
+            "template": "matrix",
+            "kind": "positive",
+            "split": "tune",
+        }]
+        manifest["dataset_files"] = {"matrix": "rows.jsonl"}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        (self.root / "rows.jsonl").write_text(
+            '{"id":"row","value":1e400}\n',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(LaneError, "non-finite numeric value"):
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )
+
+    def test_dataset_file_rejects_surrogates_like_the_pinned_runner(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "behavior",
+            "template": "matrix",
+            "kind": "positive",
+            "split": "tune",
+        }]
+        manifest["dataset_files"] = {"matrix": "rows.jsonl"}
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        (self.root / "rows.jsonl").write_text(
+            '{"id":"row","value":"\\ud800"}\n',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(LaneError, "surrogate code point"):
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )
+
+    def test_event_envelope_rejects_an_ignored_overflowed_number(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        text = events_path.read_text(encoding="utf-8")
+        events_path.write_text(text.replace("{", '{"ignored":1e400,', 1), encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "non-finite numeric value"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_event_envelope_rejects_an_ignored_surrogate(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        text = events_path.read_text(encoding="utf-8")
+        events_path.write_text(
+            text.replace("{", '{"ignored":"\\ud800",', 1),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(LaneError, "surrogate code point"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_event_envelope_rejects_excessive_nesting(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        text = events_path.read_text(encoding="utf-8")
+        nested = "[" * 101 + "0" + "]" * 101
+        events_path.write_text(
+            text.replace("{", f'{{"ignored":{nested},', 1),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(LaneError, "maximum nesting depth"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
     def plan_run(self, case: str, variant: str, run_number: int = 1) -> str:
         design_path = self.root / "runs" / "answer-design.json"
@@ -664,6 +840,40 @@ class ExposureEligibilityTests(unittest.TestCase):
         identities.append(duplicate)
         self.write_design(identities)
         with self.assertRaisesRegex(LaneError, "duplicate answer design run coordinate"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_rejects_answer_design_from_a_different_manifest_contract(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        design_path = self.root / "runs" / "answer-design.json"
+        design = json.loads(design_path.read_text(encoding="utf-8"))
+        design["eval_contract_sha256"] = f"sha256:{'f' * 64}"
+        payload = {
+            key: design[key]
+            for key in ("schema_version", "population", "eval_contract_sha256", "identities")
+        }
+        design["design_sha256"] = canonical_digest(payload)
+        design_path.write_text(json.dumps(design), encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "selected manifest contract"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_contract_binding_covers_the_complete_script_oracle_tree(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        behavior = next(case for case in manifest["cases"] if case["id"] == "behavior")
+        behavior["assertions"] = [{
+            "type": "script",
+            "command": ["python3", "oracles/check.py", "{output_dir}"],
+        }]
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        oracles = self.root / "oracles"
+        oracles.mkdir()
+        (oracles / "check.py").write_text("print('PASS')\n", encoding="utf-8")
+        support = oracles / "support.txt"
+        support.write_text("first", encoding="utf-8")
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        support.write_text("changed", encoding="utf-8")
+        with self.assertRaisesRegex(LaneError, "selected manifest contract"):
             exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
 
 

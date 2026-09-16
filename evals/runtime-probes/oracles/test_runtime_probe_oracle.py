@@ -235,6 +235,15 @@ class RuntimeProbeOracleTests(unittest.TestCase):
         workspace.add_driver("verify_order_service.py", "order_service.py", "c" * 24, ORDER_OBSERVATIONS, reachability=ORDER_REACHABILITY)
         self.assertEqual(runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "MISSING_MEASUREMENT")
 
+    def test_boolean_false_is_not_a_successful_driver_exit(self) -> None:
+        workspace = self.workspace("aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb")
+        self.add_order_replays(workspace)
+        workspace.events[0]["exit_code"] = False
+        self.assertEqual(
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0],
+            "MISSING_MEASUREMENT",
+        )
+
     def test_unsafe_command_and_file_change_fail(self) -> None:
         for event in (
             {"type": "command", "input_summary": "rm inputs/order_service.py"},

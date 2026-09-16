@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import shlex
@@ -24,6 +25,46 @@ PAIRED_VARIANTS = ("with_skill", "old_skill")
 
 class LaneError(ValueError):
     pass
+
+
+def _strict_json_loads(text: str) -> Any:
+    def object_from_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        output: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in output:
+                raise ValueError(f"duplicate object key: {key}")
+            output[key] = value
+        return output
+
+    def reject_nonfinite(value: str) -> None:
+        raise ValueError(f"non-finite numeric constant: {value}")
+
+    value = json.loads(
+        text,
+        object_pairs_hook=object_from_pairs,
+        parse_constant=reject_nonfinite,
+    )
+
+    def validate_persistable_value(item: Any, *, depth: int = 0) -> None:
+        if depth > 100:
+            raise ValueError("JSON value exceeds the maximum nesting depth")
+        if isinstance(item, str):
+            try:
+                item.encode("utf-8", errors="strict")
+            except UnicodeEncodeError as exc:
+                raise ValueError("JSON value contains a surrogate code point") from exc
+        if isinstance(item, float) and not math.isfinite(item):
+            raise ValueError(f"non-finite numeric value: {item}")
+        if isinstance(item, list):
+            for child in item:
+                validate_persistable_value(child, depth=depth + 1)
+        if isinstance(item, dict):
+            for key, child in item.items():
+                validate_persistable_value(key, depth=depth)
+                validate_persistable_value(child, depth=depth + 1)
+
+    validate_persistable_value(value)
+    return value
 
 
 def _is_within(path: Path, root: Path) -> bool:
@@ -52,12 +93,39 @@ def _reject_symlink_chain(root: Path, relative: Path) -> None:
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        value = _strict_json_loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
         raise LaneError(f"cannot read JSON from {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise LaneError(f"expected a JSON object in {path}")
     return value
+
+
+def _load_eval_manifest(path: Path) -> dict[str, Any]:
+    manifest = _read_json(path)
+    dataset_files = manifest.pop("dataset_files", None)
+    if dataset_files is None:
+        return manifest
+    if not isinstance(dataset_files, dict):
+        raise LaneError("manifest dataset_files must map dataset ids to JSONL paths")
+    datasets = dict(manifest.get("datasets") or {})
+    for dataset_id, relative in dataset_files.items():
+        rows_path = path.parent / str(relative)
+        if not rows_path.is_file():
+            raise LaneError(f"manifest dataset file does not exist: {rows_path}")
+        rows: list[Any] = []
+        for line_number, line in enumerate(rows_path.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                rows.append(_strict_json_loads(line))
+            except (json.JSONDecodeError, ValueError) as exc:
+                raise LaneError(
+                    f"manifest dataset line is invalid JSON: {rows_path}:{line_number}: {exc}"
+                ) from exc
+        datasets[str(dataset_id)] = rows
+    manifest["datasets"] = datasets
+    return manifest
 
 
 def _read_regular_text_below(root: Path, relative: Path) -> str:
@@ -112,8 +180,8 @@ def _read_regular_text_below(root: Path, relative: Path) -> str:
 
 def _read_json_below(root: Path, relative: Path, *, object_only: bool) -> Any:
     try:
-        value = json.loads(_read_regular_text_below(root, relative))
-    except json.JSONDecodeError as exc:
+        value = _strict_json_loads(_read_regular_text_below(root, relative))
+    except (json.JSONDecodeError, ValueError) as exc:
         raise LaneError(f"cannot read JSON from {root / relative}: {exc}") from exc
     if object_only and not isinstance(value, dict):
         raise LaneError(f"expected a JSON object in {root / relative}")
@@ -668,9 +736,137 @@ def _canonical_json_sha256(value: Any) -> str:
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
 
 
+def _apply_dataset_row(value: Any, row: dict[str, Any]) -> Any:
+    if isinstance(value, str):
+        output = value
+        for key, cell in row.items():
+            output = output.replace("{" + str(key) + "}", str(cell))
+        return output
+    if isinstance(value, list):
+        return [_apply_dataset_row(item, row) for item in value]
+    if isinstance(value, dict):
+        return {key: _apply_dataset_row(item, row) for key, item in value.items()}
+    return value
+
+
+def _materialize_dataset_cases(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    cases = manifest.get("cases", [])
+    if not isinstance(cases, list):
+        raise LaneError("manifest cases must be a list")
+    datasets = manifest.get("datasets") or {}
+    output: list[dict[str, Any]] = []
+    for case_index, case in enumerate(cases, 1):
+        if not isinstance(case, dict) or not all(isinstance(key, str) for key in case):
+            raise LaneError(f"manifest case {case_index} must be an object with string keys")
+        dataset_id = case.get("template")
+        if not dataset_id:
+            output.append(dict(case))
+            continue
+        rows = datasets.get(str(dataset_id))
+        if not isinstance(rows, list) or not rows:
+            raise LaneError(f"manifest case template references an unknown dataset: {dataset_id}")
+        for row_index, row in enumerate(rows, 1):
+            if not isinstance(row, dict) or not all(isinstance(key, str) for key in row):
+                raise LaneError(f"manifest dataset row {row_index} must be an object with string keys")
+            materialized = {
+                key: _apply_dataset_row(value, row)
+                for key, value in case.items()
+                if key != "template"
+            }
+            materialized["id"] = f"{case.get('id')}-{row.get('id', row_index)}"
+            materialized["dataset"] = str(dataset_id)
+            output.append(materialized)
+    return output
+
+
+def _eval_contract_sha256(manifest: dict[str, Any], manifest_path: Path, split: str) -> str:
+    cases = [
+        case for case in _materialize_dataset_cases(manifest)
+        if case.get("split") == split
+    ]
+    referenced: set[str] = set()
+    script_roots: set[Path] = set()
+    manifest_dir = manifest_path.parent.resolve()
+    for case in cases:
+        prompt_ref = case.get("prompt_ref")
+        if isinstance(prompt_ref, str) and prompt_ref:
+            referenced.add(prompt_ref)
+        referenced.update(str(value) for value in (case.get("files") or []))
+        assertions = [*(case.get("assertions") or []), *[
+            assertion
+            for turn in (case.get("turns") or [])
+            if isinstance(turn, dict)
+            for assertion in (turn.get("assertions") or [])
+        ]]
+        for assertion in assertions:
+            if not isinstance(assertion, dict):
+                continue
+            if assertion.get("type") == "golden_output":
+                reference = assertion.get("reference", assertion.get("value"))
+                if isinstance(reference, str) and reference:
+                    referenced.add(reference)
+            if assertion.get("type") != "script":
+                continue
+            command = assertion.get("command")
+            parts = [command] if isinstance(command, str) else command
+            if not isinstance(parts, list) or not all(isinstance(part, str) for part in parts):
+                continue
+            for part in parts:
+                candidate = Path(part)
+                if candidate.is_absolute() or ".." in candidate.parts:
+                    continue
+                resolved = (manifest_dir / candidate).resolve()
+                if not resolved.is_file():
+                    continue
+                try:
+                    relative = resolved.relative_to(manifest_dir)
+                except ValueError as exc:
+                    raise LaneError(f"eval contract path escapes manifest directory: {part}") from exc
+                if len(relative.parts) == 1:
+                    raise LaneError("script oracles must live in a dedicated subdirectory")
+                referenced.add(relative.as_posix())
+                script_roots.add(manifest_dir / relative.parts[0])
+    files: list[dict[str, str]] = []
+    for relative in sorted(referenced):
+        candidate = (manifest_path.parent / relative).resolve()
+        try:
+            display = candidate.relative_to(manifest_dir).as_posix()
+        except ValueError as exc:
+            raise LaneError(f"eval contract path escapes manifest directory: {relative}") from exc
+        if not candidate.is_file():
+            files.append({"path": display, "availability": "missing"})
+            continue
+        files.append({
+            "path": display,
+            "sha256": hashlib.sha256(candidate.read_bytes()).hexdigest(),
+        })
+    oracle_trees: list[dict[str, str]] = []
+    for root in sorted(script_roots):
+        digest = hashlib.sha256()
+        for candidate in sorted(root.rglob("*")):
+            if candidate.is_symlink():
+                raise LaneError(f"script oracle tree contains a symlink: {candidate}")
+            if not candidate.is_file():
+                continue
+            relative = candidate.relative_to(root).as_posix()
+            digest.update(relative.encode("utf-8") + b"\0")
+            digest.update(candidate.read_bytes())
+        oracle_trees.append({
+            "path": root.relative_to(manifest_dir).as_posix(),
+            "sha256": digest.hexdigest(),
+        })
+    return _canonical_json_sha256({
+        "schema_version": 1,
+        "manifest": manifest,
+        "referenced_files": files,
+        "script_oracle_trees": oracle_trees,
+    })
+
+
 def _expected_exposure_runs(
     runs: Path,
     expected_case_ids: set[str],
+    expected_contract_digest: str,
 ) -> dict[str, dict[str, Any]]:
     design_path = Path("answer-design.json")
     design = _read_json_below(runs, design_path, object_only=True)
@@ -680,6 +876,8 @@ def _expected_exposure_runs(
     contract_digest = design.get("eval_contract_sha256")
     if not isinstance(contract_digest, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", contract_digest) is None:
         raise LaneError("answer design has an invalid eval contract digest")
+    if contract_digest != expected_contract_digest:
+        raise LaneError("answer design does not match the selected manifest contract")
     if not isinstance(identities, list):
         raise LaneError("answer design identities must be a list")
 
@@ -809,14 +1007,11 @@ def _case_requires_target_read(case: dict[str, Any]) -> bool:
 
 
 def exposure_report(runs: Path, manifest_path: Path, target_skill: str, split: str) -> dict[str, Any]:
-    manifest = _read_json(manifest_path)
-    cases = manifest.get("cases")
-    if not isinstance(cases, list):
-        raise LaneError("manifest cases must be a list")
-    case_ids = [case.get("id") for case in cases if isinstance(case, dict)]
+    manifest = _load_eval_manifest(manifest_path)
+    cases = _materialize_dataset_cases(manifest)
+    case_ids = [case.get("id") for case in cases]
     if (
-        len(case_ids) != len(cases)
-        or not all(isinstance(case_id, str) and case_id for case_id in case_ids)
+        not all(isinstance(case_id, str) and case_id for case_id in case_ids)
         or len(case_ids) != len(set(case_ids))
     ):
         raise LaneError("manifest case ids must be non-empty and unique")
@@ -827,7 +1022,8 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str, split: s
     selected_case_ids = {case["id"] for case in selected_cases}
     if not selected_case_ids:
         raise LaneError(f"manifest has no answer cases in split {split!r}")
-    expected_runs = _expected_exposure_runs(runs, selected_case_ids)
+    expected_contract_digest = _eval_contract_sha256(manifest, manifest_path, split)
+    expected_runs = _expected_exposure_runs(runs, selected_case_ids, expected_contract_digest)
     must_read = {
         case.get("id")
         for case in selected_cases
