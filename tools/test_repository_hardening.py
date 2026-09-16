@@ -38,6 +38,12 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn("pii-scope: repository", SHARED_WORKFLOW)
         self.assertIn("evals-dir: evals", SHARED_WORKFLOW)
         self.assertIn("trigger-cases: tools/skill-trigger-cases.json", SHARED_WORKFLOW)
+        action_references = re.findall(r"^\s*- uses: (\S+)", SHARED_WORKFLOW, re.MULTILINE)
+        self.assertEqual(len(action_references), 2)
+        for action_reference in action_references:
+            self.assertRegex(action_reference, r"^[^@\s]+@[0-9a-f]{40}$")
+        self.assertIn("persist-credentials: false", SHARED_WORKFLOW)
+        self.assertIn("REQUIRE_PINNED_UPSTREAM_OBJECT: \"1\"", SHARED_WORKFLOW)
 
     def test_ruleset_has_required_branch_protections(self) -> None:
         self.assertEqual(RULESET["enforcement"], "active")
@@ -54,6 +60,10 @@ class RepositoryHardening(unittest.TestCase):
         status = rules["required_status_checks"]
         self.assertTrue(status["strict_required_status_checks_policy"])
         self.assertIn({"context": "skills", "integration_id": 15368}, status["required_status_checks"])
+        self.assertIn(
+            {"context": "direct-eval-tests", "integration_id": 15368},
+            status["required_status_checks"],
+        )
         self.assertIn("deletion", rules)
         self.assertIn("non_fast_forward", rules)
 

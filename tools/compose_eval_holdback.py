@@ -6,6 +6,7 @@ import json
 import math
 import re
 import shutil
+import stat
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -53,7 +54,7 @@ def read_json(path: Path) -> dict[str, Any]:
             parse_constant=reject_nonfinite,
         )
         validate(value)
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
         raise CompositionError(f"cannot read {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise CompositionError(f"{path} must contain one JSON object")
@@ -122,8 +123,11 @@ def checked_files(root: Path) -> list[Path]:
             raise CompositionError(f"symlinks are not allowed: {path}")
         if path.is_dir():
             continue
-        if not path.is_file():
+        metadata = path.stat(follow_symlinks=False)
+        if not stat.S_ISREG(metadata.st_mode):
             raise CompositionError(f"special files are not allowed: {path}")
+        if metadata.st_nlink != 1:
+            raise CompositionError(f"hard-linked files are not allowed: {path}")
         if "__pycache__" not in path.parts and "runs" not in path.parts:
             files.append(path)
     return files
@@ -163,6 +167,38 @@ def validate_cases(public: dict[str, Any], overlay: dict[str, Any]) -> list[dict
             raise CompositionError(f"{case_id} trigger case needs boolean should_trigger")
         if kind != "trigger" and "should_trigger" in case:
             raise CompositionError(f"{case_id} behavior case must not set should_trigger")
+        prompt_sources = [
+            key for key in ("prompt", "prompt_ref", "turns") if key in case
+        ]
+        if "prompt" in case and (
+            not isinstance(case["prompt"], str) or not case["prompt"].strip()
+        ):
+            raise CompositionError(f"{case_id} prompt must be non-empty text")
+        if "prompt_ref" in case and (
+            not isinstance(case["prompt_ref"], str) or not case["prompt_ref"].strip()
+        ):
+            raise CompositionError(
+                f"{case_id} prompt_ref must be a string with non-whitespace content"
+            )
+        if "turns" in case:
+            turns = case["turns"]
+            if (
+                not isinstance(turns, list)
+                or not turns
+                or any(
+                    not isinstance(turn, dict)
+                    or not isinstance(turn.get("prompt"), str)
+                    or not turn["prompt"].strip()
+                    for turn in turns
+                )
+            ):
+                raise CompositionError(
+                    f"{case_id} turns must be a non-empty list of prompted objects"
+                )
+        if len(prompt_sources) != 1:
+            raise CompositionError(
+                f"{case_id} must define exactly one of prompt, prompt_ref, or turns"
+            )
         seen.add(case_id)
         validated.append(case)
     behavior = [case for case in validated if case.get("kind") != "trigger"]
@@ -202,7 +238,7 @@ def validate_case_references(
 
     def validate_script(case_id: str, assertion: object) -> None:
         if not isinstance(assertion, dict):
-            return
+            raise CompositionError(f"{case_id} assertions must contain objects")
         if assertion.get("type") == "golden_output":
             validate_reference(
                 case_id,
@@ -245,17 +281,23 @@ def validate_case_references(
             references.append(prompt_ref)
         for reference in references:
             validate_reference(case_id, reference, "file reference")
-        assertions_value = case.get("assertions") or []
+        assertions_value = case.get("assertions")
+        if assertions_value is None:
+            assertions_value = []
         if not isinstance(assertions_value, list):
             raise CompositionError(f"{case_id} assertions must be a list")
         assertions = list(assertions_value)
-        turns = case.get("turns") or []
+        turns = case.get("turns")
+        if turns is None:
+            turns = []
         if not isinstance(turns, list):
             raise CompositionError(f"{case_id} turns must be a list")
         for turn in turns:
             if not isinstance(turn, dict):
                 raise CompositionError(f"{case_id} turns must contain objects")
-            turn_assertions = turn.get("assertions") or []
+            turn_assertions = turn.get("assertions")
+            if turn_assertions is None:
+                turn_assertions = []
             if not isinstance(turn_assertions, list):
                 raise CompositionError(f"{case_id} turn assertions must be a list")
             assertions.extend(turn_assertions)
@@ -268,6 +310,14 @@ def compose(repo: Path, skill_name: str, overlay_path: Path, output_root: Path) 
     unresolved_overlay = overlay_path.absolute()
     if unresolved_overlay == repo or repo in unresolved_overlay.parents:
         raise CompositionError("the private overlay must be outside the repository")
+    if path_contains_symlink(unresolved_overlay):
+        raise CompositionError("the private overlay must not contain symlinks")
+    try:
+        overlay_metadata = unresolved_overlay.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise CompositionError(f"cannot inspect private overlay: {exc}") from exc
+    if not stat.S_ISREG(overlay_metadata.st_mode) or overlay_metadata.st_nlink != 1:
+        raise CompositionError("the private overlay must be a regular single-link file")
     overlay_path = unresolved_overlay.resolve()
     if overlay_path == repo or repo in overlay_path.parents:
         raise CompositionError("the private overlay must be outside the repository")

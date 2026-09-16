@@ -246,31 +246,11 @@ def _command_tokens(command: str) -> list[str]:
     return list(lexer)
 
 
-def _shell_body(command: str) -> str | None:
-    try:
-        arguments = shlex.split(command)
-    except ValueError:
-        return None
-    if (
-        len(arguments) == 3
-        and Path(arguments[0]).name in {"bash", "dash", "sh", "zsh"}
-        and Path(arguments[0]).parent.as_posix() in {"/bin", "/usr/bin"}
-        and arguments[1].startswith("-")
-        and "c" in arguments[1][1:]
-    ):
-        return arguments[2]
-    return None
-
-
 def _mutates(command: str) -> bool:
     shell_command = re.sub(r"\\\r?\n", "", command)
-    if any(marker in shell_command for marker in ("$(", "`", "<(", ">(")):
-        return True
-    shell_body = _shell_body(shell_command)
-    if shell_body is not None:
-        lines = [line for line in shell_body.splitlines() if line.strip()]
-        return not lines or any(_mutates(line) for line in lines)
     if "\n" in shell_command or "\r" in shell_command:
+        return True
+    if any(marker in shell_command for marker in ("$(", "`", "<(", ">(")):
         return True
     try:
         tokens = _command_tokens(shell_command)
@@ -336,26 +316,7 @@ def _mutates(command: str) -> bool:
                 return True
             continue
         if name in {"bash", "dash", "sh", "zsh"}:
-            if executable not in {
-                "/bin/bash", "/bin/dash", "/bin/sh", "/bin/zsh",
-                "/usr/bin/bash", "/usr/bin/dash", "/usr/bin/sh", "/usr/bin/zsh",
-            }:
-                return True
-            nested = argv[1:]
-            options: list[str] = []
-            while nested and nested[0].startswith("-"):
-                options.append(nested.pop(0))
-            command_mode = any(
-                option.startswith("-")
-                and not option.startswith("--")
-                and "c" in option[1:]
-                for option in options
-            )
-            if len(nested) != 1 or not command_mode:
-                return True
-            if _mutates(nested[0]):
-                return True
-            continue
+            return True
         if name == "find":
             mutating_find_options = {
                 "-delete", "-exec", "-execdir", "-fls", "-fprint", "-fprintf", "-ok", "-okdir",
@@ -457,12 +418,7 @@ def _argv_runs_probe(argv: list[str]) -> bool:
             argv.pop(0)
         return _argv_runs_probe(argv)
     if name in {"bash", "dash", "sh", "zsh"}:
-        options: list[str] = []
-        while argv and argv[0].startswith("-"):
-            options.append(argv.pop(0))
-        if len(argv) != 1 or not any("c" in option.lstrip("-") for option in options):
-            return True
-        return _command_runs_probe(argv[0])
+        return True
     if name in {"cat", "head", "tail", "wc", "ls", "stat"}:
         return False
     if name == "sed":
@@ -478,10 +434,10 @@ def _argv_runs_probe(argv: list[str]) -> bool:
 
 
 def _command_runs_probe(command: str) -> bool:
-    shell_body = _shell_body(command)
-    if shell_body is not None:
-        lines = [line for line in shell_body.splitlines() if line.strip()]
-        return not lines or any(_command_runs_probe(line) for line in lines)
+    if "\n" in command or "\r" in command or any(
+        marker in command for marker in ("$(", "`", "<(", ">(")
+    ):
+        return True
     try:
         tokens = _command_tokens(command)
     except ValueError:
@@ -513,11 +469,6 @@ def _trusted_invocation(command: str, driver: str) -> TrustedInvocation | None:
         arguments = shlex.split(command)
     except ValueError:
         return None
-    if len(arguments) == 3 and arguments[0] in {"/bin/bash", "/bin/sh", "/bin/zsh"} and arguments[1] in {"-c", "-lc"}:
-        try:
-            arguments = shlex.split(arguments[2])
-        except ValueError:
-            return None
     if len(arguments) != 2:
         return None
     executable = PurePosixPath(arguments[0])
@@ -526,7 +477,7 @@ def _trusted_invocation(command: str, driver: str) -> TrustedInvocation | None:
         not executable.is_absolute()
         or executable.as_posix() != arguments[0]
         or any(part in {"", ".", ".."} for part in executable.parts)
-        or re.fullmatch(r"python3(?:\.\d+)?", executable.name) is None
+        or re.fullmatch(r"python3?(?:\.\d+)?", executable.name) is None
         or not driver_path.is_absolute()
         or driver_path.as_posix() != arguments[1]
         or any(part in {"", ".", ".."} for part in driver_path.parts)

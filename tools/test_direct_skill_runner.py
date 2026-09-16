@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import tempfile
 import unittest
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
+
+import direct_skill_runner
 
 from direct_skill_runner import (
     RECEIPT_KEY,
+    RunnerError,
     decorate_backend,
     pinned_runner_argv,
+    parse_arguments,
     runner_spec,
+    verify_runner_provenance,
 )
 
 
@@ -118,7 +126,66 @@ class DirectSkillRunnerTests(unittest.TestCase):
             self.assertEqual(runner_spec(skill_ci), spec)
             self.assertEqual(command[command.index("--from") + 1], spec)
             self.assertIn(str(script.resolve()), command)
+            self.assertNotIn("--inside-pinned-runner", command)
             self.assertEqual(command[-3:], ["run-agent", "--agent", "codex"])
+
+    def test_internal_handoff_requires_distribution_provenance_matching_the_pin(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            module = root / "site-packages" / "skill_benchmark.py"
+            module.parent.mkdir()
+            module.write_text("", encoding="utf-8")
+            commit = "c2a1735983fd7827491ad4d89f9bebe9e8e229a0"
+            spec = f"git+https://github.com/mdsmithaustin/skill-eval-harness.git@{commit}"
+
+            class Distribution:
+                @staticmethod
+                def locate_file(value):
+                    return module.parent / value
+
+                @staticmethod
+                def read_text(name):
+                    self.assertEqual(name, "direct_url.json")
+                    return (
+                        '{"url":"https://github.com/mdsmithaustin/skill-eval-harness.git",'
+                        '"vcs_info":{"vcs":"git","commit_id":"' + commit
+                        + '","requested_revision":"' + commit + '"}}'
+                    )
+
+            with mock.patch(
+                "direct_skill_runner.metadata.distribution",
+                return_value=Distribution(),
+            ), mock.patch.object(direct_skill_runner.sys, "prefix", str(root)), mock.patch.object(
+                direct_skill_runner.sys, "base_prefix", str(root / "base")
+            ), mock.patch.object(
+                direct_skill_runner.sys,
+                "executable",
+                str(root / "bin" / "python"),
+            ), mock.patch.object(
+                direct_skill_runner.sys,
+                "flags",
+                SimpleNamespace(isolated=1),
+            ):
+                (root / "bin").mkdir()
+                (root / "bin" / "python").write_text("", encoding="utf-8")
+                verify_runner_provenance(SimpleNamespace(__file__=module), spec)
+                with self.assertRaisesRegex(RunnerError, "does not match runner.lock"):
+                    verify_runner_provenance(SimpleNamespace(__file__=module), spec[:-1] + "1")
+                with self.assertRaisesRegex(RunnerError, "outside the pinned installation"):
+                    verify_runner_provenance(
+                        SimpleNamespace(__file__=root / "shadow" / "skill_benchmark.py"),
+                        spec,
+                    )
+
+    def test_former_internal_flag_is_not_a_supported_entry_point(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parse_arguments([
+                "--inside-pinned-runner",
+                "--backend",
+                "codex",
+                "--",
+                "run-agent",
+            ])
 
 
 if __name__ == "__main__":

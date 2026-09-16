@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 import tomllib
@@ -22,6 +23,13 @@ IGNORED = (
     "skills/unslop/evals/eval-runs/transcript.jsonl",
     "review-inbox/harvest.md",
     "skills/unslop/evals/review-inbox/harvest.md",
+    "evals/runtime-probes/tasks.jsonl",
+    "evals/runtime-probes/answers/case/run-1/output.md",
+    "evals/runtime-probes/judge-transcripts/run-1/prompt.md",
+    "evals/runtime-probes/compare-results.jsonl",
+    "evals/runtime-probes/grade.json",
+    "evals/runtime-probes/report.md",
+    "evals/runtime-probes/custom/compare-results.jsonl",
 )
 
 TRACKABLE = (
@@ -46,13 +54,21 @@ GENERATED_NAMES = {
     "benchmark-objective.json",
     "events.json",
     "grade.json",
+    "exposure.json",
     "judge.jsonl",
     "metrics.json",
     "output.md",
     "report.md",
     "trace.jsonl",
     "trigger-matrix.json",
+    "tasks.all.jsonl",
+    "tasks.jsonl",
+    "compare-results.jsonl",
+    "compare-summary.json",
+    "compare-tasks.jsonl",
+    "compare-truth.json",
 }
+GENERATED_DIRECTORIES = {"answers", "judge-transcripts"}
 
 WHY_EVALS_LIVE_OUTSIDE_SKILLS = (
     "A skill installer copies a skill directory verbatim and offers no exclude "
@@ -100,7 +116,13 @@ class EvalArtifactsStayOutOfGit(unittest.TestCase):
                 self.assertTrue((suite / "shared-benchmark.json").is_file())
                 self.assertTrue(any((suite / "oracles").glob("*.py")))
                 self.assertFalse(ignored(f"evals/{skill_name}/shared-benchmark.json"))
-        generated = [path for path in tracked if "runs" in Path(path).parts or Path(path).name in GENERATED_NAMES]
+        generated = [
+            path
+            for path in tracked
+            if "runs" in Path(path).parts
+            or not GENERATED_DIRECTORIES.isdisjoint(Path(path).parts)
+            or Path(path).name in GENERATED_NAMES
+        ]
         self.assertEqual(generated, [], f"generated eval results are tracked: {generated}")
 
 
@@ -197,6 +219,8 @@ class DirectSkillExperimentContract(unittest.TestCase):
             text=True,
         )
         if result.returncode != 0:
+            if os.environ.get("REQUIRE_PINNED_UPSTREAM_OBJECT") == "1":
+                self.fail("the pinned upstream Git object is required but unavailable")
             self.skipTest("the shallow checkout does not contain the pinned upstream Git object")
         self.assertEqual(
             self.contract["lanes"]["integrated"]["upstream_skill_roster"],

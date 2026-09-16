@@ -12,6 +12,26 @@ __pycache__/
 # of git even on the layout the lint rejects.
 **/evals/**/runs/
 **/eval-runs/
+/evals/**/answer-design.json
+/evals/**/benchmark.json
+/evals/**/benchmark-objective.json
+/evals/**/events.json
+/evals/**/exposure.json
+/evals/**/grade.json
+/evals/**/judge.jsonl
+/evals/**/metrics.json
+/evals/**/output.md
+/evals/**/report.md
+/evals/**/trace.jsonl
+/evals/**/trigger-matrix.json
+/evals/**/tasks.jsonl
+/evals/**/tasks.all.jsonl
+/evals/**/compare-tasks.jsonl
+/evals/**/compare-truth.json
+/evals/**/compare-results.jsonl
+/evals/**/compare-summary.json
+/evals/**/answers/
+/evals/**/judge-transcripts/
 .private-evals/
 evals/direct-skills-foundation-decisions.tsv
 

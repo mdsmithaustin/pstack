@@ -289,7 +289,8 @@ Run the full CI-equivalent checks from the repository root:
 .venv/bin/python tools/check-skill-content.py skills
 .venv/bin/python tools/generate-subagents.py --check
 docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
-.venv/bin/python tools/run_python_test_suites.py \
+git fetch --no-tags --depth=1 https://github.com/cursor/plugins.git "$(cat .github/upstream-sha)"
+REQUIRE_PINNED_UPSTREAM_OBJECT=1 .venv/bin/python tools/run_python_test_suites.py \
   tools \
   evals/verify-commands/oracles \
   evals/spec-probes/oracles \
