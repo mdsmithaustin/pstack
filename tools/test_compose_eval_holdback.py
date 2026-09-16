@@ -288,6 +288,34 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
                 with self.assertRaisesRegex(CompositionError, "script reference"):
                     compose(self.repo, "demo", self.overlay, self.root / f"bad-script-{index}")
 
+    def test_validates_nested_golden_output_references(self) -> None:
+        golden = self.overlay.parent / "payload" / "golden" / "answer.md"
+        golden.parent.mkdir()
+        golden.write_text("expected", encoding="utf-8")
+        cases = holdback_cases()
+        cases[0]["turns"] = [{
+            "assertions": [{
+                "type": "golden_output",
+                "reference": "golden/answer.md",
+            }],
+        }]
+        self.write_overlay(cases=cases)
+        result = compose(self.repo, "demo", self.overlay, self.root / "golden-output")
+        self.assertTrue((result.parent / "golden" / "answer.md").is_file())
+
+        for index, reference in enumerate(("/tmp/evil.md", "../evil.md", "golden/missing.md")):
+            with self.subTest(reference=reference):
+                cases = holdback_cases()
+                cases[0]["turns"] = [{
+                    "assertions": [{
+                        "type": "golden_output",
+                        "reference": reference,
+                    }],
+                }]
+                self.write_overlay(cases=cases)
+                with self.assertRaisesRegex(CompositionError, "golden_output reference"):
+                    compose(self.repo, "demo", self.overlay, self.root / f"bad-golden-{index}")
+
 
 if __name__ == "__main__":
     unittest.main()

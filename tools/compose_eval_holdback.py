@@ -160,8 +160,33 @@ def validate_case_references(
 ) -> None:
     available = public_files | private_files
 
+    def validate_reference(case_id: str, reference: object, label: str) -> str:
+        if not isinstance(reference, str):
+            raise CompositionError(f"{case_id} {label} must be a string")
+        path = PurePosixPath(reference)
+        if (
+            not reference
+            or "\\" in reference
+            or path.is_absolute()
+            or path.as_posix() != reference
+            or any(part in {".", ".."} for part in path.parts)
+        ):
+            raise CompositionError(f"{case_id} has an unsafe {label}: {reference!r}")
+        if reference not in available:
+            raise CompositionError(f"{case_id} {label} references a missing file: {reference}")
+        return reference
+
     def validate_script(case_id: str, assertion: object) -> None:
-        if not isinstance(assertion, dict) or assertion.get("type") != "script":
+        if not isinstance(assertion, dict):
+            return
+        if assertion.get("type") == "golden_output":
+            validate_reference(
+                case_id,
+                assertion.get("reference", assertion.get("value")),
+                "golden_output reference",
+            )
+            return
+        if assertion.get("type") != "script":
             return
         command = assertion.get("command")
         if (
@@ -181,20 +206,7 @@ def validate_case_references(
             and ("/" in token or "\\" in token or PurePosixPath(token).suffix in {".js", ".pl", ".py", ".rb", ".sh"})
         )
         for reference in references:
-            path = PurePosixPath(reference)
-            if (
-                "\\" in reference
-                or path.is_absolute()
-                or path.as_posix() != reference
-                or any(part in {".", ".."} for part in path.parts)
-            ):
-                raise CompositionError(
-                    f"{case_id} has an unsafe script reference: {reference!r}"
-                )
-            if reference not in available:
-                raise CompositionError(
-                    f"{case_id} script references a missing file: {reference}"
-                )
+            validate_reference(case_id, reference, "script reference")
 
     for case in cases:
         case_id = case["id"]
@@ -208,17 +220,7 @@ def validate_case_references(
                 raise CompositionError(f"{case_id} prompt_ref must be a string")
             references.append(prompt_ref)
         for reference in references:
-            path = PurePosixPath(reference)
-            if (
-                not reference
-                or "\\" in reference
-                or path.is_absolute()
-                or path.as_posix() != reference
-                or any(part in {".", ".."} for part in path.parts)
-            ):
-                raise CompositionError(f"{case_id} has an unsafe file reference: {reference!r}")
-            if reference not in available:
-                raise CompositionError(f"{case_id} references a missing file: {reference}")
+            validate_reference(case_id, reference, "file reference")
         assertions_value = case.get("assertions") or []
         if not isinstance(assertions_value, list):
             raise CompositionError(f"{case_id} assertions must be a list")
