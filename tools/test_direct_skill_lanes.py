@@ -652,6 +652,198 @@ class ExposureEligibilityTests(unittest.TestCase):
         self.assertFalse(restraint["target_read_expected"])
         self.assertTrue(report["eligible"])
 
+    def test_multi_turn_restraint_uses_turn_level_false_expectation(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        manifest["cases"] = [{
+            "id": "multi-turn-restraint",
+            "kind": "negative",
+            "split": "tune",
+            "turns": [{
+                "prompt": "Only edit the prose.",
+                "assertions": [{
+                    "type": "skill_invoked",
+                    "expected": False,
+                    "variants": ["with_skill"],
+                }],
+            }],
+        }]
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        self.write_events("multi-turn-restraint", "with_skill", None)
+        self.write_events("multi-turn-restraint", "old_skill", "architect")
+
+        report = exposure_report(
+            self.root / "runs",
+            self.manifest,
+            "verify-commands",
+            "tune",
+        )
+
+        treatment = next(
+            row for row in report["runs"]
+            if row["case_id"] == "multi-turn-restraint" and row["variant"] == "with_skill"
+        )
+        self.assertFalse(treatment["target_read_expected"])
+        self.assertTrue(report["eligible"])
+
+    def test_rejects_conflicting_top_level_and_turn_invocation_expectations(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        behavior = manifest["cases"][0]
+        behavior["assertions"] = [{
+            "type": "skill_invoked",
+            "expected": True,
+            "variants": ["with_skill"],
+        }]
+        behavior["turns"] = [{
+            "prompt": "Continue.",
+            "assertions": [{
+                "type": "skill_invoked",
+                "expected": False,
+                "variants": ["with_skill"],
+            }],
+        }]
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+
+        with self.assertRaisesRegex(LaneError, "conflicting with_skill invocation expectations"):
+            exposure_report(
+                self.root / "runs",
+                self.manifest,
+                "verify-commands",
+                "tune",
+            )
+
+    def test_treatment_expectation_honors_only_and_except_variant_filters(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        behavior = manifest["cases"][0]
+        behavior["assertions"] = [{
+            "type": "skill_invoked",
+            "expected": False,
+            "only_variants": ["old_skill"],
+        }]
+        behavior["turns"] = [{
+            "prompt": "Continue.",
+            "assertions": [{
+                "type": "skill_invoked",
+                "expected": False,
+                "except_variants": ["with_skill"],
+            }],
+        }]
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        self.write_events("behavior", "with_skill", None)
+        self.write_events("behavior", "old_skill", None)
+
+        report = exposure_report(
+            self.root / "runs",
+            self.manifest,
+            "verify-commands",
+            "tune",
+        )
+
+        self.assertFalse(report["eligible"])
+        self.assertEqual(report["missing_target_reads"][0]["case_id"], "behavior")
+
+    def test_null_assertion_collections_match_runner_normalization(self) -> None:
+        manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+        behavior = manifest["cases"][0]
+        behavior["assertions"] = None
+        behavior["turns"] = [{"prompt": "Continue.", "assertions": None}]
+        self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+
+        report = exposure_report(
+            self.root / "runs",
+            self.manifest,
+            "verify-commands",
+            "tune",
+        )
+
+        self.assertTrue(report["eligible"])
+
+    def test_rejects_falsy_non_collection_assertion_shapes(self) -> None:
+        for field, value in (
+            ("assertions", False),
+            ("assertions", 0),
+            ("assertions", ""),
+            ("assertions", {}),
+            ("turns", False),
+            ("turns", 0),
+            ("turns", ""),
+            ("turns", {}),
+        ):
+            with self.subTest(field=field, value=value):
+                manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+                manifest["cases"][0][field] = value
+                self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+                self.write_events("behavior", "with_skill", "verify-commands")
+                self.write_events("behavior", "old_skill", None)
+                with self.assertRaisesRegex(LaneError, f"{field} must be a list"):
+                    exposure_report(
+                        self.root / "runs",
+                        self.manifest,
+                        "verify-commands",
+                        "tune",
+                    )
+                for path in (self.root / "runs").iterdir():
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
+                self.manifest.write_text(json.dumps({
+                    "cases": [
+                        {"id": "behavior", "kind": "positive", "split": "tune"},
+                        {"id": "positive-trigger", "kind": "trigger", "split": "tune", "should_trigger": True},
+                        {"id": "negative-trigger", "kind": "trigger", "split": "tune", "should_trigger": False},
+                        {
+                            "id": "restraint",
+                            "kind": "negative",
+                            "split": "holdback",
+                            "assertions": [{
+                                "type": "skill_invoked",
+                                "expected": False,
+                                "variants": ["with_skill"],
+                            }],
+                        },
+                    ]
+                }), encoding="utf-8")
+
+    def test_rejects_invalid_skill_invoked_variant_filters(self) -> None:
+        invalid_filters = (
+            {"variants": None},
+            {"variants": []},
+            {"variants": ["with_skill", "with_skill"]},
+            {"variants": ["with_skill", 7]},
+            {"variants": [""]},
+            {"variants": ["with_skill"], "only_variants": ["with_skill"]},
+            {"variants": ["with_skill"], "except_variants": ["with_skill"]},
+        )
+        for filters in invalid_filters:
+            with self.subTest(filters=filters):
+                manifest = json.loads(self.manifest.read_text(encoding="utf-8"))
+                manifest["cases"][0]["assertions"] = [{
+                    "type": "skill_invoked",
+                    "expected": False,
+                    **filters,
+                }]
+                self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+                self.write_events("behavior", "with_skill", None)
+                self.write_events("behavior", "old_skill", None)
+                with self.assertRaisesRegex(LaneError, "skill_invoked"):
+                    exposure_report(
+                        self.root / "runs",
+                        self.manifest,
+                        "verify-commands",
+                        "tune",
+                    )
+                for path in (self.root / "runs").iterdir():
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
+                manifest["cases"][0].pop("assertions")
+                self.manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
     def test_rejects_incomplete_run_pair(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")
         self.plan_run("behavior", "old_skill")

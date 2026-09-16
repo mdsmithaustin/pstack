@@ -984,16 +984,57 @@ def _expected_exposure_runs(
 
 def _case_requires_target_read(case: dict[str, Any]) -> bool:
     declared: list[bool] = []
-    assertions = case.get("assertions", [])
+    assertions = case.get("assertions")
+    if assertions is None:
+        assertions = []
     if not isinstance(assertions, list):
         raise LaneError(f"case {case.get('id')} assertions must be a list")
+    turns = case.get("turns")
+    if turns is None:
+        turns = []
+    if not isinstance(turns, list):
+        raise LaneError(f"case {case.get('id')} turns must be a list")
+    assertions = list(assertions)
+    for turn_index, turn in enumerate(turns, 1):
+        if not isinstance(turn, dict):
+            raise LaneError(f"case {case.get('id')} turn {turn_index} must be an object")
+        turn_assertions = turn.get("assertions")
+        if turn_assertions is None:
+            turn_assertions = []
+        if not isinstance(turn_assertions, list):
+            raise LaneError(
+                f"case {case.get('id')} turn {turn_index} assertions must be a list"
+            )
+        assertions.extend(turn_assertions)
     for assertion in assertions:
         if not isinstance(assertion, dict) or assertion.get("type") != "skill_invoked":
             continue
-        variants = assertion.get("variants")
-        if variants is not None and (
-            not isinstance(variants, list) or "with_skill" not in variants
-        ):
+        if "variants" in assertion and "only_variants" in assertion:
+            raise LaneError(
+                f"case {case.get('id')} skill_invoked assertion has conflicting variant filters"
+            )
+        for key in ("variants", "only_variants", "except_variants"):
+            if key not in assertion:
+                continue
+            values = assertion[key]
+            if (
+                not isinstance(values, list)
+                or not values
+                or not all(isinstance(value, str) and value for value in values)
+                or len(values) != len(set(values))
+            ):
+                raise LaneError(
+                    f"case {case.get('id')} skill_invoked {key} must be a non-empty unique string list"
+                )
+        included = assertion.get("variants", assertion.get("only_variants"))
+        excluded = assertion.get("except_variants")
+        if isinstance(included, list) and isinstance(excluded, list) and set(included) & set(excluded):
+            raise LaneError(
+                f"case {case.get('id')} skill_invoked assertion includes and excludes the same variant"
+            )
+        if isinstance(included, list) and "with_skill" not in included:
+            continue
+        if isinstance(excluded, list) and "with_skill" in excluded:
             continue
         expected = assertion.get("expected", True)
         if not isinstance(expected, bool):
