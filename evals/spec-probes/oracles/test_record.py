@@ -43,6 +43,19 @@ class RecordOracleTests(unittest.TestCase):
         self.assertEqual(evaluate("pos-mixed-shapes", table), [])
         self.assertEqual(evaluate("pos-mixed-shapes", prose), [])
 
+    def test_embedded_record_rejects_duplicate_keys_and_nonfinite_numbers(self) -> None:
+        for payload in (
+            '{"coverage":{"applicable":0},"coverage":{"applicable":0}}',
+            '{"coverage":{"applicable":NaN}}',
+            '{"coverage":{"applicable":1e400}}',
+        ):
+            record, errors = extract_import_record(
+                f"<spec-probe-record>{payload}</spec-probe-record>"
+            )
+            self.assertIsNone(record)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("not valid JSON", errors[0])
+
     def test_reordered_requirements_and_paraphrased_questions_keep_the_verdict(self) -> None:
         first = "CH-401 leaves adjacent windows undecided. CH-402 needs a definition of character."
         second = "How should the product count a display-name symbol under CH-402? Must abutting availability periods combine under CH-401?"

@@ -1,7 +1,6 @@
 {
   "stale-summary": {
     "bootstrap": "stale_summary.py",
-    "minimum_signals": 1,
     "states": [
       {"name": "current", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/run-checks.py"]}]},
       {"name": "count-changed", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/run-checks.py"]}]},
@@ -10,7 +9,6 @@
   },
   "empty-selection": {
     "bootstrap": "empty_selection.py",
-    "minimum_signals": 2,
     "states": [
       {"name": "present", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/run-scenarios.py", "--list"]}, {"program": "python", "args": ["tools/run-scenarios.py", "--name", "checkout_rejects_expired_card"]}]},
       {"name": "absent", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/run-scenarios.py", "--list"]}]},
@@ -19,7 +17,6 @@
   },
   "defaulted-parity": {
     "bootstrap": "defaulted_parity.py",
-    "minimum_signals": 3,
     "states": [
       {"name": "equal", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/reference_total.py"]}, {"program": "python", "args": ["tools/current_total.py"]}]},
       {"name": "unequal", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/reference_total.py"]}, {"program": "python", "args": ["tools/current_total.py"]}]},
@@ -30,7 +27,6 @@
   },
   "package-path": {
     "bootstrap": "package_path.py",
-    "minimum_signals": 1,
     "states": [
       {"name": "healthy", "exit": "zero", "required_operations": [{"program": "python", "args": ["packages/web/scripts/check-release.py"]}]},
       {"name": "package-broken", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["packages/web/scripts/check-release.py"]}]},
@@ -39,7 +35,6 @@
   },
   "scoped-source": {
     "bootstrap": "scoped_source.py",
-    "minimum_signals": 1,
     "states": [
       {"name": "migrated", "exit": "zero", "required_operations": [{"program": "python", "args": ["packages/api/tools/verify-scenario.py", "legacy_fetch_uses_new_client"]}]},
       {"name": "target-regressed", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["packages/api/tools/verify-scenario.py", "legacy_fetch_uses_new_client"]}]},
@@ -48,7 +43,6 @@
   },
   "healthy-control": {
     "bootstrap": "healthy_control.py",
-    "minimum_signals": 1,
     "states": [
       {"name": "healthy", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/verify-release.py"]}]},
       {"name": "broken", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/verify-release.py"]}]}

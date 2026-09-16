@@ -160,7 +160,7 @@
       "difficulty": "extended",
       "trigger_type": "explicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Use verify_order_service.py as the trusted driver for order_service.py. Run it once, then run it again as a fresh replay. Report whether the duplicate-order observation reaches a public caller and warrants a regression finding. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files or create a follow-up check. Use a findings table, bullets, or prose.",
+      "prompt": "Use verify_order_service.py as the trusted driver for order_service.py. Resolve python3 with command -v and the workspace with pwd, then run the driver twice using the absolute interpreter path and the absolute inputs/verify_order_service.py path. Treat the second run as a fresh replay. Report whether the duplicate-order observation reaches a public caller and warrants a regression finding. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files or create a follow-up check. Use a findings table, bullets, or prose.",
       "files": ["fixtures/order_service.py", "fixtures/verify_order_service.py"],
       "expected_behavior": [
         "Runs the declared trusted driver twice from fresh state and binds both distinct evidence IDs.",
@@ -193,7 +193,7 @@
       "difficulty": "extended",
       "trigger_type": "explicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Use verify_order_service.py as the trusted driver for order_service.py. Run it once, then run it again as a fresh replay. Decide whether the negative-quantity handler observation reaches the real import caller through its gateway guard. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files or create a follow-up check. Use a findings table, bullets, or prose.",
+      "prompt": "Use verify_order_service.py as the trusted driver for order_service.py. Resolve python3 with command -v and the workspace with pwd, then run the driver twice using the absolute interpreter path and the absolute inputs/verify_order_service.py path. Treat the second run as a fresh replay. Decide whether the negative-quantity handler observation reaches the real import caller through its gateway guard. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files or create a follow-up check. Use a findings table, bullets, or prose.",
       "files": ["fixtures/order_service.py", "fixtures/verify_order_service.py"],
       "expected_behavior": [
         "Binds the direct handler observation and public guard result to two completed trusted driver runs.",
@@ -226,7 +226,7 @@
       "difficulty": "extended",
       "trigger_type": "contextual",
       "success_goals": ["outcome", "process"],
-      "prompt": "Use verify_billing_service.py as the trusted driver for billing_service.py. Run it once, then run it again as a fresh replay. Report the provider error and provider delay behavior without turning passing boundary handling into defects. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files. Use a findings table, bullets, or prose.",
+      "prompt": "Use verify_billing_service.py as the trusted driver for billing_service.py. Resolve python3 with command -v and the workspace with pwd, then run the driver twice using the absolute interpreter path and the absolute inputs/verify_billing_service.py path. Treat the second run as a fresh replay. Report the provider error and provider delay behavior without turning passing boundary handling into defects. Cite the evidence ID printed by each completed driver run. This is diagnostic-only. Do not alter files. Use a findings table, bullets, or prose.",
       "files": ["fixtures/billing_service.py", "fixtures/verify_billing_service.py"],
       "expected_behavior": [
         "Binds provider failure and slowness observations to two completed trusted driver runs.",

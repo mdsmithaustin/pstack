@@ -21,8 +21,11 @@ from typing import Any, Iterable
 CONFIG_PATH = Path("evals/direct-skills-experiment.json")
 HELPER_PATH = Path("tools/direct_skill_lanes.py")
 CLAUDE_ADAPTER_PATH = Path("tools/claude-pstack-eval")
+RUNNER_HELPER_PATH = Path("tools/direct_skill_runner.py")
+HELPER_PATHS = (HELPER_PATH, RUNNER_HELPER_PATH, CLAUDE_ADAPTER_PATH)
 RECEIPT_NAME = "integrated-lane-receipt.json"
 PAIRED_VARIANTS = ("with_skill", "old_skill")
+WORKSPACE_RECEIPT_KEY = "pstack_workspace_receipt"
 
 
 class LaneError(ValueError):
@@ -34,6 +37,12 @@ class ExternalSuite:
     root: Path
     eval_inventory: dict[str, str]
     target_skill_inventory: dict[str, str]
+
+
+@dataclass(frozen=True)
+class WorkspaceReceipt:
+    mounts: frozenset[str]
+    workspace_root_sha256: str
 
 
 def _strict_json_loads(text: str) -> Any:
@@ -493,12 +502,10 @@ def _materialize_at(
         if _load_external_suite(repo, target_skill, external_suite.root) != external_suite:
             raise LaneError("external suite changed while being copied")
         eval_suite_inventory = external_suite.eval_inventory
-    helper_digest = _copy_tracked_file(repo, HELPER_PATH, output / HELPER_PATH)
-    claude_adapter_digest = _copy_tracked_file(
-        repo,
-        CLAUDE_ADAPTER_PATH,
-        output / CLAUDE_ADAPTER_PATH,
-    )
+    helper_digests = {
+        path.as_posix(): _copy_tracked_file(repo, path, output / path)
+        for path in HELPER_PATHS
+    }
 
     manifest_path = suite_destination / "shared-benchmark.json"
     manifest = _read_json(manifest_path)
@@ -538,10 +545,7 @@ def _materialize_at(
         "local_cli_port_map": integrated["local_cli_port_map"],
         "skills": source_skill_inventory,
         "eval_suite": eval_suite_inventory,
-        "helpers": {
-            HELPER_PATH.as_posix(): helper_digest,
-            CLAUDE_ADAPTER_PATH.as_posix(): claude_adapter_digest,
-        },
+        "helpers": helper_digests,
     }
     if external_suite is not None:
         source["eval_suite_origin"] = {
@@ -677,8 +681,8 @@ def verify_materialized_lane(
     if source.get("eval_suite") != expected_eval_suite:
         raise LaneError("integrated lane source eval inventory changed after materialization")
     expected_helpers = {
-        HELPER_PATH.as_posix(): _tracked_file_digest(repo, HELPER_PATH),
-        CLAUDE_ADAPTER_PATH.as_posix(): _tracked_file_digest(repo, CLAUDE_ADAPTER_PATH),
+        path.as_posix(): _tracked_file_digest(repo, path)
+        for path in HELPER_PATHS
     }
     if source.get("helpers") != expected_helpers:
         raise LaneError("integrated lane source helper changed after materialization")
@@ -769,8 +773,8 @@ def filter_prepared_tasks(source: Path, destination: Path, variants: Iterable[st
         if not line.strip():
             continue
         try:
-            row = json.loads(line)
-        except json.JSONDecodeError as exc:
+            row = _strict_json_loads(line)
+        except (json.JSONDecodeError, ValueError) as exc:
             raise LaneError(f"prepared task line {index} is invalid JSON: {exc}") from exc
         if not isinstance(row, dict):
             raise LaneError(f"prepared task line {index} is not an object")
@@ -816,42 +820,89 @@ def filter_prepared_tasks(source: Path, destination: Path, variants: Iterable[st
     return counts
 
 
-def _reader_command_names_target(command: str, target_skill: str, depth: int = 0) -> bool:
-    if depth > 2:
-        return False
+def _workspace_relative_path(value: str) -> PurePosixPath | None:
+    if not value or "\\" in value or "\0" in value:
+        return None
+    while value.startswith("./"):
+        value = value[2:]
+    path = PurePosixPath(value)
+    if (
+        not value
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or path.as_posix() != value
+    ):
+        return None
+    return path
+
+
+def _reader_command_target_path(command: str, target_skill: str) -> str | None:
+    if "\n" in command or "\r" in command or any(
+        marker in command for marker in ("$(", "`", "<(", ">(")
+    ):
+        return None
     try:
         argv = shlex.split(command)
     except ValueError:
-        return False
+        return None
     if not argv or any(token in {"|", "||", "&&", ";"} for token in argv):
-        return False
-    while argv and ("=" in argv[0] and not argv[0].startswith(("/", "./", "../"))):
-        argv.pop(0)
-    if argv and Path(argv[0]).name == "env":
-        argv.pop(0)
-        while argv and (argv[0].startswith("-") or "=" in argv[0]):
-            argv.pop(0)
-    if not argv:
-        return False
+        return None
+    if not argv or ("=" in argv[0] and not argv[0].startswith(("/", "./", "../"))):
+        return None
+    if Path(argv[0]).name == "env":
+        return None
     executable = Path(argv[0]).name
-    if executable in {"bash", "sh", "zsh"}:
-        shell_args = argv[1:]
-        options: list[str] = []
-        while shell_args and shell_args[0].startswith("-"):
-            options.append(shell_args.pop(0))
-        if len(shell_args) != 1 or not any("c" in option.lstrip("-") for option in options):
-            return False
-        return _reader_command_names_target(shell_args[0], target_skill, depth + 1)
-    if executable not in {"cat", "sed", "head", "tail"}:
+    trusted_executables = {
+        "cat": {"/bin/cat", "/usr/bin/cat"},
+        "sed": {"/bin/sed", "/usr/bin/sed"},
+        "head": {"/bin/head", "/usr/bin/head"},
+        "tail": {"/bin/tail", "/usr/bin/tail"},
+    }
+    if argv[0] not in trusted_executables.get(executable, set()):
+        return None
+    if executable == "cat":
+        target_path = argv[1] if len(argv) == 2 else None
+    elif executable == "sed":
+        if len(argv) == 2:
+            target_path = argv[1]
+        elif len(argv) == 3 and not argv[1].startswith("-"):
+            target_path = argv[2]
+        elif len(argv) == 4 and argv[1] == "-n" and not argv[2].startswith("-"):
+            target_path = argv[3]
+        else:
+            target_path = None
+    elif len(argv) == 2:
+        target_path = argv[1]
+    elif len(argv) == 4 and argv[1] == "-n" and argv[2].isdigit():
+        target_path = argv[3]
+    else:
+        target_path = None
+    if target_path is None:
+        return None
+    path = PurePosixPath(target_path)
+    return target_path if path.is_absolute() and path.parts[-3:] == ("skills", target_skill, "SKILL.md") else None
+
+
+def _attested_target_path(
+    value: str, target_skill: str, workspace_root_sha256: str
+) -> bool:
+    if not value or "\\" in value or "\0" in value:
         return False
-    return any(
-        PurePosixPath(argument.replace("\\", "/")).parts[-3:]
-        == ("skills", target_skill, "SKILL.md")
-        for argument in argv[1:]
-    )
+    path = PurePosixPath(value)
+    if (
+        not path.is_absolute()
+        or path.as_posix() != value
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or path.parts[-3:] != ("skills", target_skill, "SKILL.md")
+    ):
+        return False
+    workspace = path.parent.parent.parent.as_posix()
+    return hashlib.sha256(workspace.encode("utf-8")).hexdigest() == workspace_root_sha256
 
 
-def _event_names_target(event: Any, target_skill: str) -> bool:
+def _event_names_target(
+    event: Any, target_skill: str, workspace_root_sha256: str
+) -> bool:
     if not isinstance(event, dict):
         return False
     if event.get("status") != "completed" or event.get("is_error") is True:
@@ -860,12 +911,16 @@ def _event_names_target(event: Any, target_skill: str) -> bool:
         command = event.get("input_summary")
         output = event.get("output_summary")
         exit_code = event.get("exit_code")
-        return (
-            isinstance(command, str)
-            and isinstance(output, str)
-            and bool(output.strip())
-            and (exit_code is None or (type(exit_code) is int and exit_code == 0))
-            and _reader_command_names_target(command, target_skill)
+        if (
+            not isinstance(command, str)
+            or not isinstance(output, str)
+            or not output.strip()
+            or not (exit_code is None or (type(exit_code) is int and exit_code == 0))
+        ):
+            return False
+        target_path = _reader_command_target_path(command, target_skill)
+        return target_path is not None and _attested_target_path(
+            target_path, target_skill, workspace_root_sha256
         )
     if event.get("type") != "skill_load":
         return False
@@ -880,8 +935,62 @@ def _event_names_target(event: Any, target_skill: str) -> bool:
         return False
     if name in ("Skill", "skill", "activate_skill") and value == target_skill:
         return True
-    parts = PurePosixPath(value.replace("\\", "/")).parts
-    return parts[-3:] == ("skills", target_skill, "SKILL.md")
+    return _attested_target_path(
+        value, target_skill, workspace_root_sha256
+    )
+
+
+def _workspace_receipt(runs: Path, run_dir: str) -> WorkspaceReceipt | None:
+    metadata = _read_json_below(
+        runs,
+        PurePosixPath(run_dir) / "metadata.json",
+        object_only=True,
+    )
+    receipt = metadata.get(WORKSPACE_RECEIPT_KEY)
+    if receipt is None:
+        return None
+    if not isinstance(receipt, dict):
+        raise LaneError(f"workspace receipt is malformed for {run_dir}")
+    if receipt.get("error") is not None:
+        if not isinstance(receipt.get("error"), str):
+            raise LaneError(f"workspace receipt error is malformed for {run_dir}")
+        return None
+    if set(receipt) != {
+        "schema_version",
+        "mounts",
+        "post_sha256",
+        "pre_sha256",
+        "python_path_sha256",
+        "workspace_root_sha256",
+    }:
+        raise LaneError(f"workspace receipt has an invalid shape for {run_dir}")
+    mounts = receipt.get("mounts")
+    digests = (
+        receipt.get("pre_sha256"),
+        receipt.get("post_sha256"),
+        receipt.get("python_path_sha256"),
+        receipt.get("workspace_root_sha256"),
+    )
+    if (
+        receipt.get("schema_version") != 2
+        or not isinstance(mounts, list)
+        or mounts != sorted(set(mounts))
+        or not all(
+            isinstance(value, str) and _workspace_relative_path(value) is not None
+            for value in mounts
+        )
+        or not all(
+            isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+            for value in digests
+        )
+    ):
+        raise LaneError(f"workspace receipt is malformed for {run_dir}")
+    if digests[0] != digests[1]:
+        return None
+    return WorkspaceReceipt(
+        mounts=frozenset(mounts),
+        workspace_root_sha256=digests[3],
+    )
 
 
 def _canonical_json_sha256(value: Any) -> str:
@@ -1261,7 +1370,18 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str, split: s
         ):
             raise LaneError(f"exposure events must use the harness event envelope: {events_path}")
         events = payload["events"]
-        observed = any(_event_names_target(event, target_skill) for event in events)
+        receipt = _workspace_receipt(runs, run_dir)
+        target_path = f"skills/{target_skill}/SKILL.md"
+        observed = (
+            receipt is not None
+            and target_path in receipt.mounts
+            and any(
+                _event_names_target(
+                    event, target_skill, receipt.workspace_root_sha256
+                )
+                for event in events
+            )
+        )
         case_id = identity["case_id"]
         variant = identity["variant"]
         expected = variant == "with_skill" and case_id in must_read

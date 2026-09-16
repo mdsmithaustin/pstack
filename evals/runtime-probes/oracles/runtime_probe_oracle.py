@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -7,7 +8,8 @@ import re
 import shlex
 import stat
 import sys
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -15,6 +17,7 @@ PROBE_EXECUTABLES = {"curl", "docker", "node", "wget"}
 READ_ONLY_EXECUTABLES = {
     "cat", "echo", "head", "ls", "printf", "pwd", "stat", "tail", "wc",
 }
+WORKSPACE_RECEIPT_KEY = "pstack_workspace_receipt"
 
 
 class CandidateFailure(ValueError):
@@ -27,6 +30,19 @@ class MissingMeasurement(ValueError):
 
 class InfrastructureFailure(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class WorkspaceReceipt:
+    mounts: frozenset[str]
+    python_path_sha256: str
+    workspace_root_sha256: str
+
+
+@dataclass(frozen=True)
+class TrustedInvocation:
+    driver_path: str
+    interpreter_path: str
 
 
 def strict_json_loads(text: str) -> Any:
@@ -154,6 +170,68 @@ def load_events(output_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
         raise InfrastructureFailure("events.json does not contain an events list")
     trace = read_regular_artifact(output_dir, "trace.jsonl", errors="replace").splitlines()
     return events, trace
+
+
+def load_workspace_receipt(output_dir: Path) -> WorkspaceReceipt:
+    try:
+        metadata = strict_json_loads(read_regular_artifact(output_dir, "metadata.json"))
+    except (json.JSONDecodeError, RecursionError, ValueError) as error:
+        raise InfrastructureFailure(f"metadata.json is unreadable: {error}") from error
+    if not isinstance(metadata, dict):
+        raise InfrastructureFailure("metadata.json must contain an object")
+    receipt = metadata.get(WORKSPACE_RECEIPT_KEY)
+    if receipt is None:
+        raise MissingMeasurement("run has no workspace receipt")
+    if not isinstance(receipt, dict):
+        raise InfrastructureFailure("workspace receipt is malformed")
+    if receipt.get("error") is not None:
+        if not isinstance(receipt.get("error"), str):
+            raise InfrastructureFailure("workspace receipt error is malformed")
+        raise MissingMeasurement("workspace receipt is unavailable")
+    if set(receipt) != {
+        "schema_version",
+        "mounts",
+        "post_sha256",
+        "pre_sha256",
+        "python_path_sha256",
+        "workspace_root_sha256",
+    }:
+        raise InfrastructureFailure("workspace receipt has an invalid shape")
+    mounts = receipt.get("mounts")
+    pre_digest = receipt.get("pre_sha256")
+    post_digest = receipt.get("post_sha256")
+    python_path_digest = receipt.get("python_path_sha256")
+    workspace_root_digest = receipt.get("workspace_root_sha256")
+    if (
+        receipt.get("schema_version") != 2
+        or not isinstance(mounts, list)
+        or mounts != sorted(set(mounts))
+        or not all(
+            isinstance(value, str)
+            and "\\" not in value
+            and not PurePosixPath(value).is_absolute()
+            and PurePosixPath(value).as_posix() == value
+            and not any(part in {"", ".", ".."} for part in PurePosixPath(value).parts)
+            for value in mounts
+        )
+        or not all(
+            isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+            for value in (
+                pre_digest,
+                post_digest,
+                python_path_digest,
+                workspace_root_digest,
+            )
+        )
+    ):
+        raise InfrastructureFailure("workspace receipt is malformed")
+    if pre_digest != post_digest:
+        raise MissingMeasurement("workspace mounts changed during the answer run")
+    return WorkspaceReceipt(
+        mounts=frozenset(mounts),
+        python_path_sha256=python_path_digest,
+        workspace_root_sha256=workspace_root_digest,
+    )
 
 
 def _unquoted(token: str) -> tuple[str, bool]:
@@ -413,44 +491,68 @@ def ensure_no_probe_commands(events: list[dict[str, Any]]) -> None:
         fail(not _command_runs_probe(command), f"non-executable task ran a probe-capable command: {command}")
 
 
-def _trusted_command_count(command: str, driver: str) -> int:
+def _trusted_invocation(command: str, driver: str) -> TrustedInvocation | None:
+    if "\n" in command or "\r" in command or any(
+        marker in command for marker in ("$(", "`", "<(", ">(")
+    ):
+        return None
     try:
         arguments = shlex.split(command)
     except ValueError:
-        return 0
+        return None
     if len(arguments) == 3 and arguments[0] in {"/bin/bash", "/bin/sh", "/bin/zsh"} and arguments[1] in {"-c", "-lc"}:
         try:
-            arguments = [_unquoted(token)[0] for token in _command_tokens(arguments[2])]
+            arguments = shlex.split(arguments[2])
         except ValueError:
-            return 0
-    arguments = [argument for argument in arguments if argument not in {";", "&&"}]
-    while arguments and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", arguments[0]):
-        arguments.pop(0)
-    if not arguments or len(arguments) % 2:
-        return 0
-    count = 0
-    for index in range(0, len(arguments), 2):
-        executable, script = arguments[index:index + 2]
-        if "/" in executable:
-            path = Path(executable)
-            trusted_interpreter = path.parent.as_posix() in {"/usr/bin", "/usr/local/bin"}
-        else:
-            trusted_interpreter = True
-        if (
-            not trusted_interpreter
-            or re.fullmatch(r"python3(?:\.\d+)?", Path(executable).name) is None
-            or script not in {driver, f"inputs/{driver}"}
-        ):
-            return 0
-        count += 1
-    return count
+            return None
+    if len(arguments) != 2:
+        return None
+    executable = PurePosixPath(arguments[0])
+    driver_path = PurePosixPath(arguments[1])
+    if (
+        not executable.is_absolute()
+        or executable.as_posix() != arguments[0]
+        or any(part in {"", ".", ".."} for part in executable.parts)
+        or re.fullmatch(r"python3(?:\.\d+)?", executable.name) is None
+        or not driver_path.is_absolute()
+        or driver_path.as_posix() != arguments[1]
+        or any(part in {"", ".", ".."} for part in driver_path.parts)
+        or driver_path.parts[-2:] != ("inputs", driver)
+    ):
+        return None
+    return TrustedInvocation(
+        driver_path=driver_path.as_posix(),
+        interpreter_path=executable.as_posix(),
+    )
 
 
 def _trusted_command(command: str, driver: str) -> bool:
-    return _trusted_command_count(command, driver) > 0
+    return _trusted_invocation(command, driver) is not None
 
 
-def _trace_payloads(trace: list[str], line_number: object, driver: str) -> list[dict[str, Any]]:
+def _path_digest(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _validate_invocation_attestation(
+    receipt: WorkspaceReceipt,
+    driver: str,
+    invocation: TrustedInvocation,
+) -> None:
+    workspace = PurePosixPath(invocation.driver_path).parent.parent.as_posix()
+    if _path_digest(workspace) != receipt.workspace_root_sha256:
+        raise MissingMeasurement(f"completed {driver} from an unattested fixture path")
+    try:
+        resolved_interpreter = Path(invocation.interpreter_path).resolve(
+            strict=True
+        ).as_posix()
+    except OSError as error:
+        raise MissingMeasurement(f"completed {driver} interpreter is unavailable") from error
+    if _path_digest(resolved_interpreter) != receipt.python_path_sha256:
+        raise MissingMeasurement(f"completed {driver} with an unattested interpreter")
+
+
+def _trace_payload(trace: list[str], line_number: object, driver: str) -> dict[str, Any]:
     if type(line_number) is not int or line_number < 1 or line_number > len(trace):
         raise InfrastructureFailure("completed command points outside trace.jsonl")
     try:
@@ -463,56 +565,49 @@ def _trace_payloads(trace: list[str], line_number: object, driver: str) -> list[
     if not isinstance(item, dict):
         raise InfrastructureFailure("completed command trace item is malformed")
     output = item.get("aggregated_output") or item.get("output") or item.get("result") or ""
-    payloads: list[dict[str, Any]] = []
     for line in str(output).splitlines():
         try:
             payload = strict_json_loads(line)
         except (json.JSONDecodeError, RecursionError, ValueError):
             continue
         if isinstance(payload, dict) and payload.get("driver") == driver:
-            payloads.append(payload)
-    if not payloads:
-        raise MissingMeasurement(f"completed {driver} command has no driver JSON output")
-    return payloads
+            return payload
+    raise MissingMeasurement(f"completed {driver} command has no driver JSON output")
 
 
 def trusted_replays(output_dir: Path, driver: str, target: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     events, trace = load_events(output_dir)
+    receipt = load_workspace_receipt(output_dir)
+    if f"inputs/{driver}" not in receipt.mounts:
+        raise MissingMeasurement(f"workspace receipt does not contain inputs/{driver}")
     ensure_diagnostic_only(events, driver)
-    attempts = [
-        event
-        for event in events
-        if event.get("type") == "command"
-        and event.get("status") == "completed"
-        and _trusted_command(str(event.get("input_summary", "")), driver)
-    ]
-    invocation_count = sum(
-        _trusted_command_count(str(event.get("input_summary", "")), driver)
-        for event in attempts
-    )
-    if invocation_count != 2:
+    attempts: list[tuple[dict[str, Any], TrustedInvocation]] = []
+    for event in events:
+        if event.get("type") != "command":
+            continue
+        invocation = _trusted_invocation(str(event.get("input_summary", "")), driver)
+        if invocation is not None:
+            attempts.append((event, invocation))
+    if len(attempts) != 2:
         raise MissingMeasurement(f"{driver} must run exactly twice for the bounded replay")
     payloads: list[dict[str, Any]] = []
-    for event in attempts:
+    for event, invocation in attempts:
         exit_code = event.get("exit_code")
         if event.get("status") != "completed" or type(exit_code) is not int or exit_code != 0:
             raise MissingMeasurement(f"{driver} did not complete successfully twice")
         raw_ref = event.get("raw_ref")
         if not isinstance(raw_ref, dict):
             raise InfrastructureFailure("completed driver command has no trace reference")
-        expected = _trusted_command_count(str(event.get("input_summary", "")), driver)
-        observed = _trace_payloads(trace, raw_ref.get("line"), driver)
-        if len(observed) != expected:
-            raise MissingMeasurement(f"completed {driver} command output count does not match its invocations")
-        for payload in observed:
-            fail(payload.get("target") == target, f"driver reported the wrong target: {payload.get('target')}")
-            fail(payload.get("fresh_start") is True, "driver did not report a fresh start")
-            evidence_id = payload.get("evidence_id")
-            fail(
-                isinstance(evidence_id, str) and re.fullmatch(r"[0-9a-f]{24}", evidence_id) is not None,
-                "driver evidence ID is invalid",
-            )
-            payloads.append(payload)
+        payload = _trace_payload(trace, raw_ref.get("line"), driver)
+        _validate_invocation_attestation(receipt, driver, invocation)
+        fail(payload.get("target") == target, f"driver reported the wrong target: {payload.get('target')}")
+        fail(payload.get("fresh_start") is True, "driver did not report a fresh start")
+        evidence_id = payload.get("evidence_id")
+        fail(
+            isinstance(evidence_id, str) and re.fullmatch(r"[0-9a-f]{24}", evidence_id) is not None,
+            "driver evidence ID is invalid",
+        )
+        payloads.append(payload)
     fail(payloads[0]["evidence_id"] != payloads[1]["evidence_id"], "fresh replay reused an evidence ID")
     return payloads, events
 

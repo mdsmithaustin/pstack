@@ -57,8 +57,10 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         self.assertEqual(manifest["skill_paths"][0], "arms/treatment/skills/verify-commands/SKILL.md")
         self.assertTrue((self.shadow / "tools" / "direct_skill_lanes.py").is_file())
         self.assertTrue((self.shadow / "tools" / "claude-pstack-eval").is_file())
+        self.assertTrue((self.shadow / "tools" / "direct_skill_runner.py").is_file())
         self.assertIn("tools/direct_skill_lanes.py", self.receipt["source"]["helpers"])
         self.assertIn("tools/claude-pstack-eval", self.receipt["source"]["helpers"])
+        self.assertIn("tools/direct_skill_runner.py", self.receipt["source"]["helpers"])
         self.assertNotIn("eval_suite_origin", self.receipt["source"])
 
     def test_receipt_verifies_untampered_materialization(self) -> None:
@@ -131,6 +133,7 @@ class IntegratedLaneMaterializationTests(unittest.TestCase):
         shutil.copy2(ROOT / ".github" / "upstream-sha", fake_repo / ".github" / "upstream-sha")
         shutil.copy2(ROOT / "tools" / "direct_skill_lanes.py", fake_repo / "tools" / "direct_skill_lanes.py")
         shutil.copy2(ROOT / "tools" / "claude-pstack-eval", fake_repo / "tools" / "claude-pstack-eval")
+        shutil.copy2(ROOT / "tools" / "direct_skill_runner.py", fake_repo / "tools" / "direct_skill_runner.py")
         shutil.copy2(
             ROOT / "evals" / "direct-skills-experiment.json",
             fake_repo / "evals" / "direct-skills-experiment.json",
@@ -408,6 +411,22 @@ class PreparedTaskFilterTests(unittest.TestCase):
         with self.assertRaisesRegex(LaneError, "population mismatch"):
             filter_prepared_tasks(source, self.root / "filtered.jsonl", ("with_skill", "old_skill"))
 
+    def test_rejects_ambiguous_or_nonfinite_prepared_task_json(self) -> None:
+        source = self.root / "prepared.jsonl"
+        for text in (
+            '{"case_id":"a","case_id":"b","variant":"with_skill"}\n',
+            '{"case_id":"a","variant":"with_skill","ignored":NaN}\n',
+            '{"case_id":"a","variant":"with_skill","ignored":1e400}\n',
+        ):
+            with self.subTest(text=text):
+                source.write_text(text, encoding="utf-8")
+                with self.assertRaisesRegex(LaneError, "invalid JSON"):
+                    filter_prepared_tasks(
+                        source,
+                        self.root / "filtered.jsonl",
+                        ("with_skill", "old_skill"),
+                    )
+
     def test_rejects_pair_prompt_mismatch(self) -> None:
         source = self.root / "prepared.jsonl"
         rows = [
@@ -424,6 +443,7 @@ class ExposureEligibilityTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
+        self.workspace_root = "/runner/workspace"
         self.manifest = self.root / "manifest.json"
         self.manifest.write_text(json.dumps({
             "cases": [
@@ -715,13 +735,26 @@ class ExposureEligibilityTests(unittest.TestCase):
         events = [] if skill is None else [event or {
             "type": "skill_load",
             "name": "Read",
-            "input_summary": f"./skills/{skill}/SKILL.md",
+            "input_summary": f"{self.workspace_root}/skills/{skill}/SKILL.md",
             "status": "completed",
         }]
         (run / "events.json").write_text(json.dumps({
             "schema_version": 2,
             "source": "test",
             "events": events,
+        }), encoding="utf-8")
+        mounts = [] if skill is None else [f"skills/{skill}/SKILL.md"]
+        (run / "metadata.json").write_text(json.dumps({
+            "pstack_workspace_receipt": {
+                "schema_version": 2,
+                "mounts": mounts,
+                "pre_sha256": "a" * 64,
+                "post_sha256": "a" * 64,
+                "python_path_sha256": "b" * 64,
+                "workspace_root_sha256": hashlib.sha256(
+                    self.workspace_root.encode("utf-8")
+                ).hexdigest(),
+            }
         }), encoding="utf-8")
 
     def test_requires_the_target_not_any_skill_event(self) -> None:
@@ -744,11 +777,11 @@ class ExposureEligibilityTests(unittest.TestCase):
         self.assertFalse(report["eligible"])
         self.assertEqual(len(report["missing_target_reads"]), 1)
 
-    def test_completed_reader_command_counts_as_target_read(self) -> None:
+    def test_completed_absolute_reader_command_counts_as_target_read(self) -> None:
         command = {
             "type": "command",
             "name": "Bash",
-            "input_summary": "sed -n '1,240p' ./skills/verify-commands/SKILL.md",
+            "input_summary": f"/usr/bin/sed -n '1,240p' {self.workspace_root}/skills/verify-commands/SKILL.md",
             "output_summary": "---\nname: verify-commands\n---",
             "status": "completed",
         }
@@ -757,18 +790,82 @@ class ExposureEligibilityTests(unittest.TestCase):
         report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertTrue(report["eligible"])
 
-    def test_shell_wrapped_reader_command_counts_as_target_read(self) -> None:
+    def test_shell_wrapped_absolute_reader_command_does_not_count(self) -> None:
         command = {
             "type": "command",
             "name": "Bash",
-            "input_summary": "/bin/zsh -lc \"sed -n '1,240p' ./skills/verify-commands/SKILL.md\"",
+            "input_summary": f"/bin/zsh -lc \"/usr/bin/sed -n '1,240p' {self.workspace_root}/skills/verify-commands/SKILL.md\"",
             "output_summary": "---\nname: verify-commands\n---",
             "status": "completed",
         }
         self.write_events("behavior", "with_skill", "verify-commands", event=command)
         self.write_events("behavior", "old_skill", None)
         report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
-        self.assertTrue(report["eligible"])
+        self.assertFalse(report["eligible"])
+
+    def test_relative_reader_command_does_not_establish_workspace_exposure(self) -> None:
+        command = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": "cat skills/verify-commands/SKILL.md",
+            "output_summary": "---\nname: verify-commands\n---",
+            "status": "completed",
+            "exit_code": 0,
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=command)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(
+            self.root / "runs", self.manifest, "verify-commands", "tune"
+        )
+        self.assertFalse(report["eligible"])
+
+    def test_reader_named_executable_does_not_establish_workspace_exposure(self) -> None:
+        command = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": f"/tmp/cat {self.workspace_root}/skills/verify-commands/SKILL.md",
+            "output_summary": "forged content",
+            "status": "completed",
+            "exit_code": 0,
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=command)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(
+            self.root / "runs", self.manifest, "verify-commands", "tune"
+        )
+        self.assertFalse(report["eligible"])
+
+    def test_reader_version_option_does_not_establish_workspace_exposure(self) -> None:
+        command = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": f"/usr/bin/sed --version {self.workspace_root}/skills/verify-commands/SKILL.md",
+            "output_summary": "sed version",
+            "status": "completed",
+            "exit_code": 0,
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=command)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(
+            self.root / "runs", self.manifest, "verify-commands", "tune"
+        )
+        self.assertFalse(report["eligible"])
+
+    def test_reader_environment_override_does_not_establish_workspace_exposure(self) -> None:
+        command = {
+            "type": "command",
+            "name": "Bash",
+            "input_summary": f"LD_PRELOAD=/tmp/reader.so /bin/cat {self.workspace_root}/skills/verify-commands/SKILL.md",
+            "output_summary": "forged content",
+            "status": "completed",
+            "exit_code": 0,
+        }
+        self.write_events("behavior", "with_skill", "verify-commands", event=command)
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(
+            self.root / "runs", self.manifest, "verify-commands", "tune"
+        )
+        self.assertFalse(report["eligible"])
 
     def test_reader_command_without_returned_content_does_not_count(self) -> None:
         command = {
@@ -809,6 +906,41 @@ class ExposureEligibilityTests(unittest.TestCase):
         report = exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
         self.assertFalse(report["eligible"])
         self.assertEqual(len(report["missing_target_reads"]), 1)
+
+    def test_suffix_matching_decoy_skill_paths_do_not_count(self) -> None:
+        for event in (
+            {
+                "type": "skill_load",
+                "name": "Read",
+                "input_summary": "/tmp/decoy/skills/verify-commands/SKILL.md",
+                "status": "completed",
+            },
+            {
+                "type": "command",
+                "name": "Bash",
+                "input_summary": "cat /tmp/decoy/skills/verify-commands/SKILL.md",
+                "output_summary": "decoy",
+                "status": "completed",
+                "exit_code": 0,
+            },
+        ):
+            with self.subTest(event=event["type"]):
+                self.write_events(
+                    "behavior", "with_skill", "verify-commands", event=event
+                )
+                self.write_events("behavior", "old_skill", None)
+                report = exposure_report(
+                    self.root / "runs",
+                    self.manifest,
+                    "verify-commands",
+                    "tune",
+                )
+                self.assertFalse(report["eligible"])
+                for path in (self.root / "runs").iterdir():
+                    if path.is_dir():
+                        shutil.rmtree(path)
+                    else:
+                        path.unlink()
 
     def test_native_skill_activation_counts_without_a_file_path(self) -> None:
         native = {

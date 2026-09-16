@@ -14,3 +14,21 @@ jobs:
       require-manifests: true
       trigger-cases: tools/skill-trigger-cases.json
       pii-scope: repository
+  direct-eval-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python3 -m pip install --require-hashes -r tools/requirements.txt
+      - name: Pull pinned replay image
+        run: docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
+      - name: Run non-empty direct-evaluation suites
+        run: >-
+          python3 tools/run_python_test_suites.py
+          tools
+          evals/verify-commands/oracles
+          evals/spec-probes/oracles
+          evals/runtime-probes/oracles

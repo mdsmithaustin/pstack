@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from direct_skill_lanes import LaneError
-from run_direct_skill_eval import command_plan, execute_plan, main
+from run_direct_skill_eval import adapter_arguments, command_plan, execute_plan, main
 
 
 class DirectSkillEvalRunnerTests(unittest.TestCase):
@@ -51,9 +51,15 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
         values.update(changes)
         return command_plan(**values)
 
+    @staticmethod
+    def operation(command: list[str]) -> str:
+        if any(Path(value).name == "direct_skill_runner.py" for value in command):
+            return "run-agent"
+        return command[6]
+
     def test_plan_runs_complete_pipeline_on_requested_split(self) -> None:
         commands = self.plan(split="holdback")
-        self.assertEqual([command[6] for command in commands], [
+        self.assertEqual([self.operation(command) for command in commands], [
             "validate", "audit-manifest", "prepare", "run-agent", "grade", "judge", "benchmark", "report",
         ])
         for command in commands:
@@ -69,6 +75,15 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
         self.assertIn("--codex-cmd", commands[3])
         self.assertIn("--claude-bin", commands[5])
         self.assertIn(str(self.skill_ci / "tools" / "claude-project-only"), commands[5])
+
+    def test_codex_adapter_quotes_a_path_with_spaces_and_shell_punctuation(self) -> None:
+        root = self.root / "skill ci;still-one-path"
+        arguments = adapter_arguments("codex", root)
+        parsed = __import__("shlex").split(arguments[1])
+        self.assertEqual(parsed[0], str(root / "tools" / "codex-project-only"))
+        self.assertEqual(parsed[1:], [
+            "exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only"
+        ])
 
     def test_claude_answer_uses_codex_judge_adapters(self) -> None:
         commands = self.plan(agent="claude", judge_backend="codex")
@@ -91,7 +106,11 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
             "optional_variants": ["old_skill"],
         }), encoding="utf-8")
         commands = self.plan(lane="integrated")
-        harness_commands = [command[6] for command in commands if len(command) > 6 and command[0] == "uv"]
+        harness_commands = [
+            self.operation(command)
+            for command in commands
+            if len(command) > 6 and command[0] == "uv"
+        ]
         self.assertEqual(harness_commands, [
             "validate", "audit-manifest", "prepare", "run-agent", "grade", "compare-tasks",
         ])
@@ -115,6 +134,16 @@ class DirectSkillEvalRunnerTests(unittest.TestCase):
 
     def test_integrated_plan_rejects_manifest_without_pair_arms(self) -> None:
         with self.assertRaisesRegex(ValueError, "integrated manifest"):
+            self.plan(lane="integrated")
+
+    def test_integrated_plan_rejects_ambiguous_manifest_json(self) -> None:
+        manifest = self.repo / "evals" / "demo" / "shared-benchmark.json"
+        manifest.write_text(
+            '{"optional_variants":["old_skill"],"skill_paths":["one"],'
+            '"skill_paths":["two"],"old_skill_paths":["old"]}',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "cannot read integrated manifest"):
             self.plan(lane="integrated")
 
     def test_integrated_plan_does_not_require_an_inline_judge(self) -> None:
