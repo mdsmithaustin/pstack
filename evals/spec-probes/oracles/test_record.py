@@ -305,8 +305,31 @@ class RecordOracleTests(unittest.TestCase):
         text = '<spec-probe-record>{"coverage":{"applicable":1}}</spec-probe-record>'
         self.assertEqual(
             evaluate("neg-deployed-incident-restraint", text),
-            ["coverage.applicable must be 0"],
+            [
+                "coverage.applicable must be 0",
+                "coverage.resolved must be 0",
+                "coverage.dismissed must be 0",
+                "coverage.unresolved must be 0",
+            ],
         )
+
+    def test_incident_tagged_record_requires_complete_zero_coverage(self) -> None:
+        empty = "<spec-probe-record>{}</spec-probe-record>"
+        self.assertEqual(
+            evaluate("neg-deployed-incident-restraint", empty),
+            ["coverage must be an object with zero incident counts"],
+        )
+        incomplete = '<spec-probe-record>{"coverage":{"applicable":0}}</spec-probe-record>'
+        self.assertEqual(
+            evaluate("neg-deployed-incident-restraint", incomplete),
+            [
+                "coverage.resolved must be 0",
+                "coverage.dismissed must be 0",
+                "coverage.unresolved must be 0",
+            ],
+        )
+        complete = '<spec-probe-record>{"coverage":{"applicable":0,"resolved":0,"dismissed":0,"unresolved":0}}</spec-probe-record>'
+        self.assertEqual(evaluate("neg-deployed-incident-restraint", complete), [])
 
     def test_importer_integration_checks_parseable_coverage_arithmetic(self) -> None:
         record = {

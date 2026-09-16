@@ -164,6 +164,19 @@ def _coverage_errors(record: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _incident_coverage_errors(record: dict[str, Any]) -> list[str]:
+    errors = _coverage_errors(record)
+    coverage = record.get("coverage")
+    if not isinstance(coverage, dict):
+        return [*errors, "coverage must be an object with zero incident counts"]
+    for key in ("applicable", "resolved", "dismissed", "unresolved"):
+        if type(coverage.get(key)) is not int or coverage[key] != 0:
+            error = f"coverage.{key} must be 0"
+            if error not in errors:
+                errors.append(error)
+    return errors
+
+
 def _trace_errors(events: list[dict[str, Any]] | None) -> list[str]:
     if events is None:
         return []
@@ -190,7 +203,7 @@ def evaluate_spec(text: str, spec: CaseSpec, events: list[dict[str, Any]] | None
             record, import_errors = extract_import_record(text)
             errors.extend(import_errors)
             if record is not None:
-                errors.extend(_coverage_errors(record))
+                errors.extend(_incident_coverage_errors(record))
         return errors
     missing = [requirement_id for requirement_id in spec.requirement_ids if requirement_id not in mentioned]
     if missing:
