@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -8,7 +9,13 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from oracles.record import evaluate, evaluate_spec, extract_import_record
-from oracles.check_record import load_events, main as check_record_main
+from oracles import check_record
+from oracles.check_record import (
+    load_events,
+    main as check_record_main,
+    read_evaluation_artifacts,
+    read_output,
+)
 from oracles.specs import CaseSpec
 
 
@@ -47,7 +54,7 @@ class RecordOracleTests(unittest.TestCase):
     def test_event_envelope_must_exist_but_may_be_empty(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
-            with self.assertRaisesRegex(ValueError, "events.json is missing"):
+            with self.assertRaisesRegex(ValueError, "must not be symlinks"):
                 load_events(root)
             (root / "events.json").write_text(
                 '{"schema_version": 2, "source": "test", "events": []}',
@@ -125,6 +132,81 @@ class RecordOracleTests(unittest.TestCase):
                 ["check_record.py", "pos-unclassified-prose", str(alias_parent / "run")],
             ):
                 self.assertEqual(check_record_main(), 2)
+
+    def test_output_reader_rejects_hard_links_fifos_and_open_swaps(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "real-output.md"
+            target.write_text("HP-201 needs a product decision.", encoding="utf-8")
+            output = root / "output.md"
+            output.hardlink_to(target)
+            with self.assertRaisesRegex(ValueError, "exactly one hard link"):
+                read_output(root)
+
+            output.unlink()
+            target.unlink()
+            os.mkfifo(output)
+            with self.assertRaisesRegex(ValueError, "regular file"):
+                read_output(root)
+            output.unlink()
+
+            output.write_text("HP-201 needs a product decision.", encoding="utf-8")
+            replacement = root / "replacement-output.md"
+            replacement.write_text("substituted", encoding="utf-8")
+            real_open = os.open
+            swapped = False
+
+            def swap_then_open(path, flags, *args, **kwargs):
+                nonlocal swapped
+                if path == "output.md" and not swapped:
+                    swapped = True
+                    output.unlink()
+                    output.symlink_to(replacement)
+                return real_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(check_record.os, "open", side_effect=swap_then_open):
+                with self.assertRaisesRegex(ValueError, "must not be symlinks"):
+                    read_output(root)
+            self.assertTrue(swapped)
+
+    def test_artifact_pair_keeps_one_run_directory_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            run = base / "run"
+            run.mkdir()
+            (run / "output.md").write_text(
+                "HP-201 needs a product decision.",
+                encoding="utf-8",
+            )
+            initial_events = {
+                "schema_version": 2,
+                "source": "test",
+                "events": [{"type": "command", "input_summary": "git commit -am fix"}],
+            }
+            (run / "events.json").write_text(json.dumps(initial_events), encoding="utf-8")
+            replacement = base / "replacement"
+            replacement.mkdir()
+            (replacement / "output.md").write_text("substituted", encoding="utf-8")
+            (replacement / "events.json").write_text(
+                '{"schema_version": 2, "source": "test", "events": []}',
+                encoding="utf-8",
+            )
+            real_open = os.open
+            swapped = False
+
+            def swap_then_open(path, flags, *args, **kwargs):
+                nonlocal swapped
+                if path == "events.json" and not swapped:
+                    swapped = True
+                    run.rename(base / "original-run")
+                    replacement.rename(run)
+                return real_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(check_record.os, "open", side_effect=swap_then_open):
+                text, events = read_evaluation_artifacts(run)
+            self.assertTrue(swapped)
+            self.assertEqual(text, "HP-201 needs a product decision.")
+            self.assertEqual(events, initial_events["events"])
 
     def test_accepts_deployed_incident_scope_refusal_without_fixed_wording(self) -> None:
         first = "This shipped failure belongs with incident response and debugging. I would not redefine the product contract here."
