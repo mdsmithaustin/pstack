@@ -49,6 +49,7 @@ Matching digests show that the recorded file paths and bytes match at the two la
 Run repository tests and pinned harness checks before spending model budget.
 
 ```sh
+docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
 mise exec -- python3 tools/run_python_test_suites.py \
   tools \
   evals/verify-commands/oracles \
