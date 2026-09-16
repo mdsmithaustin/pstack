@@ -159,6 +159,43 @@ def validate_case_references(
     private_files: set[str],
 ) -> None:
     available = public_files | private_files
+
+    def validate_script(case_id: str, assertion: object) -> None:
+        if not isinstance(assertion, dict) or assertion.get("type") != "script":
+            return
+        command = assertion.get("command")
+        if (
+            not isinstance(command, list)
+            or len(command) < 2
+            or not all(isinstance(token, str) and token for token in command)
+        ):
+            raise CompositionError(f"{case_id} script command must be a string list")
+        if re.fullmatch(r"python3?(?:\.\d+)?", command[0]) is None:
+            raise CompositionError(f"{case_id} script command must use Python")
+        script = command[1]
+        references = [script]
+        references.extend(
+            token
+            for token in command[2:]
+            if token != "{output_dir}"
+            and ("/" in token or "\\" in token or PurePosixPath(token).suffix in {".js", ".pl", ".py", ".rb", ".sh"})
+        )
+        for reference in references:
+            path = PurePosixPath(reference)
+            if (
+                "\\" in reference
+                or path.is_absolute()
+                or path.as_posix() != reference
+                or any(part in {".", ".."} for part in path.parts)
+            ):
+                raise CompositionError(
+                    f"{case_id} has an unsafe script reference: {reference!r}"
+                )
+            if reference not in available:
+                raise CompositionError(
+                    f"{case_id} script references a missing file: {reference}"
+                )
+
     for case in cases:
         case_id = case["id"]
         files = case.get("files", [])
@@ -182,14 +219,38 @@ def validate_case_references(
                 raise CompositionError(f"{case_id} has an unsafe file reference: {reference!r}")
             if reference not in available:
                 raise CompositionError(f"{case_id} references a missing file: {reference}")
+        assertions_value = case.get("assertions") or []
+        if not isinstance(assertions_value, list):
+            raise CompositionError(f"{case_id} assertions must be a list")
+        assertions = list(assertions_value)
+        turns = case.get("turns") or []
+        if not isinstance(turns, list):
+            raise CompositionError(f"{case_id} turns must be a list")
+        for turn in turns:
+            if not isinstance(turn, dict):
+                raise CompositionError(f"{case_id} turns must contain objects")
+            turn_assertions = turn.get("assertions") or []
+            if not isinstance(turn_assertions, list):
+                raise CompositionError(f"{case_id} turn assertions must be a list")
+            assertions.extend(turn_assertions)
+        for assertion in assertions:
+            validate_script(case_id, assertion)
 
 
 def compose(repo: Path, skill_name: str, overlay_path: Path, output_root: Path) -> Path:
     repo = repo.resolve()
-    overlay_path = overlay_path.resolve()
-    if output_root.is_symlink():
+    unresolved_overlay = overlay_path.absolute()
+    if unresolved_overlay == repo or repo in unresolved_overlay.parents:
+        raise CompositionError("the private overlay must be outside the repository")
+    overlay_path = unresolved_overlay.resolve()
+    if overlay_path == repo or repo in overlay_path.parents:
+        raise CompositionError("the private overlay must be outside the repository")
+    unresolved_output = output_root.absolute()
+    if unresolved_output == repo or repo in unresolved_output.parents:
+        raise CompositionError("the composed holdback must be outside the repository")
+    if unresolved_output.is_symlink():
         raise CompositionError("output path must not be a symlink")
-    output_root = output_root.resolve()
+    output_root = unresolved_output.resolve()
     if output_root == repo or repo in output_root.parents:
         raise CompositionError("the composed holdback must be outside the repository")
     if output_root.exists():

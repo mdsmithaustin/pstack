@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
+import stat
 import sys
 from pathlib import Path
 from typing import Any
 
 
 PROBE_EXECUTABLES = {"curl", "docker", "node", "wget"}
+READ_ONLY_EXECUTABLES = {
+    "cat", "echo", "head", "ls", "printf", "pwd", "stat", "tail", "wc",
+}
 
 
 class CandidateFailure(ValueError):
@@ -28,40 +33,72 @@ def fail(condition: bool, message: str) -> None:
         raise CandidateFailure(message)
 
 
-def path_contains_symlink(path: Path) -> bool:
-    absolute = path.absolute()
-    current = Path(absolute.anchor)
-    for part in absolute.parts[1:]:
-        current /= part
-        if current.is_symlink():
-            return True
-    return False
-
-
-def reject_symlink_artifacts(output_dir: Path, names: tuple[str, ...]) -> None:
-    if any(path_contains_symlink(output_dir / name) for name in names):
-        raise InfrastructureFailure("evaluation artifact paths must not be symlinks")
+def read_regular_artifact(output_dir: Path, name: str, *, errors: str = "strict") -> str:
+    absolute_root = output_dir.absolute()
+    root_parts = list(absolute_root.parts[1:])
+    canonical_root = Path(absolute_root.anchor)
+    if root_parts and (canonical_root / root_parts[0]).is_symlink():
+        alias = canonical_root / root_parts.pop(0)
+        resolved = alias.resolve(strict=True)
+        if alias.lstat().st_uid != 0 or resolved.stat().st_uid != 0:
+            raise InfrastructureFailure("evaluation artifact paths must not be symlinks")
+        canonical_root = resolved
+    for part in root_parts:
+        canonical_root /= part
+        if canonical_root.is_symlink():
+            raise InfrastructureFailure("evaluation artifact paths must not be symlinks")
+    directory_descriptor = -1
+    artifact_descriptor = -1
+    try:
+        directory_descriptor = os.open(canonical_root.anchor, os.O_RDONLY | os.O_DIRECTORY)
+        for part in canonical_root.parts[1:]:
+            next_descriptor = os.open(
+                part,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=directory_descriptor,
+            )
+            os.close(directory_descriptor)
+            directory_descriptor = next_descriptor
+        artifact_descriptor = os.open(
+            name,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=directory_descriptor,
+        )
+        metadata = os.fstat(artifact_descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise InfrastructureFailure(
+                f"{name} must be a regular file with exactly one hard link"
+            )
+        stream = os.fdopen(artifact_descriptor, "r", encoding="utf-8", errors=errors)
+        artifact_descriptor = -1
+        with stream:
+            text = stream.read()
+            if os.fstat(stream.fileno()).st_nlink != 1:
+                raise InfrastructureFailure(
+                    f"{name} must be a regular file with exactly one hard link"
+                )
+            return text
+    except InfrastructureFailure:
+        raise
+    except (OSError, UnicodeError) as error:
+        raise InfrastructureFailure("evaluation artifact paths must not be symlinks") from error
+    finally:
+        if artifact_descriptor >= 0:
+            os.close(artifact_descriptor)
+        if directory_descriptor >= 0:
+            os.close(directory_descriptor)
 
 
 def read_output(output_dir: Path) -> str:
-    path = output_dir / "output.md"
-    reject_symlink_artifacts(output_dir, ("output.md",))
-    if not path.is_file():
-        raise InfrastructureFailure("output.md is missing")
-    text = path.read_text(encoding="utf-8", errors="replace").strip()
+    text = read_regular_artifact(output_dir, "output.md", errors="replace").strip()
     fail(bool(text), "output.md is empty")
     return text
 
 
 def load_events(output_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
-    events_path = output_dir / "events.json"
-    trace_path = output_dir / "trace.jsonl"
-    reject_symlink_artifacts(output_dir, ("events.json", "trace.jsonl"))
-    if not events_path.is_file() or not trace_path.is_file():
-        raise InfrastructureFailure("events.json and trace.jsonl are required")
     try:
-        envelope = json.loads(events_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        envelope = json.loads(read_regular_artifact(output_dir, "events.json"))
+    except json.JSONDecodeError as error:
         raise InfrastructureFailure(f"events.json is unreadable: {error}") from error
     if (
         not isinstance(envelope, dict)
@@ -74,10 +111,7 @@ def load_events(output_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
     events = envelope.get("events")
     if not isinstance(events, list) or not all(isinstance(item, dict) for item in events):
         raise InfrastructureFailure("events.json does not contain an events list")
-    try:
-        trace = trace_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError as error:
-        raise InfrastructureFailure(f"trace.jsonl is unreadable: {error}") from error
+    trace = read_regular_artifact(output_dir, "trace.jsonl", errors="replace").splitlines()
     return events, trace
 
 
@@ -94,8 +128,11 @@ def _command_tokens(command: str) -> list[str]:
 
 
 def _mutates(command: str) -> bool:
+    shell_command = re.sub(r"\\\r?\n", "", command)
+    if any(marker in shell_command for marker in ("$(", "`", "<(", ">(")):
+        return True
     try:
-        tokens = _command_tokens(command)
+        tokens = _command_tokens(shell_command)
     except ValueError:
         return True
     for index, token in enumerate(tokens):
@@ -115,11 +152,15 @@ def _mutates(command: str) -> bool:
             segments[-1].append(token)
     for segment in segments:
         argv = [_unquoted(token)[0] for token in segment]
-        while argv and "=" in argv[0] and not argv[0].startswith(("/", "./")):
-            argv.pop(0)
+        if argv and "=" in argv[0] and not argv[0].startswith(("/", "./")):
+            return True
         if not argv:
             continue
         executable = argv[0]
+        if "/" in executable and Path(executable).parent.as_posix() not in {
+            "/bin", "/usr/bin", "/usr/local/bin",
+        }:
+            return True
         name = Path(executable).name.lower()
         if name == "env":
             nested = argv[1:]
@@ -133,9 +174,11 @@ def _mutates(command: str) -> bool:
                         return True
                     del nested[:2]
                     continue
-                if option.startswith(("--unset=", "--chdir=")) or "=" in option:
+                if option.startswith(("--unset=", "--chdir=")):
                     nested.pop(0)
                     continue
+                if "=" in option:
+                    return True
                 if option.startswith("-"):
                     return True
                 break
@@ -151,24 +194,6 @@ def _mutates(command: str) -> bool:
             if not nested or _mutates(shlex.join(nested)):
                 return True
             continue
-        if name in {"apply_patch", "rm", "mv", "cp", "touch", "mkdir", "chmod", "tee"}:
-            return True
-        if name == "git" and len(argv) > 1 and argv[1] in {"add", "commit", "push", "reset", "checkout", "switch"}:
-            return True
-        if name == "sed" and any(argument == "--in-place" or argument.startswith("-i") for argument in argv[1:]):
-            return True
-        if (
-            re.fullmatch(r"python3?(?:\.\d+)?", name)
-            and len(argv) > 1
-            and argv[1].startswith("-c")
-        ):
-            return True
-        if name in {"node", "ruby", "perl"} and any(
-            argument in {"-e", "--eval", "-p", "--print"}
-            or argument.startswith(("--eval=", "--print=", "-e", "-p"))
-            for argument in argv[1:]
-        ):
-            return True
         if name in {"bash", "dash", "sh", "zsh"}:
             nested = argv[1:]
             options: list[str] = []
@@ -184,16 +209,51 @@ def _mutates(command: str) -> bool:
                 return True
             if _mutates(nested[0]):
                 return True
+            continue
+        if re.fullmatch(r"python3?(?:\.\d+)?", name):
+            return True
+        if name in READ_ONLY_EXECUTABLES:
+            continue
+        if name in {"rg", "grep"}:
+            allowed_options = {
+                "-F", "-i", "-n", "-w",
+                "--fixed-strings", "--ignore-case", "--line-number", "--word-regexp",
+            }
+            for argument in argv[1:]:
+                if argument == "--":
+                    break
+                if argument.startswith("-") and argument not in allowed_options:
+                    return True
+            continue
+        if name == "sed":
+            arguments = list(argv[1:])
+            if not arguments or arguments.pop(0) != "-n":
+                return True
+            if arguments and arguments[0] == "-e":
+                arguments.pop(0)
+            if (
+                len(arguments) < 2
+                or re.fullmatch(r"(?:\d+|\$)(?:,(?:\d+|\$))?p", arguments[0]) is None
+                or any(argument.startswith("-") for argument in arguments[1:])
+            ):
+                return True
+            continue
+        return True
     return False
 
 
-def ensure_diagnostic_only(events: list[dict[str, Any]]) -> None:
+def ensure_diagnostic_only(
+    events: list[dict[str, Any]],
+    trusted_driver: str | None = None,
+) -> None:
     changes = [event for event in events if event.get("type") in {"file_change", "file_write"}]
     fail(not changes, "diagnostic-only task changed a file")
     for event in events:
         if event.get("type") != "command":
             continue
         command = str(event.get("input_summary", ""))
+        if trusted_driver is not None and _trusted_command(command, trusted_driver):
+            continue
         fail(not _mutates(command), f"diagnostic-only task used a mutating command: {command}")
 
 
@@ -324,7 +384,7 @@ def _trace_payload(trace: list[str], line_number: object, driver: str) -> dict[s
 
 def trusted_replays(output_dir: Path, driver: str, target: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     events, trace = load_events(output_dir)
-    ensure_diagnostic_only(events)
+    ensure_diagnostic_only(events, driver)
     attempts = [
         event
         for event in events

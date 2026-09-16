@@ -174,6 +174,37 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         with self.assertRaisesRegex(CompositionError, "outside the repository"):
             compose(self.repo, "demo", self.overlay, self.repo / "generated")
 
+    def test_rejects_repository_symlink_to_an_external_output_parent(self) -> None:
+        outside = self.root / "outside-output"
+        outside.mkdir()
+        link = self.repo / "external-output"
+        link.symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(CompositionError, "outside the repository"):
+            compose(self.repo, "demo", self.overlay, link / "composed")
+
+    def test_rejects_private_overlay_inside_repository(self) -> None:
+        private = self.repo / "private"
+        private.mkdir()
+        shutil.copytree(self.overlay.parent / "payload", private / "payload")
+        overlay = private / "overlay.json"
+        shutil.copyfile(self.overlay, overlay)
+        with self.assertRaisesRegex(CompositionError, "private overlay must be outside"):
+            compose(self.repo, "demo", overlay, self.root / "composed")
+
+    def test_rejects_repository_symlink_to_an_external_overlay(self) -> None:
+        overlay = self.repo / "private-overlay.json"
+        overlay.symlink_to(self.overlay)
+        with self.assertRaisesRegex(CompositionError, "private overlay must be outside"):
+            compose(self.repo, "demo", overlay, self.root / "composed")
+
+    def test_rejects_external_symlink_to_a_repository_overlay(self) -> None:
+        overlay = self.repo / "private-overlay.json"
+        shutil.copyfile(self.overlay, overlay)
+        link = self.root / "private-overlay-link.json"
+        link.symlink_to(overlay)
+        with self.assertRaisesRegex(CompositionError, "private overlay must be outside"):
+            compose(self.repo, "demo", link, self.root / "composed")
+
     def test_rejects_file_as_output_directory(self) -> None:
         output = self.root / "composed"
         output.write_text("occupied", encoding="utf-8")
@@ -231,6 +262,31 @@ class ComposeEvalHoldbackTests(unittest.TestCase):
         self.write_overlay(cases=cases)
         with self.assertRaisesRegex(CompositionError, "prompt_ref must be a string"):
             compose(self.repo, "demo", self.overlay, self.root / "bad-prompt-ref")
+
+    def test_accepts_a_private_script_copied_into_the_composed_suite(self) -> None:
+        oracle = self.overlay.parent / "payload" / "oracles" / "private_check.py"
+        oracle.parent.mkdir()
+        oracle.write_text("print('PASS')\n", encoding="utf-8")
+        cases = holdback_cases()
+        cases[0]["assertions"] = [{
+            "type": "script",
+            "command": ["python3", "oracles/private_check.py", "{output_dir}"],
+        }]
+        self.write_overlay(cases=cases)
+        result = compose(self.repo, "demo", self.overlay, self.root / "private-script")
+        self.assertTrue((result.parent / "oracles" / "private_check.py").is_file())
+
+    def test_rejects_script_paths_outside_the_composed_suite(self) -> None:
+        for index, reference in enumerate(("/tmp/evil.py", "../evil.py", "oracles/missing.py")):
+            with self.subTest(reference=reference):
+                cases = holdback_cases()
+                cases[0]["assertions"] = [{
+                    "type": "script",
+                    "command": ["python3", reference, "{output_dir}"],
+                }]
+                self.write_overlay(cases=cases)
+                with self.assertRaisesRegex(CompositionError, "script reference"):
+                    compose(self.repo, "demo", self.overlay, self.root / f"bad-script-{index}")
 
 
 if __name__ == "__main__":

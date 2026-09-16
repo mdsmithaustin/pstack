@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,6 +153,60 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             )
             self.assertEqual(result, ("INFRASTRUCTURE_FAILURE", "evaluation artifact paths must not be symlinks"))
 
+    def test_evaluate_rejects_a_hard_linked_or_special_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            real_output = root / "real-output.md"
+            real_output.write_text("plain result", encoding="utf-8")
+            (root / "output.md").hardlink_to(real_output)
+            self.assertEqual(
+                runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", root),
+                (
+                    "INFRASTRUCTURE_FAILURE",
+                    "output.md must be a regular file with exactly one hard link",
+                ),
+            )
+            (root / "output.md").unlink()
+            (root / "real-output.md").unlink()
+            os.mkfifo(root / "output.md")
+            self.assertEqual(
+                runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", root),
+                (
+                    "INFRASTRUCTURE_FAILURE",
+                    "output.md must be a regular file with exactly one hard link",
+                ),
+            )
+
+    def test_evaluate_rejects_an_ancestor_swapped_to_a_symlink_at_open(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            run = root / "run"
+            run.mkdir()
+            (run / "output.md").write_text("plain result", encoding="utf-8")
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "output.md").write_text("substituted result", encoding="utf-8")
+            real_open = os.open
+            swapped = False
+
+            def swap_then_open(path, flags, *args, **kwargs):
+                nonlocal swapped
+                if path == "run" and not swapped:
+                    swapped = True
+                    run.rename(root / "original-run")
+                    run.symlink_to(outside, target_is_directory=True)
+                return real_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(runtime_probe_oracle.os, "open", side_effect=swap_then_open):
+                self.assertEqual(
+                    runtime_probe_oracle.evaluate("neg-plan-order-service-unavailable", run),
+                    (
+                        "INFRASTRUCTURE_FAILURE",
+                        "evaluation artifact paths must not be symlinks",
+                    ),
+                )
+            self.assertTrue(swapped)
+
     def test_accepts_natural_findings_table_and_structurally_different_prose(self) -> None:
         table = "| Evidence | Result |\n| --- | --- |\n| aaaaaaaaaaaaaaaaaaaaaaaa | first run |\n| bbbbbbbbbbbbbbbbbbbbbbbb | clean replay |"
         prose = "The initial run is aaaaaaaaaaaaaaaaaaaaaaaa. A fresh replay produced bbbbbbbbbbbbbbbbbbbbbbbb. The duplicate is reachable through checkout and affects customer orders."
@@ -271,12 +326,33 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             workspace.events.append(event)
             self.assertEqual(runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0], "CANDIDATE_FAILURE")
 
-    def test_dev_null_redirection_is_not_a_file_mutation(self) -> None:
+    def test_unknown_commands_fail_closed(self) -> None:
+        for command in (
+            "awk 'BEGIN { system(\"touch /tmp/diagnostic\") }'",
+            "echo $(touch /tmp/diagnostic)",
+            "echo $\\\n(touch /tmp/diagnostic)",
+            "find inputs -exec touch /tmp/diagnostic ;",
+            "git diff --output=/tmp/diagnostic",
+            "GIT_EXTERNAL_DIFF=/tmp/mutate git diff --ext-diff",
+            "/tmp/cat inputs/order-service-note.md",
+            "PATH=/tmp cat inputs/order-service-note.md",
+            "env PATH=/tmp cat inputs/order-service-note.md",
+            "rg --hostname-bin=/tmp/mutate --hyperlink-format='file://{host}{path}' foo inputs/order-service-note.md",
+            "sed -n -e 1p -i inputs/order-service-note.md",
+            "sed -n -e 1p --in-place inputs/order-service-note.md",
+            'printf "$(touch /tmp/diagnostic)"',
+        ):
+            workspace = self.workspace("aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb")
+            self.add_order_replays(workspace)
+            workspace.events.append({"type": "command", "input_summary": command})
+            self.assertEqual(
+                runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path)[0],
+                "CANDIDATE_FAILURE",
+            )
+
+    def test_quoted_redirection_symbol_is_not_a_file_mutation(self) -> None:
         runtime_probe_oracle.ensure_diagnostic_only(
-            [
-                {"type": "command", "input_summary": "python3 inputs/verify_order_service.py 2>/dev/null"},
-                {"type": "command", "input_summary": "printf '>'"},
-            ]
+            [{"type": "command", "input_summary": "printf '>'"}]
         )
 
     def test_candidate_owned_interpreters_and_shell_wrappers_are_not_trusted(self) -> None:
