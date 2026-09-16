@@ -1,6 +1,6 @@
 # Direct-skill evaluation foundation
 
-This directory contains reusable inputs for evaluating `verify-commands`, `spec-probes`, and `runtime-probes`. Model answers, traces, judge verdicts, reports, token ledgers, and private holdbacks stay outside Git.
+This directory contains reusable inputs for evaluating `verify-commands`, `spec-probes`, and `runtime-probes`. Model answers, traces, judge verdicts, reports, token ledgers, and private holdbacks stay outside Git. Record this foundation's local decision trail at `evals/direct-skills-foundation-decisions.tsv`; the exact path is ignored and must not be staged.
 
 The experiment has two comparison lanes. Only the integrated lane can support a headline quality claim.
 
@@ -32,7 +32,7 @@ The oracles do not require one application-style response schema.
 
 - `verify-commands` accepts a natural answer with one fenced shell artifact and brief prose. It runs the artifact against fresh healthy and defective fixture states inside a locked container. The candidate process has no writable home or shared-memory scratch space and cannot create regular files. An in-container evidence service authenticates each required interpreter, argument vector, and working directory against the root-owned fixture. A hidden operation failure repeats an otherwise passing fixture to prove that the plan propagates the check result. Candidate bytes enter through standard input. They never become host shell arguments, environment values, image names, or paths. There is no host-execution fallback.
 - `spec-probes` accepts natural prose and Markdown tables. Its oracle checks source requirement anchors, non-mutation, and arithmetic consistency when the answer includes tagged coverage data. A cross-family comparison judge decides which answer is more complete, grounded, and applicable.
-- `runtime-probes` accepts natural prose and findings tables. Its oracle checks that the trusted driver ran as required, the trace contains fresh target-specific evidence, the driver facts match the fixture, the answer cites actual evidence IDs, and the fixture was not mutated. A cross-family comparison judge decides whether the answer's claims agree with those facts and which answer has better diagnostic quality.
+- `runtime-probes` accepts natural prose and findings tables. Its oracle checks that recorded command evidence identifies the expected driver, the trace contains fresh target-specific evidence, the recorded driver facts match the fixture, the answer cites actual evidence IDs, and the fixture was not mutated. This is not driver-integrity proof on the current Claude path. A cross-family comparison judge decides whether the answer's claims agree with those facts and which answer has better diagnostic quality.
 
 Tagged JSON samples remain only in explicitly named importer-integration unit tests. They test parser compatibility and do not contribute to headline behavior results. Metamorphic tests use structurally different valid answers to keep the deterministic gates independent of wording and presentation.
 

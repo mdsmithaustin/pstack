@@ -1,7 +1,9 @@
 import io
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -288,6 +290,60 @@ print(json.dumps({"status": "measured", "states": results}, sort_keys=True))
 '''
 
 
+class InfrastructureFailure(ValueError):
+    pass
+
+
+def canonical_artifact_root(root: Path) -> Path:
+    absolute = root.absolute()
+    parts = list(absolute.parts[1:])
+    current = Path(absolute.anchor)
+    if parts and (current / parts[0]).is_symlink():
+        alias = current / parts.pop(0)
+        resolved = alias.resolve(strict=True)
+        if alias.lstat().st_uid != 0 or resolved.stat().st_uid != 0:
+            raise InfrastructureFailure(f"output path contains an untrusted symlink: {alias}")
+        current = resolved
+    for part in parts:
+        current /= part
+        if current.is_symlink():
+            raise InfrastructureFailure(f"output path contains a symlink: {current}")
+    return current
+
+
+def read_output(output_dir: Path) -> str:
+    absolute = canonical_artifact_root(output_dir) / "output.md"
+    descriptor = -1
+    try:
+        descriptor = os.open(absolute.anchor, os.O_RDONLY | os.O_DIRECTORY)
+        for index, part in enumerate(absolute.parts[1:]):
+            final = index == len(absolute.parts) - 2
+            flags = os.O_RDONLY | os.O_NOFOLLOW
+            flags |= os.O_NONBLOCK if final else os.O_DIRECTORY
+            next_descriptor = os.open(part, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise InfrastructureFailure("output.md is not a regular file")
+        if metadata.st_nlink != 1:
+            raise InfrastructureFailure("output.md must have exactly one hard link")
+        stream = os.fdopen(descriptor, "r", encoding="utf-8")
+        descriptor = -1
+        with stream:
+            text = stream.read()
+            if os.fstat(stream.fileno()).st_nlink != 1:
+                raise InfrastructureFailure("output.md must have exactly one hard link")
+            return text
+    except (OSError, UnicodeError) as error:
+        raise InfrastructureFailure(
+            f"output path contains a symlink or unreadable component: {error}"
+        ) from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 def parse_plan(text: str) -> dict:
     fences = SHELL_FENCE.findall(text)
     if len(fences) != 1:
@@ -385,11 +441,12 @@ def replay(plan: dict, definition: dict, bootstrap: Path) -> tuple[int, dict]:
 
 
 def evaluate(case_id: str, output_dir: Path) -> tuple[int, dict]:
-    output = output_dir / "output.md"
-    if not output.is_file():
-        return 1, {"status": "candidate_failure", "reason": f"missing {output.name}"}
     try:
-        plan = parse_plan(output.read_text(encoding="utf-8"))
+        text = read_output(output_dir)
+    except InfrastructureFailure as error:
+        return 2, {"status": "infrastructure", "reason": str(error)}
+    try:
+        plan = parse_plan(text)
         definition, bootstrap = load_case(case_id)
     except (OSError, ValueError) as error:
         return 1, {"status": "candidate_failure", "reason": str(error)}

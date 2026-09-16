@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import direct_skill_lanes as lane_module
 from direct_skill_lanes import (
     LaneError,
     _tracked_tree_files,
@@ -530,6 +531,111 @@ class ExposureEligibilityTests(unittest.TestCase):
         events_path.symlink_to(target)
         with self.assertRaisesRegex(LaneError, "contains a symlink"):
             exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_rejects_a_symlinked_answer_design(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        design_path = self.root / "runs" / "answer-design.json"
+        target = self.root / "replacement-answer-design.json"
+        design_path.replace(target)
+        design_path.symlink_to(target)
+        with self.assertRaisesRegex(LaneError, "contains a symlink"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_reads_from_the_standard_unresolved_temporary_root(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        report = exposure_report(
+            Path(self.temp.name) / "runs",
+            Path(self.temp.name) / "manifest.json",
+            "verify-commands",
+            "tune",
+        )
+        self.assertTrue(report["eligible"])
+
+    def test_rejects_a_hard_linked_answer_design(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        design_path = self.root / "runs" / "answer-design.json"
+        target = self.root / "replacement-answer-design.json"
+        design_path.replace(target)
+        os.link(target, design_path)
+        with self.assertRaisesRegex(LaneError, "exactly one hard link"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_rejects_a_hard_linked_event_file(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        target = self.root / "replacement-events.json"
+        events_path.replace(target)
+        os.link(target, events_path)
+        with self.assertRaisesRegex(LaneError, "exactly one hard link"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_rejects_answer_design_swapped_to_a_symlink_at_open(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        design_path = self.root / "runs" / "answer-design.json"
+        target = self.root / "replacement-answer-design.json"
+        target.write_text(design_path.read_text(encoding="utf-8"), encoding="utf-8")
+        real_open = os.open
+        swapped = False
+
+        def swap_then_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if path == "answer-design.json" and not swapped:
+                swapped = True
+                design_path.unlink()
+                design_path.symlink_to(target)
+            return real_open(path, flags, *args, **kwargs)
+
+        with patch.object(lane_module.os, "open", side_effect=swap_then_open):
+            with self.assertRaisesRegex(LaneError, "contains a symlink"):
+                exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+        self.assertTrue(swapped)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires POSIX FIFOs")
+    def test_rejects_a_fifo_answer_design_without_blocking(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        design_path = self.root / "runs" / "answer-design.json"
+        design_path.unlink()
+        os.mkfifo(design_path)
+        with self.assertRaisesRegex(LaneError, "not a regular file"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires POSIX FIFOs")
+    def test_rejects_a_fifo_event_file_without_blocking(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        events_path.unlink()
+        os.mkfifo(events_path)
+        with self.assertRaisesRegex(LaneError, "not a regular file"):
+            exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+
+    def test_rejects_event_file_swapped_to_a_symlink_at_open(self) -> None:
+        self.write_events("behavior", "with_skill", "verify-commands")
+        self.write_events("behavior", "old_skill", None)
+        events_path = self.root / "runs" / "behavior" / "with_skill" / "events.json"
+        target = self.root / "replacement-events.json"
+        target.write_text(events_path.read_text(encoding="utf-8"), encoding="utf-8")
+        real_open = os.open
+        swapped = False
+
+        def swap_then_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if path == "events.json" and not swapped:
+                swapped = True
+                events_path.unlink()
+                events_path.symlink_to(target)
+            return real_open(path, flags, *args, **kwargs)
+
+        with patch.object(lane_module.os, "open", side_effect=swap_then_open):
+            with self.assertRaisesRegex(LaneError, "contains a symlink"):
+                exposure_report(self.root / "runs", self.manifest, "verify-commands", "tune")
+        self.assertTrue(swapped)
 
     def test_rejects_a_symlinked_runs_root(self) -> None:
         self.write_events("behavior", "with_skill", "verify-commands")

@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import os
 import shutil
 import tarfile
 import tempfile
@@ -18,9 +19,10 @@ SPEC.loader.exec_module(MODULE)
 class PlanReplayTests(unittest.TestCase):
     def evaluate_sample(self, case_id, sample_name):
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "output.md"
+            root = Path(directory).resolve()
+            output = root / "output.md"
             shutil.copyfile(ROOT / "samples" / sample_name, output)
-            return MODULE.evaluate(case_id, Path(directory))
+            return MODULE.evaluate(case_id, root)
 
     def test_two_different_valid_commands_pass_real_replays(self):
         for sample in ("valid-stale-npm.md", "valid-stale-direct.md"):
@@ -111,12 +113,84 @@ class PlanReplayTests(unittest.TestCase):
 
     def test_unavailable_docker_is_unmeasured(self):
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "output.md"
+            root = Path(directory).resolve()
+            output = root / "output.md"
             shutil.copyfile(ROOT / "samples" / "valid-stale-npm.md", output)
             with mock.patch.object(MODULE.shutil, "which", return_value=None):
-                code, result = MODULE.evaluate("stale-summary", Path(directory))
+                code, result = MODULE.evaluate("stale-summary", root)
         self.assertEqual(code, 2)
         self.assertEqual(result, {"status": "infrastructure", "reason": "docker is unavailable"})
+
+    def test_rejects_a_symlinked_output_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "candidate.md"
+            target.write_text("```sh\ntrue\n```", encoding="utf-8")
+            (root / "output.md").symlink_to(target)
+            code, result = MODULE.evaluate("stale-summary", root)
+        self.assertEqual((code, result["status"]), (2, "infrastructure"))
+        self.assertIn("contains a symlink", result["reason"])
+
+    def test_rejects_output_below_a_symlinked_ancestor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            real = root / "real"
+            real.mkdir()
+            (real / "output.md").write_text("```sh\ntrue\n```", encoding="utf-8")
+            alias = root / "alias"
+            alias.symlink_to(real, target_is_directory=True)
+            code, result = MODULE.evaluate("stale-summary", alias)
+        self.assertEqual((code, result["status"]), (2, "infrastructure"))
+        self.assertIn("contains a symlink", result["reason"])
+
+    def test_rejects_a_non_regular_output_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            output = root / "output.md"
+            output.mkdir()
+            code, result = MODULE.evaluate("stale-summary", root)
+        self.assertEqual((code, result["status"]), (2, "infrastructure"))
+        self.assertIn("not a regular file", result["reason"])
+
+    def test_reads_from_the_standard_unresolved_temporary_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "output.md").write_text("```sh\ntrue\n```", encoding="utf-8")
+            self.assertEqual(MODULE.read_output(root), "```sh\ntrue\n```")
+
+    def test_rejects_a_hard_linked_output_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "external.md"
+            target.write_text("```sh\ntrue\n```", encoding="utf-8")
+            os.link(target, root / "output.md")
+            code, result = MODULE.evaluate("stale-summary", root)
+        self.assertEqual((code, result["status"]), (2, "infrastructure"))
+        self.assertIn("exactly one hard link", result["reason"])
+
+    def test_rejects_output_swapped_to_a_symlink_at_open(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            output = root / "output.md"
+            output.write_text("```sh\ntrue\n```", encoding="utf-8")
+            target = root / "replacement.md"
+            target.write_text("```sh\nfalse\n```", encoding="utf-8")
+            real_open = MODULE.os.open
+            swapped = False
+
+            def swap_then_open(path, flags, *args, **kwargs):
+                nonlocal swapped
+                if path == "output.md" and not swapped:
+                    swapped = True
+                    output.unlink()
+                    output.symlink_to(target)
+                return real_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(MODULE.os, "open", side_effect=swap_then_open):
+                code, result = MODULE.evaluate("stale-summary", root)
+        self.assertTrue(swapped)
+        self.assertEqual((code, result["status"]), (2, "infrastructure"))
+        self.assertIn("contains a symlink", result["reason"])
 
     def test_candidate_bytes_are_only_tar_payload(self):
         marker = "SHELL_BYTES_9b58a4"

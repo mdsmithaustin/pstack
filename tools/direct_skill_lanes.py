@@ -8,6 +8,7 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -56,6 +57,66 @@ def _read_json(path: Path) -> dict[str, Any]:
         raise LaneError(f"cannot read JSON from {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise LaneError(f"expected a JSON object in {path}")
+    return value
+
+
+def _read_regular_text_below(root: Path, relative: Path) -> str:
+    if relative.is_absolute() or ".." in relative.parts:
+        raise LaneError(f"lane artifact path must stay below its root: {relative}")
+    absolute_root = root.absolute()
+    root_parts = list(absolute_root.parts[1:])
+    canonical_root = Path(absolute_root.anchor)
+    if root_parts and (canonical_root / root_parts[0]).is_symlink():
+        alias = canonical_root / root_parts.pop(0)
+        resolved = alias.resolve(strict=True)
+        if alias.lstat().st_uid != 0 or resolved.stat().st_uid != 0:
+            raise LaneError(f"lane artifact path contains an untrusted symlink: {alias}")
+        canonical_root = resolved
+    for part in root_parts:
+        canonical_root /= part
+        if canonical_root.is_symlink():
+            raise LaneError(f"lane artifact path contains a symlink: {canonical_root}")
+    absolute_root = canonical_root
+    parts = (*absolute_root.parts[1:], *relative.parts)
+    descriptor = -1
+    try:
+        descriptor = os.open(absolute_root.anchor, os.O_RDONLY | os.O_DIRECTORY)
+        for index, part in enumerate(parts):
+            final = index == len(parts) - 1
+            flags = os.O_RDONLY | os.O_NOFOLLOW
+            flags |= os.O_NONBLOCK if final else os.O_DIRECTORY
+            next_descriptor = os.open(part, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = next_descriptor
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise LaneError(f"lane artifact is not a regular file: {root / relative}")
+        if metadata.st_nlink != 1:
+            raise LaneError(f"lane artifact must have exactly one hard link: {root / relative}")
+        stream = os.fdopen(descriptor, "r", encoding="utf-8")
+        descriptor = -1
+        with stream:
+            text = stream.read()
+            if os.fstat(stream.fileno()).st_nlink != 1:
+                raise LaneError(f"lane artifact must have exactly one hard link: {root / relative}")
+            return text
+    except (OSError, UnicodeError) as exc:
+        raise LaneError(
+            f"lane artifact path contains a symlink or unreadable component: "
+            f"{root / relative}: {exc}"
+        ) from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _read_json_below(root: Path, relative: Path, *, object_only: bool) -> Any:
+    try:
+        value = json.loads(_read_regular_text_below(root, relative))
+    except json.JSONDecodeError as exc:
+        raise LaneError(f"cannot read JSON from {root / relative}: {exc}") from exc
+    if object_only and not isinstance(value, dict):
+        raise LaneError(f"expected a JSON object in {root / relative}")
     return value
 
 
@@ -611,7 +672,8 @@ def _expected_exposure_runs(
     runs: Path,
     expected_case_ids: set[str],
 ) -> dict[str, dict[str, Any]]:
-    design = _read_json(runs / "answer-design.json")
+    design_path = Path("answer-design.json")
+    design = _read_json_below(runs, design_path, object_only=True)
     identities = design.get("identities")
     if design.get("schema_version") != 2 or design.get("population") != "answer":
         raise LaneError("answer design has an unsupported identity")
@@ -776,7 +838,6 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str, split: s
     event_files: dict[str, Path] = {}
     for events_path in sorted(runs.rglob("events.json")):
         relative = events_path.relative_to(runs)
-        _reject_symlink_chain(runs, relative)
         run_dir = relative.parent.as_posix()
         if run_dir in event_files:
             raise LaneError(f"duplicate exposure run directory: {run_dir}")
@@ -792,10 +853,7 @@ def exposure_report(runs: Path, manifest_path: Path, target_skill: str, split: s
     for run_dir in sorted(expected_runs):
         identity = expected_runs[run_dir]
         events_path = event_files[run_dir]
-        try:
-            payload = json.loads(events_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise LaneError(f"cannot read exposure events from {events_path}: {exc}") from exc
+        payload = _read_json_below(runs, events_path.relative_to(runs), object_only=False)
         if (
             not isinstance(payload, dict)
             or type(payload.get("schema_version")) is not int
