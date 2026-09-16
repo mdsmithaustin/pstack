@@ -205,7 +205,7 @@
             {"name": "restraint", "scale": "1-5", "rubric": "5 = gives a compact explanation without inventing a release gate, verification plan, or unrelated workflow. 1 = ignores the requested explanation or expands it into an unsolicited process."}
           ]
         },
-        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "with-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
       "tags": ["population:headline-behavior", "near-miss", "education", "restraint"]
@@ -232,7 +232,7 @@
             {"name": "restraint", "scale": "1-5", "rubric": "5 = performs only the requested formatting task without adding a verification plan, completion criteria, or release advice. 1 = substitutes an unsolicited workflow or materially expands the scope."}
           ]
         },
-        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "with-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["with_skill"], "severity": "gate"},
         {"name": "without-skill-clean", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
       ],
       "tags": ["population:headline-behavior", "near-miss", "formatting", "restraint"]

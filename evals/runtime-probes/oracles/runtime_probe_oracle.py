@@ -368,6 +368,8 @@ def _trace_payload(trace: list[str], line_number: object, driver: str) -> dict[s
         raw = json.loads(trace[line_number - 1])
     except json.JSONDecodeError as error:
         raise InfrastructureFailure("completed command trace line is not JSON") from error
+    if not isinstance(raw, dict):
+        raise InfrastructureFailure("completed command trace line is not an object")
     item = raw.get("item", raw)
     if not isinstance(item, dict):
         raise InfrastructureFailure("completed command trace item is malformed")

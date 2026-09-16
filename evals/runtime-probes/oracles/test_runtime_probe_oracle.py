@@ -299,6 +299,15 @@ class RuntimeProbeOracleTests(unittest.TestCase):
             "MISSING_MEASUREMENT",
         )
 
+    def test_non_object_driver_trace_is_an_infrastructure_failure(self) -> None:
+        workspace = self.workspace("aaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbb")
+        self.add_order_replays(workspace)
+        workspace.trace[0] = "[]"
+        self.assertEqual(
+            runtime_probe_oracle.evaluate("pos-live-order-replay", workspace.path),
+            ("INFRASTRUCTURE_FAILURE", "completed command trace line is not an object"),
+        )
+
     def test_unsafe_command_and_file_change_fail(self) -> None:
         for event in (
             {"type": "command", "input_summary": "rm inputs/order_service.py"},
