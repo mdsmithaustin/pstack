@@ -21,10 +21,9 @@ commands, and attempts to forge execution evidence.
 
 `spec-probes` and `runtime-probes` allow several valid response shapes. Their
 grader-only expectations name the relevant fixture facts and unacceptable
-claims. A cross-family judge scores the response. Runtime judging also receives
-the normalized trajectory so a claimed probe can be checked against completed
-tool evidence. This is transcript-grounded evaluation, not immutable execution
-attestation.
+claims. A cross-family judge scores the response. Process assertions separately
+check available trace evidence such as skill loading and required commands.
+This is evidence-grounded evaluation, not immutable execution attestation.
 
 `skill_invoked` assertions are exposure diagnostics. They do not independently
 prove that a read came from a particular mounted file.
@@ -66,17 +65,22 @@ exposure assertions.
 
 ## Confirmation run
 
-Use three paired repetitions only after the screen works. The convenience task
-always uses a Claude judge and does not include trajectories. For the requested
-cross-family comparison, invoke the pinned harness directly and add
-`--judge-trajectory`:
+Use three paired answer repetitions only after the screen works. One grounded
+judge verdict per answer is the default confirmation budget. Repeat judging
+only for threshold-close or disputed answers after inspecting the first
+verdict's prompt and rationale. The convenience task always uses a Claude
+judge, so invoke the pinned harness directly for a cross-family comparison.
+
+Resolve adapter paths before starting. Answer runs execute in isolated
+workspaces, where a repository-relative adapter path does not exist.
 
 ```sh
 skill=runtime-probes
 run_root=/private/tmp/runtime-probes-confirmation
-skill_ci=../skill-ci
+skill_ci="$(cd ../skill-ci && pwd -P)"
 manifest="evals/$skill/shared-benchmark.json"
 runner() { uv run --no-project python "$skill_ci/tools/run_runner.py" "$@"; }
+mkdir -p "$run_root"
 
 runner skill-benchmark audit-manifest "$manifest" --fail-on-blockers --strict-judge
 runner skill-benchmark prepare "$manifest" --split tune --runs-per-variant 3 --out "$run_root/tasks.jsonl"
@@ -87,15 +91,15 @@ runner skill-benchmark run-agent --agent codex --model gpt-5.6-sol \
 runner skill-benchmark grade "$manifest" --runs "$run_root/codex" --allow-scripts
 runner skill-benchmark judge "$manifest" --runs "$run_root/codex" \
   --judge-backend claude --judge-model opus \
-  --claude-bin "$skill_ci/tools/claude-project-only" --judge-runs 3 \
-  --judge-trajectory --transcripts "$run_root/codex-judge-transcripts" \
+  --claude-bin "$skill_ci/tools/claude-project-only" --judge-runs 1 \
+  --transcripts "$run_root/codex-judge-transcripts" \
   --out "$run_root/codex-judge.jsonl"
 runner skill-benchmark benchmark "$manifest" --runs "$run_root/codex" --split tune \
   --allow-scripts --judge-results "$run_root/codex-judge.jsonl" \
   --out "$run_root/codex-benchmark.json"
 ```
 
-Run Claude answers separately and use Codex Astra as their judge:
+Run Claude answers separately and use Codex as their judge:
 
 ```sh
 runner skill-benchmark run-agent --agent claude --model opus \
@@ -103,9 +107,9 @@ runner skill-benchmark run-agent --agent claude --model opus \
   --tasks "$run_root/tasks.jsonl" --runs "$run_root/claude" --timeout 240
 runner skill-benchmark grade "$manifest" --runs "$run_root/claude" --allow-scripts
 runner skill-benchmark judge "$manifest" --runs "$run_root/claude" \
-  --judge-backend codex --judge-model gpt-6-astra \
+  --judge-backend codex --judge-model gpt-5.6-sol \
   --codex-cmd "$skill_ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
-  --judge-runs 3 --judge-trajectory --transcripts "$run_root/claude-judge-transcripts" \
+  --judge-runs 1 --transcripts "$run_root/claude-judge-transcripts" \
   --out "$run_root/claude-judge.jsonl"
 runner skill-benchmark benchmark "$manifest" --runs "$run_root/claude" --split tune \
   --allow-scripts --judge-results "$run_root/claude-judge.jsonl" \
@@ -120,7 +124,7 @@ one `MODEL` value to every selected adapter, so use the pinned harness directly:
 ```sh
 skill=runtime-probes
 trigger_root=/private/tmp/runtime-probes-triggers
-skill_ci=../skill-ci
+skill_ci="$(cd ../skill-ci && pwd -P)"
 manifest="evals/$skill/shared-benchmark.json"
 runner() { uv run --no-project python "$skill_ci/tools/run_runner.py" "$@"; }
 mkdir -p "$trigger_root/codex-traces" "$trigger_root/claude-traces"
