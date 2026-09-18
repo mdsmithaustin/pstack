@@ -26,6 +26,11 @@ jobs:
         run: python3 tools/generate-subagents.py --check
       - name: Skill lint and runtime command tests
         run: python3 -m unittest discover -s tools -p 'test_*.py'
+      - name: Verify-command oracle contract tests
+        working-directory: evals/verify-commands/oracles
+        run: |
+          docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
+          python3 -m unittest -v test_check_plan
       - name: Real npx skill installations preserve complete personas
         run: python3 tools/probe-subagent-install.py
       - name: pstack-models.md lint tests

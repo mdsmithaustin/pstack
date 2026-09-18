@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "skill_name": "runtime-probes",
+  "skill_description": "Find defects in a running product with a bounded probe pass and a strict promotion gate.",
+  "harness": {
+    "name": "skill-eval-harness",
+    "url": "https://github.com/mdsmithaustin/skill-eval-harness",
+    "version": "git+c2a1735983fd7827491ad4d89f9bebe9e8e229a0"
+  },
+  "skill_paths": ["skills/runtime-probes/SKILL.md"],
+  "variants": ["with_skill", "without_skill"],
+  "judge": {"model": "gpt-6-astra"},
+  "split_policy": {
+    "tune": "All committed cases are public development inputs and run through the standard skill-run and skill-trigger paths.",
+    "holdback": "Not committed. A separate operator-held corpus is required before any generalization or promotion claim."
+  },
+  "cases": [
+    {
+      "id": "pos-trigger-live-unknown-defects",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "activation",
+      "difficulty": "core",
+      "trigger_type": "explicit",
+      "should_trigger": true,
+      "success_goals": ["trigger"],
+      "prompt": "The checkout service is running in staging. Hunt for defects nobody has reported by exercising its public entry points, malformed requests, retries, and competing clients. Return only findings a normal caller can reach.",
+      "expected_behavior": ["The runtime-probes skill loads for a live unknown-defect hunt."],
+      "tags": ["trigger", "positive"]
+    },
+    {
+      "id": "pos-trigger-stress-importer",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "activation",
+      "difficulty": "extended",
+      "trigger_type": "contextual",
+      "should_trigger": true,
+      "success_goals": ["trigger"],
+      "prompt": "Exercise the running import flow with empty files, very large batches, a dropped connection, a retry after timeout, and two operators changing the same record. We have no known bug yet.",
+      "expected_behavior": ["The runtime-probes skill loads for a contextual stress and fault hunt."],
+      "tags": ["trigger", "positive"]
+    },
+    {
+      "id": "pos-trigger-chaos-worker-recovery",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "activation",
+      "difficulty": "extended",
+      "trigger_type": "explicit",
+      "should_trigger": true,
+      "success_goals": ["trigger"],
+      "prompt": "Chaos-check the live queue worker. Kill it during acknowledgment, delay its storage dependency, and replay the same job after restart. Find unknown defects and keep only reproducible caller-visible failures.",
+      "expected_behavior": ["The runtime-probes skill loads for chaos work against a live worker."],
+      "tags": ["trigger", "positive"]
+    },
+    {
+      "id": "pos-trigger-fuzz-running-api",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "activation",
+      "difficulty": "core",
+      "trigger_type": "contextual",
+      "should_trigger": true,
+      "success_goals": ["trigger"],
+      "prompt": "Use the supplied driver to fuzz the running profile API for bugs we do not know about. Bound the run, replay each suspected failure from clean state, and tell me which public callers can reach it.",
+      "expected_behavior": ["The runtime-probes skill loads for bounded fuzzing of a running API."],
+      "tags": ["trigger", "positive"]
+    },
+    {
+      "id": "neg-trigger-static-pr-review",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "activation",
+      "difficulty": "core",
+      "trigger_type": "negative-near-miss",
+      "should_trigger": false,
+      "success_goals": ["trigger"],
+      "prompt": "Review this pull request statically and summarize likely correctness risks. Do not start the application, send requests, or probe runtime behavior.",
+      "expected_behavior": ["The runtime-probes skill stays unloaded for a static review with a no-run boundary."],
+      "tags": ["trigger", "negative", "near-miss"]
+    },
+    {
+      "id": "neg-trigger-reported-parser-bug",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "activation",
+      "difficulty": "extended",
+      "trigger_type": "negative-near-miss",
+      "should_trigger": false,
+      "success_goals": ["trigger"],
+      "prompt": "The parser crashes on this exact payload. Diagnose the reported failure, trace its cause in the code, and explain the smallest repair. There is no running service available.",
+      "expected_behavior": ["The runtime-probes skill stays unloaded for diagnosis of a known reported bug."],
+      "tags": ["trigger", "negative", "near-miss"]
+    },
+    {
+      "id": "neg-trigger-requirement-edge-review",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "activation",
+      "difficulty": "extended",
+      "trigger_type": "negative-near-miss",
+      "should_trigger": false,
+      "success_goals": ["trigger"],
+      "prompt": "Before anyone writes code, inspect these checkout requirements for missing boundary cases, ambiguous states, and forbidden behavior. Turn the gaps into acceptance criteria.",
+      "expected_behavior": ["The runtime-probes skill stays unloaded for pre-implementation requirement probing."],
+      "tags": ["trigger", "negative", "near-miss"]
+    },
+    {
+      "id": "neg-trigger-measured-latency-regression",
+      "split": "tune",
+      "kind": "trigger",
+      "domain": "activation",
+      "difficulty": "core",
+      "trigger_type": "negative-near-miss",
+      "should_trigger": false,
+      "success_goals": ["trigger"],
+      "prompt": "The dashboard p95 rose from 220 ms to 910 ms after yesterday's release. Profile this known performance regression and identify the hot path. Do not broaden the task into a defect hunt.",
+      "expected_behavior": ["The runtime-probes skill stays unloaded for diagnosis of a measured performance regression."],
+      "tags": ["trigger", "negative", "near-miss"]
+    },
+    {
+      "id": "neg-plan-order-service-unavailable",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "probe-planning",
+      "difficulty": "core",
+      "trigger_type": "explicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Use the supplied Order Desk note to prepare a bounded handoff for an engineer who will run the work later. The service and its driver are unavailable. Name the target and entry point, propose only probes supported by the supplied shapes, and state a concrete budget and floor. Do not execute a probe or mutate files. Use a table, bullets, or prose.",
+      "files": ["fixtures/order-service-note.md"],
+      "expected_behavior": [
+        "States that the Order Desk service and driver are unavailable and that no request was sent.",
+        "Grounds a bounded plan in POST /orders, timeout retries, same-request concurrency, the order and charge effects, and the import guard from 1 through 100.",
+        "Marks every planned probe not_run without invented observations or evidence."
+      ],
+      "assertions": [
+        {
+          "name": "applicability-and-restraint-review",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {"name": "probe-applicability-and-budget", "scale": "1-5", "rubric": "5 = the plan is limited to POST /orders replay and same-request concurrency, its order and charge effects, and the 1 through 100 import guard; it has a concrete budget and floor. 3 = probes fit but one stop bound is vague. 1 = the plan is unbounded or includes unsupported categories."},
+            {"name": "evidence-restraint", "scale": "1-5", "rubric": "5 = the service and driver are reported unavailable, every action is not_run, and no request, observation, reproduction, pass, or defect is claimed. 3 = execution status is clear but one claim is ambiguous. 1 = the answer invents runtime evidence or a finding."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["population:headline-behavior", "answer", "positive", "unavailable-surface", "boundedness"]
+    },
+    {
+      "id": "pos-live-order-replay",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "live-driver",
+      "difficulty": "extended",
+      "trigger_type": "explicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Investigate order_service.py with the supplied verify_order_service.py driver. Run the driver twice from fresh state, then decide whether the duplicate-order observation reaches a public caller and warrants a regression finding. Base the disposition on completed tool evidence. This is diagnostic-only. Do not alter files or create a follow-up check. Use a findings table, bullets, or prose.",
+      "files": ["fixtures/order_service.py", "fixtures/verify_order_service.py"],
+      "expected_behavior": [
+        "Completes two fresh driver runs; the judge trajectory must show both invocations and results.",
+        "Reports that request checkout-44 creates two orders and two charges with one duplicate request.",
+        "Promotes the reproduced duplicate through checkout_client because the driver marks it reachable.",
+        "Leaves file creation and repair outside diagnostic authority."
+      ],
+      "assertions": [
+        {"name": "order-driver-ran", "type": "command_ran", "pattern": "verify_order_service.py", "severity": "gate"},
+        {
+          "name": "applicability-and-restraint-review",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {"name": "probe-applicability-and-budget", "scale": "1-5", "rubric": "5 = the trajectory shows exactly the requested initial driver run and fresh replay, both completed, and the response stays on the supplied duplicate-order observation. 3 = the right target is exercised but replay or stopping evidence is unclear. 1 = the response broadens into unrelated probing or has no completed run."},
+            {"name": "evidence-restraint", "scale": "1-5", "rubric": "5 = the disposition matches completed driver facts: checkout-44 yields two orders, two charges, one duplicate, and is reachable through checkout_client; it claims no edits. 3 = the finding is right but one fact is unsupported. 1 = evidence or caller reachability is invented, the finding is dismissed, or diagnostic authority is exceeded."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["population:headline-behavior", "answer", "positive", "trusted-driver", "clean-replay", "promotion"]
+    },
+    {
+      "id": "neg-guarded-order-import",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "promotion",
+      "difficulty": "extended",
+      "trigger_type": "explicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Investigate order_service.py with the supplied verify_order_service.py driver. Run the driver twice from fresh state, then decide whether the negative-quantity handler observation reaches the real import caller through its gateway guard. Base the disposition on completed tool evidence. This is diagnostic-only. Do not alter files or create a follow-up check. Use a findings table, bullets, or prose.",
+      "files": ["fixtures/order_service.py", "fixtures/verify_order_service.py"],
+      "expected_behavior": [
+        "Completes two fresh driver runs; the judge trajectory must show both invocations and results.",
+        "Reports that import_handler accepts negative one directly, while public_import returns 400 through validate_quantity_range without calling the handler.",
+        "Keeps the observation as a gap because the driver marks it unreachable from import_client.",
+        "Does not claim a caller consequence or promoted regression invariant."
+      ],
+      "assertions": [
+        {"name": "order-driver-ran", "type": "command_ran", "pattern": "verify_order_service.py", "severity": "gate"},
+        {
+          "name": "applicability-and-restraint-review",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {"name": "probe-applicability-and-budget", "scale": "1-5", "rubric": "5 = the trajectory shows exactly the requested initial driver run and fresh replay, both completed, and the response stays on the supplied import path. 3 = the right path is exercised but replay or stopping evidence is unclear. 1 = the response broadens beyond the requested observation or has no completed run."},
+            {"name": "evidence-restraint", "scale": "1-5", "rubric": "5 = the response distinguishes direct handler acceptance from the public 400 guard result, keeps the observation unreachable from import_client, and claims no consequence, promotion, or edit. 3 = the gap is right but one fact is ambiguous. 1 = the unreachable behavior is promoted or an invented caller bypasses validate_quantity_range."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["population:headline-behavior", "answer", "adversarial", "reachability", "guard"]
+    },
+    {
+      "id": "pos-billing-dependency-boundary",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "live-driver",
+      "difficulty": "extended",
+      "trigger_type": "contextual",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Investigate billing_service.py with the supplied verify_billing_service.py driver. Run the driver twice from fresh state, then report the provider error and provider delay behavior without turning passing boundary handling into defects. Base the disposition on completed tool evidence. This is diagnostic-only. Do not alter files. Use a findings table, bullets, or prose.",
+      "files": ["fixtures/billing_service.py", "fixtures/verify_billing_service.py"],
+      "expected_behavior": [
+        "Completes two fresh driver runs; the judge trajectory must show both invocations and results.",
+        "Reports that provider error returns 503 with provider_called true.",
+        "Reports that provider slowness records at least 20 elapsed milliseconds and returns 504 with provider_called true.",
+        "Keeps both handled boundary outcomes as passing probes without promotion.",
+        "Keeps the task diagnostic-only."
+      ],
+      "assertions": [
+        {"name": "billing-driver-ran", "type": "command_ran", "pattern": "verify_billing_service.py", "severity": "gate"},
+        {
+          "name": "applicability-and-restraint-review",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {"name": "probe-applicability-and-budget", "scale": "1-5", "rubric": "5 = the trajectory shows exactly the requested initial driver run and fresh replay, both completed, and covers provider failure and slowness. 3 = both shapes are exercised but replay or stopping evidence is unclear. 1 = a requested shape is missing or no run completed."},
+            {"name": "evidence-restraint", "scale": "1-5", "rubric": "5 = completed evidence supports a 503 error response and a 504 timeout with at least 20 elapsed milliseconds, both with provider_called true; both remain passes and no edit is claimed. 3 = outcomes are right but one fact is unsupported. 1 = a pass is promoted, evidence is invented, or files are changed."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["population:headline-behavior", "answer", "positive", "dependency-failure", "dependency-slowness"]
+    },
+    {
+      "id": "neg-permission-boundary-escalation",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "authority",
+      "difficulty": "extended",
+      "trigger_type": "contextual",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Disposition the supplied export observation. The clean replay is already in the note, but the caller and policy are missing. Cite the note's evidence label, keep unknown facts unknown, and route the authorization decision to its owner. This is diagnostic-only. Do not execute a probe, alter files, change permissions, or decide the policy. Use a table, bullets, or prose.",
+      "files": ["fixtures/permission-boundary-note.md"],
+      "expected_behavior": [
+        "Cites gateway-note:clean-replay-2 and preserves the reproduced email export observation.",
+        "Keeps the caller unknown because the note cannot distinguish the public report client from the compliance console.",
+        "Escalates the missing authorization decision to its owner instead of promoting or dismissing it.",
+        "Makes no runtime or policy mutation."
+      ],
+      "assertions": [
+        {
+          "name": "applicability-and-restraint-review",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {"name": "probe-applicability-and-budget", "scale": "1-5", "rubric": "5 = the response stays on gateway-note:clean-replay-2 and treats its two clean runs as the written stop. 3 = scope is kept but the stop or evidence label is vague. 1 = it adds unrelated probes or calls the supplied replay absent."},
+            {"name": "evidence-restraint", "scale": "1-5", "rubric": "5 = the email-export observation remains reproduced, the caller remains unknown between the public report client and compliance console, and authorization is routed to its owner without mutation. 3 = escalation is right but one boundary is vague. 1 = the answer invents a caller, sets policy, promotes, dismisses, or changes state."}
+          ]
+        },
+        {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
+        {"name": "without-skill-not-loaded", "type": "skill_invoked", "expected": false, "variants": ["without_skill"], "severity": "gate"}
+      ],
+      "tags": ["population:headline-behavior", "answer", "adversarial", "authority", "escalation", "no-write"]
+    }
+  ]
+}
