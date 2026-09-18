@@ -34,6 +34,25 @@ class PlanReplayTests(unittest.TestCase):
                     ["current", "count-changed", "broken", "forced-operation-failure"],
                 )
 
+    def test_equivalent_python_script_paths_pass_real_replays(self):
+        examples = (
+            (
+                "stale-summary",
+                "valid-stale-dotted.md",
+                ["current", "count-changed", "broken", "forced-operation-failure"],
+            ),
+            (
+                "package-path",
+                "valid-package-local.md",
+                ["healthy", "package-broken", "root-decoy", "forced-operation-failure"],
+            ),
+        )
+        for case_id, sample, expected_states in examples:
+            with self.subTest(sample=sample):
+                code, result = self.evaluate_sample(case_id, sample)
+                self.assertEqual((code, result["status"]), (0, "pass"), result)
+                self.assertEqual(result["states"], expected_states)
+
     def test_every_public_state_matrix_accepts_its_valid_plan(self):
         plans = {
             "empty-selection": "valid-empty-selection.md",
@@ -84,6 +103,21 @@ class PlanReplayTests(unittest.TestCase):
         )
         self.assertFalse(forced["exit_matches"])
         self.assertEqual(forced["missing_operations"], [])
+
+    def test_changed_trailing_argument_is_not_accepted(self):
+        code, result = self.evaluate_sample("empty-selection", "changed-trailing-argument.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        required = {
+            "program": "python",
+            "args": [
+                "tools/run-scenarios.py",
+                "--name",
+                "checkout_rejects_expired_card",
+            ],
+        }
+        self.assertTrue(
+            any(required in state["missing_operations"] for state in result["failed_states"])
+        )
 
     def test_candidate_cannot_mutate_root_owned_fixture(self):
         code, result = self.evaluate_sample("stale-summary", "tampered-fixture.md")

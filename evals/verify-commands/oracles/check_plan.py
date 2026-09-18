@@ -58,14 +58,31 @@ def peer_process(connection):
 def operation_matches(specification, event, project):
     program = specification.get("program")
     expected_arguments = specification.get("args")
-    if program != "python" or not isinstance(expected_arguments, list):
+    if (
+        program != "python"
+        or not isinstance(expected_arguments, list)
+        or not expected_arguments
+        or not all(isinstance(argument, str) for argument in expected_arguments)
+        or not expected_arguments[0]
+        or expected_arguments[0].startswith("-")
+    ):
+        raise RuntimeError("invalid required operation")
+    root = project.resolve(strict=True)
+    expected_script = (root / expected_arguments[0]).resolve(strict=True)
+    if not expected_script.is_relative_to(root):
         raise RuntimeError("invalid required operation")
     cwd, executable, arguments = event
-    return (
-        cwd == project.resolve()
-        and executable == Path(sys.executable).resolve()
-        and list(arguments[1:]) == expected_arguments
-    )
+    if (
+        executable != Path(sys.executable).resolve()
+        or not cwd.is_relative_to(root)
+        or len(arguments) < 2
+        or not arguments[1]
+        or arguments[1].startswith("-")
+        or tuple(arguments[2:]) != tuple(expected_arguments[1:])
+    ):
+        return False
+    actual_script = (cwd / arguments[1]).resolve(strict=True)
+    return actual_script.is_relative_to(root) and actual_script == expected_script
 
 
 def serve_evidence(listener, stop_reader, result_writer, specifications, project, forced_exit):
