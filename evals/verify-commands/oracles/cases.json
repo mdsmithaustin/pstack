@@ -1,0 +1,51 @@
+{
+  "stale-summary": {
+    "bootstrap": "stale_summary.py",
+    "states": [
+      {"name": "current", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/run-checks.py"]}]},
+      {"name": "count-changed", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/run-checks.py"]}]},
+      {"name": "broken", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/run-checks.py"]}]}
+    ]
+  },
+  "empty-selection": {
+    "bootstrap": "empty_selection.py",
+    "states": [
+      {"name": "present", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/run-scenarios.py", "--list"]}, {"program": "python", "args": ["tools/run-scenarios.py", "--name", "checkout_rejects_expired_card"]}]},
+      {"name": "absent", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/run-scenarios.py", "--list"]}]},
+      {"name": "scenario-broken", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/run-scenarios.py", "--list"]}, {"program": "python", "args": ["tools/run-scenarios.py", "--name", "checkout_rejects_expired_card"]}]}
+    ]
+  },
+  "defaulted-parity": {
+    "bootstrap": "defaulted_parity.py",
+    "states": [
+      {"name": "equal", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/reference_total.py"]}, {"program": "python", "args": ["tools/current_total.py"]}]},
+      {"name": "unequal", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/reference_total.py"]}, {"program": "python", "args": ["tools/current_total.py"]}]},
+      {"name": "reference-unavailable", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/reference_total.py"]}]},
+      {"name": "current-unavailable", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/reference_total.py"]}, {"program": "python", "args": ["tools/current_total.py"]}]},
+      {"name": "both-unavailable", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/reference_total.py"]}]}
+    ]
+  },
+  "package-path": {
+    "bootstrap": "package_path.py",
+    "states": [
+      {"name": "healthy", "exit": "zero", "required_operations": [{"program": "python", "args": ["packages/web/scripts/check-release.py"]}]},
+      {"name": "package-broken", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["packages/web/scripts/check-release.py"]}]},
+      {"name": "root-decoy", "exit": "zero", "required_operations": [{"program": "python", "args": ["packages/web/scripts/check-release.py"]}]}
+    ]
+  },
+  "scoped-source": {
+    "bootstrap": "scoped_source.py",
+    "states": [
+      {"name": "migrated", "exit": "zero", "required_operations": [{"program": "python", "args": ["packages/api/tools/verify-scenario.py", "legacy_fetch_uses_new_client"]}]},
+      {"name": "target-regressed", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["packages/api/tools/verify-scenario.py", "legacy_fetch_uses_new_client"]}]},
+      {"name": "compatibility-retained", "exit": "zero", "required_operations": [{"program": "python", "args": ["packages/api/tools/verify-scenario.py", "legacy_fetch_uses_new_client"]}]}
+    ]
+  },
+  "healthy-control": {
+    "bootstrap": "healthy_control.py",
+    "states": [
+      {"name": "healthy", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/verify-release.py"]}]},
+      {"name": "broken", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/verify-release.py"]}]}
+    ]
+  }
+}
