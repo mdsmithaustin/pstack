@@ -128,12 +128,15 @@
       "difficulty": "core",
       "trigger_type": "explicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Use the supplied Order Desk note to prepare a bounded handoff for an engineer who will run the work later. The service and its driver are unavailable. Name the target and entry point, propose only probes supported by the supplied shapes, and state a concrete budget and floor. Do not execute a probe or mutate files. Use a table, bullets, or prose.",
+      "prompt": "Use the supplied Order Desk note to prepare a bounded handoff for an engineer who will run the work later. The service and its driver are unavailable. Name the target and entry points, propose only probes supported by the supplied shapes, and state the execution-limit status. Do not execute a probe or mutate files. Use a table, bullets, or prose.",
       "files": ["fixtures/order-service-note.md"],
       "expected_behavior": [
         "States that the Order Desk service and driver are unavailable and that no request was sent.",
-        "Grounds a bounded plan in POST /orders, timeout retries, same-request concurrency, the order and charge effects, and the import guard from 1 through 100.",
-        "Marks every planned probe not_run without invented observations or evidence."
+        "Grounds a bounded plan in POST /orders, timeout retries, same-request concurrency, the order and charge effects, and every documented import-guard partition: both inclusive endpoints are forwarded, quantities below the range are rejected before the handler, and quantities above the range are rejected before the handler.",
+        "Reports that the budget and floor are absent rather than inventing execution limits.",
+        "Creates no file and does not claim that a findings record was written.",
+        "Does not propose unsupported probe categories.",
+        "Marks every planned probe not run without invented observations or evidence."
       ],
       "assertions": [
         {
@@ -142,8 +145,8 @@
           "severity": "gate",
           "threshold": 4,
           "graded_dimensions": [
-            {"name": "probe-applicability-and-budget", "scale": "1-5", "rubric": "5 = the plan is limited to POST /orders replay and same-request concurrency, its order and charge effects, and the 1 through 100 import guard; it has a concrete budget and floor. 3 = probes fit but one stop bound is vague. 1 = the plan is unbounded or includes unsupported categories."},
-            {"name": "evidence-restraint", "scale": "1-5", "rubric": "5 = the service and driver are reported unavailable, every action is not_run, and no request, observation, reproduction, pass, or defect is claimed. 3 = execution status is clear but one claim is ambiguous. 1 = the answer invents runtime evidence or a finding."}
+            {"name": "probe-applicability-and-budget", "scale": "1-5", "rubric": "5 = the plan contains only source-supported rows for POST /orders replay, same-request concurrency, its order and charge effects, and all documented import partitions; it forwards both endpoints 1 and 100 and covers rejection below 1 and above 100, whether expressed as the partition or a representative value; it reports that the budget and floor are absent without inventing limit values or proposing unsupported probes. 3 = the probe set fits but one partition, stated result, or limit status is ambiguous. 1 = the response replaces a stated result with a generic inspection instruction, invents execution limits, omits a source-supported entry point or behavior partition, or proposes an unsupported probe."},
+            {"name": "evidence-restraint", "scale": "1-5", "rubric": "5 = the service and driver are reported unavailable, no file is created or claimed, every action is not run, and no request, observation, reproduction, pass, or defect is claimed. 3 = execution or file status is clear but one claim is ambiguous. 1 = the answer claims a written findings record despite the no-file-change instruction, invents runtime evidence or a finding, or presents unsupported execution alternatives as part of the handoff."}
           ]
         },
         {"name": "with-skill-loaded", "type": "skill_invoked", "expected": true, "variants": ["with_skill"], "severity": "gate"},
