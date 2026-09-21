@@ -77,7 +77,7 @@ workspaces, where a repository-relative adapter path does not exist.
 ```sh
 skill=runtime-probes
 run_root=/private/tmp/runtime-probes-confirmation
-skill_ci="$(cd ../skill-ci && pwd -P)"
+skill_ci="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/../../skill-ci" && pwd -P)"
 manifest="evals/$skill/shared-benchmark.json"
 runner() { uv run --no-project python "$skill_ci/tools/run_runner.py" "$@"; }
 mkdir -p "$run_root"
@@ -124,7 +124,7 @@ one `MODEL` value to every selected adapter, so use the pinned harness directly:
 ```sh
 skill=runtime-probes
 trigger_root=/private/tmp/runtime-probes-triggers
-skill_ci="$(cd ../skill-ci && pwd -P)"
+skill_ci="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/../../skill-ci" && pwd -P)"
 manifest="evals/$skill/shared-benchmark.json"
 runner() { uv run --no-project python "$skill_ci/tools/run_runner.py" "$@"; }
 mkdir -p "$trigger_root/codex-traces" "$trigger_root/claude-traces"
