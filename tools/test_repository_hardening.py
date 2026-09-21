@@ -61,11 +61,12 @@ class RepositoryHardening(unittest.TestCase):
         hook = (ROOT / "lefthook.yml").read_text(encoding="utf-8")
         python_runs = re.findall(r"^\s+run: (.*python.*)$", hook, re.MULTILINE)
         self.assertEqual(len(python_runs), 4)
-        self.assertTrue(all(command.startswith(".venv/bin/python ") for command in python_runs))
-        self.assertIn(".venv/bin/python tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json", hook)
-        self.assertIn(".venv/bin/python tools/check-skill-content.py skills", hook)
-        self.assertIn(".venv/bin/python tools/check-cross-suite-references.py", hook)
-        self.assertIn(".venv/bin/python tools/check-pii.py --staged", hook)
+        self.assertIn("""python: '"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"'""", hook)
+        self.assertTrue(all(command.startswith("'{python} ") for command in python_runs))
+        self.assertIn("{python} tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json", hook)
+        self.assertIn("{python} tools/check-skill-content.py skills", hook)
+        self.assertIn("{python} tools/check-cross-suite-references.py", hook)
+        self.assertIn("{python} tools/check-pii.py --staged", hook)
 
 
 if __name__ == "__main__":
