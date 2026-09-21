@@ -26,7 +26,7 @@ When a workflow requests `poteto-agent` or `Comment Sicko`, read the [named-role
 Each writer gets its own git worktree, whichever mechanism spawns it. Keep the location a native isolation option picks. When you run `git worktree add` yourself, never place the worktree beside the repository:
 
 - A throwaway checkout (verify, review, replay, eval arm) goes under `mktemp -d "${TMPDIR:-/tmp}/pstack-<slug>.XXXXXX"`. Remove it with `git worktree remove` when its run ends.
-- A worktree that holds unpushed work goes under `<repo>/.worktrees/<slug>`. If the repository does not ignore `.worktrees/`, add it to `.git/info/exclude` first.
+- A worktree that holds unpushed work goes under `.worktrees/<slug>` in the main checkout. If the repository does not ignore `.worktrees/`, append it to `"$(git rev-parse --git-common-dir)/info/exclude"` first.
 
 **Set an arm's model.** Pass a model value this session has confirmed the spawn mechanism accepts. If the value is unconfirmed or rejected, omit it and let the arm inherit the session model. Report the substitution. For explicitly requested models, apply [Arena's required-arm rule](../arena/SKILL.md#required-arms).
 
