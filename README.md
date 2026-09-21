@@ -272,7 +272,7 @@ to set it up, point your agent at [`FOR_AGENTS.md`](./automations/benny/FOR_AGEN
 
 ## contributor checks
 
-Use Python 3.12 and Bun 1.4.0. Create the local virtual environment, install the hook, and let the fast pre-commit checks run before each commit.
+Use Python 3.12 and Bun 1.4.0. Create the local virtual environment in the main checkout, install the hook, and let the fast pre-commit checks run before each commit. The hooks in a linked worktree use that same `.venv`.
 
 ```sh
 python3 -m venv .venv
