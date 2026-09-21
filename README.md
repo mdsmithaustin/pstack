@@ -307,7 +307,7 @@ Behavioral eval manifests and their oracles live at the repository root under `e
 
 The commands above do not cover the manifests. CI runs that gate separately, through the `evals-dir` input to `skill-checks`. For every `evals/**/shared-benchmark.json` it runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. The runner is pinned in `runner.lock` in `mdsmithaustin/skill-ci`, so reproduce that gate locally with the build that file names rather than whatever `skill-benchmark` is on your PATH.
 
-`mise.toml` adds local tasks for those runner commands. It expects a checkout of `mdsmithaustin/skill-ci` beside this one and `uv` on your PATH. mise asks you to run `mise trust` once. Each runner task reads that checkout's `runner.lock` and invokes the pinned runner in an isolated uv environment. A globally installed runner cannot override the lock.
+`mise.toml` adds local tasks for those runner commands. It expects a checkout of `mdsmithaustin/skill-ci` beside this one and `uv` on your PATH. A worktree under `.worktrees/` inherits that path from the main checkout. A checkout anywhere else, such as under `$TMPDIR`, cannot load these tasks, so run them from the main checkout or a `.worktrees/` worktree. mise asks you to run `mise trust` once. Each runner task reads that checkout's `runner.lock` and invokes the pinned runner in an isolated uv environment. A globally installed runner cannot override the lock.
 
 ```sh
 mise run skill-lint

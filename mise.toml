@@ -1,5 +1,5 @@
 [env]
-SKILL_CI = "{{ config_root }}/../skill-ci"
+SKILL_CI = "{{ env.SKILL_CI | default(value=config_root ~ '/../skill-ci') }}"
 EVALS_DIR = "evals"
 
 [task_config]

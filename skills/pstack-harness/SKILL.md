@@ -23,7 +23,10 @@ When a workflow requests `poteto-agent` or `Comment Sicko`, read the [named-role
 2. No such tool → invoke your own CLI non-interactively as a subprocess (its help names the command and flags), one invocation per arm, run concurrently in background shells, each arm's report collected from stdout or a file path named in its brief.
 3. No subprocesses either → run the arms sequentially inline, one at a time, each writing its report to a file before the next starts, then synthesize. Keep the configured arm count.
 
-Each writer gets its own git worktree, whichever mechanism spawns it.
+Each writer gets its own git worktree, whichever mechanism spawns it. Keep the location a native isolation option picks. When you run `git worktree add` yourself, never place the worktree beside the repository:
+
+- A throwaway checkout (verify, review, replay, eval arm) goes under `mktemp -d "${TMPDIR:-/tmp}/pstack-<slug>.XXXXXX"`. Remove it with `git worktree remove` when its run ends.
+- A worktree that holds unpushed work goes under `.worktrees/<slug>` in the main checkout. If the repository does not ignore `.worktrees/`, append it to `"$(git rev-parse --git-common-dir)/info/exclude"` first.
 
 **Set an arm's model.** Pass a model value this session has confirmed the spawn mechanism accepts. If the value is unconfirmed or rejected, omit it and let the arm inherit the session model. Report the substitution. For explicitly requested models, apply [Arena's required-arm rule](../arena/SKILL.md#required-arms).
 

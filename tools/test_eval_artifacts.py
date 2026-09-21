@@ -79,7 +79,7 @@ class MiseTasksReadTheEvalsTree(unittest.TestCase):
         self.assertIn("evals/unslop/shared-benchmark.json", manifests)
 
     def test_tasks_come_from_the_skill_ci_checkout(self) -> None:
-        self.assertEqual(self.config["env"]["SKILL_CI"], "{{ config_root }}/../skill-ci")
+        self.assertEqual(self.config["env"]["SKILL_CI"], "{{ env.SKILL_CI | default(value=config_root ~ '/../skill-ci') }}")
         self.assertEqual(self.config["task_config"]["includes"], ["../skill-ci/skill-tasks.toml"])
 
 
