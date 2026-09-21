@@ -272,7 +272,7 @@ to set it up, point your agent at [`FOR_AGENTS.md`](./automations/benny/FOR_AGEN
 
 ## contributor checks
 
-Use Python 3.12 and Bun 1.4.0. Create the local virtual environment in the main checkout, install the hook, and let the fast pre-commit checks run before each commit. The hooks in a linked worktree use that same `.venv`.
+Use Python 3.12 and Bun 1.4.0. Create the local virtual environment in the main checkout, install the hook, and let the fast pre-commit checks run before each commit.
 
 ```sh
 python3 -m venv .venv
@@ -301,7 +301,7 @@ lefthook validate
 git diff --check
 ```
 
-Each command exits nonzero when its check fails. The three unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses `.venv/bin/python` and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
+Each command exits nonzero when its check fails. The three unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
 
 Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 
