@@ -264,7 +264,7 @@ type [`/automate-me`](./skills/automate-me/SKILL.md). it mines your recent trans
 
 models are configurable too. type [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it detects the models you have access to and writes a small config file mapping each role (code, judgment, the review panels) to a model — user-level at `~/.agents/pstack-models.md`, with an optional per-repo override at `.agents/pstack-models.md` whose lines win role-by-role. every skill reads the layered config and falls back to sensible defaults when no line matches, so you override only what you want. a role can pin a reasoning effort with `model@effort`, and `## codex`, `## claude-code`, or `## hermes` sections hold per-CLI picks in the same file. one config serves every CLI: a value a harness can't use just means inherit-parent there, and a claude alias on codex becomes its gpt-5.6 tier.
 
-a config written before the panels shrank to three entries pins the old default models. delete those role lines, or delete the file, then run `/setup-pstack` again. a rerun keeps any role whose model differs from the default.
+a config written before the panels shrank to three entries still lists four panel entries. delete those panel lines, or delete the file, then run `/setup-pstack` again. a rerun keeps any role whose model differs from the default.
 
 ## automations
 
