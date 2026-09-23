@@ -122,7 +122,7 @@ If your scope assessment suggests a single-commit trivial target where the PR de
 Spawn one synthesizer subagent:
 
 - `subagent_type`: `general-purpose`
-- `model`: your configured why-synthesizer model (default `fable`), with its configured effort per the **pstack-harness** skill
+- `model`: your configured why-synthesizer model (default `opus`), with its configured effort per the **pstack-harness** skill
 - `readonly`: `false` (agent mode). The synthesizer's quality check spot-verifies citations, which can require MCP access. Readonly/Ask mode strips MCPs and defeats that.
 
 The synthesizer gets:

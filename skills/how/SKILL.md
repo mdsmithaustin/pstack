@@ -33,7 +33,7 @@ Each explorer gets the prompt in `references/explorer-prompt.md` with its angle 
 Spawn one Task subagent that explores and explains in one pass:
 
 - `subagent_type`: `general-purpose`
-- `model`: your configured how-explainer model (default `fable`), with its configured effort per the **pstack-harness** skill
+- `model`: your configured how-explainer model (default `opus`), with its configured effort per the **pstack-harness** skill
 - `readonly`: `true`
 
 Build its prompt from `references/explainer-prompt.md` with the Direct exploration instructions. Omit Explorer Findings and Synthesis. Go to Step 4.
@@ -43,7 +43,7 @@ Build its prompt from `references/explainer-prompt.md` with the Direct explorati
 Once all explorers have returned, spawn one Task subagent to synthesize their findings into one explanation:
 
 - `subagent_type`: `general-purpose`
-- `model`: your configured how-explainer model (default `fable`), with its configured effort per the **pstack-harness** skill
+- `model`: your configured how-explainer model (default `opus`), with its configured effort per the **pstack-harness** skill
 - `readonly`: `true`
 
 Build its prompt from `references/explainer-prompt.md` with every explorer's findings and the Synthesis instructions. Omit Direct exploration.
