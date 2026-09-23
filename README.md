@@ -31,7 +31,7 @@ two steps:
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs.
 
-that's it. the other skills are situational; the mode skill uses them for you as needed. out of the box the mode splits work by model strength (using claude code's subagent model aliases): code delegates (feature, refactoring, bug fix, perf, hillclimb) go to sonnet, while the hardest changes, prose, and judgment go to fable. the default panel is fable / opus / sonnet / haiku. on codex the same aliases translate to the gpt-5.6 family (sol at max for fable, sol at xhigh for opus, terra for sonnet, luna for haiku) with a reasoning-effort floor of high; on hermes everything runs on your session model. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) changes any of it.
+that's it. the other skills are situational; the mode skill uses them for you as needed. out of the box the mode splits work by model strength (using claude code's subagent model aliases): code delegates (feature, refactoring, bug fix, perf, hillclimb) go to sonnet, while the hardest changes, prose, and judgment go to fable. the default panel is fable / opus / sonnet. on codex the same aliases translate to the gpt-5.6 family (sol at max for fable, sol at xhigh for opus, terra for sonnet, luna for haiku) with a reasoning-effort floor of high; on hermes everything runs on your session model. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) changes any of it.
 
 ## usage
 
@@ -73,7 +73,7 @@ morning.
 | [shipping](./skills/poteto-mode/playbooks/shipping.md) | independently verify a green stack, then land the contiguous verified run bottom-up through github by default or origin when available. |
 | [autonomous run](./skills/poteto-mode/playbooks/autonomous-run.md) | drive a long task to completion without stopping. |
 | [orchestrate](./skills/poteto-mode/playbooks/orchestrate.md) | a standing project handed to one coordinator chat: multi-day, many stacked prs, fleets of subagents. |
-| [autopilot-full](./skills/poteto-mode/playbooks/autopilot-full.md) | run independent prs to merged with one owner per pr and root verification of each merge-ready head. |
+| [autopilot-full](./skills/poteto-mode/playbooks/autopilot-full.md) | run independent prs to merged with one owner per pr and a root swarm verdict on each round, from the code-ready head on. |
 | [autopilot-stack](./skills/poteto-mode/playbooks/autopilot-stack.md) | build and verify one linear base-branch stack for the operator to review and land. |
 | [session pickup](./skills/poteto-mode/playbooks/session-pickup.md) | resume or take over a prior agent's in-flight work. |
 | [pause safely](./skills/poteto-mode/playbooks/pause-safely.md) | suspend in-flight work cleanly so it can be resumed later. |
@@ -263,6 +263,8 @@ your CLI already has a plan mode which works great with pstack. but personally, 
 type [`/automate-me`](./skills/automate-me/SKILL.md). it mines your recent transcripts, drafts a `<your-name>-mode` skill from how you've actually worked, and routes through pstack underneath. you keep pstack as the base and end up with your own routing skill alongside `poteto-mode`.
 
 models are configurable too. type [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it detects the models you have access to and writes a small config file mapping each role (code, judgment, the review panels) to a model — user-level at `~/.agents/pstack-models.md`, with an optional per-repo override at `.agents/pstack-models.md` whose lines win role-by-role. every skill reads the layered config and falls back to sensible defaults when no line matches, so you override only what you want. a role can pin a reasoning effort with `model@effort`, and `## codex`, `## claude-code`, or `## hermes` sections hold per-CLI picks in the same file. one config serves every CLI: a value a harness can't use just means inherit-parent there, and a claude alias on codex becomes its gpt-5.6 tier.
+
+a config written before the panels shrank to three entries still lists four panel entries. delete those panel lines, including any under `## codex`, or delete the file, then run `/setup-pstack` again. a rerun keeps any role you changed, whether its model, effort, panel list, alias, or harness section.
 
 ## automations
 

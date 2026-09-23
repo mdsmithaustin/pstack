@@ -33,14 +33,13 @@ Write one clear paragraph. If you're unsure about the intent, ask the user befor
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` list from the pstack models config, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), one reviewer per entry, extending or shrinking the Reviewer A/B/C/D labels below to the configured entry count. Otherwise use the table defaults. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
+Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` list from the pstack models config, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), one reviewer per entry, extending or shrinking the Reviewer A/B/C labels below to the configured entry count. Otherwise use the table defaults. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
 
 | Subagent | Default model |
 |----------|---------------|
 | Reviewer A | `fable` |
 | Reviewer B | `opus` |
 | Reviewer C | `sonnet` |
-| Reviewer D | `haiku` |
 
 For each reviewer:
 - `subagent_type`: `general-purpose`

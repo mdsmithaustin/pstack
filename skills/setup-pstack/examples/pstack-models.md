@@ -18,11 +18,11 @@ why investigators: sonnet
 why synthesizer: fable
 reflect tooling: opus
 reflect judgment, divergent, synthesizer: fable
-arena runners: fable, opus, sonnet, haiku
-arena cross-judge pool: fable, opus, sonnet, haiku
+arena runners: fable, opus, sonnet
+arena cross-judge pool: fable, opus, sonnet
 swarm workers: sonnet
-architect runners: fable, opus, sonnet, haiku
-interrogate reviewers: fable, opus, sonnet, haiku
+architect runners: fable, opus, sonnet
+interrogate reviewers: fable, opus, sonnet
 trail reviewer: opus
 default: inherit-parent
 
@@ -39,9 +39,9 @@ why investigators: gpt-5.6-terra@high
 why synthesizer: gpt-5.6-sol@max
 reflect tooling: gpt-5.6-sol@xhigh
 reflect judgment, divergent, synthesizer: gpt-5.6-sol@max
-arena runners: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high, gpt-5.6-luna@high
-arena cross-judge pool: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high, gpt-5.6-luna@high
+arena runners: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high
+arena cross-judge pool: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high
 swarm workers: gpt-5.6-terra@high
-architect runners: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high, gpt-5.6-luna@high
-interrogate reviewers: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high, gpt-5.6-luna@high
+architect runners: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high
+interrogate reviewers: gpt-5.6-sol@max, gpt-5.6-sol@xhigh, gpt-5.6-terra@high
 trail reviewer: gpt-5.6-terra@xhigh
