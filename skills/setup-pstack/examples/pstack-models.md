@@ -10,14 +10,14 @@ feature, refactoring: sonnet
 bug-fix: sonnet
 perf-issue: sonnet
 hillclimb: sonnet
-judgment and prose: fable
-hardest tasks: fable
+judgment and prose: opus
+hardest tasks: opus
 how explorer: sonnet
-how explainer: fable
+how explainer: opus
 why investigators: sonnet
-why synthesizer: fable
+why synthesizer: opus
 reflect tooling: opus
-reflect judgment, divergent, synthesizer: fable
+reflect judgment, divergent, synthesizer: opus
 arena runners: fable, opus, sonnet
 arena cross-judge pool: fable, opus, sonnet
 swarm workers: sonnet

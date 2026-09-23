@@ -32,15 +32,15 @@ One message, three `Task` calls, `subagent_type: general-purpose`, explicit `mod
 
 | Lens | `model` | Prompt template |
 |---|---|---|
-| Judgment | your configured reflect-judgment model and effort (default `fable`) | `references/judgment-reviewer.md` |
+| Judgment | your configured reflect-judgment model and effort (default `opus`) | `references/judgment-reviewer.md` |
 | Tooling | your configured reflect-tooling model and effort (default `opus`) | `references/tooling-reviewer.md` |
-| Divergent | your configured reflect-divergent model and effort (default `fable`) | `references/divergent-reviewer.md` |
+| Divergent | your configured reflect-divergent model and effort (default `opus`) | `references/divergent-reviewer.md` |
 
 Pass each template verbatim, substituting the transcript path or digest where marked. Reviewers return findings in the `Task` response body.
 
 ### 3. Synthesize
 
-One `Task` call, `subagent_type: general-purpose`, using your configured reflect-synthesizer model and effort (default `fable`), agent mode (`readonly: false`). The synthesizer's quality check includes spot-verifying citations, which can require MCP access. Readonly strips MCPs. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.
+One `Task` call, `subagent_type: general-purpose`, using your configured reflect-synthesizer model and effort (default `opus`), agent mode (`readonly: false`). The synthesizer's quality check includes spot-verifying citations, which can require MCP access. Readonly strips MCPs. Use `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. The synthesizer returns a structured Accepted / Rejected / Backlog list.
 
 ### 4. Structural enforcement check
 
