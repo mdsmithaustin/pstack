@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "test-authoring",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Names the new test with the glossary term Hold from CONTEXT.md.",
+    "Keeps the code's abbreviation resv out of the new test's name."
+  ]
+}

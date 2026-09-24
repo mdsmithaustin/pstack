@@ -1,0 +1,5 @@
+--- a/poteto-tdd/SKILL.md
++++ b/poteto-tdd/SKILL.md
+@@ -17,1 +17,1 @@
+-3. **Write the failing test first.** Add the smallest focused test that would have caught the bug. The test should encode intended behavior, not mirror the current implementation.
++3. **Write the failing test first.** Add the smallest focused test that would have caught the bug. The test should encode intended behavior, not mirror the current implementation. Write it as the scenario the report describes. Given the reporter's state, When their action, Then the correct outcome as a literal. Never assert only that the wrong value is gone. Follow the **principle-test-behavior-not-implementation** skill.
