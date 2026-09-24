@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -215,6 +216,58 @@ class WrapTests(ShopRepo):
         self.assertIn("is not the recorded", record["error"])
         self.assertFalse((root / "prompt-seen.txt").exists())
         self.assertFalse((slot / "workspace.diff").exists())
+
+
+ARGV_AGENT = """#!/usr/bin/env python3
+import json, pathlib, sys
+pathlib.Path("argv.json").write_text(json.dumps(sys.argv[1:]))
+"""
+CLAUDE_READ_ONLY_SHELL = [
+    "--allowedTools",
+    "Bash(git log:*)", "Bash(git show:*)", "Bash(git grep:*)", "Bash(git diff:*)", "Bash(git status:*)",
+    "Bash(rg:*)", "Bash(grep:*)", "Bash(ls:*)", "Bash(find:*)", "Bash(wc:*)", "Bash(head:*)", "Bash(sed -n:*)",
+    "--disallowedTools",
+    "Bash(find * -exec*)", "Bash(find * -ok*)", "Bash(find * -delete*)",
+    "Bash(rg * --pre*)", "Bash(git grep * -O*)", "Bash(git grep * --open-files-in-pager*)",
+]
+
+
+class AgentFlagTests(ShopRepo):
+    """The argv each agent receives through the wrapper screen.py writes."""
+
+    def argv_seen(self, agent, in_workspace, entry="poteto-mode"):
+        out = self.base / f"out-{agent}-{in_workspace}-{entry}"
+        agent_path = self.base / "argv-agent"
+        agent_path.write_text(ARGV_AGENT)
+        agent_path.chmod(0o755)
+        with mock.patch.object(screen, "skill_ci", return_value=self.base):
+            (self.base / "tools").mkdir(exist_ok=True)
+            for name in ("claude-project-only", "codex-project-only"):
+                target = self.base / "tools" / name
+                if not target.exists():
+                    target.symlink_to(agent_path)
+            backend = screen.backend_args(agent, out, entry, in_workspace)
+        command = [backend[1]] if agent == "claude" else shlex.split(backend[1])
+        root = self.harness_workspace(f"cwd-{agent}-{in_workspace}-{entry}", "# Poteto mode\n")
+        arm = self.base / "arm"
+        if in_workspace and not arm.exists():
+            (arm / "overlay").mkdir(parents=True)
+            tree = workspace.reference_checkout(workspace.Spec("shop", self.commit, {}))[1]
+            (arm / "workspace.json").write_text(json.dumps({"repo": "shop", "commit": self.commit, "mirror": str(self.mirror), "tree": tree}))
+        environment = {**os.environ, "CANON_WORKSPACE": str(arm), "CANON_HARVEST": str(self.base / "harvest")}
+        subprocess.run([*command, "-p", "--model", "sonnet"], cwd=root, env=environment, input=b"Add amendments.", capture_output=True, check=True)
+        return json.loads((root / "argv.json").read_text())
+
+    def test_claude_in_a_workspace_may_run_read_only_shell_commands(self):
+        self.assertEqual(self.argv_seen("claude", True), ["-p", "--model", "sonnet", *CLAUDE_READ_ONLY_SHELL])
+
+    def test_claude_outside_a_workspace_gets_no_shell_rules(self):
+        self.assertEqual(self.argv_seen("claude", False), ["-p", "--model", "sonnet"])
+        self.assertEqual(self.argv_seen("claude", False, entry="skill"), ["-p", "--model", "sonnet"])
+
+    def test_codex_in_a_workspace_gets_no_claude_rules(self):
+        self.assertEqual(self.argv_seen("codex", True),
+                         ["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write", "-p", "--model", "sonnet"])
 
 
 class MountClashTests(unittest.TestCase):

@@ -71,6 +71,20 @@ COMPANION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 # How each agent is invoked explicitly, and where it discovers project skills.
 # Codex docs: "$skill" works even when agents/openai.yaml disables implicit use.
 ENTRY_INVOCATION = {"claude": ("/poteto-mode", ".claude/skills"), "codex": ("$poteto-mode", ".agents/skills")}
+# claude-project-only runs -p under acceptEdits, which denies Bash, and Claude
+# Code 2.1.281 has no Grep or Glob tool there. In a workspace case these rules
+# let Claude run read-only commands by prefix, as Codex can. The deny rules
+# close the flags that run another program or delete files.
+CLAUDE_WORKSPACE_TOOLS = (
+    "--allowedTools",
+    *(f"Bash({prefix}:*)" for prefix in (
+        "git log", "git show", "git grep", "git diff", "git status",
+        "rg", "grep", "ls", "find", "wc", "head", "sed -n",
+    )),
+    "--disallowedTools",
+    "Bash(find * -exec*)", "Bash(find * -ok*)", "Bash(find * -delete*)",
+    "Bash(rg * --pre*)", "Bash(git grep * -O*)", "Bash(git grep * --open-files-in-pager*)",
+)
 READ_EVENTS = {"file_read", "skill_load", "command", "tool_call"}
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@")
 # The harness names a near-miss case "adversarial"; a regression guard, not a capability.
@@ -603,7 +617,8 @@ def workspace_wrapper(agent, out, target, entry):
         token, discovery = ENTRY_INVOCATION[agent]
         command += ["--token", token, "--discovery", discovery]
     command += ["--", str(target)]
-    wrapper.write_text(f"#!/bin/sh\nexec {' '.join(map(shlex.quote, command))} \"$@\"\n")
+    tools = CLAUDE_WORKSPACE_TOOLS if agent == "claude" else ()
+    wrapper.write_text(f"#!/bin/sh\nexec {' '.join(map(shlex.quote, command))} \"$@\" {' '.join(map(shlex.quote, tools))}".rstrip() + "\n")
     wrapper.chmod(0o755)
     return wrapper
 

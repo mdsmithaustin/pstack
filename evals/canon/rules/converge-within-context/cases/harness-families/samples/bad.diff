@@ -1,0 +1,110 @@
+diff --git a/omnigent/harness_families.py b/omnigent/harness_families.py
+new file mode 100644
+index 0000000..322fc11
+--- /dev/null
++++ b/omnigent/harness_families.py
+@@ -0,0 +1,54 @@
++"""One place that answers which family a harness is in."""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++from typing import Literal
++
++from omnigent.harness_aliases import canonicalize_harness
++
++FamilyKind = Literal["provider", "routing", "skills"]
++
++
++@dataclass(frozen=True)
++class HarnessFamily:
++    """Every family a harness belongs to. ``None`` means none of that kind."""
++
++    provider: str | None = None
++    routing: str | None = None
++    skills: str | None = None
++
++
++_HARNESS_FAMILY: dict[str, HarnessFamily] = {
++    "claude-sdk": HarnessFamily(provider="anthropic", routing="claude", skills="claude"),
++    "claude-native": HarnessFamily(provider="anthropic", routing="claude", skills="claude"),
++    "native-claude": HarnessFamily(provider="anthropic", skills="claude"),
++    "codex": HarnessFamily(provider="openai", routing="gpt", skills="codex"),
++    "codex-native": HarnessFamily(provider="openai", routing="gpt", skills="codex"),
++    "native-codex": HarnessFamily(provider="openai", skills="codex"),
++    "openai-agents": HarnessFamily(provider="openai", routing="gpt"),
++    "openai-agents-sdk": HarnessFamily(provider="openai", routing="gpt"),
++    "agents_sdk": HarnessFamily(routing="gpt"),
++    "claude_sdk": HarnessFamily(routing="claude", skills="claude"),
++    "antigravity": HarnessFamily(provider="openai"),
++    "agy": HarnessFamily(provider="openai"),
++    "antigravity-native": HarnessFamily(provider="gemini", skills="antigravity"),
++    "native-antigravity": HarnessFamily(provider="gemini", skills="antigravity"),
++    "agy-native": HarnessFamily(provider="gemini"),
++    "native-agy": HarnessFamily(provider="gemini"),
++    "qwen": HarnessFamily(provider="openai"),
++    "qwen-native": HarnessFamily(provider="openai"),
++    "native-qwen": HarnessFamily(provider="openai"),
++    "pi": HarnessFamily(routing="pi", skills="pi"),
++    "pi-native": HarnessFamily(skills="pi"),
++    "cursor-native": HarnessFamily(skills="cursor"),
++    "devin-native": HarnessFamily(skills="devin"),
++}
++
++
++def harness_family(harness: str | None, kind: FamilyKind = "provider") -> str | None:
++    """Return the *kind* family of *harness*, or ``None``."""
++    if harness is None or harness == "auto":
++        return None
++    entry = _HARNESS_FAMILY.get(harness) or _HARNESS_FAMILY.get(canonicalize_harness(harness) or harness)
++    return getattr(entry, kind) if entry else None
+diff --git a/omnigent/onboarding/provider_config.py b/omnigent/onboarding/provider_config.py
+index 9d23287..d1c6608 100644
+--- a/omnigent/onboarding/provider_config.py
++++ b/omnigent/onboarding/provider_config.py
+@@ -1225,7 +1225,9 @@ def harness_family(harness: str) -> str | None:
+     :returns: ``"anthropic"`` / ``"openai"`` for a single-family harness, or
+         ``None`` for an unmapped / both-family harness.
+     """
+-    return _HARNESS_FAMILY.get(harness)
++    from omnigent.harness_families import harness_family as lookup
++
++    return lookup(harness, "provider")
+ 
+ 
+ def _cli_config_serves_pi(entry: ProviderEntry) -> bool:
+diff --git a/omnigent/runner/subagent_routing.py b/omnigent/runner/subagent_routing.py
+index 9c4c398..8e5215a 100644
+--- a/omnigent/runner/subagent_routing.py
++++ b/omnigent/runner/subagent_routing.py
+@@ -487,26 +487,14 @@ def _opt_str(value: Any) -> str | None:
+ 
+ 
+ def _harness_family(harness: str) -> str | None:
+-    from omnigent.server.smart_routing import _HARNESS_FAMILY
+-
+-    return _HARNESS_FAMILY.get(harness)
++    return harness_family(harness)
+ 
+ 
+ def harness_family(harness: str | None) -> str | None:
+-    """Return the model family *harness* belongs to.
+-
+-    The single family lookup shared by the hook path (native subagent
+-    spawns) and the omnigent child-session path, so "in-family" means the
+-    same thing for both.
++    """Return the routing family *harness* belongs to."""
++    from omnigent.harness_families import harness_family as lookup
+ 
+-    :param harness: Harness id, e.g. ``"codex-native"``. ``None`` or the
+-        unresolved ``"auto"`` sentinel carry no family.
+-    :returns: ``"claude"``, ``"gpt"``, ``"pi"``, or ``None`` when the
+-        harness is unknown / multi-family.
+-    """
+-    if harness is None or harness == "auto":
+-        return None
+-    return _harness_family(harness)
++    return lookup(harness, "routing")
+ 
+ 
+ def auto_harness_session(conv: Any, parent: Any = None) -> bool:

@@ -1,0 +1,14 @@
+{
+  "kind": "positive",
+  "domain": "domain-naming",
+  "timeout_s": 2400,
+  "expected_behavior": [
+    "Filters the session list by label, the word the table, API, and docs already use, and adds no tag parameter, argument, or name beside it.",
+    "Adds the filter to GET /v1/sessions and to SessionsNamespace.list in the Python client.",
+    "Tells the user that the code calls these labels."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  }
+}

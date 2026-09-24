@@ -183,6 +183,17 @@ class NearMissThatNeverRanTests(unittest.TestCase):
         self.assertEqual(screen.rule_verdict(outcomes), ("not-separated", ["bdd missing"]))
 
 
+class CasePromptTests(unittest.TestCase):
+    def test_no_case_prompt_contains_another(self):
+        """The offline stand-in answers for the first case whose prompt its
+        input contains, so a prompt shared across rules grades the wrong rule."""
+        prompts = {f"{case.rule}/{case.id}": screen.render_prompt(case) for rule in screen.load_rules() for case in rule.cases}
+
+        clashes = sorted(f"{inner} inside {outer}" for inner in prompts for outer in prompts if inner != outer and prompts[inner] in prompts[outer])
+
+        self.assertEqual(clashes, [])
+
+
 class SkillFilesReadTests(unittest.TestCase):
     files = sorted(TREE)
 

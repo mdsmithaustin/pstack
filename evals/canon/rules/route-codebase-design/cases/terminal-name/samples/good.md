@@ -1,0 +1,1 @@
+`native_terminal_name` now returns the `terminal_name` of the native agent row whose harness matches, also accepting the reversed `native-<name>` spelling that `canonicalize_harness` leaves alone. `tests/test_harness_aliases.py` passes.

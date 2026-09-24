@@ -1,0 +1,183 @@
+diff --git a/omnigent/gateway_inference.py b/omnigent/gateway_inference.py
+index 5519e35..aa4fa22 100644
+--- a/omnigent/gateway_inference.py
++++ b/omnigent/gateway_inference.py
+@@ -13,13 +13,15 @@ import logging
+ from collections.abc import Iterable, Mapping
+ from typing import Final
+ 
++from omnigent.harness_aliases import CODEX_HARNESSES, canonicalize_harness, native_spellings
++
+ _logger = logging.getLogger(__name__)
+ 
+ # Every spelling the Claude family travels under on the wire.
+-CLAUDE_GATEWAY_HARNESSES: Final[tuple[str, ...]] = ("claude-native", "native-claude")
++CLAUDE_GATEWAY_HARNESSES: Final[tuple[str, ...]] = tuple(sorted(native_spellings("claude")))
+ 
+ # Every spelling the Codex family travels under on the wire.
+-CODEX_GATEWAY_HARNESSES: Final[tuple[str, ...]] = ("codex", "codex-native", "native-codex")
++CODEX_GATEWAY_HARNESSES: Final[tuple[str, ...]] = tuple(sorted(CODEX_HARNESSES))
+ 
+ # The AI Gateway serves Codex/OpenAI-Responses under this path suffix; both
+ # gateway URL shapes (dedicated subdomain and workspace-hosted) end with it.
+@@ -151,8 +153,6 @@ def _family_spellings(harness: str) -> tuple[str, ...]:
+     :param harness: Harness id in any spelling, e.g. ``"native-codex"``.
+     :returns: The family's spellings, or just *harness* when it is in neither.
+     """
+-    from omnigent.harness_aliases import canonicalize_harness
+-
+     canonical = canonicalize_harness(harness) or harness
+     for spellings in (CLAUDE_GATEWAY_HARNESSES, CODEX_GATEWAY_HARNESSES):
+         if canonical in spellings or harness in spellings:
+diff --git a/omnigent/harness_aliases.py b/omnigent/harness_aliases.py
+index c261da7..b40fe9f 100644
+--- a/omnigent/harness_aliases.py
++++ b/omnigent/harness_aliases.py
+@@ -77,3 +77,20 @@ def native_terminal_name(harness: str | None) -> str | None:
+     # reversed ``native-<name>`` spelling (not all are folded by
+     # ``canonicalize_harness``), so strip either affix.
+     return canonical.removesuffix("-native").removeprefix("native-")
++
++
++def native_spellings(terminal: str) -> frozenset[str]:
++    """Return every native harness spelling whose CLI runs in *terminal*.
++
++    Derived from the registry, e.g. ``"codex"`` ->
++    ``{"codex-native", "native-codex"}``.
++
++    :param terminal: A terminal short-name, e.g. ``"claude"``.
++    :returns: The native spellings, empty when none runs there.
++    """
++    return frozenset(name for name in NATIVE_HARNESSES if native_terminal_name(name) == terminal)
++
++
++# The Codex family: the exec harness plus its native spellings. Readiness,
++# model-override, and gateway checks must agree on every one.
++CODEX_HARNESSES: frozenset[str] = frozenset({"codex"}) | native_spellings("codex")
+diff --git a/omnigent/harness_availability.py b/omnigent/harness_availability.py
+index 651eaa1..82d02e1 100644
+--- a/omnigent/harness_availability.py
++++ b/omnigent/harness_availability.py
+@@ -1,4 +1,4 @@
+-"""Shared harness-readiness states and harness-family identifiers."""
++"""Shared harness-readiness states."""
+ 
+ from __future__ import annotations
+ 
+@@ -17,12 +17,6 @@ HarnessAvailability = Literal[
+     "version-too-low",
+ ]
+ 
+-# Readiness and model-family checks must agree on every Codex spelling.
+-CODEX_CANONICAL_HARNESSES: Final[frozenset[str]] = frozenset(
+-    {"codex", "codex-native", "native-codex"}
+-)
+-
+-
+ def is_harness_availability(value: object) -> TypeGuard[HarnessAvailability]:
+     """Return whether a decoded value is a supported readiness state."""
+     return isinstance(value, bool) or value in (
+diff --git a/omnigent/models/model_override.py b/omnigent/models/model_override.py
+index a0b195c..67d2d7f 100644
+--- a/omnigent/models/model_override.py
++++ b/omnigent/models/model_override.py
+@@ -11,8 +11,7 @@ from __future__ import annotations
+ 
+ import re
+ 
+-from omnigent.harness_aliases import canonicalize_harness, is_native_harness
+-from omnigent.harness_availability import CODEX_CANONICAL_HARNESSES
++from omnigent.harness_aliases import CODEX_HARNESSES, canonicalize_harness, is_native_harness
+ from omnigent.harness_plugins import model_env_keys
+ 
+ # Generous-but-safe upper bound; real ids ("databricks-claude-opus-4-8",
+@@ -75,7 +74,7 @@ def validate_model_override(value: str) -> str:
+ _CLAUDE_FAMILY_HARNESSES: frozenset[str] = frozenset(
+     {"claude-native", "native-claude", "claude-sdk", "claude_sdk"}
+ )
+-# CODEX_CANONICAL_HARNESSES is restricted to the codex-compatible families
++# CODEX_HARNESSES is restricted to the codex-compatible families
+ # (see is_codex_compatible_model): the gateway serves codex over the
+ # Anthropic-incompatible Responses wire, and codex >= 0.137 dropped the
+ # chat/completions wire that was the only path to Claude — so a codex x Claude
+@@ -182,7 +181,7 @@ def model_family_mismatch(harness: str, model: str) -> str | None:
+             "Kimi models or the pi / openai-agents worker for any other "
+             "gateway model."
+         )
+-    if canon in CODEX_CANONICAL_HARNESSES and not is_codex_compatible_model(model):
++    if canon in CODEX_HARNESSES and not is_codex_compatible_model(model):
+         return (
+             f"harness {canon!r} only runs codex-compatible models (id naming "
+             f"'gpt', 'codex', 'glm', or 'kimi'); got {model!r}. Use the "
+diff --git a/omnigent/onboarding/harness_readiness.py b/omnigent/onboarding/harness_readiness.py
+index 3b0bffd..dd1ccfb 100644
+--- a/omnigent/onboarding/harness_readiness.py
++++ b/omnigent/onboarding/harness_readiness.py
+@@ -36,9 +36,8 @@ from pathlib import Path
+ import omnigent.onboarding.gemini_auth as _gemini_auth
+ import omnigent.onboarding.kimi_auth as _kimi_auth
+ from omnigent._platform import IS_WINDOWS, resolve_cli_binary
+-from omnigent.harness_aliases import HARNESS_ALIASES, NATIVE_HARNESSES, canonicalize_harness
++from omnigent.harness_aliases import CODEX_HARNESSES, HARNESS_ALIASES, NATIVE_HARNESSES, canonicalize_harness
+ from omnigent.harness_availability import (
+-    CODEX_CANONICAL_HARNESSES,
+     HARNESS_BINARY_MISSING,
+     HARNESS_NEEDS_AUTH,
+     HARNESS_VERSION_TOO_LOW,
+@@ -1020,7 +1019,7 @@ def harness_is_configured(harness: str) -> bool:
+ def _is_codex_family_harness(canonical: str) -> bool:
+     """Return whether a canonical harness uses Codex readiness semantics."""
+     return (
+-        canonical in CODEX_CANONICAL_HARNESSES and _HARNESS_FAMILY.get(canonical) == OPENAI_FAMILY
++        canonical in CODEX_HARNESSES and _HARNESS_FAMILY.get(canonical) == OPENAI_FAMILY
+     )
+ 
+ 
+diff --git a/omnigent/runner/app.py b/omnigent/runner/app.py
+index 0300ff0..939ad6d 100644
+--- a/omnigent/runner/app.py
++++ b/omnigent/runner/app.py
+@@ -62,11 +62,11 @@ from omnigent.entities.session_resources import (
+ )
+ from omnigent.errors import ErrorCode, ErrorPhase, OmnigentError
+ from omnigent.harness_aliases import (
++    CODEX_HARNESSES,
+     canonicalize_harness,
+     is_native_harness,
+     native_terminal_name,
+ )
+-from omnigent.harness_availability import CODEX_CANONICAL_HARNESSES
+ from omnigent.harness_capabilities import InstructionDelivery
+ from omnigent.harness_plugins import (
+     harness_capabilities,
+@@ -13637,7 +13637,7 @@ def _build_spawn_env_from_spec(
+         from omnigent.runner.subagent_routing import session_router_env
+ 
+         env.update(session_router_env(session_id, harness))
+-        if harness in CODEX_CANONICAL_HARNESSES:
++        if harness in CODEX_HARNESSES:
+             # A Smart Routing turn or spawn can land on a gateway arm codex's
+             # bundled catalog has no entry for, so the session replaces that
+             # catalog. Plain sessions get nothing here and never pay the
+diff --git a/tests/test_harness_capabilities.py b/tests/test_harness_capabilities.py
+index bef8cfa..c9ab292 100644
+--- a/tests/test_harness_capabilities.py
++++ b/tests/test_harness_capabilities.py
+@@ -10,7 +10,7 @@ drift.
+ from __future__ import annotations
+ 
+ from omnigent import harness_plugins as hp
+-from omnigent.harness_availability import CODEX_CANONICAL_HARNESSES
++from omnigent.harness_aliases import CODEX_HARNESSES
+ from omnigent.harness_capabilities import (
+     AuthModel,
+     EffortFamily,
+@@ -64,7 +64,7 @@ def test_model_family_matches_model_override_sets() -> None:
+         family = capability.model_family
+         if harness in _CLAUDE_FAMILY_HARNESSES:
+             assert family is ModelFamily.CLAUDE, harness
+-        elif harness in CODEX_CANONICAL_HARNESSES:
++        elif harness in CODEX_HARNESSES:
+             assert family is ModelFamily.GPT, harness
+         elif harness in _ANTIGRAVITY_FAMILY_HARNESSES:
+             assert family is ModelFamily.GEMINI, harness

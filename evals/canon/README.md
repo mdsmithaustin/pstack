@@ -81,6 +81,10 @@ records `<isolated workspace>`.
    these whole words in any case: eval, evals, evaluation, judge, experiment,
    rubric, score, compare, benchmark, candidate, arena. Ask for files inside
    `<file path="...">` tags, or commits inside `<commit message="...">` tags.
+   No prompt may equal or contain another case's prompt, in any rule. The
+   offline stand-in answers for the first case whose prompt it finds, and
+   `test_screen.py` checks this. Two rules that share an oracle and a fixture
+   therefore word their prompts differently.
 5. Write `rules/<id>/oracle.py`. Map every case id to a function that returns
    a list of failure strings, empty on a pass. The arm copies only this one
    file, so it may import only `shared` and the standard library, and read only
@@ -190,6 +194,18 @@ recorded. Under the poteto-mode entry it links the skills as before. A repo
 that already tracks `.claude/skills` gets a copy of each skill beside its own.
 Codex runs with `--sandbox workspace-write` for these cases.
 
+Claude runs through `claude-project-only`, whose `acceptEdits` mode denies
+Bash in a `-p` run. Claude Code 2.1.281 lists no Grep or Glob tool there, so
+without Bash it could not search a real repo while Codex runs git and grep. The
+workspace wrapper, and only that wrapper, appends `--allowedTools` rules for
+read-only commands by prefix: `git log`, `git show`, `git grep`, `git diff`,
+`git status`, `rg`, `grep`, `ls`, `find`, `wc`, `head`, and `sed -n`. It
+also appends `--disallowedTools` rules for the flags that make those commands
+run another program or delete files: `find -exec`, `-ok`, `-delete`,
+`rg --pre`, and `git grep -O`. A run with a model that does not exist, which
+costs nothing, accepted both flags on 2026-09-24, and an unknown flag fails
+the same run at parsing. No run has yet shown each rule matching a command.
+
 When the agent exits, `wrap` writes a binary diff of the workspace against that
 tree to a slot outside the workspace. The diff covers edits, deletions, and new
 files that git does not ignore. A rename shows as a deletion and an add. The
@@ -213,7 +229,16 @@ A workspace case's check receives a `shared.Workspace` in place of the project.
 the new bytes of every path the diff touches, with `None` for a deleted path.
 The samples are `good.md` and `bad.md` with a `good.diff` and `bad.diff` beside
 them. `test_oracle.py` passes `workspace=Workspace(checkout, diff)` to `grade`.
-The offline stand-in applies the chosen sample's diff in its cwd.
+The offline stand-in applies the chosen sample's diff in its cwd. The sample
+tests skip when the mirror lacks the pinned commit.
+
+The omnigent cases grade the diff statically, with the AST of the Python files
+it touches. Their upstream tests need pyyaml, pydantic, and pytest, which the
+networkless image does not have. omnigent's `AGENTS.md` asks for `pre-commit`
+before any commit, so each prompt says there is no need to commit. It also
+asks for a `@deprecated` marker on anything slated for removal, so the
+one-name check skips a `@deprecated` def and a parameter declared with
+`deprecated=True`. None of these cases needs an overlay.
 
 Each run costs one checkout. On an Apple silicon Mac on 2026-09-24, omnigent
 (5,545 files) took 1.0 s to check out, 0.3 s to diff, and 102 MB of disk.

@@ -1,0 +1,1 @@
+Added `omnigent/harness_families.py` with one `_HARNESS_FAMILY` table. Each entry is a `HarnessFamily` with its provider, routing, and skills family, and `harness_family(harness, kind)` answers all three. `provider_config.harness_family` and `subagent_routing.harness_family` now read it.
