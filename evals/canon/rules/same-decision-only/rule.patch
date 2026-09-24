@@ -1,0 +1,7 @@
+--- a/principle-laziness-protocol/SKILL.md
++++ b/principle-laziness-protocol/SKILL.md
+@@ -12,3 +12,3 @@
+ - **Maintain a flat call hierarchy.** Avoid deep call chains. A rich interface that hides substantial work is not a deep call chain. If answering a question requires tracing through more than 3 files or layers, flatten it.
+-- **Consolidate decisions.** Do not repeat the same choice in several places. Put it behind one source of truth and pass the result as a simple flag.
++- **Consolidate decisions.** Do not repeat the same choice in several places. Put it behind one source of truth and pass the result as a simple flag. Merge only the same decision. Two look-alike code paths that different people or business functions change are two decisions. Keep them separate even when the code matches today.
+ - **Minimize the diff.** Make the smallest change that solves the problem. Fewer lines beat "elegant" boilerplate.

@@ -1,0 +1,10 @@
+--- a/spec-probes/SKILL.md
++++ b/spec-probes/SKILL.md
+@@ -8,3 +8,7 @@
+ A verifier only checks assertions that exist, and it is confidently wrong about edges the spec never stated. The fix is not a better verifier; it is spec completeness. Run these two passes over each requirement before code, in this order.
+
++## Before the passes: map rules to examples
++
++Split each requirement into the rules it states. Under each rule, write examples as Given, When, Then with literal values taken from the spec. Never invent a Then. When the spec does not state the outcome, the example is a question. Record it as an unresolved item. The passes below probe each rule, and each item that resolves becomes another example.
++
+ ## Pass 1: edge probe
