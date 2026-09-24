@@ -1,0 +1,58 @@
+diff --git a/hermes_cli/sessions_cmd.py b/hermes_cli/sessions_cmd.py
+index a10305f..5fe077e 100644
+--- a/hermes_cli/sessions_cmd.py
++++ b/hermes_cli/sessions_cmd.py
+@@ -974,7 +974,17 @@ def _cmd_repair_routing(db, args):
+     print(f"\nRepaired {repaired} of {len(adoptable)} session(s).")
+ 
+ 
++def _print_chain_totals(db, session_id):
++    totals = db.conversation_usage(session_id)
++    print(f"Chain of {session_id}: {totals['sessions']} session(s)\n"
++          f"Input tokens:  {totals['input_tokens']:,}\nOutput tokens: {totals['output_tokens']:,}\n"
++          f"Spend:         ${totals['cost_usd']:.4f}")
++
++
+ def _cmd_stats(db, args):
++    if getattr(args, "session_id", None):
++        _print_chain_totals(db, args.session_id)
++        return
+     print(f"Total sessions: {db.session_count()}\nTotal messages: {db.message_count()}")
+     for src in ("cli", "telegram", "discord", "whatsapp", "slack"):
+         if (c := db.session_count(source=src)) > 0:
+diff --git a/hermes_cli/subcommands/sessions.py b/hermes_cli/subcommands/sessions.py
+index d56bf4a..a23e40b 100644
+--- a/hermes_cli/subcommands/sessions.py
++++ b/hermes_cli/subcommands/sessions.py
+@@ -247,7 +247,9 @@ def build_sessions_parser(subparsers, *, cmd_sessions: Callable) -> None:
+     sessions_recover.add_argument(
+         "--report", type=Path, help="JSON report path (defaults to <output>.recovery.json)")
+ 
+-    sessions_subparsers.add_parser("stats", help="Show session store statistics")
++    sessions_stats = sessions_subparsers.add_parser("stats", help="Show session store statistics")
++    sessions_stats.add_argument("session_id", nargs="?",
++        help="Sum tokens and spend over this session's whole conversation")
+ 
+     sessions_rename = sessions_subparsers.add_parser(
+         "rename", help="Set or change a session's title")
+diff --git a/hermes_state_usage.py b/hermes_state_usage.py
+index 06ea514..5b5622b 100644
+--- a/hermes_state_usage.py
++++ b/hermes_state_usage.py
+@@ -433,3 +433,16 @@ class SessionUsageMixin:
+              WHERE {' AND '.join(where)}
+             """, params)
+         return {"tokens": int(row[0] or 0), "cost_usd": float(row[1] or 0.0)}
++
++    def conversation_usage(self, session_id: str) -> Dict[str, float]:
++        """Tokens and spend summed over every row of the compressed conversation."""
++        chain = self.get_compression_chain(session_id)
++        row = self._read_one(f"""
++            SELECT COALESCE(SUM(COALESCE(input_tokens, 0)), 0),
++                   COALESCE(SUM(COALESCE(output_tokens, 0)), 0),
++                   COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd, 0)), 0)
++              FROM sessions
++             WHERE id IN ({','.join('?' * len(chain))})
++            """, chain)
++        return {"sessions": len(chain), "input_tokens": int(row[0] or 0),
++                "output_tokens": int(row[1] or 0), "cost_usd": float(row[2] or 0.0)}

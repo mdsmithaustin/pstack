@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 import importlib.util
 import io
 import json
@@ -242,7 +243,9 @@ class CompanionMountTests(unittest.TestCase):
         quiet.__enter__()
         self.addCleanup(quiet.__exit__, None, None, None)
         self.out = base / "out"
-        self.rule = screen.load_rule("route-domain-modeling")
+        # The rule's workspace cases need the hermes mirror, so build only its pasted-project case.
+        rule = screen.load_rule("route-domain-modeling")
+        self.rule = dataclasses.replace(rule, cases=tuple(case for case in rule.cases if not case.workspace))
 
     def arm(self, arm):
         return self.out / "arms" / self.rule.id / self.rule.cases[0].id / arm
