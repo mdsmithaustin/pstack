@@ -1,11 +1,10 @@
 """Refactor by named smell: move the envious function, bundle the clump, add no one-caller helpers.
 
-billing-cleanup has Feature Envy and Data Clumps, and the commit messages name
-the refactorings. delivery-dates has two copies that change for different
+billing-cleanup has Feature Envy and Data Clumps. Commit-message vocabulary is
+not graded, because only the rule asks for it. delivery-dates has two copies that change for different
 reasons, so they stay separate."""
 import ast
 import json
-import re
 
 from shared import functions, is_test_path, parse_commits, parse_python, run_jobs
 
@@ -13,10 +12,6 @@ CLUMP = {"street", "city", "postal_code"}
 ENVY_FIELDS = {"tier", "loyalty_years", "tax_exempt", "country", "credit_cents"}
 RUN = ["python3", "-m", "billing.run", "data/accounts.json"]
 SUITE = ["python3", "-m", "unittest", "-q"]
-NAMED_MOVES = {
-    "Move Function": re.compile(r"\bmove (function|method)\b", re.IGNORECASE),
-    "Introduce Parameter Object": re.compile(r"\b(introduce parameter object|preserve whole object|extract class)\b", re.IGNORECASE),
-}
 
 
 def source_modules(tree):
@@ -81,10 +76,6 @@ def check_billing(answer, project):
         for node in top_level_functions(module):
             if node.name not in original_names and call_sites(after, node.name) == 1:
                 failures.append(f"{path}:{node.name} is a new function with one caller")
-    messages = "\n".join(message for message, _ in commits)
-    for name, pattern in NAMED_MOVES.items():
-        if not pattern.search(messages):
-            failures.append(f"no commit message names {name}")
     return failures
 
 

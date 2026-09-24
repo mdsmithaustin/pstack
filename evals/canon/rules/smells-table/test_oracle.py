@@ -21,8 +21,6 @@ class BillingCleanupTests(unittest.TestCase):
                 "billing/invoices.py:format_address still takes street, city, and postal_code",
                 "billing/invoices.py:shipping_zone still takes street, city, and postal_code",
                 "billing/invoices.py:mailing_label still takes street, city, and postal_code",
-                "no commit message names Move Function",
-                "no commit message names Introduce Parameter Object",
             ],
         )
 
