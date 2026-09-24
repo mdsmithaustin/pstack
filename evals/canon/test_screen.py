@@ -1,8 +1,12 @@
+import contextlib
 import importlib.util
+import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("canon_screen", ROOT / "screen.py")
@@ -216,6 +220,81 @@ class ExposureRecordTests(unittest.TestCase):
             (base / "events.json").write_text(json.dumps({"events": []}))
 
             self.assertEqual(screen.exposure({"run_base": str(base)}, sorted(TREE)), {"read": [], "entry_invoked": True})
+
+
+COMPANION = {"SKILL.md": b"---\nname: domain-modeling\n---\n# Domain Modeling\n", "agents/openai.yaml": b"interface:\n  display_name: Domain\n"}
+
+
+class CompanionMountTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        for path, data in COMPANION.items():
+            (base / "companions" / "domain-modeling" / path).parent.mkdir(parents=True, exist_ok=True)
+            (base / "companions" / "domain-modeling" / path).write_bytes(data)
+        (base / "skill-ci").mkdir()
+        (base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
+        environment = mock.patch.dict(os.environ, {"CANON_COMPANIONS_ROOT": str(base / "companions"), "SKILL_CI": str(base / "skill-ci")})
+        environment.start()
+        self.addCleanup(environment.stop)
+        quiet = contextlib.redirect_stdout(io.StringIO())
+        quiet.__enter__()
+        self.addCleanup(quiet.__exit__, None, None, None)
+        self.out = base / "out"
+        self.rule = screen.load_rule("route-domain-modeling")
+
+    def arm(self, arm):
+        return self.out / "arms" / self.rule.id / self.rule.cases[0].id / arm
+
+    def test_both_arms_mount_the_companion_beside_pstack_as_is(self):
+        screen.build(self.out, [self.rule], "poteto-mode")
+
+        for arm in screen.ARMS:
+            self.assertEqual(screen.read_tree(self.arm(arm) / "pstack" / "domain-modeling"), COMPANION)
+            self.assertTrue((self.arm(arm) / "pstack" / "poteto-mode" / "SKILL.md").is_file())
+
+    def test_single_skill_entry_mounts_and_lists_the_companion(self):
+        screen.build(self.out, [self.rule], "skill")
+
+        for arm in screen.ARMS:
+            self.assertEqual(screen.read_tree(self.arm(arm) / "skills" / "domain-modeling"), COMPANION)
+            manifest = json.loads((self.arm(arm) / screen.MANIFEST).read_text())
+            self.assertEqual(manifest["skill_paths"], ["skills/poteto-mode/SKILL.md", "skills/domain-modeling/SKILL.md"])
+
+    def test_build_records_one_companion_hash_for_every_arm(self):
+        screen.build(self.out, [self.rule], "poteto-mode")
+
+        record = json.loads((self.out / "arms" / self.rule.id / "build.json").read_text())["companions"]
+        digest = screen.tree_hash(COMPANION)
+        case = self.rule.cases[0].id
+        self.assertEqual(record["trees"]["domain-modeling"], {"files": 2, "sha256": digest, "arms": {f"{case}/current": digest, f"{case}/amended": digest}})
+
+    def test_one_change_check_sees_only_the_pstack_tree(self):
+        screen.build(self.out, [self.rule], "poteto-mode")
+
+        built = json.loads((self.out / "arms" / self.rule.id / "build.json").read_text())
+        current, amended = ({path: data for path, data in screen.read_tree(self.arm(arm) / "pstack").items() if not path.startswith("domain-modeling/")} for arm in screen.ARMS)
+        self.assertEqual((built["target"], built["patch_kind"]), ("poteto-mode/playbooks/feature.md", "insert"))
+        self.assertEqual(screen.single_change(current, amended), screen.rule_change(self.rule, screen.tracked("skills")))
+
+    def test_companion_named_like_a_pstack_skill_is_refused(self):
+        rule = screen.Rule(self.rule.id, self.rule.source, self.rule.patch, self.rule.target, self.rule.cases, ("poteto-mode",))
+
+        with self.assertRaisesRegex(screen.ScreenError, "companion poteto-mode collides"):
+            screen.build(self.out, [rule], "poteto-mode")
+
+    def test_arm_copy_that_differs_from_the_source_is_refused(self):
+        with self.assertRaisesRegex(screen.ScreenError, r"differs from its source in \['c/amended'\]"):
+            screen.companion_record({"domain-modeling": COMPANION}, {"domain-modeling": {"c/current": screen.tree_hash(COMPANION), "c/amended": "0"}})
+
+    def test_rule_without_companions_builds_as_before(self):
+        rule = screen.load_rule("preparatory-refactor")
+
+        screen.build(self.out, [rule], "poteto-mode")
+
+        built = json.loads((self.out / "arms" / rule.id / "build.json").read_text())
+        self.assertEqual(sorted(built), ["cases", "entry", "inserted", "patch_kind", "removed", "target", "tree_dir"])
 
 
 if __name__ == "__main__":

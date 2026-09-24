@@ -21,6 +21,10 @@ separates and no near-miss case reverses or goes ungraded.
 where the agent discovers project skills, and starts the prompt with the
 agent's explicit invocation, as a user of /poteto-mode would.
 
+A rule whose rule.json names companions gets those skill directories copied
+unchanged from $CANON_COMPANIONS_ROOT (default ~/.agents/skills) into both
+arms beside pstack. The one-change check never sees them.
+
   screen.py plan [--runs-root DIR ...]                 list rules, cases, and past runs
   screen.py build --out DIR [--entry E] [RULE ...]     write both arms of every case
   screen.py audit [--entry E] [RULE ...]               model-free: build, validate, audit, prepare
@@ -29,6 +33,7 @@ agent's explicit invocation, as a user of /poteto-mode would.
 """
 import argparse
 import difflib
+import hashlib
 import importlib.util
 import json
 import os
@@ -52,6 +57,10 @@ ENTRY_SKILL = "poteto-mode"
 ENTRY_TREE = "pstack"
 ENTRY_TIMEOUT_S = 900
 DEFAULT_RUNS_ROOT = Path("/private/tmp/canon-entry")
+# Skills a user installs beside pstack. A rule that routes to one names it in
+# rule.json "companions", and both arms mount the same copy next to pstack.
+DEFAULT_COMPANIONS_ROOT = Path.home() / ".agents" / "skills"
+COMPANION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 # How each agent is invoked explicitly, and where it discovers project skills.
 # Codex docs: "$skill" works even when agents/openai.yaml disables implicit use.
 ENTRY_INVOCATION = {"claude": ("/poteto-mode", ".claude/skills"), "codex": ("$poteto-mode", ".agents/skills")}
@@ -93,6 +102,7 @@ class Rule:
     patch: str
     target: str
     cases: tuple
+    companions: tuple = ()
 
     @property
     def skill(self):
@@ -155,7 +165,11 @@ def load_rule(rule_id):
     checks = set(oracle_checks(rule_id))
     if checks != {case.id for case in cases}:
         raise ScreenError(f"rules/{rule_id}/oracle.py CHECKS covers {sorted(checks)}, cases are {[case.id for case in cases]}")
-    return Rule(rule_id, json.loads((root / "rule.json").read_text())["source"], patch, parse_patch(patch)[0], cases)
+    spec = json.loads((root / "rule.json").read_text())
+    companions = spec.get("companions", [])
+    if not isinstance(companions, list) or not all(isinstance(name, str) and COMPANION_NAME.match(name) for name in companions):
+        raise ScreenError(f"rules/{rule_id}/rule.json companions must be a list of skill directory names, not {companions!r}")
+    return Rule(rule_id, spec["source"], patch, parse_patch(patch)[0], cases, tuple(companions))
 
 
 def load_rules(requested=()):
@@ -175,6 +189,37 @@ def tracked(scope):
     if not paths:
         raise ScreenError(f"{scope} has no tracked files")
     return {path.removeprefix("skills/"): (REPO / path).read_bytes() for path in paths}
+
+
+def companions_root():
+    return Path(os.environ.get("CANON_COMPANIONS_ROOT", DEFAULT_COMPANIONS_ROOT)).expanduser().resolve()
+
+
+def read_tree(root):
+    return {path.relative_to(root).as_posix(): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file()}
+
+
+def tree_hash(files):
+    digest = hashlib.sha256()
+    for path in sorted(files):
+        digest.update(path.encode() + b"\0" + str(len(files[path])).encode() + b"\0" + files[path])
+    return digest.hexdigest()
+
+
+def companion_trees(rule, mounted):
+    """{name: {path: bytes}} for each companion skill the rule routes to, read
+    as-is from the companion root. A name that is also a skill in the mounted
+    tree is refused, because the copy would shadow or merge into it."""
+    root = companions_root()
+    taken = {path.split("/", 1)[0] for path in mounted}
+    trees = {}
+    for name in rule.companions:
+        if name in taken:
+            raise ScreenError(f"companion {name} collides with a skill in the mounted tree")
+        if not (root / name / "SKILL.md").is_file():
+            raise ScreenError(f"companion {name} has no SKILL.md under {root}; set CANON_COMPANIONS_ROOT")
+        trees[name] = read_tree(root / name)
+    return trees
 
 
 def parse_patch(patch):
@@ -339,7 +384,10 @@ def build(out, rules, entry="skill"):
         amended = apply_patch(current, rule.patch)
         change = single_change(current, amended)
         description = frontmatter_description(current[f"{skill}/SKILL.md"].decode())
-        cases = {}
+        companions = companion_trees(rule, current)
+        if entry == "skill":
+            skill_paths += [f"skills/{name}/SKILL.md" for name in companions]
+        cases, arm_hashes = {}, {}
         for case in rule.cases:
             prompt = render_prompt(case)
             for arm, tree in zip(ARMS, (current, amended)):
@@ -350,17 +398,40 @@ def build(out, rules, entry="skill"):
                     destination = root / tree_dir / path
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     destination.write_bytes(data)
+                for name, files in companions.items():
+                    for path, data in files.items():
+                        destination = root / tree_dir / name / path
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        destination.write_bytes(data)
+                    arm_hashes.setdefault(name, {})[f"{case.id}/{arm}"] = tree_hash(read_tree(root / tree_dir / name))
                 copy_grader(rule, case, root)
                 (root / MANIFEST).write_text(json.dumps(manifest(rule, case, prompt, skill, description, skill_paths, entry), indent=2) + "\n")
             cases[case.id] = {"kind": case.kind, "timeout_s": ENTRY_TIMEOUT_S if entry == ENTRY_SKILL else case.spec["timeout_s"]}
         built[rule.id] = {"entry": entry, "tree_dir": tree_dir, "target": change.target, "patch_kind": change.kind,
                           "removed": change.removed, "inserted": change.inserted, "cases": cases}
+        if companions:
+            built[rule.id]["companions"] = companion_record(companions, arm_hashes)
         (out / "arms" / rule.id / "build.json").write_text(json.dumps(built[rule.id], indent=2) + "\n")
         print(f"{rule.id}: {entry} entry, {len(current)} tracked files, skills/{change.target} {change.kind}, cases {', '.join(cases)}")
+        for name, record in built[rule.id].get("companions", {}).get("trees", {}).items():
+            print(f"  companion {name}: {record['files']} file(s), sha256 {record['sha256'][:12]} in every arm")
         if change.removed:
             print("  - " + change.removed.strip().replace("\n", "\n    "))
         print("  + " + change.inserted.strip().replace("\n", "\n    "))
     return built
+
+
+def companion_record(companions, arm_hashes):
+    """Hash each companion as read back from every arm, and refuse the build
+    unless every arm holds the same bytes as the companion root."""
+    trees = {}
+    for name, files in companions.items():
+        expected = tree_hash(files)
+        differing = sorted(arm for arm, digest in arm_hashes[name].items() if digest != expected)
+        if differing:
+            raise ScreenError(f"companion {name} differs from its source in {differing}")
+        trees[name] = {"files": len(files), "sha256": expected, "arms": arm_hashes[name]}
+    return {"root": str(companions_root()), "trees": trees}
 
 
 def check_manifest(root, kind):
@@ -641,7 +712,7 @@ def plan(roots):
     for rule in rules.values():
         change = changes[rule.id]
         kind = change.kind if isinstance(change, Change) else f"BROKEN: {change}"
-        print(f"{rule.id}  [{rule.source}]  skills/{rule.target}  {kind}")
+        print(f"{rule.id}  [{rule.source}]  skills/{rule.target}  {kind}" + (f"  companions {', '.join(rule.companions)}" if rule.companions else ""))
         for case in rule.cases:
             seen = runs.get((rule.id, case.id))
             print(f"  {case.id:20} {case.kind:9}  {'; '.join(seen) if seen else 'not run'}")

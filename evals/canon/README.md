@@ -27,8 +27,8 @@ change the answer. A `near-miss` case is one where the rule must not change it.
 A rule `SEPARATES` only when every positive case separates and no near-miss case
 reverses or goes ungraded.
 
-`screen.py plan` lists every rule with its source, owner file, patch kind, and
-cases. It also shows each finished run found under `--runs-root`, which can be
+`screen.py plan` lists every rule with its source, owner file, patch kind,
+companions, and cases. It also shows each finished run found under `--runs-root`, which can be
 given more than once and defaults to `/private/tmp/canon-entry`. A run whose
 owner file differs from today's current or amended text is marked `(older
 text)`.
@@ -38,7 +38,7 @@ text)`.
 ```
 rules/<id>/
   rule.patch          one hunk against skills/
-  rule.json           {"source": "..."}
+  rule.json           {"source": "...", "companions": ["<skill>", ...]}; companions is optional
   oracle.py           CHECKS = {"<case-id>": check}; check(answer, project) returns failures
   test_oracle.py      unit tests that grade the samples
   cases/<case-id>/
@@ -62,7 +62,8 @@ records `<isolated workspace>`.
 
 ## How to add a rule
 
-1. Create `rules/<id>/rule.json` with the research source.
+1. Create `rules/<id>/rule.json` with the research source. If the rule routes
+   to a skill that users install beside pstack, list it in `companions`.
 2. Write `rules/<id>/rule.patch` as one hunk against the tracked file, with
    paths relative to `skills/` (`--- a/<skill>/SKILL.md`, `+++ b/<skill>/SKILL.md`).
 3. Add cases under `rules/<id>/cases/<case-id>/`, at least one of them
@@ -122,6 +123,23 @@ Answers return files inside `<file path="...">` tags, because the harness
 discards the agent's workspace. Oracles that run answer code use the pinned
 `python:3.12-slim` image with no network, a read-only root, and no
 capabilities.
+
+## Companion skills
+
+A rule that routes to another suite's skill names it in `rule.json`
+`companions`. The build copies each named directory unchanged, including
+`agents/openai.yaml` and other invocation flags, from `$CANON_COMPANIONS_ROOT`
+(default `~/.agents/skills`) into both arms. Under `--entry poteto-mode` the
+copy sits in `skills/pstack/<name>`, so the same link that exposes pstack
+also exposes the companion by name. Under `--entry skill` it sits in
+`skills/<name>` and its `SKILL.md` joins `skill_paths`. The build refuses a
+companion whose name matches a pstack skill.
+
+The one-change check reads only the pstack files, so companions never count
+as a second change. `build.json` records each companion's file count and a
+sha256 of its files as read back from every arm. The build fails when an
+arm's copy differs from the source. Rules without companions build exactly as
+before. `compare` counts reads of companion files like reads of pstack files.
 
 ## Rule texts
 

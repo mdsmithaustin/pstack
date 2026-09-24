@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "domain-language",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Names the new operation after the glossary's Amendment, the term CONTEXT.md gives for removing line items from an unshipped order.",
+    "Adds no function, class, or file named as a partial or line-item cancellation, which CONTEXT.md lists under Avoid."
+  ]
+}
