@@ -8,11 +8,14 @@ answers with samples/good.md in both arms. A correct screen then prints
 SEPARATES for every positive case, TIE-PASS for every near-miss case, and
 SEPARATES for every rule. When the workspace mounts skills/pstack, the poteto-mode
 entry's tree, it exits 3 unless the prompt starts with the explicit invocation
-and the tree is linked where Codex finds it.
+and the tree is linked where Codex finds it. For a workspace case it also
+applies the chosen sample's .diff to the checkout in its cwd, and exits 4 when
+there is no checkout or the sandbox forbids writes.
 """
 import glob
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,6 +38,12 @@ marker = screen.rule_change(rule, screen.tracked("skills")).inserted.strip()
 mounted = "".join(Path(path).read_text() for path in glob.glob("skills/**/*.md", recursive=True))
 sample = "good.md" if case.kind == "near-miss" or marker in mounted else "bad.md"
 answer = (case.root / "samples" / sample).read_text()
+if case.workspace:
+    # A workspace case edits the checkout in its cwd with the sample's diff,
+    # which needs the sandbox that allows writes there.
+    if "workspace-write" not in sys.argv or not Path(".git").is_dir():
+        sys.exit(4)
+    subprocess.run(["git", "apply", "--binary", str(case.root / "samples" / Path(sample).with_suffix(".diff"))], check=True)
 Path(sys.argv[sys.argv.index("--output-last-message") + 1]).write_text(answer)
 for event in (
     {"type": "thread.started", "thread_id": "offline"},

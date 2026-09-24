@@ -25,6 +25,10 @@ A rule whose rule.json names companions gets those skill directories copied
 unchanged from $CANON_COMPANIONS_ROOT (default ~/.agents/skills) into both
 arms beside pstack. The one-change check never sees them.
 
+A case whose case.json names a workspace runs inside a checkout of a real repo
+at a pinned commit (see workspace.py) instead of receiving project files in the
+prompt. Its oracle grades the diff the agent left on that checkout.
+
   screen.py plan [--runs-root DIR ...]                 list rules, cases, and past runs
   screen.py build --out DIR [--entry E] [RULE ...]     write both arms of every case
   screen.py audit [--entry E] [RULE ...]               model-free: build, validate, audit, prepare
@@ -47,8 +51,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CANON = Path(__file__).resolve().parent
+sys.path.insert(0, str(CANON))
+import workspace  # noqa: E402
+
 REPO = CANON.parents[1]
-RULES = CANON / "rules"
+RULES = Path(os.environ.get("CANON_RULES", CANON / "rules")).resolve()
 ARMS = ("current", "amended")
 DEFAULT_MODELS = {"claude": "sonnet", "codex": "gpt-6-sol"}
 MANIFEST = "shared-benchmark.json"
@@ -94,6 +101,10 @@ class Case:
     root: Path
     spec: dict
 
+    @property
+    def workspace(self):
+        return self.spec.get("workspace")
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -134,18 +145,26 @@ def oracle_checks(rule_id):
     spec = importlib.util.spec_from_file_location("canon_check", CANON / "oracles" / "check.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    module.RULES = RULES
     return module.load_oracle(rule_id)
 
 
 def load_case(rule_id, root):
     spec_path = root / "case.json"
-    for required in (spec_path, root / "prompt.md", root / "project"):
+    spec = json.loads(spec_path.read_text()) if spec_path.is_file() else {}
+    # A workspace case works in a real checkout, so it has no project/ and its
+    # timeout defaults to workspace.TIMEOUT_S.
+    in_workspace = "workspace" in spec
+    for required in (spec_path, root / "prompt.md", *(() if in_workspace else (root / "project",))):
         if not required.exists():
             raise ScreenError(f"case {rule_id}/{root.name} has no {required.name}")
-    spec = json.loads(spec_path.read_text())
-    missing = {"kind", "domain", "timeout_s", "expected_behavior"} - set(spec)
+    if in_workspace and (root / "project").exists():
+        raise ScreenError(f"case {rule_id}/{root.name} names a workspace, so it must not have project/")
+    missing = {"kind", "domain", "expected_behavior", *(() if in_workspace else ("timeout_s",))} - set(spec)
     if missing:
         raise ScreenError(f"{spec_path} lacks {sorted(missing)}")
+    if in_workspace:
+        workspace.parse_spec(root, spec["workspace"])
     if spec["kind"] not in CASE_KINDS:
         raise ScreenError(f"{spec_path} kind must be one of {sorted(CASE_KINDS)}, not {spec['kind']!r}")
     if LEAK.search(root.name):
@@ -305,16 +324,24 @@ def harness_version():
 
 
 def render_prompt(case):
-    project_root = case.root / "project"
-    listing = "\n\n".join(
-        f'<file path="{path.relative_to(project_root).as_posix()}">\n{path.read_text()}</file>'
-        for path in sorted(project_root.rglob("*"))
-        if path.is_file() and "__pycache__" not in path.parts
-    )
-    prompt = (case.root / "prompt.md").read_text().replace("{project}", listing).strip()
-    leaked = sorted({match.group(0).lower() for match in LEAK.finditer(prompt)})
+    prompt = (case.root / "prompt.md").read_text()
+    if case.workspace:
+        if "{project}" in prompt:
+            raise ScreenError(f"{case.rule}/{case.id} works in a checkout; its prompt must not ask for {{project}}")
+        overlay = workspace.parse_spec(case.root, case.workspace).overlay
+        seeded = "\n".join(f"{path}\n{data.decode(errors='replace')}" for path, data in overlay.items())
+    else:
+        project_root = case.root / "project"
+        listing = "\n\n".join(
+            f'<file path="{path.relative_to(project_root).as_posix()}">\n{path.read_text()}</file>'
+            for path in sorted(project_root.rglob("*"))
+            if path.is_file() and "__pycache__" not in path.parts
+        )
+        prompt, seeded = prompt.replace("{project}", listing), ""
+    prompt = prompt.strip()
+    leaked = sorted({match.group(0).lower() for match in LEAK.finditer(prompt + "\n" + seeded)})
     if leaked:
-        raise ScreenError(f"{case.rule}/{case.id} prompt carries meta vocabulary the answering agent would see: {leaked}")
+        raise ScreenError(f"{case.rule}/{case.id} prompt or overlay carries meta vocabulary the answering agent would see: {leaked}")
     return prompt
 
 
@@ -363,13 +390,64 @@ def manifest(rule, case, prompt, skill, description, skill_paths, entry):
     }
 
 
-def copy_grader(rule, case, root):
-    """Give the arm the grader files and nothing that holds an answer."""
+def copy_grader(rule, case, root, checkout=None):
+    """Give the arm the grader files and nothing that holds an answer. A
+    workspace case gets the path of its pinned checkout instead of project/."""
     shutil.copytree(CANON / "oracles", root / "oracles", ignore=shutil.ignore_patterns("__pycache__", "test_*.py"))
     rule_root = root / "rules" / rule.id
     rule_root.mkdir(parents=True)
     shutil.copyfile(RULES / rule.id / "oracle.py", rule_root / "oracle.py")
-    shutil.copytree(case.root / "project", rule_root / "cases" / case.id / "project", ignore=shutil.ignore_patterns("__pycache__"))
+    if checkout is None:
+        shutil.copytree(case.root / "project", rule_root / "cases" / case.id / "project", ignore=shutil.ignore_patterns("__pycache__"))
+        return
+    (rule_root / "cases" / case.id).mkdir(parents=True)
+    (rule_root / "cases" / case.id / "workspace.json").write_text(json.dumps({"checkout": str(checkout[0]), "tree": checkout[1]}) + "\n")
+
+
+def mount_clashes(tracked, rule, entry, skills):
+    """Paths the repo tracks where the mounted skills will go: the skill root,
+    and, under the poteto-mode entry, each skill's copy in a discovery
+    directory the repo already has (workspace.expose)."""
+    def taken(prefix):
+        return prefix in tracked or any(path.startswith(prefix + "/") for path in tracked)
+
+    if entry == "skill":
+        return [prefix for prefix in (f"skills/{name}" for name in (rule.skill, *rule.companions)) if taken(prefix)]
+    clashes = [f"skills/{ENTRY_TREE}"] if taken(f"skills/{ENTRY_TREE}") else []
+    names = sorted({path.split("/", 1)[0] for path in skills} | set(rule.companions))
+    for _, discovery in ENTRY_INVOCATION.values():
+        if taken(discovery):
+            clashes += [discovery] if discovery in tracked else [f"{discovery}/{name}" for name in names if taken(f"{discovery}/{name}")]
+    return clashes
+
+
+def prepare_workspace(rule, case, entry, skills):
+    """(spec, (checkout, tree)) for a workspace case, refusing a repo that
+    tracks a path the mounted skills take."""
+    spec = workspace.parse_spec(case.root, case.workspace)
+    clashes = mount_clashes(workspace.tracked_paths(workspace.require_mirror(spec), spec.commit), rule, entry, skills)
+    if clashes:
+        raise ScreenError(f"{rule.id}/{case.id}: {spec.repo}@{spec.commit[:12]} tracks paths the mounted skills take: {clashes}")
+    return spec, workspace.reference_checkout(spec)
+
+
+def write_arm_workspace(root, spec, tree):
+    """The arm's copy of what the entry wrapper materializes, hashed as read back."""
+    arm = root / "workspace"
+    (arm / "overlay").mkdir(parents=True)
+    for path, data in spec.overlay.items():
+        (arm / "overlay" / path).parent.mkdir(parents=True, exist_ok=True)
+        (arm / "overlay" / path).write_bytes(data)
+    record = {"repo": spec.repo, "commit": spec.commit, "mirror": str(workspace.mirror_path(spec.repo)), "tree": tree}
+    (arm / "workspace.json").write_text(json.dumps(record, indent=2) + "\n")
+    return tree_hash(read_tree(arm))
+
+
+def workspace_record(spec, checkout, arm_hashes):
+    """Refuse the build unless every arm holds the same workspace input."""
+    if len(set(arm_hashes.values())) != 1:
+        raise ScreenError(f"arms hold different workspace inputs: {arm_hashes}")
+    return {"repo": spec.repo, "commit": spec.commit, "tree": checkout[1], "checkout": str(checkout[0]), "arms": arm_hashes}
 
 
 def build(out, rules, entry="skill"):
@@ -390,6 +468,9 @@ def build(out, rules, entry="skill"):
         cases, arm_hashes = {}, {}
         for case in rule.cases:
             prompt = render_prompt(case)
+            spec, checkout, workspace_hashes = None, None, {}
+            if case.workspace:
+                spec, checkout = prepare_workspace(rule, case, entry, current)
             for arm, tree in zip(ARMS, (current, amended)):
                 root = out / "arms" / rule.id / case.id / arm
                 if root.exists():
@@ -404,9 +485,15 @@ def build(out, rules, entry="skill"):
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         destination.write_bytes(data)
                     arm_hashes.setdefault(name, {})[f"{case.id}/{arm}"] = tree_hash(read_tree(root / tree_dir / name))
-                copy_grader(rule, case, root)
+                copy_grader(rule, case, root, checkout)
+                if spec is not None:
+                    workspace_hashes[f"{case.id}/{arm}"] = write_arm_workspace(root, spec, checkout[1])
                 (root / MANIFEST).write_text(json.dumps(manifest(rule, case, prompt, skill, description, skill_paths, entry), indent=2) + "\n")
-            cases[case.id] = {"kind": case.kind, "timeout_s": ENTRY_TIMEOUT_S if entry == ENTRY_SKILL else case.spec["timeout_s"]}
+            if spec is None:
+                cases[case.id] = {"kind": case.kind, "timeout_s": ENTRY_TIMEOUT_S if entry == ENTRY_SKILL else case.spec["timeout_s"]}
+            else:
+                cases[case.id] = {"kind": case.kind, "timeout_s": case.spec.get("timeout_s", workspace.TIMEOUT_S),
+                                  "workspace": workspace_record(spec, checkout, workspace_hashes)}
         built[rule.id] = {"entry": entry, "tree_dir": tree_dir, "target": change.target, "patch_kind": change.kind,
                           "removed": change.removed, "inserted": change.inserted, "cases": cases}
         if companions:
@@ -505,22 +592,60 @@ def entry_wrapper(agent, out, target):
     return wrapper
 
 
-def backend_args(agent, out, entry):
+def workspace_wrapper(agent, out, target, entry):
+    """The entry wrapper for a workspace case. workspace.py wrap materializes
+    the checkout in the agent's cwd, adds the invocation under the poteto-mode
+    entry, runs the agent, and harvests its diff."""
+    wrapper = out / "entry" / f"{agent}-workspace"
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(CANON / "workspace.py"), "wrap"]
+    if entry == ENTRY_SKILL:
+        token, discovery = ENTRY_INVOCATION[agent]
+        command += ["--token", token, "--discovery", discovery]
+    command += ["--", str(target)]
+    wrapper.write_text(f"#!/bin/sh\nexec {' '.join(map(shlex.quote, command))} \"$@\"\n")
+    wrapper.chmod(0o755)
+    return wrapper
+
+
+def backend_args(agent, out, entry, in_workspace=False):
     tools = skill_ci() / "tools"
     target = tools / ("claude-project-only" if agent == "claude" else "codex-project-only")
-    if entry == ENTRY_SKILL:
+    if in_workspace:
+        target = workspace_wrapper(agent, out, target, entry)
+    elif entry == ENTRY_SKILL:
         target = entry_wrapper(agent, out, target)
     if agent == "claude":
         return ["--claude-bin", target]
-    return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox read-only"]
+    sandbox = "workspace-write" if in_workspace else "read-only"
+    return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}"]
+
+
+def file_harvest(work, expected_tree):
+    """Move the numbered slots the wrapper filled, in task order, to each run's
+    path under work/harvest, and refuse a run whose workspace was not the
+    tree the build recorded."""
+    harvest = work / "harvest"
+    rows = [json.loads(line)["run_dir"] for line in (work / "tasks.jsonl").read_text().splitlines()]
+    slots = sorted(harvest.glob("[0-9][0-9][0-9][0-9]")) if harvest.is_dir() else []
+    if len(slots) != len(rows):
+        raise ScreenError(f"{work}: the wrapper filled {len(slots)} workspace slot(s) for {len(rows)} run(s)")
+    for slot, run_dir in zip(slots, rows):
+        record = json.loads((slot / "workspace.json").read_text())
+        if record.get("tree") != expected_tree or record.get("error"):
+            raise ScreenError(f"{work}/{run_dir}: workspace tree {record.get('tree')} is not the built {expected_tree} {record.get('error', '')}".rstrip())
+        destination = harvest / run_dir
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        slot.rename(destination)
 
 
 def run(agent, out, rules, model, runs, timeout, entry="skill"):
     env = agent_env(agent, out)
     built = build(out, rules, entry)
-    backend = backend_args(agent, out, entry)
     for rule in rules:
         for case in rule.cases:
+            case_build = built[rule.id]["cases"][case.id]
+            backend = backend_args(agent, out, entry, "workspace" in case_build)
             for arm in ARMS:
                 check_manifest(out / "arms" / rule.id / case.id / arm, case.kind)
             for arm in ARMS:
@@ -531,9 +656,14 @@ def run(agent, out, rules, model, runs, timeout, entry="skill"):
                 work.mkdir(parents=True)
                 harness("prepare", root / MANIFEST, "--split", "tune", "--runs-per-variant", runs, "--out", work / "tasks-all.jsonl")
                 with_skill_rows(work / "tasks-all.jsonl", work / "tasks.jsonl")
+                run_env = env
+                if "workspace" in case_build:
+                    run_env = {**env, "CANON_WORKSPACE": str(root / "workspace"), "CANON_HARVEST": str(work / "harvest")}
                 harness("run-agent", "--agent", agent, "--model", model, *backend,
                         "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
-                        "--timeout", timeout or built[rule.id]["cases"][case.id]["timeout_s"], env=env)
+                        "--timeout", timeout or case_build["timeout_s"], env=run_env)
+                if "workspace" in case_build:
+                    file_harvest(work, case_build["workspace"]["tree"])
                 harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
                         "--allow-scripts", "--out", work / "grade.json")
     compare(out)
@@ -616,12 +746,16 @@ def compare(out):
         build_info = json.loads((out / "arms" / rule / "build.json").read_text())
         tree_root = out / "arms" / rule / case / arm / build_info["tree_dir"]
         tree_files = sorted(path.relative_to(tree_root).as_posix() for path in tree_root.rglob("*.md"))
+        companions = set(build_info.get("companions", {}).get("trees", {}))
         for result in json.loads(grade.read_text())["results"]:
             status, reasons = verdict(result)
+            seen = exposure(result, tree_files)
+            if companions:
+                seen["companions_read"] = sorted({path.split("/", 1)[0] for path in seen["read"]} & companions)
             table.append({
                 "agent": agent, "rule": rule, "case": case, "kind": build_info["cases"][case]["kind"], "arm": arm,
                 "run": result.get("run_number"), "entry": build_info["entry"], "target": build_info["target"],
-                "verdict": status, "reasons": reasons, "exposure": exposure(result, tree_files),
+                "verdict": status, "reasons": reasons, "exposure": seen,
             })
     pairs = {}
     for row in table:
@@ -640,7 +774,10 @@ def compare(out):
             seen = row["exposure"]["read"]
             target_state = "read" if first["target"] in seen else "NOT READ"
             entry_state = "invoked" if row["exposure"]["entry_invoked"] else "not observed"
-            print(f"    {arm}: {first['target']} {target_state}; entry {entry_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
+            companion_state = ""
+            if "companions_read" in row["exposure"]:
+                companion_state = f"; companion {', '.join(row['exposure']['companions_read']) or 'none'} read"
+            print(f"    {arm}: {first['target']} {target_state}; entry {entry_state}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
             if row["reasons"]:
                 print(f"    {arm}: {row['reasons']}")
     grouped = {}
@@ -736,7 +873,8 @@ def main(argv=None):
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--model")
     p.add_argument("--runs", type=int, default=1, help="paired repetitions per case (default 1)")
-    p.add_argument("--timeout", type=int, help="seconds per answer; defaults to 900 for the poteto-mode entry, else the case's timeout_s")
+    p.add_argument("--timeout", type=int, help="seconds per answer; a workspace case defaults to its timeout_s, else 1800; "
+                   "other cases to 900 under the poteto-mode entry, else their timeout_s")
     p.add_argument("--entry", choices=ENTRIES, default="skill")
     p.add_argument("rules", nargs="*")
     p = sub.add_parser("compare")
@@ -753,7 +891,7 @@ def main(argv=None):
             run(args.agent, args.out.resolve(), load_rules(args.rules), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry)
         else:
             compare(args.out.resolve())
-    except (ScreenError, subprocess.CalledProcessError) as exc:
+    except (ScreenError, workspace.WorkspaceError, subprocess.CalledProcessError) as exc:
         print(f"screen: {exc}", file=sys.stderr)
         return 1
     return 0
