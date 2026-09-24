@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "bug-fix-sequencing",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Lands a behavior-preserving commit that moves the duplicated discount logic into one function, with the suite green.",
+    "Then lands a failing repro for coupon plus member price, then a fix that edits the one shared function."
+  ]
+}
