@@ -4,6 +4,8 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -187,11 +189,7 @@ class CasePromptTests(unittest.TestCase):
     def test_no_case_prompt_contains_another(self):
         """The offline stand-in answers for the first case whose prompt its
         input contains, so a prompt shared across rules grades the wrong rule."""
-        prompts = {f"{case.rule}/{case.id}": screen.render_prompt(case) for rule in screen.load_rules() for case in rule.cases}
-
-        clashes = sorted(f"{inner} inside {outer}" for inner in prompts for outer in prompts if inner != outer and prompts[inner] in prompts[outer])
-
-        self.assertEqual(clashes, [])
+        self.assertEqual(screen.prompt_clashes([case for rule in screen.load_rules() for case in rule.cases]), [])
 
 
 class SkillFilesReadTests(unittest.TestCase):
@@ -309,6 +307,160 @@ class CompanionMountTests(unittest.TestCase):
 
         built = json.loads((self.out / "arms" / rule.id / "build.json").read_text())
         self.assertEqual(sorted(built), ["cases", "entry", "inserted", "patch_kind", "removed", "target", "tree_dir"])
+
+
+INDEX_SENTENCES = {
+    "domain-words-index": ("- **Model the Domain**", "Name things with the domain's words from the nearest `CONTEXT.md`, and never use a word it lists under `_Avoid_`."),
+    "one-name-per-concept-index": ("- **Model the Domain**", "When the user's word for a concept differs from the code's, use the code's word and tell the user. Do not add a second name."),
+    "separate-contexts-index": ("- **Model the Domain**", "When one word names different concepts in two parts of the codebase, keep a separate type for each. Do not merge them."),
+    "route-domain-modeling-index": ("- **Feature.**", "When a `CONTEXT.md` exists or the task introduces a new domain term, use the `domain-modeling` skill if available to check the terms and record each resolved one. Otherwise read `CONTEXT.md` and use its terms."),
+    "route-codebase-design-index": ("- **Refactoring.**", "When the target moves a seam or deepens shallow modules, use the `codebase-design` skill if available. Otherwise keep a new interface only when a second adapter exists."),
+}
+
+
+class IndexPlacementPatchTests(unittest.TestCase):
+    def test_each_index_variant_appends_one_sentence_to_one_entry_of_poteto_mode(self):
+        tree = screen.tracked("skills")
+        for rule_id, (entry, sentence) in INDEX_SENTENCES.items():
+            with self.subTest(rule=rule_id):
+                rule = screen.load_rule(rule_id)
+                path, _, body = screen.parse_patch(rule.patch)
+                change = screen.single_change(tree, screen.apply_patch(tree, rule.patch))
+
+                self.assertEqual((path, change.kind, change.inserted), ("poteto-mode/SKILL.md", "insert", " " + sentence))
+                self.assertEqual([tag for tag, _ in body], ["-", "+"])
+                self.assertTrue(body[1][1].startswith(entry))
+                self.assertTrue(body[1][1].endswith(sentence + "\n"))
+
+
+class CasesFromTests(unittest.TestCase):
+    def test_variant_runs_its_source_cases_under_its_own_id(self):
+        source, variant = screen.load_rule("domain-words"), screen.load_rule("domain-words-index")
+
+        self.assertEqual((variant.cases_from, variant.case_rule, variant.source), ("domain-words", "domain-words", "Evans EV-1"))
+        self.assertEqual([(case.id, case.kind, case.root) for case in variant.cases], [(case.id, case.kind, case.root) for case in source.cases])
+        self.assertEqual({case.rule for case in variant.cases}, {"domain-words-index"})
+
+    def test_variant_inherits_its_source_companions(self):
+        self.assertEqual(screen.load_rule("route-domain-modeling-index").companions, ("domain-modeling",))
+        self.assertEqual(screen.load_rule("route-codebase-design-index").companions, ("codebase-design",))
+        self.assertEqual(screen.load_rule("one-name-per-concept-index").companions, ())
+
+
+class CasesFromRulesTests(unittest.TestCase):
+    """cases_from against a scratch rules directory."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.rules = Path(directory.name)
+        patch = FEATURE_HEAD + "@@ -1 +1 @@\n-1. Plan.\n+1. Plan first.\n"
+        case = {"cases/shop/case.json": '{"kind": "positive", "domain": "d", "timeout_s": 60, "expected_behavior": ["x"]}',
+                "cases/shop/prompt.md": "Add orders.\n{project}", "cases/shop/project/app.py": "x = 1\n"}
+        self.write("scratch-base", {"rule.json": '{"source": "S1", "companions": ["domain-modeling"]}', "rule.patch": patch,
+                                    "oracle.py": "CHECKS = {'shop': lambda answer, project: []}\n", **case})
+        self.write("scratch-variant", {"rule.json": '{"cases_from": "scratch-base"}', "rule.patch": patch})
+        self.write("scratch-copy", case)
+        rules = mock.patch.object(screen, "RULES", self.rules)
+        rules.start()
+        self.addCleanup(rules.stop)
+
+    def write(self, rule_id, files):
+        for path, text in files.items():
+            (self.rules / rule_id / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.rules / rule_id / path).write_text(text)
+
+    def test_variant_inherits_source_and_companions(self):
+        rule = screen.load_rule("scratch-variant")
+
+        self.assertEqual((rule.source, rule.companions, rule.cases_from), ("S1", ("domain-modeling",), "scratch-base"))
+
+    def test_companions_in_the_variant_override_the_source(self):
+        self.write("scratch-variant", {"rule.json": '{"cases_from": "scratch-base", "companions": []}'})
+
+        self.assertEqual(screen.load_rule("scratch-variant").companions, ())
+
+    def test_variant_with_its_own_cases_is_refused(self):
+        self.write("scratch-variant", {"cases/other/prompt.md": "Other.\n"})
+
+        with self.assertRaisesRegex(screen.ScreenError, "takes its cases from scratch-base, so it must not have cases"):
+            screen.load_rule("scratch-variant")
+
+    def test_variant_of_a_variant_is_refused(self):
+        self.write("scratch-third", {"rule.json": '{"cases_from": "scratch-variant"}', "rule.patch": ""})
+
+        with self.assertRaisesRegex(screen.ScreenError, "which takes its own from scratch-base"):
+            screen.load_rule("scratch-third")
+
+    def test_unknown_source_is_refused(self):
+        self.write("scratch-variant", {"rule.json": '{"cases_from": "scratch-missing"}'})
+
+        with self.assertRaisesRegex(screen.ScreenError, "cases_from must name another rule"):
+            screen.load_rule("scratch-variant")
+
+    def test_shared_case_is_no_clash_but_a_copied_prompt_is(self):
+        base, variant = screen.load_rule("scratch-base"), screen.load_rule("scratch-variant")
+        copy = screen.load_case("scratch-copy", self.rules / "scratch-copy" / "cases" / "shop")
+
+        self.assertEqual(screen.prompt_clashes([*base.cases, *variant.cases]), [])
+        self.assertEqual(screen.prompt_clashes([*base.cases, *variant.cases, copy]), [
+            "scratch-base/shop inside scratch-copy/shop",
+            "scratch-copy/shop inside scratch-base/shop",
+            "scratch-copy/shop inside scratch-variant/shop",
+            "scratch-variant/shop inside scratch-copy/shop",
+        ])
+
+
+class VariantArmTests(unittest.TestCase):
+    def test_variant_arm_grades_with_the_source_oracle_under_its_own_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            (base / "skill-ci").mkdir()
+            (base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
+            rule = screen.load_rule("domain-words-index")
+            rule = dataclasses.replace(rule, cases=tuple(case for case in rule.cases if case.id == "shipment-tracking"))
+            with mock.patch.dict(os.environ, {"SKILL_CI": str(base / "skill-ci")}), contextlib.redirect_stdout(io.StringIO()):
+                screen.build(base / "out", [rule], "poteto-mode")
+            arm = base / "out" / "arms" / "domain-words-index" / "shipment-tracking" / "amended"
+            samples = ROOT / "rules" / "domain-words" / "cases" / "shipment-tracking" / "samples"
+            codes = {}
+            for sample in ("good.md", "bad.md"):
+                output = base / sample
+                output.mkdir()
+                (output / "output.md").write_text((samples / sample).read_text())
+                codes[sample] = subprocess.run([sys.executable, str(arm / "oracles" / "check.py"), "domain-words-index", "shipment-tracking", str(output)],
+                                               capture_output=True, text=True).returncode
+            command = json.loads((arm / screen.MANIFEST).read_text())["cases"][0]["assertions"][0]["command"]
+
+            self.assertEqual((arm / "rules" / "domain-words-index" / "oracle.py").read_bytes(), (ROOT / "rules" / "domain-words" / "oracle.py").read_bytes())
+            self.assertEqual(command, ["python3", "oracles/check.py", "domain-words-index", "shipment-tracking", "{output_dir}"])
+            self.assertEqual(codes, {"good.md": 0, "bad.md": 1})
+
+
+class AnsweredCaseTests(unittest.TestCase):
+    rules = [screen.load_rule("domain-words"), screen.load_rule("domain-words-index")]
+
+    def prompt(self, case_id):
+        return "$poteto-mode Task prompt:\n" + screen.render_prompt(next(case for case in self.rules[0].cases if case.id == case_id))
+
+    def test_workspace_path_names_the_rule_and_case(self):
+        path = "/o/arms/domain-words-index/session-lineage-usage/amended/workspace"
+
+        rule, case = screen.answered_case(self.rules, self.prompt("session-lineage-usage"), "", path)
+
+        self.assertEqual((rule.id, case.id), ("domain-words-index", "session-lineage-usage"))
+
+    def test_shared_pasted_case_goes_to_the_rule_whose_text_is_mounted(self):
+        mounted = "- **Model the Domain** ... " + INDEX_SENTENCES["domain-words-index"][1]
+
+        rule, case = screen.answered_case(self.rules, self.prompt("shipment-tracking"), mounted)
+
+        self.assertEqual((rule.id, case.id), ("domain-words-index", "shipment-tracking"))
+
+    def test_shared_pasted_case_with_no_rule_text_mounted_goes_to_the_first_rule(self):
+        rule, case = screen.answered_case(self.rules, self.prompt("shipment-tracking"), "")
+
+        self.assertEqual((rule.id, case.id), ("domain-words", "shipment-tracking"))
 
 
 if __name__ == "__main__":

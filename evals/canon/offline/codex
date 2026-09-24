@@ -2,6 +2,8 @@
 """Stand-in for `codex` that spends no model budget.
 
 It finds the case whose prompt it was given and reads the rule's patched file.
+A workspace case's input path names its rule and case. A pasted-project case
+that a variant shares with its source goes to the rule whose text is mounted.
 For a positive case it answers with samples/good.md when the mounted skills
 carry the rule's new text and samples/bad.md otherwise. For a near-miss case it
 answers with samples/good.md in both arms. A correct screen then prints
@@ -15,6 +17,7 @@ there is no checkout or the sandbox forbids writes.
 import glob
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -29,13 +32,13 @@ screen = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(screen)
 
 prompt = sys.stdin.read() or sys.argv[-1]
-rule, case = next((rule, case) for rule in screen.load_rules() for case in rule.cases if screen.render_prompt(case) in prompt)
+mounted = "".join(Path(path).read_text() for path in glob.glob("skills/**/*.md", recursive=True))
+rule, case = screen.answered_case(screen.load_rules(), prompt, mounted, os.environ.get("CANON_WORKSPACE"))
 entry = Path(".agents/skills")
 if Path("skills", screen.ENTRY_TREE).is_dir() and not (prompt.startswith("$poteto-mode ") and (entry / "poteto-mode" / "SKILL.md").is_file()):
     sys.exit(3)
 read_command = f"sed -n 1,400p {'.agents/skills' if entry.exists() else 'skills'}/{rule.target}"
 marker = screen.rule_change(rule, screen.tracked("skills")).inserted.strip()
-mounted = "".join(Path(path).read_text() for path in glob.glob("skills/**/*.md", recursive=True))
 sample = "good.md" if case.kind == "near-miss" or marker in mounted else "bad.md"
 answer = (case.root / "samples" / sample).read_text()
 if case.workspace:

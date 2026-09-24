@@ -1,0 +1,5 @@
+--- a/poteto-mode/SKILL.md
++++ b/poteto-mode/SKILL.md
+@@ -136 +136 @@
+-- **Feature.** New or changed behavior, built from a named data shape. `playbooks/feature.md`.
++- **Feature.** New or changed behavior, built from a named data shape. `playbooks/feature.md`. When a `CONTEXT.md` exists or the task introduces a new domain term, use the `domain-modeling` skill if available to check the terms and record each resolved one. Otherwise read `CONTEXT.md` and use its terms.

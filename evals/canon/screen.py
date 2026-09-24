@@ -25,6 +25,9 @@ A rule whose rule.json names companions gets those skill directories copied
 unchanged from $CANON_COMPANIONS_ROOT (default ~/.agents/skills) into both
 arms beside pstack. The one-change check never sees them.
 
+A rule whose rule.json names cases_from is a placement variant. It has its own
+rule.patch and runs the named rule's cases and oracle unchanged.
+
 A case whose case.json names a workspace runs inside a checkout of a real repo
 at a pinned commit (see workspace.py) instead of receiving project files in the
 prompt. Its oracle grades the diff the agent left on that checkout.
@@ -129,10 +132,17 @@ class Rule:
     target: str
     cases: tuple
     companions: tuple = ()
+    # A variant places another rule's text elsewhere and runs that rule's cases
+    # and oracle unchanged, so the two screens compare directly.
+    cases_from: str = None
 
     @property
     def skill(self):
         return self.target.split("/", 1)[0]
+
+    @property
+    def case_rule(self):
+        return self.cases_from or self.id
 
 
 @dataclass(frozen=True)
@@ -187,23 +197,45 @@ def load_case(rule_id, root):
     return Case(rule_id, root.name, spec["kind"], root, spec)
 
 
-def load_rule(rule_id):
+def rule_spec(rule_id):
+    """rule.json, with a variant's missing source and companions taken from
+    the rule it names in cases_from. A variant holds no cases/ or oracle.py."""
     root = RULES / rule_id
-    for required in ("rule.json", "oracle.py", "cases"):
+    if not (root / "rule.json").is_file():
+        raise ScreenError(f"rule {rule_id} has no rule.json")
+    spec = json.loads((root / "rule.json").read_text())
+    origin = spec.get("cases_from")
+    if origin is None:
+        return spec
+    for own in ("oracle.py", "cases"):
+        if (root / own).exists():
+            raise ScreenError(f"rule {rule_id} takes its cases from {origin}, so it must not have {own}")
+    if not isinstance(origin, str) or not (RULES / origin / "rule.patch").is_file():
+        raise ScreenError(f"rules/{rule_id}/rule.json cases_from must name another rule, not {origin!r}")
+    source = json.loads((RULES / origin / "rule.json").read_text())
+    if "cases_from" in source:
+        raise ScreenError(f"rule {rule_id} takes its cases from {origin}, which takes its own from {source['cases_from']}")
+    return {"source": source["source"], "companions": source.get("companions", []), **spec}
+
+
+def load_rule(rule_id):
+    spec = rule_spec(rule_id)
+    origin = spec.get("cases_from", rule_id)
+    root = RULES / origin
+    for required in ("oracle.py", "cases"):
         if not (root / required).exists():
-            raise ScreenError(f"rule {rule_id} has no {required}")
-    patch = (root / "rule.patch").read_text()
+            raise ScreenError(f"rule {origin} has no {required}")
+    patch = (RULES / rule_id / "rule.patch").read_text()
     cases = tuple(load_case(rule_id, path) for path in sorted((root / "cases").iterdir()) if path.is_dir())
     if not any(case.kind == "positive" for case in cases):
-        raise ScreenError(f"rule {rule_id} has no positive case")
-    checks = set(oracle_checks(rule_id))
+        raise ScreenError(f"rule {origin} has no positive case")
+    checks = set(oracle_checks(origin))
     if checks != {case.id for case in cases}:
-        raise ScreenError(f"rules/{rule_id}/oracle.py CHECKS covers {sorted(checks)}, cases are {[case.id for case in cases]}")
-    spec = json.loads((root / "rule.json").read_text())
+        raise ScreenError(f"rules/{origin}/oracle.py CHECKS covers {sorted(checks)}, cases are {[case.id for case in cases]}")
     companions = spec.get("companions", [])
     if not isinstance(companions, list) or not all(isinstance(name, str) and COMPANION_NAME.match(name) for name in companions):
         raise ScreenError(f"rules/{rule_id}/rule.json companions must be a list of skill directory names, not {companions!r}")
-    return Rule(rule_id, spec["source"], patch, parse_patch(patch)[0], cases, tuple(companions))
+    return Rule(rule_id, spec["source"], patch, parse_patch(patch)[0], cases, tuple(companions), spec.get("cases_from"))
 
 
 def load_rules(requested=()):
@@ -360,6 +392,34 @@ def render_prompt(case):
     return prompt
 
 
+def answered_case(rules, prompt, mounted, arm_workspace=None):
+    """(rule, case) the offline stand-in answers. A workspace case's input
+    sits at arms/<rule>/<case>/<arm>/workspace, which names both. Otherwise the
+    prompt picks the case, and a case that a variant shares with its source
+    goes to the rule whose inserted text is mounted."""
+    matches = [(rule, case) for rule in rules for case in rule.cases if render_prompt(case) in prompt]
+    if arm_workspace:
+        named = tuple(Path(arm_workspace).parts[-4:-2])
+        matches = [(rule, case) for rule, case in matches if (rule.id, case.id) == named]
+    elif len(matches) > 1:
+        tree = tracked("skills")
+        matches.sort(key=lambda match: rule_change(match[0], tree).inserted.strip() not in mounted)
+    if not matches:
+        raise ScreenError("no case matches the prompt")
+    return matches[0]
+
+
+def prompt_clashes(cases):
+    """Pairs of cases where one prompt equals or contains another. A variant
+    and its source load the same case directory, so that pair is not a clash."""
+    prompts = [(case, render_prompt(case)) for case in cases]
+    return sorted(
+        f"{inner.rule}/{inner.id} inside {outer.rule}/{outer.id}"
+        for inner, inner_prompt in prompts for outer, outer_prompt in prompts
+        if inner is not outer and inner.root != outer.root and inner_prompt in outer_prompt
+    )
+
+
 def manifest(rule, case, prompt, skill, description, skill_paths, entry):
     kind, intent = CASE_KINDS[case.kind]
     return {
@@ -411,7 +471,7 @@ def copy_grader(rule, case, root, checkout=None):
     shutil.copytree(CANON / "oracles", root / "oracles", ignore=shutil.ignore_patterns("__pycache__", "test_*.py"))
     rule_root = root / "rules" / rule.id
     rule_root.mkdir(parents=True)
-    shutil.copyfile(RULES / rule.id / "oracle.py", rule_root / "oracle.py")
+    shutil.copyfile(RULES / rule.case_rule / "oracle.py", rule_root / "oracle.py")
     if checkout is None:
         shutil.copytree(case.root / "project", rule_root / "cases" / case.id / "project", ignore=shutil.ignore_patterns("__pycache__"))
         return

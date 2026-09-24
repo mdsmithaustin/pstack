@@ -39,6 +39,7 @@ text)`.
 rules/<id>/
   rule.patch          one hunk against skills/
   rule.json           {"source": "...", "companions": ["<skill>", ...]}; companions is optional
+                      a placement variant has {"cases_from": "<rule>"} and no oracle.py or cases/
   oracle.py           CHECKS = {"<case-id>": check}; check(answer, project) returns failures
                       (project is a shared.Workspace in a workspace case)
   test_oracle.py      unit tests that grade the samples
@@ -82,9 +83,10 @@ records `<isolated workspace>`.
    rubric, score, compare, benchmark, candidate, arena. Ask for files inside
    `<file path="...">` tags, or commits inside `<commit message="...">` tags.
    No prompt may equal or contain another case's prompt, in any rule. The
-   offline stand-in answers for the first case whose prompt it finds, and
-   `test_screen.py` checks this. Two rules that share an oracle and a fixture
-   therefore word their prompts differently.
+   offline stand-in picks its case by prompt, and `test_screen.py` checks
+   this. Two rules that share an oracle and a fixture therefore word their
+   prompts differently. A placement variant and its source load the same case
+   directory, which is the one exception.
 5. Write `rules/<id>/oracle.py`. Map every case id to a function that returns
    a list of failure strings, empty on a pass. The arm copies only this one
    file, so it may import only `shared` and the standard library, and read only
@@ -102,6 +104,24 @@ Do not edit shared files to add a rule. If a rule needs a new shared helper, add
 it to `oracles/shared.py` in its own change. Every check loads every rule, so a
 half-written `rules/<x>/` breaks the checks for everyone in that worktree. Work
 in your own worktree, or keep each rule directory loadable.
+
+## Placement variants
+
+A placement variant tests where a rule sits, not what it says. It moves an
+existing rule's operative sentence to another file, such as the
+poteto-mode `SKILL.md` that every `/poteto-mode` run has in context. Its
+`rule.json` is `{"cases_from": "<rule>"}`, and its directory holds only that
+and `rule.patch`. It runs the source rule's cases and oracle unchanged, so its
+results compare directly with the source's. It inherits the source's `source`
+and `companions` unless its own `rule.json` names them. A variant of a variant
+is refused. The arm copies the source's `oracle.py` under the variant's id.
+Name a variant `<rule>-index` when it places the rule in the poteto-mode index.
+`--case` picks which shared cases a paid run answers.
+
+The offline stand-in reads the rule and case of a workspace case from the path
+of its input, `arms/<rule>/<case>/<arm>/workspace`. For a pasted-project case
+it matches the prompt, and a case that a variant shares with its source goes to
+the rule whose inserted text is mounted.
 
 ## Entry modes
 
