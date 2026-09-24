@@ -796,12 +796,16 @@ def exposure(result, tree_files):
     return {"read": skill_files_read(events, tree_files), "entry_invoked": entry_invoked(base)}
 
 
-def classify(current, amended, target):
+def classify(current, amended, target, entry="skill"):
     """Name what a pair shows. A pair whose amended arm never read the patched
-    file says nothing about the rule, so it is unexposed rather than a tie."""
+    file says nothing about the rule, so it is unexposed rather than a tie.
+    Under the poteto-mode entry the wrapper starts every prompt with the
+    invocation, which injects poteto-mode/SKILL.md without a file read. Neither
+    agent's trace shows that injection, so the entry itself counts as exposure."""
     if current is None or amended is None or "INVALID" in (current["verdict"], amended["verdict"]):
         return "invalid"
-    exposed = target in amended["exposure"]["read"] or (target == f"{ENTRY_SKILL}/SKILL.md" and amended["exposure"]["entry_invoked"])
+    injected = entry == ENTRY_SKILL or amended["exposure"]["entry_invoked"]
+    exposed = target in amended["exposure"]["read"] or (target == f"{ENTRY_SKILL}/SKILL.md" and injected)
     if not exposed:
         return "unexposed"
     return {
@@ -850,7 +854,7 @@ def compare(out):
     summary = []
     for (agent, rule, run_number, case), arms in sorted(pairs.items(), key=lambda item: tuple(map(str, item[0]))):
         first = next(iter(arms.values()))
-        outcome = classify(arms.get("current"), arms.get("amended"), first["target"])
+        outcome = classify(arms.get("current"), arms.get("amended"), first["target"], first["entry"])
         summary.append({"agent": agent, "rule": rule, "case": case, "kind": first["kind"], "run": run_number, "target": first["target"], "outcome": outcome})
         cells = [f"{arm}={arms[arm]['verdict'] if arm in arms else 'MISSING'}" for arm in ARMS]
         print(f"{agent:6} {rule:26} {case:18} {first['kind']:9} run-{run_number}  " + "  ".join(cells) + f"  {outcome.upper()}")

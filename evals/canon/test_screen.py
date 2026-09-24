@@ -150,6 +150,23 @@ class PairOutcomeTests(unittest.TestCase):
 
         self.assertEqual(outcome, "separates")
 
+    def test_patched_index_counts_as_exposed_under_the_poteto_mode_entry(self):
+        """Codex never shows the $poteto-mode injection and Claude's -p stream
+        never shows the /poteto-mode expansion, so the entry is the evidence."""
+        outcome = screen.classify(run_row("FAIL", []), run_row("PASS", []), "poteto-mode/SKILL.md", "poteto-mode")
+
+        self.assertEqual(outcome, "separates")
+
+    def test_patched_index_is_unexposed_under_the_single_skill_entry_when_unread(self):
+        outcome = screen.classify(run_row("FAIL", []), run_row("PASS", []), "poteto-mode/SKILL.md", "skill")
+
+        self.assertEqual(outcome, "unexposed")
+
+    def test_the_entry_exposes_only_the_index_not_a_leaf(self):
+        outcome = screen.classify(run_row("FAIL", []), run_row("PASS", []), self.target, "poteto-mode")
+
+        self.assertEqual(outcome, "unexposed")
+
     def test_ungradable_arm_is_invalid(self):
         outcome = screen.classify(run_row("PASS", [self.target]), run_row("INVALID", [self.target]), self.target)
 

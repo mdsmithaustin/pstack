@@ -150,7 +150,10 @@ outcome: `separates`, `tie-pass`, `tie-fail`, `reverses`, `invalid`, or
 `unexposed`. `unexposed` means the amended arm never read the patched file, so
 the pair says nothing about the rule. A read through a glob or a directory-wide
 grep does not count. Codex's `exec --json` stream does not show whether it
-injected the entry skill.
+injected the entry skill, and Claude's `-p` stream does not echo the prompt, so
+no trace shows the injection. Under `--entry poteto-mode` a rule patched into
+`poteto-mode/SKILL.md` therefore counts as exposed without a read, because the
+wrapper starts every prompt with the invocation.
 
 Answers return files inside `<file path="...">` tags, because the harness
 discards the agent's workspace. Workspace cases are the exception. Their
@@ -295,7 +298,7 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent codex --entry poteto-mode --out "$(mktemp -d)/offline"
 ```
 
-`python3 -m unittest` runs `test_screen.py`, `test_workspace.py`, and
+`python3 -m unittest` runs `test_screen.py`, `test_workspace.py`, `test_chain.py`, and
 `test_oracles.py`, which loads `oracles/test_shared.py` and every
 `rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
 mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
@@ -333,6 +336,30 @@ has no shell tool without them. `screen.py compare --out DIR` reprints a
 finished run. Runs made before cases existed keep their old `compare.json`,
 which `plan` reads. `compare` refuses those directories so it cannot overwrite
 that file.
+
+## Chain census
+
+`chain.py` reads finished run dirs and reports, per run, how far the agent
+followed the poteto-mode chain. It records the entry and whether the invocation
+was injected, which playbooks the lead read, and whether it wrote a worklist and
+how much of it copies the playbook's steps. It also records each skill file read
+with its event index, whether the rule's owner file came before the first edit
+in a workspace case, subagent spawns and whether a Claude brief names the data
+shape, principle citations in the reply, and denied tool calls. It parses Claude
+stream-json and Codex `exec --json` traces into one event list, so both agents
+go through the same stage code. `test_chain.py` checks the parsers against
+trimmed real traces in `fixtures/chain/`.
+
+```sh
+python3 evals/canon/chain.py --markdown                 # stage rates per agent, workspace verdict cross-tab
+python3 evals/canon/chain.py --jsonl /tmp/chain.jsonl   # one JSON line per run
+```
+
+It reads `/private/tmp/canon-entry`, `/private/tmp/canon-ws`, and
+`/private/tmp/canon-screen` unless given roots. Codex's stream shows waits on a
+delegate but no spawn or brief, and Claude's `-p` sessions offer no worklist
+tool. Those stages read "not visible" or zero because of the harness, not the
+agent.
 
 ## Reading the result
 
