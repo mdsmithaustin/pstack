@@ -1,0 +1,11 @@
+--- a/principle-migrate-callers-then-delete-legacy-apis/SKILL.md
++++ b/principle-migrate-callers-then-delete-legacy-apis/SKILL.md
+@@ -11,7 +11,7 @@
+ **Rule:**
+ - Do not keep legacy API paths only because internal callers still exist
+ - Inventory callers, migrate them, and delete the old API immediately
+-- Treat temporary adapters as exceptional and time-boxed, not default architecture
++- Treat temporary adapters as exceptional and time-boxed, not default architecture. When the caller migration cannot land in one PR, or external callers depend on the API, put one interface in front of the old implementation. Move callers to it, add the new implementation behind it, and switch callers over. Then delete the old implementation. Delete the interface too if one implementation remains. Every step keeps the build green.
+ - Update tests to assert the new contract, and delete tests that only protect pre-refactor implementation details
+ 
+ **When this applies:**
