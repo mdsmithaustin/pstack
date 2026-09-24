@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "domain-modeling",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Adds a quantity-change operation to shop/order.py that keeps total_cents equal to the sum of the lines.",
+    "The cart route calls that operation and neither indexes into lines nor assigns quantity or total_cents."
+  ]
+}

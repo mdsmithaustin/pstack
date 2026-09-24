@@ -1,0 +1,9 @@
+{
+  "kind": "near-miss",
+  "domain": "domain-modeling",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Merges Customer and InvoiceCustomer into one type, since both hold the same row for the same purpose.",
+    "Updates the PDF, mail, and row code to use that one type."
+  ]
+}
