@@ -313,3 +313,14 @@ class CompanionMountTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SelectCasesTests(unittest.TestCase):
+    def test_keeps_only_named_cases_and_drops_empty_rules(self):
+        rules = screen.load_rules(["domain-words", "two-hats"])
+        chosen = screen.select_cases(rules, ["session-lineage-usage"])
+        self.assertEqual([(r.id, [c.id for c in r.cases]) for r in chosen], [("domain-words", ["session-lineage-usage"])])
+
+    def test_unknown_case_is_refused(self):
+        with self.assertRaises(SystemExit):
+            screen.select_cases(screen.load_rules(["two-hats"]), ["no-such-case"])

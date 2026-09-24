@@ -36,6 +36,7 @@ prompt. Its oracle grades the diff the agent left on that checkout.
   screen.py compare --out DIR                          print paired verdicts with exposure
 """
 import argparse
+import dataclasses
 import difflib
 import hashlib
 import importlib.util
@@ -654,6 +655,17 @@ def file_harvest(work, expected_tree):
         slot.rename(destination)
 
 
+def select_cases(rules, case_ids):
+    if not case_ids:
+        return rules
+    known = {case.id for rule in rules for case in rule.cases}
+    unknown = sorted(set(case_ids) - known)
+    if unknown:
+        raise SystemExit(f"unknown case id(s): {', '.join(unknown)}")
+    chosen = [dataclasses.replace(rule, cases=tuple(c for c in rule.cases if c.id in case_ids)) for rule in rules]
+    return [rule for rule in chosen if rule.cases]
+
+
 def run(agent, out, rules, model, runs, timeout, entry="skill"):
     env = agent_env(agent, out)
     built = build(out, rules, entry)
@@ -891,6 +903,7 @@ def main(argv=None):
     p.add_argument("--timeout", type=int, help="seconds per answer; a workspace case defaults to its timeout_s, else 1800; "
                    "other cases to 900 under the poteto-mode entry, else their timeout_s")
     p.add_argument("--entry", choices=ENTRIES, default="skill")
+    p.add_argument("--case", action="append", default=[], help="run only these case ids (repeatable)")
     p.add_argument("rules", nargs="*")
     p = sub.add_parser("compare")
     p.add_argument("--out", type=Path, required=True)
@@ -903,7 +916,7 @@ def main(argv=None):
         elif args.command == "audit":
             audit(load_rules(args.rules), args.entry)
         elif args.command == "run":
-            run(args.agent, args.out.resolve(), load_rules(args.rules), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry)
+            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry)
         else:
             compare(args.out.resolve())
     except (ScreenError, workspace.WorkspaceError, subprocess.CalledProcessError) as exc:
