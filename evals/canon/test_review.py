@@ -498,10 +498,12 @@ class OfflineReviewRunTests(ReviewCase):
         case = self.cases["discount-cap"]
         rubric, pr = (case.root / "rubric.md").read_text(), screen.review_pr(case)
 
-        self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric, pr), (True, "every labeled sample agreed"))
-        self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric + "More.\n", pr),
-                         (False, "the guide, the PR, or the judge changed since calibration"))
-        self.assertEqual(screen.case_calibration(case, "codex", "gpt-6-sol", rubric, pr), (False, "no calibration record"))
+        with judge_env():
+            self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric, pr), (True, "every labeled sample agreed"))
+            self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric + "More.\n", pr),
+                             (False, "the guide, the PR, or the judge changed since calibration"))
+            self.assertEqual(screen.case_calibration(case, "codex", "gpt-6-sol", rubric, pr), (False, "no calibration record"))
+        self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric, pr), (False, "no calibration record"))
 
 
 @unittest.skipUnless(os.environ.get("CANON_SBX_E2E") == "1" and shutil.which("sbx") and harness_available(),
@@ -522,3 +524,18 @@ class SandboxedReviewRunTests(ReviewCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StandinCalibrationTests(unittest.TestCase):
+    def test_standin_calibration_never_counts_for_the_model_judge(self):
+        pr = {"title": "t", "body": "b", "diff": "d"}
+        with mock.patch.dict(os.environ, {"CANON_JUDGE_STANDIN": "/bin/true"}):
+            standin_key = review.calibration_key("codex", "gpt-6-sol", "positive", "guide", pr)
+            standin_path = review.calibration_path("r", "c", "codex", "gpt-6-sol")
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CANON_JUDGE_STANDIN", None)
+            model_key = review.calibration_key("codex", "gpt-6-sol", "positive", "guide", pr)
+            model_path = review.calibration_path("r", "c", "codex", "gpt-6-sol")
+        self.assertNotEqual(standin_key, model_key)
+        self.assertEqual(standin_path.name, "standin-codex-gpt-6-sol.json")
+        self.assertEqual(model_path.name, "model-codex-gpt-6-sol.json")

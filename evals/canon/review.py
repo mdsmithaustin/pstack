@@ -228,13 +228,18 @@ def judge(backend, model, kind, rubric, pr, answer, written="", secret_words=(),
     return record
 
 
+def judge_runner():
+    """Calibration from the stand-in judge must never vouch for the real one."""
+    return "standin" if os.environ.get("CANON_JUDGE_STANDIN") else "model"
+
+
 def calibration_key(backend, model, kind, rubric, pr):
-    parts = [TEMPLATE_VERSION, backend, model, kind, rubric, pr["title"], pr["body"], pr["diff"]]
+    parts = [TEMPLATE_VERSION, judge_runner(), backend, model, kind, rubric, pr["title"], pr["body"], pr["diff"]]
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()
 
 
 def calibration_path(rule, case, backend, model):
-    return workspace.cache_root() / "calibration" / rule / case / f"{backend}-{model}.json"
+    return workspace.cache_root() / "calibration" / rule / case / f"{judge_runner()}-{backend}-{model}.json"
 
 
 def agreement(samples):
