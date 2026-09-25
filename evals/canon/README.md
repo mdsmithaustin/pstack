@@ -337,6 +337,146 @@ finished run. Runs made before cases existed keep their old `compare.json`,
 which `plan` reads. `compare` refuses those directories so it cannot overwrite
 that file.
 
+## Sandboxed runs
+
+`--runner sbx` runs each workspace answer inside its own Docker Sandbox
+(`sbx`, v0.43.0 here) instead of on the host. A pasted-project case is
+refused under this runner. Nothing else about a run changes: the harness
+still prepares, times, and grades it, and `compare` and `chain.py` read the
+same directories.
+
+```sh
+sbx version && sbx diagnose        # daemon healthy, authenticated
+sbx secret ls                      # anthropic and openai credentials for the proxy
+python3 evals/canon/sandbox.py deps --agent codex --repo omnigent --commit 02969a131c72d74c00c5800d8e82ae831f8ec5e5
+python3 evals/canon/sandbox.py probe --agent codex --repo omnigent --commit 02969a131c72d74c00c5800d8e82ae831f8ec5e5
+python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode \
+  --case session-stats-json --out "/private/tmp/canon-sbx/codex-$(date +%m%d%H%M)" domain-words
+```
+
+Each run goes through `sandbox.py wrap`, which does this:
+
+1. It checks out the pinned commit and overlay in the harness workspace and
+   refuses a tree that differs from the build, as `workspace.py wrap` does.
+   Then it repacks the checkout so it no longer borrows objects from the
+   host mirror.
+2. It creates one sandbox with `sbx create --clone --skills off`. The agent
+   works on a private clone inside the sandbox. The host checkout is mounted
+   read-only at `/run/sandbox/source`, and the sandbox cannot write to it.
+   `--skills off` keeps sbx's shared skill store out of `~/.claude/skills`.
+   No Docker socket is mounted.
+3. It copies in the mounted skills and the overlay as one tar. `sbx_inside.py
+   setup` then links the tree to `.claude/skills` or `.agents/skills`. It
+   registers the poteto-agent and Comment Sicko personas by running
+   `pstack-harness/scripts/subagents.py install --harness claude-code|codex
+   --project <clone>` through that link, as a user install would. For Codex
+   it also trusts the clone in the sandbox's own `~/.codex/config.toml`, since
+   Codex loads project roles only for a trusted project. Last, it links the
+   project's dependencies and checks the clone's tree against the build.
+   Setup files go to git's exclude list, so they never reach the diff. The
+   payload directory is deleted before the agent starts.
+4. It runs the agent in the clone with `sbx exec`, under `timeout` at the
+   case budget minus 120 seconds. The harness's flags are rewritten for the
+   sandbox. Claude drops `--no-session-persistence`, so its transcripts are
+   written, and gets `--setting-sources project --permission-mode
+   bypassPermissions --strict-mcp-config --allowedTools TodoWrite`. Codex
+   drops `--ephemeral` and `--ignore-user-config`, because the sandbox's own
+   config holds its proxy provider. It runs `--sandbox danger-full-access`
+   with the sandbox's MCP gateway disabled. `bypassPermissions` and
+   `danger-full-access` are safe only because the sandbox is the boundary. The
+   prompt still starts with `/poteto-mode` or `$poteto-mode`.
+5. `sbx_inside.py harvest` writes the workspace diff and copies the agent's
+   session store, `~/.claude/projects` or `~/.codex/sessions`, which holds the
+   lead's session and every delegate's. The wrapper copies both out, with the
+   sandbox's network log, into the run's harvest slot. Then it removes the
+   sandbox, even when the run fails. `sandbox.py gc` removes any `canon-*`
+   sandbox a killed run left behind. Do not run it while a screen is running.
+
+The harvest dir of a run holds `workspace.diff`, `workspace.json`,
+`network-log.json`, and `transcripts/claude/<project>/<session>.jsonl` with
+`<session>/subagents/agent-*.jsonl` and `.meta.json`, or
+`transcripts/codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. `workspace.json`
+records the sandbox name, the template, the CLI versions, the timings, the
+network rules that applied, and `reachable`, the policy decision for each
+model API host and each denied host.
+
+**Auth.** Credentials never enter this repo or a run directory. `sbx secret`
+stores them on the host, and the sandbox's proxy adds them to model API
+requests. The Codex kit writes a `~/.codex/config.toml` whose provider sends
+requests to `chatgpt.com/backend-api/codex` through that proxy with a
+placeholder token. The Claude kit writes `~/.claude/.credentials.json` from the
+stored Anthropic OAuth secret. On 2026-09-25 that secret had expired, and a
+Claude run inside the sandbox stopped with "OAuth session expired and could
+not be refreshed". Refresh it before a paid Claude run, for example by
+storing an API key with `sbx secret set anthropic`, and confirm with one short
+prompt. `sbx secret set` supports `--oauth` for OpenAI only.
+
+**Network.** The host's global policy denies by default. Each agent kit adds
+its own hosts to that sandbox: the Anthropic API and claude.com hosts for
+Claude, and chatgpt.com, the OpenAI API, GitHub, npm, and the Ubuntu archives
+for Codex. A run sandbox adds a per-sandbox deny rule for every package index
+and source host in `sbx.json` `run_deny_network`, so a run reaches only its
+model API. A local deny can only narrow egress. The dependency build is the one
+step that reaches PyPI, GitHub releases, and astral.sh, through per-sandbox
+allow rules (`build_network`) on a sandbox that is removed afterwards.
+
+**Dependencies.** `sandbox.py deps` builds one template per agent, repo, and
+commit. It creates a sandbox with no workspace and extracts the pinned commit
+under `/opt/canon-deps/<repo>/src`. It installs uv from `sbx.json` (the
+kit's uv 0.9.26 is older than omnigent's `required-version`) and the repo's
+pinned Python. Then it runs `uv sync` with the repo's lockfile: `--frozen --group
+test` for omnigent with `OMNIGENT_SKIP_WEB_UI=true` (its build otherwise runs
+pnpm), and `--frozen --extra dev` for hermes. The venv, the uv cache, and the
+interpreter live under `/opt/canon-deps`, outside every workspace. The source
+copy and the kit's credential files are deleted before `sbx template save`.
+At run time setup links `.venv` to that venv and reruns the same `uv sync`
+offline, which reinstalls the project's own editable packages from the clone.
+The agent runs with `UV_OFFLINE=1`, `UV_PYTHON_DOWNLOADS=never`, and the repo's
+env, so `uv run pytest` works without the network. The record of each build
+sits under `$CANON_CACHE/sbx/`.
+
+**Tools observed.** `sandbox.py probe` builds a run-shaped sandbox and lists
+what the agent is offered without a paid model call. Claude gets a model name
+that does not exist, and its init event lists tools, agents, and slash commands
+before it fails. Codex is pointed at a local server inside the sandbox that
+records the request and answers 400. Observed on 2026-09-25, with no
+dependency template:
+
+- Claude Code 2.1.280 runs in `bypassPermissions`. Its tools are Task, Bash,
+  Edit, Read, Write, NotebookEdit, Skill, TaskCreate, TaskGet, TaskList,
+  TaskUpdate, TaskStop, ToolSearch, WebFetch, WebSearch, Workflow, and
+  others. Its agents include poteto-agent and comment-sicko, and poteto-mode
+  is a slash command. Without `--allowedTools TodoWrite`, the same `-p` run
+  lists none of TaskCreate, TaskGet, TaskList, or TaskUpdate.
+- Codex 0.149.1 gets exec_command, write_stdin, update_plan,
+  request_user_input, view_image, and the multi_agent_v1 namespace:
+  spawn_agent, send_input, wait_agent, close_agent, and resume_agent.
+  spawn_agent's agent_type lists poteto-agent and comment-sicko. The request
+  carries the injected poteto-mode `SKILL.md`. A paid smoke run (one
+  poteto-agent spawn replying "ok", gpt-5.6-luna at low effort, 32,611 input
+  tokens) showed `collab_tool_call` items for spawn_agent with the brief in
+  `exec --json`. The child's rollout names `agent_role: poteto-agent`, starts
+  with the persona briefing, and reads `.agents/skills/poteto-mode/SKILL.md`.
+
+**Costs measured** on an Apple silicon Mac on 2026-09-25, with the offline
+stand-in on the small test repo: create 4.0 to 4.3 s, setup 3.3 s, harvest
+2.4 to 3.0 s, destroy 0.8 s per run. The first sandbox from a kit image took
+14 to 18 s. DEPS_COSTS
+
+**Offline check.** `test_sandbox.py` unit-tests the argv rewrite, the staging
+repack, and `sbx_inside.py` setup and harvest on a plain clone. With
+`CANON_SBX_E2E=1`, it also runs both arms of a workspace rule for each agent
+in real sandboxes with `offline/sbx-agent` as the agent. That stand-in exits
+nonzero unless the prompt carries the invocation, the skills are linked, the
+persona is registered, the flags give it full tools, and its cwd is the
+clone. It applies the sample diff and writes a trace with one worklist call and
+one poteto-agent spawn, plus transcripts for the lead and the delegate. Both
+agents print `SEPARATES`, and each takes about 50 seconds.
+
+```sh
+(cd evals/canon && CANON_SBX_E2E=1 python3 -m unittest test_sandbox -v)
+```
+
 ## Chain census
 
 `chain.py` reads finished run dirs and reports, per run, how far the agent

@@ -35,7 +35,7 @@ prompt. Its oracle grades the diff the agent left on that checkout.
   screen.py plan [--runs-root DIR ...]                 list rules, cases, and past runs
   screen.py build --out DIR [--entry E] [RULE ...]     write both arms of every case
   screen.py audit [--entry E] [RULE ...]               model-free: build, validate, audit, prepare
-  screen.py run --agent claude|codex --out DIR [--entry E] [RULE ...]   paid: answer, grade, compare
+  screen.py run --agent claude|codex --out DIR [--entry E] [--runner host|sbx] [RULE ...]   paid: answer, grade, compare
   screen.py compare --out DIR                          print paired verdicts with exposure
 """
 import argparse
@@ -631,8 +631,15 @@ def audit(rules, entry="skill"):
                     print(f"OK {rule.id}/{case.id}/{arm}: {count} with_skill row(s)")
 
 
-def agent_env(agent, out):
+def agent_env(agent, out, runner="host"):
     env = dict(os.environ)
+    if runner == "sbx":
+        # The agent runs from the sandbox template; the host needs only sbx.
+        version = subprocess.run(["sbx", "version"], capture_output=True, text=True, check=False)
+        if version.returncode != 0:
+            raise ScreenError("`sbx version` failed; --runner sbx needs Docker Sandboxes")
+        print(f"sbx: {version.stdout.strip()}")
+        return env
     if agent == "codex" and os.environ.get("CODEX_BIN"):
         shim = out / "bin"
         shim.mkdir(parents=True, exist_ok=True)
@@ -684,10 +691,28 @@ def workspace_wrapper(agent, out, target, entry):
     return wrapper
 
 
-def backend_args(agent, out, entry, in_workspace=False):
+def sandbox_wrapper(agent, out, entry):
+    """The entry wrapper for a workspace case under --runner sbx: sandbox.py
+    wrap runs the agent inside its own sandbox (see sandbox.py)."""
+    wrapper = out / "entry" / f"{agent}-sbx"
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, str(CANON / "sandbox.py"), "wrap", "--agent", agent]
+    if entry == ENTRY_SKILL:
+        token, discovery = ENTRY_INVOCATION[agent]
+        command += ["--token", token, "--discovery", discovery]
+    wrapper.write_text(f"#!/bin/sh\nexec {' '.join(map(shlex.quote, command))} -- \"$@\"\n")
+    wrapper.chmod(0o755)
+    return wrapper
+
+
+def backend_args(agent, out, entry, in_workspace=False, runner="host"):
     tools = skill_ci() / "tools"
     target = tools / ("claude-project-only" if agent == "claude" else "codex-project-only")
-    if in_workspace:
+    if runner == "sbx":
+        if not in_workspace:
+            raise ScreenError("--runner sbx runs workspace cases only; a pasted-project case has no checkout to clone")
+        target = sandbox_wrapper(agent, out, entry)
+    elif in_workspace:
         target = workspace_wrapper(agent, out, target, entry)
     elif entry == ENTRY_SKILL:
         target = entry_wrapper(agent, out, target)
@@ -726,13 +751,13 @@ def select_cases(rules, case_ids):
     return [rule for rule in chosen if rule.cases]
 
 
-def run(agent, out, rules, model, runs, timeout, entry="skill"):
-    env = agent_env(agent, out)
+def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host"):
+    env = agent_env(agent, out, runner)
     built = build(out, rules, entry)
     for rule in rules:
         for case in rule.cases:
             case_build = built[rule.id]["cases"][case.id]
-            backend = backend_args(agent, out, entry, "workspace" in case_build)
+            backend = backend_args(agent, out, entry, "workspace" in case_build, runner)
             for arm in ARMS:
                 check_manifest(out / "arms" / rule.id / case.id / arm, case.kind)
             for arm in ARMS:
@@ -745,7 +770,8 @@ def run(agent, out, rules, model, runs, timeout, entry="skill"):
                 with_skill_rows(work / "tasks-all.jsonl", work / "tasks.jsonl")
                 run_env = env
                 if "workspace" in case_build:
-                    run_env = {**env, "CANON_WORKSPACE": str(root / "workspace"), "CANON_HARVEST": str(work / "harvest")}
+                    run_env = {**env, "CANON_WORKSPACE": str(root / "workspace"), "CANON_HARVEST": str(work / "harvest"),
+                               "CANON_TIMEOUT_S": str(timeout or case_build["timeout_s"])}
                 harness("run-agent", "--agent", agent, "--model", model, *backend,
                         "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
                         "--timeout", timeout or case_build["timeout_s"], env=run_env)
@@ -968,6 +994,8 @@ def main(argv=None):
                    "other cases to 900 under the poteto-mode entry, else their timeout_s")
     p.add_argument("--entry", choices=ENTRIES, default="skill")
     p.add_argument("--case", action="append", default=[], help="run only these case ids (repeatable)")
+    p.add_argument("--runner", choices=("host", "sbx"), default="host",
+                   help="host runs the agent CLI on this machine; sbx runs each workspace answer in its own Docker sandbox")
     p.add_argument("rules", nargs="*")
     p = sub.add_parser("compare")
     p.add_argument("--out", type=Path, required=True)
@@ -980,7 +1008,7 @@ def main(argv=None):
         elif args.command == "audit":
             audit(load_rules(args.rules), args.entry)
         elif args.command == "run":
-            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry)
+            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner)
         else:
             compare(args.out.resolve())
     except (ScreenError, workspace.WorkspaceError, subprocess.CalledProcessError) as exc:
