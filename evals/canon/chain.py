@@ -5,9 +5,12 @@ The chain a /poteto-mode run is meant to follow:
 
   1. the invocation injects poteto-mode/SKILL.md
   2. the agent reads one playbook, the one the task matches
-  3. it opens a worklist whose first items are that playbook's steps, verbatim
+  3. it opens a worklist whose first items are that playbook's steps, verbatim,
+     on a structured tool when one is offered, else in its progress messages
   4. it reads the principle leaf a decision needs before making the decision
-  5. it delegates code-writing to a subagent whose brief names the data shape
+  5. it delegates code-writing to a poteto-agent subagent whose brief names
+     the data shape; a delegate a routed skill prescribes (Comment Sicko, how
+     explorers, architect runners, ...) keeps the role that skill gives it
   6. its reply cites only principles whose leaf it read
 
 Each agent's trace is parsed into one list of Events (reads of mounted skill
@@ -21,7 +24,9 @@ with actor "delegate", placed right after the spawn that started it.
 
 A ROOT is a directory of screen.py --out dirs, or one such dir. Every run dir
 under it (<out>/<agent>/<rule>/[<case>/]<arm>/runs/<case>/with_skill[/run-N]
-holding trace.jsonl) becomes one JSON line.
+holding trace.jsonl) becomes one JSON line. A Claude run whose harvest dir
+holds raw-stream.jsonl is read from it: the sandbox wrapper keeps the agent's
+whole stream there and hands the harness a copy with one result event.
 """
 import argparse
 import importlib.util
@@ -69,6 +74,8 @@ TRIM_VERBS = {"head", "tail"}
 WRITE_VERBS = {"tee", "rm", "mv", "cp", "touch", "apply_patch"}
 CLAUDE_EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 CLAUDE_WORKLIST_TOOLS = {"TodoWrite", "TaskCreate", "TaskUpdate"}
+CLAUDE_WORKLIST_OFFERS = {"TodoWrite", "TaskCreate"}
+CODEX_WORKLIST_TOOL = "update_plan"
 CLAUDE_SPAWN_TOOLS = {"Agent", "Task"}
 CODEX_SPAWN_TOOLS = {"spawn_agent", "spawn"}
 SHELL_WRAPPER = re.compile(r"^/bin/(?:ba|z)?sh -lc ")
@@ -76,17 +83,24 @@ HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*(?:\n|$)", re.
 DATA_SHAPE = re.compile(r"data shape|organizing structure|principle-[a-z-]+|model[- ]the[- ]domain", re.IGNORECASE)
 FOR_LOOP = re.compile(r"\bfor (\w+) in ([^;]+?);\s*do\s+(.+?);?\s*done\b")
 WORKLIST_WORD = re.compile(r"\b(worklist|todo list|to-do list)\b", re.IGNORECASE)
+LIST_ITEM = re.compile(r"^\s*(?:\d+[.)]|[-*•]|\[[ x]\])\s+")
+STEP_POINTER = re.compile(r"\*\*([a-z][a-z0-9-]*)\*\*|`([a-z][a-z0-9-]*)`")
+GENERIC_ROLES = {None, "default", "worker", "general-purpose"}
 PERSONA_ROLE = "poteto-agent"
 CODEX_BRIEFING_HEAD = "Pstack installed skill paths"
+RAW_STREAM = "raw-stream.jsonl"
 
 
-def persona_line():
-    """The opening sentence of the poteto-agent body, which every delivery
+def first_sentence(text):
+    line = next(line for line in text.splitlines() if line.strip() and not line.startswith("#"))
+    return " ".join(line.split(". ")[0].split())
+
+
+def persona_line(role_id=PERSONA_ROLE):
+    """The opening sentence of a named role's body, which every delivery
     route carries whole."""
     roles = json.loads((screen.REPO / "skills/pstack-harness/references/subagents/roles.json").read_text())
-    body = next(role["body"] for role in roles["roles"] if role["id"] == PERSONA_ROLE)
-    line = next(line for line in body.splitlines() if line.strip() and not line.startswith("#"))
-    return " ".join(line.split(". ")[0].split())
+    return first_sentence(next(role["body"] for role in roles["roles"] if role["id"] == role_id))
 
 
 PERSONA_LINE = persona_line()
@@ -96,6 +110,65 @@ def has_persona(text):
     return PERSONA_LINE in " ".join((text or "").split())
 
 
+def template_line(path):
+    """The sentence a brief built from a routed skill's prompt template
+    carries: the first body sentence after the template's --- rule, else its
+    first "You are" sentence, else its first sentence."""
+    text = (screen.REPO / "skills" / path).read_text()
+    head, rule, body = text.partition("\n---\n")
+    if rule:
+        return first_sentence(body)
+    you = re.search(r"^You are[^\n]*", text, re.MULTILINE)
+    return " ".join(you.group(0).split(". ")[0].split()) if you else first_sentence(text)
+
+
+@dataclass(frozen=True)
+class Prescribed:
+    """A delegate a routed skill prescribes. A Codex 0.157 brief is
+    encrypted, so path and reads are what its harvest shows."""
+    skill: str
+    name: str
+    roles: tuple = ()
+    line: str = None
+    template: str = None
+    mention: str = None
+    named_by_path: bool = True
+
+    def matches(self, role, brief, path=None, reads=()):
+        flat = " ".join((brief or "").split())
+        return ((role or "").lower().replace(" ", "-") in self.roles
+                or bool(self.line and self.line in flat)
+                or bool(self.template and (self.template in flat or self.template in reads))
+                or bool(self.mention and re.search(self.mention, flat, re.IGNORECASE))
+                or bool(self.named_by_path and path and re.search(rf"(?:^|/){re.escape(self.skill)}(?:[_-]|$)", path)))
+
+
+def routed(skill, name, template):
+    return Prescribed(skill, name, line=template_line(template), template=template)
+
+
+PRESCRIBED = (
+    Prescribed("no-comments", "comment-sicko", roles=("comment-sicko",), line=persona_line("comment-sicko"), named_by_path=False),
+    routed("how", "explorer", "how/references/explorer-prompt.md"),
+    routed("how", "explainer", "how/references/explainer-prompt.md"),
+    routed("why", "investigator", "why/references/investigator-prompt.md"),
+    routed("why", "synthesizer", "why/references/synthesizer-prompt.md"),
+    routed("architect", "runner", "architect/references/runner-prompt.md"),
+    routed("interrogate", "reviewer", "interrogate/references/reviewer-prompt.md"),
+    routed("reflect", "judgment reviewer", "reflect/references/judgment-reviewer.md"),
+    routed("reflect", "tooling reviewer", "reflect/references/tooling-reviewer.md"),
+    routed("reflect", "divergent reviewer", "reflect/references/divergent-reviewer.md"),
+    routed("reflect", "synthesizer", "reflect/references/synthesizer.md"),
+    Prescribed("arena", "runner", mention=r"\barena/SKILL\.md\b|\barena (?:runner|candidate)s?\b"),
+    Prescribed("swarm", "worker", mention=r"\bswarm/SKILL\.md\b|\bswarm (?:worker|reviewer)s?\b"),
+)
+
+
+def prescribed_by(role, brief, path=None, reads=()):
+    """"<skill> <name>" of the routed-skill role a delegate holds, or None."""
+    return next((f"{entry.skill} {entry.name}" for entry in PRESCRIBED if entry.matches(role, brief, path, reads)), None)
+
+
 @dataclass(frozen=True)
 class Event:
     """One thing a run did, in trace order. actor is "main" or "delegate".
@@ -103,7 +176,7 @@ class Event:
     and extends the spawn's sub with its own line in the child transcript."""
     index: int
     actor: str
-    kind: str  # read, edit, spawn, wait, worklist, message, denied
+    kind: str  # read, edit, spawn, wait, worklist, worklist-rejected, message, denied
     path: str = ""
     partial: bool = False
     text: str = ""
@@ -122,6 +195,8 @@ class Spawn:
     persona: bool = False
     path: str = None
     code_writing: bool = False  # the delegate edited a workspace file, vs an explorer or design runner
+    prescribed: str = None  # "<skill> <name>" when a routed skill prescribes its role
+    reads: frozenset = frozenset()  # tree paths its own transcript read
     inline: list = field(default_factory=list)  # its events the lead stream already echoed
 
 
@@ -136,6 +211,7 @@ class Child:
     persona: bool = False
     brief: str = ""
     path: str = None
+    worklist_tool_offered: bool = None  # True when its rollout lists or calls update_plan
 
 
 @dataclass
@@ -143,7 +219,8 @@ class Trace:
     events: list = field(default_factory=list)
     final: str = ""
     slash_commands: tuple = ()
-    worklist_tool_offered: bool = None  # None when the trace does not list tools
+    worklist_tool_offered: bool = None  # None when the trace neither lists tools nor calls one
+    result_events: int = None  # Claude: one per turn the lead ended, the last being the answer
     spawns: dict = field(default_factory=dict)  # spawn key -> Spawn
 
 
@@ -341,8 +418,11 @@ def claude_events(records, tree, cwd, failed, agents=(), actor=None):
                 if in_workspace(path, where, tree):
                     mine.append(Event(index, who, "edit", path))
             elif name in CLAUDE_WORKLIST_TOOLS:
-                items = [todo.get("content", "") for todo in data.get("todos") or []] or [data.get("subject", ""), data.get("description", "")]
-                mine.append(Event(index, who, "worklist", text="\n".join(item for item in items if item)))
+                if name == "TodoWrite":
+                    items = [todo.get("content", "") for todo in data.get("todos") or []]
+                else:
+                    items = [" ".join(part for part in (data.get("subject"), data.get("description")) if part)]
+                mine.append(Event(index, who, "worklist" if ok else "worklist-rejected", text=item_lines(items)))
             elif name in CLAUDE_SPAWN_TOOLS:
                 event = Event(index, who, "spawn", text=data.get("prompt", ""))
                 mine.append(event)
@@ -363,13 +443,17 @@ def parse_claude(lines, tree):
             cwd = record.get("cwd", "")
             trace.slash_commands = tuple(record.get("slash_commands") or ())
             tools = record.get("tools") or []
-            trace.worklist_tool_offered = bool(CLAUDE_WORKLIST_TOOLS & set(tools))
+            trace.worklist_tool_offered = bool(CLAUDE_WORKLIST_OFFERS & set(tools))
             agents = tuple(record.get("agents") or ())
         if record.get("type") == "system" and record.get("subtype") == "permission_denied":
             denied_ids.add(record.get("tool_use_id"))
             trace.events.append(Event(index, "main", "denied", text=record.get("tool_name", "")))
-        if record.get("type") == "result":
-            trace.final = record.get("result") or ""
+    results = [record for _, record in records if record.get("type") == "result"]
+    trace.result_events = len(results)
+    if results:
+        # A lead that ends a turn while a background delegate runs emits a
+        # result each time; the last one is the answer.
+        trace.final = results[-1].get("result") or ""
     events, trace.spawns, echoed = claude_events(records, tree, cwd, denied_ids | errored_tool_ids(records), agents)
     for key, inline in echoed.items():
         if key in trace.spawns:
@@ -418,7 +502,8 @@ def parse_codex(lines, tree, cwd=""):
                 if in_workspace(change.get("path", ""), cwd, tree):
                     trace.events.append(Event(index, "main", "edit", change["path"]))
         elif kind == "todo_list":
-            trace.events.append(Event(index, "main", "worklist", text="\n".join(entry.get("text", "") for entry in item.get("items") or [])))
+            trace.worklist_tool_offered = True
+            trace.events.append(Event(index, "main", "worklist", text=item_lines(entry.get("text", "") for entry in item.get("items") or [])))
         elif kind == "collab_tool_call":
             event = codex_collab(index, "main", item, trace.spawns)
             trace.events.append(event)
@@ -455,12 +540,28 @@ def file_change_paths(item):
     return [change.get("path", "") for change in changes if isinstance(change, dict)]
 
 
+def item_lines(items):
+    """Worklist items as text, one item per line."""
+    return "\n".join(" ".join(item.split()) for item in items if item and item.strip())
+
+
 def plan_text(arguments):
     try:
         plan = json.loads(arguments).get("plan") or []
     except (ValueError, AttributeError):
         return str(arguments)
-    return "\n".join(step.get("step", "") for step in plan if isinstance(step, dict))
+    return item_lines(step.get("step", "") for step in plan if isinstance(step, dict))
+
+
+def exec_plan_text(source):
+    """The steps of a code-mode tools.update_plan({plan: [{step: "..."}]}) call."""
+    steps = [match.group(2) for match in re.finditer(r"""\bstep["']?\s*:\s*(["'`])((?:\\.|(?!\1).)*)\1""", source)]
+    return item_lines(steps) if steps else source
+
+
+def lists_update_plan(payload):
+    tools = payload.get("tools") if isinstance(payload, dict) else None
+    return any(isinstance(tool, dict) and tool.get("name") == CODEX_WORKLIST_TOOL for tool in tools or [])
 
 
 def codex_role(meta):
@@ -490,9 +591,11 @@ def parse_codex_rollout(lines, tree):
     the file. Only the file's first session_meta is this rollout's own
     identity (thread_source, parent_thread_id, agent_role, agent_path), so
     later ones are ignored."""
-    meta, events, spawns, brief, developer = {}, [], {}, None, ""
+    meta, events, spawns, brief, task, developer, offered = {}, [], {}, None, None, "", None
     for index, record in json_records(lines):
         payload = record.get("payload") or {}
+        if lists_update_plan(payload):
+            offered = True
         if record.get("type") == "session_meta":
             if not meta:
                 meta = payload
@@ -500,10 +603,17 @@ def parse_codex_rollout(lines, tree):
             kind = payload.get("type")
             if kind == "message" and payload.get("role") == "developer" and not developer:
                 developer = item_text(payload.get("content")).lstrip()
-            elif kind == "function_call" and payload.get("name") == "update_plan":
+            elif kind == "agent_message" and task is None and payload.get("recipient") and payload.get("recipient") == codex_path(meta):
+                # 0.157 hands a spawned child its task as a message addressed
+                # to its path, under a header; an encrypted payload leaves
+                # nothing after the header.
+                task = item_text(payload.get("content")).partition("Payload:")[2].strip() or None
+            elif kind == "function_call" and payload.get("name") == CODEX_WORKLIST_TOOL:
+                offered = True
                 events.append(Event(index, "delegate", "worklist", text=plan_text(payload.get("arguments", ""))))
-            elif kind == "custom_tool_call" and "tools.update_plan(" in str(payload.get("input", "")):
-                events.append(Event(index, "delegate", "worklist", text=payload["input"]))
+            elif kind == "custom_tool_call" and f"tools.{CODEX_WORKLIST_TOOL}(" in str(payload.get("input", "")):
+                offered = True
+                events.append(Event(index, "delegate", "worklist", text=exec_plan_text(payload["input"])))
         elif record.get("type") == "event_msg" and payload.get("type") == "item_completed":
             item, cwd = payload.get("item") or {}, meta.get("cwd", "")
             kind = item.get("type")
@@ -521,8 +631,9 @@ def parse_codex_rollout(lines, tree):
             elif kind == "CollabAgentToolCall":
                 events.append(codex_collab(index, "delegate", item, spawns))
     role = codex_role(meta)
+    brief = task or brief
     persona = role == PERSONA_ROLE or developer.startswith(CODEX_BRIEFING_HEAD) or has_persona(brief)
-    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "", codex_path(meta))
+    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "", codex_path(meta), offered)
 
 
 def attach(trace, children):
@@ -554,6 +665,7 @@ def attach(trace, children):
             spawn.persona = spawn.persona or child.persona
             spawn.path = spawn.path or child.path
             spawn.code_writing = spawn.code_writing or any(event.kind == "edit" for event in child.events)
+            spawn.reads = spawn.reads | {event.path for event in child.events if event.kind == "read"}
             base = spawn.event
             moved = {id(event): replace(event, index=base.index, sub=base.sub + (event.index,)) for event in child.events}
             trace.events += moved.values()
@@ -592,6 +704,8 @@ def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
             children.append(child)
         else:
             lead = child
+    if lead and lead.worklist_tool_offered:
+        trace.worklist_tool_offered = True
     if lead and not any(event.kind == "worklist" and event.actor == "main" for event in trace.events):
         trace.events += [replace(event, index=len(lead_lines), actor="main", sub=(event.index,)) for event in lead.events if event.kind == "worklist"]
     return attach(trace, children)
@@ -615,6 +729,84 @@ def playbook_steps(text):
     return steps
 
 
+@dataclass(frozen=True)
+class Step:
+    """One numbered playbook step as a worklist item must keep it: its
+    identity (the bold heading it opens with, else its first clause) and the
+    skills it points at (bold or backticked skill names)."""
+    identity: str
+    pointers: tuple
+
+
+def first_clause(text, words=5):
+    """The opening clause, cut at its first punctuation mark and at five
+    words, so a paraphrase of the rest of the clause still names the step."""
+    clause = re.split(r"[.,;:(]\s|[.,;:(]$|\s[-–]\s", text + " ", maxsplit=1)[0]
+    return " ".join(clause.split()[:words])
+
+
+def step_specs(text, skill_names):
+    """The Steps of a playbook. A step runs from its numbered line through the
+    indented lines under it; its identity comes from the numbered line."""
+    blocks = []
+    for line in text.splitlines():
+        match = re.match(r"^\d+\.\s+(.*)", line)
+        if match:
+            blocks.append([match.group(1)])
+        elif blocks and blocks[-1] is not None and line.startswith((" ", "\t")) and line.strip():
+            blocks[-1].append(line.strip())
+        elif blocks and line.strip():
+            blocks.append(None)
+    steps = []
+    for block in filter(None, blocks):
+        heading = re.match(r"\*\*([^*]+?)[.:]\*\*", block[0])
+        identity = normalize(heading.group(1)) if heading else first_clause(normalize(block[0]))
+        pointers = []
+        for pair in STEP_POINTER.findall(" ".join(block)):
+            name = pair[0] or pair[1]
+            if (name in skill_names or f"principle-{name}" in skill_names) and name not in pointers:
+                pointers.append(name)
+        steps.append(Step(identity, tuple(pointers)))
+    return steps
+
+
+def message_items(text):
+    """The list items of a message: each numbered or bulleted line with the
+    lines that continue it. A message with no list is one item."""
+    items = []
+    for line in text.splitlines():
+        if LIST_ITEM.match(line):
+            items.append(LIST_ITEM.sub("", line, count=1))
+        elif items and line.strip():
+            items[-1] += " " + line.strip()
+    return items or [text]
+
+
+def valid_carrier(carrier, tool_offered, tool_rejected):
+    """The pstack-harness worklist contract: a structured tool when one is
+    offered, else progress messages, which also take over after a rejected
+    tool call."""
+    message_allowed = tool_offered is not True or tool_rejected
+    return carrier == "tool" or (carrier == "message" and message_allowed)
+
+
+def has_name(text, name):
+    return re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", text) is not None
+
+
+def step_fidelity(steps, items):
+    """Per step: whether an item keeps its identity, and which of its pointers
+    that item keeps. A step no item names keeps none of its pointers."""
+    items = [normalize(item) for item in items]
+    report = []
+    for number, step in enumerate(steps, 1):
+        item = next((item for item in items if step.identity and step.identity in item), None)
+        kept = [name for name in step.pointers if item is not None and has_name(item, name)]
+        report.append({"step": number, "identity": step.identity, "listed": item is not None,
+                       "pointers": list(step.pointers), "kept": kept})
+    return report
+
+
 def principle_index(index_text):
     """{slug: title} from the Principles section of poteto-mode/SKILL.md."""
     return {slug: title for title, slug in PRINCIPLE_ENTRY.findall(index_text)}
@@ -630,8 +822,9 @@ def cited_principles(text, principles):
     return cited
 
 
-def stages(trace, *, case, owner, injected, playbook_texts, principles, workspace):
-    """Every chain stage of one run, from its events."""
+def stages(trace, *, case, owner, injected, playbook_texts, principles, workspace, skill_names=()):
+    """Every chain stage of one run, from its events. skill_names are the
+    mounted skills a playbook step may point at."""
     main = [event for event in trace.events if event.actor == "main"]
     reads = [event for event in trace.events if event.kind == "read"]
     main_reads = [event for event in main if event.kind == "read"]
@@ -655,8 +848,21 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         owner_at, owner_full = (order(event), not event.partial) if event else (None, False)
 
     tool_lists = [event.text for event in main if event.kind == "worklist"]
+    rejected = any(event.kind == "worklist-rejected" for event in main)
+    specs = step_specs(playbook_texts.get(matched, ""), set(skill_names)) if matched else []
     finals = {trace.final.strip()}
-    text_lists = [event.text for event in main if event.kind == "message" and WORKLIST_WORD.search(event.text) and event.text.strip() not in finals]
+
+    def names_steps(text):
+        flat = normalize(text)
+        return sum(bool(spec.identity) and spec.identity in flat for spec in specs) >= 2
+
+    text_lists = [event.text for event in main if event.kind == "message" and event.text.strip() not in finals
+                  and (WORKLIST_WORD.search(event.text) or names_steps(event.text))]
+    carrier = "tool" if tool_lists else "message" if text_lists else "none"
+    items = ([line for text in tool_lists for line in text.splitlines()] if tool_lists
+             else [item for text in text_lists for item in message_items(text)])
+    fidelity = step_fidelity(specs, items)
+    pointer_total = sum(len(step["pointers"]) for step in fidelity)
     blob = normalize("\n".join(tool_lists or text_lists))
     steps = playbook_steps(playbook_texts.get(matched, "")) if matched else []
     def share(keys):
@@ -673,7 +879,18 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         # one (codex_collab), so the whole delegate census comes from the
         # harvested child rollouts attach() folded into trace.spawns.
         briefed = list(trace.spawns.values())
-    code_writers = [spawn for spawn in briefed if spawn.code_writing]
+    for spawn in briefed:
+        spawn.prescribed = prescribed_by(spawn.role, spawn.event.text, spawn.path, spawn.reads)
+    helpers = [spawn for spawn in briefed if not spawn.prescribed]
+    implementers = [spawn for spawn in helpers if spawn.code_writing]
+    census = {}
+    for spawn in briefed:
+        counts = census.setdefault(spawn.role or "(none)", dict.fromkeys(("spawns", "code_writing", "prescribed", "persona", "implementation_misses"), 0))
+        counts["spawns"] += 1
+        counts["code_writing"] += spawn.code_writing
+        counts["prescribed"] += bool(spawn.prescribed)
+        counts["persona"] += spawn.persona
+        counts["implementation_misses"] += spawn in implementers and not spawn.persona
     cited = cited_principles(trace.final, principles)
     unread = [slug for slug in cited if f"{slug}/SKILL.md" not in first_read]
     return {
@@ -686,6 +903,13 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
             "text_list": bool(text_lists) and not tool_lists,
             "verbatim_fraction": verbatim,
             "echoed_fraction": echoed,
+            "carrier": carrier,
+            "tool_rejected": rejected,
+            "valid_carrier": valid_carrier(carrier, trace.worklist_tool_offered, rejected),
+            "steps": fidelity,
+            "steps_listed": sum(step["listed"] for step in fidelity) if fidelity else None,
+            "steps_total": len(fidelity) if fidelity else None,
+            "pointer_fraction": round(sum(len(step["kept"]) for step in fidelity) / pointer_total, 2) if pointer_total else None,
         },
         "leaf_reads": [
             {"path": event.path, "index": event.index, "actor": event.actor, "partial": event.partial}
@@ -706,15 +930,22 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         },
         "delegate_edits": sorted({event.path for event in edits if event.actor == "delegate"}),
         "delegate_census": [
-            {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona}
+            {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona, "prescribed": spawn.prescribed}
             for spawn in briefed
         ],
-        "code_writing_delegate_persona": {
-            "spawns": len(code_writers),
-            "with_persona": sum(spawn.persona for spawn in code_writers),
+        "role_census": census,
+        "implementation_delegate_persona": {
+            "spawns": len(implementers),
+            "with_persona": sum(spawn.persona for spawn in implementers),
+            "misses": [spawn.role for spawn in implementers if not spawn.persona],
+        },
+        "helper_persona": {
+            "spawns": len(helpers),
+            "with_persona": sum(spawn.persona for spawn in helpers),
         },
         "citations": {"cited": cited, "unread": unread, "only_read": (not unread) if cited else None},
         "tools_denied": sum(event.kind == "denied" for event in trace.events),
+        "result_events": trace.result_events,
         "worklist_tool": {
             "offered": True if trace.worklist_tool_offered is None and tool_lists else trace.worklist_tool_offered,
             "called": bool(tool_lists),
@@ -772,6 +1003,11 @@ def verdict_for(run, run_number):
     grade = run.out / run.agent / run.rule / (run.arm if run.legacy else f"{run.case}/{run.arm}") / "grade.json"
     if not grade.is_file():
         return "UNGRADED"
+    regraded = grade.with_name("regrade.json")
+    if regraded.is_file():
+        row = next((row for row in json.loads(regraded.read_text())["results"] if row["run"] == run_number), None)
+        if row:
+            return row["verdict"]
     results = json.loads(grade.read_text()).get("results", [])
     for result in results:
         if Path(result.get("run_base", "")).resolve() == run.path.resolve():
@@ -814,7 +1050,9 @@ def analyze(trace_path, principles):
         return None
     build_info, files = arm_tree(run)
     tree = {path: md_lines(source.read_text(errors="replace")) for path, source in files.items()}
-    lines = trace_path.read_text(errors="replace").splitlines()
+    harvest = harvest_dir(run.path)
+    raw = harvest / RAW_STREAM if harvest and run.agent == "claude" else None
+    lines = (raw if raw and raw.is_file() else trace_path).read_text(errors="replace").splitlines()
     run_number = int(run.path.name.removeprefix("run-")) if run.path.name.startswith("run-") else 1
     entry = build_info.get("entry", "skill")
     if run.agent == "claude":
@@ -825,7 +1063,6 @@ def analyze(trace_path, principles):
         if environment.is_file():
             cwd = str(json.loads(environment.read_text()).get("cwd") or "")
         trace = parse_codex(lines, tree, cwd if cwd.startswith("/") else "")
-    harvest = harvest_dir(run.path)
     if harvest and (harvest / "transcripts").is_dir():
         attach_transcripts(trace, run.agent, harvest / "transcripts", tree, lines)
     output = run.path / "output.md"
@@ -840,8 +1077,9 @@ def analyze(trace_path, principles):
         "workspace": workspace,
         "injected": injected,
     }
+    skill_names = {path.split("/")[0] for path in files if path.count("/") == 1 and path.endswith("/SKILL.md")}
     record.update(stages(trace, case=run.case, owner=rule_owner(run.rule, build_info, run.arm), injected=injected,
-                         playbook_texts=playbook_texts, principles=principles, workspace=workspace))
+                         playbook_texts=playbook_texts, principles=principles, workspace=workspace, skill_names=skill_names))
     return record
 
 
@@ -851,10 +1089,25 @@ def walk(roots):
             yield from sorted(path for path in root.rglob("trace.jsonl") if "with_skill" in path.parts)
 
 
-def rate(rows, test):
+def rate(rows, test, fraction=False):
+    """hits/runs, or for a fraction stage the mean over runs that have one."""
     counted = [row for row in rows if test(row) is not None]
-    hits = sum(bool(test(row)) for row in counted)
-    return f"{hits}/{len(counted)}" if counted else "n/a"
+    if not counted:
+        return "n/a"
+    if fraction:
+        return f"{sum(test(row) for row in counted) / len(counted):.2f} over {len(counted)}"
+    return f"{sum(bool(test(row)) for row in counted)}/{len(counted)}"
+
+
+def role_census(rows):
+    """{role: role_census counts summed over rows}."""
+    total = {}
+    for row in rows:
+        for role, counts in row["role_census"].items():
+            into = total.setdefault(role, dict.fromkeys(counts, 0))
+            for key, value in counts.items():
+                into[key] += value
+    return dict(sorted(total.items()))
 
 
 STAGES = {
@@ -862,10 +1115,11 @@ STAGES = {
     "one playbook, the expected one": lambda row: row["playbook_matched"] if row["playbook_expected"] not in (None, "unknown") else None,
     "any playbook read": lambda row: bool(row["playbook_read"]),
     "worklist tool offered": lambda row: row["worklist"]["tool_offered"],
-    "worklist tool called": lambda row: row["worklist"]["tool_called"],
-    "worklist in message text": lambda row: row["worklist"]["text_list"],
-    "worklist half verbatim or more": lambda row: None if row["worklist"]["verbatim_fraction"] is None else row["worklist"]["verbatim_fraction"] >= 0.5,
-    "worklist echoes half the steps' opening words": lambda row: None if row["worklist"]["echoed_fraction"] is None else row["worklist"]["echoed_fraction"] >= 0.5,
+    "worklist carried by a tool": lambda row: row["worklist"]["carrier"] == "tool",
+    "worklist carried in messages": lambda row: row["worklist"]["carrier"] == "message",
+    "worklist present via a valid carrier": lambda row: row["worklist"]["valid_carrier"],
+    "every playbook step listed": lambda row: None if row["worklist"]["steps_total"] is None else row["worklist"]["steps_listed"] == row["worklist"]["steps_total"],
+    "step pointers preserved (fraction)": lambda row: row["worklist"]["pointer_fraction"],
     "owner file read or injected": lambda row: row["owner_read"],
     "owner read in full": lambda row: row["owner_read_full"],
     "owner read before first edit": lambda row: row["leaf_before_first_edit"],
@@ -873,13 +1127,15 @@ STAGES = {
     "brief says data shape or names a principle": lambda row: row["delegation"]["brief_names_shape"],
     "cited any principle": lambda row: bool(row["citations"]["cited"]),
     "cited only read leaves": lambda row: row["citations"]["only_read"],
-    "lead called a worklist tool, unless none was offered": lambda row: None if row["worklist_tool"]["offered"] is False else row["worklist_tool"]["called"],
-    "delegate got the poteto-agent briefing": lambda row: row["delegate_persona"]["with_persona"] == row["delegate_persona"]["spawns"] if row["delegate_persona"]["spawns"] else None,
-    "code-writing delegate ran as poteto-agent": lambda row: (
-        row["code_writing_delegate_persona"]["with_persona"] == row["code_writing_delegate_persona"]["spawns"]
-        if row["code_writing_delegate_persona"]["spawns"] else None
+    "delegate outside a routed skill got the poteto-agent briefing": lambda row: (
+        row["helper_persona"]["with_persona"] == row["helper_persona"]["spawns"] if row["helper_persona"]["spawns"] else None
+    ),
+    "implementation delegate ran as poteto-agent": lambda row: (
+        row["implementation_delegate_persona"]["with_persona"] == row["implementation_delegate_persona"]["spawns"]
+        if row["implementation_delegate_persona"]["spawns"] else None
     ),
 }
+FRACTION_STAGES = {"step pointers preserved (fraction)"}
 
 
 def markdown(rows):
@@ -891,14 +1147,22 @@ def markdown(rows):
     out = ["| stage | " + " | ".join(agents) + " |", "|---|" + "---|" * len(agents)]
     out.append("| runs | " + " | ".join(str(sum(row["agent"] == agent for row in rows)) for agent in agents) + " |")
     for name, test in STAGES.items():
-        out.append(f"| {name} | " + " | ".join(rate([row for row in rows if row["agent"] == agent], test) for agent in agents) + " |")
+        out.append(f"| {name} | " + " | ".join(rate([row for row in rows if row["agent"] == agent], test, name in FRACTION_STAGES) for agent in agents) + " |")
+    out += ["", f"{skipped} single-skill entry run(s) left out.", "", "Delegates per role. Prescribed means a routed skill gives the role; "
+            "an implementation miss is a code-writing delegate outside a routed skill that did not run as poteto-agent.", ""]
+    for agent in agents:
+        census = role_census([row for row in rows if row["agent"] == agent])
+        out += [f"{agent}", "", "| role | spawns | code-writing | prescribed | poteto-agent | implementation misses |", "|---|---|---|---|---|---|"]
+        out += [f"| {role} | {counts['spawns']} | {counts['code_writing']} | {counts['prescribed']} | {counts['persona']} | {counts['implementation_misses']} |"
+                for role, counts in census.items()]
+        out.append("")
     workspace = [row for row in rows if row["workspace"] and row["verdict"] in ("PASS", "FAIL")]
-    out += ["", f"{skipped} single-skill entry run(s) left out.", "", "Workspace cases, graded runs only. Each cell is stage hits over runs with that verdict.", ""]
+    out += ["Workspace cases, graded runs only. Each cell is stage hits over runs with that verdict.", ""]
     for agent in agents:
         mine = [row for row in workspace if row["agent"] == agent]
         out += [f"{agent} ({len(mine)} runs)", "", "| stage | PASS | FAIL |", "|---|---|---|"]
         for name, test in STAGES.items():
-            out.append(f"| {name} | " + " | ".join(rate([row for row in mine if row["verdict"] == verdict], test) for verdict in ("PASS", "FAIL")) + " |")
+            out.append(f"| {name} | " + " | ".join(rate([row for row in mine if row["verdict"] == verdict], test, name in FRACTION_STAGES) for verdict in ("PASS", "FAIL")) + " |")
         out.append("")
     return "\n".join(out)
 

@@ -11,7 +11,8 @@ install does, links the project's test dependencies from a pinned template,
 runs the agent with every tool and no permission prompts inside the sandbox,
 and copies the workspace diff, the agent's session transcripts (every
 delegate's included), and the sandbox's network log back out. The sandbox is
-removed when the run ends.
+removed when the run ends. A Claude run's stream reaches the harness with only
+its last result event, and its full stream is kept as raw-stream.jsonl.
 
   sandbox.py deps --agent A --repo R [--commit C]       build the dependency template for R at C
   sandbox.py probe --agent A [--repo R --commit C]      list the tools a run offers, at no model cost
@@ -87,9 +88,9 @@ class Sandbox:
         sbx(*args, kit, *([path] if path is not None else []))
         return cls(name)
 
-    def exec(self, *argv, workdir=None, env=None, input=None, capture=True, check=True, user=None):
+    def exec_args(self, argv, workdir=None, env=None, interactive=False, user=None):
         args = ["exec"]
-        if input is not None:
+        if interactive:
             args.append("-i")
         if workdir:
             args += ["-w", workdir]
@@ -97,7 +98,16 @@ class Sandbox:
             args += ["-u", user]
         for key, value in (env or {}).items():
             args += ["-e", f"{key}={value}"]
-        return sbx(*args, self.name, *argv, input=input, capture=capture, check=check)
+        return [*args, self.name, *argv]
+
+    def exec(self, *argv, workdir=None, env=None, input=None, capture=True, check=True, user=None):
+        return sbx(*self.exec_args(argv, workdir, env, input is not None, user), input=input, capture=capture, check=check)
+
+    def exec_stdout(self, *argv, workdir=None, env=None, stdin=None):
+        """Run argv with stdin from an open file and stderr passed through.
+        Returns the Popen; the caller reads its stdout line by line."""
+        return subprocess.Popen(["sbx", *map(str, self.exec_args(argv, workdir, env, stdin is not None))],
+                                stdin=stdin if stdin is not None else subprocess.DEVNULL, stdout=subprocess.PIPE)
 
     def put(self, local, remote):
         sbx("cp", local, f"{self.name}:{remote}")
@@ -294,6 +304,54 @@ def agent_command(agent, argv):
     return [*rewritten, *CODEX_FLAGS], last_message
 
 
+def is_result(line):
+    try:
+        event = json.loads(line)
+    except ValueError:
+        return False
+    return isinstance(event, dict) and event.get("type") == "result"
+
+
+def last_result_only(lines):
+    """The lines in order, without every result event but the last. The
+    harness takes exactly one result from a Claude stream, and a lead that
+    waits on a background delegate ends a turn, with a result, each time."""
+    held = []
+    for line in lines:
+        if is_result(line):
+            yield from held[1:]
+            held = [line]
+        elif held:
+            held.append(line)
+        else:
+            yield line
+    yield from held
+
+
+def stream_claude(box, command, prompt_path, raw_path, out, **options):
+    """Run Claude in the sandbox, keep its whole stream in raw_path, and write
+    the stream with one result event to out. Returns the exit code."""
+    with open(prompt_path, "rb") as stdin, open(raw_path, "wb") as raw:
+        proc = box.exec_stdout(*command, stdin=stdin, **options)
+
+        def lines():
+            for line in proc.stdout:
+                raw.write(line)
+                yield line
+
+        try:
+            for line in last_result_only(lines()):
+                out.write(line)
+                out.flush()
+            return proc.wait()
+        except BaseException:
+            proc.kill()
+            proc.wait()
+            raise
+        finally:
+            proc.stdout.close()
+
+
 def pack(directory, files):
     """A tar of {archive path: local path or bytes}."""
     target = Path(directory) / f"payload-{secrets.token_hex(4)}.tar"
@@ -401,9 +459,15 @@ def wrap(argv, stdin=sys.stdin.buffer):
             env = inside["deps"]["env"] if inside["deps"] else {}
             record["command"] = command
             record["prompt_bytes"] = len(prompt)
+            timed_command = ("timeout", "--kill-after=30", str(max(budget, 60)), *command)
             with timed(timings, "agent_s"):
-                record["agent_rc"] = box.exec("timeout", "--kill-after=30", str(max(budget, 60)), *command,
-                                              workdir=str(root), env=env, input=prompt, capture=False, check=False).returncode
+                if agent == "claude":
+                    prompt_path = Path(directory) / "prompt.txt"
+                    prompt_path.write_bytes(prompt)
+                    record["agent_rc"] = stream_claude(box, timed_command, prompt_path, slot / "raw-stream.jsonl", sys.stdout.buffer,
+                                                       workdir=str(root), env=env)
+                else:
+                    record["agent_rc"] = box.exec(*timed_command, workdir=str(root), env=env, input=prompt, capture=False, check=False).returncode
             if os.environ.get("CANON_SBX_STANDIN"):
                 box.exec("rm", "-rf", STANDIN)
             with timed(timings, "harvest_s"):

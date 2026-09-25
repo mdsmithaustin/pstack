@@ -42,6 +42,13 @@ prompt. Its oracle grades the diff the agent left on that checkout.
   screen.py audit [--entry E] [RULE ...]               model-free: build, validate, audit, prepare
   screen.py run --agent claude|codex --out DIR [--entry E] [--runner host|sbx] [RULE ...]   paid: answer, grade, compare
   screen.py compare --out DIR                          print paired verdicts with exposure
+  screen.py regrade --out DIR                          grade workspace runs again from their diffs, then compare
+
+regrade runs each workspace case's oracle, from the arm's grader copy, on every
+harvested run's diff and output.md (empty when missing). It writes regrade.json
+beside each grade.json, which it leaves as is, and compare prefers regrade.json
+when present. A run the harness called INVALID and regrade graded carries
+graded_from_diff. Pasted-project cases keep the harness grade.
 """
 import argparse
 import dataclasses
@@ -196,12 +203,16 @@ def harness(*arguments, env=None):
     subprocess.run(command, check=True, env=env)
 
 
-def oracle_checks(rule_id):
+def load_check(rules=None):
     spec = importlib.util.spec_from_file_location("canon_check", CANON / "oracles" / "check.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    module.RULES = RULES
-    return module.load_oracle(rule_id)
+    module.RULES = rules or RULES
+    return module
+
+
+def oracle_checks(rule_id):
+    return load_check().load_oracle(rule_id)
 
 
 def load_case(rule_id, root):
@@ -1004,6 +1015,44 @@ def rule_verdict(outcomes):
     return ("separates" if not reasons else "not-separated"), reasons
 
 
+def regrade_run(check, rule, case, run_base):
+    """(verdict, reasons) from the oracle on a run's harvested diff and its
+    answer, empty when output.md is missing. None when no diff was harvested."""
+    try:
+        project = check.load_workspace(rule, case, run_base)
+    except check.OracleError:
+        return None
+    output = Path(run_base) / "output.md"
+    answer = output.read_text(encoding="utf-8") if output.is_file() else ""
+    try:
+        failures = check.load_oracle(rule)[case](answer, project)
+    except check.OracleError as exc:
+        failures = [str(exc)]
+    return ("FAIL" if failures else "PASS"), "; ".join(failures)
+
+
+def regrade(out):
+    """Grade every run of every workspace case again from its diff, into
+    regrade.json beside grade.json, then compare. The oracle and checkout are
+    the arm's grader copy, as the harness used. A run the harness called
+    INVALID is marked graded_from_diff."""
+    for grade in sorted(out.glob("*/*/*/*/grade.json")):
+        agent, rule, case, arm = grade.parent.relative_to(out).parts
+        build_info = json.loads((out / "arms" / rule / "build.json").read_text())
+        if "workspace" not in build_info["cases"][case]:
+            continue
+        check = load_check(out / "arms" / rule / case / arm / "rules")
+        rows = []
+        for result in json.loads(grade.read_text())["results"]:
+            regraded = regrade_run(check, rule, case, result["run_base"])
+            if regraded is None:
+                continue
+            rows.append({"run": result.get("run_number"), "verdict": regraded[0], "reasons": regraded[1],
+                         "graded_from_diff": verdict(result)[0] == "INVALID"})
+        (grade.parent / "regrade.json").write_text(json.dumps({"results": rows}, indent=2) + "\n")
+    compare(out)
+
+
 def compare(out):
     if not any(out.glob("*/*/*/*/grade.json")) and any(out.glob("*/*/*/grade.json")):
         raise ScreenError(f"{out} was made before rules had cases; its compare.json is final and plan reads it")
@@ -1014,16 +1063,24 @@ def compare(out):
         tree_root = out / "arms" / rule / case / arm / build_info["tree_dir"]
         tree_files = sorted(path.relative_to(tree_root).as_posix() for path in tree_root.rglob("*.md"))
         companions = set(build_info.get("companions", {}).get("trees", {}))
+        regraded_path = grade.with_name("regrade.json")
+        regraded = {row["run"]: row for row in json.loads(regraded_path.read_text())["results"]} if regraded_path.is_file() else {}
         for result in json.loads(grade.read_text())["results"]:
             status, reasons = verdict(result)
             seen = exposure(result, tree_files)
             if companions:
                 seen["companions_read"] = sorted({path.split("/", 1)[0] for path in seen["read"]} & companions)
-            table.append({
+            row = {
                 "agent": agent, "rule": rule, "case": case, "kind": build_info["cases"][case]["kind"], "arm": arm,
                 "run": result.get("run_number"), "entry": build_info["entry"], "target": build_info["target"],
                 "verdict": status, "reasons": reasons, "exposure": seen,
-            })
+            }
+            again = regraded.get(result.get("run_number"))
+            if again:
+                row.update(verdict=again["verdict"], reasons=again["reasons"])
+                if again["graded_from_diff"]:
+                    row["graded_from_diff"] = True
+            table.append(row)
     pairs = {}
     for row in table:
         pairs.setdefault((row["agent"], row["rule"], row["run"], row["case"]), {})[row["arm"]] = row
@@ -1062,6 +1119,8 @@ def compare(out):
             if "companions_read" in row["exposure"]:
                 companion_state = f"; companion {', '.join(row['exposure']['companions_read']) or 'none'} read"
             print(f"    {arm}: {target_state}entry {entry_state}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
+            if row.get("graded_from_diff"):
+                print(f"    {arm}: graded from the diff; the harness found no gradable answer")
             if row["reasons"]:
                 print(f"    {arm}: {row['reasons']}")
         if not paired:
@@ -1176,6 +1235,8 @@ def main(argv=None):
     p.add_argument("rules", nargs="*")
     p = sub.add_parser("compare")
     p.add_argument("--out", type=Path, required=True)
+    p = sub.add_parser("regrade")
+    p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "plan":
@@ -1186,6 +1247,8 @@ def main(argv=None):
             audit(load_rules(args.rules), args.entry)
         elif args.command == "run":
             run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner)
+        elif args.command == "regrade":
+            regrade(args.out.resolve())
         else:
             compare(args.out.resolve())
     except (ScreenError, workspace.WorkspaceError, subprocess.CalledProcessError) as exc:

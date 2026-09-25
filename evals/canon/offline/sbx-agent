@@ -15,7 +15,8 @@ poteto-agent persona is registered, 5 unless the flags give it full tools in
 the sandbox, and 6 unless its cwd is the pinned clone. Then it applies the
 sample diff, prints a trace in the agent's own format with one worklist call
 and one poteto-agent spawn, and writes session transcripts for the lead and
-the delegate where the agent keeps them.
+the delegate where the agent keeps them. Claude's trace ends two turns with a
+result event, the first while it waits on the delegate, as a lead does.
 """
 import json
 import os
@@ -81,6 +82,10 @@ def claude(plan_data, argv, prompt):
              "parent_tool_use_id": None, "session_id": session},
         ]
 
+    def result(text):
+        return {"type": "result", "subtype": "success", "is_error": False, "result": text, "session_id": session,
+                "total_cost_usd": 0, "usage": {"input_tokens": 0, "output_tokens": 0}}
+
     records = [
         {"type": "system", "subtype": "init", "cwd": cwd, "session_id": session, "permissionMode": "bypassPermissions",
          "tools": ["Task", "Bash", "Edit", "Read", "TaskCreate", "TaskUpdate", "TaskList", "Write"],
@@ -89,13 +94,15 @@ def claude(plan_data, argv, prompt):
         *[record for index, path in enumerate(plan_data["reads"])
           for record in call(f"toolu_standin_read{index}", "Read", {"file_path": f"{cwd}/{discovery}/{path}"})],
         *call(spawn, "Task", {"subagent_type": "poteto-agent", "description": "Build", "prompt": brief}),
-        {"type": "result", "subtype": "success", "is_error": False, "result": plan_data["answer"], "session_id": session,
-         "total_cost_usd": 0, "usage": {"input_tokens": 0, "output_tokens": 0}},
+        result("Waiting on the delegate."),
+        {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "The delegate finished."}]},
+         "parent_tool_use_id": None, "session_id": session},
+        result(plan_data["answer"]),
     ]
     subprocess.run(["git", "apply", "--binary", "-"], input=plan_data["diff"].encode(), check=True)
     project = Path.home() / ".claude" / "projects" / cwd.replace("/", "-").replace(".", "-")
     (project / session / "subagents").mkdir(parents=True, exist_ok=True)
-    (project / f"{session}.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records[1:-1]))
+    (project / f"{session}.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records[1:] if record["type"] != "result"))
     child = [
         {"type": "user", "isSidechain": True, "agentId": "astandin", "sessionId": session, "cwd": cwd, "message": {"role": "user", "content": brief}},
         {"type": "assistant", "isSidechain": True, "agentId": "astandin", "sessionId": session, "cwd": cwd, "message": {"role": "assistant", "content": [

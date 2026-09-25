@@ -357,6 +357,74 @@ class WorkspaceBuildTests(ShopRule):
                     self.assertEqual(check.grade("orders-workspace", "orders-amend", sample, workspace=Workspace(checkout, diff)), expected)
 
 
+class RegradeTests(ShopRule):
+    """A finished codex run of the shop rule, written by hand in the shape the
+    harness leaves: grade.json per arm, runs/<case>/with_skill/run-N, harvest beside."""
+
+    def finish(self, arm, runs):
+        work = self.out / "codex" / "orders-workspace" / "orders-amend" / arm
+        results = []
+        for number, (harness_verdict, answer, diff) in enumerate(runs, 1):
+            run_base = work / "runs" / "orders-amend" / "with_skill" / f"run-{number}"
+            run_base.mkdir(parents=True)
+            (run_base / "events.json").write_text(json.dumps({"events": [
+                {"type": "file_read", "status": "completed", "input_summary": f"skills/pstack/{self.rule.target}"}]}))
+            if answer is not None:
+                (run_base / "output.md").write_text(answer)
+            if diff is not None:
+                harvest = work / "harvest" / "orders-amend" / "with_skill" / f"run-{number}"
+                harvest.mkdir(parents=True)
+                (harvest / "workspace.diff").write_text(diff)
+            result = {"run_number": number, "run_base": str(run_base), "missing_output": answer is None, "execution_valid": answer is not None}
+            if harness_verdict != "INVALID":
+                evidence = "PASS\n" if harness_verdict == "PASS" else "".join(f"FAIL: {failure}\n" for failure in FAILURES_OF_BAD)
+                result["assertions"] = [{"name": "rule-behavior", "passed": harness_verdict == "PASS", "evidence": evidence}]
+            results.append(result)
+        (work / "grade.json").write_text(json.dumps({"results": results}))
+        return work / "grade.json"
+
+    def test_invalid_run_whose_diff_passes_is_graded_pass_from_the_diff(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            screen.build(self.out, [self.rule], "poteto-mode")
+        self.finish("current", [("FAIL", "Done.\n", BAD_DIFF), ("FAIL", "Done.\n", BAD_DIFF)])
+        amended = self.finish("amended", [("INVALID", None, GOOD_DIFF), ("INVALID", None, None)])
+        graded = amended.read_text()
+
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            self.assertEqual(screen.main(["regrade", "--out", str(self.out)]), 0)
+
+        compared = json.loads((self.out / "compare.json").read_text())
+        self.assertEqual([(row["arm"], row["run"], row["verdict"], row.get("graded_from_diff")) for row in compared["runs"]], [
+            ("amended", 1, "PASS", True),
+            ("amended", 2, "INVALID", None),
+            ("current", 1, "FAIL", None),
+            ("current", 2, "FAIL", None),
+        ])
+        self.assertEqual([(pair["run"], pair["outcome"]) for pair in compared["pairs"]], [(1, "separates"), (2, "invalid")])
+        self.assertEqual(compared["runs"][2]["reasons"], "; ".join(FAILURES_OF_BAD))
+        self.assertEqual(json.loads(amended.with_name("regrade.json").read_text()),
+                         {"results": [{"run": 1, "verdict": "PASS", "reasons": "", "graded_from_diff": True}]})
+        self.assertEqual(amended.read_text(), graded)
+        self.assertIn("amended: graded from the diff; the harness found no gradable answer", printed.getvalue())
+
+    def test_pasted_project_cases_keep_the_harness_grade(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            screen.build(self.out, [self.rule], "poteto-mode")
+        build_json = self.out / "arms" / "orders-workspace" / "build.json"
+        built = json.loads(build_json.read_text())
+        del built["cases"]["orders-amend"]["workspace"]
+        build_json.write_text(json.dumps(built))
+        current = self.finish("current", [("FAIL", "Done.\n", BAD_DIFF)])
+        self.finish("amended", [("INVALID", None, GOOD_DIFF)])
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            screen.regrade(self.out)
+
+        compared = json.loads((self.out / "compare.json").read_text())
+        self.assertEqual([(row["arm"], row["verdict"]) for row in compared["runs"]], [("amended", "INVALID"), ("current", "FAIL")])
+        self.assertFalse(current.with_name("regrade.json").exists())
+
+
 def harness_available():
     return (screen.skill_ci() / "runner.lock").is_file() and shutil.which("uv") is not None
 

@@ -1,0 +1,8 @@
+{
+  "cases_from": "separate-contexts",
+  "arms": [
+    "current",
+    "pointer"
+  ],
+  "source": "poteto-mode Subagents section, moved to the point of use"
+}

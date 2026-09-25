@@ -69,8 +69,8 @@ class ClaudeTraceTests(unittest.TestCase):
         })
 
     def test_the_run_has_no_worklist_tool_to_call(self):
-        self.assertEqual(self.stages["worklist"], {
-            "tool_offered": False, "tool_called": False, "text_list": False, "verbatim_fraction": 0.0, "echoed_fraction": 0.0,
+        self.assertEqual({key: self.stages["worklist"][key] for key in ("tool_offered", "carrier", "valid_carrier", "steps_listed", "steps_total", "pointer_fraction")}, {
+            "tool_offered": False, "carrier": "none", "valid_carrier": False, "steps_listed": 0, "steps_total": 4, "pointer_fraction": None,
         })
 
     def test_the_slash_command_is_listed(self):
@@ -95,8 +95,8 @@ class CodexTraceTests(unittest.TestCase):
         ])
 
     def test_worklist_in_a_message_that_does_not_copy_the_steps(self):
-        self.assertEqual(self.stages["worklist"], {
-            "tool_offered": None, "tool_called": False, "text_list": True, "verbatim_fraction": 0.0, "echoed_fraction": 0.0,
+        self.assertEqual({key: self.stages["worklist"][key] for key in ("tool_offered", "carrier", "valid_carrier", "steps_listed", "verbatim_fraction")}, {
+            "tool_offered": None, "carrier": "message", "valid_carrier": True, "steps_listed": 0, "verbatim_fraction": 0.0,
         })
 
     def test_a_wait_marks_delegation_without_a_visible_spawn(self):
@@ -249,13 +249,13 @@ class PrincipleIndexTests(unittest.TestCase):
         self.assertEqual((len(index), index["principle-model-the-domain"]), (23, "Model the Domain"))
 
 
-def make_run(directory, agent, fixture, transcripts=True):
+def make_run(directory, agent, fixture, transcripts=True, tree=TREE):
     """A screen.py --out dir around one fixture: a stub mounted tree, a
     build.json whose owner is the Feature playbook, the fixture's trace in the
     run dir, and its harvest in the parallel harvest tree."""
     out = Path(directory) / "out"
     arm = out / "arms" / "domain-words" / "session-tree" / "amended" / "skills"
-    for path in TREE:
+    for path in tree:
         (arm / path).parent.mkdir(parents=True, exist_ok=True)
         (arm / path).write_text(FEATURE if path.endswith("feature.md") else "line\n" * 10)
     (out / "arms" / "domain-words" / "build.json").write_text(json.dumps({
@@ -273,9 +273,9 @@ def make_run(directory, agent, fixture, transcripts=True):
     return run / "trace.jsonl"
 
 
-def analyze(fixture, agent, transcripts=True):
+def analyze(fixture, agent, transcripts=True, tree=TREE):
     with tempfile.TemporaryDirectory() as directory:
-        return chain.analyze(make_run(directory, agent, fixture, transcripts), PRINCIPLES)
+        return chain.analyze(make_run(directory, agent, fixture, transcripts, tree), PRINCIPLES)
 
 
 class ClaudeSandboxHarvestTests(unittest.TestCase):
@@ -405,41 +405,212 @@ class CodexDelegateFanOutTests(unittest.TestCase):
 
     def test_census_names_each_delegates_role_path_and_whether_it_writes_code(self):
         self.assertEqual(self.row["delegate_census"], [
-            {"role": "explorer", "path": "/root/how_harness_families", "code_writing": False, "persona": False},
-            {"role": "poteto-agent", "path": "/root/migrate_callers", "code_writing": True, "persona": True},
+            {"role": "explorer", "path": "/root/how_harness_families", "code_writing": False, "persona": False, "prescribed": "how explorer"},
+            {"role": "poteto-agent", "path": "/root/migrate_callers", "code_writing": True, "persona": True, "prescribed": None},
         ])
 
-    def test_only_the_code_writing_delegate_counts_toward_the_new_stage(self):
+    def test_only_the_code_writing_delegate_counts_toward_the_implementation_stage(self):
         self.assertEqual(self.row["delegate_persona"], {"spawns": 2, "with_persona": 1, "roles": ["explorer", "poteto-agent"]})
-        self.assertEqual(self.row["code_writing_delegate_persona"], {"spawns": 1, "with_persona": 1})
-        self.assertTrue(chain.STAGES["code-writing delegate ran as poteto-agent"](self.row))
+        self.assertEqual(self.row["implementation_delegate_persona"], {"spawns": 1, "with_persona": 1, "misses": []})
+        self.assertTrue(chain.STAGES["implementation delegate ran as poteto-agent"](self.row))
 
     def test_the_edit_is_attributed_to_the_delegate(self):
         self.assertEqual(self.row["delegate_edits"], ["/workspace/app/src/sessions/tree.py"])
 
 
-class CodeWritingDelegatePersonaStageTests(unittest.TestCase):
-    """The new stage in isolation, against synthetic Spawn census entries, so
-    each boundary (no code-writing delegate, one that is poteto-agent, one
-    that is not) has a literal expected value independent of any fixture."""
+class ImplementationDelegatePersonaStageTests(unittest.TestCase):
+    def stage(self, implementers):
+        row = {"implementation_delegate_persona": {"spawns": len(implementers), "with_persona": sum(implementers)}}
+        return chain.STAGES["implementation delegate ran as poteto-agent"](row)
 
-    def stage(self, code_writers):
-        row = {"code_writing_delegate_persona": {
-            "spawns": len(code_writers), "with_persona": sum(code_writers),
-        }}
-        return chain.STAGES["code-writing delegate ran as poteto-agent"](row)
-
-    def test_no_code_writing_delegate_is_not_measured(self):
+    def test_no_implementation_delegate_is_not_measured(self):
         self.assertIsNone(self.stage([]))
 
-    def test_a_code_writing_delegate_without_the_persona_fails(self):
+    def test_an_implementation_delegate_without_the_persona_fails(self):
         self.assertFalse(self.stage([False]))
 
-    def test_every_code_writing_delegate_with_the_persona_passes(self):
+    def test_every_implementation_delegate_with_the_persona_passes(self):
         self.assertTrue(self.stage([True, True]))
 
-    def test_one_of_two_code_writing_delegates_without_the_persona_fails(self):
+    def test_one_of_two_implementation_delegates_without_the_persona_fails(self):
         self.assertFalse(self.stage([True, False]))
+
+
+class PrescribedRoleTests(unittest.TestCase):
+    def test_comment_sicko_by_role_in_either_spelling(self):
+        self.assertEqual((chain.prescribed_by("comment-sicko", ""), chain.prescribed_by("Comment Sicko", "")),
+                         ("no-comments comment-sicko", "no-comments comment-sicko"))
+
+    def test_comment_sicko_briefing_pasted_into_a_generic_role(self):
+        brief = "# Comment Sicko\n\nMy first output when spawned is exactly this.\n\nYes... Ha ha ha... Yes!"
+
+        self.assertEqual(chain.prescribed_by("general-purpose", brief), "no-comments comment-sicko")
+
+    def test_a_how_explorer_brief_built_from_its_template(self):
+        brief = ("You are exploring a codebase to understand how something works. Gather facts.\n\n"
+                 "## Question\n\nHow do harness families resolve?")
+
+        self.assertEqual(chain.prescribed_by("general-purpose", brief), "how explorer")
+
+    def test_a_delegate_that_read_the_architect_runner_prompt(self):
+        self.assertEqual(chain.prescribed_by("default", "", "/root/design_a", {"architect/references/runner-prompt.md"}), "architect runner")
+
+    def test_an_agent_path_that_names_the_routed_skill(self):
+        self.assertEqual((chain.prescribed_by("default", "", "/root/how_harness_family"), chain.prescribed_by("default", "", "/root/showcase")),
+                         ("how explorer", None))
+
+    def test_an_arena_runner_named_in_its_brief(self):
+        self.assertEqual(chain.prescribed_by("general-purpose", "You are arena runner 2 of 3. Write candidate B."), "arena runner")
+
+    def test_a_generic_implementation_brief_is_not_prescribed(self):
+        self.assertIsNone(chain.prescribed_by("worker", "Implement the consumer migration in omnigent/providers.py.", "/root/consumer_migration"))
+
+
+class CodexRolesHarvestTests(unittest.TestCase):
+    """Trimmed real files from the Codex harness-families leaf run
+    (codex-bundle-separate-contexts-harness-harness-families-r2, run 1).
+    Codex 0.157 encrypts every spawn brief, so each child's role comes from
+    its session_meta, its agent path, and its own reads. how_harness_family
+    is a default explorer, design_table a default architect runner that read
+    the runner prompt, consumer_migration a worker that edits source, and
+    comment_review a Comment Sicko that edits comments."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-roles", "codex", tree={**TREE, "architect/references/runner-prompt.md": 10})
+
+    def test_census_names_the_routed_role_of_each_delegate(self):
+        self.assertEqual([(entry["role"], entry["path"], entry["code_writing"], entry["prescribed"]) for entry in self.row["delegate_census"]], [
+            ("default", "/root/how_harness_family", False, "how explorer"),
+            ("default", "/root/design_table", False, "architect runner"),
+            ("worker", "/root/consumer_migration", True, None),
+            ("comment-sicko", "/root/comment_review", True, "no-comments comment-sicko"),
+        ])
+
+    def test_the_generic_worker_is_the_one_implementation_miss(self):
+        self.assertEqual(self.row["implementation_delegate_persona"], {"spawns": 1, "with_persona": 0, "misses": ["worker"]})
+        self.assertFalse(chain.STAGES["implementation delegate ran as poteto-agent"](self.row))
+
+    def test_role_census(self):
+        self.assertEqual(self.row["role_census"], {
+            "default": {"spawns": 2, "code_writing": 0, "prescribed": 2, "persona": 0, "implementation_misses": 0},
+            "worker": {"spawns": 1, "code_writing": 1, "prescribed": 0, "persona": 0, "implementation_misses": 1},
+            "comment-sicko": {"spawns": 1, "code_writing": 1, "prescribed": 1, "persona": 0, "implementation_misses": 0},
+        })
+
+    def test_an_encrypted_brief_is_no_brief(self):
+        self.assertIsNone(self.row["delegation"]["brief_names_shape"])
+
+
+SKILLS = chain.screen.REPO / "skills"
+SKILL_NAMES = {path.parent.name for path in SKILLS.glob("*/SKILL.md")}
+PLAYBOOKS = {name: (SKILLS / "poteto-mode" / "playbooks" / f"{name}.md").read_text() for name in ("feature", "refactoring")}
+
+
+def shipped_stages(trace, case, owner):
+    return chain.stages(trace, case=case, owner=owner, injected=True, playbook_texts=PLAYBOOKS,
+                        principles=PRINCIPLES, workspace=True, skill_names=SKILL_NAMES)
+
+
+class StepSpecTests(unittest.TestCase):
+    def test_refactoring_steps_keep_a_five_word_identity_and_every_pointer(self):
+        self.assertEqual([(step.identity, step.pointers) for step in chain.step_specs(PLAYBOOKS["refactoring"], SKILL_NAMES)], [
+            ("pin the behavior contract first", ("how",)),
+            ("name the structure the code", ("principle-model-the-domain",)),
+            ("name the target shape", ("principle-foundational-thinking", "principle-redesign-from-first-principles", "architect")),
+            ("subtract before you add", ("principle-subtract-before-you-add", "principle-laziness-protocol")),
+            ("move in small behavior-preserving steps", ("principle-migrate-callers-then-delete-legacy-apis",)),
+            ("prove behavior is unchanged on", ("principle-prove-it-works",)),
+            ("confirm the change is worth", ("principle-minimize-reader-load",)),
+            ("rebase into small ordered commits", ("sequence-verifiable-units",)),
+        ])
+
+    def test_a_pointer_on_an_indented_line_belongs_to_its_step_and_a_non_skill_is_no_pointer(self):
+        text = "1. Delegate with `sonnet` per **pstack-harness**.\n   - Split per the **separate-before-serializing-shared-state** principle skill.\n2. Run **Opening a PR**.\n"
+
+        self.assertEqual(chain.step_specs(text, SKILL_NAMES), [
+            chain.Step("delegate with sonnet per pstack-harness", ("pstack-harness", "separate-before-serializing-shared-state")),
+            chain.Step("run opening a pr", ()),
+        ])
+
+    def test_message_items_join_continuation_lines(self):
+        self.assertEqual(chain.message_items("Worklist:\n\n1. Pin it.\n   Then test.\n- Ship.\n"), ["Pin it. Then test.", "Ship."])
+
+    def test_a_code_mode_update_plan_call_lists_its_steps(self):
+        self.assertEqual(chain.exec_plan_text('await tools.update_plan({plan: [{step: "Pin the behavior", status: "pending"}, {"step": \'Name the shape\'}]});'),
+                         "Pin the behavior\nName the shape")
+
+
+class ClaudeMultiResultTests(unittest.TestCase):
+    """A trimmed real Claude sandbox run (claude-bundle-one-name-tags-
+    sessions-by-tag-r3, leaf, run 2). The lead ended two turns while its
+    delegates ran in the background, so the stream holds three result
+    events, the last being the answer. Nine TaskCreate calls carry the
+    Feature steps, reworded in places."""
+
+    def setUp(self):
+        self.lines = (FIXTURES / "claude-multi-result.jsonl").read_text().splitlines()
+        self.trace = chain.parse_claude(self.lines, TREE)
+
+    def test_the_last_result_is_the_answer(self):
+        self.assertEqual((self.trace.result_events, self.trace.final[:60]),
+                         (3, "You can now list sessions by label, for example everything w"))
+
+    def test_task_create_carries_seven_of_eight_steps_and_three_of_eight_pointers(self):
+        worklist = shipped_stages(self.trace, "sessions-by-tag", "poteto-mode/playbooks/feature.md")["worklist"]
+
+        self.assertEqual({key: worklist[key] for key in ("tool_offered", "carrier", "valid_carrier", "steps_listed", "steps_total", "pointer_fraction")}, {
+            "tool_offered": True, "carrier": "tool", "valid_carrier": True, "steps_listed": 7, "steps_total": 8, "pointer_fraction": 0.38,
+        })
+        self.assertEqual([(step["listed"], step["kept"]) for step in worklist["steps"]], [
+            (True, ["how"]), (True, ["architect"]), (False, []), (True, []), (True, []), (True, []), (True, ["interrogate"]), (True, []),
+        ])
+
+    def test_a_harvested_raw_stream_is_read_in_place_of_the_harness_trace(self):
+        filtered = [line for line in self.lines if json.loads(line)["type"] != "result"] + [self.lines[-1]]
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "claude", "sbx-claude", transcripts=False)
+            trace_path.write_text("\n".join(filtered) + "\n")
+            alone = chain.analyze(trace_path, PRINCIPLES)
+            (trace_path.parents[3] / "harvest" / "session-tree" / "with_skill" / "raw-stream.jsonl").write_text("\n".join(self.lines) + "\n")
+            raw = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual((alone["result_events"], raw["result_events"]), (1, 3))
+
+
+class CodexMessageWorklistTests(unittest.TestCase):
+    """The same Codex run's lead: it reads the Refactoring playbook and posts
+    its eight steps, verbatim, as a numbered message."""
+
+    def test_every_step_and_every_pointer_is_kept(self):
+        trace = chain.parse_codex((FIXTURES / "sbx-codex-roles" / "run" / "trace.jsonl").read_text().splitlines(), TREE)
+        worklist = shipped_stages(trace, "harness-families", "poteto-mode/playbooks/refactoring.md")["worklist"]
+
+        self.assertEqual({key: worklist[key] for key in ("tool_offered", "carrier", "valid_carrier", "steps_listed", "steps_total", "pointer_fraction")}, {
+            "tool_offered": None, "carrier": "message", "valid_carrier": True, "steps_listed": 8, "steps_total": 8, "pointer_fraction": 1.0,
+        })
+
+
+class WorklistCarrierTests(unittest.TestCase):
+    def worklist(self, offered, events):
+        trace = chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md"), *events], worklist_tool_offered=offered)
+        return run_stages(trace)["worklist"]
+
+    def test_a_message_list_is_invalid_when_a_tool_was_offered(self):
+        self.assertFalse(self.worklist(True, [chain.Event(1, "main", "message", text="Worklist:\n1. `how` over the affected subsystem")])["valid_carrier"])
+
+    def test_a_message_list_is_valid_after_the_tool_rejected_a_call(self):
+        worklist = self.worklist(True, [chain.Event(1, "main", "worklist-rejected", text="`how` over the affected subsystem"),
+                                        chain.Event(2, "main", "message", text="Worklist:\n1. `how` over the affected subsystem")])
+
+        self.assertEqual((worklist["carrier"], worklist["tool_rejected"], worklist["valid_carrier"], worklist["steps_listed"]), ("message", True, True, 1))
+
+    def test_a_message_that_names_two_steps_is_a_worklist_without_the_word(self):
+        worklist = self.worklist(None, [chain.Event(1, "main", "message", text="Plan:\n1. how over the affected subsystem\n2. architect for parallel design exploration")])
+
+        self.assertEqual((worklist["carrier"], worklist["valid_carrier"], worklist["steps_listed"]), ("message", True, 2))
+
+    def test_no_list_is_no_valid_carrier(self):
+        self.assertFalse(self.worklist(None, [])["valid_carrier"])
 
 
 class NoTranscriptsTests(unittest.TestCase):
@@ -479,7 +650,7 @@ class AttachTests(unittest.TestCase):
 
 class FixtureLinesAreRealJsonTests(unittest.TestCase):
     def test_every_fixture_line_parses(self):
-        for name in ("claude-trace.jsonl", "codex-trace.jsonl"):
+        for name in ("claude-trace.jsonl", "codex-trace.jsonl", "claude-multi-result.jsonl"):
             for line in (FIXTURES / name).read_text().splitlines():
                 json.loads(line)
 
@@ -489,7 +660,7 @@ class FixtureLinesAreRealJsonTests(unittest.TestCase):
             for line in path.read_text().splitlines():
                 json.loads(line)
 
-        self.assertEqual(len(paths), 10)
+        self.assertEqual(len(paths), 15)
 
 
 if __name__ == "__main__":

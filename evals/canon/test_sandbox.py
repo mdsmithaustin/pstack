@@ -50,6 +50,54 @@ class AgentCommandTests(unittest.TestCase):
         self.assertEqual(last_message, "/host/tmp/last.json")
 
 
+class ClaudeStreamTests(unittest.TestCase):
+    def test_every_result_but_the_last_is_dropped_and_the_rest_keep_their_order(self):
+        stream = [
+            b'{"type":"system","subtype":"init"}\n',
+            b'{"type":"assistant","message":"spawn"}\n',
+            b'{"type":"result","result":"Waiting on the delegate."}\n',
+            b'{"type":"assistant","message":"delegate done"}\n',
+            b'not json\n',
+            b'{"type":"result","result":"Final answer."}\n',
+            b'{"type":"system","subtype":"after"}\n',
+        ]
+
+        self.assertEqual(list(sandbox.last_result_only(stream)), [
+            b'{"type":"system","subtype":"init"}\n',
+            b'{"type":"assistant","message":"spawn"}\n',
+            b'{"type":"assistant","message":"delegate done"}\n',
+            b'not json\n',
+            b'{"type":"result","result":"Final answer."}\n',
+            b'{"type":"system","subtype":"after"}\n',
+        ])
+
+    def test_a_stream_with_one_result_passes_unchanged(self):
+        stream = [b'{"type":"assistant"}\n', b'{"type":"result","result":"ok"}\n', b'["result"]\n']
+
+        self.assertEqual(list(sandbox.last_result_only(stream)), stream)
+
+
+    def test_claude_run_keeps_the_raw_stream_and_forwards_one_result(self):
+        agent = ("import json, sys\n"
+                 "prompt = sys.stdin.read()\n"
+                 "print(json.dumps({'type': 'result', 'result': 'wait'}))\n"
+                 "print(json.dumps({'type': 'result', 'result': prompt}))\n"
+                 "sys.exit(7)\n")
+
+        class LocalBox:
+            def exec_stdout(self, *argv, stdin=None):
+                return subprocess.Popen([*argv], stdin=stdin, stdout=subprocess.PIPE)
+
+        with tempfile.TemporaryDirectory() as directory:
+            prompt, raw, out = Path(directory) / "prompt.txt", Path(directory) / "raw-stream.jsonl", io.BytesIO()
+            prompt.write_bytes(b"done")
+
+            code = sandbox.stream_claude(LocalBox(), [sys.executable, "-c", agent], prompt, raw, out)
+
+            self.assertEqual((code, out.getvalue()), (7, b'{"type": "result", "result": "done"}\n'))
+            self.assertEqual(raw.read_bytes(), b'{"type": "result", "result": "wait"}\n{"type": "result", "result": "done"}\n')
+
+
 class TemplateNameTests(unittest.TestCase):
     def test_deps_tag_names_agent_repo_and_commit_and_pins_the_config(self):
         tag = sandbox.deps_tag("codex", "omnigent", "02969a131c72d74c00c5800d8e82ae831f8ec5e5")
@@ -215,6 +263,12 @@ class SandboxedStandInRunTests(test_workspace.ShopRule):
             self.assertTrue(set(record["timings"]) >= {"create_s", "setup_s", "agent_s", "harvest_s", "destroy_s"})
             self.assertTrue(list(harvest.glob(transcript)), sorted(str(p) for p in harvest.rglob("*")))
             self.assertTrue((harvest / "network-log.json").is_file())
+            if agent == "claude":
+                raw = (harvest / "raw-stream.jsonl").read_bytes().splitlines()
+                self.assertEqual([json.loads(line)["result"] for line in raw if sandbox.is_result(line)][:1], ["Waiting on the delegate."])
+                self.assertEqual(sum(map(sandbox.is_result, raw)), 2)
+            else:
+                self.assertFalse((harvest / "raw-stream.jsonl").exists())
         self.assertNotIn(record["sandbox"], sandbox.sandboxes())
 
     def test_claude_stand_in_runs_in_a_sandbox_and_the_rule_separates(self):
