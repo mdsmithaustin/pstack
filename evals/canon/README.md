@@ -496,10 +496,42 @@ python3 evals/canon/chain.py --jsonl /tmp/chain.jsonl   # one JSON line per run
 ```
 
 It reads `/private/tmp/canon-entry`, `/private/tmp/canon-ws`, and
-`/private/tmp/canon-screen` unless given roots. Codex's stream shows waits on a
-delegate but no spawn or brief, and Claude's `-p` sessions offer no worklist
-tool. Those stages read "not visible" or zero because of the harness, not the
-agent.
+`/private/tmp/canon-screen` unless given roots. In those runs Codex's stream
+shows waits on a delegate but no spawn or brief, and Claude's `-p` sessions
+offer no worklist tool. Those stages read "not visible" or zero because of the
+harness, not the agent.
+
+A sandboxed run also harvests the agent's own transcripts next to its
+workspace diff, in `harvest/<run>/transcripts/`. Claude writes each delegate to
+`claude/<project>/<session>/subagents/agent-<id>.jsonl`, with a `.meta.json`
+naming its `agentType` and the lead's spawning `toolUseId`. Codex writes one
+rollout per thread under `codex/sessions/`. A child's `session_meta` names its
+`parent_thread_id` and `agent_role`. When those files exist, `chain.py` parses
+each delegate's reads, edits, spawns, worklist calls, and messages with actor
+`delegate`. It places them right after the spawn that started them, so every
+stage sees them. They fill `delegation.delegate_reads` and `delegate_edits`.
+Workspace edits are judged against the child's own cwd, which in a sandbox may
+sit under `/tmp`. A run without a `transcripts/` dir yields the same fields as
+before.
+
+Two stages use them:
+
+- `worklist_tool` gives `offered`, `called`, and `calls` for the lead. Claude's
+  init event says whether TodoWrite or TaskCreate was offered. Codex shows no
+  tool list, so `offered` stays `null` until the lead calls `update_plan`,
+  seen as a `todo_list` item or in the lead's rollout.
+- `delegate_persona` counts the lead's spawns whose delegate got the
+  poteto-agent briefing, with each spawn's role. A Claude spawn counts when it
+  names `poteto-agent` and the init event lists that agent, when the child's
+  meta says `poteto-agent`, or when the brief carries the persona body's first
+  line from `roles.json`. A Codex spawn counts when the child rollout's role is
+  `poteto-agent` or its first developer message is the installed-skill-paths
+  briefing. A Codex spawn's `collab_tool_call` prompt is its brief for the
+  data-shape stage.
+
+`fixtures/chain/sbx-codex/` holds trimmed files from a real Codex sandbox
+probe. `fixtures/chain/sbx-claude/` is synthetic, because no Claude sandbox run
+has completed yet.
 
 ## Reading the result
 
