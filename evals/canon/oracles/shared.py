@@ -140,3 +140,13 @@ def apply_diff(checkout, diff):
                 (stage / path).write_bytes(source.read_bytes())
         git_apply("--binary", "--whitespace=nowarn")
         return {path: (stage / path).read_bytes() if (stage / path).is_file() else None for path in paths}
+
+
+# A review case's oracle is a precheck on the review text: a verdict that the
+# review flagged the flaw, or flagged the decoy, counts only when the review
+# names the file or symbol the case is about. The judge decides the rest.
+def review_names(answer, location):
+    """Failures unless answer matches one of the location regexes."""
+    if any(re.search(pattern, answer, re.IGNORECASE) for pattern in location):
+        return []
+    return ["the review does not name the file or symbol under review"]

@@ -1,0 +1,74 @@
+From 34f59ac74127e6cc40b2a16bbe4683af742cfe3c Mon Sep 17 00:00:00 2001
+From: Dana Whitlock <dana.whitlock@example.com>
+Date: Fri, 25 Sep 2026 17:00:19 -0600
+Subject: [PATCH] docs(state): add a CONTEXT.md glossary for the session store
+
+Session, lineage, continuation, tip, branch and profile each had two or
+three names across hermes_state_*.py, the sessions CLI and the Desktop
+sidebar. Write down the one we use and the ones we don't, and point the
+root AGENTS.md at it.
+---
+ AGENTS.md  |  3 +++
+ CONTEXT.md | 36 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 39 insertions(+)
+ create mode 100644 CONTEXT.md
+
+diff --git a/AGENTS.md b/AGENTS.md
+index 53ffead645..8cc6f085b1 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -459,6 +459,9 @@ extract, not to regex around it.
+ | `gateway/platforms/` new adapter | `gateway/platforms/ADDING_A_PLATFORM.md` | Step-by-step adapter guide |
+ | profiles / multiplex / secret scope (any area) | `gateway/AGENTS.md` § Profile scope, `website/docs/user-guide/multi-profile-gateways.md` § What is isolated per profile | which execution points bind scope, what is isolated per profile |
+ 
++Session-store vocabulary (session, lineage, continuation, tip, branch, profile) lives in the
++root `CONTEXT.md`; name new code and help text with its terms.
++
+ Long-form background lives in `website/docs/developer-guide/` (agent-loop, prompt-assembly,
+ context-compression-and-caching, gateway-internals, tools-runtime, plugins/, cron-internals,
+ session-storage, ...). Workflow rules (PR/issue/review/salvage process) live in the
+diff --git a/CONTEXT.md b/CONTEXT.md
+new file mode 100644
+index 0000000000..4cc88aaa4e
+--- /dev/null
++++ b/CONTEXT.md
+@@ -0,0 +1,36 @@
++# Sessions
++
++The words hermes-agent uses for what `state.db` keeps about each run of the agent
++(`hermes_state.py` and its `hermes_state_*.py` siblings, `hermes sessions`, the
++Desktop sidebar). Use these terms in names, help text, and docs.
++
++## Language
++
++**Session**:
++One row in the `sessions` table with its own id. Compression ends a session and starts a new one.
++
++**Lineage**:
++The compression continuations of one session, in order from root to tip (`get_compression_lineage`).
++_Avoid_: chain, thread
++
++**Continuation**:
++A session whose parent ended with `end_reason='compression'`.
++
++**Tip**:
++The live, last session of a lineage (`get_compression_tip`).
++_Avoid_: head, latest
++
++**Branch**:
++A copy of a session that the user makes with `/branch` (`_branched_from` in `model_config`).
++It owns its own transcript and spend, and is not part of its source's lineage.
++_Avoid_: fork, clone
++
++**Profile**:
++One isolated `HERMES_HOME` with its own `state.db`.
++_Avoid_: workspace, account
++
++## Relationships
++
++- A **Lineage** holds one root **Session** and its **Continuations**.
++- A **Branch** is the root of a lineage of its own.
++- Every session belongs to exactly one **Profile**.
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,1 @@
+Could you review `consolidate-harness-family` against main before I merge it? It pulls the harness family lookups out of smart routing, subagent routing and skill sources into a new `omnigent/harness_family.py`. The description the author wrote is in pr-body.md. Just give me your review here; no need to commit, push, or run pre-commit.

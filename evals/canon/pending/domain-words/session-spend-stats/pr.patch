@@ -1,0 +1,295 @@
+From 27143cecbe04143ddf7ad90d674af66ec3ba3f8b Mon Sep 17 00:00:00 2001
+From: Tomasz Wierzbicki <tomasz.wierzbicki@example.com>
+Date: Fri, 25 Sep 2026 17:20:40 -0600
+Subject: [PATCH 1/2] feat(state): sum tokens and spend over a session's
+ compression chain
+
+Compression ends a session and starts a new row, so a long run's usage is
+split across every row it rotated through and no single row says what the
+run cost. chain_usage() walks get_compression_lineage() root to tip and
+sums the token and spend columns; any member of the chain gives the same
+totals, and a /branch copy stays out of its source's numbers.
+---
+ hermes_state_usage.py                  | 26 +++++++++++++
+ tests/hermes_state/test_chain_usage.py | 54 ++++++++++++++++++++++++++
+ 2 files changed, 80 insertions(+)
+ create mode 100644 tests/hermes_state/test_chain_usage.py
+
+diff --git a/hermes_state_usage.py b/hermes_state_usage.py
+index 06ea514c55..b95ef9c430 100644
+--- a/hermes_state_usage.py
++++ b/hermes_state_usage.py
+@@ -419,6 +419,32 @@ class SessionUsageMixin:
+         )
+         return {row["task"]: {k: row[k] for k in row.keys() if k != "task"} for row in rows}
+ 
++    def chain_usage(self, session_id: str) -> Dict[str, Any]:
++        """Tokens and spend summed over the compression chain ``session_id`` belongs to, root through
++        tip, whichever member is passed. Compression mints a new row mid-run, so one row only holds the
++        spend since the last split. A ``/branch`` copy is a chain of its own and never absorbs its
++        source's rows (``get_compression_lineage`` stops at it). Spend prefers billed over estimated,
++        as in :meth:`usage_totals`. ``{}`` for an unknown id."""
++        chain = self.get_compression_lineage(session_id)
++        if not chain:
++            return {}
++        row = self._read_one(f"""
++            SELECT COALESCE(SUM(api_call_count), 0),
++                   COALESCE(SUM(input_tokens), 0),
++                   COALESCE(SUM(output_tokens), 0),
++                   COALESCE(SUM(cache_read_tokens), 0),
++                   COALESCE(SUM(cache_write_tokens), 0),
++                   COALESCE(SUM(reasoning_tokens), 0),
++                   COALESCE(SUM(COALESCE(actual_cost_usd, estimated_cost_usd, 0)), 0)
++              FROM sessions
++             WHERE id IN ({','.join('?' * len(chain))})
++            """, chain)
++        return {
++            "session_ids": chain, "api_calls": int(row[0]), "input_tokens": int(row[1]),
++            "output_tokens": int(row[2]), "cache_read_tokens": int(row[3]), "cache_write_tokens": int(row[4]),
++            "reasoning_tokens": int(row[5]), "cost_usd": float(row[6]),
++        }
++
+     def usage_totals(self, *, min_message_count: int = 1, include_archived: bool = False) -> Dict[str, float]:
+         """Tokens and spend across the whole store (one scan), so the sidebar total does not
+         shrink with paging. Spend prefers the billed figure over the estimate."""
+diff --git a/tests/hermes_state/test_chain_usage.py b/tests/hermes_state/test_chain_usage.py
+new file mode 100644
+index 0000000000..bf7692b7b2
+--- /dev/null
++++ b/tests/hermes_state/test_chain_usage.py
+@@ -0,0 +1,54 @@
++"""chain_usage sums tokens and spend over a compression chain, root through tip."""
++
++import pytest
++
++from hermes_state import SessionDB
++
++
++@pytest.fixture()
++def db(tmp_path):
++    session_db = SessionDB(db_path=tmp_path / "state.db")
++    try:
++        yield session_db
++    finally:
++        session_db.close()
++
++
++def _run(db, session_id, *, parent=None, input_tokens, output_tokens, cost, compressed=True, **kwargs):
++    db.create_session(session_id, source="cli", parent_session_id=parent, **kwargs)
++    db.update_token_counts(
++        session_id, input_tokens=input_tokens, output_tokens=output_tokens,
++        estimated_cost_usd=cost, api_call_count=1,
++    )
++    if compressed:
++        db.end_session(session_id, "compression")
++
++
++def test_every_member_of_a_chain_reports_the_same_totals(db):
++    _run(db, "root", input_tokens=1000, output_tokens=100, cost=0.25)
++    _run(db, "mid", parent="root", input_tokens=2000, output_tokens=200, cost=0.5)
++    _run(db, "tip", parent="mid", input_tokens=400, output_tokens=40, cost=0.125, compressed=False)
++
++    totals = [db.chain_usage(session_id) for session_id in ("root", "mid", "tip")]
++
++    assert totals[0] == totals[1] == totals[2]
++    assert totals[0]["session_ids"] == ["root", "mid", "tip"]
++    assert totals[0]["input_tokens"] == 1000 + 2000 + 400
++    assert totals[0]["output_tokens"] == 100 + 200 + 40
++    assert totals[0]["api_calls"] == 3
++    assert totals[0]["cost_usd"] == pytest.approx(0.25 + 0.5 + 0.125)
++
++
++def test_branch_keeps_its_own_spend_out_of_its_source_chain(db):
++    _run(db, "root", input_tokens=1000, output_tokens=100, cost=0.25)
++    _run(db, "tip", parent="root", input_tokens=400, output_tokens=40, cost=0.125, compressed=False)
++    _run(db, "branch", parent="root", input_tokens=9000, output_tokens=900, cost=2.0, compressed=False,
++         model_config={"_branched_from": "root"})
++
++    source, branch = db.chain_usage("tip"), db.chain_usage("branch")
++
++    assert source["session_ids"] == ["root", "tip"]
++    assert source["input_tokens"] == 1400
++    assert branch["session_ids"] == ["branch"]
++    assert branch["input_tokens"] == 9000
++    assert db.chain_usage("missing") == {}
+-- 
+2.54.0 (Apple Git-157)
+
+
+From ab2a3814250bae812818164b8aeea9db0ca0b534 Mon Sep 17 00:00:00 2001
+From: Tomasz Wierzbicki <tomasz.wierzbicki@example.com>
+Date: Fri, 25 Sep 2026 17:20:40 -0600
+Subject: [PATCH 2/2] feat(sessions): hermes sessions stats <id> prints one
+ run's tokens and spend
+
+stats takes an optional session id or unique prefix. With one, it prints
+API calls, input/output (and cache/reasoning when present) tokens and
+spend summed over the session's compression chain, plus the chain's root
+and tip when compression split it. Without one, output is unchanged.
+---
+ hermes_cli/sessions_cmd.py                    | 26 +++++++++-
+ hermes_cli/subcommands/sessions.py            |  8 ++-
+ tests/hermes_cli/test_sessions_stats_chain.py | 51 +++++++++++++++++++
+ website/docs/user-guide/sessions.md           | 18 +++++++
+ 4 files changed, 101 insertions(+), 2 deletions(-)
+ create mode 100644 tests/hermes_cli/test_sessions_stats_chain.py
+
+diff --git a/hermes_cli/sessions_cmd.py b/hermes_cli/sessions_cmd.py
+index a10305f970..0c149c84ec 100644
+--- a/hermes_cli/sessions_cmd.py
++++ b/hermes_cli/sessions_cmd.py
+@@ -975,6 +975,8 @@ def _cmd_repair_routing(db, args):
+ 
+ 
+ def _cmd_stats(db, args):
++    if getattr(args, "session_id", None):
++        return _print_chain_usage(db, args.session_id)
+     print(f"Total sessions: {db.session_count()}\nTotal messages: {db.message_count()}")
+     for src in ("cli", "telegram", "discord", "whatsapp", "slack"):
+         if (c := db.session_count(source=src)) > 0:
+@@ -983,6 +985,26 @@ def _cmd_stats(db, args):
+         print(f"Database size: {_size_mb(db.db_path):.1f} MB")
+ 
+ 
++def _print_chain_usage(db, session_id):
++    """`hermes sessions stats <id>`: one session's tokens and spend across its compression chain."""
++    resolved = db.resolve_session_id(session_id)
++    if not resolved:
++        return _not_found(session_id)
++    usage = db.chain_usage(resolved)
++    chain = usage["session_ids"]
++    print(f"Session: {resolved}")
++    if len(chain) > 1:
++        print(f"Compression chain: {len(chain)} sessions ({chain[0]} -> {chain[-1]})")
++    print(f"API calls: {usage['api_calls']:,}")
++    print(f"Input tokens: {usage['input_tokens']:,}")
++    print(f"Output tokens: {usage['output_tokens']:,}")
++    if usage["cache_read_tokens"] or usage["cache_write_tokens"]:
++        print(f"Cache read/write tokens: {usage['cache_read_tokens']:,} / {usage['cache_write_tokens']:,}")
++    if usage["reasoning_tokens"]:
++        print(f"Reasoning tokens: {usage['reasoning_tokens']:,}")
++    print(f"Spend: ${usage['cost_usd']:.4f}")
++
++
+ # -- dispatch -----------------------------------------------------------------
+ 
+ def _cmd_repair_profiles(args):
+@@ -1013,7 +1035,9 @@ _DB_HANDLERS = {
+ 
+ def _print_empty_store(action: str, args) -> None:
+     """A profile that never created state.db: report empty instead of opening a writer that creates it."""
+-    if action == "stats":
++    if action == "stats" and getattr(args, "session_id", None):
++        _not_found(args.session_id)
++    elif action == "stats":
+         print("Total sessions: 0\nTotal messages: 0")
+     elif action == "pinned":
+         print("[]" if getattr(args, "json", False) else "No pinned sessions. Pin one with: hermes sessions pin <session_id>")
+diff --git a/hermes_cli/subcommands/sessions.py b/hermes_cli/subcommands/sessions.py
+index d56bf4a418..ff50bb6b2b 100644
+--- a/hermes_cli/subcommands/sessions.py
++++ b/hermes_cli/subcommands/sessions.py
+@@ -247,7 +247,13 @@ def build_sessions_parser(subparsers, *, cmd_sessions: Callable) -> None:
+     sessions_recover.add_argument(
+         "--report", type=Path, help="JSON report path (defaults to <output>.recovery.json)")
+ 
+-    sessions_subparsers.add_parser("stats", help="Show session store statistics")
++    sessions_stats = sessions_subparsers.add_parser(
++        "stats", help="Show session store statistics, or one session's tokens and spend",
++        description="Without an id, show store-wide session and message counts. With a session "
++            "id, sum tokens and spend over that session's whole compression chain, root to tip, "
++            "so a long run split by compression reports one total. A /branch copy is its own chain.")
++    sessions_stats.add_argument(
++        "session_id", nargs="?", help="Session ID or unique prefix; any session in the chain works")
+ 
+     sessions_rename = sessions_subparsers.add_parser(
+         "rename", help="Set or change a session's title")
+diff --git a/tests/hermes_cli/test_sessions_stats_chain.py b/tests/hermes_cli/test_sessions_stats_chain.py
+new file mode 100644
+index 0000000000..33af918f4f
+--- /dev/null
++++ b/tests/hermes_cli/test_sessions_stats_chain.py
+@@ -0,0 +1,51 @@
++"""`hermes sessions stats <id>` prints one total for a run that compression split across rows."""
++
++import argparse
++
++import pytest
++
++import hermes_cli.sessions_cmd as sessions_cmd
++
++
++@pytest.fixture
++def state_db(monkeypatch, tmp_path):
++    import hermes_state
++    from hermes_state import SessionDB
++
++    db_path = tmp_path / "state.db"
++    monkeypatch.setattr(hermes_state, "_default_db_path", lambda: db_path)
++    seed = SessionDB(db_path=db_path)
++    for session_id, parent, tokens in (("20260901_aaaa", None, 1200), ("20260901_bbbb", "20260901_aaaa", 800)):
++        seed.create_session(session_id, "cli", parent_session_id=parent)
++        seed.update_token_counts(session_id, input_tokens=tokens, output_tokens=tokens // 10,
++                                 estimated_cost_usd=tokens / 1000, api_call_count=2)
++    seed.end_session("20260901_aaaa", "compression")
++    seed.close()
++    return db_path
++
++
++def _parse(*argv):
++    from hermes_cli.subcommands.sessions import build_sessions_parser
++
++    parser = argparse.ArgumentParser()
++    build_sessions_parser(parser.add_subparsers(dest="command"), cmd_sessions=sessions_cmd.cmd_sessions)
++    return parser.parse_args(["sessions", *argv])
++
++
++def test_stats_with_an_id_sums_the_whole_compression_chain(state_db, capsys):
++    assert sessions_cmd.cmd_sessions(_parse("stats", "20260901_bb")) is None
++
++    out = capsys.readouterr().out
++    assert "Compression chain: 2 sessions (20260901_aaaa -> 20260901_bbbb)" in out
++    assert "Input tokens: 2,000" in out
++    assert "Output tokens: 200" in out
++    assert "API calls: 4" in out
++    assert "Spend: $2.0000" in out
++
++
++def test_stats_with_an_unknown_id_fails_and_without_one_keeps_store_counts(state_db, capsys):
++    assert sessions_cmd.cmd_sessions(_parse("stats", "nope")) == 1
++    assert "No session 'nope'" in capsys.readouterr().out
++
++    assert sessions_cmd.cmd_sessions(_parse("stats")) is None
++    assert "Total sessions: 2" in capsys.readouterr().out
+diff --git a/website/docs/user-guide/sessions.md b/website/docs/user-guide/sessions.md
+index 6362ff984a..1aadb069fa 100644
+--- a/website/docs/user-guide/sessions.md
++++ b/website/docs/user-guide/sessions.md
+@@ -612,6 +612,24 @@ Total messages: 3847
+ Database size: 12.4 MB
+ ```
+ 
++Pass a session ID (or a unique prefix) to see what one run used. Compression
++starts a new session row each time it runs, so the totals are summed over the
++whole compression chain, root to tip, whichever session of the chain you name.
++A `/branch` copy keeps its own totals.
++
++```bash
++hermes sessions stats 20250305_0915
++```
++
++```
++Session: 20250305_091523_a1b2c3d4
++Compression chain: 3 sessions (20250305_091523_a1b2c3d4 -> 20250305_114208_e5f6a7b8)
++API calls: 61
++Input tokens: 1,482,915
++Output tokens: 38,204
++Spend: $4.1872
++```
++
+ For deeper analytics — token usage, cost estimates, tool breakdown, and activity patterns — use [`hermes insights`](../reference/cli-commands.md#hermes-insights).
+ 
+ ### Repair Stranded Gateway Sessions
+-- 
+2.54.0 (Apple Git-157)
+

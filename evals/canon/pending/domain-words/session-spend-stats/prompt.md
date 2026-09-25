@@ -1,0 +1,1 @@
+Could you take a look at `sessions-stats-per-session` against main before I merge it? It lets `hermes sessions stats` take a session id and print that run's tokens and spend across compressions. Just a review, nothing to commit or push.

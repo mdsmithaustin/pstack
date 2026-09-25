@@ -498,6 +498,23 @@ grades each run from its diff. Such a run's `compare.json` row carries
 `graded_from_diff` and `ungraded`. A review arm then needs `screen.py judge
 --out DIR`.
 
+## Authoring review cases
+
+`review_cases.py check [RULE/CASE ...]` runs the authoring checks the build
+does not: the patch applies to the pinned commit as one commit, it changes 50
+to 300 lines outside lockfiles, the lines it adds carry no meta vocabulary,
+the prompt names the branch and the body file, `rubric.md` does not carry the
+rule id, and every `FOUND` and `FALSE_ALARM` sample passes the precheck.
+`review_cases.py checkout RULE/CASE DEST` builds `main` and the PR branch
+for a look by hand. A review oracle calls `shared.review_names(answer,
+location)` with regexes for the flawed file or symbol, or the decoy's.
+
+`pending/<rule>/<case>/` holds review cases that need a commit on `main`
+before the PR, in `base.patch`, which the harness does not build. No loader
+reads that directory. `notation-not-runtime/trivial-routing-suggestion` needs
+pytest-bdd adopted on `main`, and `domain-words/session-spend-stats` needs a
+`CONTEXT.md` there.
+
 ## Rule texts
 
 R7 says "Write Given, When, Then or Gherkin-style tests" where the draft said

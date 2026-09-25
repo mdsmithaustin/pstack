@@ -4,7 +4,7 @@ import re
 from collections import Counter
 from pathlib import PurePosixPath
 
-from shared import apply_diff, parse_files, parse_python
+from shared import apply_diff, parse_files, parse_python, review_names
 
 
 def names(tree):
@@ -140,4 +140,20 @@ def check_label_filter(answer, workspace):
     return failures
 
 
-CHECKS = {"billing-pause": check_one_name, "sessions-by-tag": check_label_filter, "sessions-by-label": check_label_filter}
+# Review cases: the precheck needs the review to name the tag filter, or the
+# session and conversation split the host filter branch follows.
+def check_tag_filter_review(answer, project):
+    return review_names(answer, (r"\btags?\b", r"_parse_tag_filter", r"\btag_(?:key|value)\b"))
+
+
+def check_host_filter_review(answer, project):
+    return review_names(answer, (r"\bconversations?\b", r"\blist_conversations\b"))
+
+
+CHECKS = {
+    "billing-pause": check_one_name,
+    "sessions-by-tag": check_label_filter,
+    "sessions-by-label": check_label_filter,
+    "sessions-tag-filter-review": check_tag_filter_review,
+    "sessions-host-filter-review": check_host_filter_review,
+}
