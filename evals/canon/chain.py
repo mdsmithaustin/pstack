@@ -120,6 +120,8 @@ class Spawn:
     event: Event
     role: str = None
     persona: bool = False
+    path: str = None
+    code_writing: bool = False  # the delegate edited a workspace file, vs an explorer or design runner
     inline: list = field(default_factory=list)  # its events the lead stream already echoed
 
 
@@ -133,6 +135,7 @@ class Child:
     role: str = None
     persona: bool = False
     brief: str = ""
+    path: str = None
 
 
 @dataclass
@@ -466,6 +469,12 @@ def codex_role(meta):
     return meta.get("agent_role") or spawned.get("agent_role")
 
 
+def codex_path(meta):
+    source = meta.get("source") if isinstance(meta.get("source"), dict) else {}
+    spawned = (source.get("subagent") or {}).get("thread_spawn") or {}
+    return meta.get("agent_path") or spawned.get("agent_path")
+
+
 def is_codex_child(meta):
     source = meta.get("source") if isinstance(meta.get("source"), dict) else {}
     return bool(meta.get("parent_thread_id")) or "subagent" in source
@@ -474,12 +483,19 @@ def is_codex_child(meta):
 def parse_codex_rollout(lines, tree):
     """(session_meta payload, Child) of one Codex rollout. Only completed
     items count. Code-mode exec input repeats the commands and spawns that
-    items record, so of it only update_plan calls are read."""
+    items record, so of it only update_plan calls are read.
+
+    A forked child's rollout replays its parent thread's own history for
+    context, which carries the parent's own session_meta record further down
+    the file. Only the file's first session_meta is this rollout's own
+    identity (thread_source, parent_thread_id, agent_role, agent_path), so
+    later ones are ignored."""
     meta, events, spawns, brief, developer = {}, [], {}, None, ""
     for index, record in json_records(lines):
         payload = record.get("payload") or {}
         if record.get("type") == "session_meta":
-            meta = payload
+            if not meta:
+                meta = payload
         elif record.get("type") == "response_item":
             kind = payload.get("type")
             if kind == "message" and payload.get("role") == "developer" and not developer:
@@ -506,7 +522,7 @@ def parse_codex_rollout(lines, tree):
                 events.append(codex_collab(index, "delegate", item, spawns))
     role = codex_role(meta)
     persona = role == PERSONA_ROLE or developer.startswith(CODEX_BRIEFING_HEAD) or has_persona(brief)
-    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "")
+    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "", codex_path(meta))
 
 
 def attach(trace, children):
@@ -517,23 +533,27 @@ def attach(trace, children):
     while pending:
         ready = [child for child in pending if child.link in trace.spawns]
         if not ready:
-            anchor = Event(max((event.index for event in trace.events), default=-1) + 1, "delegate", "spawn")
+            base_index = max((event.index for event in trace.events), default=-1) + 1
             ready = pending
-            for child in ready:
-                trace.spawns[child.link] = Spawn(anchor)
+            for offset, child in enumerate(ready):
+                trace.spawns[child.link] = Spawn(Event(base_index + offset, "delegate", "spawn"))
         for child in ready:
             spawn = trace.spawns[child.link]
             echoed = {id(event) for event in spawn.inline}
             trace.events = [event for event in trace.events if id(event) not in echoed]
             spawn.inline = []
-            if child.brief and not spawn.event.text and spawn.event in trace.events:
+            if child.brief and not spawn.event.text:
                 old = spawn.event
-                new = trace.events[trace.events.index(old)] = replace(old, text=child.brief)
+                new = replace(old, text=child.brief)
+                if old in trace.events:
+                    trace.events[trace.events.index(old)] = new
                 for other in trace.spawns.values():
                     if other.event is old:
                         other.event = new
             spawn.role = spawn.role or child.role
             spawn.persona = spawn.persona or child.persona
+            spawn.path = spawn.path or child.path
+            spawn.code_writing = spawn.code_writing or any(event.kind == "edit" for event in child.events)
             base = spawn.event
             moved = {id(event): replace(event, index=base.index, sub=base.sub + (event.index,)) for event in child.events}
             trace.events += moved.values()
@@ -648,6 +668,12 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
     waits = [event for event in main if event.kind == "wait"]
     by_event = {id(spawn.event): spawn for spawn in trace.spawns.values()}
     briefed = [by_event.get(id(event)) or Spawn(event) for event in spawns]
+    if not spawns and trace.spawns:
+        # Codex's own stream never shows a real spawn call, only a `wait` on
+        # one (codex_collab), so the whole delegate census comes from the
+        # harvested child rollouts attach() folded into trace.spawns.
+        briefed = list(trace.spawns.values())
+    code_writers = [spawn for spawn in briefed if spawn.code_writing]
     cited = cited_principles(trace.final, principles)
     unread = [slug for slug in cited if f"{slug}/SKILL.md" not in first_read]
     return {
@@ -672,13 +698,21 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         "first_edit": first_edit,
         "leaf_before_first_edit": None if first_edit is None or not workspace else owner_at is not None and owner_at < order(edits[0]),
         "delegation": {
-            "spawns": len(spawns),
+            "spawns": len(briefed),
             "waits": len(waits),
-            "delegated": bool(spawns or waits),
-            "brief_names_shape": any(DATA_SHAPE.search(event.text or "") for event in spawns) if spawns and any(event.text for event in spawns) else None,
+            "delegated": bool(briefed or waits),
+            "brief_names_shape": any(DATA_SHAPE.search(spawn.event.text or "") for spawn in briefed) if briefed and any(spawn.event.text for spawn in briefed) else None,
             "delegate_reads": sorted({event.path for event in reads if event.actor == "delegate"}),
         },
         "delegate_edits": sorted({event.path for event in edits if event.actor == "delegate"}),
+        "delegate_census": [
+            {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona}
+            for spawn in briefed
+        ],
+        "code_writing_delegate_persona": {
+            "spawns": len(code_writers),
+            "with_persona": sum(spawn.persona for spawn in code_writers),
+        },
         "citations": {"cited": cited, "unread": unread, "only_read": (not unread) if cited else None},
         "tools_denied": sum(event.kind == "denied" for event in trace.events),
         "worklist_tool": {
@@ -841,6 +875,10 @@ STAGES = {
     "cited only read leaves": lambda row: row["citations"]["only_read"],
     "lead called a worklist tool, unless none was offered": lambda row: None if row["worklist_tool"]["offered"] is False else row["worklist_tool"]["called"],
     "delegate got the poteto-agent briefing": lambda row: row["delegate_persona"]["with_persona"] == row["delegate_persona"]["spawns"] if row["delegate_persona"]["spawns"] else None,
+    "code-writing delegate ran as poteto-agent": lambda row: (
+        row["code_writing_delegate_persona"]["with_persona"] == row["code_writing_delegate_persona"]["spawns"]
+        if row["code_writing_delegate_persona"]["spawns"] else None
+    ),
 }
 
 

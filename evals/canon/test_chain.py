@@ -357,6 +357,91 @@ class CodexSandboxHarvestTests(unittest.TestCase):
         ])
 
 
+class CodexRealChildRolloutTests(unittest.TestCase):
+    """A trimmed real child rollout harvested from a Codex 0.157 sandbox run
+    (codex-smoke-separate-contexts-2, the harness-families/leaf arm's
+    migrate_callers delegate). Its own session_meta at ordinal 0 marks it a
+    poteto-agent subagent forked from the lead thread; its history replay
+    then repeats the LEAD's own session_meta at ordinal 1, the way
+    history_mode: paginated actually does it. A parser that keeps whichever
+    session_meta it sees last would read this child as the lead itself."""
+
+    def setUp(self):
+        path = FIXTURES / "sbx-codex-delegates" / "harvest" / "transcripts" / "codex" / "sessions" / "2026" / "09" / "25" / "rollout-2026-09-25T14-42-40-01a0d904-b881-71b1-b94c-06828c0f72e8.jsonl"
+        self.meta, self.child = chain.parse_codex_rollout(path.read_text().splitlines(), TREE)
+
+    def test_the_lead_session_meta_further_down_the_file_does_not_win(self):
+        self.assertEqual(self.meta.get("id"), "01a0d904-b881-71b1-b94c-06828c0f72e8")
+        self.assertEqual(self.meta.get("parent_thread_id"), "01a0d901-50dc-76d1-b766-0d529d47c7c5")
+
+    def test_is_a_child_with_its_role_and_path(self):
+        self.assertTrue(chain.is_codex_child(self.meta))
+        self.assertEqual((chain.codex_role(self.meta), chain.codex_path(self.meta)), ("poteto-agent", "/root/migrate_callers"))
+
+    def test_reads_and_the_file_change_are_delegate_events(self):
+        self.assertEqual([(event.kind, event.path) for event in self.child.events if event.kind in ("read", "edit")], [
+            ("read", "unslop/SKILL.md"), ("read", "principle-laziness-protocol/SKILL.md"),
+            ("edit", "/workspace/app/src/sessions/tree.py"),
+        ])
+
+    def test_role_alone_marks_the_persona_even_though_the_briefing_is_not_its_first_developer_message(self):
+        self.assertTrue(self.child.persona)
+
+
+class CodexDelegateFanOutTests(unittest.TestCase):
+    """A synthetic lead (0.157's exec --json stream: shell reads, two waits,
+    never a visible spawn) fanned out to two harvested children: the real
+    trimmed poteto-agent from CodexRealChildRolloutTests, which edits a file,
+    and an explorer that only reads."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-delegates", "codex")
+
+    def test_both_children_are_counted_as_spawns_from_the_harvest_alone(self):
+        self.assertEqual(self.row["delegation"], {
+            "spawns": 2, "waits": 2, "delegated": True, "brief_names_shape": None,
+            "delegate_reads": ["how/SKILL.md", "principle-laziness-protocol/SKILL.md", "unslop/SKILL.md"],
+        })
+
+    def test_census_names_each_delegates_role_path_and_whether_it_writes_code(self):
+        self.assertEqual(self.row["delegate_census"], [
+            {"role": "explorer", "path": "/root/how_harness_families", "code_writing": False, "persona": False},
+            {"role": "poteto-agent", "path": "/root/migrate_callers", "code_writing": True, "persona": True},
+        ])
+
+    def test_only_the_code_writing_delegate_counts_toward_the_new_stage(self):
+        self.assertEqual(self.row["delegate_persona"], {"spawns": 2, "with_persona": 1, "roles": ["explorer", "poteto-agent"]})
+        self.assertEqual(self.row["code_writing_delegate_persona"], {"spawns": 1, "with_persona": 1})
+        self.assertTrue(chain.STAGES["code-writing delegate ran as poteto-agent"](self.row))
+
+    def test_the_edit_is_attributed_to_the_delegate(self):
+        self.assertEqual(self.row["delegate_edits"], ["/workspace/app/src/sessions/tree.py"])
+
+
+class CodeWritingDelegatePersonaStageTests(unittest.TestCase):
+    """The new stage in isolation, against synthetic Spawn census entries, so
+    each boundary (no code-writing delegate, one that is poteto-agent, one
+    that is not) has a literal expected value independent of any fixture."""
+
+    def stage(self, code_writers):
+        row = {"code_writing_delegate_persona": {
+            "spawns": len(code_writers), "with_persona": sum(code_writers),
+        }}
+        return chain.STAGES["code-writing delegate ran as poteto-agent"](row)
+
+    def test_no_code_writing_delegate_is_not_measured(self):
+        self.assertIsNone(self.stage([]))
+
+    def test_a_code_writing_delegate_without_the_persona_fails(self):
+        self.assertFalse(self.stage([False]))
+
+    def test_every_code_writing_delegate_with_the_persona_passes(self):
+        self.assertTrue(self.stage([True, True]))
+
+    def test_one_of_two_code_writing_delegates_without_the_persona_fails(self):
+        self.assertFalse(self.stage([True, False]))
+
+
 class NoTranscriptsTests(unittest.TestCase):
     def test_a_harvest_without_transcripts_changes_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -404,7 +489,7 @@ class FixtureLinesAreRealJsonTests(unittest.TestCase):
             for line in path.read_text().splitlines():
                 json.loads(line)
 
-        self.assertEqual(len(paths), 7)
+        self.assertEqual(len(paths), 10)
 
 
 if __name__ == "__main__":
