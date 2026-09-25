@@ -190,6 +190,24 @@ class RunLayoutTests(unittest.TestCase):
         self.assertEqual((run.out.name, run.agent, run.rule, run.case, run.arm, run.legacy),
                          ("claude-y", "claude", "preparatory-refactor", "csv-export", "current", True))
 
+    def test_an_arm_the_build_lists_is_a_run_and_an_unlisted_one_is_not(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / "codex-z"
+            (out / "arms" / "bundle").mkdir(parents=True)
+            (out / "arms" / "bundle" / "build.json").write_text(json.dumps({"arms": ["current", "leaf", "leaf+trigger"]}))
+            listed = chain.locate(self.make(out, "codex/bundle/csv-export/leaf+trigger/runs/csv-export/with_skill"))
+            unlisted = chain.locate(self.make(out, "codex/bundle/csv-export/amended/runs/csv-export/with_skill"))
+
+        self.assertEqual((listed.rule, listed.case, listed.arm), ("bundle", "csv-export", "leaf+trigger"))
+        self.assertIsNone(unlisted)
+
+    def test_an_arm_owns_the_first_file_its_patch_changes(self):
+        build = {"target": "poteto-mode/playbooks/feature.md",
+                 "arm_changes": {"current": [], "leaf+trigger": ["poteto-mode/SKILL.md", "principle-model-the-domain/SKILL.md"]}}
+
+        self.assertEqual(chain.rule_owner("bundle", build, "leaf+trigger"), "poteto-mode/SKILL.md")
+        self.assertEqual(chain.rule_owner("bundle", build, "current"), "poteto-mode/playbooks/feature.md")
+
 
 class InjectionTests(unittest.TestCase):
     def test_wrapper_token_and_listed_slash_command_mean_injected(self):
@@ -211,6 +229,15 @@ class InjectionTests(unittest.TestCase):
             (out / "entry").mkdir()
             (out / "entry" / "codex-workspace").write_text("exec python3 workspace.py wrap --token '$poteto-mode' --discovery .agents/skills -- codex-project-only \"$@\"\n")
             run = chain.RunDir(out, "codex", "r", "c", "amended", out, False)
+
+            self.assertTrue(chain.injection(run, "codex", "poteto-mode", chain.Trace()))
+
+    def test_sandbox_wrapper_passes_the_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            (out / "entry").mkdir()
+            (out / "entry" / "codex-sbx").write_text("exec python3 sandbox.py wrap --agent codex --token '$poteto-mode' --discovery .agents/skills -- \"$@\"\n")
+            run = chain.RunDir(out, "codex", "r", "c", "leaf", out, False)
 
             self.assertTrue(chain.injection(run, "codex", "poteto-mode", chain.Trace()))
 

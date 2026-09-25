@@ -711,11 +711,15 @@ def locate(trace_path):
     parts = trace_path.parent.parts
     at = len(parts) - 1 - parts[::-1].index("runs")
     arm, case = parts[at - 1], parts[at + 1]
-    if arm not in screen.ARMS:
-        return None
     cased = parts[at - 2] == case and (Path(*parts[:at - 4]) / "arms").is_dir()
     if cased:
-        return RunDir(Path(*parts[:at - 4]), parts[at - 4], parts[at - 3], case, arm, trace_path.parent, False)
+        out, rule = Path(*parts[:at - 4]), parts[at - 3]
+        build = out / "arms" / rule / "build.json"
+        if arm not in (json.loads(build.read_text()).get("arms", screen.ARMS) if build.is_file() else screen.ARMS):
+            return None
+        return RunDir(out, parts[at - 4], rule, case, arm, trace_path.parent, False)
+    if arm not in screen.ARMS:
+        return None
     rule = parts[at - 2]
     return RunDir(Path(*parts[:at - 3]), parts[at - 3], rule, screen.LEGACY_CASES.get(rule, case), arm, trace_path.parent, True)
 
@@ -751,14 +755,19 @@ def injection(run, agent, entry, trace):
     if entry != screen.ENTRY_SKILL:
         return False
     token = screen.ENTRY_INVOCATION[agent][0]
-    wrappers = [run.out / "entry" / name for name in (agent, f"{agent}-workspace")]
+    wrappers = [run.out / "entry" / name for name in (agent, f"{agent}-workspace", f"{agent}-sbx")]
     prefixed = any(path.is_file() and re.search(rf"(?<![\w$/.-]){re.escape(token)}(?![\w-])", path.read_text()) for path in wrappers)
     if agent == "claude":
         return prefixed and screen.ENTRY_SKILL in trace.slash_commands
     return prefixed
 
 
-def rule_owner(rule, build_info):
+def rule_owner(rule, build_info, arm=None):
+    """The file the rule patches. An arm of an N-arm rule owns the first file
+    its own patch changes; current, which changes none, keeps the rule's target."""
+    changed = build_info.get("arm_changes", {}).get(arm)
+    if changed:
+        return changed[0]
     if build_info.get("target"):
         return build_info["target"]
     patch = screen.RULES / rule / "rule.patch"
@@ -797,7 +806,7 @@ def analyze(trace_path, principles):
         "workspace": workspace,
         "injected": injected,
     }
-    record.update(stages(trace, case=run.case, owner=rule_owner(run.rule, build_info), injected=injected,
+    record.update(stages(trace, case=run.case, owner=rule_owner(run.rule, build_info, run.arm), injected=injected,
                          playbook_texts=playbook_texts, principles=principles, workspace=workspace))
     return record
 

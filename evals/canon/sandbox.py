@@ -153,9 +153,10 @@ def sandboxes():
 
 
 def templates():
-    listing = _json_or_text(sbx("template", "ls", "--json").stdout)
-    rows = listing if isinstance(listing, list) else (listing or {}).get("templates") or (listing or {}).get("images") or []
-    return rows
+    """{"repository:tag": row} of the templates in the sandbox runtime's store."""
+    listing = json.loads(sbx("template", "ls", "--json").stdout)
+    rows = listing if isinstance(listing, list) else next((value for value in listing.values() if isinstance(value, list)), [])
+    return {f"{row['repository'].rsplit('/', 1)[-1]}:{row['tag']}": row for row in rows}
 
 
 @contextlib.contextmanager
@@ -172,7 +173,9 @@ def config_digest(*parts):
 
 
 def deps_tag(agent, repo, commit):
-    spec = CONFIG["repos"][repo]
+    """The template name for agent, repo, and commit, versioned by every
+    setting that changes what the build installs."""
+    spec = {key: value for key, value in CONFIG["repos"][repo].items() if key in ("python", "sync", "env")}
     return f"canon-deps-{agent}-{repo}-{commit[:12]}:{config_digest(CONFIG['uv'], spec, CONFIG['agents'][agent]['kit'])}"
 
 
@@ -189,15 +192,6 @@ def deps_env(repo):
     }
 
 
-def template_present(tag):
-    name, _, version = tag.partition(":")
-    for row in templates():
-        text = json.dumps(row)
-        if name in text and version in text:
-            return True
-    return False
-
-
 def records_dir():
     path = workspace.cache_root() / "sbx"
     path.mkdir(parents=True, exist_ok=True)
@@ -211,7 +205,7 @@ def build_deps(agent, repo, commit):
     deleted before the snapshot, and so are the agent's credential files, which
     the kit writes again when a sandbox is created from the template."""
     spec, kit = CONFIG["repos"][repo], CONFIG["agents"][agent]["kit"]
-    mirror = workspace.fetch(repo, commit) if not workspace.has_commit(workspace.mirror_path(repo), commit) else workspace.mirror_path(repo)
+    mirror = workspace.fetch(repo, commit)
     tag = deps_tag(agent, repo, commit)
     name = f"{PREFIX}deps-{agent}-{repo}-{secrets.token_hex(3)}"
     record = {"tag": tag, "agent": agent, "repo": repo, "commit": commit, "uv": CONFIG["uv"], "python": spec["python"],
@@ -248,6 +242,7 @@ def build_deps(agent, repo, commit):
             with timed(timings, "save_s"):
                 sbx("stop", name)
                 sbx("template", "save", name, tag)
+            record["template_bytes"] = templates()[tag]["size"]
         finally:
             if box is not None:
                 with timed(timings, "destroy_s"):
@@ -365,7 +360,7 @@ def wrap(argv, stdin=sys.stdin.buffer):
             template = None
             if inside["deps"]:
                 template = deps_tag(agent, spec["repo"], spec["commit"])
-                if not template_present(template):
+                if template not in templates():
                     raise SandboxError(f"no dependency template {template}; build it with "
                                        f"`python3 evals/canon/sandbox.py deps --agent {agent} --repo {spec['repo']} --commit {spec['commit']}`")
             record["template"] = template
@@ -469,6 +464,12 @@ def probe(agent, repo=None, commit=None):
             setup = box.exec("python3", f"{PAYLOAD}/sbx_inside.py", "setup", f"{PAYLOAD}/manifest.json", check=False)
             report = {"setup": _json_or_text(setup.stdout.strip().splitlines()[-1]) if setup.stdout.strip() else setup.stderr.decode()}
             env = inside["deps"]["env"] if inside["deps"] else {}
+            if inside["deps"]:
+                package = CONFIG["repos"][repo]["package"]
+                check = box.exec("sh", "-c", f"uv run --frozen python -c 'import {package}, pytest; print({package}.__file__, pytest.__version__)' "
+                                 "&& uv run --frozen pytest --collect-only -q -p no:cacheprovider tests 2>&1 | tail -n 1",
+                                 workdir=str(root), env=env, check=False)
+                report["deps_check"] = (check.stdout + check.stderr).decode(errors="replace").strip().splitlines()[-3:]
             if agent == "claude":
                 command, _ = agent_command("claude", ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
                                                       "--model", "canon-no-such-model"])

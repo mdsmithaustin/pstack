@@ -17,8 +17,8 @@
   },
   "uv": "0.12.17",
   "repos": {
-    "omnigent": {"python": "3.12", "sync": ["--frozen", "--group", "test"], "env": {"OMNIGENT_SKIP_WEB_UI": "true"}},
-    "hermes": {"python": "3.11", "sync": ["--frozen", "--extra", "dev"]}
+    "omnigent": {"python": "3.12", "sync": ["--frozen", "--group", "test"], "env": {"OMNIGENT_SKIP_WEB_UI": "true"}, "package": "omnigent"},
+    "hermes": {"python": "3.11", "sync": ["--frozen", "--extra", "dev"], "package": "hermes_cli"}
   },
   "build_network": [
     "pypi.org",
