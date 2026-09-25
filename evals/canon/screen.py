@@ -28,6 +28,11 @@ arms beside pstack. The one-change check never sees them.
 A rule whose rule.json names cases_from is a placement variant. It has its own
 rule.patch and runs the named rule's cases and oracle unchanged.
 
+An arms rule is a variant whose rule.json lists "arms", current first. Each
+other arm has arms/<arm>.patch, a unified diff against skills/ that may touch
+several files. Every arm of every case is built and graded, and compare shows
+each arm against current and each later arm against each earlier one.
+
 A case whose case.json names a workspace runs inside a checkout of a real repo
 at a pinned commit (see workspace.py) instead of receiving project files in the
 prompt. Its oracle grades the diff the agent left on that checkout.
@@ -61,6 +66,7 @@ import workspace  # noqa: E402
 REPO = CANON.parents[1]
 RULES = Path(os.environ.get("CANON_RULES", CANON / "rules")).resolve()
 ARMS = ("current", "amended")
+ARM_NAME = re.compile(r"^[a-z0-9][a-z0-9+._-]*$")
 DEFAULT_MODELS = {"claude": "sonnet", "codex": "gpt-6-sol"}
 MANIFEST = "shared-benchmark.json"
 ENTRIES = ("skill", "poteto-mode")
@@ -128,6 +134,7 @@ class Case:
 class Rule:
     id: str
     source: str
+    # rule.patch of a pair rule; None for an arms rule.
     patch: str
     target: str
     cases: tuple
@@ -135,10 +142,33 @@ class Rule:
     # A variant places another rule's text elsewhere and runs that rule's cases
     # and oracle unchanged, so the two screens compare directly.
     cases_from: str = None
+    # An arms rule's ((arm, patch), ...) for every arm after current, in order.
+    arm_patches: tuple = ()
+
+    @property
+    def paired(self):
+        return not self.arm_patches
+
+    @property
+    def arms(self):
+        """((arm, patch or None), ...) in run order. current has no patch."""
+        treated = (("amended", self.patch),) if self.paired else self.arm_patches
+        return (("current", None), *treated)
+
+    @property
+    def arm_names(self):
+        return tuple(name for name, _ in self.arms)
 
     @property
     def skill(self):
         return self.target.split("/", 1)[0]
+
+    @property
+    def skills(self):
+        """Skill directories the rule changes, which the single-skill entry mounts."""
+        if self.paired:
+            return (self.skill,)
+        return tuple(sorted({path.split("/", 1)[0] for _, patch in self.arm_patches for path in patch_paths(patch)[1]}))
 
     @property
     def case_rule(self):
@@ -218,14 +248,39 @@ def rule_spec(rule_id):
     return {"source": source["source"], "companions": source.get("companions", []), **spec}
 
 
+def load_arm_patches(rule_id, names):
+    """((arm, patch), ...) for an arms rule: one arms/<arm>.patch per listed arm
+    after current, and no patch that rule.json does not list."""
+    root = RULES / rule_id
+    if (root / "rule.patch").exists():
+        raise ScreenError(f"rule {rule_id} lists arms, so it must not have rule.patch")
+    if not isinstance(names, list) or not names or names[0] != "current":
+        raise ScreenError(f"rules/{rule_id}/rule.json arms must be a list that starts with current, not {names!r}")
+    if len(names) < 2 or len(set(names)) != len(names) or not all(isinstance(name, str) and ARM_NAME.match(name) for name in names):
+        raise ScreenError(f"rules/{rule_id}/rule.json arms must be current and at least one more distinct name matching {ARM_NAME.pattern}, not {names!r}")
+    patches = {path.name.removesuffix(".patch"): path for path in (root / "arms").glob("*.patch")}
+    missing = [name for name in names[1:] if name not in patches]
+    if missing:
+        raise ScreenError(f"rule {rule_id} has no arms/<arm>.patch for {missing}")
+    unlisted = sorted(set(patches) - set(names[1:]))
+    if unlisted:
+        raise ScreenError(f"rule {rule_id} has arms/<arm>.patch for arms its rule.json does not list after current: {unlisted}")
+    return tuple((name, patches[name].read_text()) for name in names[1:])
+
+
 def load_rule(rule_id):
     spec = rule_spec(rule_id)
     origin = spec.get("cases_from", rule_id)
+    arm_patches = ()
+    if "arms" in spec or (RULES / rule_id / "arms").exists():
+        if "cases_from" not in spec:
+            raise ScreenError(f"rule {rule_id} has arms, so its rule.json must name the rule it takes cases from in cases_from")
+        arm_patches = load_arm_patches(rule_id, spec.get("arms"))
     root = RULES / origin
     for required in ("oracle.py", "cases"):
         if not (root / required).exists():
             raise ScreenError(f"rule {origin} has no {required}")
-    patch = (RULES / rule_id / "rule.patch").read_text()
+    patch = None if arm_patches else (RULES / rule_id / "rule.patch").read_text()
     cases = tuple(load_case(rule_id, path) for path in sorted((root / "cases").iterdir()) if path.is_dir())
     if not any(case.kind == "positive" for case in cases):
         raise ScreenError(f"rule {origin} has no positive case")
@@ -235,11 +290,12 @@ def load_rule(rule_id):
     companions = spec.get("companions", [])
     if not isinstance(companions, list) or not all(isinstance(name, str) and COMPANION_NAME.match(name) for name in companions):
         raise ScreenError(f"rules/{rule_id}/rule.json companions must be a list of skill directory names, not {companions!r}")
-    return Rule(rule_id, spec["source"], patch, parse_patch(patch)[0], cases, tuple(companions), spec.get("cases_from"))
+    target = sorted(patch_paths(arm_patches[0][1])[1])[0] if arm_patches else parse_patch(patch)[0]
+    return Rule(rule_id, spec["source"], patch, target, cases, tuple(companions), spec.get("cases_from"), arm_patches)
 
 
 def load_rules(requested=()):
-    known = sorted(path.name for path in RULES.iterdir() if (path / "rule.patch").is_file())
+    known = sorted(path.name for path in RULES.iterdir() if (path / "rule.patch").is_file() or (path / "arms").is_dir())
     unknown = sorted(set(requested) - set(known))
     if unknown:
         raise ScreenError(f"unknown rule(s): {', '.join(unknown)}; known: {', '.join(known)}")
@@ -359,6 +415,69 @@ def rule_change(rule, tree):
     return single_change(tree, apply_patch(tree, rule.patch))
 
 
+def git_apply(tree, patch, *flags):
+    """Run git apply on tree written into a scratch repo, which anchors the
+    patch paths at its root. Returns (completed process, tree read back)."""
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        env = {**os.environ, **workspace.GIT_ENV}
+        subprocess.run(["git", "init", "-q", str(root)], env=env, check=True)
+        for path, data in tree.items():
+            (root / path).parent.mkdir(parents=True, exist_ok=True)
+            (root / path).write_bytes(data)
+        (root / ".git" / "arm.patch").write_text(patch)
+        result = subprocess.run(["git", "apply", *flags, ".git/arm.patch"], cwd=root, env=env, capture_output=True, text=True)
+        return result, {path: data for path, data in read_tree(root).items() if not path.startswith(".git/")}
+
+
+def patch_paths(patch):
+    """(strip level, paths relative to skills/) of a multi-file patch. Paths
+    written as a/skills/... drop the skills/ prefix."""
+    result, _ = git_apply({}, patch, "--numstat", "-p1")
+    if result.returncode:
+        raise ScreenError(f"arm patch does not parse: {result.stderr.strip()}")
+    paths = [line.split("\t", 2)[2] for line in result.stdout.splitlines()]
+    if paths and all(path.startswith("skills/") for path in paths):
+        return 2, [path.removeprefix("skills/") for path in paths]
+    return 1, paths
+
+
+def apply_arm_patch(tree, patch):
+    """The tree with an arm's patch applied by git apply. Refuses a patch that
+    does not apply or leaves the tree as it was."""
+    strip, _ = patch_paths(patch)
+    result, applied = git_apply(tree, patch, f"-p{strip}")
+    if result.returncode:
+        raise ScreenError(f"arm patch does not apply to skills/: {result.stderr.strip()}")
+    if applied == tree:
+        raise ScreenError("arm patch changes nothing")
+    return applied
+
+
+def arm_trees(rule, current):
+    """[(arm, tree)] in the rule's order, current first."""
+    apply = apply_patch if rule.paired else apply_arm_patch
+    return [(name, current if patch is None else apply(current, patch)) for name, patch in rule.arms]
+
+
+def changed_paths(before, after):
+    return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+
+
+def rule_mounted(rule, mounted, tree):
+    """Whether the mounted skill text carries the rule: a pair rule's inserted
+    text, or every line some arm adds that the current tree lacks."""
+    if rule.paired:
+        return rule_change(rule, tree).inserted.strip() in mounted
+    text = b"\n".join(tree.values()).decode(errors="replace")
+    for _, patch in rule.arm_patches:
+        added = [line[1:].strip() for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++")]
+        new = [line for line in added if line and line not in text]
+        if new and all(line in mounted for line in new):
+            return True
+    return False
+
+
 def frontmatter_description(skill_md):
     match = re.search(r"^description:\s*(.+)$", skill_md.split("\n---", 1)[0], re.MULTILINE)
     value = match.group(1).strip()
@@ -396,14 +515,14 @@ def answered_case(rules, prompt, mounted, arm_workspace=None):
     """(rule, case) the offline stand-in answers. A workspace case's input
     sits at arms/<rule>/<case>/<arm>/workspace, which names both. Otherwise the
     prompt picks the case, and a case that a variant shares with its source
-    goes to the rule whose inserted text is mounted."""
+    goes to the rule whose text is mounted."""
     matches = [(rule, case) for rule in rules for case in rule.cases if render_prompt(case) in prompt]
     if arm_workspace:
         named = tuple(Path(arm_workspace).parts[-4:-2])
         matches = [(rule, case) for rule, case in matches if (rule.id, case.id) == named]
     elif len(matches) > 1:
         tree = tracked("skills")
-        matches.sort(key=lambda match: rule_change(match[0], tree).inserted.strip() not in mounted)
+        matches.sort(key=lambda match: not rule_mounted(match[0], mounted, tree))
     if not matches:
         raise ScreenError("no case matches the prompt")
     return matches[0]
@@ -487,7 +606,7 @@ def mount_clashes(tracked, rule, entry, skills):
         return prefix in tracked or any(path.startswith(prefix + "/") for path in tracked)
 
     if entry == "skill":
-        return [prefix for prefix in (f"skills/{name}" for name in (rule.skill, *rule.companions)) if taken(prefix)]
+        return [prefix for prefix in (f"skills/{name}" for name in (*rule.skills, *rule.companions)) if taken(prefix)]
     clashes = [f"skills/{ENTRY_TREE}"] if taken(f"skills/{ENTRY_TREE}") else []
     names = sorted({path.split("/", 1)[0] for path in skills} | set(rule.companions))
     for _, discovery in ENTRY_INVOCATION.values():
@@ -529,13 +648,20 @@ def build(out, rules, entry="skill"):
     built = {}
     for rule in rules:
         if entry == "skill":
-            skill, tree_dir, current = rule.skill, "skills", tracked(f"skills/{rule.skill}")
-            skill_paths = [f"skills/{skill}/SKILL.md"]
+            skill, tree_dir = rule.skill, "skills"
+            current = {path: data for path, data in tracked("skills").items() if path.split("/", 1)[0] in rule.skills}
+            others = [name for name in rule.skills if name != skill and f"{name}/SKILL.md" in current]
+            skill_paths = [f"skills/{name}/SKILL.md" for name in (skill, *others)]
         else:
             skill, tree_dir, current = ENTRY_SKILL, ENTRY_TREE, tracked("skills")
             skill_paths = [ENTRY_TREE]
-        amended = apply_patch(current, rule.patch)
-        change = single_change(current, amended)
+        trees = arm_trees(rule, current)
+        if rule.paired:
+            change = single_change(current, trees[1][1])
+            record = {"target": change.target, "patch_kind": change.kind, "removed": change.removed, "inserted": change.inserted}
+        else:
+            arm_changes = {name: changed_paths(current, tree) for name, tree in trees}
+            record = {"target": arm_changes[rule.arm_names[1]][0], "patch_kind": "arms", "arm_changes": arm_changes}
         description = frontmatter_description(current[f"{skill}/SKILL.md"].decode())
         companions = companion_trees(rule, current)
         if entry == "skill":
@@ -546,7 +672,7 @@ def build(out, rules, entry="skill"):
             spec, checkout, workspace_hashes = None, None, {}
             if case.workspace:
                 spec, checkout = prepare_workspace(rule, case, entry, current)
-            for arm, tree in zip(ARMS, (current, amended)):
+            for arm, tree in trees:
                 root = out / "arms" / rule.id / case.id / arm
                 if root.exists():
                     shutil.rmtree(root)
@@ -569,14 +695,18 @@ def build(out, rules, entry="skill"):
             else:
                 cases[case.id] = {"kind": case.kind, "timeout_s": case.spec.get("timeout_s", workspace.TIMEOUT_S),
                                   "workspace": workspace_record(spec, checkout, workspace_hashes)}
-        built[rule.id] = {"entry": entry, "tree_dir": tree_dir, "target": change.target, "patch_kind": change.kind,
-                          "removed": change.removed, "inserted": change.inserted, "cases": cases}
+        built[rule.id] = {"entry": entry, "tree_dir": tree_dir, **record, "arms": list(rule.arm_names), "cases": cases}
         if companions:
             built[rule.id]["companions"] = companion_record(companions, arm_hashes)
         (out / "arms" / rule.id / "build.json").write_text(json.dumps(built[rule.id], indent=2) + "\n")
-        print(f"{rule.id}: {entry} entry, {len(current)} tracked files, skills/{change.target} {change.kind}, cases {', '.join(cases)}")
-        for name, record in built[rule.id].get("companions", {}).get("trees", {}).items():
-            print(f"  companion {name}: {record['files']} file(s), sha256 {record['sha256'][:12]} in every arm")
+        shape = f"skills/{record['target']} {record['patch_kind']}" if rule.paired else f"arms {', '.join(rule.arm_names)}"
+        print(f"{rule.id}: {entry} entry, {len(current)} tracked files, {shape}, cases {', '.join(cases)}")
+        for name, tree_record in built[rule.id].get("companions", {}).get("trees", {}).items():
+            print(f"  companion {name}: {tree_record['files']} file(s), sha256 {tree_record['sha256'][:12]} in every arm")
+        if not rule.paired:
+            for arm in rule.arm_names[1:]:
+                print(f"  {arm}: {', '.join(f'skills/{path}' for path in record['arm_changes'][arm])}")
+            continue
         if change.removed:
             print("  - " + change.removed.strip().replace("\n", "\n    "))
         print("  + " + change.inserted.strip().replace("\n", "\n    "))
@@ -623,7 +753,7 @@ def audit(rules, entry="skill"):
         build(out, rules, entry)
         for rule in rules:
             for case in rule.cases:
-                for arm in ARMS:
+                for arm in rule.arm_names:
                     root = out / "arms" / rule.id / case.id / arm
                     check_manifest(root, case.kind)
                     harness("prepare", root / MANIFEST, "--split", "tune", "--runs-per-variant", "1", "--out", root / "tasks-all.jsonl")
@@ -758,9 +888,9 @@ def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host"):
         for case in rule.cases:
             case_build = built[rule.id]["cases"][case.id]
             backend = backend_args(agent, out, entry, "workspace" in case_build, runner)
-            for arm in ARMS:
+            for arm in rule.arm_names:
                 check_manifest(out / "arms" / rule.id / case.id / arm, case.kind)
-            for arm in ARMS:
+            for arm in rule.arm_names:
                 root = out / "arms" / rule.id / case.id / arm
                 work = out / agent / rule.id / case.id / arm
                 if work.exists():
@@ -822,16 +952,18 @@ def exposure(result, tree_files):
     return {"read": skill_files_read(events, tree_files), "entry_invoked": entry_invoked(base)}
 
 
-def classify(current, amended, target, entry="skill"):
-    """Name what a pair shows. A pair whose amended arm never read the patched
-    file says nothing about the rule, so it is unexposed rather than a tie.
+def classify(baseline, treatment, target, entry="skill"):
+    """Name what a pair shows. target is the file, or the set of files, that
+    differ between the two arms. A pair whose treatment arm read none of them
+    says nothing about the change, so it is unexposed rather than a tie.
     Under the poteto-mode entry the wrapper starts every prompt with the
     invocation, which injects poteto-mode/SKILL.md without a file read. Neither
     agent's trace shows that injection, so the entry itself counts as exposure."""
-    if current is None or amended is None or "INVALID" in (current["verdict"], amended["verdict"]):
+    if baseline is None or treatment is None or "INVALID" in (baseline["verdict"], treatment["verdict"]):
         return "invalid"
-    injected = entry == ENTRY_SKILL or amended["exposure"]["entry_invoked"]
-    exposed = target in amended["exposure"]["read"] or (target == f"{ENTRY_SKILL}/SKILL.md" and injected)
+    targets = {target} if isinstance(target, str) else set(target)
+    injected = entry == ENTRY_SKILL or treatment["exposure"]["entry_invoked"]
+    exposed = bool(targets & set(treatment["exposure"]["read"])) or (f"{ENTRY_SKILL}/SKILL.md" in targets and injected)
     if not exposed:
         return "unexposed"
     return {
@@ -839,7 +971,25 @@ def classify(current, amended, target, entry="skill"):
         ("PASS", "FAIL"): "reverses",
         ("PASS", "PASS"): "tie-pass",
         ("FAIL", "FAIL"): "tie-fail",
-    }[(current["verdict"], amended["verdict"])]
+    }[(baseline["verdict"], treatment["verdict"])]
+
+
+def comparisons(arms):
+    """(baseline, treatment) arm pairs: each arm against the first, then each
+    later arm against each earlier one."""
+    treated = arms[1:]
+    return [(arms[0], arm) for arm in treated] + [(baseline, arm) for index, baseline in enumerate(treated) for arm in treated[index + 1:]]
+
+
+def differing_files(case_root, build_info, baseline, treatment):
+    """Files whose bytes differ between two built arms of one case."""
+    changes = build_info["arm_changes"]
+
+    def read(arm, path):
+        file = case_root / arm / build_info["tree_dir"] / path
+        return file.read_bytes() if file.is_file() else None
+
+    return sorted(path for path in set(changes[baseline]) | set(changes[treatment]) if read(baseline, path) != read(treatment, path))
 
 
 def rule_verdict(outcomes):
@@ -877,38 +1027,59 @@ def compare(out):
     pairs = {}
     for row in table:
         pairs.setdefault((row["agent"], row["rule"], row["run"], row["case"]), {})[row["arm"]] = row
-    summary = []
+    # grouped: (agent, rule, run, treatment arm vs current, or None for a pair rule) -> case outcomes
+    summary, grouped = [], {}
     for (agent, rule, run_number, case), arms in sorted(pairs.items(), key=lambda item: tuple(map(str, item[0]))):
         first = next(iter(arms.values()))
-        outcome = classify(arms.get("current"), arms.get("amended"), first["target"], first["entry"])
-        summary.append({"agent": agent, "rule": rule, "case": case, "kind": first["kind"], "run": run_number, "target": first["target"], "outcome": outcome})
-        cells = [f"{arm}={arms[arm]['verdict'] if arm in arms else 'MISSING'}" for arm in ARMS]
-        print(f"{agent:6} {rule:26} {case:18} {first['kind']:9} run-{run_number}  " + "  ".join(cells) + f"  {outcome.upper()}")
-        for arm in ARMS:
+        build_info = json.loads((out / "arms" / rule / "build.json").read_text())
+        names = build_info.get("arms", list(ARMS))
+        paired = build_info.get("patch_kind") != "arms"
+        outcomes = []
+        for baseline, treatment in comparisons(names):
+            target = first["target"] if paired else differing_files(out / "arms" / rule / case, build_info, baseline, treatment)
+            outcome = classify(arms.get(baseline), arms.get(treatment), target, first["entry"])
+            pair = {"agent": agent, "rule": rule, "case": case, "kind": first["kind"], "run": run_number, "target": target, "outcome": outcome}
+            if not paired:
+                pair.update(baseline=baseline, treatment=treatment)
+            summary.append(pair)
+            outcomes.append(f"    {treatment} vs {baseline}: {outcome.upper()}")
+            if baseline == names[0]:
+                grouped.setdefault((agent, rule, run_number, None if paired else treatment), []).append((case, first["kind"], outcome))
+        cells = [f"{arm}={arms[arm]['verdict'] if arm in arms else 'MISSING'}" for arm in names]
+        print(f"{agent:6} {rule:26} {case:18} {first['kind']:9} run-{run_number}  " + "  ".join(cells) + (f"  {summary[-1]['outcome'].upper()}" if paired else ""))
+        for arm in names:
             row = arms.get(arm)
             if row is None:
                 continue
             seen = row["exposure"]["read"]
-            target_state = "read" if first["target"] in seen else "NOT READ"
+            if paired:
+                target_state = f"{first['target']} {'read' if first['target'] in seen else 'NOT READ'}; "
+            else:
+                owned = build_info["arm_changes"][arm]
+                target_state = f"changed {', '.join(owned)} ({len(set(owned) & set(seen))} of {len(owned)} read); " if owned else ""
             entry_state = "invoked" if row["exposure"]["entry_invoked"] else "not observed"
             companion_state = ""
             if "companions_read" in row["exposure"]:
                 companion_state = f"; companion {', '.join(row['exposure']['companions_read']) or 'none'} read"
-            print(f"    {arm}: {first['target']} {target_state}; entry {entry_state}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
+            print(f"    {arm}: {target_state}entry {entry_state}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
             if row["reasons"]:
                 print(f"    {arm}: {row['reasons']}")
-    grouped = {}
-    for pair in summary:
-        grouped.setdefault((pair["agent"], pair["rule"], pair["run"]), []).append((pair["case"], pair["kind"], pair["outcome"]))
-    for (agent, rule, run_number), outcomes in grouped.items():
+        if not paired:
+            print("\n".join(outcomes))
+    for (agent, rule, run_number, _), outcomes in grouped.items():
         ran = {case for case, _, _ in outcomes}
         built_cases = json.loads((out / "arms" / rule / "build.json").read_text())["cases"]
         outcomes += [(case, spec["kind"], "missing") for case, spec in built_cases.items() if case not in ran]
     rules = []
-    for (agent, rule, run_number), outcomes in sorted(grouped.items(), key=lambda item: tuple(map(str, item[0]))):
+    # Sort on agent, rule, and run only, so a rule's arms keep their order.
+    for (agent, rule, run_number, arm), outcomes in sorted(grouped.items(), key=lambda item: tuple(map(str, item[0][:3]))):
         result, reasons = rule_verdict(outcomes)
-        rules.append({"agent": agent, "rule": rule, "run": run_number, "verdict": result, "reasons": reasons})
-        print(f"{agent:6} {rule:26} rule run-{run_number}  {result.upper()}" + (f"  ({'; '.join(reasons)})" if reasons else ""))
+        verdict_row = {"agent": agent, "rule": rule, "run": run_number, "verdict": result, "reasons": reasons}
+        label = "rule"
+        if arm is not None:
+            verdict_row["arm"], label = arm, f"rule {arm} vs current"
+        rules.append(verdict_row)
+        print(f"{agent:6} {rule:26} {label} run-{run_number}  {result.upper()}" + (f"  ({'; '.join(reasons)})" if reasons else ""))
     (out / "compare.json").write_text(json.dumps({"pairs": summary, "rules": rules, "runs": table}, indent=2) + "\n")
     print(f"wrote {out / 'compare.json'}")
 
@@ -921,16 +1092,16 @@ def out_dirs(roots):
             yield from sorted(path for path in root.iterdir() if (path / "compare.json").is_file())
 
 
-def arm_file(out, rule_id, case_id, arm, build_info):
+def arm_file(out, rule_id, case_id, arm, build_info, target):
     arm_root = out / "arms" / rule_id / arm if "cases" not in build_info else out / "arms" / rule_id / case_id / arm
-    path = arm_root / build_info["tree_dir"] / build_info["target"]
+    path = arm_root / build_info["tree_dir"] / target
     return path.read_bytes() if path.is_file() else None
 
 
 def past_runs(roots, rules, trees):
     """{(rule, case): ["agent/entry outcome", ...]} from finished --out dirs. A run
-    whose owner file differs from today's current or amended text is marked as
-    run against older text."""
+    whose changed files differ from today's text in any arm is marked as run
+    against older text."""
     runs = {}
     for out in out_dirs(roots):
         for pair in json.loads((out / "compare.json").read_text())["pairs"]:
@@ -940,12 +1111,13 @@ def past_runs(roots, rules, trees):
             if rule is None or not build_path.is_file():
                 continue
             build_info = json.loads(build_path.read_text())
-            current, amended = trees[rule.id]
+            files = sorted({path for changed in build_info.get("arm_changes", {}).values() for path in changed}) or [rule.target]
             fresh = build_info["target"] == rule.target and all(
-                arm_file(out, rule.id, case_id, arm, build_info) == tree.get(rule.target)
-                for arm, tree in zip(ARMS, (current, amended))
+                arm_file(out, rule.id, case_id, arm, build_info, path) == trees[rule.id].get(arm, {}).get(path)
+                for arm in build_info.get("arms", ARMS) for path in files
             )
-            label = f"{pair['agent']}/{build_info['entry']} {pair['outcome']}" + ("" if fresh else " (older text)")
+            compared = f"{pair['treatment']} vs {pair['baseline']} " if "treatment" in pair else ""
+            label = f"{pair['agent']}/{build_info['entry']} {compared}{pair['outcome']}" + ("" if fresh else " (older text)")
             runs.setdefault((rule.id, case_id), []).append(label)
     return runs
 
@@ -956,17 +1128,22 @@ def plan(roots):
     trees, changes = {}, {}
     for rule in rules.values():
         try:
-            amended = apply_patch(tree, rule.patch)
-            changes[rule.id] = single_change(tree, amended)
-            trees[rule.id] = (tree, amended)
+            trees[rule.id] = dict(arm_trees(rule, tree))
+            changes[rule.id] = single_change(tree, trees[rule.id]["amended"]) if rule.paired else None
         except ScreenError as exc:
             changes[rule.id] = exc
-            trees[rule.id] = (tree, {})
+            trees[rule.id] = {"current": tree}
     runs = past_runs(roots, rules, trees)
     for rule in rules.values():
         change = changes[rule.id]
-        kind = change.kind if isinstance(change, Change) else f"BROKEN: {change}"
+        if isinstance(change, ScreenError):
+            kind = f"BROKEN: {change}"
+        else:
+            kind = change.kind if rule.paired else f"arms {', '.join(rule.arm_names)}"
         print(f"{rule.id}  [{rule.source}]  skills/{rule.target}  {kind}" + (f"  companions {', '.join(rule.companions)}" if rule.companions else ""))
+        if not rule.paired and not isinstance(change, ScreenError):
+            for arm in rule.arm_names[1:]:
+                print(f"  arm {arm}: {', '.join(changed_paths(tree, trees[rule.id][arm]))}")
         for case in rule.cases:
             seen = runs.get((rule.id, case.id))
             print(f"  {case.id:20} {case.kind:9}  {'; '.join(seen) if seen else 'not run'}")

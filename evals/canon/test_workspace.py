@@ -1,4 +1,5 @@
 import contextlib
+import difflib
 import importlib.util
 import io
 import json
@@ -375,6 +376,60 @@ class OfflineWorkspaceRunTests(ShopRule):
                          ["app/amend_log.md", "app/legacy.py", "app/orders.py"])
         self.assertEqual(sorted(apply_diff(checkout, workspace_diff(harvest / "current" / "runs" / "orders-amend" / "with_skill"))),
                          ["README.md"])
+
+
+def unified(path, before, after):
+    return "".join(difflib.unified_diff(before.splitlines(True), after.splitlines(True), f"a/{path}" if before else "/dev/null", f"b/{path}"))
+
+
+LEAF_LINE = "When a placed order changes, record the change in app/amend_log.md.\n"
+TRIGGER_LINE = "- Changing a placed order → record it in app/amend_log.md.\n"
+NOTE = "Amendments keep a log beside the orders code.\n"
+
+
+class ShopArmsRule(ShopRule):
+    """A three-arm rule that takes its case from orders-workspace. Its arms
+    patch real tracked skill files, so they are written against today's text."""
+
+    def setUp(self):
+        super().setUp()
+        feature, index = (screen.tracked("skills")[path].decode() for path in ("poteto-mode/playbooks/feature.md", "poteto-mode/SKILL.md"))
+        head, rest = feature.split("\n", 1)
+        leaf = unified("poteto-mode/playbooks/feature.md", feature, f"{head}\n{LEAF_LINE}{rest}")
+        trigger = leaf + unified("poteto-mode/SKILL.md", index, index + TRIGGER_LINE) + unified("poteto-mode/references/orders-amend.md", "", NOTE)
+        rule = screen.RULES / "orders-arms"
+        (rule / "arms").mkdir(parents=True)
+        (rule / "rule.json").write_text(json.dumps({"cases_from": "orders-workspace", "arms": ["current", "leaf", "leaf+trigger"]}))
+        (rule / "arms" / "leaf.patch").write_text(leaf)
+        (rule / "arms" / "leaf+trigger.patch").write_text(trigger)
+        self.rule = screen.load_rule("orders-arms")
+
+
+@unittest.skipUnless(harness_available(), "needs a skill-ci checkout at $SKILL_CI and uv")
+class OfflineArmsRunTests(ShopArmsRule):
+    def test_each_treatment_arm_separates_from_current_and_the_two_tie(self):
+        with mock.patch.dict(os.environ, {"CODEX_BIN": str(ROOT / "offline" / "codex")}), contextlib.redirect_stdout(io.StringIO()) as printed:
+            screen.run("codex", self.out, [self.rule], "gpt-6-sol", 1, None, "poteto-mode")
+
+        compared = json.loads((self.out / "compare.json").read_text())
+        self.assertEqual([(pair["treatment"], pair["baseline"], pair["outcome"]) for pair in compared["pairs"]],
+                         [("leaf", "current", "separates"), ("leaf+trigger", "current", "separates"), ("leaf+trigger", "leaf", "tie-pass")],
+                         printed.getvalue()[-3000:])
+        self.assertEqual([(row["arm"], row["verdict"]) for row in compared["rules"]], [("leaf", "separates"), ("leaf+trigger", "separates")])
+        built = json.loads((self.out / "arms" / "orders-arms" / "build.json").read_text())
+        self.assertEqual((built["arms"], built["patch_kind"], built["target"]), (["current", "leaf", "leaf+trigger"], "arms", "poteto-mode/playbooks/feature.md"))
+        self.assertEqual(built["arm_changes"], {
+            "current": [],
+            "leaf": ["poteto-mode/playbooks/feature.md"],
+            "leaf+trigger": ["poteto-mode/SKILL.md", "poteto-mode/playbooks/feature.md", "poteto-mode/references/orders-amend.md"],
+        })
+        self.assertEqual((self.out / "arms" / "orders-arms" / "orders-amend" / "leaf+trigger" / "pstack" / "poteto-mode" / "references" / "orders-amend.md").read_text(), NOTE)
+        checkout = workspace.reference_checkout(workspace.parse_spec(self.rule.cases[0].root, self.rule.cases[0].workspace))[0]
+        touched = {arm: sorted(apply_diff(checkout, workspace_diff(self.out / "codex" / "orders-arms" / "orders-amend" / arm / "runs" / "orders-amend" / "with_skill")))
+                   for arm in self.rule.arm_names}
+        self.assertEqual(touched, {"current": ["README.md"],
+                                   "leaf": ["app/amend_log.md", "app/legacy.py", "app/orders.py"],
+                                   "leaf+trigger": ["app/amend_log.md", "app/legacy.py", "app/orders.py"]})
 
 
 if __name__ == "__main__":

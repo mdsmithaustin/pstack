@@ -123,6 +123,48 @@ of its input, `arms/<rule>/<case>/<arm>/workspace`. For a pasted-project case
 it matches the prompt, and a case that a variant shares with its source goes to
 the rule whose inserted text is mounted.
 
+### Arm rules
+
+An arm rule compares more than one placement of a rule in one run. Its
+directory holds `rule.json` and `arms/`, and no `rule.patch`:
+
+```
+rules/<id>/
+  rule.json           {"cases_from": "<rule>", "arms": ["current", "leaf", "leaf+trigger"]}
+                      source and companions are optional, as for a variant
+  arms/<arm>.patch    one per arm after current
+```
+
+`current` is first and has no patch. Every other arm has exactly one
+`arms/<arm>.patch`, and every patch file is listed. Arm names match
+`^[a-z0-9][a-z0-9+._-]*$`. An arm's patch is a unified diff against `skills/`
+that may change several files in several hunks, add a file from `/dev/null`,
+or delete one. Paths read `a/<skill>/...`, or `a/skills/<skill>/...`, which
+drops the `skills/` prefix. The build applies it with `git apply` in a
+scratch copy of the tree, and refuses a patch that does not apply or changes
+nothing. The one-change check does not run. The rule takes its cases and
+oracle from `cases_from`, as a variant does. Under `--entry skill` the arms
+mount every skill any arm changes.
+
+`build` writes `arms/<rule>/<case>/<arm>/` for every arm in order.
+`build.json` records `"patch_kind": "arms"`, `"arms"` in order, and
+`"arm_changes"`, which maps each arm to the files it changes (`current` has
+none). `"target"` is the first changed file of the first arm after current, for
+older readers. A pair rule's `build.json` also records
+`"arms": ["current", "amended"]`.
+
+`compare` prints one row per case and run with every arm's verdict in order,
+each arm's changed files and how many it read, then one line per comparison:
+each arm against current, then each later arm against each earlier one, as
+`leaf+trigger vs leaf: TIE-PASS`. The exposure target of a comparison is the
+set of files that differ between the two arms. The later arm is exposed when it
+read one of them, or under `--entry poteto-mode` when one of them is
+`poteto-mode/SKILL.md`. Each arm after current gets its own rule line against
+current, `rule leaf vs current run-1 SEPARATES`. In `compare.json` these pair
+entries add `baseline` and `treatment`, and these rule entries add `arm`. `plan`
+lists an arm rule's arms and each arm's changed files. `chain.py` counts only
+the `current` and `amended` arms.
+
 ## Entry modes
 
 `--entry skill` is the default. It mounts only the skill that owns the patched
@@ -298,7 +340,7 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent codex --entry poteto-mode --out "$(mktemp -d)/offline"
 ```
 
-`python3 -m unittest` runs `test_screen.py`, `test_workspace.py`, `test_chain.py`, and
+`python3 -m unittest` runs `test_screen.py`, `test_arms.py`, `test_workspace.py`, `test_chain.py`, and
 `test_oracles.py`, which loads `oracles/test_shared.py` and every
 `rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
 mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
