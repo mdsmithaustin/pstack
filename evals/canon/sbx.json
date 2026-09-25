@@ -4,21 +4,52 @@
       "kit": "claude",
       "harness": "claude-code",
       "discovery": ".claude/skills",
-      "transcripts": {"from": ".claude/projects", "to": "claude"},
-      "api": ["api.anthropic.com"]
+      "transcripts": {
+        "from": ".claude/projects",
+        "to": "claude"
+      },
+      "api": [
+        "api.anthropic.com"
+      ]
     },
     "codex": {
       "kit": "codex",
       "harness": "codex",
       "discovery": ".agents/skills",
-      "transcripts": {"from": ".codex/sessions", "to": "codex/sessions"},
-      "api": ["chatgpt.com", "api.openai.com"]
+      "transcripts": {
+        "from": ".codex/sessions",
+        "to": "codex/sessions"
+      },
+      "api": [
+        "chatgpt.com",
+        "api.openai.com"
+      ],
+      "cli": "@openai/codex@0.157.0"
     }
   },
   "uv": "0.12.17",
   "repos": {
-    "omnigent": {"python": "3.12", "sync": ["--frozen", "--group", "test"], "env": {"OMNIGENT_SKIP_WEB_UI": "true"}, "package": "omnigent"},
-    "hermes": {"python": "3.11", "sync": ["--frozen", "--extra", "dev"], "package": "hermes_cli"}
+    "omnigent": {
+      "python": "3.12",
+      "sync": [
+        "--frozen",
+        "--group",
+        "test"
+      ],
+      "env": {
+        "OMNIGENT_SKIP_WEB_UI": "true"
+      },
+      "package": "omnigent"
+    },
+    "hermes": {
+      "python": "3.11",
+      "sync": [
+        "--frozen",
+        "--extra",
+        "dev"
+      ],
+      "package": "hermes_cli"
+    }
   },
   "build_network": [
     "pypi.org",
@@ -26,7 +57,8 @@
     "github.com",
     "objects.githubusercontent.com",
     "release-assets.githubusercontent.com",
-    "releases.astral.sh"
+    "releases.astral.sh",
+    "registry.npmjs.org"
   ],
   "run_deny_network": [
     "api.github.com",

@@ -176,7 +176,7 @@ def deps_tag(agent, repo, commit):
     """The template name for agent, repo, and commit, versioned by every
     setting that changes what the build installs."""
     spec = {key: value for key, value in CONFIG["repos"][repo].items() if key in ("python", "sync", "env")}
-    return f"canon-deps-{agent}-{repo}-{commit[:12]}:{config_digest(CONFIG['uv'], spec, CONFIG['agents'][agent]['kit'])}"
+    return f"canon-deps-{agent}-{repo}-{commit[:12]}:{config_digest(CONFIG['uv'], spec, CONFIG['agents'][agent]['kit'], CONFIG['agents'][agent].get('cli'))}"
 
 
 def deps_env(repo):
@@ -228,6 +228,13 @@ def build_deps(agent, repo, commit):
                 ["uv", "python", "install", spec["python"]],
                 ["sh", "-c", f"cd {DEPS_ROOT}/{repo}/src && uv sync {' '.join(spec['sync'])}"],
             ]
+            cli = CONFIG["agents"][agent].get("cli")
+            if cli:
+                with timed(timings, "cli_s"):
+                    proc = box.exec("npm", "install", "-g", cli, user="root", check=False)
+                if proc.returncode != 0:
+                    raise SandboxError(f"npm install -g {cli} failed: {proc.stderr.decode(errors='replace')[-800:]}")
+                record["cli"] = cli
             for key, step in zip(("extract_s", "uv_s", "python_s", "sync_s"), steps):
                 with timed(timings, key):
                     proc = box.exec(*step, env=env, check=False)
