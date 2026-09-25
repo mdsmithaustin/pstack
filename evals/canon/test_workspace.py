@@ -403,7 +403,8 @@ class RegradeTests(ShopRule):
         self.assertEqual([(pair["run"], pair["outcome"]) for pair in compared["pairs"]], [(1, "separates"), (2, "invalid")])
         self.assertEqual(compared["runs"][2]["reasons"], "; ".join(FAILURES_OF_BAD))
         self.assertEqual(json.loads(amended.with_name("regrade.json").read_text()),
-                         {"results": [{"run": 1, "verdict": "PASS", "reasons": "", "graded_from_diff": True}]})
+                         {"results": [{"run": 1, "verdict": "PASS", "reasons": "", "graded_from_diff": True,
+                                       "run_base": str(self.out / "codex" / "orders-workspace" / "orders-amend" / "amended" / "runs" / "orders-amend" / "with_skill" / "run-1")}]})
         self.assertEqual(amended.read_text(), graded)
         self.assertIn("amended: graded from the diff; the harness found no gradable answer", printed.getvalue())
 

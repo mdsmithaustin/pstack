@@ -37,18 +37,30 @@ A case whose case.json names a workspace runs inside a checkout of a real repo
 at a pinned commit (see workspace.py) instead of receiving project files in the
 prompt. Its oracle grades the diff the agent left on that checkout.
 
+A workspace case that also names a review hands the agent a pull request on a
+branch. Its oracle is a precheck, and a blinded judge from the other model
+family grades each review against the case's rubric.md (see review.py).
+
   screen.py plan [--runs-root DIR ...]                 list rules, cases, and past runs
   screen.py build --out DIR [--entry E] [RULE ...]     write both arms of every case
   screen.py audit [--entry E] [RULE ...]               model-free: build, validate, audit, prepare
   screen.py run --agent claude|codex --out DIR [--entry E] [--runner host|sbx] [RULE ...]   paid: answer, grade, compare
   screen.py compare --out DIR                          print paired verdicts with exposure
   screen.py regrade --out DIR                          grade workspace runs again from their diffs, then compare
+  screen.py judge --out DIR [--judge B:M]              paid: judge every review run again, then compare
+  screen.py calibrate [--judge B:M ...] RULE ...       paid: judge each review case's labeled samples
+
+Every command with --out appends the traceback of any error to
+<out>/screen-error.log and prints where it went on stdout and stderr. run logs
+a failed arm and goes on to the next, then exits 1.
 
 regrade runs each workspace case's oracle, from the arm's grader copy, on every
 harvested run's diff and output.md (empty when missing). It writes regrade.json
 beside each grade.json, which it leaves as is, and compare prefers regrade.json
 when present. A run the harness called INVALID and regrade graded carries
-graded_from_diff. Pasted-project cases keep the harness grade.
+graded_from_diff. An arm whose run stopped before grading, with harvest slots
+still numbered or no grade.json, is mapped and graded from its diff too.
+Pasted-project cases keep the harness grade.
 """
 import argparse
 import dataclasses
@@ -63,11 +75,14 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
 CANON = Path(__file__).resolve().parent
 sys.path.insert(0, str(CANON))
+import review  # noqa: E402
 import workspace  # noqa: E402
 
 REPO = CANON.parents[1]
@@ -111,6 +126,7 @@ CASE_KINDS = {"positive": ("positive", "capability"), "near-miss": ("adversarial
 ACCEPTED_BLOCKER = "no adversarial cases"
 LEAK = re.compile(r"\b(evals?|evaluation|judge|experiment|rubric|score|compare|benchmark|candidate|arena)\b", re.IGNORECASE)
 # Runs made before rules had cases name no case. These are the cases they ran.
+ERROR_LOG = "screen-error.log"
 LEGACY_CASES = {
     "notation-not-runtime": "checkout-rules",
     "observe-through-interface": "register-email",
@@ -135,6 +151,43 @@ class Case:
     @property
     def workspace(self):
         return self.spec.get("workspace")
+
+    @property
+    def review(self):
+        return self.spec.get("review")
+
+    @property
+    def owner(self):
+        """The rule whose cases/ holds this case; a variant borrows its source's."""
+        return self.root.parent.parent.name
+
+
+def case_spec(case):
+    return workspace.parse_spec(case.root, case.workspace, case.review)
+
+
+def standin_review(case, treated):
+    """The labeled sample an offline stand-in answers a review case with: the
+    CLEAN one for a near-miss, else FOUND when the rule is mounted and MISSED
+    when it is not."""
+    wanted = "CLEAN" if case.kind == "near-miss" else ("FOUND" if treated else "MISSED")
+    labels = check_labels(case.root, case.kind)
+    return case.root / "samples" / next(name for name, label in sorted(labels.items()) if label == wanted)
+
+
+def check_labels(root, kind):
+    """samples/labels.json maps each calibration sample to a verdict the judge
+    may give for the case's kind."""
+    path = root / "samples" / "labels.json"
+    labels = json.loads(path.read_text())
+    if not isinstance(labels, dict) or not labels:
+        raise ScreenError(f"{path} must map sample file names to verdicts")
+    for name, label in labels.items():
+        if label not in review.VERDICTS[kind]:
+            raise ScreenError(f"{path} labels {name} {label!r}; a {kind} case's verdicts are {review.VERDICTS[kind]}")
+        if not (root / "samples" / name).is_file() or "/" in name:
+            raise ScreenError(f"{path} names {name}, which is not a file in samples/")
+    return labels
 
 
 @dataclass(frozen=True)
@@ -229,10 +282,17 @@ def load_case(rule_id, root):
     missing = {"kind", "domain", "expected_behavior", *(() if in_workspace else ("timeout_s",))} - set(spec)
     if missing:
         raise ScreenError(f"{spec_path} lacks {sorted(missing)}")
+    if spec.get("kind") not in CASE_KINDS:
+        raise ScreenError(f"{spec_path} kind must be one of {sorted(CASE_KINDS)}, not {spec.get('kind')!r}")
+    if "review" in spec and not in_workspace:
+        raise ScreenError(f"{spec_path} names a review, so it must name a workspace")
     if in_workspace:
-        workspace.parse_spec(root, spec["workspace"])
-    if spec["kind"] not in CASE_KINDS:
-        raise ScreenError(f"{spec_path} kind must be one of {sorted(CASE_KINDS)}, not {spec['kind']!r}")
+        workspace.parse_spec(root, spec["workspace"], spec.get("review"))
+    if "review" in spec:
+        for required in (root / "rubric.md", root / "samples" / "labels.json"):
+            if not required.is_file():
+                raise ScreenError(f"review case {rule_id}/{root.name} has no {required.relative_to(root)}")
+        check_labels(root, spec["kind"])
     if LEAK.search(root.name):
         raise ScreenError(f"case id {root.name!r} carries meta vocabulary; pick a project-shaped name")
     return Case(rule_id, root.name, spec["kind"], root, spec)
@@ -505,8 +565,10 @@ def render_prompt(case):
     if case.workspace:
         if "{project}" in prompt:
             raise ScreenError(f"{case.rule}/{case.id} works in a checkout; its prompt must not ask for {{project}}")
-        overlay = workspace.parse_spec(case.root, case.workspace).overlay
-        seeded = "\n".join(f"{path}\n{data.decode(errors='replace')}" for path, data in overlay.items())
+        spec = case_spec(case)
+        seeded = "\n".join(f"{path}\n{data.decode(errors='replace')}" for path, data in spec.overlay.items())
+        if spec.review:
+            seeded += f"\n{spec.review['title']}\n{spec.review['branch']}"
     else:
         project_root = case.root / "project"
         listing = "\n\n".join(
@@ -629,21 +691,35 @@ def mount_clashes(tracked, rule, entry, skills):
 def prepare_workspace(rule, case, entry, skills):
     """(spec, (checkout, tree)) for a workspace case, refusing a repo that
     tracks a path the mounted skills take."""
-    spec = workspace.parse_spec(case.root, case.workspace)
+    spec = case_spec(case)
     clashes = mount_clashes(workspace.tracked_paths(workspace.require_mirror(spec), spec.commit), rule, entry, skills)
     if clashes:
         raise ScreenError(f"{rule.id}/{case.id}: {spec.repo}@{spec.commit[:12]} tracks paths the mounted skills take: {clashes}")
     return spec, workspace.reference_checkout(spec)
 
 
-def write_arm_workspace(root, spec, tree):
-    """The arm's copy of what the entry wrapper materializes, hashed as read back."""
+def review_record(spec, checkout):
+    """What a review case's arms and build.json record: the PR's title,
+    branch, body file, and the commit ids of main and the PR branch as the
+    reference checkout holds them. None for a case that is not a review."""
+    if not spec.review:
+        return None
+    return {"title": spec.review["title"], "branch": spec.review["branch"], "body_file": spec.review["body_file"],
+            "refs": workspace.refs(checkout[0], spec.review["branch"])}
+
+
+def write_arm_workspace(root, spec, tree, pr=None):
+    """The arm's copy of what the entry wrapper materializes, hashed as read
+    back. A review arm also holds pr.patch and the recorded refs."""
     arm = root / "workspace"
     (arm / "overlay").mkdir(parents=True)
     for path, data in spec.overlay.items():
         (arm / "overlay" / path).parent.mkdir(parents=True, exist_ok=True)
         (arm / "overlay" / path).write_bytes(data)
     record = {"repo": spec.repo, "commit": spec.commit, "mirror": str(workspace.mirror_path(spec.repo)), "tree": tree}
+    if pr:
+        (arm / "pr.patch").write_bytes(spec.review["patch"])
+        record["review"] = pr
     (arm / "workspace.json").write_text(json.dumps(record, indent=2) + "\n")
     return tree_hash(read_tree(arm))
 
@@ -680,9 +756,10 @@ def build(out, rules, entry="skill"):
         cases, arm_hashes = {}, {}
         for case in rule.cases:
             prompt = render_prompt(case)
-            spec, checkout, workspace_hashes = None, None, {}
+            spec, checkout, pr, workspace_hashes = None, None, None, {}
             if case.workspace:
                 spec, checkout = prepare_workspace(rule, case, entry, current)
+                pr = review_record(spec, checkout)
             for arm, tree in trees:
                 root = out / "arms" / rule.id / case.id / arm
                 if root.exists():
@@ -699,13 +776,15 @@ def build(out, rules, entry="skill"):
                     arm_hashes.setdefault(name, {})[f"{case.id}/{arm}"] = tree_hash(read_tree(root / tree_dir / name))
                 copy_grader(rule, case, root, checkout)
                 if spec is not None:
-                    workspace_hashes[f"{case.id}/{arm}"] = write_arm_workspace(root, spec, checkout[1])
+                    workspace_hashes[f"{case.id}/{arm}"] = write_arm_workspace(root, spec, checkout[1], pr)
                 (root / MANIFEST).write_text(json.dumps(manifest(rule, case, prompt, skill, description, skill_paths, entry), indent=2) + "\n")
             if spec is None:
                 cases[case.id] = {"kind": case.kind, "timeout_s": ENTRY_TIMEOUT_S if entry == ENTRY_SKILL else case.spec["timeout_s"]}
             else:
                 cases[case.id] = {"kind": case.kind, "timeout_s": case.spec.get("timeout_s", workspace.TIMEOUT_S),
                                   "workspace": workspace_record(spec, checkout, workspace_hashes)}
+                if pr:
+                    cases[case.id]["review"] = pr
         built[rule.id] = {"entry": entry, "tree_dir": tree_dir, **record, "arms": list(rule.arm_names), "cases": cases}
         if companions:
             built[rule.id]["companions"] = companion_record(companions, arm_hashes)
@@ -892,35 +971,67 @@ def select_cases(rules, case_ids):
     return [rule for rule in chosen if rule.cases]
 
 
+def log_error(out, context, exc):
+    """Append exc's traceback to <out>/screen-error.log and say where it went
+    on stdout and on stderr, so a caller that reads only one stream sees it."""
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / ERROR_LOG).open("a", encoding="utf-8") as handle:
+        handle.write(f"--- {time.strftime('%Y-%m-%dT%H:%M:%S')} {context}\n{''.join(traceback.format_exception(exc))}\n")
+    message = f"screen: ERROR in {context}: {type(exc).__name__}: {exc} (traceback in {out / ERROR_LOG})"
+    print(message, flush=True)
+    print(message, file=sys.stderr, flush=True)
+
+
+def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout):
+    root = out / "arms" / rule.id / case.id / arm
+    work = out / agent / rule.id / case.id / arm
+    if work.exists():
+        raise ScreenError(f"{work} exists; use a fresh --out so runs never mix")
+    work.mkdir(parents=True)
+    harness("prepare", root / MANIFEST, "--split", "tune", "--runs-per-variant", runs, "--out", work / "tasks-all.jsonl")
+    with_skill_rows(work / "tasks-all.jsonl", work / "tasks.jsonl")
+    run_env = env
+    if "workspace" in case_build:
+        run_env = {**env, "CANON_WORKSPACE": str(root / "workspace"), "CANON_HARVEST": str(work / "harvest"),
+                   "CANON_TIMEOUT_S": str(timeout or case_build["timeout_s"])}
+    harness("run-agent", "--agent", agent, "--model", model, *backend,
+            "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
+            "--timeout", timeout or case_build["timeout_s"], env=run_env)
+    if "workspace" in case_build:
+        file_harvest(work, case_build["workspace"]["tree"])
+    harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
+            "--allow-scripts", "--out", work / "grade.json")
+    if "review" in case_build:
+        judge_arm(out, agent, rule, case, arm)
+
+
 def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host"):
+    """Answer, grade, and judge every arm of every case. An arm that fails is
+    logged with its traceback and skipped, so the other arms still run; the
+    run then exits nonzero naming each failed arm."""
     env = agent_env(agent, out, runner)
     built = build(out, rules, entry)
+    failed = []
     for rule in rules:
         for case in rule.cases:
             case_build = built[rule.id]["cases"][case.id]
-            backend = backend_args(agent, out, entry, "workspace" in case_build, runner)
+            try:
+                backend = backend_args(agent, out, entry, "workspace" in case_build, runner)
+                for arm in rule.arm_names:
+                    check_manifest(out / "arms" / rule.id / case.id / arm, case.kind)
+            except Exception as exc:  # noqa: BLE001
+                log_error(out, f"{agent}/{rule.id}/{case.id}", exc)
+                failed.append(f"{rule.id}/{case.id}")
+                continue
             for arm in rule.arm_names:
-                check_manifest(out / "arms" / rule.id / case.id / arm, case.kind)
-            for arm in rule.arm_names:
-                root = out / "arms" / rule.id / case.id / arm
-                work = out / agent / rule.id / case.id / arm
-                if work.exists():
-                    raise ScreenError(f"{work} exists; use a fresh --out so runs never mix")
-                work.mkdir(parents=True)
-                harness("prepare", root / MANIFEST, "--split", "tune", "--runs-per-variant", runs, "--out", work / "tasks-all.jsonl")
-                with_skill_rows(work / "tasks-all.jsonl", work / "tasks.jsonl")
-                run_env = env
-                if "workspace" in case_build:
-                    run_env = {**env, "CANON_WORKSPACE": str(root / "workspace"), "CANON_HARVEST": str(work / "harvest"),
-                               "CANON_TIMEOUT_S": str(timeout or case_build["timeout_s"])}
-                harness("run-agent", "--agent", agent, "--model", model, *backend,
-                        "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
-                        "--timeout", timeout or case_build["timeout_s"], env=run_env)
-                if "workspace" in case_build:
-                    file_harvest(work, case_build["workspace"]["tree"])
-                harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
-                        "--allow-scripts", "--out", work / "grade.json")
+                try:
+                    run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout)
+                except Exception as exc:  # noqa: BLE001
+                    log_error(out, f"{agent}/{rule.id}/{case.id}/{arm}", exc)
+                    failed.append(f"{rule.id}/{case.id}/{arm}")
     compare(out)
+    if failed:
+        raise ScreenError(f"{len(failed)} arm(s) or case(s) failed: {', '.join(failed)}; see {out / ERROR_LOG}, then `screen.py regrade --out {out}`")
 
 
 def verdict(result):
@@ -1031,41 +1142,198 @@ def regrade_run(check, rule, case, run_base):
     return ("FAIL" if failures else "PASS"), "; ".join(failures)
 
 
+def work_dirs(out, *markers):
+    """Each <agent>/<rule>/<case>/<arm> work dir under out that holds one of markers."""
+    found = {path.parent for marker in markers for path in out.glob(f"*/*/*/*/{marker}")}
+    return sorted(path for path in found if path.relative_to(out).parts[0] != "arms")
+
+
+def run_bases(work):
+    """[(run number, run dir)] for every with_skill task the work dir prepared."""
+    rows = [json.loads(line) for line in (work / "tasks.jsonl").read_text().splitlines() if line.strip()]
+    return [(row["run_number"], work / "runs" / row["run_dir"]) for row in rows]
+
+
+def harness_results(work):
+    """grade.json's results, or, for an arm that stopped before grading, one
+    ungraded result per prepared run."""
+    grade = work / "grade.json"
+    if grade.is_file():
+        return json.loads(grade.read_text())["results"]
+    return [{"run_number": number, "run_base": str(base), "missing_output": True} for number, base in run_bases(work)]
+
+
+def map_slots(work, tree):
+    """Map harvest slots a stopped run left numbered to their run dirs."""
+    if (work / "harvest").is_dir() and any((work / "harvest").glob("[0-9][0-9][0-9][0-9]")):
+        file_harvest(work, tree)
+
+
 def regrade(out):
     """Grade every run of every workspace case again from its diff, into
     regrade.json beside grade.json, then compare. The oracle and checkout are
     the arm's grader copy, as the harness used. A run the harness called
-    INVALID is marked graded_from_diff."""
-    for grade in sorted(out.glob("*/*/*/*/grade.json")):
-        agent, rule, case, arm = grade.parent.relative_to(out).parts
+    INVALID, or never graded, is marked graded_from_diff. An arm that stopped
+    after the agent ran gets its numbered harvest slots mapped first."""
+    for work in work_dirs(out, "tasks.jsonl", "grade.json"):
+        agent, rule, case, arm = work.relative_to(out).parts
         build_info = json.loads((out / "arms" / rule / "build.json").read_text())
         if "workspace" not in build_info["cases"][case]:
             continue
+        try:
+            map_slots(work, build_info["cases"][case]["workspace"]["tree"])
+        except ScreenError as exc:
+            log_error(out, f"regrade {agent}/{rule}/{case}/{arm}", exc)
+            continue
         check = load_check(out / "arms" / rule / case / arm / "rules")
         rows = []
-        for result in json.loads(grade.read_text())["results"]:
+        for result in harness_results(work):
             regraded = regrade_run(check, rule, case, result["run_base"])
             if regraded is None:
                 continue
             rows.append({"run": result.get("run_number"), "verdict": regraded[0], "reasons": regraded[1],
-                         "graded_from_diff": verdict(result)[0] == "INVALID"})
-        (grade.parent / "regrade.json").write_text(json.dumps({"results": rows}, indent=2) + "\n")
+                         "graded_from_diff": verdict(result)[0] == "INVALID", "run_base": result["run_base"]})
+        (work / "regrade.json").write_text(json.dumps({"results": rows}, indent=2) + "\n")
     compare(out)
+
+
+def review_pr(case):
+    """{"title", "body", "diff"} of a review case's PR, as the judge sees it."""
+    spec = case_spec(case)
+    return {"title": spec.review["title"], "body": spec.overlay[spec.review["body_file"]].decode(errors="replace"),
+            "diff": spec.review["patch"].decode(errors="replace")}
+
+
+def case_calibration(case, backend, model, rubric, pr):
+    path = review.calibration_path(case.owner, case.id, backend, model)
+    record = json.loads(path.read_text()) if path.is_file() else None
+    return review.calibration_status(record, review.calibration_key(backend, model, case.kind, rubric, pr))
+
+
+def written_by(check, run_base):
+    """The diff the reviewer left in the checkout, or "" when none was harvested."""
+    try:
+        return check.workspace_diff(run_base)
+    except check.OracleError:
+        return ""
+
+
+def judge_arm(out, agent, rule, case, arm, judge=None):
+    """Judge every run of one review arm into <work>/judge.json. The judge is
+    the other family unless judge names (backend, model)."""
+    work = out / agent / rule.id / case.id / arm
+    backend, model = judge or review.JUDGE_FOR[agent]
+    rubric, pr, spec = (case.root / "rubric.md").read_text(), review_pr(case), case_spec(case)
+    calibrated, reason = case_calibration(case, backend, model, rubric, pr)
+    check = load_check(out / "arms" / rule.id / case.id / arm / "rules")
+    rows = []
+    for number, run_base in run_bases(work):
+        output = run_base / "output.md"
+        answer = output.read_text(encoding="utf-8", errors="replace") if output.is_file() else ""
+        written = written_by(check, run_base)
+        precheck = regrade_run(check, rule.id, case.id, run_base) or ("FAIL", "no harvested workspace")
+        if answer.strip() or written.strip():
+            record = review.judge(backend, model, case.kind, rubric, pr, answer, written, (rule.id, case.owner), spec.repo, spec.commit)
+        else:
+            record = {"backend": backend, "model": model, "verdict": None, "error": "no review: output.md is missing or empty"}
+        combined = review.combine(case.kind, record["verdict"], precheck[0] == "PASS") if record["verdict"] else "UNJUDGED"
+        record.update(run=number, precheck=precheck[0], precheck_failures=precheck[1], combined=combined,
+                      calibrated=calibrated, calibration=reason)
+        rows.append(record)
+        print(f"judge {agent}/{rule.id}/{case.id}/{arm} run-{number}: {combined} (judge {record['verdict']}, precheck {precheck[0]}"
+              f"{'' if calibrated else ', UNCALIBRATED'}){' ' + record['error'] if record.get('error') else ''}", flush=True)
+    (work / "judge.json").write_text(json.dumps({"judge": {"backend": backend, "model": model}, "results": rows}, indent=2) + "\n")
+    return rows
+
+
+def judge_all(out, judge=None):
+    """Judge every review arm under out again, then compare."""
+    rules = {}
+    for work in work_dirs(out, "tasks.jsonl"):
+        agent, rule_id, case_id, arm = work.relative_to(out).parts
+        build_info = json.loads((out / "arms" / rule_id / "build.json").read_text())
+        if "review" not in build_info["cases"][case_id]:
+            continue
+        rule = rules.setdefault(rule_id, load_rule(rule_id))
+        case = next(case for case in rule.cases if case.id == case_id)
+        judge_arm(out, agent, rule, case, arm, judge)
+    compare(out)
+
+
+def calibrate(rules, judges):
+    """Judge every labeled sample of every review case of rules with each
+    judge, store the agreement under the cache, and print it per label. A
+    case whose judge disagrees with any label stays uncalibrated, and its
+    run results say so."""
+    check = load_check()
+    reviewed = [(rule, case) for rule in rules for case in rule.cases if case.review]
+    if not reviewed:
+        raise ScreenError(f"no review cases in {', '.join(rule.id for rule in rules)}")
+    summary = []
+    for rule, case in reviewed:
+        rubric, pr, spec = (case.root / "rubric.md").read_text(), review_pr(case), case_spec(case)
+        checkout = workspace.reference_checkout(spec)[0]
+        labels = check_labels(case.root, case.kind)
+        for backend, model in judges:
+            samples = {}
+            for name, label in sorted(labels.items()):
+                answer = (case.root / "samples" / name).read_text()
+                record = review.judge(backend, model, case.kind, rubric, pr, answer, "", (rule.id, case.owner), spec.repo, spec.commit)
+                failures = check.grade(case.owner, case.id, text=answer, workspace=check.Workspace(checkout, ""))
+                samples[name] = {"label": label, "verdict": record["verdict"], "evidence": record.get("evidence"),
+                                 "error": record.get("error"), "precheck": "FAIL" if failures else "PASS",
+                                 "combined": review.combine(case.kind, record["verdict"], not failures) if record["verdict"] else "UNJUDGED",
+                                 "prompt_sha256": record["prompt_sha256"]}
+            table, agreed = review.agreement(samples)
+            result = {"rule": case.owner, "case": case.id, "kind": case.kind, "backend": backend, "model": model,
+                      "template": review.TEMPLATE_VERSION, "key": review.calibration_key(backend, model, case.kind, rubric, pr),
+                      "samples": samples, "agreement": table, "calibrated": agreed}
+            path = review.calibration_path(case.owner, case.id, backend, model)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(result, indent=2) + "\n")
+            summary.append(result)
+            print(f"{case.owner}/{case.id} {case.kind} judge {backend}:{model}: {'CALIBRATED' if agreed else 'UNCALIBRATED'}")
+            for label, (hits, total) in sorted(table.items()):
+                print(f"    {label:11} {hits}/{total} agree")
+            for name, sample in samples.items():
+                if sample["verdict"] != sample["label"] or sample["precheck"] == "FAIL":
+                    print(f"    {name}: labeled {sample['label']}, judged {sample['verdict']}, precheck {sample['precheck']}"
+                          + (f", error {sample['error']}" if sample["error"] else ""))
+            print(f"    wrote {path}")
+    return summary
+
+
+def review_row(record, kind):
+    """(verdict for the pair, reasons, review fields) of one judged run. The
+    combined verdict passes when it is the case's passing verdict."""
+    if record is None:
+        return "INVALID", "not judged", {"combined": "UNJUDGED", "verdict": None, "precheck": None, "calibrated": False, "calibration": "not judged"}
+    fields = {key: record.get(key) for key in ("combined", "verdict", "evidence", "precheck", "calibrated", "calibration", "label", "error")}
+    if record["combined"] == "UNJUDGED":
+        return "INVALID", f"not judged: {record.get('error')}", fields
+    return ("PASS" if record["combined"] == review.PASSING[kind] else "FAIL"), "", fields
 
 
 def compare(out):
     if not any(out.glob("*/*/*/*/grade.json")) and any(out.glob("*/*/*/grade.json")):
         raise ScreenError(f"{out} was made before rules had cases; its compare.json is final and plan reads it")
     table = []
-    for grade in sorted(out.glob("*/*/*/*/grade.json")):
-        agent, rule, case, arm = grade.parent.relative_to(out).parts
+    for work in work_dirs(out, "grade.json", "regrade.json"):
+        agent, rule, case, arm = work.relative_to(out).parts
+        grade = work / "grade.json"
         build_info = json.loads((out / "arms" / rule / "build.json").read_text())
         tree_root = out / "arms" / rule / case / arm / build_info["tree_dir"]
         tree_files = sorted(path.relative_to(tree_root).as_posix() for path in tree_root.rglob("*.md"))
         companions = set(build_info.get("companions", {}).get("trees", {}))
         regraded_path = grade.with_name("regrade.json")
         regraded = {row["run"]: row for row in json.loads(regraded_path.read_text())["results"]} if regraded_path.is_file() else {}
-        for result in json.loads(grade.read_text())["results"]:
+        reviewed = "review" in build_info["cases"][case]
+        judged = {}
+        if reviewed and (work / "judge.json").is_file():
+            judged = {row["run"]: row for row in json.loads((work / "judge.json").read_text())["results"]}
+        results = json.loads(grade.read_text())["results"] if grade.is_file() else [
+            {"run_number": row["run"], "run_base": row.get("run_base", ""), "missing_output": True} for row in regraded.values()]
+        for result in results:
             status, reasons = verdict(result)
             seen = exposure(result, tree_files)
             if companions:
@@ -1080,6 +1348,12 @@ def compare(out):
                 row.update(verdict=again["verdict"], reasons=again["reasons"])
                 if again["graded_from_diff"]:
                     row["graded_from_diff"] = True
+            if not grade.is_file():
+                row["ungraded"] = True
+            if reviewed:
+                precheck = row["verdict"]
+                row["verdict"], row["reasons"], row["review"] = review_row(judged.get(result.get("run_number")), row["kind"])
+                row["review"]["precheck"] = row["review"]["precheck"] or precheck
             table.append(row)
     pairs = {}
     for row in table:
@@ -1121,6 +1395,12 @@ def compare(out):
             print(f"    {arm}: {target_state}entry {entry_state}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
             if row.get("graded_from_diff"):
                 print(f"    {arm}: graded from the diff; the harness found no gradable answer")
+            if row.get("ungraded"):
+                print(f"    {arm}: no grade.json; the run stopped before the harness graded it")
+            if "review" in row:
+                state = row["review"]
+                print(f"    {arm}: review {state['combined']} (judge {state['verdict']}, precheck {state['precheck']}"
+                      f"{'' if state['calibrated'] else ', uncalibrated: ' + str(state['calibration'])})")
             if row["reasons"]:
                 print(f"    {arm}: {row['reasons']}")
         if not paired:
@@ -1137,10 +1417,31 @@ def compare(out):
         label = "rule"
         if arm is not None:
             verdict_row["arm"], label = arm, f"rule {arm} vs current"
+        uncalibrated = any(not row["review"]["calibrated"] for row in table
+                           if "review" in row and (row["agent"], row["rule"], row["run"]) == (agent, rule, run_number))
+        if uncalibrated:
+            verdict_row["uncalibrated"] = True
         rules.append(verdict_row)
-        print(f"{agent:6} {rule:26} {label} run-{run_number}  {result.upper()}" + (f"  ({'; '.join(reasons)})" if reasons else ""))
-    (out / "compare.json").write_text(json.dumps({"pairs": summary, "rules": rules, "runs": table}, indent=2) + "\n")
+        print(f"{agent:6} {rule:26} {label} run-{run_number}  {result.upper()}" + (f"  ({'; '.join(reasons)})" if reasons else "")
+              + ("  [judge uncalibrated]" if uncalibrated else ""))
+    review_scores = []
+    for (agent, rule, arm) in sorted({(row["agent"], row["rule"], row["arm"]) for row in table if "review" in row}):
+        rows = [row for row in table if "review" in row and (row["agent"], row["rule"], row["arm"]) == (agent, rule, arm)]
+        score = {"agent": agent, "rule": rule, "arm": arm, **review.scores(rows)}
+        review_scores.append(score)
+        print(f"{agent:6} {rule:26} review {arm}: " + score_line(score))
+    (out / "compare.json").write_text(json.dumps({"pairs": summary, "rules": rules, "runs": table, "review_scores": review_scores}, indent=2) + "\n")
     print(f"wrote {out / 'compare.json'}")
+
+
+def score_line(score):
+    def share(key):
+        cell = score[key]
+        return f"{cell['count']}/{cell['of']}" + (f" ({cell['rate']:.2f})" if cell["rate"] is not None else "")
+
+    return (f"recall FOUND {share('recall_found')}, FOUND+PARTIAL {share('recall_found_or_partial')}; "
+            f"false alarms {share('false_alarm_rate')}; precheck {share('precheck_pass')}; "
+            f"{score['unjudged']} unjudged, {score['uncalibrated']} uncalibrated")
 
 
 def out_dirs(roots):
@@ -1237,7 +1538,15 @@ def main(argv=None):
     p.add_argument("--out", type=Path, required=True)
     p = sub.add_parser("regrade")
     p.add_argument("--out", type=Path, required=True)
+    p = sub.add_parser("judge")
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--judge", type=judge_choice, help="BACKEND:MODEL for every review; default the other family's judge per agent")
+    p = sub.add_parser("calibrate")
+    p.add_argument("--judge", type=judge_choice, action="append",
+                   help=f"BACKEND:MODEL, repeatable (default {', '.join(':'.join(pair) for pair in sorted(set(review.JUDGE_FOR.values())))})")
+    p.add_argument("rules", nargs="+")
     args = parser.parse_args(argv)
+    out = args.out.resolve() if getattr(args, "out", None) else None
     try:
         if args.command == "plan":
             plan(args.runs_root or [DEFAULT_RUNS_ROOT])
@@ -1248,13 +1557,28 @@ def main(argv=None):
         elif args.command == "run":
             run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner)
         elif args.command == "regrade":
-            regrade(args.out.resolve())
+            regrade(out)
+        elif args.command == "judge":
+            judge_all(out, args.judge)
+        elif args.command == "calibrate":
+            calibrate(load_rules(args.rules), args.judge or sorted(set(review.JUDGE_FOR.values())))
         else:
-            compare(args.out.resolve())
-    except (ScreenError, workspace.WorkspaceError, subprocess.CalledProcessError) as exc:
-        print(f"screen: {exc}", file=sys.stderr)
+            compare(out)
+    except Exception as exc:  # noqa: BLE001
+        if out is not None:
+            log_error(out, args.command, exc)
+        else:
+            traceback.print_exception(exc)
+            print(f"screen: {exc}", flush=True)
         return 1
     return 0
+
+
+def judge_choice(text):
+    backend, _, model = text.partition(":")
+    if backend not in review.JUDGE_FOR or not model:
+        raise argparse.ArgumentTypeError(f"--judge takes BACKEND:MODEL with BACKEND one of {sorted(review.JUDGE_FOR)}, not {text!r}")
+    return backend, model
 
 
 if __name__ == "__main__":

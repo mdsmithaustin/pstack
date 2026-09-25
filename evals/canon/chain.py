@@ -91,6 +91,20 @@ PERSONA_ROLE = "poteto-agent"
 CODEX_BRIEFING_HEAD = "Pstack installed skill paths"
 RAW_STREAM = "raw-stream.jsonl"
 
+# The skill files a lead may review a pull request by, as the route each names.
+# Any other poteto-mode playbook is a route under its own name.
+REVIEW_ROUTES = {
+    "poteto-mode/playbooks/investigation.md": "investigation",
+    "interrogate/SKILL.md": "interrogate",
+    "interrogate/references/code-quality-review.md": "interrogate/code-quality-review",
+    "interrogate/references/reviewer-prompt.md": "interrogate/reviewer-prompt",
+    "architect/references/design-red-flags.md": "architect-design-red-flags",
+    "how/SKILL.md": "how",
+}
+PRINCIPLE_LEAF = re.compile(r"^(principle-[a-z-]+)/SKILL\.md$")
+DIFF_PATH = re.compile(r"^diff --git a/.+? b/(.+)$", re.MULTILINE)
+JUDGE_VERDICTS = (*screen.review.VERDICTS["positive"], *screen.review.VERDICTS["near-miss"])
+
 
 def first_sentence(text):
     line = next(line for line in text.splitlines() if line.strip() and not line.startswith("#"))
@@ -975,6 +989,45 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
     }
 
 
+def review_route(path):
+    playbook = PLAYBOOK.match(path)
+    return REVIEW_ROUTES.get(path) or (playbook.group(1) if playbook else None)
+
+
+def review_stage(trace, review, census, diff, after, judged):
+    """How the lead reviewed the pull request on review["branch"]: the review
+    skill files it read, in order, the principle leaves each actor read, its
+    delegates, whether the run changed the PR (diff is the harvested
+    workspace.diff, None when none was harvested; after is workspace.json),
+    and the judge's verdict."""
+    route_reads = []
+    for event in trace.events:
+        name = review_route(event.path) if event.actor == "main" and event.kind == "read" else None
+        if name and name not in [read["route"] for read in route_reads]:
+            route_reads.append({"route": name, "index": event.index})
+    route = [read["route"] for read in route_reads]
+    leaves = {"lead": [], "delegate": []}
+    for event in trace.events:
+        leaf = PRINCIPLE_LEAF.match(event.path) if event.kind == "read" else None
+        actor = "lead" if event.actor == "main" else "delegate"
+        if leaf and leaf.group(1) not in leaves[actor]:
+            leaves[actor].append(leaf.group(1))
+    head = after.get("head_after")
+    return {
+        "branch": review["branch"],
+        "route": route,
+        "primary": route[0] if route else "none",
+        "route_reads": route_reads,
+        "principle_leaves": leaves,
+        "delegated": {"delegated": bool(census), "spawns": len(census),
+                      "roles": [entry["prescribed"] or entry["role"] for entry in census]},
+        "pr_modified": None if diff is None else bool(diff.strip()),
+        "pr_paths": sorted(set(DIFF_PATH.findall(diff or ""))),
+        "head_moved": None if head is None else head != review.get("refs", {}).get(review["branch"]),
+        "verdict": judged,
+    }
+
+
 @dataclass(frozen=True)
 class RunDir:
     out: Path
@@ -1015,8 +1068,12 @@ def arm_tree(run):
     return build_info, files
 
 
+def work_dir(run):
+    return run.out / run.agent / run.rule / (run.arm if run.legacy else f"{run.case}/{run.arm}")
+
+
 def verdict_for(run, run_number):
-    grade = run.out / run.agent / run.rule / (run.arm if run.legacy else f"{run.case}/{run.arm}") / "grade.json"
+    grade = work_dir(run) / "grade.json"
     if not grade.is_file():
         return "UNGRADED"
     regraded = grade.with_name("regrade.json")
@@ -1032,6 +1089,15 @@ def verdict_for(run, run_number):
         if result.get("run_number") == run_number:
             return screen.verdict(result)[0]
     return "UNGRADED"
+
+
+def judge_for(run, run_number):
+    """The judge's combined verdict and calibration of one run, or None."""
+    judge = work_dir(run) / "judge.json"
+    if not judge.is_file():
+        return None
+    row = next((row for row in json.loads(judge.read_text()).get("results", []) if row.get("run") == run_number), None)
+    return {"combined": row.get("combined"), "calibrated": row.get("calibrated")} if row else None
 
 
 def injection(run, agent, entry, trace):
@@ -1096,6 +1162,16 @@ def analyze(trace_path, principles):
     skill_names = {path.split("/")[0] for path in files if path.count("/") == 1 and path.endswith("/SKILL.md")}
     record.update(stages(trace, case=run.case, owner=rule_owner(run.rule, build_info, run.arm), injected=injected,
                          playbook_texts=playbook_texts, principles=principles, workspace=workspace, skill_names=skill_names))
+    review = build_info.get("cases", {}).get(run.case, {}).get("review")
+    record["review"] = None
+    if review:
+        diff = harvest / "workspace.diff" if harvest else None
+        after = harvest / "workspace.json" if harvest else None
+        record["review"] = review_stage(
+            trace, review, record["delegate_census"],
+            diff.read_text(errors="replace") if diff and diff.is_file() else None,
+            json.loads(after.read_text()) if after and after.is_file() else {},
+            judge_for(run, run_number))
     return record
 
 
@@ -1152,6 +1228,39 @@ STAGES = {
     ),
 }
 FRACTION_STAGES = {"step pointers preserved (fraction)"}
+REVIEW_STAGES = {
+    "read an interrogate reference": lambda row: any(name.startswith("interrogate/") for name in row["review"]["route"]),
+    "read a principle leaf": lambda row: any(row["review"]["principle_leaves"].values()),
+    "delegated": lambda row: row["review"]["delegated"]["delegated"],
+    "pr modified": lambda row: row["review"]["pr_modified"],
+    "head moved": lambda row: row["review"]["head_moved"],
+}
+
+
+def review_markdown(rows, agents):
+    """Per agent over review runs: primary route counts, the review stages,
+    delegate roles, and primary route by the judge's combined verdict."""
+    out = ["Review cases. The route is the review skill files the lead read, in order; the primary route is the first.", ""]
+    for agent in agents:
+        mine = [row for row in rows if row["agent"] == agent and row["review"]]
+        if not mine:
+            continue
+        primaries = sorted({row["review"]["primary"] for row in mine})
+        roles = {}
+        for row in mine:
+            for role in row["review"]["delegated"]["roles"]:
+                roles[role or "(none)"] = roles.get(role or "(none)", 0) + 1
+        out += [f"{agent} review ({len(mine)} runs)", "", "| stage | runs |", "|---|---|"]
+        out += [f"| primary route {name} | {rate(mine, lambda row, name=name: row['review']['primary'] == name)} |" for name in primaries]
+        out += [f"| {name} | {rate(mine, test)} |" for name, test in REVIEW_STAGES.items()]
+        out += [f"| delegate roles | {', '.join(f'{role} {count}' for role, count in sorted(roles.items())) or '-'} |", ""]
+        out += ["| primary route | " + " | ".join(JUDGE_VERDICTS) + " | unjudged |", "|---|" + "---|" * (len(JUDGE_VERDICTS) + 1)]
+        for name in primaries:
+            combined = [(row["review"]["verdict"] or {}).get("combined") for row in mine if row["review"]["primary"] == name]
+            combined = [verdict if verdict in JUDGE_VERDICTS else None for verdict in combined]
+            out.append(f"| {name} | " + " | ".join(str(combined.count(verdict)) for verdict in (*JUDGE_VERDICTS, None)) + " |")
+        out.append("")
+    return out
 
 
 def markdown(rows):
@@ -1180,6 +1289,8 @@ def markdown(rows):
         for name, test in STAGES.items():
             out.append(f"| {name} | " + " | ".join(rate([row for row in mine if row["verdict"] == verdict], test, name in FRACTION_STAGES) for verdict in ("PASS", "FAIL")) + " |")
         out.append("")
+    if any(row.get("review") for row in rows):
+        out += review_markdown(rows, agents)
     return "\n".join(out)
 
 

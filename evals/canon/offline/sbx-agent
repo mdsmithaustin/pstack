@@ -7,7 +7,9 @@
 sandbox.py runs `plan` when CANON_SBX_STANDIN names this file, copies the file
 and its plan into the sandbox, and runs it in place of the agent. The plan
 picks samples/good for a near-miss case or any arm but current, and bad for
-current, so a correct pipeline prints SEPARATES for each positive case.
+current, so a correct pipeline prints SEPARATES for each positive case. A
+review case answers with the labeled sample screen.standin_review picks and
+edits nothing.
 
 Inside, it exits 3 unless the prompt starts with the agent's explicit
 invocation and the skills are linked where the agent finds them, 4 unless the
@@ -42,12 +44,11 @@ def plan():
     sample = "good" if case.kind == "near-miss" or arm != "current" else "bad"
     build = json.loads((arm_input.parents[2] / "build.json").read_text())
     changed = build.get("arm_changes", {}).get(arm) or [build["target"]]
-    print(json.dumps({
-        "rule": rule_id, "case": case_id, "arm": arm,
-        "answer": (case.root / "samples" / f"{sample}.md").read_text(),
-        "diff": (case.root / "samples" / f"{sample}.diff").read_text(),
-        "reads": changed,
-    }))
+    if case.review:
+        answer, diff = screen.standin_review(case, arm != "current").read_text(), ""
+    else:
+        answer, diff = (case.root / "samples" / f"{sample}.md").read_text(), (case.root / "samples" / f"{sample}.diff").read_text()
+    print(json.dumps({"rule": rule_id, "case": case_id, "arm": arm, "answer": answer, "diff": diff, "reads": changed}))
 
 
 def fail(code, why):
@@ -99,7 +100,8 @@ def claude(plan_data, argv, prompt):
          "parent_tool_use_id": None, "session_id": session},
         result(plan_data["answer"]),
     ]
-    subprocess.run(["git", "apply", "--binary", "-"], input=plan_data["diff"].encode(), check=True)
+    if plan_data["diff"]:
+        subprocess.run(["git", "apply", "--binary", "-"], input=plan_data["diff"].encode(), check=True)
     project = Path.home() / ".claude" / "projects" / cwd.replace("/", "-").replace(".", "-")
     (project / session / "subagents").mkdir(parents=True, exist_ok=True)
     (project / f"{session}.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records[1:] if record["type"] != "result"))
@@ -121,7 +123,8 @@ def codex(plan_data, argv, prompt):
     discovery = check_shape("codex", argv, prompt)
     cwd, parent, child = os.getcwd(), str(uuid.uuid4()), str(uuid.uuid4())
     brief = "Data shape: the orders module keeps one amend function. Success: the tests pass."
-    subprocess.run(["git", "apply", "--binary", "-"], input=plan_data["diff"].encode(), check=True)
+    if plan_data["diff"]:
+        subprocess.run(["git", "apply", "--binary", "-"], input=plan_data["diff"].encode(), check=True)
     Path(argv[argv.index("--output-last-message") + 1]).write_text(plan_data["answer"])
     sessions = Path.home() / ".codex" / "sessions" / "2026" / "09" / "25"
     sessions.mkdir(parents=True, exist_ok=True)

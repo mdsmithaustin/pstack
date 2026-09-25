@@ -250,33 +250,41 @@ class PrincipleIndexTests(unittest.TestCase):
         self.assertEqual((len(index), index["principle-model-the-domain"]), (23, "Model the Domain"))
 
 
-def make_run(directory, agent, fixture, transcripts=True, tree=TREE):
-    """A screen.py --out dir around one fixture: a stub mounted tree, a
-    build.json whose owner is the Feature playbook, the fixture's trace in the
-    run dir, and its harvest in the parallel harvest tree."""
+def make_run(directory, agent, fixture, transcripts=True, tree=TREE, case="session-tree"):
+    """A screen.py --out dir around one fixture: a stub mounted tree, the
+    fixture's build.json or else one whose owner is the Feature playbook, the
+    fixture's trace in the run dir, its harvest in the parallel harvest tree,
+    and its judge.json in the arm's work dir."""
+    source = FIXTURES / fixture
     out = Path(directory) / "out"
-    arm = out / "arms" / "domain-words" / "session-tree" / "amended" / "skills"
+    arm = out / "arms" / "domain-words" / case / "amended" / "skills"
     for path in tree:
         (arm / path).parent.mkdir(parents=True, exist_ok=True)
         (arm / path).write_text(FEATURE if path.endswith("feature.md") else "line\n" * 10)
-    (out / "arms" / "domain-words" / "build.json").write_text(json.dumps({
+    build = source / "build.json"
+    (out / "arms" / "domain-words" / "build.json").write_text(build.read_text() if build.is_file() else json.dumps({
         "entry": "poteto-mode", "target": "poteto-mode/playbooks/feature.md",
         "cases": {"session-tree": {"workspace": {"repo": "omnigent"}}},
     }))
-    work = out / agent / "domain-words" / "session-tree" / "amended"
-    run = work / "runs" / "session-tree" / "with_skill"
+    work = out / agent / "domain-words" / case / "amended"
+    run = work / "runs" / case / "with_skill"
     run.mkdir(parents=True)
-    shutil.copy(FIXTURES / fixture / "run" / "trace.jsonl", run / "trace.jsonl")
-    harvest = work / "harvest" / "session-tree" / "with_skill"
+    shutil.copy(source / "run" / "trace.jsonl", run / "trace.jsonl")
+    harvest = work / "harvest" / case / "with_skill"
     harvest.mkdir(parents=True)
     if transcripts:
-        shutil.copytree(FIXTURES / fixture / "harvest" / "transcripts", harvest / "transcripts")
+        shutil.copytree(source / "harvest" / "transcripts", harvest / "transcripts")
+    for name in ("workspace.diff", "workspace.json"):
+        if (source / "harvest" / name).is_file():
+            shutil.copy(source / "harvest" / name, harvest / name)
+    if (source / "judge.json").is_file():
+        shutil.copy(source / "judge.json", work / "judge.json")
     return run / "trace.jsonl"
 
 
-def analyze(fixture, agent, transcripts=True, tree=TREE):
+def analyze(fixture, agent, transcripts=True, tree=TREE, case="session-tree"):
     with tempfile.TemporaryDirectory() as directory:
-        return chain.analyze(make_run(directory, agent, fixture, transcripts, tree), PRINCIPLES)
+        return chain.analyze(make_run(directory, agent, fixture, transcripts, tree, case), PRINCIPLES)
 
 
 class ClaudeSandboxHarvestTests(unittest.TestCase):
@@ -708,6 +716,95 @@ class AttachTests(unittest.TestCase):
         self.assertEqual((chain.has_persona(body), chain.has_persona("Run the tests.")), (True, False))
 
 
+REVIEW_TREE = {**TREE, **{path: 10 for path in (
+    "poteto-mode/playbooks/investigation.md", "interrogate/SKILL.md",
+    "interrogate/references/code-quality-review.md", "interrogate/references/reviewer-prompt.md",
+    "architect/references/design-red-flags.md",
+)}}
+
+
+class ClaudeReviewTests(unittest.TestCase):
+    """A synthetic Claude review of pr-42. The lead loads interrogate, fails
+    to read the design red flags, reads the code quality reference, cats the
+    Prove It Works leaf and how in one command, spawns a general-purpose
+    reviewer that reads the interrogate reviewer prompt and one leaf, then
+    rereads the code quality reference. The harvest shows two touched files
+    and a moved head."""
+
+    def setUp(self):
+        self.review = analyze("sbx-claude-review", "claude", tree=REVIEW_TREE, case="pr-review")["review"]
+
+    def test_route_is_the_lead_completed_reads_in_order(self):
+        self.assertEqual((self.review["route"], self.review["primary"], self.review["route_reads"]), (
+            ["interrogate", "interrogate/code-quality-review", "how"], "interrogate",
+            [{"route": "interrogate", "index": 1}, {"route": "interrogate/code-quality-review", "index": 5}, {"route": "how", "index": 7}],
+        ))
+
+    def test_principle_leaves_split_by_reader(self):
+        self.assertEqual(self.review["principle_leaves"], {
+            "lead": ["principle-prove-it-works"], "delegate": ["principle-test-behavior-not-implementation"],
+        })
+
+    def test_the_reviewer_delegate_holds_the_interrogate_role(self):
+        self.assertEqual(self.review["delegated"], {"delegated": True, "spawns": 1, "roles": ["interrogate reviewer"]})
+
+    def test_a_changed_checkout_and_moved_head_modify_the_pr(self):
+        self.assertEqual((self.review["pr_modified"], self.review["pr_paths"], self.review["head_moved"]), (
+            True, ["src/sessions/tree.py", "tests/test_tree.py"], True,
+        ))
+
+    def test_verdict_comes_from_the_judge(self):
+        self.assertEqual((self.review["branch"], self.review["verdict"]), ("pr-42", {"combined": "FOUND", "calibrated": True}))
+
+
+class CodexReviewTests(unittest.TestCase):
+    """A synthetic Codex review of pr-42. The lead reads the Investigation
+    playbook, the design red flags, and the Model the Domain leaf, then spawns
+    one child at /root/interrogate_reviewer that reads Laziness Protocol. The
+    checkout is untouched and the head stays at the PR ref."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-review", "codex", tree=REVIEW_TREE, case="pr-review")
+
+    def test_review_of_an_untouched_pr(self):
+        self.assertEqual(self.row["review"], {
+            "branch": "pr-42",
+            "route": ["investigation", "architect-design-red-flags"],
+            "primary": "investigation",
+            "route_reads": [{"route": "investigation", "index": 1}, {"route": "architect-design-red-flags", "index": 2}],
+            "principle_leaves": {"lead": ["principle-model-the-domain"], "delegate": ["principle-laziness-protocol"]},
+            "delegated": {"delegated": True, "spawns": 1, "roles": ["interrogate reviewer"]},
+            "pr_modified": False,
+            "pr_paths": [],
+            "head_moved": False,
+            "verdict": {"combined": "MISSED", "calibrated": False},
+        })
+
+    def test_markdown_review_section(self):
+        claude = analyze("sbx-claude-review", "claude", tree=REVIEW_TREE, case="pr-review")
+        lines = chain.markdown([claude, self.row, analyze("sbx-claude", "claude")]).splitlines()
+        start = lines.index("claude review (1 runs)")
+
+        self.assertEqual(lines[start - 2:], [
+            "Review cases. The route is the review skill files the lead read, in order; the primary route is the first.", "",
+            "claude review (1 runs)", "", "| stage | runs |", "|---|---|",
+            "| primary route interrogate | 1/1 |",
+            "| read an interrogate reference | 1/1 |", "| read a principle leaf | 1/1 |", "| delegated | 1/1 |",
+            "| pr modified | 1/1 |", "| head moved | 1/1 |", "| delegate roles | interrogate reviewer 1 |", "",
+            "| primary route | FOUND | PARTIAL | MISSED | FALSE_ALARM | CLEAN | unjudged |", "|---|---|---|---|---|---|---|",
+            "| interrogate | 1 | 0 | 0 | 0 | 0 | 0 |", "",
+            "codex review (1 runs)", "", "| stage | runs |", "|---|---|",
+            "| primary route investigation | 1/1 |",
+            "| read an interrogate reference | 0/1 |", "| read a principle leaf | 1/1 |", "| delegated | 1/1 |",
+            "| pr modified | 0/1 |", "| head moved | 0/1 |", "| delegate roles | interrogate reviewer 1 |", "",
+            "| primary route | FOUND | PARTIAL | MISSED | FALSE_ALARM | CLEAN | unjudged |", "|---|---|---|---|---|---|---|",
+            "| investigation | 0 | 0 | 1 | 0 | 0 | 0 |",
+        ])
+
+    def test_a_build_run_has_no_review(self):
+        self.assertEqual((self.row["review"]["primary"], analyze("sbx-codex", "codex")["review"]), ("investigation", None))
+
+
 class FixtureLinesAreRealJsonTests(unittest.TestCase):
     def test_every_fixture_line_parses(self):
         for name in ("claude-trace.jsonl", "codex-trace.jsonl", "claude-multi-result.jsonl"):
@@ -720,7 +817,7 @@ class FixtureLinesAreRealJsonTests(unittest.TestCase):
             for line in path.read_text().splitlines():
                 json.loads(line)
 
-        self.assertEqual(len(paths), 15)
+        self.assertEqual(len(paths), 19)
 
 
 if __name__ == "__main__":
