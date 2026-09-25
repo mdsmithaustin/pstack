@@ -1,0 +1,53 @@
+{
+  "cases_from": "separate-contexts",
+  "arms": [
+    "current",
+    "leaf",
+    "leaf+trigger"
+  ],
+  "source": "Evans EV-3, separate-contexts merged with converge-within-context in model-the-domain per disclosure-map.md section 3, trigger per section 4 items 1-2",
+  "tier_map": [
+    {
+      "arm": "leaf",
+      "file": "principle-model-the-domain/SKILL.md",
+      "line": 22,
+      "tier": 2,
+      "why": "Rule text. Separate-contexts and converge-within-context become one bullet in model-the-domain, the leaf the dedupe decision loads."
+    },
+    {
+      "arm": "leaf",
+      "file": "principle-foundational-thinking/SKILL.md",
+      "line": 13,
+      "tier": 2,
+      "why": "Qualifier only. The foundational-thinking sentence would otherwise contradict the separate-contexts bullet. No rule text moves here."
+    },
+    {
+      "arm": "trigger",
+      "file": "poteto-mode/SKILL.md",
+      "line": 59,
+      "tier": 0,
+      "why": "Trigger form only. The index when-clause gains the naming and merging activities, so the leaf loads when those decisions happen. The gist sentence is unchanged."
+    },
+    {
+      "arm": "trigger",
+      "file": "principle-model-the-domain/SKILL.md",
+      "line": 3,
+      "tier": 2,
+      "why": "Mirror of the index when-clause in the leaf description. Not a loader, since the leaf is gated against model invocation."
+    },
+    {
+      "arm": "trigger",
+      "file": "poteto-mode/playbooks/feature.md",
+      "line": 6,
+      "tier": 1,
+      "why": "Pointer at the step before types get names. It names the leaf and states no rule."
+    },
+    {
+      "arm": "trigger",
+      "file": "architect/references/runner-prompt.md",
+      "line": 10,
+      "tier": 3,
+      "why": "Pointer in the architect runner prompt, a reference file each sketch runner reads. It names the leaf and states no rule."
+    }
+  ]
+}

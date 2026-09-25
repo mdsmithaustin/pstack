@@ -1,0 +1,25 @@
+{
+  "cases_from": "preparatory-refactor",
+  "arms": [
+    "current",
+    "leaf",
+    "leaf+trigger"
+  ],
+  "source": "Fowler R2 at Feature step 3 per disclosure-map.md section 3 and section 4 item 7",
+  "tier_map": [
+    {
+      "arm": "leaf",
+      "file": "poteto-mode/playbooks/feature.md",
+      "line": 8,
+      "tier": 1,
+      "why": "Rule text at the throughput checkpoint, where blocking units are chosen before the brief."
+    },
+    {
+      "arm": "trigger",
+      "file": "poteto-mode/playbooks/feature.md",
+      "line": 8,
+      "tier": 1,
+      "why": "Pointer at the same bullet. It loads sequence-verifiable-units, whose Delivery paragraph already orders the scaffold before the feature."
+    }
+  ]
+}

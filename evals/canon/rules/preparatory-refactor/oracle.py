@@ -3,8 +3,10 @@ import ast
 import csv
 import io
 import json
+import re
+from collections import Counter
 
-from shared import functions, is_test_path, parse_commits, parse_python, run_jobs
+from shared import apply_diff, functions, is_test_path, parse_commits, parse_python, run_jobs
 
 REPORT_RUNS = (
     ["python3", "report.py", "data/sample-orders.json", "--since", "2026-09-01"],
@@ -107,4 +109,78 @@ def check_preparatory(answer, project):
     return failures
 
 
-CHECKS = {"csv-export": check_preparatory}
+# omnigent's PII guardrail spells its category keys out in four literals: the
+# pattern dict, the label dict, and the pii_types enum and default in
+# POLICY_REGISTRY. A new category is one edit once they come from one table.
+SAFETY = "omnigent/policies/builtins/safety.py"
+PII_KEYS = {"ssn", "credit_card", "email", "phone"}
+IP_KEY = re.compile(r"ip(v4)?(_address(es)?)?", re.IGNORECASE)
+
+
+def string_items(node):
+    items = node.keys if isinstance(node, ast.Dict) else node.elts if isinstance(node, (ast.List, ast.Tuple, ast.Set)) else None
+    if items and all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in items):
+        return {item.value for item in items}
+    return set()
+
+
+def category_lists(tree):
+    """Each literal that lists every PII category key, named by the
+    assignment it sits under and the dict key it is the value of."""
+    found = []
+
+    def visit(node, owner, key):
+        if PII_KEYS <= string_items(node):
+            found.append(" ".join(part for part in (owner, key) if part))
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            owner, key = ast.unparse(node.targets[0] if isinstance(node, ast.Assign) else node.target), None
+        if isinstance(node, ast.Dict):
+            for item_key, value in zip(node.keys, node.values):
+                named = item_key.value if isinstance(item_key, ast.Constant) and isinstance(item_key.value, str) else key
+                visit(value, owner, named)
+            return
+        for child in ast.iter_child_nodes(node):
+            visit(child, owner, key)
+
+    visit(tree, None, None)
+    return found
+
+
+def string_constants(tree):
+    return Counter(node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str))
+
+
+def schema_keys(tree, field):
+    keys = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            for item_key, value in zip(node.keys, node.values):
+                if isinstance(item_key, ast.Constant) and item_key.value == field:
+                    keys |= {inner.value for child in ast.walk(value) if isinstance(child, ast.Dict)
+                             for inner in child.keys if isinstance(inner, ast.Constant)}
+    return keys
+
+
+def check_pii_category(answer, workspace):
+    changed = apply_diff(workspace.checkout, workspace.diff)
+    paths = sorted({SAFETY} | {path for path in changed if path.startswith("omnigent/") and path.endswith(".py") and changed[path] is not None})
+    failures = []
+    added = False
+    for path in paths:
+        before = workspace.checkout / path
+        old = before.read_text(encoding="utf-8") if before.is_file() else ""
+        new = changed[path].decode("utf-8") if path in changed else old
+        tree = parse_python(path, new)
+        added |= any(IP_KEY.fullmatch(value) for value in string_constants(tree) - string_constants(parse_python(path, old)))
+        lists = category_lists(tree)
+        if len(lists) > 1:
+            failures.append(f"{path} lists the PII category keys by hand in {len(lists)} places: {', '.join(lists)}")
+        if path == SAFETY:
+            failures += [f"{SAFETY} drops the pii_types {key} from the policy's params_schema"
+                         for key in ("enum", "default") if key not in schema_keys(tree, "pii_types")]
+    if not added:
+        failures.insert(0, "no PII category key for IP addresses is added")
+    return failures
+
+
+CHECKS = {"csv-export": check_preparatory, "pii-ip-address": check_pii_category}

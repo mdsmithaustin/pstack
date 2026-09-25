@@ -1,0 +1,21 @@
+--- a/principle-foundational-thinking/SKILL.md
++++ b/principle-foundational-thinking/SKILL.md
+@@ -10,7 +10,7 @@
+ 
+ **Data structures first.** Get the data shape right before writing logic. Define core types early, trace every access pattern, and choose structures that match the dominant paths.
+ 
+-At code level, DRY the structure, not every line. Types and data models should converge. Three similar statements still beat a premature abstraction. Prefer explicit over clever. Test behavior and edge cases, not line counts.
++At code level, DRY the structure, not every line. Types and data models should converge within one context. Three similar statements still beat a premature abstraction. Prefer explicit over clever. Test behavior and edge cases, not line counts.
+ 
+ **Concurrency corollary.** Before sharing state between actors, ask "what happens if another actor modifies this concurrently?" If not "nothing", isolate.
+ 
+--- a/principle-model-the-domain/SKILL.md
++++ b/principle-model-the-domain/SKILL.md
+@@ -19,6 +19,7 @@
+ - A module organized around one body of domain knowledge instead of a sequence such as load, validate, transform, and save. Execution order is not ownership.
+ - A small module boundary that gathers repeated behavior, ownership, or invariants.
+ - A queue, cache, index, graph/tree, or normalized collection where the data access pattern calls for it.
++- A separate type in each context when one word names different concepts in two parts of the codebase, instead of one merged type whose fields are optional per meaning. Share only what means the same thing in both, such as an id. Translate at the one place where the two contexts exchange data. Within one context, merge types and helpers that mean the same thing.
+ - Any other structure that fits. When none fits, work out what the code must never allow and how the data gets read, then find the structure that encodes exactly that.
+ 
+ Do not force an abstraction. Prefer boring code if the current shape is already clear, local, and unlikely to grow. Be skeptical of an abstraction that adds indirection without removing branches, duplicated rules, invalid states, or lifecycle risk.

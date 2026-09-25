@@ -1,0 +1,11 @@
+--- a/poteto-mode/playbooks/feature.md
++++ b/poteto-mode/playbooks/feature.md
+@@ -2,7 +2,7 @@
+ 
+ **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
+ 
+-1. `how` over the affected subsystem.
++1. `how` over the affected subsystem. If a `CONTEXT.md` or `CONTEXT-MAP.md` sits at the repo root, or the feature introduces a domain term the code does not yet name, and **domain-modeling** is available by name or trigger, use it to check the feature's terms against the glossary and record each resolved term before `architect` names types. Settle a term conflict from code evidence, and ask only when the product meaning itself is undecided. If the companion is absent, read the root `CONTEXT.md` and any `docs/adr/` record for the area during `how`, use its terms in type and function names, and list new or conflicting terms in the reply.
+ 2. `architect` for parallel design exploration.
+ 3. Write the throughput checkpoint as four items in the same worklist. A dimension that genuinely does not apply (single file, no fan-out) keeps its item with `skipped: <reason>` rather than being dropped:
+    - **Blocking first steps.** Gates run before fan-out.
