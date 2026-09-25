@@ -1005,7 +1005,7 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
         judge_arm(out, agent, rule, case, arm)
 
 
-def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host"):
+def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", only_arms=()):
     """Answer, grade, and judge every arm of every case. An arm that fails is
     logged with its traceback and skipped, so the other arms still run; the
     run then exits nonzero naming each failed arm."""
@@ -1024,6 +1024,8 @@ def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host"):
                 failed.append(f"{rule.id}/{case.id}")
                 continue
             for arm in rule.arm_names:
+                if only_arms and arm not in only_arms:
+                    continue
                 try:
                     run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout)
                 except Exception as exc:  # noqa: BLE001
@@ -1531,6 +1533,7 @@ def main(argv=None):
                    "other cases to 900 under the poteto-mode entry, else their timeout_s")
     p.add_argument("--entry", choices=ENTRIES, default="skill")
     p.add_argument("--case", action="append", default=[], help="run only these case ids (repeatable)")
+    p.add_argument("--arm", action="append", default=[], help="run only these arms (repeatable), e.g. --arm current")
     p.add_argument("--runner", choices=("host", "sbx"), default="host",
                    help="host runs the agent CLI on this machine; sbx runs each workspace answer in its own Docker sandbox")
     p.add_argument("rules", nargs="*")
@@ -1555,7 +1558,7 @@ def main(argv=None):
         elif args.command == "audit":
             audit(load_rules(args.rules), args.entry)
         elif args.command == "run":
-            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner)
+            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner, only_arms=tuple(args.arm))
         elif args.command == "regrade":
             regrade(out)
         elif args.command == "judge":
