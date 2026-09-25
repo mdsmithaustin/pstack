@@ -25,3 +25,5 @@ The check: before you keep a test, ask whether it would still pass if every func
 **Keep** a test of a relation across a table's rows (a key present in two tables, a parent that exists), and a compile-time check in a `*.test-d.ts` file.
 
 **Production prerequisites.** An acceptance test must not pass because its setup establishes state or ordering that production never establishes. Exercise the real initialization path or prove that the caller supplies the prerequisite. Ordinary fixture inputs that real callers can supply are valid.
+
+**Notation, not a runtime.** Write Given, When, Then or Gherkin-style tests in the project's existing framework. Do not add Cucumber, a Gherkin runner, or `.feature` files unless the project already runs one.
