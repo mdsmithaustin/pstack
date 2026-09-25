@@ -2,7 +2,7 @@
 import ast
 import re
 
-from shared import apply_diff, parse_files, parse_python
+from shared import apply_diff, parse_files, parse_python, review_names
 
 BILLING = {"payer_name", "balance_cents"}
 SIGN_IN = {"email", "password_hash", "mfa_enabled"}
@@ -166,7 +166,14 @@ def check_wrapper_folded(answer, workspace):
     return failures
 
 
+# Review of a pull request that puts the routing family and the skill vendor
+# behind one harness_family(kind=...) lookup.
+def check_kind_switch_review(answer, project):
+    return review_names(answer, (r"\bharness_family\b", r"harness_family\.py"))
+
+
 CHECKS = {
+    "harness-family-module-review": check_kind_switch_review,
     "account-types": check_separate,
     "invoice-customers": check_merged,
     "harness-families": check_families_apart,

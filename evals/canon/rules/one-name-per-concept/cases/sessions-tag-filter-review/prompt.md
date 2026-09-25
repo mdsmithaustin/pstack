@@ -1,0 +1,1 @@
+Could you give `sessions-list-tag-filter` a review against main before I merge it? It adds a tag filter to the session list endpoint and the Python client. The PR description is in pr-body.md. Just leave your comments here, no need to commit or push anything.

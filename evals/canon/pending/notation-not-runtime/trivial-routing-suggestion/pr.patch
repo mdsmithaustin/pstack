@@ -1,0 +1,231 @@
+From 8aeacd2121b89c77b8463481917de4365ced67b5 Mon Sep 17 00:00:00 2001
+From: Tomasz Wrobel <tomasz.wrobel@example.com>
+Date: Sat, 19 Sep 2026 09:18:00 +0200
+Subject: [PATCH] feat(policies): name a suggested model when denying trivial
+ tasks
+
+deny_trivial_to_expensive_model tells the agent to "use a smaller model"
+but never says which one, so the agent guesses and often retries on
+another gated model. Add an optional suggested_model factory param that
+the DENY reason names, on both the fresh and the cached verdict path.
+Reject a suggestion that is itself listed in expensive_models.
+
+Add the new verdicts to features/trivial_routing.feature.
+
+Signed-off-by: Tomasz Wrobel <tomasz.wrobel@example.com>
+---
+ omnigent/policies/builtins/routing.py         | 50 +++++++++++++++----
+ .../builtins/features/trivial_routing.feature | 25 ++++++++++
+ .../test_trivial_routing_scenarios.py         | 42 +++++++++++++++-
+ 3 files changed, 105 insertions(+), 12 deletions(-)
+
+diff --git a/omnigent/policies/builtins/routing.py b/omnigent/policies/builtins/routing.py
+index a806b81e8..98c863b4e 100644
+--- a/omnigent/policies/builtins/routing.py
++++ b/omnigent/policies/builtins/routing.py
+@@ -99,10 +99,30 @@ def _extract_response_text(response: object) -> str:
+     return content_text if isinstance(content_text, str) else ""
+ 
+ 
++def _trivial_reason(current_model: str, suggested_model: str | None) -> str:
++    """
++    Build the DENY reason for a trivial task sent to an expensive model.
++
++    :param current_model: The gated model the request targeted, e.g.
++        ``"databricks-claude-opus-4-6"``.
++    :param suggested_model: The model the operator wants trivial tasks
++        to use instead, e.g. ``"databricks-claude-haiku-4-5"``. ``None``
++        falls back to a generic "smaller model" hint.
++    :returns: The reason string surfaced to the agent.
++    """
++    alternative = f"'{suggested_model}'" if suggested_model else "a smaller model"
++    return (
++        f"This task appears trivial and does not warrant "
++        f"the expensive model '{current_model}'. Use "
++        f"{alternative} for simple tasks."
++    )
++
++
+ def deny_trivial_to_expensive_model(
+     *,
+     expensive_models: list[str],
+     classification_prompt: str = _DEFAULT_CLASSIFICATION_PROMPT,
++    suggested_model: str | None = None,
+ ) -> PolicyCallable:
+     """Factory: deny trivial tasks from using expensive models.
+ 
+@@ -125,10 +145,20 @@ def deny_trivial_to_expensive_model(
+         (``{"difficulty": "TRIVIAL"|"COMPLEX"}``); the prompt
+         only needs to describe the classification criteria, not
+         the output format.
++    :param suggested_model: Optional model id to name in the DENY
++        reason, e.g. ``"databricks-claude-haiku-4-5"``, so the agent
++        knows which model to retry with. Must not be one of
++        *expensive_models*.
+     :returns: An async policy callable that denies trivial
+         ``llm_request`` events targeting expensive models.
++    :raises ValueError: If *suggested_model* is itself gated.
+     """
+     gated = frozenset(expensive_models)
++    if suggested_model is not None and suggested_model in gated:
++        raise ValueError(
++            f"suggested_model {suggested_model!r} is listed in expensive_models; "
++            "trivial tasks would be denied on it too"
++        )
+ 
+     async def evaluate(event: PolicyEvent) -> PolicyResponse | None:
+         """Classify the user message and deny trivial calls to expensive models.
+@@ -168,11 +198,7 @@ def deny_trivial_to_expensive_model(
+         if cached == "TRIVIAL":
+             return {
+                 "result": "DENY",
+-                "reason": (
+-                    f"This task appears trivial and does not warrant "
+-                    f"the expensive model '{current_model}'. Use a "
+-                    f"smaller model for simple tasks."
+-                ),
++                "reason": _trivial_reason(current_model, suggested_model),
+             }
+         if cached == "COMPLEX":
+             return None
+@@ -218,11 +244,7 @@ def deny_trivial_to_expensive_model(
+             )
+             return {
+                 "result": "DENY",
+-                "reason": (
+-                    f"This task appears trivial and does not warrant "
+-                    f"the expensive model '{current_model}'. Use a "
+-                    f"smaller model for simple tasks."
+-                ),
++                "reason": _trivial_reason(current_model, suggested_model),
+                 "state_updates": [
+                     {"key": cache_key, "action": "set", "value": "TRIVIAL"},
+                 ],
+@@ -499,6 +521,14 @@ POLICY_REGISTRY: list[dict[str, object]] = [
+                         "via structured output, not the prompt)."
+                     ),
+                 },
++                "suggested_model": {
++                    "type": "string",
++                    "description": (
++                        "Model id named in the denial reason so the agent "
++                        "retries trivial tasks on it. Must not be one of "
++                        "expensive_models."
++                    ),
++                },
+             },
+             "required": ["expensive_models"],
+         },
+diff --git a/tests/policies/builtins/features/trivial_routing.feature b/tests/policies/builtins/features/trivial_routing.feature
+index d4fbed38e..d6bc40bd6 100644
+--- a/tests/policies/builtins/features/trivial_routing.feature
++++ b/tests/policies/builtins/features/trivial_routing.feature
+@@ -34,3 +34,28 @@ Feature: Keep trivial tasks off expensive models
+     Given the server has no LLM client
+     When the agent sends "What is 2+2?" to "databricks-claude-opus-4-6"
+     Then the policy abstains
++
++  Scenario: A trivial task is pointed at the suggested model
++    Given the policy suggests "databricks-claude-haiku-4-5"
++    And the classifier rates the message trivial
++    When the agent sends "What is 2+2?" to "databricks-claude-opus-4-6"
++    Then the call is denied
++    And the reason tells the agent to use "databricks-claude-haiku-4-5"
++
++  Scenario: A reused trivial verdict still names the suggested model
++    Given the policy suggests "databricks-claude-haiku-4-5"
++    And the session already rated "What is 2+2?" trivial
++    When the agent sends "What is 2+2?" to "databricks-claude-opus-4-6"
++    Then the call is denied
++    And the reason tells the agent to use "databricks-claude-haiku-4-5"
++    And the classifier was not asked
++
++  Scenario: Without a suggestion the reason stays generic
++    Given the classifier rates the message trivial
++    When the agent sends "What is 2+2?" to "databricks-claude-opus-4-6"
++    Then the call is denied
++    And the reason tells the agent to use a smaller model
++
++  Scenario: A gated model cannot be the suggestion
++    When the policy is configured to suggest "databricks-claude-opus-4-6"
++    Then configuration fails naming "databricks-claude-opus-4-6"
+diff --git a/tests/policies/builtins/test_trivial_routing_scenarios.py b/tests/policies/builtins/test_trivial_routing_scenarios.py
+index 9b2f83a52..a61b281ba 100644
+--- a/tests/policies/builtins/test_trivial_routing_scenarios.py
++++ b/tests/policies/builtins/test_trivial_routing_scenarios.py
+@@ -48,7 +48,12 @@ def _cache_key(message: str) -> str:
+ def routing() -> dict[str, Any]:
+     """Mutable state shared by the steps of one scenario."""
+     client = _StubClient()
+-    return {"session_state": {}, "classifier": client.create, "llm_client": client}
++    return {
++        "session_state": {},
++        "classifier": client.create,
++        "llm_client": client,
++        "suggested_model": None,
++    }
+ 
+ 
+ @given(parsers.parse('the routing policy gates "{model}"'))
+@@ -67,6 +72,11 @@ def cached_rating(routing: dict[str, Any], message: str, difficulty: str) -> Non
+     routing["session_state"][_cache_key(message)] = difficulty.upper()
+ 
+ 
++@given(parsers.parse('the policy suggests "{model}"'))
++def suggestion(routing: dict[str, Any], model: str) -> None:
++    routing["suggested_model"] = model
++
++
+ @given("the server has no LLM client")
+ def no_llm_client(routing: dict[str, Any]) -> None:
+     routing["llm_client"] = None
+@@ -74,13 +84,26 @@ def no_llm_client(routing: dict[str, Any]) -> None:
+ 
+ @when(parsers.parse('the agent sends "{message}" to "{model}"'))
+ def send(routing: dict[str, Any], message: str, model: str) -> None:
+-    policy = deny_trivial_to_expensive_model(expensive_models=routing["expensive_models"])
++    policy = deny_trivial_to_expensive_model(
++        expensive_models=routing["expensive_models"],
++        suggested_model=routing["suggested_model"],
++    )
+     event = llm_request_event(model=model, last_user_message=message)
+     event["session_state"] = routing["session_state"]
+     event["llm_client"] = routing["llm_client"]
+     routing["verdict"] = asyncio.run(policy(event))
+ 
+ 
++@when(parsers.parse('the policy is configured to suggest "{model}"'))
++def configure_gated_suggestion(routing: dict[str, Any], model: str) -> None:
++    with pytest.raises(ValueError) as excinfo:
++        deny_trivial_to_expensive_model(
++            expensive_models=routing["expensive_models"],
++            suggested_model=model,
++        )
++    routing["error"] = str(excinfo.value)
++
++
+ @then("the call is denied")
+ def denied(routing: dict[str, Any]) -> None:
+     assert routing["verdict"]["result"] == "DENY"
+@@ -105,3 +128,18 @@ def remembered(routing: dict[str, Any], message: str, difficulty: str) -> None:
+ @then("the classifier was not asked")
+ def classifier_not_asked(routing: dict[str, Any]) -> None:
+     routing["classifier"].assert_not_awaited()
++
++
++@then(parsers.parse('the reason tells the agent to use "{model}"'))
++def reason_names_model(routing: dict[str, Any], model: str) -> None:
++    assert f"Use '{model}' for simple tasks." in routing["verdict"]["reason"]
++
++
++@then("the reason tells the agent to use a smaller model")
++def reason_is_generic(routing: dict[str, Any]) -> None:
++    assert "Use a smaller model for simple tasks." in routing["verdict"]["reason"]
++
++
++@then(parsers.parse('configuration fails naming "{model}"'))
++def configuration_fails(routing: dict[str, Any], model: str) -> None:
++    assert model in routing["error"]
+-- 
+2.54.0 (Apple Git-157)
+

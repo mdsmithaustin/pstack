@@ -1,0 +1,465 @@
+From 730e74f8193c30ced82aa28740d70c6a2ebc17c2 Mon Sep 17 00:00:00 2001
+From: Lena Okafor <lena.okafor@example.com>
+Date: Fri, 18 Sep 2026 15:42:00 +0000
+Subject: [PATCH] refactor(routing,skills): move harness family lookups into
+ omnigent/harness_family.py
+
+Smart Routing kept its harness -> family table in server/smart_routing.py,
+runner/subagent_routing.py wrapped it in two more helpers, and
+spec/skill_sources.py parsed the harness id for its own family. Adding a
+harness spelling meant finding all three.
+
+Add omnigent/harness_family.py with one harness_family() lookup. kind=
+selects the routing family (the default, used by every routing caller) or
+the skill family. Migrate every caller and delete the per-module copies.
+Behavior is unchanged: the routing table and the skill-family parse are
+carried over as they were, and the existing subagent-routing and
+skill-source tests pass against the new lookup.
+
+Signed-off-by: Lena Okafor <lena.okafor@example.com>
+---
+ omnigent/harness_family.py                    | 59 +++++++++++++++++++
+ omnigent/runner/subagent_routing.py           | 33 ++---------
+ omnigent/runner/tool_dispatch.py              |  4 +-
+ omnigent/runner/turn_routing.py               |  2 +-
+ .../server/routes/_sessions/orchestration.py  |  2 +-
+ omnigent/server/smart_routing.py              | 35 ++++-------
+ omnigent/spec/skill_sources.py                | 47 ++-------------
+ tests/server/test_subagent_routing.py         |  2 +-
+ tests/spec/test_skill_sources.py              | 11 ++--
+ tests/test_harness_family.py                  | 34 +++++++++++
+ 10 files changed, 123 insertions(+), 106 deletions(-)
+ create mode 100644 omnigent/harness_family.py
+ create mode 100644 tests/test_harness_family.py
+
+diff --git a/omnigent/harness_family.py b/omnigent/harness_family.py
+new file mode 100644
+index 000000000..4b1324ba3
+--- /dev/null
++++ b/omnigent/harness_family.py
+@@ -0,0 +1,59 @@
++"""Which family a harness belongs to.
++
++Smart Routing and host-skill discovery both group harness ids into families,
++so both read them from here and a new harness spelling is added in one place.
++"""
++
++from __future__ import annotations
++
++from typing import Literal
++
++FamilyKind = Literal["routing", "skills"]
++
++# Smart Routing model families, keyed by every spelling callers pass,
++# including the executor types ``AgentSpec.harness_kind`` returns.
++_ROUTING_FAMILIES: dict[str, str] = {
++    "claude-sdk": "claude",
++    "claude_sdk": "claude",
++    "claude-native": "claude",
++    "pi": "pi",
++    "codex": "gpt",
++    "codex-native": "gpt",
++    "openai-agents": "gpt",
++    "openai-agents-sdk": "gpt",
++    "agents_sdk": "gpt",
++}
++
++_SKILL_FAMILIES = frozenset({"claude", "codex", "cursor", "pi", "antigravity", "devin"})
++
++
++def _skill_family(harness: str) -> str | None:
++    # Every spelling of a vendor's harness shares its skill directories, so the
++    # family comes from the id: ``claude_sdk``, ``claude-native`` and
++    # ``native-claude`` all read ~/.claude.
++    normalized = harness.replace("_", "-")
++    parts = normalized.split("-")
++    base = parts[1] if parts[0] == "native" and len(parts) > 1 else parts[0]
++    # Bare ``antigravity`` is the in-process Gemini SDK executor, not the agy
++    # CLI, so it never reads ~/.gemini skills.
++    if base not in _SKILL_FAMILIES or normalized == "antigravity":
++        return None
++    return base
++
++
++def harness_family(harness: str | None, *, kind: FamilyKind = "routing") -> str | None:
++    """Return the family *harness* belongs to.
++
++    :param harness: A harness id, e.g. ``"codex-native"`` or ``"claude_sdk"``.
++        ``None``, ``""`` and the unresolved ``"auto"`` sentinel have no family.
++    :param kind: ``"routing"`` for the Smart Routing model family
++        (``"claude"``, ``"gpt"`` or ``"pi"``); ``"skills"`` for the vendor
++        whose host skill directories the harness reads (``"claude"``,
++        ``"codex"``, ``"cursor"``, ``"pi"``, ``"antigravity"`` or ``"devin"``).
++    :returns: The family, or ``None`` when the harness has none of that kind.
++    """
++    if not harness or harness == "auto":
++        return None
++    if kind == "skills":
++        return _skill_family(harness)
++    return _ROUTING_FAMILIES.get(harness)
+diff --git a/omnigent/runner/subagent_routing.py b/omnigent/runner/subagent_routing.py
+index 9c4c3988e..044d376ef 100644
+--- a/omnigent/runner/subagent_routing.py
++++ b/omnigent/runner/subagent_routing.py
+@@ -63,4 +63,6 @@ from pathlib import Path
+ from typing import TYPE_CHECKING, Any, Literal
+ 
++from omnigent.harness_family import harness_family
++
+ if TYPE_CHECKING:
+     import httpx
+@@ -487,27 +489,4 @@ def _opt_str(value: Any) -> str | None:
+ 
+ 
+-def _harness_family(harness: str) -> str | None:
+-    from omnigent.server.smart_routing import _HARNESS_FAMILY
+-
+-    return _HARNESS_FAMILY.get(harness)
+-
+-
+-def harness_family(harness: str | None) -> str | None:
+-    """Return the model family *harness* belongs to.
+-
+-    The single family lookup shared by the hook path (native subagent
+-    spawns) and the omnigent child-session path, so "in-family" means the
+-    same thing for both.
+-
+-    :param harness: Harness id, e.g. ``"codex-native"``. ``None`` or the
+-        unresolved ``"auto"`` sentinel carry no family.
+-    :returns: ``"claude"``, ``"gpt"``, ``"pi"``, or ``None`` when the
+-        harness is unknown / multi-family.
+-    """
+-    if harness is None or harness == "auto":
+-        return None
+-    return _harness_family(harness)
+-
+-
+ def auto_harness_session(conv: Any, parent: Any = None) -> bool:
+     """Report whether a session may cross harness families.
+@@ -674,8 +653,8 @@ def _target_harness(
+ ) -> str:
+     """Name the harness a picked model should run on."""
+-    if picked_family is not None and picked_family == _harness_family(req_harness):
++    if picked_family is not None and picked_family == harness_family(req_harness):
+         return req_harness
+     counterpart = _COUNTERPART_HARNESS.get(req_harness)
+-    if counterpart is not None and _harness_family(counterpart) == picked_family:
++    if counterpart is not None and harness_family(counterpart) == picked_family:
+         return counterpart
+     return picked_harness or counterpart or req_harness
+@@ -884,9 +863,9 @@ def _decision_from_result(
+ 
+     picked_harness = _opt_str(getattr(result, "harness", None))
+-    family = _harness_family(picked_harness) if picked_harness else None
++    family = harness_family(picked_harness) if picked_harness else None
+     if family is None:
+         for harness_id, models in candidates.items():
+             if model in models:
+-                family = _harness_family(harness_id)
++                family = harness_family(harness_id)
+                 break
+     target = _target_harness(req.harness, picked_harness, family)
+diff --git a/omnigent/runner/tool_dispatch.py b/omnigent/runner/tool_dispatch.py
+index 2aeb14e49..d25695796 100644
+--- a/omnigent/runner/tool_dispatch.py
++++ b/omnigent/runner/tool_dispatch.py
+@@ -5443,7 +5443,7 @@ async def _spawn_family(
+     from types import SimpleNamespace
+ 
++    from omnigent.harness_family import harness_family
+     from omnigent.runner.subagent_routing import (
+         auto_harness_session,
+-        harness_family,
+         session_routing_class,
+         subagent_routing_enabled,
+@@ -5506,5 +5506,5 @@ def _in_spawn_family(builtins: list[_JsonObject], family: str | None) -> list[_J
+     if family is None:
+         return builtins
+-    from omnigent.runner.subagent_routing import harness_family
++    from omnigent.harness_family import harness_family
+ 
+     kept: list[_JsonObject] = []
+diff --git a/omnigent/runner/turn_routing.py b/omnigent/runner/turn_routing.py
+index a9f9728b9..30d44f7b8 100644
+--- a/omnigent/runner/turn_routing.py
++++ b/omnigent/runner/turn_routing.py
+@@ -486,7 +486,7 @@ def out_of_parent_family(
+     :returns: ``True`` when the pane must not be routed.
+     """
++    from omnigent.harness_family import harness_family
+     from omnigent.runner.subagent_routing import (
+         auto_harness_session,
+-        harness_family,
+         subagent_routing_enabled,
+     )
+diff --git a/omnigent/server/routes/_sessions/orchestration.py b/omnigent/server/routes/_sessions/orchestration.py
+index ad4b63772..0eb82a2b7 100644
+--- a/omnigent/server/routes/_sessions/orchestration.py
++++ b/omnigent/server/routes/_sessions/orchestration.py
+@@ -54,4 +54,5 @@ from omnigent.harness_availability import (
+     HARNESS_VERSION_TOO_LOW,
+ )
++from omnigent.harness_family import harness_family
+ from omnigent.host.frames import (
+     HARNESS_NOT_CONFIGURED_ERROR_CODE as _HARNESS_NOT_CONFIGURED_ERROR_CODE,
+@@ -88,5 +89,4 @@ from omnigent.runner.subagent_routing import (
+     ROUTING_DECISION_LABEL_KEY,
+     auto_harness_session,
+-    harness_family,
+     subagent_routing_enabled,
+ )
+diff --git a/omnigent/server/smart_routing.py b/omnigent/server/smart_routing.py
+index 4cc5df1b4..72a4cb79f 100644
+--- a/omnigent/server/smart_routing.py
++++ b/omnigent/server/smart_routing.py
+@@ -22,4 +22,5 @@ from typing import TYPE_CHECKING, Any, Protocol
+ 
+ from omnigent.db.workspace_cache import WorkspaceScopedCache
++from omnigent.harness_family import harness_family
+ from omnigent.models.model_fallbacks import (
+     SMART_ROUTING_CLAUDE_LADDER,
+@@ -99,16 +100,4 @@ _CURRENT_GENERATION_MODELS: Mapping[str, tuple[str, ...]] = MappingProxyType(
+ )
+ 
+-_HARNESS_FAMILY: dict[str, str] = {
+-    "claude-sdk": "claude",
+-    "claude_sdk": "claude",
+-    "claude-native": "claude",
+-    "pi": "pi",
+-    "codex": "gpt",
+-    "codex-native": "gpt",
+-    "openai-agents": "gpt",
+-    "openai-agents-sdk": "gpt",
+-    "agents_sdk": "gpt",
+-}
+-
+ 
+ def infer_models(
+@@ -128,5 +117,5 @@ def infer_models(
+     if harness is None:
+         return None
+-    family = _HARNESS_FAMILY.get(harness)
++    family = harness_family(harness)
+     if family is None:
+         return None
+@@ -147,5 +136,5 @@ def models_in_family(harness: str | None, models: Iterable[str]) -> list[str]:
+     :returns: The servable subset, order preserved.
+     """
+-    from omnigent.runner.subagent_routing import harness_family, model_in_family
++    from omnigent.runner.subagent_routing import model_in_family
+ 
+     family = harness_family(harness)
+@@ -181,5 +170,5 @@ def catalog_models_for_harness(
+     if own:
+         return list(own)
+-    family = _HARNESS_FAMILY.get(harness)
++    family = harness_family(harness)
+     for worker, worker_models in catalog.items():
+         if not worker_models:
+@@ -189,5 +178,5 @@ def catalog_models_for_harness(
+             continue
+         if worker_harness == harness or (
+-            family is not None and _HARNESS_FAMILY.get(worker_harness) == family
++            family is not None and harness_family(worker_harness) == family
+         ):
+             return list(worker_models)
+@@ -1270,9 +1259,7 @@ def natural_harness_for_model(
+     candidates = serving or order
+     family = _model_family(model)
+-    chosen = next((h for h in candidates if _HARNESS_FAMILY.get(h) == family), None)
++    chosen = next((h for h in candidates if harness_family(h) == family), None)
+     if chosen is None:
+-        chosen = next(
+-            (h for h in candidates if _HARNESS_FAMILY.get(h) == _MULTI_MODEL_FAMILY), None
+-        )
++        chosen = next((h for h in candidates if harness_family(h) == _MULTI_MODEL_FAMILY), None)
+     if chosen is None:
+         chosen = candidates[0] if candidates else None
+@@ -1508,5 +1495,5 @@ class TaskV1RouteOptionSource:
+     def _scenario(self, harnesses: Iterable[str]) -> str:
+         """Map a harness set to a router scenario key."""
+-        families = {_HARNESS_FAMILY.get(h) for h in harnesses}
++        families = {harness_family(h) for h in harnesses}
+         if families == {"claude"}:
+             return "cc"
+@@ -1528,5 +1515,5 @@ class TaskV1RouteOptionSource:
+         order = list(catalog) or list(harnesses)
+         family = _model_family(arm)
+-        match = next((h for h in order if _HARNESS_FAMILY.get(h) == family), None)
++        match = next((h for h in order if harness_family(h) == family), None)
+         if match is not None:
+             return match
+@@ -2034,5 +2021,5 @@ async def route_session_harness(
+     :param runner_client: HTTP client pointed at the runner (optional).
+     :param allowed_family: Restrict candidates to this harness family
+-        (:func:`omnigent.runner.subagent_routing.harness_family`), e.g.
++        (:func:`omnigent.harness_family.harness_family`), e.g.
+         ``"gpt"`` for a child of a codex session. ``None`` offers every
+         auto-routing harness — only sessions in auto-harness mode.
+@@ -2093,5 +2080,5 @@ async def route_session_harness(
+             _AUTO_ROUTING_HARNESSES if harness_candidates is None else tuple(harness_candidates)
+         )
+-        if allowed_family is None or _HARNESS_FAMILY.get(h) == allowed_family
++        if allowed_family is None or harness_family(h) == allowed_family
+     )
+     harness_models: dict[str, list[str]] = {}
+diff --git a/omnigent/spec/skill_sources.py b/omnigent/spec/skill_sources.py
+index a2f761d68..1f4049040 100644
+--- a/omnigent/spec/skill_sources.py
++++ b/omnigent/spec/skill_sources.py
+@@ -23,4 +23,5 @@ from typing import cast
+ 
+ from omnigent.errors import OmnigentError
++from omnigent.harness_family import harness_family
+ from omnigent.spec.parser import _discover_skills, _parse_skill, discover_host_skills
+ from omnigent.spec.types import AgentSpec, SkillSpec
+@@ -28,44 +29,4 @@ from omnigent.spec.types import AgentSpec, SkillSpec
+ _log = logging.getLogger(__name__)
+ 
+-_SKILL_FAMILIES = frozenset({"claude", "codex", "cursor", "pi", "antigravity", "devin"})
+-
+-# The bare ``antigravity`` harness is the in-process Gemini SDK executor, NOT the
+-# agy CLI. It never launches agy, so ~/.gemini plugin/builtin skills are not its
+-# skills — it keeps the generic walk, whose skills omnigent resolves+injects.
+-_ANTIGRAVITY_SDK_HARNESS = "antigravity"
+-
+-
+-def _harness_family(harness: str | None) -> str | None:
+-    """
+-    Map any harness spelling to its vendor family, or ``None``.
+-
+-    Collapses variant suffixes/prefixes — ``claude-sdk``,
+-    ``claude-native`` and ``native-claude`` all map to ``"claude"`` —
+-    so the provider registry can be keyed by family rather than by every
+-    canonical variant.
+-
+-    :param harness: A harness id (canonical or alias), e.g.
+-        ``"codex-native"``; ``None`` or ``""`` returns ``None``.
+-    :returns: One of ``"claude"``, ``"codex"``, ``"cursor"``, ``"pi"``,
+-        or ``None`` for unknown/other harnesses.
+-    """
+-    if not harness:
+-        return None
+-    # Normalize the underscore executor-type spelling (``claude_sdk``,
+-    # ``agents_sdk``) to the hyphen form before splitting — the in-process
+-    # SDK harness flows in as ``claude_sdk`` (canonicalize_harness leaves it
+-    # unchanged), and without this it would miss the ``claude`` family and
+-    # silently lose plugin slash-commands.
+-    normalized = harness.replace("_", "-")
+-    parts = normalized.split("-")
+-    base = parts[1] if parts[0] == "native" and len(parts) > 1 else parts[0]
+-    if base not in _SKILL_FAMILIES:
+-        return None
+-    # Unlike claude (where SDK and native share ~/.claude), antigravity's two
+-    # harnesses are different runtimes: only the agy CLI reads ~/.gemini.
+-    if base == _ANTIGRAVITY_SDK_HARNESS and normalized == _ANTIGRAVITY_SDK_HARNESS:
+-        return None
+-    return base
+-
+ 
+ @dataclass(frozen=True)
+@@ -116,5 +77,5 @@ def skill_source_context_from_env(
+     configured_claude_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+     codex_home: Path | None = None
+-    if _harness_family(harness) == "codex":
++    if harness_family(harness, kind="skills") == "codex":
+         from omnigent.inner.codex_executor import _codex_home_config_source_from_env
+ 
+@@ -236,5 +197,5 @@ def resolve_harness_skills(ctx: SkillSourceContext, harness: str | None) -> list
+     from omnigent.harness_aliases import is_native_harness
+ 
+-    family = _harness_family(harness)
++    family = harness_family(harness, kind="skills")
+     provider = _SKILL_SOURCES.get(family, _generic_host_skills)
+     # The terminal-matching resolution — a native session types ``/name`` into
+@@ -766,5 +727,5 @@ def devin_host_skills(ctx: SkillSourceContext) -> list[SkillSpec]:
+ 
+ 
+-# Keyed by harness family (see _harness_family). A harness with no entry
++# Keyed by skill family (see omnigent.harness_family). A harness with no entry
+ # (qwen, openai-agents, the in-process antigravity SDK, …) falls through to
+ # _generic_host_skills in resolve_harness_skills — the ~/.claude/skills walk,
+diff --git a/tests/server/test_subagent_routing.py b/tests/server/test_subagent_routing.py
+index 598272bb9..42216a181 100644
+--- a/tests/server/test_subagent_routing.py
++++ b/tests/server/test_subagent_routing.py
+@@ -15,4 +15,5 @@ import pytest
+ 
+ from omnigent.entities.conversation import RoutingDecisionData
++from omnigent.harness_family import harness_family
+ from omnigent.inner.hook_scripts.subagent_router import read_router_endpoint
+ from omnigent.runner.subagent_routing import (
+@@ -30,5 +31,4 @@ from omnigent.runner.subagent_routing import (
+     ensure_session_router_quietly,
+     forget_session_routing_class,
+-    harness_family,
+     make_server_relay_resolver,
+     model_in_family,
+diff --git a/tests/spec/test_skill_sources.py b/tests/spec/test_skill_sources.py
+index b6ac6fc37..bafae2f62 100644
+--- a/tests/spec/test_skill_sources.py
++++ b/tests/spec/test_skill_sources.py
+@@ -6,9 +6,6 @@ from pathlib import Path
+ import pytest
+ 
+-from omnigent.spec.skill_sources import (
+-    SkillSourceContext,
+-    _harness_family,
+-    resolve_harness_skills,
+-)
++from omnigent.harness_family import harness_family
++from omnigent.spec.skill_sources import SkillSourceContext, resolve_harness_skills
+ 
+ 
+@@ -75,6 +72,6 @@ def _ctx(
+     ],
+ )
+-def test_harness_family(harness: str | None, expected: str | None) -> None:
+-    assert _harness_family(harness) == expected
++def test_skill_family(harness: str | None, expected: str | None) -> None:
++    assert harness_family(harness, kind="skills") == expected
+ 
+ 
+diff --git a/tests/test_harness_family.py b/tests/test_harness_family.py
+new file mode 100644
+index 000000000..845aef802
+--- /dev/null
++++ b/tests/test_harness_family.py
+@@ -0,0 +1,34 @@
++"""Tests for omnigent.harness_family."""
++
++from __future__ import annotations
++
++import pytest
++
++from omnigent.harness_family import FamilyKind, harness_family
++
++
++@pytest.mark.parametrize(
++    "harness,kind,expected",
++    [
++        ("codex-native", "routing", "gpt"),
++        ("codex-native", "skills", "codex"),
++        ("claude_sdk", "routing", "claude"),
++        ("claude_sdk", "skills", "claude"),
++        ("pi", "routing", "pi"),
++        ("pi-native", "routing", None),
++        ("pi-native", "skills", "pi"),
++        ("openai-agents", "routing", "gpt"),
++        ("openai-agents", "skills", None),
++        ("antigravity-native", "routing", None),
++        ("antigravity-native", "skills", "antigravity"),
++        ("auto", "routing", None),
++        ("auto", "skills", None),
++        (None, "skills", None),
++    ],
++)
++def test_harness_family(harness: str | None, kind: FamilyKind, expected: str | None) -> None:
++    assert harness_family(harness, kind=kind) == expected
++
++
++def test_harness_family_defaults_to_routing() -> None:
++    assert harness_family("codex") == harness_family("codex", kind="routing") == "gpt"
+-- 
+2.54.0 (Apple Git-157)
+

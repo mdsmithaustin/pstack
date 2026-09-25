@@ -1,13 +1,14 @@
 """Write Gherkin-style tests in the existing framework, no runner.
 
 checkout-rules runs plain pytest, so the scenarios stay in pytest.
-checkout-bdd already runs pytest-bdd, so the scenarios use it."""
+checkout-bdd already runs pytest-bdd, so the scenarios use it.
+routing-suggested-model is a review of an omnigent pull request that adds pytest-bdd."""
 import ast
 import re
 import tomllib
 from pathlib import PurePosixPath
 
-from shared import OracleError, functions, is_test_path, normalized_source, original_test_sources, parse_files, parse_python
+from shared import OracleError, functions, is_test_path, normalized_source, original_test_sources, parse_files, parse_python, review_names
 
 RUNNER_DEPENDENCY = re.compile(r"\b(behave|pytest[-_]bdd|radish|cucumber|gherkin)\b", re.IGNORECASE)
 RUNNER_IMPORT = re.compile(r"^\s*(?:from|import)\s+(behave|pytest_bdd|radish|gherkin)\b|\bpytest[-_]bdd\b", re.MULTILINE)
@@ -120,4 +121,13 @@ def check_existing_runner(answer, project):
     return failures
 
 
-CHECKS = {"checkout-rules": check_notation, "checkout-bdd": check_existing_runner}
+def check_routing_suggested_model(answer, project):
+    """The pytest-bdd dependency, the feature file, or its step module."""
+    return review_names(answer, (r"pytest[-_ ]?bdd", r"\.feature\b", r"\bgherkin\b", r"test_suggested_model_scenarios"))
+
+
+CHECKS = {
+    "checkout-rules": check_notation,
+    "checkout-bdd": check_existing_runner,
+    "routing-suggested-model": check_routing_suggested_model,
+}

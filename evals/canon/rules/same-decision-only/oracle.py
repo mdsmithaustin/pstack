@@ -7,7 +7,7 @@ import ast
 import json
 from pathlib import PurePosixPath
 
-from shared import is_test_path, parse_files, parse_python, run_jobs
+from shared import is_test_path, parse_files, parse_python, review_names, run_jobs
 
 PAYROLL = ("payroll.pay", "net_pay")
 INVOICE = ("invoicing.totals", "invoice_total")
@@ -146,4 +146,13 @@ def check_merged(answer, project):
     return failures
 
 
-CHECKS = {"payroll-invoice-rounding": check_separate, "invoice-credit-rounding": check_merged}
+def check_billing_monthly_limit(answer, project):
+    """The two look-alike validators the pull request keeps apart."""
+    return review_names(answer, (r"validate_monthly_limit", r"validate_charge_amount"))
+
+
+CHECKS = {
+    "payroll-invoice-rounding": check_separate,
+    "invoice-credit-rounding": check_merged,
+    "billing-monthly-limit": check_billing_monthly_limit,
+}

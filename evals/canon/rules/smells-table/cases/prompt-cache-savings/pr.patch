@@ -1,0 +1,272 @@
+From b2cbeb69c80c8fe25ef6c043704ffa2ae43cc81c Mon Sep 17 00:00:00 2001
+From: Tomasz Wierzbicki <tomasz.wierzbicki@example.com>
+Date: Fri, 25 Sep 2026 17:05:27 -0600
+Subject: [PATCH] feat(usage): show what prompt caching saved, per call and in
+ /usage
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The 💾 Cache line already reports hits and writes, but not what they are
+worth. A cache read bills at a fraction of the input rate and a write at
+a premium over it, so whether caching is paying off on a route depends on
+the rate card, not the hit rate alone.
+
+Each priced response now also yields the net saving: reads at the gap
+between the input and cache-read rates, minus writes at the gap between
+the cache-write and input rates, with context-tier rates applied to the
+whole request as estimate_usage_cost does. The per-call line gains
+"saved ~$0.26" (or "cost ~$0.04 extra" on a write-only first call), the
+session keeps a running total that /new resets, and /usage prints it.
+
+Subscription-included routes and rate cards without cache prices report
+nothing rather than a misleading $0.00.
+---
+ agent/agent_init.py               |  1 +
+ agent/cache_savings.py            | 77 +++++++++++++++++++++++++++++++
+ agent/turn_usage.py               | 16 ++++---
+ hermes_cli/cli_info_mixin.py      |  5 ++
+ run_agent.py                      |  1 +
+ tests/agent/test_cache_savings.py | 67 +++++++++++++++++++++++++++
+ 6 files changed, 161 insertions(+), 6 deletions(-)
+ create mode 100644 agent/cache_savings.py
+ create mode 100644 tests/agent/test_cache_savings.py
+
+diff --git a/agent/agent_init.py b/agent/agent_init.py
+index a3e3bd91d4..97a4e7443d 100644
+--- a/agent/agent_init.py
++++ b/agent/agent_init.py
+@@ -2306,6 +2306,7 @@ _USAGE_STATE: Dict[str, Any] = {
+     "session_cache_write_tokens": 0,
+     "session_reasoning_tokens": 0,
+     "session_estimated_cost_usd": 0.0,
++    "session_cache_savings_usd": 0.0,
+     "session_cost_status": "unknown",
+     "session_cost_source": "none",
+     # Status-bar latency/velocity history (last 10 calls), shared by loop + codex_runtime.
+diff --git a/agent/cache_savings.py b/agent/cache_savings.py
+new file mode 100644
+index 0000000000..86b46087a5
+--- /dev/null
++++ b/agent/cache_savings.py
+@@ -0,0 +1,77 @@
++"""Prompt-cache savings: what cache reads saved against paying the full input rate.
++
++A cache read bills at a fraction of the input rate, and a cache write bills at a
++premium over it (1.25x input on Anthropic and OpenAI GPT-5.6). The net figure is
++``reads * (input - read) - writes * (write - input)`` per million tokens, so the
++first call of a conversation, which only writes, usually shows a small cost and
++later calls that hit the cache show the saving.
++"""
++
++from __future__ import annotations
++
++from decimal import Decimal
++from typing import Optional
++
++from agent.usage_pricing import PricingEntry, format_cost_label, get_pricing_entry
++
++_ONE_MILLION = Decimal("1000000")
++
++
++def cache_savings_usd(
++    entry: PricingEntry, prompt_tokens: int, cache_read_tokens: int, cache_write_tokens: int,
++) -> Optional[Decimal]:
++    """Net USD saved by the cache for one request, or None when a needed rate is unknown.
++
++    Above ``tier_threshold_tokens`` the ``*_above`` rates apply to the whole request,
++    matching how ``estimate_usage_cost`` prices it.
++    """
++    above = entry.tier_threshold_tokens is not None and prompt_tokens > entry.tier_threshold_tokens
++
++    def rate(base: Optional[Decimal], above_rate: Optional[Decimal]) -> Optional[Decimal]:
++        return above_rate if above and above_rate is not None else base
++
++    input_rate = rate(entry.input_cost_per_million, entry.input_cost_per_million_above)
++    read_rate = rate(entry.cache_read_cost_per_million, entry.cache_read_cost_per_million_above)
++    write_rate = rate(entry.cache_write_cost_per_million, entry.cache_write_cost_per_million_above)
++    if input_rate is None:
++        return None
++    if (cache_read_tokens and read_rate is None) or (cache_write_tokens and write_rate is None):
++        return None
++    saved = Decimal(cache_read_tokens) * (input_rate - read_rate) if cache_read_tokens else Decimal(0)
++    premium = Decimal(cache_write_tokens) * (write_rate - input_rate) if cache_write_tokens else Decimal(0)
++    return (saved - premium) / _ONE_MILLION
++
++
++def estimate_cache_savings(
++    model: str, prompt_tokens: int, cache_read_tokens: int, cache_write_tokens: int, *,
++    provider: Optional[str] = None, base_url: Optional[str] = None, api_key: Optional[str] = None,
++) -> Optional[Decimal]:
++    """Cache savings for one request on this route; None when there is nothing to price.
++
++    Subscription-included routes carry no per-token price, so they report None rather
++    than a misleading $0.00.
++    """
++    if not (cache_read_tokens or cache_write_tokens):
++        return None
++    entry = get_pricing_entry(model, provider=provider, base_url=base_url, api_key=api_key)
++    if entry is None or entry.source == "none":
++        return None
++    return cache_savings_usd(entry, prompt_tokens, cache_read_tokens, cache_write_tokens)
++
++
++def format_savings_label(savings: Decimal) -> str:
++    """``saved ~$0.12`` for a net saving, ``cost ~$0.01 extra`` when writes outweigh reads."""
++    if savings < 0:
++        return f"cost {format_cost_label(-savings)} extra"
++    return f"saved {format_cost_label(savings)}"
++
++
++def format_cache_line(
++    prompt_tokens: int, cache_read_tokens: int, cache_write_tokens: int, savings: Optional[Decimal],
++) -> str:
++    """The body of the per-call ``💾 Cache:`` line."""
++    hit_pct = (cache_read_tokens / prompt_tokens * 100) if prompt_tokens > 0 else 0
++    line = f"{cache_read_tokens:,}/{prompt_tokens:,} tokens ({hit_pct:.0f}% hit, {cache_write_tokens:,} written"
++    if savings is not None:
++        line += f", {format_savings_label(savings)}"
++    return line + ")"
+diff --git a/agent/turn_usage.py b/agent/turn_usage.py
+index b97159839b..b6ea204a44 100644
+--- a/agent/turn_usage.py
++++ b/agent/turn_usage.py
+@@ -15,6 +15,7 @@ from contextlib import suppress
+ from dataclasses import dataclass
+ from typing import Any, Dict, List
+ 
++from agent.cache_savings import estimate_cache_savings, format_cache_line
+ from agent.image_token_cost import calibrate_from_usage
+ from agent.usage_anchor import capture_usage_anchor, set_usage_anchor
+ from agent.usage_pricing import estimate_usage_cost, normalize_usage
+@@ -242,6 +243,14 @@ def record_response_usage(
+             _cost_delta = (_cost_delta or 0.0) + _moa_cost
+     agent.session_cost_status = cost_result.status
+     agent.session_cost_source = cost_result.source
++    # Priced like the cost above: aggregator usage at the aggregator's real route.
++    cache_savings = estimate_cache_savings(
++        _agg_cost_model, aggregator_usage.prompt_tokens, aggregator_usage.cache_read_tokens,
++        aggregator_usage.cache_write_tokens, provider=_agg_cost_provider,
++        base_url=_agg_cost_base_url, api_key=getattr(agent, "api_key", ""),
++    )
++    if cache_savings is not None:
++        agent.session_cache_savings_usd += float(cache_savings)
+ 
+     # Persist per-call token deltas for any session_id so non-CLI runs can't lose
+     # accounting; gateway/session-store writes use absolute totals and safely overwrite
+@@ -286,10 +295,5 @@ def record_response_usage(
+     written = canonical_usage.cache_write_tokens
+     prompt = usage_dict["prompt_tokens"]
+     if (cached or written) and not agent.quiet_mode:
+-        hit_pct = (cached / prompt * 100) if prompt > 0 else 0
+-        agent._vprint(
+-            f"{agent.log_prefix}   💾 Cache: "
+-            f"{cached:,}/{prompt:,} tokens "
+-            f"({hit_pct:.0f}% hit, {written:,} written)"
+-        )
++        agent._vprint(f"{agent.log_prefix}   💾 Cache: {format_cache_line(prompt, cached, written, cache_savings)}")
+     return ResponseUsageOutcome(compression_attempts=compression_attempts, rearmed=rearmed)
+diff --git a/hermes_cli/cli_info_mixin.py b/hermes_cli/cli_info_mixin.py
+index 774604c763..bfea0c3070 100644
+--- a/hermes_cli/cli_info_mixin.py
++++ b/hermes_cli/cli_info_mixin.py
+@@ -733,6 +733,11 @@ class CLIInfoMixin:
+         print(f"  Completion tokens:         {agent.session_completion_tokens:>10,}")
+         print(f"  Total tokens:              {agent.session_total_tokens:>10,}")
+         print(f"  API calls:                 {calls:>10,}")
++        cache_savings = getattr(agent, "session_cache_savings_usd", 0.0) or 0.0
++        if cache_savings:
++            from decimal import Decimal
++            from agent.cache_savings import format_savings_label
++            print(f"  Prompt cache:              {format_savings_label(Decimal(str(cache_savings))):>10}")
+         print(f"  Session duration:          {elapsed:>10}")
+         print(f"  {'─' * 40}")
+         from agent.context_breakdown import context_display_source
+diff --git a/run_agent.py b/run_agent.py
+index 9132c6646f..7e81ec9b01 100644
+--- a/run_agent.py
++++ b/run_agent.py
+@@ -422,6 +422,7 @@ class AIAgent(
+         ):
+             setattr(self, counter, 0)
+         self.session_estimated_cost_usd = 0.0
++        self.session_cache_savings_usd = 0.0
+         self.session_cost_status = "unknown"
+         self.session_cost_source = "none"
+ 
+diff --git a/tests/agent/test_cache_savings.py b/tests/agent/test_cache_savings.py
+new file mode 100644
+index 0000000000..8c8633dbaf
+--- /dev/null
++++ b/tests/agent/test_cache_savings.py
+@@ -0,0 +1,67 @@
++"""Prompt-cache savings: reads saved against the full input rate, net of the write premium."""
++from decimal import Decimal
++from types import SimpleNamespace
++
++from agent import cache_savings
++from agent.cache_savings import cache_savings_usd, estimate_cache_savings, format_cache_line
++from agent.usage_pricing import PricingEntry
++
++# $3 input, $0.30 cache read, $3.75 cache write per million (Sonnet-shaped rates).
++_ENTRY = PricingEntry(
++    input_cost_per_million=Decimal("3.00"), output_cost_per_million=Decimal("15.00"),
++    cache_read_cost_per_million=Decimal("0.30"), cache_write_cost_per_million=Decimal("3.75"),
++    source="official_docs_snapshot",
++)
++
++
++def test_reads_save_the_rate_gap_and_writes_cost_the_premium():
++    # 100k reads save 100k * $2.70/M; 10k writes cost 10k * $0.75/M extra.
++    assert cache_savings_usd(_ENTRY, 120_000, 100_000, 10_000) == Decimal("0.27") - Decimal("0.0075")
++    # A write-only first call is a net cost, and the label says so.
++    first_call = cache_savings_usd(_ENTRY, 50_000, 0, 50_000)
++    assert first_call == Decimal("-0.0375")
++    assert format_cache_line(50_000, 0, 50_000, first_call) == "0/50,000 tokens (0% hit, 50,000 written, cost ~$0.04 extra)"
++
++
++def test_tiered_rates_apply_to_the_whole_request_above_the_threshold():
++    tiered = PricingEntry(
++        input_cost_per_million=Decimal("1.25"), cache_read_cost_per_million=Decimal("0.125"),
++        cache_write_cost_per_million=Decimal("1.25"), tier_threshold_tokens=200_000,
++        input_cost_per_million_above=Decimal("2.50"), cache_read_cost_per_million_above=Decimal("0.25"),
++        source="official_docs_snapshot",
++    )
++    below = cache_savings_usd(tiered, 200_000, 100_000, 0)
++    above = cache_savings_usd(tiered, 200_001, 100_000, 0)
++    assert above == 2 * below
++
++
++def test_unknown_or_included_pricing_reports_nothing():
++    no_read_rate = PricingEntry(input_cost_per_million=Decimal("3.00"), source="provider_models_api")
++    assert cache_savings_usd(no_read_rate, 10_000, 5_000, 0) is None
++    assert estimate_cache_savings("gpt-5.6-sol", 10_000, 5_000, 0, provider="openai-codex") is None
++    assert estimate_cache_savings("claude-sonnet-4-6", 10_000, 0, 0, provider="anthropic") is None
++
++
++def test_session_accumulates_savings_and_a_new_session_clears_them(tmp_path, monkeypatch):
++    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
++    monkeypatch.setattr(cache_savings, "get_pricing_entry", lambda *a, **k: _ENTRY)
++    from agent import turn_usage
++    from run_agent import AIAgent
++
++    agent = AIAgent(api_key="k", base_url="https://inference-api.nousresearch.com/v1", provider="nous",
++                    api_mode="chat_completions", model="anthropic/claude-sonnet-4.6", session_id="t", platform="cli",
++                    quiet_mode=True, skip_context_files=True, skip_memory=True, save_trajectories=False,
++                    enabled_toolsets=["file"])
++    usage = SimpleNamespace(prompt_tokens=120_000, completion_tokens=7, total_tokens=120_007,
++                            prompt_tokens_details=SimpleNamespace(cached_tokens=100_000, cache_write_tokens=10_000),
++                            completion_tokens_details=None)
++    try:
++        for n in (1, 2):
++            turn_usage.record_response_usage(agent, SimpleNamespace(usage=usage, id=None, model=agent.model),
++                                             messages=[{"role": "user", "content": "hi"}], api_call_count=n,
++                                             api_duration=0.1, compression_attempts=0, max_compression_attempts=3)
++        assert agent.session_cache_savings_usd == float(2 * cache_savings_usd(_ENTRY, 120_000, 100_000, 10_000))
++        agent.reset_session_state()
++        assert agent.session_cache_savings_usd == 0.0
++    finally:
++        agent.close()
+-- 
+2.54.0 (Apple Git-157)
+

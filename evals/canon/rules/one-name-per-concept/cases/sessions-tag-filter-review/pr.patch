@@ -1,0 +1,333 @@
+From b33a4d50fb56b87f4d88c88ee53a0b01105121b8 Mon Sep 17 00:00:00 2001
+From: Lena Okafor <lena.okafor@example.com>
+Date: Fri, 25 Sep 2026 17:06:51 -0600
+Subject: [PATCH 1/2] feat(server): filter GET /v1/sessions by tag
+
+Add a tag query parameter to the session list. tag=team:infra returns
+sessions whose team tag is infra; a bare tag=team matches any value.
+The store filters with an IN-subquery on conversation_labels, the same
+shape as the pinned filter, so it composes with the ACL, project, and
+archive filters and with cursor pagination.
+
+Per-user pin keys are rejected with a 400 so the filter cannot probe
+another user's pins; pinned=true already covers the caller's own.
+
+Signed-off-by: Lena Okafor <lena.okafor@example.com>
+---
+ omnigent/server/API.md                        |  6 ++++
+ .../server/routes/sessions/routes_core.py     | 32 +++++++++++++++++
+ .../stores/conversation_store/__init__.py     |  8 +++++
+ .../conversation_store/sqlalchemy_store.py    | 17 +++++++++
+ tests/server/routes/test_sessions_crud.py     | 35 +++++++++++++++++++
+ tests/stores/test_conversation_store.py       | 19 ++++++++++
+ 6 files changed, 117 insertions(+)
+
+diff --git a/omnigent/server/API.md b/omnigent/server/API.md
+index e90480949..f7fe7c9b1 100644
+--- a/omnigent/server/API.md
++++ b/omnigent/server/API.md
+@@ -680,6 +680,12 @@ sessions, `sub_agent` returns only sub-agent child sessions, and
+ `any` returns both. `any` powers the new-session agent picker's
+ discovery of agents that are only bound to sub-agent sessions.
+ 
++The `tag` filter returns only sessions carrying a tag, the key/value
++pairs set through `labels` on create or `PATCH`. `tag=team:infra`
++matches the `team` tag with value `infra`; a bare `tag=team` matches
++any value. It combines with every other filter. Per-user pin keys
++cannot be used as tags (400); use `pinned=true` instead.
++
+ When liveness is wired, each list item includes two orthogonal signals
+ (matching `GET /health` for the same session id and the
+ `WS /v1/sessions/updates` list item fields):
+diff --git a/omnigent/server/routes/sessions/routes_core.py b/omnigent/server/routes/sessions/routes_core.py
+index 4a28f1553..4e322b9a2 100644
+--- a/omnigent/server/routes/sessions/routes_core.py
++++ b/omnigent/server/routes/sessions/routes_core.py
+@@ -236,6 +236,30 @@ from omnigent.util.session_lifecycle import (
+ from omnigent.version import VERSION
+ 
+ 
++def _parse_tag_filter(tag: str) -> tuple[str, str | None]:
++    """Split a ``?tag=`` filter into the tag key and optional value.
++
++    :param tag: ``"key:value"`` to match an exact value, or ``"key"``
++        to match any value, e.g. ``"team:infra"``.
++    :returns: ``(key, value)``, with ``value`` ``None`` when the filter
++        names only a key.
++    :raises OmnigentError: 400 if the key is empty or names a per-user
++        pin key, which never crosses the API boundary.
++    """
++    key, sep, value = tag.partition(":")
++    if not key:
++        raise OmnigentError(
++            f"tag filter {tag!r} must start with a key, e.g. 'team:infra'",
++            code=ErrorCode.INVALID_INPUT,
++        )
++    if key == PINNED_LABEL_KEY or key.startswith(f"{PINNED_LABEL_KEY}."):
++        raise OmnigentError(
++            "pins cannot be used as a tag filter; use pinned=true instead",
++            code=ErrorCode.INVALID_INPUT,
++        )
++    return key, value if sep else None
++
++
+ def _require_attachment_compatible_history(
+     session_id: str,
+     target_agent: Agent,
+@@ -1280,6 +1304,7 @@ def register_core_routes(
+         project: str | None = Query(default=None),
+         pinned: bool = Query(default=False),
+         visibility: str = Query(default="all", pattern="^(all|mine|shared|archived)$"),
++        tag: str | None = Query(default=None),
+     ) -> PaginatedList:
+         """
+         List sessions with cursor-based pagination.
+@@ -1333,6 +1358,10 @@ def register_core_routes(
+             owned. ``"archived"`` returns only archived sessions.
+             ``"all"`` (default) returns all accessible non-archived
+             sessions, matching the legacy behaviour.
++        :param tag: When set, return only sessions carrying this tag.
++            ``"team:infra"`` matches the ``team`` tag with value
++            ``infra``; a bare ``"team"`` matches any value. ``None``
++            (default) disables the filter.
+         :returns: A :class:`PaginatedList` of
+             :class:`SessionListItem`.
+         """
+@@ -1349,6 +1378,7 @@ def register_core_routes(
+         # disabled entirely — no auth_provider).
+         user_id = _require_user(request, auth_provider)
+         normalized_query = search_query if search_query else None
++        tag_key, tag_value = _parse_tag_filter(tag) if tag else (None, None)
+         # Map the visibility filter to store-level ACL params.
+         # "mine": only sessions the caller owns — no accessible_by needed
+         #   because owner-level implies access.
+@@ -1420,6 +1450,8 @@ def register_core_routes(
+             pinned=pinned,
+             # Pins are per-user: filter to the caller's own pin key.
+             pinned_owner=user_id,
++            tag_key=tag_key,
++            tag_value=tag_value,
+         )
+         # Side chats surface only as Workspace-rail tabs, so drop any
+         # side-chat-labeled fork from the sidebar list (it is still a normal
+diff --git a/omnigent/stores/conversation_store/__init__.py b/omnigent/stores/conversation_store/__init__.py
+index 75ddc7de7..c63c1d9f4 100644
+--- a/omnigent/stores/conversation_store/__init__.py
++++ b/omnigent/stores/conversation_store/__init__.py
+@@ -700,6 +700,8 @@ class ConversationStore(ABC):
+         pinned: bool = False,
+         pinned_owner: str | None = None,
+         title: str | None = None,
++        tag_key: str | None = None,
++        tag_value: str | None = None,
+     ) -> PagedList[Conversation]:
+         """
+         List conversations with cursor-based pagination.
+@@ -811,6 +813,12 @@ class ConversationStore(ABC):
+             Powers the ``(agent, title)`` child-session lookup in
+             ``sys_session_send`` so the server can resolve the target
+             in a single indexed query instead of fetching all children.
++        :param tag_key: When set, only return conversations tagged with
++            this key, e.g. ``"team"``. Tags are stored as conversation
++            labels. ``None`` disables the filter.
++        :param tag_value: When set with ``tag_key``, the tag must also
++            have this exact value, e.g. ``"infra"``. ``None`` matches any
++            value. Ignored unless ``tag_key`` is set.
+         :returns: A :class:`PagedList` of :class:`Conversation`
+             objects.
+         :raises omnigent.errors.StaleCursorError: If the ``after``/``before``
+diff --git a/omnigent/stores/conversation_store/sqlalchemy_store.py b/omnigent/stores/conversation_store/sqlalchemy_store.py
+index 686fa9c3e..d89f8aec3 100644
+--- a/omnigent/stores/conversation_store/sqlalchemy_store.py
++++ b/omnigent/stores/conversation_store/sqlalchemy_store.py
+@@ -2651,6 +2651,8 @@ class SqlAlchemyConversationStore(ConversationStore):
+         pinned: bool = False,
+         pinned_owner: str | None = None,
+         title: str | None = None,
++        tag_key: str | None = None,
++        tag_value: str | None = None,
+     ) -> PagedList[Conversation]:
+         """
+         List conversations with cursor-based pagination.
+@@ -2718,6 +2720,11 @@ class SqlAlchemyConversationStore(ConversationStore):
+             can access but does NOT own — i.e. sessions shared with them
+             by another user. Requires ``accessible_by`` to be set.
+             ``False`` (default) disables the filter.
++        :param tag_key: When set, restrict to conversations tagged with
++            this key (a ``conversation_labels`` row). ``None`` disables
++            the filter.
++        :param tag_value: When set with ``tag_key``, the tag's value must
++            match exactly. ``None`` matches any value.
+         :returns: A :class:`PagedList` of :class:`Conversation`
+             objects.
+         """
+@@ -3028,6 +3035,16 @@ class SqlAlchemyConversationStore(ConversationStore):
+                         )
+                     )
+                 )
++            if tag_key is not None:
++                # Tags are label rows, colocated on the AP DB like pins, so the
++                # same inline IN-subquery applies.
++                tagged = select(SqlConversationLabel.conversation_id).where(
++                    SqlConversationLabel.workspace_id == current_workspace_id(),
++                    SqlConversationLabel.key == tag_key,
++                )
++                if tag_value is not None:
++                    tagged = tagged.where(SqlConversationLabel.value == tag_value)
++                stmt = stmt.where(SqlConversation.id.in_(tagged))
+             if after:
+                 stmt = self._apply_cursor(
+                     session,
+diff --git a/tests/server/routes/test_sessions_crud.py b/tests/server/routes/test_sessions_crud.py
+index fe2f04aa4..f289818b5 100644
+--- a/tests/server/routes/test_sessions_crud.py
++++ b/tests/server/routes/test_sessions_crud.py
+@@ -788,3 +788,38 @@ async def test_list_sessions_pinned_filter(
+     assert plain.id not in ids
+     # A pin belonging to another user must not appear for the caller.
+     assert other_user_pin.id not in ids
++
++
++# ── GET /v1/sessions?tag= (filter) ───────────────────────────────────
++
++
++async def test_list_sessions_filtered_by_tag(
++    client: httpx.AsyncClient,
++    db_uri: str,
++) -> None:
++    """``?tag=key:value`` matches the exact value; ``?tag=key`` any value."""
++    agent_store = SqlAlchemyAgentStore(db_uri)
++    conv_store = SqlAlchemyConversationStore(db_uri)
++    agent_id = generate_agent_id()
++    agent_store.create(agent_id, name="tag-agent", bundle_location="test:///bundle")
++    infra = conv_store.create_conversation(agent_id=agent_id)
++    web = conv_store.create_conversation(agent_id=agent_id)
++    untagged = conv_store.create_conversation(agent_id=agent_id)
++    conv_store.set_labels(infra.id, {"team": "infra"})
++    conv_store.set_labels(web.id, {"team": "web"})
++
++    resp = await client.get("/v1/sessions", params={"tag": "team:infra"})
++    assert resp.status_code == 200
++    assert [s["id"] for s in resp.json()["data"]] == [infra.id]
++
++    resp = await client.get("/v1/sessions", params={"tag": "team", "order": "asc"})
++    assert resp.status_code == 200
++    assert [s["id"] for s in resp.json()["data"]] == [infra.id, web.id]
++    assert untagged.id not in [s["id"] for s in resp.json()["data"]]
++
++
++@pytest.mark.parametrize("tag", [":infra", "omnigent.pinned", "omnigent.pinned.bob:1"])
++async def test_list_sessions_rejects_invalid_tag(client: httpx.AsyncClient, tag: str) -> None:
++    """An empty key or a pin key is a 400, not a silent empty page."""
++    resp = await client.get("/v1/sessions", params={"tag": tag})
++    assert resp.status_code == 400
+diff --git a/tests/stores/test_conversation_store.py b/tests/stores/test_conversation_store.py
+index e877eeb93..a388cef8c 100644
+--- a/tests/stores/test_conversation_store.py
++++ b/tests/stores/test_conversation_store.py
+@@ -6509,6 +6509,25 @@ def test_list_conversations_filters_by_pinned_label(
+     assert conversation_store.list_conversations(pinned=True, pinned_owner="alice").data == []
+ 
+ 
++def test_list_conversations_filters_by_tag(
++    conversation_store: SqlAlchemyConversationStore,
++) -> None:
++    """``tag_key`` alone matches any value; with ``tag_value`` only that value."""
++    infra = conversation_store.create_conversation(title="infra")
++    web = conversation_store.create_conversation(title="web")
++    conversation_store.create_conversation(title="untagged")
++    conversation_store.set_labels(infra.id, {"team": "infra", "env": "prod"})
++    conversation_store.set_labels(web.id, {"team": "web"})
++
++    any_team = conversation_store.list_conversations(tag_key="team")
++    assert {c.id for c in any_team.data} == {infra.id, web.id}
++
++    infra_only = conversation_store.list_conversations(tag_key="team", tag_value="infra")
++    assert [c.id for c in infra_only.data] == [infra.id]
++
++    assert conversation_store.list_conversations(tag_key="team", tag_value="prod").data == []
++
++
+ def test_pinned_label_key_fits_column_for_long_user_ids() -> None:
+     """The per-user pin key must never overflow the ``String(128)`` label-key
+     column. Short ids stay verbatim (DB-readable); an over-long id (e.g. a long
+-- 
+2.54.0 (Apple Git-157)
+
+
+From 994031423bbb00c3b1c110c24b8174093c1284ab Mon Sep 17 00:00:00 2001
+From: Lena Okafor <lena.okafor@example.com>
+Date: Fri, 25 Sep 2026 17:06:51 -0600
+Subject: [PATCH 2/2] feat(sdk): accept tag on SessionsNamespace.list
+
+Pass the new GET /v1/sessions tag filter through the Python client so
+scripts can list, say, every session tagged team:infra without paging
+through the whole list and filtering locally.
+
+Signed-off-by: Lena Okafor <lena.okafor@example.com>
+---
+ sdks/python-client/omnigent_client/_sessions.py |  6 ++++++
+ tests/frontends/sdk/test_sessions_namespace.py  | 16 ++++++++++++++++
+ 2 files changed, 22 insertions(+)
+
+diff --git a/sdks/python-client/omnigent_client/_sessions.py b/sdks/python-client/omnigent_client/_sessions.py
+index a90fe92b7..808feb8d0 100644
+--- a/sdks/python-client/omnigent_client/_sessions.py
++++ b/sdks/python-client/omnigent_client/_sessions.py
+@@ -610,6 +610,7 @@ class SessionsNamespace:
+         sort_by: str = "created_at",
+         include_archived: bool = False,
+         visibility: Literal["all", "mine", "shared", "archived"] = "all",
++        tag: str | None = None,
+     ) -> list[SessionListItem]:
+         """
+         List sessions with cursor-based pagination.
+@@ -639,6 +640,9 @@ class SessionsNamespace:
+             by the caller. ``"archived"`` returns only archived sessions.
+             Without server authentication, ``"mine"`` and ``"shared"``
+             behave like ``"all"``. Always sent explicitly to the server.
++        :param tag: Filter to sessions carrying this tag, as
++            ``"key:value"`` (exact value) or ``"key"`` (any value),
++            e.g. ``"team:infra"``. ``None`` disables the filter.
+         :returns: List of :class:`SessionListItem`.
+         :raises StaleCursorError: If ``after``/``before`` names a session
+             that has since been deleted. The walk cannot continue from
+@@ -661,6 +665,8 @@ class SessionsNamespace:
+             params["agent_name"] = agent_name
+         if include_archived:
+             params["include_archived"] = "true"
++        if tag is not None:
++            params["tag"] = tag
+         resp = await self._http.get(
+             f"{self._base}/v1/sessions",
+             params=params,
+diff --git a/tests/frontends/sdk/test_sessions_namespace.py b/tests/frontends/sdk/test_sessions_namespace.py
+index 695a9f618..193cb5092 100644
+--- a/tests/frontends/sdk/test_sessions_namespace.py
++++ b/tests/frontends/sdk/test_sessions_namespace.py
+@@ -1393,6 +1393,22 @@ async def test_list_visibility_preserves_pagination_and_filters(
+     assert rows == []
+ 
+ 
++@pytest.mark.asyncio
++async def test_list_sends_tag_filter() -> None:
++    """``tag`` travels as the ``tag`` query parameter, unchanged."""
++
++    def handler(request: httpx.Request) -> httpx.Response:
++        assert request.url.path == "/v1/sessions"
++        assert request.url.params["tag"] == "team:infra"
++        return httpx.Response(200, json={"data": []})
++
++    ns, client = _make_namespace(handler)
++    try:
++        assert await ns.list(tag="team:infra") == []
++    finally:
++        await client.aclose()
++
++
+ @pytest.mark.asyncio
+ async def test_list_preserves_host_id_on_rows() -> None:
+     """``list()`` rows keep the server's ``host_id`` (and default to None).
+-- 
+2.54.0 (Apple Git-157)
+

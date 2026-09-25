@@ -1,0 +1,14 @@
+{
+  "kind": "positive",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": "Raises that the new chain_usage method, its local, the CLI helper and the help text name the compression lineage 'chain', a word the root CONTEXT.md lists under Avoid for Lineage, and asks for the glossary term (lineage_usage, 'compression lineage') even though get_compression_chain already uses the old word.",
+  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"},
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(sessions): hermes sessions stats <id> prints one run's tokens and spend",
+    "body_file": "pr-body.md",
+    "branch": "sessions-stats-per-session",
+    "base_patches": ["base.patch"]
+  }
+}

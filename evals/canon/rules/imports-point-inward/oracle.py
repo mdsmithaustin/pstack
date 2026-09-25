@@ -4,7 +4,7 @@ import json
 from decimal import Decimal
 from pathlib import PurePosixPath
 
-from shared import is_test_path, parse_files, parse_python, run_jobs
+from shared import is_test_path, parse_files, parse_python, review_names, run_jobs
 
 POLICY = "billing.invoices"
 ADAPTERS = ("billing.store", "billing.service", "billing.reminders")
@@ -93,4 +93,9 @@ def check_inward(answer, project):
     return sorted(set(failures))
 
 
-CHECKS = {"billing-late-fees": check_inward}
+def check_outbound_image_limit(answer, project):
+    return review_names(answer, (r"image_eviction_policy", r"_cfg_vision", r"resolve_outbound_image_(?:limit|budget)",
+                                 r"outbound_image_retire_count"))
+
+
+CHECKS = {"billing-late-fees": check_inward, "outbound-image-limit": check_outbound_image_limit}

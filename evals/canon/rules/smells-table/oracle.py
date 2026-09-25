@@ -2,11 +2,13 @@
 
 billing-cleanup has Feature Envy and Data Clumps. Commit-message vocabulary is
 not graded, because only the rule asks for it. delivery-dates has two copies that change for different
-reasons, so they stay separate."""
+reasons, so they stay separate. prompt-cache-savings is a pull request review:
+the new savings function envies PricingEntry and takes a clump of token counts
+that CanonicalUsage already holds."""
 import ast
 import json
 
-from shared import functions, is_test_path, parse_commits, parse_python, run_jobs
+from shared import functions, is_test_path, parse_commits, parse_python, review_names, run_jobs
 
 CLUMP = {"street", "city", "postal_code"}
 ENVY_FIELDS = {"tier", "loyalty_years", "tax_exempt", "country", "credit_cents"}
@@ -131,4 +133,9 @@ def check_dates(answer, project):
     return failures
 
 
-CHECKS = {"billing-cleanup": check_billing, "delivery-dates": check_dates}
+def check_prompt_cache_savings(answer, project):
+    """The envious savings function or the functions the token-count clump runs through."""
+    return review_names(answer, (r"cache_savings_usd", r"cache_savings\.py", r"estimate_cache_savings", r"format_cache_line"))
+
+
+CHECKS = {"billing-cleanup": check_billing, "delivery-dates": check_dates, "prompt-cache-savings": check_prompt_cache_savings}

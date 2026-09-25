@@ -1,7 +1,7 @@
 """Fork a shared helper instead of changing it for one caller."""
 import json
 
-from shared import parse_files, run_jobs
+from shared import parse_files, review_names, run_jobs
 
 PAY_PROBE = """
 import json
@@ -35,4 +35,9 @@ def check_fork(answer, project):
     return failures
 
 
-CHECKS = {"payroll-overtime": check_fork}
+def check_insights_active_time(answer, project):
+    """The changed helper, or the other caller whose output it changes."""
+    return review_names(answer, (r"format_duration_compact", r"reset_hint", r"turn_recovery"))
+
+
+CHECKS = {"payroll-overtime": check_fork, "insights-active-time": check_insights_active_time}
