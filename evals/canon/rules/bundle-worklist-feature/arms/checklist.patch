@@ -1,0 +1,191 @@
+diff --git a/poteto-mode/SKILL.md b/poteto-mode/SKILL.md
+index 44230671..5e287f5d 100644
+--- a/poteto-mode/SKILL.md
++++ b/poteto-mode/SKILL.md
+@@ -117,7 +117,7 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
+ 
+ ## Playbooks
+ 
+-Open a worklist whose first items are the matched playbook's steps, copied verbatim, before any task-specific items. The **pstack-harness** skill selects the best native carrier from live capability descriptions, without depending on a product-specific tool name. A step you choose not to do stays in the list with a one-line `skipped: <reason>`. Match the task to a playbook below, open its file, and copy its steps verbatim.
++Open a worklist whose first items are the matched playbook's steps, before any task-specific items. The **pstack-harness** skill selects the best native carrier from live capability descriptions, without depending on a product-specific tool name. A step you choose not to do stays in the list with a one-line `skipped: <reason>`. Match the task to a playbook below, open its file, and copy the checklist under its Worklist marker into the worklist carrier before step 1. For a playbook without one, copy its steps verbatim.
+ 
+ At task selection, use an optional companion only to prevent likely wrong work, contradictory decisions, or rework beyond pstack alone. A keyword match or another artifact does not satisfy this gate. Resolve availability by name or trigger on a best-effort basis. Follow its instructions and trust its dependencies. Do not scan the filesystem, inspect manifests, run readiness or dependency checks, preflight setup, or prompt installation. If the user names an unavailable companion, disclose the absence and do not claim its full workflow. These routes preserve existing lifecycle, execution, merge, and GSD ownership.
+ 
+diff --git a/poteto-mode/playbooks/feature.md b/poteto-mode/playbooks/feature.md
+index ee69a76b..0628c6da 100644
+--- a/poteto-mode/playbooks/feature.md
++++ b/poteto-mode/playbooks/feature.md
+@@ -1,5 +1,16 @@
+ ### Feature
+ 
++**Worklist.** Copy these items into your worklist before step 1.
++
++1. how over the affected subsystem (**how**)
++2. architect for parallel design exploration (**architect**)
++3. Write the throughput checkpoint as four items in the same worklist (**principle-separate-before-serializing-shared-state**)
++4. Delegate code-writing to a subagent using your configured feature model and effort (**pstack-harness**, **principle-model-the-domain**, **arena**)
++5. Verify on the matching surface against the accepted scope and integrated result (**principle-prove-it-works**)
++6. Rebase into small, ordered commits (**principle-sequence-verifiable-units**)
++7. If the design is contested, interrogate before shipping (**interrogate**)
++8. Run Opening a PR
++
+ **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
+ 
+ 1. `how` over the affected subsystem.
+diff --git a/poteto-mode/playbooks/refactoring.md b/poteto-mode/playbooks/refactoring.md
+index 69ee8669..52f44e3f 100644
+--- a/poteto-mode/playbooks/refactoring.md
++++ b/poteto-mode/playbooks/refactoring.md
+@@ -1,5 +1,16 @@
+ ### Refactoring
+ 
++**Worklist.** Copy these items into your worklist before step 1.
++
++1. Pin the behavior contract first (**how**)
++2. Name the structure the code is missing (**principle-model-the-domain**)
++3. Name the target shape (**principle-foundational-thinking**, **principle-redesign-from-first-principles**, **architect**)
++4. Subtract before you add (**principle-subtract-before-you-add**, **principle-laziness-protocol**)
++5. Move in small behavior-preserving steps (**principle-migrate-callers-then-delete-legacy-apis**)
++6. Prove behavior is unchanged on the real artifact (**principle-prove-it-works**)
++7. Confirm the change is worth keeping (**principle-minimize-reader-load**)
++8. Rebase into small ordered commits (**principle-sequence-verifiable-units**)
++
+ **You own the contract. The structure changes. The behavior does not.** Distinct from Feature, which adds behavior, and Bug fix, which corrects it.
+ 
+ If the cleanup reveals a missing feature or a real bug, split it out and ship the structural change first against the pinned contract. A redesign is allowed, but name it and route to Feature. Large or cross-cutting structural work belongs to the **figure-it-out** skill. This playbook is the focused-to-medium change.
+diff --git a/poteto-mode/scripts/playbook-checklist b/poteto-mode/scripts/playbook-checklist
+new file mode 100755
+index 00000000..c60e5fbd
+--- /dev/null
++++ b/poteto-mode/scripts/playbook-checklist
+@@ -0,0 +1,130 @@
++#!/usr/bin/env python3
++"""Print a playbook's worklist checklist: one line per numbered step, with the
++step's identity and every skill its step and sub-bullets point at.
++
++Usage: playbook-checklist [--write] PLAYBOOK [PLAYBOOK...]
++
++--write puts the checklist under the Worklist marker at the top of each
++playbook, replacing the checklist already there.
++"""
++from __future__ import annotations
++
++import re
++import sys
++from pathlib import Path
++
++MARKER = "**Worklist.** Copy these items into your worklist before step 1."
++STEP = re.compile(r"^(\d+)\.\s+(.*)")
++HEADING = re.compile(r"^\*\*([^*]+?)[.:]\*\*")
++LINK = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
++POINTER = re.compile(r"\*\*([a-z][a-z0-9-]*)\*\*|`([a-z][a-z0-9-]*)`|\]\((?:[^)]*/)?([a-z][a-z0-9-]*)/SKILL\.md\)")
++CLAUSE_END = re.compile(r"[.,;:(]\s|[.,;:(]$|\s[-–]\s|\s\(")
++SHORT_SENTENCE = 8
++
++
++def plain(text: str) -> str:
++    text = LINK.sub(r"\1", text)
++    return re.sub(r"\s+", " ", re.sub(r"[*`]", "", text)).strip()
++
++
++def without_checklist(lines: list[str]) -> list[str]:
++    """The playbook lines with the Worklist marker and its checklist removed."""
++    if MARKER not in lines:
++        return lines
++    start = lines.index(MARKER)
++    end = start + 1
++    while end < len(lines) and not lines[end].strip():
++        end += 1
++    while end < len(lines) and STEP.match(lines[end]):
++        end += 1
++    while end < len(lines) and not lines[end].strip():
++        end += 1
++    return lines[:start] + lines[end:]
++
++
++def step_blocks(text: str) -> list[list[str]]:
++    """Each top-level numbered step with the indented lines under it."""
++    blocks: list[list[str] | None] = []
++    for line in without_checklist(text.splitlines()):
++        if STEP.match(line):
++            blocks.append([line])
++        elif blocks and blocks[-1] is not None and line.startswith((" ", "\t")) and line.strip():
++            blocks[-1].append(line.strip())
++        elif blocks and line.strip():
++            blocks.append(None)
++    return [block for block in blocks if block]
++
++
++def identity(first: str, pointers: list[str]) -> str:
++    """The bold heading a step opens with, else its first sentence when that is
++    short, else its first clause."""
++    body = STEP.match(first).group(2)
++    heading = HEADING.match(body)
++    if heading:
++        return plain(heading.group(1))
++    text = plain(body)
++    sentence = re.split(r"(?<=\.)\s", text, maxsplit=1)[0].rstrip(".")
++    if len(sentence.split()) <= SHORT_SENTENCE:
++        return sentence
++    clause = CLAUSE_END.split(text + " ", maxsplit=1)[0].strip()
++    for name in pointers:
++        for spelled in (name, name.removeprefix("principle-")):
++            clause = clause.removesuffix(f" per {spelled}").removesuffix(f" per the {spelled} principle skill")
++    return clause
++
++
++def step_pointers(block: list[str], skills_root: Path) -> list[str]:
++    found: list[str] = []
++    for match in POINTER.finditer(" ".join(block)):
++        name = next(group for group in match.groups() if group)
++        for candidate in (name, f"principle-{name}"):
++            if (skills_root / candidate).is_dir():
++                if candidate not in found:
++                    found.append(candidate)
++                break
++    return found
++
++
++def checklist(text: str, skills_root: Path) -> list[str]:
++    lines = []
++    for block in step_blocks(text):
++        pointers = step_pointers(block, skills_root)
++        number = STEP.match(block[0]).group(1)
++        refs = f" ({', '.join(f'**{name}**' for name in pointers)})" if pointers else ""
++        lines.append(f"{number}. {identity(block[0], pointers)}{refs}")
++    return lines
++
++
++def written(text: str, skills_root: Path) -> str:
++    """The playbook with its checklist under the marker, after the title."""
++    lines = without_checklist(text.splitlines())
++    title = next(index for index, line in enumerate(lines) if line.startswith("#"))
++    rest = lines[title + 1:]
++    while rest and not rest[0].strip():
++        rest = rest[1:]
++    block = [MARKER, "", *checklist(text, skills_root), ""]
++    return "\n".join([*lines[:title + 1], "", *block, *rest]) + ("\n" if text.endswith("\n") else "")
++
++
++def skills_root_of(playbook: Path) -> Path:
++    return playbook.resolve().parents[2]
++
++
++def main(argv: list[str]) -> int:
++    write = "--write" in argv
++    paths = [Path(arg) for arg in argv if arg != "--write"]
++    if not paths:
++        print(__doc__.strip(), file=sys.stderr)
++        return 2
++    for path in paths:
++        text = path.read_text(encoding="utf-8")
++        root = skills_root_of(path)
++        if write:
++            path.write_text(written(text, root), encoding="utf-8")
++        else:
++            print("\n".join(checklist(text, root)))
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main(sys.argv[1:]))

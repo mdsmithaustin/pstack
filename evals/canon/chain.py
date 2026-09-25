@@ -84,6 +84,7 @@ DATA_SHAPE = re.compile(r"data shape|organizing structure|principle-[a-z-]+|mode
 FOR_LOOP = re.compile(r"\bfor (\w+) in ([^;]+?);\s*do\s+(.+?);?\s*done\b")
 WORKLIST_WORD = re.compile(r"\b(worklist|todo list|to-do list)\b", re.IGNORECASE)
 LIST_ITEM = re.compile(r"^\s*(?:\d+[.)]|[-*•]|\[[ x]\])\s+")
+WORKLIST_MARKER = "**Worklist.** Copy these items into your worklist before step 1."
 STEP_POINTER = re.compile(r"\*\*([a-z][a-z0-9-]*)\*\*|`([a-z][a-z0-9-]*)`")
 GENERIC_ROLES = {None, "default", "worker", "general-purpose"}
 PERSONA_ROLE = "poteto-agent"
@@ -717,10 +718,24 @@ def normalize(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
+def step_lines(text):
+    """The playbook's lines without the checklist a Worklist marker opens. The
+    checklist restates the numbered steps below it, one line each, so its
+    lines are no steps of their own."""
+    lines = text.splitlines()
+    if WORKLIST_MARKER not in lines:
+        return lines
+    start = lines.index(WORKLIST_MARKER)
+    end = start + 1
+    while end < len(lines) and (not lines[end].strip() or re.match(r"^\d+\.\s", lines[end])):
+        end += 1
+    return lines[:start] + lines[end:]
+
+
 def playbook_steps(text):
     """The first sentence of each top-level numbered step, normalized."""
     steps = []
-    for line in text.splitlines():
+    for line in step_lines(text):
         match = re.match(r"^\d+\.\s+(.*)", line)
         if match:
             sentence = normalize(match.group(1))
@@ -749,7 +764,7 @@ def step_specs(text, skill_names):
     """The Steps of a playbook. A step runs from its numbered line through the
     indented lines under it; its identity comes from the numbered line."""
     blocks = []
-    for line in text.splitlines():
+    for line in step_lines(text):
         match = re.match(r"^\d+\.\s+(.*)", line)
         if match:
             blocks.append([match.group(1)])
@@ -791,7 +806,8 @@ def valid_carrier(carrier, tool_offered, tool_rejected):
 
 
 def has_name(text, name):
-    return re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", text) is not None
+    """Whether text names a skill, bare or by its principle- directory name."""
+    return re.search(rf"(?<![\w-])(?:principle-)?{re.escape(name)}(?![\w-])", text) is not None
 
 
 def step_fidelity(steps, items):

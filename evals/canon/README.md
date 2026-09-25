@@ -632,8 +632,13 @@ Claude's TodoWrite or TaskCreate in the init tools, or for Codex an
 playbook steps. Each numbered step of the matched playbook has an identity,
 its opening bold heading or else its first clause cut to five words, and
 pointers, the bold or backticked skill names in the step and the indented
-lines under it. `worklist.steps` records per step whether some item keeps the
-identity and which pointers that item keeps. The stages are "worklist present
+lines under it. An item keeps a pointer it names bare or with its `principle-`
+prefix. A checklist under a `**Worklist.**` marker, which the checklist arm of
+`bundle-worklist-feature` and `bundle-worklist-refactor` generates with
+`poteto-mode/scripts/playbook-checklist`, restates the steps and adds none; each
+of its lines keeps its step's identity and every pointer. `worklist.steps`
+records per step whether some item keeps the identity and which pointers that
+item keeps. The stages are "worklist present
 via a valid carrier", "every playbook step listed", and "step pointers
 preserved (fraction)", a mean over runs. `verbatim_fraction` stays in the
 JSONL.

@@ -11,6 +11,9 @@ the skills root. A principle- prefix always reads as one. Any other kebab name
 reads as one only when "skill" appears on the same rendered line. On a line that
 mentions a principle, a bare name also resolves against its principle- directory.
 
+A playbook under a skill that ships scripts/playbook-checklist must carry,
+below that script's Worklist marker, exactly the checklist the script emits.
+
 CommonMark code blocks are skipped for link and sibling checks. Port substitution
 checks scan every raw line, including templates inside code blocks. An unclosed
 fence is itself a finding because it would otherwise hide the rest of the file.
@@ -18,6 +21,8 @@ fence is itself a finding because it would otherwise hide the rest of the file.
 from __future__ import annotations
 
 import argparse
+import importlib.machinery
+import importlib.util
 import json
 import re
 import sys
@@ -443,11 +448,58 @@ def check_port_substitutions(parsed: ParsedFile) -> Iterator[Finding]:
                 yield Finding(parsed.path, lineno, "port-substitution", replacement)
 
 
+CHECKLIST_GENERATOR = PurePosixPath("scripts/playbook-checklist")
+_generators: dict[Path, Any] = {}
+
+
+def checklist_generator(skill: Path) -> Any | None:
+    script = skill / CHECKLIST_GENERATOR
+    if not script.is_file():
+        return None
+    if script not in _generators:
+        loader = importlib.machinery.SourceFileLoader(f"playbook_checklist_{len(_generators)}", str(script))
+        module = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+        loader.exec_module(module)
+        _generators[script] = module
+    return _generators[script]
+
+
+def check_playbook_checklist(parsed: ParsedFile) -> Iterator[Finding]:
+    if parsed.path.parent.name != "playbooks":
+        return
+    generator = checklist_generator(parsed.path.parent.parent)
+    if generator is None:
+        return
+    lines = [line for _lineno, line in parsed.raw]
+    if generator.MARKER not in lines:
+        return
+    start = lines.index(generator.MARKER) + 1
+    while start < len(lines) and not lines[start].strip():
+        start += 1
+    end = start
+    while end < len(lines) and re.match(r"^\d+\.\s", lines[end]):
+        end += 1
+    text = parsed.path.read_text(encoding="utf-8")
+    expected = generator.checklist(text, ROOT)
+    actual = lines[start:end]
+    if actual == expected:
+        return
+    offset = next((i for i, (a, e) in enumerate(zip(actual, expected)) if a != e), min(len(actual), len(expected)))
+    want = expected[offset] if offset < len(expected) else "(no line)"
+    yield Finding(
+        parsed.path,
+        start + offset + 1,
+        "playbook-checklist",
+        f"checklist drifted from {CHECKLIST_GENERATOR}; expected {want!r}, rerun it with --write",
+    )
+
+
 REGISTRY: list[tuple[str, Callable[[ParsedFile], Iterator[Finding]]]] = [
     ("relative-link", check_relative_links),
     ("sibling-skill", check_sibling_skill),
     ("unclosed-fence", check_unclosed_fence),
     ("port-substitution", check_port_substitutions),
+    ("playbook-checklist", check_playbook_checklist),
 ]
 
 

@@ -1,0 +1,26 @@
+diff --git a/poteto-mode/SKILL.md b/poteto-mode/SKILL.md
+index 44230671..9560070a 100644
+--- a/poteto-mode/SKILL.md
++++ b/poteto-mode/SKILL.md
+@@ -12,6 +12,8 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
+ 
+ ## Non-negotiables
+ 
++**Start every multi-step task with a worklist whose first items are the matched playbook's steps.** The failure mode is a bespoke plan that drops the playbook's named steps and their principle pointers.
++
+ The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
+ 
+ Remaining triggers:
+diff --git a/pstack-harness/SKILL.md b/pstack-harness/SKILL.md
+index 79f52246..a67a6f19 100644
+--- a/pstack-harness/SKILL.md
++++ b/pstack-harness/SKILL.md
+@@ -44,7 +44,7 @@ Choose its carrier by capability, never by a remembered product-specific name:
+ 
+ 1. Inspect the tools and channels already exposed in the live session. Prefer a native structured capability whose description says it creates or updates task, plan, or work-item state.
+ 2. If the harness supports deferred capability discovery, make one semantic query for a capability that tracks ordered multi-step work and item status. Do not query product-specific names.
+-3. If structured tracking is available, use it. If discovery finds none or any call is rejected, stop trying that carrier for the rest of the task. Publish and maintain the same worklist through the harness's normal progress-update channel. Both are native carriers of the same contract.
++3. If structured tracking is available, use it. If discovery finds none or any call is rejected, stop trying that carrier for the rest of the task. Publish and maintain the same worklist through the harness's normal progress-update channel. Both are native carriers of the same contract. When no structured tool is exposed, post the worklist as a numbered checklist in the first progress message and re-post it when an item changes state.
+ 
+ Do not create a scratch task file solely because structured tracking is unavailable. A durable file is appropriate only when the workflow must resume across sessions; use that workflow's named state or decision-trail artifact. Ordinary capability variation needs no warning, apology, or "fallback" announcement. Report the current worklist, not the plumbing that carries it.
+ 

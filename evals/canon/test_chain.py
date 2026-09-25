@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -538,6 +539,65 @@ class StepSpecTests(unittest.TestCase):
     def test_a_code_mode_update_plan_call_lists_its_steps(self):
         self.assertEqual(chain.exec_plan_text('await tools.update_plan({plan: [{step: "Pin the behavior", status: "pending"}, {"step": \'Name the shape\'}]});'),
                          "Pin the behavior\nName the shape")
+
+
+class ChecklistArmTests(unittest.TestCase):
+    """The checklist arm puts a generated checklist above each playbook's
+    steps. Its lines are no steps of their own, and a worklist copied from
+    it names every step and keeps every pointer."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        skills = Path(cls.tmp.name) / "skills"
+        shutil.copytree(SKILLS, skills)
+        patch = ROOT / "rules" / "bundle-worklist-feature" / "arms" / "checklist.patch"
+        subprocess.run(["git", "apply", str(patch)], cwd=skills, check=True, capture_output=True)
+        cls.patched = {name: (skills / "poteto-mode" / "playbooks" / f"{name}.md").read_text() for name in PLAYBOOKS}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def checklist(self, name):
+        lines = self.patched[name].splitlines()
+        start = lines.index(chain.WORKLIST_MARKER) + 2
+        return "\n".join(lines[start:start + 8])
+
+    def test_the_checklist_adds_no_steps(self):
+        for name in PLAYBOOKS:
+            with self.subTest(name=name):
+                self.assertEqual(chain.step_specs(self.patched[name], SKILL_NAMES), chain.step_specs(PLAYBOOKS[name], SKILL_NAMES))
+                self.assertEqual(chain.playbook_steps(self.patched[name]), chain.playbook_steps(PLAYBOOKS[name]))
+
+    def test_a_worklist_copied_from_the_refactoring_checklist_keeps_every_step_and_pointer(self):
+        report = chain.step_fidelity(chain.step_specs(self.patched["refactoring"], SKILL_NAMES),
+                                     chain.message_items(self.checklist("refactoring")))
+        self.assertEqual([(step["listed"], step["kept"]) for step in report], [
+            (True, ["how"]),
+            (True, ["principle-model-the-domain"]),
+            (True, ["principle-foundational-thinking", "principle-redesign-from-first-principles", "architect"]),
+            (True, ["principle-subtract-before-you-add", "principle-laziness-protocol"]),
+            (True, ["principle-migrate-callers-then-delete-legacy-apis"]),
+            (True, ["principle-prove-it-works"]),
+            (True, ["principle-minimize-reader-load"]),
+            (True, ["sequence-verifiable-units"]),
+        ])
+
+    def test_a_worklist_copied_from_the_feature_checklist_keeps_every_step_and_pointer(self):
+        report = chain.step_fidelity(chain.step_specs(self.patched["feature"], SKILL_NAMES),
+                                     chain.message_items(self.checklist("feature")))
+        self.assertEqual([(step["identity"], step["listed"], step["kept"] == step["pointers"]) for step in report], [
+            ("how over the affected subsystem", True, True),
+            ("architect for parallel design exploration", True, True),
+            ("write the throughput checkpoint as", True, True),
+            ("delegate code-writing to a subagent", True, True),
+            ("verify on the matching surface", True, True),
+            ("rebase into small", True, True),
+            ("if the design is contested", True, True),
+            ("run opening a pr", True, True),
+        ])
+        self.assertEqual(sum(len(step["kept"]) for step in report), 8)
 
 
 class ClaudeMultiResultTests(unittest.TestCase):

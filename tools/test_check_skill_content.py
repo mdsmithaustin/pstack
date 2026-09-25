@@ -2,6 +2,7 @@
 """Both lints must fire on planted defects and stay quiet on valid input."""
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -11,6 +12,7 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parent
 CONTENT = TOOLS / "check-skill-content.py"
 FRONTMATTER = TOOLS / "check-skill-frontmatter.py"
+CHECKLIST_ARM = TOOLS.parent / "evals/canon/rules/bundle-worklist-feature/arms/checklist.patch"
 
 
 def run(script: Path, root: Path) -> tuple[int, str]:
@@ -955,6 +957,45 @@ class FenceHandling(Tree):
         code, out = self.body('See [x](../gone/n.md "Title").')
         self.assertEqual(code, 1, "a title attribute does not make the target unreachable")
         self.assertIn("../gone/n.md", out)
+
+
+class PlaybookChecklistDrift(unittest.TestCase):
+    """The checklist arm's tree passes. A checklist line edited by hand, or a
+    step edited without rerunning the generator, fails at the drifted line."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.skills = Path(self.tmp.name) / "skills"
+        shutil.copytree(TOOLS.parent / "skills", self.skills)
+        subprocess.run(["git", "apply", str(CHECKLIST_ARM)], cwd=self.skills, check=True, capture_output=True)
+        self.feature = self.skills / "poteto-mode/playbooks/feature.md"
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def edit(self, old: str, new: str) -> None:
+        text = self.feature.read_text(encoding="utf-8")
+        self.assertEqual(text.count(old), 1)
+        self.feature.write_text(text.replace(old, new), encoding="utf-8")
+
+    def drift(self, line: int, expected: str) -> tuple[int, str]:
+        return 1, (f"{self.feature}:{line}: playbook-checklist: checklist drifted from "
+                   f"scripts/playbook-checklist; expected {expected!r}, rerun it with --write\n")
+
+    def test_the_generated_checklist_passes(self) -> None:
+        self.assertEqual(run(CONTENT, self.skills), (0, ""))
+
+    def test_a_hand_edited_checklist_line_fails_at_that_line(self) -> None:
+        self.edit("2. architect for parallel design exploration (**architect**)\n", "2. architect the design (**architect**)\n")
+        self.assertEqual(run(CONTENT, self.skills), self.drift(6, "2. architect for parallel design exploration (**architect**)"))
+
+    def test_a_step_pointer_added_without_regenerating_fails(self) -> None:
+        self.edit("8. Run **Opening a PR**.", "8. Run **Opening a PR** per the **unslop** skill.")
+        self.assertEqual(run(CONTENT, self.skills), self.drift(12, "8. Run Opening a PR per the unslop skill (**unslop**)"))
+
+    def test_a_dropped_checklist_line_fails(self) -> None:
+        self.edit("8. Run Opening a PR\n", "")
+        self.assertEqual(run(CONTENT, self.skills), self.drift(12, "8. Run Opening a PR"))
 
 
 if __name__ == "__main__":

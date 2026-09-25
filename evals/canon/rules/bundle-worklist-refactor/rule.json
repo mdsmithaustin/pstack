@@ -1,0 +1,53 @@
+{
+  "cases_from": "separate-contexts",
+  "arms": [
+    "current",
+    "upstream-strong",
+    "checklist"
+  ],
+  "source": "Worklist fidelity across sandboxed poteto-mode runs (Claude 13/42 used a worklist, every playbook step listed 1/41 Claude and 2/45 Codex, step pointers kept 8% and 3%) against the upstream import 8bef1572, whose Non-negotiables opened with a bold todolist directive. Run on case harness-families (Refactoring, omnigent).",
+  "tier_map": [
+    {
+      "arm": "upstream-strong",
+      "file": "poteto-mode/SKILL.md",
+      "line": 15,
+      "tier": 0,
+      "why": "Worklist directive restored as the bold first Non-negotiables line, with the failure mode named once."
+    },
+    {
+      "arm": "upstream-strong",
+      "file": "pstack-harness/SKILL.md",
+      "line": 47,
+      "tier": 2,
+      "why": "Concrete message-carrier fallback: a numbered checklist in the first progress message, re-posted on state change."
+    },
+    {
+      "arm": "checklist",
+      "file": "poteto-mode/SKILL.md",
+      "line": 120,
+      "tier": 0,
+      "why": "Playbooks paragraph copies the playbook's generated checklist into the worklist carrier instead of the steps verbatim."
+    },
+    {
+      "arm": "checklist",
+      "file": "poteto-mode/playbooks/feature.md",
+      "line": 3,
+      "tier": 1,
+      "why": "Generated checklist under the Worklist marker: one line per step with its identity and pointers."
+    },
+    {
+      "arm": "checklist",
+      "file": "poteto-mode/playbooks/refactoring.md",
+      "line": 3,
+      "tier": 1,
+      "why": "Same generated checklist for Refactoring."
+    },
+    {
+      "arm": "checklist",
+      "file": "poteto-mode/scripts/playbook-checklist",
+      "line": 1,
+      "tier": 3,
+      "why": "The generator that emits and writes the checklist from the numbered steps."
+    }
+  ]
+}
