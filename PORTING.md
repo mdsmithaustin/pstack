@@ -64,6 +64,25 @@ The GSD instruction audit contributed these port additions. Preserve each owner 
 | Cover relevant UI states in the existing feature map. | `create-verification-skill`. |
 | Reconcile declared threats with mitigation evidence or an explicit disposition. | `principle-prove-it-works`; Interrogate's Security rubric links to it. |
 
+## Canon rules
+
+Rules drawn from the software-design canon (Evans, Fowler, Beck, Martin, and the BDD authors) enter only after a paired screen measures a change in agent behavior. A paired screen runs poteto-mode through `/poteto-mode` or `$poteto-mode` on the same task twice, once with the current skill text and once with the rule added, on Claude Sonnet 5 and on Codex with gpt-6-sol. A repository screen runs in an isolated `sbx` sandbox on a pinned upstream repository. A fixture screen gives the agent a small project of a few files in the prompt. Preserve each owner during sync. Do not reintroduce a rule listed below as not adopted without a new screen.
+
+| Rule | Owner | Source | Screen result |
+|---|---|---|---|
+| Use the domain's words. Read the nearest `CONTEXT.md`, use its terms, and never use a word it lists under `_Avoid_`. The `_Avoid_` list follows the `CONTEXT.md` format of the optional `domain-modeling` companion. | `principle-model-the-domain` | Evans, [Domain-Driven Design Reference](https://www.domainlanguage.com/ddd/reference/), Ubiquitous Language and Intention-Revealing Interfaces | Repository screen on NousResearch/hermes-agent: 6 of 6 runs passed with the rule and 1 of 6 without, across both agents. |
+| Write Given, When, Then tests in the project's existing framework. Do not add Cucumber, a Gherkin runner, or `.feature` files unless the project already runs one. | `principle-test-behavior-not-implementation` | [Cucumber Gherkin reference](https://cucumber.io/docs/gherkin/reference/), [Dan North, Introducing BDD](https://dannorth.net/blog/introducing-bdd/) | Fixture screen: in 4 of 4 pairs where the agent read the rule, 2 per agent, the run without it added a Gherkin runner and `.feature` files and the run with it did not. A project that already ran pytest-bdd kept using it. |
+
+Not adopted. Each reason is a measured result unless it says otherwise.
+
+- Separate types per bounded context with "merge within one context" (Evans), repository screen: Codex merged unrelated families in 5 of 6 runs with the rule and 0 of 3 without. Claude passed either way.
+- A widened `principle-model-the-domain` when-clause and a Feature step 2 shape pointer, repository screen: 3 of 6 runs passed, against 6 of 6 for the leaf rule alone.
+- One name per concept (Evans), repository screen: Claude passed 3 of 3 without it. Codex rose from 0 of 3 to 1 of 3.
+- A `domain-modeling` route at Feature step 1, repository screen: no run added a glossary term. A `codebase-design` route at Refactoring step 3: the runs without it passed 12 of 12.
+- Preparatory refactoring at Feature step 3 (Beck, Fowler), repository screen: no run restructured first, with or without the rule.
+- Fixture screens only, where the runs without the rule already behaved correctly or the rule did not change the result: anti-corruption layer, invariant owner, and value types (Evans), dependency rule and single responsibility (Martin), two hats, commit order, and branch by abstraction (Fowler), and Given, When, Then shape and domain test names (BDD). A repository screen can still admit any of them.
+- Rule text in the always-loaded poteto-mode index, a design decision rather than a measurement: text there reaches every session and turns the index from a router into a rulebook. A rule's trigger belongs in an index when-clause or a playbook step, and its text belongs in the leaf.
+
 ## Named-agent portability
 
 Root `agents/*.md` owns upstream persona text and metadata. `tools/generate-subagents.py` owns the explicit port mapping and generates `skills/pstack-harness/references/subagents/roles.json`. The installed `pstack-harness/scripts/subagents.py` reads this bundle without Git, network access, or a source checkout. Do not hand-edit generated payloads.
