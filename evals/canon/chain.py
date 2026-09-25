@@ -13,7 +13,9 @@ The chain a /poteto-mode run is meant to follow:
 Each agent's trace is parsed into one list of Events (reads of mounted skill
 files, workspace edits, spawns, worklist updates, messages, denials), and
 every stage is computed from that list alone, so Claude and Codex runs are
-measured by the same code.
+measured by the same code. When the run's harvest dir holds transcripts, each
+delegate's own transcript is parsed the same way and its events are merged in
+with actor "delegate", placed right after the spawn that started it.
 
   chain.py [ROOT ...] [--jsonl FILE] [--markdown]
 
@@ -27,7 +29,7 @@ import json
 import re
 import shlex
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 CANON = Path(__file__).resolve().parent
@@ -74,17 +76,63 @@ HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*(?:\n|$)", re.
 DATA_SHAPE = re.compile(r"data shape|organizing structure|principle-[a-z-]+|model[- ]the[- ]domain", re.IGNORECASE)
 FOR_LOOP = re.compile(r"\bfor (\w+) in ([^;]+?);\s*do\s+(.+?);?\s*done\b")
 WORKLIST_WORD = re.compile(r"\b(worklist|todo list|to-do list)\b", re.IGNORECASE)
+PERSONA_ROLE = "poteto-agent"
+CODEX_BRIEFING_HEAD = "Pstack installed skill paths"
+
+
+def persona_line():
+    """The opening sentence of the poteto-agent body, which every delivery
+    route carries whole."""
+    roles = json.loads((screen.REPO / "skills/pstack-harness/references/subagents/roles.json").read_text())
+    body = next(role["body"] for role in roles["roles"] if role["id"] == PERSONA_ROLE)
+    line = next(line for line in body.splitlines() if line.strip() and not line.startswith("#"))
+    return " ".join(line.split(". ")[0].split())
+
+
+PERSONA_LINE = persona_line()
+
+
+def has_persona(text):
+    return PERSONA_LINE in " ".join((text or "").split())
 
 
 @dataclass(frozen=True)
 class Event:
-    """One thing a run did, in trace order. actor is "main" or "delegate"."""
+    """One thing a run did, in trace order. actor is "main" or "delegate".
+    index is the lead trace line. A delegate's event takes its spawn's index
+    and extends the spawn's sub with its own line in the child transcript."""
     index: int
     actor: str
     kind: str  # read, edit, spawn, wait, worklist, message, denied
     path: str = ""
     partial: bool = False
     text: str = ""
+    sub: tuple = ()
+
+
+def order(event):
+    return (event.index, event.sub)
+
+
+@dataclass
+class Spawn:
+    """The delegate one spawn event started, and whether it got the persona."""
+    event: Event
+    role: str = None
+    persona: bool = False
+    inline: list = field(default_factory=list)  # its events the lead stream already echoed
+
+
+@dataclass
+class Child:
+    """One delegate transcript. link is the key its parent registered the
+    spawn under: the Task tool_use id, or the Codex child thread id."""
+    link: str
+    events: list
+    spawns: dict
+    role: str = None
+    persona: bool = False
+    brief: str = ""
 
 
 @dataclass
@@ -93,6 +141,7 @@ class Trace:
     final: str = ""
     slash_commands: tuple = ()
     worklist_tool_offered: bool = None  # None when the trace does not list tools
+    spawns: dict = field(default_factory=dict)  # spawn key -> Spawn
 
 
 def md_lines(text):
@@ -218,77 +267,126 @@ def shell_effects(command, tree):
 
 
 def in_workspace(path, cwd, tree):
-    """A write that lands in the checkout: not a mounted skill file, not /tmp
-    or /dev, and inside cwd when the path is absolute and cwd is known."""
-    if not path or resolve(path, tree) or path.startswith(("/tmp", "/private/tmp", "/dev")):
+    """A write that lands in the checkout: not a mounted skill file, inside cwd
+    when the path is absolute and cwd is known, else not under /tmp or /dev.
+    A sandbox cwd may itself sit under /tmp."""
+    if not path or resolve(path, tree):
         return False
     if path.startswith("/") and cwd:
         return path.startswith(cwd.rstrip("/") + "/")
-    return True
+    return not path.startswith(("/tmp", "/private/tmp", "/dev"))
 
 
-def parse_claude(lines, tree):
-    trace = Trace()
-    denied_ids, errored_ids, cwd = set(), set(), ""
-    records = []
+def json_records(lines):
     for index, line in enumerate(lines):
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        records.append((index, record))
-        if record.get("type") == "system" and record.get("subtype") == "init":
-            cwd = record.get("cwd", "")
-            trace.slash_commands = tuple(record.get("slash_commands") or ())
-            tools = record.get("tools") or []
-            trace.worklist_tool_offered = bool(CLAUDE_WORKLIST_TOOLS & set(tools))
-        if record.get("type") == "system" and record.get("subtype") == "permission_denied":
-            denied_ids.add(record.get("tool_use_id"))
-            trace.events.append(Event(index, "main", "denied", text=record.get("tool_name", "")))
-        if record.get("type") == "user":
-            for block in (record.get("message") or {}).get("content") or []:
-                if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("is_error"):
-                    errored_ids.add(block.get("tool_use_id"))
-        if record.get("type") == "result":
-            trace.final = record.get("result") or ""
+        if isinstance(record, dict):
+            yield index, record
+
+
+def errored_tool_ids(records):
+    ids = set()
+    for _, record in records:
+        content = (record.get("message") or {}).get("content") if record.get("type") == "user" else None
+        for block in content if isinstance(content, list) else []:
+            if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("is_error"):
+                ids.add(block.get("tool_use_id"))
+    return ids
+
+
+def claude_events(records, tree, cwd, failed, agents=(), actor=None):
+    """(events, {tool_use id: Spawn}, {parent tool_use id: [events]}) of Claude
+    assistant records. Without an actor, a record that carries
+    parent_tool_use_id is a delegate's, echoed into the lead stream."""
+    events, spawns, echoed = [], {}, {}
     for index, record in records:
         if record.get("type") != "assistant":
             continue
-        actor = "delegate" if record.get("parent_tool_use_id") else "main"
-        for block in (record.get("message") or {}).get("content") or []:
+        parent = record.get("parent_tool_use_id")
+        who = actor or ("delegate" if parent else "main")
+        where = record.get("cwd") or cwd
+        mine = []
+        content = (record.get("message") or {}).get("content")
+        for block in content if isinstance(content, list) else []:
             kind = block.get("type")
             if kind == "text" and block.get("text", "").strip():
-                trace.events.append(Event(index, actor, "message", text=block["text"]))
+                mine.append(Event(index, who, "message", text=block["text"]))
             if kind != "tool_use":
                 continue
             name, data, use_id = block.get("name"), block.get("input") or {}, block.get("id")
-            failed = use_id in denied_ids or use_id in errored_ids
-            if name == "Read" and not failed:
+            ok = use_id not in failed
+            if name == "Read" and ok:
                 path = resolve(data.get("file_path", ""), tree)
                 if path:
                     lines_total = tree[path]
                     offset, limit = data.get("offset") or 0, data.get("limit")
                     partial = offset > 1 or (limit is not None and limit < lines_total - max(offset - 1, 0))
-                    trace.events.append(Event(index, actor, "read", path, partial))
-            elif name == "Skill" and not failed:
+                    mine.append(Event(index, who, "read", path, partial))
+            elif name == "Skill" and ok:
                 path = resolve(f"{data.get('skill', '')}/SKILL.md", tree)
                 if path:
-                    trace.events.append(Event(index, actor, "read", path))
-            elif name == "Bash" and not failed:
+                    mine.append(Event(index, who, "read", path))
+            elif name == "Bash" and ok:
                 reads, writes = shell_effects(data.get("command", ""), tree)
-                trace.events += [Event(index, actor, "read", path, partial) for path, partial in reads]
-                trace.events += [Event(index, actor, "edit", path) for path in writes if in_workspace(path, cwd, tree)]
-            elif name in CLAUDE_EDIT_TOOLS and not failed:
+                mine += [Event(index, who, "read", path, partial) for path, partial in reads]
+                mine += [Event(index, who, "edit", path) for path in writes if in_workspace(path, where, tree)]
+            elif name in CLAUDE_EDIT_TOOLS and ok:
                 path = data.get("file_path") or data.get("notebook_path") or ""
-                if in_workspace(path, cwd, tree):
-                    trace.events.append(Event(index, actor, "edit", path))
+                if in_workspace(path, where, tree):
+                    mine.append(Event(index, who, "edit", path))
             elif name in CLAUDE_WORKLIST_TOOLS:
                 items = [todo.get("content", "") for todo in data.get("todos") or []] or [data.get("subject", ""), data.get("description", "")]
-                trace.events.append(Event(index, actor, "worklist", text="\n".join(item for item in items if item)))
+                mine.append(Event(index, who, "worklist", text="\n".join(item for item in items if item)))
             elif name in CLAUDE_SPAWN_TOOLS:
-                trace.events.append(Event(index, actor, "spawn", text=data.get("prompt", "")))
-    trace.events.sort(key=lambda event: event.index)
+                event = Event(index, who, "spawn", text=data.get("prompt", ""))
+                mine.append(event)
+                role = data.get("subagent_type")
+                spawns[use_id] = Spawn(event, role, (role == PERSONA_ROLE and PERSONA_ROLE in agents) or has_persona(event.text))
+        events += mine
+        if parent and not actor:
+            echoed.setdefault(parent, []).extend(mine)
+    return events, spawns, echoed
+
+
+def parse_claude(lines, tree):
+    trace = Trace()
+    denied_ids, cwd, agents = set(), "", ()
+    records = list(json_records(lines))
+    for index, record in records:
+        if record.get("type") == "system" and record.get("subtype") == "init":
+            cwd = record.get("cwd", "")
+            trace.slash_commands = tuple(record.get("slash_commands") or ())
+            tools = record.get("tools") or []
+            trace.worklist_tool_offered = bool(CLAUDE_WORKLIST_TOOLS & set(tools))
+            agents = tuple(record.get("agents") or ())
+        if record.get("type") == "system" and record.get("subtype") == "permission_denied":
+            denied_ids.add(record.get("tool_use_id"))
+            trace.events.append(Event(index, "main", "denied", text=record.get("tool_name", "")))
+        if record.get("type") == "result":
+            trace.final = record.get("result") or ""
+    events, trace.spawns, echoed = claude_events(records, tree, cwd, denied_ids | errored_tool_ids(records), agents)
+    for key, inline in echoed.items():
+        if key in trace.spawns:
+            trace.spawns[key].inline = inline
+    trace.events += events
+    trace.events.sort(key=order)
     return trace
+
+
+def parse_claude_child(lines, meta, tree):
+    """One subagents/agent-<id>.jsonl and its meta.json. The first user
+    record's content is the brief."""
+    records = list(json_records(lines))
+    brief = next(((record.get("message") or {}).get("content") for _, record in records if record.get("type") == "user"), "")
+    if isinstance(brief, list):
+        brief = "\n".join(block.get("text", "") for block in brief if isinstance(block, dict))
+    cwd = next((record["cwd"] for _, record in records if record.get("cwd")), "")
+    events, spawns, _ = claude_events(records, tree, cwd, errored_tool_ids(records), actor="delegate")
+    role = meta.get("agentType")
+    return Child(meta.get("toolUseId", ""), events, spawns, role, role == PERSONA_ROLE or has_persona(brief), brief or "")
 
 
 def parse_codex(lines, tree, cwd=""):
@@ -319,9 +417,164 @@ def parse_codex(lines, tree, cwd=""):
         elif kind == "todo_list":
             trace.events.append(Event(index, "main", "worklist", text="\n".join(entry.get("text", "") for entry in item.get("items") or [])))
         elif kind == "collab_tool_call":
-            tool = item.get("tool", "")
-            trace.events.append(Event(index, "main", "spawn" if tool in CODEX_SPAWN_TOOLS else "wait", text=item.get("prompt") or tool))
+            event = codex_collab(index, "main", item, trace.spawns)
+            trace.events.append(event)
     return trace
+
+
+def codex_collab(index, actor, item, spawns):
+    """The event of one collab tool call. A spawn registers a Spawn under each
+    thread it started, with the role when the item names one."""
+    tool = item.get("tool", "")
+    if tool not in CODEX_SPAWN_TOOLS:
+        return Event(index, actor, "wait", text=tool)
+    event = Event(index, actor, "spawn", text=item.get("prompt") or "")
+    roles = {agent.get("thread_id"): agent.get("agent_role") for agent in item.get("receiver_agents") or []}
+    for key in item.get("receiver_thread_ids") or [f"#{index}"]:
+        spawns[key] = Spawn(event, roles.get(key), has_persona(event.text))
+    return event
+
+
+def item_text(content):
+    return "\n".join(part.get("text", "") for part in content or [] if isinstance(part, dict))
+
+
+def codex_command(argv):
+    if isinstance(argv, list):
+        return argv[2] if len(argv) >= 3 and argv[1] in ("-lc", "-c") else shlex.join(argv)
+    return argv or ""
+
+
+def file_change_paths(item):
+    changes = item.get("changes") or []
+    if isinstance(changes, dict):
+        return list(changes)
+    return [change.get("path", "") for change in changes if isinstance(change, dict)]
+
+
+def plan_text(arguments):
+    try:
+        plan = json.loads(arguments).get("plan") or []
+    except (ValueError, AttributeError):
+        return str(arguments)
+    return "\n".join(step.get("step", "") for step in plan if isinstance(step, dict))
+
+
+def codex_role(meta):
+    source = meta.get("source") if isinstance(meta.get("source"), dict) else {}
+    spawned = (source.get("subagent") or {}).get("thread_spawn") or {}
+    return meta.get("agent_role") or spawned.get("agent_role")
+
+
+def is_codex_child(meta):
+    source = meta.get("source") if isinstance(meta.get("source"), dict) else {}
+    return bool(meta.get("parent_thread_id")) or "subagent" in source
+
+
+def parse_codex_rollout(lines, tree):
+    """(session_meta payload, Child) of one Codex rollout. Only completed
+    items count. Code-mode exec input repeats the commands and spawns that
+    items record, so of it only update_plan calls are read."""
+    meta, events, spawns, brief, developer = {}, [], {}, None, ""
+    for index, record in json_records(lines):
+        payload = record.get("payload") or {}
+        if record.get("type") == "session_meta":
+            meta = payload
+        elif record.get("type") == "response_item":
+            kind = payload.get("type")
+            if kind == "message" and payload.get("role") == "developer" and not developer:
+                developer = item_text(payload.get("content")).lstrip()
+            elif kind == "function_call" and payload.get("name") == "update_plan":
+                events.append(Event(index, "delegate", "worklist", text=plan_text(payload.get("arguments", ""))))
+            elif kind == "custom_tool_call" and "tools.update_plan(" in str(payload.get("input", "")):
+                events.append(Event(index, "delegate", "worklist", text=payload["input"]))
+        elif record.get("type") == "event_msg" and payload.get("type") == "item_completed":
+            item, cwd = payload.get("item") or {}, meta.get("cwd", "")
+            kind = item.get("type")
+            if kind == "UserMessage" and brief is None:
+                brief = item_text(item.get("content"))
+            elif kind == "AgentMessage":
+                events.append(Event(index, "delegate", "message", text=item_text(item.get("content"))))
+            elif kind == "CommandExecution":
+                reads, writes = shell_effects(codex_command(item.get("command")), tree)
+                events += [Event(index, "delegate", "read", path, partial) for path, partial in reads]
+                if item.get("exit_code") == 0:
+                    events += [Event(index, "delegate", "edit", path) for path in writes if in_workspace(path, cwd, tree)]
+            elif kind == "FileChange" and item.get("status", "completed") == "completed":
+                events += [Event(index, "delegate", "edit", path) for path in file_change_paths(item) if in_workspace(path, cwd, tree)]
+            elif kind == "CollabAgentToolCall":
+                events.append(codex_collab(index, "delegate", item, spawns))
+    role = codex_role(meta)
+    persona = role == PERSONA_ROLE or developer.startswith(CODEX_BRIEFING_HEAD) or has_persona(brief)
+    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "")
+
+
+def attach(trace, children):
+    """Merge each child's events into trace right after the spawn that started
+    it, a parent before its own children. A child whose spawn the trace never
+    shows goes after the last event."""
+    pending = list(children)
+    while pending:
+        ready = [child for child in pending if child.link in trace.spawns]
+        if not ready:
+            anchor = Event(max((event.index for event in trace.events), default=-1) + 1, "delegate", "spawn")
+            ready = pending
+            for child in ready:
+                trace.spawns[child.link] = Spawn(anchor)
+        for child in ready:
+            spawn = trace.spawns[child.link]
+            echoed = {id(event) for event in spawn.inline}
+            trace.events = [event for event in trace.events if id(event) not in echoed]
+            spawn.inline = []
+            if child.brief and not spawn.event.text and spawn.event in trace.events:
+                old = spawn.event
+                new = trace.events[trace.events.index(old)] = replace(old, text=child.brief)
+                for other in trace.spawns.values():
+                    if other.event is old:
+                        other.event = new
+            spawn.role = spawn.role or child.role
+            spawn.persona = spawn.persona or child.persona
+            base = spawn.event
+            moved = {id(event): replace(event, index=base.index, sub=base.sub + (event.index,)) for event in child.events}
+            trace.events += moved.values()
+            for key, inner in child.spawns.items():
+                inner.event = moved[id(inner.event)]
+                trace.spawns[key] = inner
+        done = {id(child) for child in ready}
+        pending = [child for child in pending if id(child) not in done]
+    trace.events.sort(key=order)
+    return trace
+
+
+def harvest_dir(run_path):
+    """<work>/runs/<run> maps to <work>/harvest/<run>, as workspace_diff in
+    oracles/shared.py maps it."""
+    run_path = Path(run_path)
+    runs = next((parent for parent in run_path.parents if parent.name == "runs"), None)
+    return runs.parent / "harvest" / run_path.relative_to(runs) if runs else None
+
+
+def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
+    """Merge every delegate transcript under a harvest transcripts/ dir. For
+    Codex, the lead's own rollout supplies its update_plan calls when the exec
+    stream shows no todo_list item; they sort after the stream's last line."""
+    children = []
+    if agent == "claude":
+        for path in sorted((transcripts / "claude").glob("*/*/subagents/agent-*.jsonl")):
+            meta_path = path.with_name(path.name.removesuffix(".jsonl") + ".meta.json")
+            meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
+            children.append(parse_claude_child(path.read_text(errors="replace").splitlines(), meta, tree))
+        return attach(trace, children)
+    lead = None
+    for path in sorted((transcripts / "codex" / "sessions").rglob("rollout-*.jsonl")):
+        meta, child = parse_codex_rollout(path.read_text(errors="replace").splitlines(), tree)
+        if is_codex_child(meta):
+            children.append(child)
+        else:
+            lead = child
+    if lead and not any(event.kind == "worklist" and event.actor == "main" for event in trace.events):
+        trace.events += [replace(event, index=len(lead_lines), actor="main", sub=(event.index,)) for event in lead.events if event.kind == "worklist"]
+    return attach(trace, children)
 
 
 def normalize(text):
@@ -376,10 +629,10 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
     edits = [event for event in trace.events if event.kind == "edit"]
     first_edit = edits[0].index if edits else None
     if owner == INDEX and injected:
-        owner_at, owner_full = -1, True
+        owner_at, owner_full = (-1, ()), True
     else:
         event = first_read.get(owner)
-        owner_at, owner_full = (event.index, not event.partial) if event else (None, False)
+        owner_at, owner_full = (order(event), not event.partial) if event else (None, False)
 
     tool_lists = [event.text for event in main if event.kind == "worklist"]
     finals = {trace.final.strip()}
@@ -393,6 +646,8 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
 
     spawns = [event for event in main if event.kind == "spawn"]
     waits = [event for event in main if event.kind == "wait"]
+    by_event = {id(spawn.event): spawn for spawn in trace.spawns.values()}
+    briefed = [by_event.get(id(event)) or Spawn(event) for event in spawns]
     cited = cited_principles(trace.final, principles)
     unread = [slug for slug in cited if f"{slug}/SKILL.md" not in first_read]
     return {
@@ -415,7 +670,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         "owner_read": owner_at is not None,
         "owner_read_full": owner_full,
         "first_edit": first_edit,
-        "leaf_before_first_edit": None if first_edit is None or not workspace else owner_at is not None and owner_at < first_edit,
+        "leaf_before_first_edit": None if first_edit is None or not workspace else owner_at is not None and owner_at < order(edits[0]),
         "delegation": {
             "spawns": len(spawns),
             "waits": len(waits),
@@ -423,8 +678,19 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
             "brief_names_shape": any(DATA_SHAPE.search(event.text or "") for event in spawns) if spawns and any(event.text for event in spawns) else None,
             "delegate_reads": sorted({event.path for event in reads if event.actor == "delegate"}),
         },
+        "delegate_edits": sorted({event.path for event in edits if event.actor == "delegate"}),
         "citations": {"cited": cited, "unread": unread, "only_read": (not unread) if cited else None},
         "tools_denied": sum(event.kind == "denied" for event in trace.events),
+        "worklist_tool": {
+            "offered": True if trace.worklist_tool_offered is None and tool_lists else trace.worklist_tool_offered,
+            "called": bool(tool_lists),
+            "calls": len(tool_lists),
+        },
+        "delegate_persona": {
+            "spawns": len(briefed),
+            "with_persona": sum(spawn.persona for spawn in briefed),
+            "roles": [spawn.role for spawn in briefed],
+        },
     }
 
 
@@ -445,11 +711,15 @@ def locate(trace_path):
     parts = trace_path.parent.parts
     at = len(parts) - 1 - parts[::-1].index("runs")
     arm, case = parts[at - 1], parts[at + 1]
-    if arm not in screen.ARMS:
-        return None
     cased = parts[at - 2] == case and (Path(*parts[:at - 4]) / "arms").is_dir()
     if cased:
-        return RunDir(Path(*parts[:at - 4]), parts[at - 4], parts[at - 3], case, arm, trace_path.parent, False)
+        out, rule = Path(*parts[:at - 4]), parts[at - 3]
+        build = out / "arms" / rule / "build.json"
+        if arm not in (json.loads(build.read_text()).get("arms", screen.ARMS) if build.is_file() else screen.ARMS):
+            return None
+        return RunDir(out, parts[at - 4], rule, case, arm, trace_path.parent, False)
+    if arm not in screen.ARMS:
+        return None
     rule = parts[at - 2]
     return RunDir(Path(*parts[:at - 3]), parts[at - 3], rule, screen.LEGACY_CASES.get(rule, case), arm, trace_path.parent, True)
 
@@ -485,14 +755,19 @@ def injection(run, agent, entry, trace):
     if entry != screen.ENTRY_SKILL:
         return False
     token = screen.ENTRY_INVOCATION[agent][0]
-    wrappers = [run.out / "entry" / name for name in (agent, f"{agent}-workspace")]
+    wrappers = [run.out / "entry" / name for name in (agent, f"{agent}-workspace", f"{agent}-sbx")]
     prefixed = any(path.is_file() and re.search(rf"(?<![\w$/.-]){re.escape(token)}(?![\w-])", path.read_text()) for path in wrappers)
     if agent == "claude":
         return prefixed and screen.ENTRY_SKILL in trace.slash_commands
     return prefixed
 
 
-def rule_owner(rule, build_info):
+def rule_owner(rule, build_info, arm=None):
+    """The file the rule patches. An arm of an N-arm rule owns the first file
+    its own patch changes; current, which changes none, keeps the rule's target."""
+    changed = build_info.get("arm_changes", {}).get(arm)
+    if changed:
+        return changed[0]
     if build_info.get("target"):
         return build_info["target"]
     patch = screen.RULES / rule / "rule.patch"
@@ -516,6 +791,9 @@ def analyze(trace_path, principles):
         if environment.is_file():
             cwd = str(json.loads(environment.read_text()).get("cwd") or "")
         trace = parse_codex(lines, tree, cwd if cwd.startswith("/") else "")
+    harvest = harvest_dir(run.path)
+    if harvest and (harvest / "transcripts").is_dir():
+        attach_transcripts(trace, run.agent, harvest / "transcripts", tree, lines)
     output = run.path / "output.md"
     if output.is_file():
         trace.final = output.read_text(errors="replace") + "\n" + trace.final
@@ -528,7 +806,7 @@ def analyze(trace_path, principles):
         "workspace": workspace,
         "injected": injected,
     }
-    record.update(stages(trace, case=run.case, owner=rule_owner(run.rule, build_info), injected=injected,
+    record.update(stages(trace, case=run.case, owner=rule_owner(run.rule, build_info, run.arm), injected=injected,
                          playbook_texts=playbook_texts, principles=principles, workspace=workspace))
     return record
 
@@ -561,6 +839,8 @@ STAGES = {
     "brief says data shape or names a principle": lambda row: row["delegation"]["brief_names_shape"],
     "cited any principle": lambda row: bool(row["citations"]["cited"]),
     "cited only read leaves": lambda row: row["citations"]["only_read"],
+    "lead called a worklist tool, unless none was offered": lambda row: None if row["worklist_tool"]["offered"] is False else row["worklist_tool"]["called"],
+    "delegate got the poteto-agent briefing": lambda row: row["delegate_persona"]["with_persona"] == row["delegate_persona"]["spawns"] if row["delegate_persona"]["spawns"] else None,
 }
 
 

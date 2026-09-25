@@ -58,7 +58,7 @@ class OneChangeAcrossTreeTests(unittest.TestCase):
 
     def test_every_shipped_rule_is_one_change_across_all_tracked_skills(self):
         tree = screen.tracked("skills")
-        for rule in screen.load_rules():
+        for rule in (rule for rule in screen.load_rules() if rule.paired):
             with self.subTest(rule=rule.id):
                 change = screen.rule_change(rule, tree)
                 self.assertEqual(change.target, rule.target)
@@ -323,7 +323,8 @@ class CompanionMountTests(unittest.TestCase):
         screen.build(self.out, [rule], "poteto-mode")
 
         built = json.loads((self.out / "arms" / rule.id / "build.json").read_text())
-        self.assertEqual(sorted(built), ["cases", "entry", "inserted", "patch_kind", "removed", "target", "tree_dir"])
+        self.assertEqual(sorted(built), ["arms", "cases", "entry", "inserted", "patch_kind", "removed", "target", "tree_dir"])
+        self.assertEqual(built["arms"], ["current", "amended"])
 
 
 INDEX_SENTENCES = {

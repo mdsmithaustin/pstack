@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -189,6 +190,24 @@ class RunLayoutTests(unittest.TestCase):
         self.assertEqual((run.out.name, run.agent, run.rule, run.case, run.arm, run.legacy),
                          ("claude-y", "claude", "preparatory-refactor", "csv-export", "current", True))
 
+    def test_an_arm_the_build_lists_is_a_run_and_an_unlisted_one_is_not(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / "codex-z"
+            (out / "arms" / "bundle").mkdir(parents=True)
+            (out / "arms" / "bundle" / "build.json").write_text(json.dumps({"arms": ["current", "leaf", "leaf+trigger"]}))
+            listed = chain.locate(self.make(out, "codex/bundle/csv-export/leaf+trigger/runs/csv-export/with_skill"))
+            unlisted = chain.locate(self.make(out, "codex/bundle/csv-export/amended/runs/csv-export/with_skill"))
+
+        self.assertEqual((listed.rule, listed.case, listed.arm), ("bundle", "csv-export", "leaf+trigger"))
+        self.assertIsNone(unlisted)
+
+    def test_an_arm_owns_the_first_file_its_patch_changes(self):
+        build = {"target": "poteto-mode/playbooks/feature.md",
+                 "arm_changes": {"current": [], "leaf+trigger": ["poteto-mode/SKILL.md", "principle-model-the-domain/SKILL.md"]}}
+
+        self.assertEqual(chain.rule_owner("bundle", build, "leaf+trigger"), "poteto-mode/SKILL.md")
+        self.assertEqual(chain.rule_owner("bundle", build, "current"), "poteto-mode/playbooks/feature.md")
+
 
 class InjectionTests(unittest.TestCase):
     def test_wrapper_token_and_listed_slash_command_mean_injected(self):
@@ -213,6 +232,15 @@ class InjectionTests(unittest.TestCase):
 
             self.assertTrue(chain.injection(run, "codex", "poteto-mode", chain.Trace()))
 
+    def test_sandbox_wrapper_passes_the_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            (out / "entry").mkdir()
+            (out / "entry" / "codex-sbx").write_text("exec python3 sandbox.py wrap --agent codex --token '$poteto-mode' --discovery .agents/skills -- \"$@\"\n")
+            run = chain.RunDir(out, "codex", "r", "c", "leaf", out, False)
+
+            self.assertTrue(chain.injection(run, "codex", "poteto-mode", chain.Trace()))
+
 
 class PrincipleIndexTests(unittest.TestCase):
     def test_every_principle_in_the_shipped_index_is_parsed(self):
@@ -221,11 +249,162 @@ class PrincipleIndexTests(unittest.TestCase):
         self.assertEqual((len(index), index["principle-model-the-domain"]), (23, "Model the Domain"))
 
 
+def make_run(directory, agent, fixture, transcripts=True):
+    """A screen.py --out dir around one fixture: a stub mounted tree, a
+    build.json whose owner is the Feature playbook, the fixture's trace in the
+    run dir, and its harvest in the parallel harvest tree."""
+    out = Path(directory) / "out"
+    arm = out / "arms" / "domain-words" / "session-tree" / "amended" / "skills"
+    for path in TREE:
+        (arm / path).parent.mkdir(parents=True, exist_ok=True)
+        (arm / path).write_text(FEATURE if path.endswith("feature.md") else "line\n" * 10)
+    (out / "arms" / "domain-words" / "build.json").write_text(json.dumps({
+        "entry": "poteto-mode", "target": "poteto-mode/playbooks/feature.md",
+        "cases": {"session-tree": {"workspace": {"repo": "omnigent"}}},
+    }))
+    work = out / agent / "domain-words" / "session-tree" / "amended"
+    run = work / "runs" / "session-tree" / "with_skill"
+    run.mkdir(parents=True)
+    shutil.copy(FIXTURES / fixture / "run" / "trace.jsonl", run / "trace.jsonl")
+    harvest = work / "harvest" / "session-tree" / "with_skill"
+    harvest.mkdir(parents=True)
+    if transcripts:
+        shutil.copytree(FIXTURES / fixture / "harvest" / "transcripts", harvest / "transcripts")
+    return run / "trace.jsonl"
+
+
+def analyze(fixture, agent, transcripts=True):
+    with tempfile.TemporaryDirectory() as directory:
+        return chain.analyze(make_run(directory, agent, fixture, transcripts), PRINCIPLES)
+
+
+class ClaudeSandboxHarvestTests(unittest.TestCase):
+    """A synthetic Claude sandbox run, written to the shape the sandbox harvests
+    (no paid Claude sandbox run exists yet). The lead reads the Feature
+    playbook, calls TaskCreate once, and spawns a poteto-agent and a
+    general-purpose delegate. The poteto-agent child reads the index and one
+    leaf and edits the checkout. The general-purpose child's one skill read
+    errors."""
+
+    def setUp(self):
+        self.row = analyze("sbx-claude", "claude")
+
+    def test_child_reads_and_edits_are_the_delegates(self):
+        self.assertEqual((self.row["delegation"], self.row["delegate_edits"]), ({
+            "spawns": 2, "waits": 0, "delegated": True, "brief_names_shape": True,
+            "delegate_reads": ["poteto-mode/SKILL.md", "principle-model-the-domain/SKILL.md"],
+        }, ["/workspace/app/src/sessions/tree.py"]))
+
+    def test_child_leaf_read_takes_its_spawn_index(self):
+        self.assertEqual(self.row["leaf_reads"], [
+            {"path": "principle-model-the-domain/SKILL.md", "index": 5, "actor": "delegate", "partial": False},
+        ])
+
+    def test_lead_playbook_read_comes_before_the_delegate_edit(self):
+        self.assertEqual((self.row["first_edit"], self.row["leaf_before_first_edit"]), (5, True))
+
+    def test_only_the_poteto_agent_child_got_the_briefing(self):
+        self.assertEqual(self.row["delegate_persona"], {
+            "spawns": 2, "with_persona": 1, "roles": ["poteto-agent", "general-purpose"],
+        })
+
+    def test_offered_task_tool_was_called_once(self):
+        self.assertEqual(self.row["worklist_tool"], {"offered": True, "called": True, "calls": 1})
+
+    def test_table_line(self):
+        self.assertEqual(chain.table([self.row]).splitlines()[1].split(), [
+            "claude", "domain-words", "session-tree", "amended", "1", "UNGRADED", "-", "feature", "0.25", "y", "y", "2/0", "1/1", "0",
+        ])
+
+
+class CodexSandboxHarvestTests(unittest.TestCase):
+    """Trimmed real files from a Codex sandbox probe: the exec --json stream
+    shows one spawn_agent and one wait, and the child rollout shows a
+    poteto-agent that reads the index and unslop with one sed command."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex", "codex")
+
+    def test_child_reads_are_the_delegates(self):
+        self.assertEqual((self.row["delegation"], self.row["delegate_edits"]), ({
+            "spawns": 1, "waits": 1, "delegated": True, "brief_names_shape": False,
+            "delegate_reads": ["poteto-mode/SKILL.md", "unslop/SKILL.md"],
+        }, []))
+        self.assertEqual(self.row["leaf_reads"], [
+            {"path": "unslop/SKILL.md", "index": 3, "actor": "delegate", "partial": False},
+        ])
+
+    def test_child_rollout_role_marks_the_briefing(self):
+        self.assertEqual(self.row["delegate_persona"], {"spawns": 1, "with_persona": 1, "roles": ["poteto-agent"]})
+
+    def test_no_worklist_tool_evidence(self):
+        self.assertEqual(self.row["worklist_tool"], {"offered": None, "called": False, "calls": 0})
+
+    def test_lead_rollout_update_plan_counts_when_the_stream_has_no_todo_list(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "codex", "sbx-codex")
+            lead = next(trace_path.parents[3].rglob("rollout-*6671-*.jsonl"))
+            with lead.open("a") as handle:
+                handle.write(json.dumps({"type": "response_item", "payload": {"type": "function_call", "name": "update_plan", "arguments": json.dumps({"plan": [{"step": "`how` over the affected subsystem", "status": "pending"}]})}}) + "\n")
+                handle.write(json.dumps({"type": "response_item", "payload": {"type": "custom_tool_call", "name": "exec", "input": "await tools.update_plan({plan: []});"}}) + "\n")
+            row = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual((row["worklist_tool"], row["worklist"]["tool_called"]), ({"offered": True, "called": True, "calls": 2}, True))
+
+    def test_table_line(self):
+        self.assertEqual(chain.table([self.row]).splitlines()[1].split(), [
+            "codex", "domain-words", "session-tree", "amended", "1", "UNGRADED", "-", "-", "-", "-", "-", "1/1", "0/0", "0",
+        ])
+
+
+class NoTranscriptsTests(unittest.TestCase):
+    def test_a_harvest_without_transcripts_changes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "claude", "sbx-claude", transcripts=False)
+            with_harvest = chain.analyze(trace_path, PRINCIPLES)
+            shutil.rmtree(trace_path.parents[3] / "harvest")
+            without = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual(with_harvest, without)
+        self.assertEqual((without["delegation"], without["delegate_edits"], without["leaf_reads"], without["first_edit"], without["delegate_persona"]), (
+            {"spawns": 2, "waits": 0, "delegated": True, "brief_names_shape": True, "delegate_reads": []},
+            [], [], None, {"spawns": 2, "with_persona": 1, "roles": ["poteto-agent", "general-purpose"]},
+        ))
+
+    def test_codex_without_transcripts_sees_the_spawn_but_no_role(self):
+        row = analyze("sbx-codex", "codex", transcripts=False)
+
+        self.assertEqual((row["delegation"]["delegate_reads"], row["delegate_persona"]), ([], {"spawns": 1, "with_persona": 0, "roles": [None]}))
+
+
+class AttachTests(unittest.TestCase):
+    def test_child_transcript_replaces_the_delegate_records_the_lead_stream_echoed(self):
+        trace = chain.parse_claude((FIXTURES / "claude-trace.jsonl").read_text().splitlines(), TREE)
+        child = chain.Child("toolu_01J9z92p2dNEHL3MvAXDA43K", [chain.Event(4, "delegate", "edit", "src/tree.py")], {})
+
+        chain.attach(trace, [child])
+
+        self.assertEqual([(event.index, event.sub, event.path) for event in trace.events if event.kind == "edit"], [(8, (4,), "src/tree.py")])
+
+    def test_a_briefing_pasted_into_a_general_purpose_brief_counts(self):
+        body = "You are operating as poteto-mode's full agent style\nfor one scoped unit. Read the index."
+
+        self.assertEqual((chain.has_persona(body), chain.has_persona("Run the tests.")), (True, False))
+
+
 class FixtureLinesAreRealJsonTests(unittest.TestCase):
     def test_every_fixture_line_parses(self):
         for name in ("claude-trace.jsonl", "codex-trace.jsonl"):
             for line in (FIXTURES / name).read_text().splitlines():
                 json.loads(line)
+
+    def test_every_harvest_fixture_line_parses(self):
+        paths = sorted(FIXTURES.glob("sbx-*/**/*.jsonl"))
+        for path in paths:
+            for line in path.read_text().splitlines():
+                json.loads(line)
+
+        self.assertEqual(len(paths), 7)
 
 
 if __name__ == "__main__":

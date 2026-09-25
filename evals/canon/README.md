@@ -123,6 +123,49 @@ of its input, `arms/<rule>/<case>/<arm>/workspace`. For a pasted-project case
 it matches the prompt, and a case that a variant shares with its source goes to
 the rule whose inserted text is mounted.
 
+### Arm rules
+
+An arm rule compares more than one placement of a rule in one run. Its
+directory holds `rule.json` and `arms/`, and no `rule.patch`:
+
+```
+rules/<id>/
+  rule.json           {"cases_from": "<rule>", "arms": ["current", "leaf", "leaf+trigger"]}
+                      source and companions are optional, as for a variant
+  arms/<arm>.patch    one per arm after current
+```
+
+`current` is first and has no patch. Every other arm has exactly one
+`arms/<arm>.patch`, and every patch file is listed. Arm names match
+`^[a-z0-9][a-z0-9+._-]*$`. An arm's patch is a unified diff against `skills/`
+that may change several files in several hunks, add a file from `/dev/null`,
+or delete one. Paths read `a/<skill>/...`, or `a/skills/<skill>/...`, which
+drops the `skills/` prefix. The build applies it with `git apply` in a
+scratch copy of the tree, and refuses a patch that does not apply or changes
+nothing. The one-change check does not run. The rule takes its cases and
+oracle from `cases_from`, as a variant does. Under `--entry skill` the arms
+mount every skill any arm changes.
+
+`build` writes `arms/<rule>/<case>/<arm>/` for every arm in order.
+`build.json` records `"patch_kind": "arms"`, `"arms"` in order, and
+`"arm_changes"`, which maps each arm to the files it changes (`current` has
+none). `"target"` is the first changed file of the first arm after current, for
+older readers. A pair rule's `build.json` also records
+`"arms": ["current", "amended"]`.
+
+`compare` prints one row per case and run with every arm's verdict in order,
+each arm's changed files and how many it read, then one line per comparison:
+each arm against current, then each later arm against each earlier one, as
+`leaf+trigger vs leaf: TIE-PASS`. The exposure target of a comparison is the
+set of files that differ between the two arms. The later arm is exposed when it
+read one of them, or under `--entry poteto-mode` when one of them is
+`poteto-mode/SKILL.md`. Each arm after current gets its own rule line against
+current, `rule leaf vs current run-1 SEPARATES`. In `compare.json` these pair
+entries add `baseline` and `treatment`, and these rule entries add `arm`. `plan`
+lists an arm rule's arms and each arm's changed files. `chain.py` counts every
+arm the build lists, and takes an arm's owner file to be the first file its
+patch changes.
+
 ## Entry modes
 
 `--entry skill` is the default. It mounts only the skill that owns the patched
@@ -298,8 +341,9 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent codex --entry poteto-mode --out "$(mktemp -d)/offline"
 ```
 
-`python3 -m unittest` runs `test_screen.py`, `test_workspace.py`, `test_chain.py`, and
-`test_oracles.py`, which loads `oracles/test_shared.py` and every
+`python3 -m unittest` runs `test_screen.py`, `test_arms.py`, `test_workspace.py`,
+`test_chain.py`, `test_sandbox.py` (its sandbox runs need `CANON_SBX_E2E=1`,
+see Sandboxed runs), and `test_oracles.py`, which loads `oracles/test_shared.py` and every
 `rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
 mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
 workspace rule through the offline pipeline and checks both harvested diffs. It
@@ -337,6 +381,174 @@ finished run. Runs made before cases existed keep their old `compare.json`,
 which `plan` reads. `compare` refuses those directories so it cannot overwrite
 that file.
 
+## Sandboxed runs
+
+`--runner sbx` runs each workspace answer inside its own Docker Sandbox
+(`sbx`, v0.43.0 here) instead of on the host. A pasted-project case is
+refused under this runner. The harness still prepares, times, and grades each
+run, and `compare` and `chain.py` read the same directories as before.
+
+```sh
+sbx version && sbx diagnose        # daemon healthy, authenticated
+sbx secret ls                      # anthropic and openai credentials for the proxy
+python3 evals/canon/sandbox.py deps --agent codex --repo omnigent --commit 02969a131c72d74c00c5800d8e82ae831f8ec5e5
+python3 evals/canon/sandbox.py probe --agent codex --repo omnigent --commit 02969a131c72d74c00c5800d8e82ae831f8ec5e5
+python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode \
+  --case harness-families --out "/private/tmp/canon-sbx/codex-$(date +%m%d%H%M)" separate-contexts
+```
+
+The agent CLIs come from the kit images. On 2026-09-25 those were Claude Code
+2.1.280 and Codex 0.149.1. That Codex's model catalog lists gpt-5.6-sol, terra, and luna,
+but not gpt-6-sol, the host screen's default, so pass `--model` for Codex.
+Set `CANON_SBX_STANDIN=evals/canon/offline/sbx-agent` to run the same command
+at no model cost.
+
+Each run goes through `sandbox.py wrap`, which does this:
+
+1. It checks out the pinned commit and overlay in the harness workspace and
+   refuses a tree that differs from the build, as `workspace.py wrap` does.
+   Then it repacks the checkout so it no longer borrows objects from the
+   host mirror.
+2. It creates one sandbox with `sbx create --clone --skills off`. The agent
+   works on a private clone inside the sandbox. The host checkout is mounted
+   read-only at `/run/sandbox/source`, and the sandbox cannot write to it.
+   `--skills off` keeps sbx's shared skill store out of `~/.claude/skills`.
+   No Docker socket is mounted.
+3. It copies in the mounted skills and the overlay as one tar. `sbx_inside.py
+   setup` then links the tree to `.claude/skills` or `.agents/skills`. It
+   registers the poteto-agent and Comment Sicko personas by running
+   `pstack-harness/scripts/subagents.py install --harness claude-code|codex
+   --project <clone>` through that link, as a user install would. For Codex
+   it also trusts the clone in the sandbox's own `~/.codex/config.toml`, since
+   Codex loads project roles only for a trusted project. Last, it links the
+   project's dependencies and checks the clone's tree against the build.
+   Setup files go to git's exclude list, so they never reach the diff. The
+   payload directory is deleted before the agent starts.
+4. It runs the agent in the clone with `sbx exec`, under `timeout` at the
+   case budget minus 120 seconds. The harness's flags are rewritten for the
+   sandbox. Claude drops `--no-session-persistence`, so its transcripts are
+   written, and gets `--setting-sources project --permission-mode
+   bypassPermissions --strict-mcp-config --allowedTools TodoWrite`. Codex
+   drops `--ephemeral` and `--ignore-user-config`, because the sandbox's own
+   config holds its proxy provider. It runs `--sandbox danger-full-access`
+   with the sandbox's MCP gateway disabled. `bypassPermissions` and
+   `danger-full-access` are safe only because the sandbox is the boundary. The
+   prompt still starts with `/poteto-mode` or `$poteto-mode`.
+5. `sbx_inside.py harvest` writes the workspace diff and copies the agent's
+   session store, `~/.claude/projects` or `~/.codex/sessions`, which holds the
+   lead's session and every delegate's. The wrapper copies both out, with the
+   sandbox's network log, into the run's harvest slot. Then it removes the
+   sandbox, even when the run fails. `sandbox.py gc` removes any `canon-*`
+   sandbox a killed run left behind. Do not run it while a screen is running.
+
+The harvest dir of a run holds `workspace.diff`, `workspace.json`,
+`network-log.json`, and `transcripts/claude/<project>/<session>.jsonl` with
+`<session>/subagents/agent-*.jsonl` and `.meta.json`, or
+`transcripts/codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. `workspace.json`
+records the sandbox name, the template, the CLI versions, the timings, the
+network rules that applied, and `reachable`, the policy decision for each
+model API host and each denied host.
+
+**Auth.** Credentials never enter this repo or a run directory. `sbx secret`
+stores them on the host, and the sandbox's proxy adds them to model API
+requests. The Codex kit writes a `~/.codex/config.toml` whose provider sends
+requests to `chatgpt.com/backend-api/codex` through that proxy with a
+placeholder token. The Claude kit writes `~/.claude/.credentials.json` when a
+sandbox is created, even from a template whose copy was deleted, and `sbx
+secret ls` lists the Anthropic secret as OAuth. On 2026-09-25 a Claude run
+inside the sandbox stopped with "OAuth session expired and could not be
+refreshed", so that stored token had most likely expired. Refresh it before a paid Claude run, for example by
+storing an API key with `sbx secret set anthropic`, and confirm with one short
+prompt. `sbx secret set` supports `--oauth` for OpenAI only.
+
+**Network.** The host's global policy denies by default. Each agent kit adds
+its own hosts to that sandbox. Claude's kit adds the Anthropic API and the
+claude.com hosts. Codex's kit adds chatgpt.com, the OpenAI API, GitHub, npm,
+and the Ubuntu archives. A run sandbox adds a per-sandbox deny rule for every package index
+and source host in `sbx.json` `run_deny_network`, so a run reaches only its
+model API. A local deny can only narrow egress. The dependency build is the one
+step that reaches PyPI, GitHub releases, and astral.sh, through per-sandbox
+allow rules (`build_network`) on a sandbox that is removed afterwards.
+
+**Dependencies.** `sandbox.py deps` builds one template per agent, repo, and
+commit. It creates a sandbox with no workspace and extracts the pinned commit
+under `/opt/canon-deps/<repo>/src`. It installs uv from `sbx.json` (the
+kit's uv 0.9.26 is older than omnigent's `required-version`) and the repo's
+pinned Python. Then it runs `uv sync` against the repo's lockfile, with
+`--frozen --group test` and `OMNIGENT_SKIP_WEB_UI=true` for omnigent (its build
+otherwise runs pnpm) and `--frozen --extra dev` for hermes. The venv, the uv cache, and the
+interpreter live under `/opt/canon-deps`, outside every workspace. The source
+copy and the kit's credential files are deleted before `sbx template save`.
+At run time setup links `.venv` to that venv and reruns the same `uv sync`
+offline, which reinstalls the project's own editable packages from the clone.
+The agent runs with `UV_OFFLINE=1`, `UV_PYTHON_DOWNLOADS=never`, and the repo's
+env, so `uv run pytest` works without the network. The record of each build
+sits under `$CANON_CACHE/sbx/`.
+
+**Tools observed.** `sandbox.py probe` builds a run-shaped sandbox and lists
+what the agent is offered without a paid model call. Claude gets a model name
+that does not exist, and its init event lists tools, agents, and slash commands
+before it fails. Codex is pointed at a local server inside the sandbox that
+records the request and answers 400. Observed on 2026-09-25, with and without
+a dependency template:
+
+- Claude Code 2.1.280 runs in `bypassPermissions`. Its tools are Task, Bash,
+  Edit, Read, Write, NotebookEdit, Skill, TaskCreate, TaskGet, TaskList,
+  TaskUpdate, TaskStop, ToolSearch, WebFetch, WebSearch, Workflow, and
+  others. Its agents include poteto-agent and comment-sicko, and poteto-mode
+  is a slash command. Without `--allowedTools TodoWrite`, the same `-p` run
+  lists none of TaskCreate, TaskGet, TaskList, or TaskUpdate.
+- Codex 0.149.1 gets exec_command, write_stdin, update_plan,
+  request_user_input, view_image, web_search, the goal tools, and the
+  multi_agent_v1 namespace with spawn_agent, send_input, wait_agent,
+  close_agent, and resume_agent. spawn_agent's agent_type lists poteto-agent and comment-sicko. The request
+  carries the injected poteto-mode `SKILL.md`. A paid smoke run (one
+  poteto-agent spawn replying "ok", gpt-5.6-luna at low effort, 32,611 input
+  tokens) showed `collab_tool_call` items for spawn_agent with the brief in
+  `exec --json`. The child's rollout names `agent_role: poteto-agent`, starts
+  with the persona briefing, and reads `.agents/skills/poteto-mode/SKILL.md`.
+
+**Costs measured** on an Apple silicon Mac on 2026-09-25, with the offline
+stand-in on the small test repo: create 4.0 to 4.3 s, setup 3.3 s, harvest
+2.4 to 3.0 s, destroy 0.8 s per run. The first sandbox from a kit image took
+14 to 18 s. On omnigent with its template, the three arms of one case each took
+0.95 to 1.21 s to check out and repack, 4.1 to 4.9 s to create, 4.5 to 5.2 s
+for setup (0.43 to 0.62 s of it the offline `uv sync`), 3.8 to 4.4 s to
+harvest, and 0.9 to 1.1 s to destroy. The clone inside the sandbox took 142
+MB. The four dependency templates:
+
+| template | uv install | sync | save | deps under /opt | image |
+|---|---|---|---|---|---|
+| codex, omnigent | 56 s | 225 s | 34 s | 604 MB venv, 64 MB cache, 91 MB Python | 1.90 GB |
+| claude, omnigent | 130 s | 319 s | 32 s | same | 1.76 GB |
+| codex, hermes | 88 s | 188 s | 21 s | 213 MB venv, 52 MB cache, 97 MB Python | 1.39 GB |
+| claude, hermes | 65 s | 89 s | 22 s | same | 1.24 GB |
+
+The kit images are 1.27 GB for Codex and 0.92 GB for Claude. In a run from
+its template, `uv run pytest --collect-only tests` collected 30,321 omnigent
+tests with 24 collection errors, and 50,215 hermes tests with 57 errors, with
+no network.
+
+**Offline check.** `test_sandbox.py` unit-tests the argv rewrite, the staging
+repack, and `sbx_inside.py` setup and harvest on a plain clone. With
+`CANON_SBX_E2E=1`, it also runs both arms of a workspace rule for each agent
+in real sandboxes with `offline/sbx-agent` as the agent. That stand-in exits
+nonzero unless the prompt carries the invocation, the skills are linked, the
+persona is registered, the flags give it full tools, and its cwd is the
+clone. It applies the sample diff and writes a trace with one worklist call and
+one poteto-agent spawn, plus transcripts for the lead and the delegate. Both
+agents print `SEPARATES`, and each takes about 50 seconds. `chain.py` over
+that output reports the worklist tool called, one spawn with the poteto-agent
+briefing, and the delegate's read of `poteto-mode/SKILL.md`, for both agents.
+The same stand-in, run through `screen.py run --runner sbx` on the three-arm
+rule `bundle-separate-contexts-harness` and its omnigent case
+`harness-families`, printed `leaf vs current: SEPARATES`, `leaf+trigger vs
+current: SEPARATES`, and `leaf+trigger vs leaf: TIE-PASS`.
+
+```sh
+(cd evals/canon && CANON_SBX_E2E=1 python3 -m unittest test_sandbox -v)
+```
+
 ## Chain census
 
 `chain.py` reads finished run dirs and reports, per run, how far the agent
@@ -356,10 +568,42 @@ python3 evals/canon/chain.py --jsonl /tmp/chain.jsonl   # one JSON line per run
 ```
 
 It reads `/private/tmp/canon-entry`, `/private/tmp/canon-ws`, and
-`/private/tmp/canon-screen` unless given roots. Codex's stream shows waits on a
-delegate but no spawn or brief, and Claude's `-p` sessions offer no worklist
-tool. Those stages read "not visible" or zero because of the harness, not the
-agent.
+`/private/tmp/canon-screen` unless given roots. In those runs Codex's stream
+shows waits on a delegate but no spawn or brief, and Claude's `-p` sessions
+offer no worklist tool. Those stages read "not visible" or zero because of the
+harness, not the agent.
+
+A sandboxed run also harvests the agent's own transcripts next to its
+workspace diff, in `harvest/<run>/transcripts/`. Claude writes each delegate to
+`claude/<project>/<session>/subagents/agent-<id>.jsonl`, with a `.meta.json`
+naming its `agentType` and the lead's spawning `toolUseId`. Codex writes one
+rollout per thread under `codex/sessions/`. A child's `session_meta` names its
+`parent_thread_id` and `agent_role`. When those files exist, `chain.py` parses
+each delegate's reads, edits, spawns, worklist calls, and messages with actor
+`delegate`. It places them right after the spawn that started them, so every
+stage sees them. They fill `delegation.delegate_reads` and `delegate_edits`.
+Workspace edits are judged against the child's own cwd, which in a sandbox may
+sit under `/tmp`. A run without a `transcripts/` dir yields the same fields as
+before.
+
+Two stages use them:
+
+- `worklist_tool` gives `offered`, `called`, and `calls` for the lead. Claude's
+  init event says whether TodoWrite or TaskCreate was offered. Codex shows no
+  tool list, so `offered` stays `null` until the lead calls `update_plan`,
+  seen as a `todo_list` item or in the lead's rollout.
+- `delegate_persona` counts the lead's spawns whose delegate got the
+  poteto-agent briefing, with each spawn's role. A Claude spawn counts when it
+  names `poteto-agent` and the init event lists that agent, when the child's
+  meta says `poteto-agent`, or when the brief carries the persona body's first
+  line from `roles.json`. A Codex spawn counts when the child rollout's role is
+  `poteto-agent` or its first developer message is the installed-skill-paths
+  briefing. A Codex spawn's `collab_tool_call` prompt is its brief for the
+  data-shape stage.
+
+`fixtures/chain/sbx-codex/` holds trimmed files from a real Codex sandbox
+probe. `fixtures/chain/sbx-claude/` is synthetic, because no Claude sandbox run
+has completed yet.
 
 ## Reading the result
 
