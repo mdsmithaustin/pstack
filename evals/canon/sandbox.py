@@ -63,7 +63,8 @@ class SandboxError(Exception):
 
 
 def sbx(*args, input=None, capture=True, check=True):
-    proc = subprocess.run(["sbx", *map(str, args)], input=input, capture_output=capture)
+    proc = subprocess.run(["sbx", *map(str, args)], input=input, capture_output=capture,
+                          stdin=subprocess.DEVNULL if input is None else None)
     if check and proc.returncode != 0:
         detail = (proc.stderr or b"").decode(errors="replace").strip()[-600:] if capture else ""
         raise SandboxError(f"sbx {' '.join(map(str, args[:2]))} failed ({proc.returncode}): {detail}")
@@ -337,6 +338,11 @@ def wrap(argv, stdin=sys.stdin.buffer):
         return options[options.index(flag) + 1] if flag in options else None
 
     agent, token, discovery = option("--agent"), option("--token"), option("--discovery")
+    prompt = stdin.read()
+    if not prompt.strip():
+        raise SandboxError("the harness sent an empty prompt")
+    if token:
+        prompt = token.encode() + b" " + prompt
     arm = Path(os.environ["CANON_WORKSPACE"])
     spec = json.loads((arm / "workspace.json").read_text())
     slot = workspace.next_slot(Path(os.environ["CANON_HARVEST"]))
@@ -393,10 +399,8 @@ def wrap(argv, stdin=sys.stdin.buffer):
                 box.unpack(pack(directory, {"agent": host, "plan.json": plan}), STANDIN)
             budget = int(os.environ.get("CANON_TIMEOUT_S", workspace.TIMEOUT_S)) - RESERVE_S
             env = inside["deps"]["env"] if inside["deps"] else {}
-            prompt = stdin.read()
-            if token:
-                prompt = token.encode() + b" " + prompt
             record["command"] = command
+            record["prompt_bytes"] = len(prompt)
             with timed(timings, "agent_s"):
                 record["agent_rc"] = box.exec("timeout", "--kill-after=30", str(max(budget, 60)), *command,
                                               workdir=str(root), env=env, input=prompt, capture=False, check=False).returncode

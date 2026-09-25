@@ -57,8 +57,8 @@ def fail(code, why):
 def check_shape(agent, argv, prompt):
     token, discovery, persona = INVOCATION[agent]
     if Path("skills", "pstack").is_dir():
-        if not prompt.startswith(token) or not Path(discovery, "poteto-mode", "SKILL.md").is_file():
-            fail(3, "the prompt lacks the invocation or the skills are not linked")
+        if not prompt.startswith(token) or len(prompt[len(token):].strip()) < 20 or not Path(discovery, "poteto-mode", "SKILL.md").is_file():
+            fail(3, "the prompt lacks the invocation or the task, or the skills are not linked")
         if not Path(persona).is_file():
             fail(4, "the poteto-agent persona is not registered")
     wanted = ["--permission-mode", "bypassPermissions", "--allowedTools", "TodoWrite"] if agent == "claude" else ["--sandbox", "danger-full-access"]
