@@ -2,8 +2,13 @@
   "kind": "positive",
   "domain": "code-review",
   "timeout_s": 1500,
-  "expected_behavior": "The review flags that agent/image_eviction_policy.py, a stdlib-only policy leaf, now imports and calls the config loader (hermes_cli.config.load_config) to resolve its own limit and budget, and asks for the callers or the send path to read vision.outbound_image_limit / outbound_image_budget_mb and pass them in through the existing limit/budget parameters.",
-  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"},
+  "expected_behavior": [
+    "The review flags that agent/image_eviction_policy.py, a stdlib-only policy leaf, now imports and calls the config loader (hermes_cli.config.load_config) to resolve its own limit and budget, and asks for the callers or the send path to read vision.outbound_image_limit / outbound_image_budget_mb and pass them in through the existing limit/budget parameters."
+  ],
+  "workspace": {
+    "repo": "hermes",
+    "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"
+  },
   "review": {
     "patch": "pr.patch",
     "title": "feat(agent): configurable outbound image ceiling for send-path eviction",

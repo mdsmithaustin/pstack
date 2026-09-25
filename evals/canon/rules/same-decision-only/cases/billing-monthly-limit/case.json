@@ -2,8 +2,13 @@
   "kind": "near-miss",
   "domain": "code-review",
   "timeout_s": 1500,
-  "expected_behavior": "The review leaves the new agent.billing_view.validate_monthly_limit separate from validate_charge_amount. The two look alike today but mirror different server contracts (PUT /api/billing/monthly-cap against ceilingUsd, POST /api/billing/charge against the charge bounds) for different business functions (an org spend ceiling versus a one-time charge), so they change for different reasons. It does not ask to merge them or to extract a shared amount validator.",
-  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"},
+  "expected_behavior": [
+    "The review leaves the new agent.billing_view.validate_monthly_limit separate from validate_charge_amount. The two look alike today but mirror different server contracts (PUT /api/billing/monthly-cap against ceilingUsd, POST /api/billing/charge against the charge bounds) for different business functions (an org spend ceiling versus a one-time charge), so they change for different reasons. It does not ask to merge them or to extract a shared amount validator."
+  ],
+  "workspace": {
+    "repo": "hermes",
+    "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"
+  },
   "review": {
     "patch": "pr.patch",
     "title": "feat(billing): change the monthly spend limit from /topup",

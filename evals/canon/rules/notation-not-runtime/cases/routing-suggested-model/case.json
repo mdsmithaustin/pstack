@@ -2,8 +2,13 @@
   "kind": "positive",
   "domain": "code-review",
   "timeout_s": 1500,
-  "expected_behavior": "Raises that the PR adds pytest-bdd, a .feature file, and a step-definition module to a suite that runs plain pytest everywhere, and asks to keep the scenarios but write them as plain pytest tests (Given/When/Then in names, docstrings, or arrange-act-assert) beside tests/policies/builtins/test_routing.py, dropping the dependency and the step glue.",
-  "workspace": {"repo": "omnigent", "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"},
+  "expected_behavior": [
+    "Raises that the PR adds pytest-bdd, a .feature file, and a step-definition module to a suite that runs plain pytest everywhere, and asks to keep the scenarios but write them as plain pytest tests (Given/When/Then in names, docstrings, or arrange-act-assert) beside tests/policies/builtins/test_routing.py, dropping the dependency and the step glue."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  },
   "review": {
     "patch": "pr.patch",
     "title": "feat(policies): name a suggested model when denying trivial tasks",

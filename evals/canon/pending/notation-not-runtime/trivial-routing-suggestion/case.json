@@ -2,13 +2,20 @@
   "kind": "near-miss",
   "domain": "code-review",
   "timeout_s": 1500,
-  "expected_behavior": "Accepts the new Gherkin scenarios and step definitions as following the pytest-bdd convention main already established for built-in policy verdicts (CONTRIBUTING.md, trivial_routing.feature), and does not ask to drop pytest-bdd or rewrite the scenarios as plain pytest.",
-  "workspace": {"repo": "omnigent", "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"},
+  "expected_behavior": [
+    "Accepts the new Gherkin scenarios and step definitions as following the pytest-bdd convention main already established for built-in policy verdicts (CONTRIBUTING.md, trivial_routing.feature), and does not ask to drop pytest-bdd or rewrite the scenarios as plain pytest."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  },
   "review": {
     "patch": "pr.patch",
     "title": "feat(policies): name a suggested model when denying trivial tasks",
     "body_file": "pr-body.md",
     "branch": "trivial-routing-suggestion",
-    "base_patches": ["base.patch"]
+    "base_patches": [
+      "base.patch"
+    ]
   }
 }

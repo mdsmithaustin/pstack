@@ -2,8 +2,13 @@
   "kind": "positive",
   "domain": "code-review",
   "timeout_s": 1500,
-  "expected_behavior": "Points out that the branch calls session labels \"tags\" (the tag query parameter, tag_key/tag_value store arguments, the client's tag keyword, and the API docs) while the table, API, and client already call them labels, and asks for the filter to be named label throughout with no tag synonym.",
-  "workspace": {"repo": "omnigent", "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"},
+  "expected_behavior": [
+    "Points out that the branch calls session labels \"tags\" (the tag query parameter, tag_key/tag_value store arguments, the client's tag keyword, and the API docs) while the table, API, and client already call them labels, and asks for the filter to be named label throughout with no tag synonym."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  },
   "review": {
     "patch": "pr.patch",
     "title": "feat(sessions): filter GET /v1/sessions and SessionsNamespace.list by tag",

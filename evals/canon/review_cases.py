@@ -101,6 +101,9 @@ def shape_problems(rule, root, spec):
     problems += [f"missing {name}" for name in (review["patch"], review["body_file"], "prompt.md", "rubric.md")
                  if not (root / name).is_file()]
     problems += [f"case.json lacks {key}" for key in ("workspace", "expected_behavior", "domain") if key not in spec]
+    behavior = spec.get("expected_behavior")
+    if behavior is not None and not (isinstance(behavior, list) and behavior and all(isinstance(item, str) and item.strip() for item in behavior)):
+        problems.append("case.json expected_behavior must be a list of non-empty strings")
     if problems:
         return problems
     samples = {path.name for path in (root / "samples").glob("review-*.md")}

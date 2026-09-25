@@ -2,8 +2,17 @@
   "kind": "positive",
   "domain": "code-review",
   "timeout_s": 1500,
-  "expected_behavior": "Flags that agent/cache_savings.py:cache_savings_usd reads PricingEntry's rate and tier fields to redo pricing math that belongs in agent/usage_pricing.py, and that prompt_tokens/cache_read_tokens/cache_write_tokens travel loose through cache_savings_usd, estimate_cache_savings and format_cache_line although CanonicalUsage already holds them; asks to move the savings estimate into usage_pricing and pass the CanonicalUsage.",
-  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"},
-  "review": {"patch": "pr.patch", "title": "feat(usage): show what prompt caching saved, per call and in /usage",
-             "body_file": "pr-body.md", "branch": "feat/prompt-cache-savings"}
+  "expected_behavior": [
+    "Flags that agent/cache_savings.py:cache_savings_usd reads PricingEntry's rate and tier fields to redo pricing math that belongs in agent/usage_pricing.py, and that prompt_tokens/cache_read_tokens/cache_write_tokens travel loose through cache_savings_usd, estimate_cache_savings and format_cache_line although CanonicalUsage already holds them; asks to move the savings estimate into usage_pricing and pass the CanonicalUsage."
+  ],
+  "workspace": {
+    "repo": "hermes",
+    "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(usage): show what prompt caching saved, per call and in /usage",
+    "body_file": "pr-body.md",
+    "branch": "feat/prompt-cache-savings"
+  }
 }
