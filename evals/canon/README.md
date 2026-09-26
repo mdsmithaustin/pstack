@@ -268,7 +268,7 @@ read-only commands by prefix: `git log`, `git show`, `git grep`, `git diff`,
 `git status`, `rg`, `grep`, `ls`, `find`, `wc`, `head`, and `sed -n`. It
 also appends `--disallowedTools` rules for the flags that make those commands
 run another program or delete files: `find -exec`, `-ok`, `-delete`,
-`rg --pre`, and `git grep -O`. A run with a model that does not exist, which
+`rg --pre`, `git grep -O`, and `git grep --open-files-in-pager`. A run with a model that does not exist, which
 costs nothing, accepted both flags on 2026-09-24, and an unknown flag fails
 the same run at parsing. No run has yet shown each rule matching a command.
 
@@ -293,6 +293,9 @@ A workspace case's check receives a `shared.Workspace` in place of the project.
 `workspace.checkout` is the pinned checkout with the overlay, and
 `workspace.diff` is the run's diff. `shared.apply_diff(checkout, diff)` returns
 the new bytes of every path the diff touches, with `None` for a deleted path.
+It refuses a diff that leaves a symlink at a path it touches, that touches a
+symlink in the checkout, or whose path resolves outside the checkout, so a
+grader never reads a host file through the agent's diff.
 The samples are `good.md` and `bad.md` with a `good.diff` and `bad.diff` beside
 them. `test_oracle.py` passes `workspace=Workspace(checkout, diff)` to `grade`.
 The offline stand-in applies the chosen sample's diff in its cwd. The sample
@@ -420,9 +423,13 @@ python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol
   --case harness-families --out "/private/tmp/canon-sbx/codex-$(date +%m%d%H%M)" converge-within-context
 ```
 
-The agent CLIs come from the kit images. On 2026-09-25 those were Claude Code
-2.1.280 and Codex 0.149.1. That Codex's model catalog lists gpt-5.6-sol, terra, and luna,
-but not gpt-6-sol, the host screen's default, so pass `--model` for Codex.
+Claude Code comes from the kit image, 2.1.280 on 2026-09-25. Codex comes
+from the dependency template: `sandbox.py deps` installs `@openai/codex@0.157.0`
+(`sbx.json` `agents.codex.cli`) with npm over the kit's copy, so every Codex
+run uses 0.157.0. The kit image alone carried Codex 0.149.1 on 2026-09-25,
+and the model catalog and tool list below were observed on that kit-only
+version. Its catalog lists gpt-5.6-sol, terra, and luna, but not gpt-6-sol,
+the host screen's default, so pass `--model` for Codex.
 Set `CANON_SBX_STANDIN=evals/canon/offline/sbx-agent` to run the same command
 at no model cost.
 
@@ -436,9 +443,13 @@ Each run goes through `sandbox.py wrap`, which does this:
    works on a private clone inside the sandbox. The host checkout is mounted
    read-only at `/run/sandbox/source`, and the sandbox cannot write to it.
    `--skills off` keeps sbx's shared skill store out of `~/.claude/skills`.
-   No Docker socket is mounted.
-3. It copies in the mounted skills and the overlay as one tar. `sbx_inside.py
-   setup` then links the tree to `.claude/skills` or `.agents/skills`. It
+   No Docker socket is mounted. Before anything runs in the sandbox, it asks
+   `sbx policy check network --sandbox <name> <host> --json` about every host
+   in `run_deny_network` and about example.org, which no rule names. If any
+   answer is not a denial, the run is refused and the agent never starts.
+3. It copies in the mounted skills and the overlay as one tar. Under
+   `--entry poteto-mode`, `sbx_inside.py setup` then links the tree to
+   `.claude/skills` or `.agents/skills` and
    registers the poteto-agent and Comment Sicko personas by running
    `pstack-harness/scripts/subagents.py install --harness claude-code|codex
    --project <clone>` through that link, as a user install would. For Codex
@@ -455,8 +466,9 @@ Each run goes through `sandbox.py wrap`, which does this:
    drops `--ephemeral` and `--ignore-user-config`, because the sandbox's own
    config holds its proxy provider. It runs `--sandbox danger-full-access`
    with the sandbox's MCP gateway disabled. `bypassPermissions` and
-   `danger-full-access` are safe only because the sandbox is the boundary. The
-   prompt still starts with `/poteto-mode` or `$poteto-mode`.
+   `danger-full-access` are safe only because the sandbox is the boundary.
+   Under `--entry poteto-mode`, the prompt still starts with `/poteto-mode` or
+   `$poteto-mode`.
 5. `sbx_inside.py harvest` writes the workspace diff and copies the agent's
    session store, `~/.claude/projects` or `~/.codex/sessions`, which holds the
    lead's session and every delegate's. The wrapper copies both out, with the
@@ -477,8 +489,13 @@ The harvest dir of a run holds `workspace.diff`, `workspace.json`,
 `<session>/subagents/agent-*.jsonl` and `.meta.json`, or
 `transcripts/codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. `workspace.json`
 records the sandbox name, the template, the CLI versions, the timings, the
-network rules that applied, and `reachable`, the policy decision for each
-model API host and each denied host.
+network rules that applied, `reachable`, the policy decision for each model
+API host, and `egress`, the decision for each probe host.
+
+After the harness returns, `run` scans the arm's run and harvest dirs. A file
+named `.credentials.json` or `auth.json`, or one that holds an `sk-` key, a
+`claudeAiOauth` record, or a JSON access or refresh token, fails the arm
+before grading and names each file. The scan does not delete them.
 
 **Auth.** Credentials never enter this repo or a run directory. `sbx secret`
 stores them on the host, and the sandbox's proxy adds them to model API
@@ -492,14 +509,17 @@ refreshed", so that stored token had most likely expired. Refresh it before a pa
 storing an API key with `sbx secret set anthropic`, and confirm with one short
 prompt. `sbx secret set` supports `--oauth` for OpenAI only.
 
-**Network.** The host's global policy denies by default. Each agent kit adds
+**Network.** The run requires the host's global policy to deny by default;
+`sbx policy ls` shows it, and the probe in step 2 refuses a run where it does
+not. Each agent kit adds
 its own hosts to that sandbox. Claude's kit adds the Anthropic API and the
 claude.com hosts. Codex's kit adds chatgpt.com, the OpenAI API, GitHub, npm,
 and the Ubuntu archives. A run sandbox adds a per-sandbox deny rule for every package index
 and source host in `sbx.json` `run_deny_network`, so a run reaches only its
 model API. A local deny can only narrow egress. The dependency build is the one
-step that reaches PyPI, GitHub releases, and astral.sh, through per-sandbox
-allow rules (`build_network`) on a sandbox that is removed afterwards.
+step that reaches PyPI, GitHub releases, astral.sh, and the npm registry,
+through per-sandbox allow rules (`build_network`) on a sandbox that is removed
+afterwards.
 
 **Dependencies.** `sandbox.py deps` builds one template per agent, repo, and
 commit. It creates a sandbox with no workspace and extracts the pinned commit
@@ -529,7 +549,7 @@ a dependency template:
   others. Its agents include poteto-agent and comment-sicko, and poteto-mode
   is a slash command. Without `--allowedTools TodoWrite`, the same `-p` run
   lists none of TaskCreate, TaskGet, TaskList, or TaskUpdate.
-- Codex 0.149.1 gets exec_command, write_stdin, update_plan,
+- Codex 0.149.1, the kit-only version, gets exec_command, write_stdin, update_plan,
   request_user_input, view_image, web_search, the goal tools, and the
   multi_agent_v1 namespace with spawn_agent, send_input, wait_agent,
   close_agent, and resume_agent. spawn_agent's agent_type lists poteto-agent and comment-sicko. The request
@@ -561,8 +581,10 @@ tests with 24 collection errors, and 50,215 hermes tests with 57 errors, with
 no network.
 
 **Offline check.** `test_sandbox.py` unit-tests the argv rewrite, the staging
-repack, and `sbx_inside.py` setup and harvest on a plain clone. With
-`CANON_SBX_E2E=1`, it also runs both arms of a workspace rule for each agent
+repack, and `sbx_inside.py` setup and harvest on a plain clone. With a fake
+`sbx`, it checks the exact `sbx create` argv and that an allowed probe host
+refuses the run before the agent starts. With `CANON_SBX_E2E=1`, `sbx` on
+`PATH`, and a skill-ci checkout at `$SKILL_CI` with `uv`, it also runs both arms of a workspace rule for each agent
 in real sandboxes with `offline/sbx-agent` as the agent. That stand-in exits
 nonzero unless the prompt carries the invocation, the skills are linked, the
 persona is registered, the flags give it full tools, and its cwd is the
