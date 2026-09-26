@@ -25,6 +25,7 @@ Validation and error handling:
 
 Code organization:
 - Business logic in pure functions with no framework dependencies
+- In review, flag imports that point outward. A domain or policy module that imports a framework, driver, ORM, IO library, generated schema type, or adapter module, type-only imports included, should receive that value as plain data from its caller instead.
 - Parse functions: pure transforms from raw bytes to typed state
 - Prompt construction: structured state in, string out
 - Scoring and assessment: pure transforms from state to results
