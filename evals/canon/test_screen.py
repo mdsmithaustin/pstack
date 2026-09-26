@@ -56,7 +56,9 @@ class OneChangeAcrossTreeTests(unittest.TestCase):
 
     def test_every_shipped_rule_is_one_change_across_all_tracked_skills(self):
         tree = screen.tracked("skills")
-        for rule in (rule for rule in screen.load_rules() if rule.paired):
+        rules = [rule for rule in screen.load_rules() if rule.paired]
+        self.assertIn("value-type", [rule.id for rule in rules])
+        for rule in rules:
             with self.subTest(rule=rule.id):
                 change = screen.rule_change(rule, tree)
                 self.assertEqual(change.target, rule.target)
@@ -204,7 +206,9 @@ class CasePromptTests(unittest.TestCase):
     def test_no_case_prompt_contains_another(self):
         """The offline stand-in answers for the first case whose prompt its
         input contains, so a prompt shared across rules grades the wrong rule."""
-        self.assertEqual(screen.prompt_clashes([case for rule in screen.load_rules() for case in rule.cases]), [])
+        cases = [case for rule in screen.load_rules() for case in rule.cases]
+        self.assertIn("marketplace-subtotal", [case.id for case in cases])
+        self.assertEqual(screen.prompt_clashes(cases), [])
 
 
 class SkillFilesReadTests(unittest.TestCase):
@@ -230,11 +234,12 @@ class SkillFilesReadTests(unittest.TestCase):
     def test_listing_and_unfinished_reads_do_not_count(self):
         read = screen.skill_files_read(
             self.events("ls skills/pstack")
-            + self.events("cat skills/pstack/poteto-mode/playbooks/feature.md", status="in_progress"),
+            + self.events("cat skills/pstack/poteto-mode/playbooks/feature.md", status="in_progress")
+            + self.events("cat skills/pstack/principle-laziness-protocol/SKILL.md"),
             self.files,
         )
 
-        self.assertEqual(read, [])
+        self.assertEqual(read, ["principle-laziness-protocol/SKILL.md"])
 
 
 class ExposureRecordTests(unittest.TestCase):

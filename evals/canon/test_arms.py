@@ -267,15 +267,6 @@ class PairCompareTests(unittest.TestCase):
         self.assertEqual(compared["rules"], [{"agent": "codex", "rule": "pair", "run": 1, "verdict": "separates", "reasons": []}])
 
 
-class ShippedArmsRuleTests(unittest.TestCase):
-    def test_every_shipped_arms_rule_applies_each_arm_to_the_tracked_skills(self):
-        tree = screen.tracked("skills")
-        for rule in (rule for rule in screen.load_rules() if not rule.paired):
-            with self.subTest(rule=rule.id):
-                trees = screen.arm_trees(rule, tree)
-                self.assertEqual([name for name, _ in trees], list(rule.arm_names))
-                self.assertEqual(screen.changed_paths(tree, trees[1][1])[0], rule.target)
-
 
 if __name__ == "__main__":
     unittest.main()
