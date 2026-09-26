@@ -922,7 +922,8 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
     harness("run-agent", "--agent", agent, "--model", model, *backend,
             "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
             "--timeout", timeout or case_build["timeout_s"], env=run_env)
-    leaks = workspace.credential_findings(work)
+    known = workspace.checkout_tokens(case_build["workspace"]["checkout"]) if "workspace" in case_build else set()
+    leaks = workspace.credential_findings(work, known)
     if leaks:
         raise ScreenError(f"{work}: credential material in the run output: "
                           + ", ".join(f"{path} ({kind})" for path, kind in leaks))

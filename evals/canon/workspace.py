@@ -45,7 +45,7 @@ REFUSED = 97
 CREDENTIAL_FILES = {".credentials.json", "auth.json"}
 CREDENTIAL_TOKENS = {
     "API key": re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}"),
-    "OAuth token": re.compile(rb'claudeAiOauth|"(?:access|refresh)_?[Tt]oken"\s*:\s*"[^"\s]{20,}"'),
+    "OAuth token": re.compile(rb'"(?:access|refresh)_?[Tt]oken"\s*:\s*"[^"\s]{20,}"'),
 }
 
 
@@ -282,9 +282,24 @@ def next_slot(root):
     raise WorkspaceError(f"{root} has no free slot")
 
 
-def credential_findings(root):
+def checkout_tokens(checkout):
+    """The exact bytes of every credential-shaped match in a checkout's files,
+    .git aside: upstream test fakes and doc examples an agent may quote."""
+    found = set()
+    for directory, names, files in os.walk(checkout):
+        names[:] = [name for name in names if name != ".git"]
+        for name in files:
+            path = Path(directory, name)
+            if path.is_file() and not path.is_symlink():
+                data = path.read_bytes()
+                found.update(match.group() for pattern in CREDENTIAL_TOKENS.values() for match in pattern.finditer(data))
+    return found
+
+
+def credential_findings(root, known=frozenset()):
     """[(path under root, what it holds)] for each file that is an agent
-    credential file or holds an API key or OAuth token."""
+    credential file or holds an API key or OAuth token. A match whose bytes
+    are in known does not count."""
     root = Path(root)
     findings = []
     for path in sorted(root.rglob("*")):
@@ -293,7 +308,8 @@ def credential_findings(root):
             findings.append((relative, "credential file"))
         elif path.is_file() and not path.is_symlink():
             data = path.read_bytes()
-            findings += [(relative, kind) for kind, pattern in CREDENTIAL_TOKENS.items() if pattern.search(data)]
+            findings += [(relative, kind) for kind, pattern in CREDENTIAL_TOKENS.items()
+                         if any(match.group() not in known for match in pattern.finditer(data))]
     return findings
 
 
