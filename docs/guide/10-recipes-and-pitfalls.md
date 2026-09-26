@@ -36,6 +36,8 @@ Each worker owns one package. The parent waits for every slice and returns one `
 
 The qualifiers do real work. "don't change anything yet" keeps it read-only, and the nitpick rule pre-filters the noise so `Act on` findings are worth your time.
 
+For someone else's pull request, `/poteto-mode review this PR` runs the [Code review playbook](../../skills/poteto-mode/playbooks/code-review.md). It checks vocabulary, boundaries, shared callers, and tests against the principles, and it calls `/interrogate` for a large or contested change.
+
 ## Fix a bug through a failing test
 
 ```text
