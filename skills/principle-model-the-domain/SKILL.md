@@ -26,3 +26,9 @@ Encode the real domain in a data structure instead of scattering it across condi
 Do not force an abstraction. Prefer boring code if the current shape is already clear, local, and unlikely to grow. Be skeptical of an abstraction that adds indirection without removing branches, duplicated rules, invalid states, or lifecycle risk.
 
 The sign that you skipped this is a new feature that grows an existing if/else chain by one more branch, or a second boolean that must stay in sync with the first. Temporal decomposition is another sign. Phase-named modules repeat the same domain rules across steps.
+
+**In review.** When you review someone else's change, also check these three.
+
+- **One name per concept.** Flag a new name for a concept the code already names. The fix direction is to keep the code's word.
+- **Separate contexts.** One word can name different concepts in two parts of the codebase. Flag a change that combines them into one type whose fields are optional per meaning. The fix direction is a separate type in each part that shares only what means the same thing in both, such as an id. Convergence applies to one concept, not to one word.
+- **Shared code answers to every caller.** List the callers of each shared function, type, or constant the change touches. Flag a change made for one request that alters behavior for a caller serving a different business function. The fix direction is to fork the shared piece and change only the requester's path. Look-alike code that different business functions change is two decisions, so do not ask to merge it.
