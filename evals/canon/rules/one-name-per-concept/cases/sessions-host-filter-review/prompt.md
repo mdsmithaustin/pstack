@@ -1,0 +1,1 @@
+I'd like a second pair of eyes on `sessions-list-host-filter` before it goes into main. It lets the session list and the Python client filter by host. Its description is saved in pr-body.md. Please review it against main; comments here are enough, nothing needs to be committed or pushed.

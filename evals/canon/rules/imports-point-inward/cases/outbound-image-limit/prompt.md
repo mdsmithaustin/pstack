@@ -1,0 +1,1 @@
+Could you give `feat/outbound-image-limit` a review against main before I merge it? It lets people raise the outbound image ceiling that the send-path screenshot eviction uses, through two new `vision.*` config keys. The PR description is in pr-body.md. Just the review please, no need to commit or push anything.

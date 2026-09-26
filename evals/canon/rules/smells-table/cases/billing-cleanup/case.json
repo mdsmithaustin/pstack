@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "refactoring",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Moves invoice_total next to Customer and replaces the street, city, postal_code triple with one parameter object.",
+    "Adds no helper module and no new one-caller function, keeps billing.run output unchanged, and names Move Function and Introduce Parameter Object in the commit messages."
+  ]
+}

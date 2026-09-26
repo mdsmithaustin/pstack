@@ -20,7 +20,7 @@ hunks, a hunk with unchanged lines between its edits, and a patch that no
 longer matches `skills/`. Each arm gets its own manifest with the same case,
 prompt, and mount name. `screen.py` runs only the `with_skill` rows, grades
 each arm with the rule's executable oracle, and prints the pair side by side. No
-judge runs.
+judge runs, except for review cases.
 
 A rule has one or more cases. A `positive` case is one where the rule should
 change the answer. A `near-miss` case is one where the rule must not change it.
@@ -304,8 +304,10 @@ tests skip when the mirror lacks the pinned commit.
 The omnigent cases grade the diff statically, with the AST of the Python files
 it touches. Their upstream tests need pyyaml, pydantic, and pytest, which the
 networkless image does not have. omnigent's `AGENTS.md` asks for `pre-commit`
-before any commit, so each prompt says there is no need to commit. None of
-these cases needs an overlay.
+before any commit, so each prompt says there is no need to commit. It also
+asks for a `@deprecated` marker on anything slated for removal, so the
+one-name check skips a `@deprecated` def and a parameter declared with
+`deprecated=True`. None of these cases needs an overlay.
 
 Each run costs one checkout. On an Apple silicon Mac on 2026-09-24, omnigent
 (5,545 files) took 1.0 s to check out, 0.3 s to diff, and 102 MB of disk.
@@ -314,6 +316,178 @@ workspace after each run. `run_agent_tasks` in `skill_benchmark.py` at the
 pinned commit c2a1735 creates it with `tempfile.TemporaryDirectory`. The
 mirrors take 38 MB and 76 MB once, and each reference checkout takes the same
 space as one run.
+
+## Review cases
+
+A review case screens how poteto-mode reviews a flawed pull request, not how
+it builds one. It is a workspace case whose `case.json` also names the PR:
+
+```json
+"workspace": {"repo": "omnigent", "commit": "<40-character sha>"},
+"review": {"patch": "pr.patch", "title": "Add retry budgets", "body_file": "pr-body.md", "branch": "retry-budgets"}
+```
+
+```
+cases/<case-id>/
+  case.json           kind, domain, expected_behavior, workspace, review; timeout_s optional
+  pr.patch            the PR as a git diff or format-patch that applies to the pinned commit
+  pr-body.md          the PR description, named by review.body_file
+  prompt.md           an organic request, e.g. "Can you review the change on branch retry-budgets
+                      against main before I merge it? The PR description is in pr-body.md."
+  rubric.md           judge only: the flaw or decoy, and what counts as each verdict
+  samples/labels.json {"review-found.md": "FOUND", ...}
+  samples/review-*.md calibration reviews, one per label
+```
+
+`kind` is `positive` for a seeded flaw and `near-miss` for a clean or decoy PR
+that must not be flagged for the rule's concern. A positive case's labels are
+`FOUND`, `PARTIAL`, or `MISSED`. A near-miss case's labels are `FALSE_ALARM` or
+`CLEAN`. The build refuses a review case without `rubric.md` or
+`labels.json`, a label outside its kind's verdicts, a branch named `main`, and
+a body file name that is also an overlay path. The meta-word check covers the
+prompt, the PR title, the branch, the body, and any overlay, but not
+`pr.patch`, which is upstream-shaped code.
+
+**Checkout.** `workspace.py` checks out the pinned commit, points a local
+`main` at it, and creates the PR branch. It applies `pr.patch` with `git apply
+--index` and commits it as `Sam Rivera <sam.rivera@example.com>`, with the PR
+title as the message. The author and committer date is the pinned commit's
+committer date plus one hour. With that fixed date, the PR commit id depends
+only on the case. The PR branch stays checked out. The body file sits
+untracked in the workspace root under its own name, so `git status` shows
+`?? pr-body.md`, as a saved description would. The body is part of the
+recorded tree, so it never shows in the harvested diff unless the agent edits
+it. Each arm's `workspace/` holds `pr.patch`, the body under `overlay/`, and
+`workspace.json` with `review.refs`, the commit ids of `main` and the PR
+branch. `build.json` records the same `review` object per case beside the
+tree id and the per-arm input hash. The build refuses arms whose inputs
+differ. The entry wrapper refuses to start the agent when its tree or either
+ref differs from the recorded one. `rubric.md` and `samples/` are never copied
+into an arm, and `test_review.py` checks that.
+
+Under `--runner sbx` the clone inside the sandbox may carry only the
+checked-out branch. `sbx_inside.py setup` therefore recreates `main` and the
+PR branch from the recorded ids, checks the PR branch out, and checks HEAD.
+
+**Harvest.** The review is the agent's final message, in `output.md` as for
+every run. Files it writes land in `workspace.diff`. For a review case the
+wrapper also records `head_after` and `refs_after`. A review must not modify
+the PR, but a nonempty diff or a moved HEAD is recorded, never a failure. The
+judge sees that diff as the files the reviewer changed or added.
+
+**Precheck and judge.** `oracle.py` is the precheck.
+`CHECKS[case](answer, workspace)` returns failures unless the review names the
+case's file or symbol, or the decoy's for a near-miss. The harness grade runs
+only the precheck. After grading, `run` judges each review run and writes
+`<work>/judge.json`. A verdict that says the review flagged the location
+(`FOUND`, `PARTIAL`, or `FALSE_ALARM`) counts only when the precheck passes.
+Otherwise the combined verdict is `MISSED` for a positive case and `CLEAN` for
+a near-miss. For the pair, a combined `FOUND` or `CLEAN` is a pass and
+anything else is a fail. An unjudged run is `INVALID`.
+
+The judge is our own runner in `review.py`, not the harness's `judge`
+command. The pinned harness (c2a1735) renders every judge prompt through
+`judge_prompt`, which opens with "You are grading one Skill Eval Harness judge
+assertion" and puts `case_id` and the assertion into the payload. Its plain
+contract is fixed to `{passed, score, rationale}` (`verdict_schema_for`), so
+it cannot return a five-way verdict against a per-case rubric. The runner
+borrows the harness's CLI flags, among others: Claude runs `claude -p
+--output-format json --no-session-persistence --tools= --json-schema
+<schema>`, and Codex runs `codex exec --json --ephemeral --sandbox read-only
+--output-schema <schema> --output-last-message <file>`. sbx refuses an empty
+argv element, so the empty tool list is spelled `--tools=`.
+
+- **Cross-family.** Codex `gpt-6-sol` judges a Claude review and Claude
+  `opus` judges a Codex review (`review.JUDGE_FOR`). `screen.py judge --judge
+  B:M` overrides that.
+- **Sandbox.** Each call gets its own sandbox from the agent kit, with the run
+  deny list, and the sandbox is removed afterwards. Before the judge starts,
+  the same policy probe as a run's step 2 must deny every `run_deny_network`
+  host and example.org, or the call fails with that error and no verdict. It starts from the case repo's dependency template
+  when one exists, because that template pins the CLI. A Codex judge needs
+  it, since the kit's Codex does not list `gpt-6-sol`.
+- **Blinding.** The judge sees the rubric, the PR title, body, and diff, the
+  review under the label `review-<sha256[:8]>` of its own text, and the
+  reviewer's diff. It never sees the rule, arm, case directory, or agent. The
+  review loses the mounted skill paths, the invocation, the rule id, and any
+  agent or vendor name (`claude`, `codex`, `gpt-*`, `opus`, and so on) that
+  the PR and rubric never use. A repo about those tools keeps its own file
+  names. `judge.json` lists every redaction.
+- **Strict output.** Exactly `{"verdict": ..., "evidence": ...}`, one bare or
+  fenced JSON object. The verdict must be one of the case kind's verdicts.
+  Anything else is recorded as an error with no verdict, never guessed.
+  `evidence_in_review` records whether the evidence quotes the review.
+
+`CANON_JUDGE_STANDIN=evals/canon/offline/judge` swaps in a stand-in at no
+cost. It answers with the label of the calibration sample the review
+matches.
+
+The judge prompt, with `{verdicts}` and `{meanings}` filled per kind:
+
+```
+You are grading one code review of a pull request against a grading guide.
+
+Someone asked a reviewer to review the pull request below before it merges. Decide how the review handles the one concern the grading guide describes. Judge only that concern. Other findings, length, and tone neither help nor hurt.
+
+Allowed verdicts: FOUND, PARTIAL, MISSED.
+- FOUND: the review names where the flaw is, says what is wrong, and gives a fix direction the guide accepts.
+- PARTIAL: the review touches the flaw but lacks the location, the problem, or a fix direction the guide accepts.
+- MISSED: the review does not identify the flaw.
+
+Return only a JSON object with exactly two keys:
+- "verdict": one of FOUND, PARTIAL, MISSED.
+- "evidence": a short verbatim quote from the review that decides the verdict, or "" when the review says nothing about the concern.
+
+<grading_guide>{rubric.md}</grading_guide>
+<pull_request>Title, Description, Diff against main</pull_request>
+<review label="review-xxxxxxxx">{review}</review>
+<files_the_reviewer_changed_or_added>{workspace.diff or (none)}</files_the_reviewer_changed_or_added>
+```
+
+A near-miss case gets `Allowed verdicts: FALSE_ALARM, CLEAN.` with "the
+review flags the concern the guide describes as a problem in this pull
+request, and the guide says it is not one" and "the review does not flag
+that concern as a problem".
+
+**Calibration.** `screen.py calibrate [--judge B:M ...] RULE ...` judges every
+labeled sample of every review case with each judge (both by default). It
+prints agreement per label and stores the record under
+`$CANON_CACHE/calibration/<rule>/<case>/<runner>-<backend>-<model>.json`,
+where the runner is `model` or `standin`. The record
+is keyed by the prompt template version, judge, kind, rubric, and PR, so a
+change to any of them voids it. A case is calibrated for a judge only when
+every sample agreed. Otherwise its run verdicts carry `calibrated: false` with
+the reason, `compare` prints `uncalibrated: <reason>`, and the rule line ends
+`[judge uncalibrated]`. The samples' precheck results are recorded too. A
+sample labeled `FOUND` whose precheck fails means the oracle and the label
+disagree.
+
+**Scores.** `compare` prints one review line per agent, rule, and arm, and
+writes the same to `compare.json` `review_scores`:
+
+```
+codex  discount-review            review amended: recall FOUND 1/1 (1.00), FOUND+PARTIAL 1/1 (1.00); false alarms 0/1 (0.00); precheck 1/1 (1.00); 0 unjudged, 0 uncalibrated
+```
+
+Recall counts positive runs and the false-alarm rate counts near-miss runs,
+both on the combined verdict. The precheck rate counts positive runs.
+
+**Pilot.** One rule per agent through poteto-mode. Calibrate first, then run
+into a fresh `--out`:
+
+```sh
+rule=<review rule>
+python3 evals/canon/screen.py calibrate "$rule"
+python3 evals/canon/screen.py run --runner sbx --agent claude --model sonnet --entry poteto-mode --out "/private/tmp/canon-review/claude-$rule-$(date +%m%d%H%M)" "$rule"
+python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-6-sol --entry poteto-mode --out "/private/tmp/canon-review/codex-$rule-$(date +%m%d%H%M)" "$rule"
+```
+
+On 2026-09-25 two Codex judge calls from the omnigent Codex template reached
+`chatgpt.com/backend-api/codex` and got `401 Unauthorized: Incorrect API key
+provided: sk-svcac...`. The sandbox proxy's stored OpenAI credential was
+rejected, so refresh it (`sbx secret set openai --oauth`) before a paid
+screen. A Claude judge call with a model name that does not exist got as far
+as `unrecognized_model` with every flag accepted.
 
 ## Stopped runs
 
@@ -325,11 +499,25 @@ stopped after the agent ran, whether its harvest slots are still numbered
 `0001`, ... or it has no `grade.json`, is recovered by `screen.py regrade
 --out DIR`. regrade maps the slots with the same tree check as `run`, then
 grades each run from its diff. Such a run's `compare.json` row carries
-`graded_from_diff` and `ungraded`.
+`graded_from_diff` and `ungraded`. A review arm then needs `screen.py judge
+--out DIR`.
+
+## Authoring review cases
+
+`review_cases.py check [RULE/CASE ...]` runs the authoring checks the build
+does not: the patch applies to the pinned commit as one commit, it changes 50
+to 300 lines outside lockfiles, the lines it adds carry no meta vocabulary,
+the prompt names the branch and the body file, `rubric.md` does not carry the
+rule id, and every `FOUND` and `FALSE_ALARM` sample passes the precheck.
+`review_cases.py checkout RULE/CASE DEST` builds `main` and the PR branch
+for a look by hand. A review oracle calls `shared.review_names(answer,
+location)` with regexes for the flawed file or symbol, or the decoy's.
 
 ## Rule texts
 
-R6 is labeled "Observe through the caller's interface". It sits right before
+R7 says "Write Given, When, Then or Gherkin-style tests" where the draft said
+"these tests", because the current skill has no Given, When, Then paragraph. R6
+is labeled "Observe through the caller's interface". It sits right before
 **The fix** and narrows that paragraph's mock sentence to "For a mock at a
 system boundary, assert the payload it received, not that it was called", so
 both edits form one hunk. `preparatory-refactor` now sits in step 6 of the
@@ -359,8 +547,11 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 ```
 
 `python3 -m unittest` runs `test_screen.py`, `test_arms.py`, `test_workspace.py`,
-`test_sandbox.py` (its sandbox runs need `CANON_SBX_E2E=1`,
-see Sandboxed runs), and `test_oracles.py`, which loads `oracles/test_shared.py` and every
+`test_review.py` (review checkouts, the judge, calibration, scores, and stopped
+runs, with an offline review run when skill-ci is present, and its
+`SandboxedReviewRunTests` gated on `CANON_SBX_E2E=1`), `test_review_cases.py`
+(the seeded review cases), `test_sandbox.py` (its sandbox runs need
+`CANON_SBX_E2E=1`, see Sandboxed runs), and `test_oracles.py`, which loads `oracles/test_shared.py` and every
 `rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
 mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
 workspace rule through the offline pipeline and checks both harvested diffs. It
@@ -600,6 +791,10 @@ one poteto-agent spawn, plus transcripts for the lead and the delegate.
 Claude's trace carries two `result` events, and the test checks that
 `raw-stream.jsonl` holds both. Both agents print `SEPARATES`, and each takes
 about 50 seconds.
+The same stand-in, run through `screen.py run --runner sbx` on the three-arm
+rule `bundle-separate-contexts-harness` and its omnigent case
+`harness-families`, printed `leaf vs current: SEPARATES`, `leaf+trigger vs
+current: SEPARATES`, and `leaf+trigger vs leaf: TIE-PASS`.
 
 ```sh
 (cd evals/canon && CANON_SBX_E2E=1 python3 -m unittest test_sandbox -v)

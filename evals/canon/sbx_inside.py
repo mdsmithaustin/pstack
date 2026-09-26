@@ -69,9 +69,16 @@ def setup(manifest_path):
     payload = Path(manifest_path).parent
     root = Path(manifest["root"])
     record = {}
+    review = manifest.get("review")
+    expected = review["refs"][review["branch"]] if review else manifest["commit"]
+    if review:
+        workspace.git("checkout", "-q", "--detach", expected, cwd=root)
+        for name, sha in review["refs"].items():
+            workspace.git("branch", "-f", name, sha, cwd=root)
+        workspace.git("checkout", "-q", review["branch"], cwd=root)
     head = workspace.git("rev-parse", "HEAD", cwd=root).decode().strip()
-    if head != manifest["commit"]:
-        raise workspace.WorkspaceError(f"the clone is at {head}, not {manifest['commit']}")
+    if head != expected:
+        raise workspace.WorkspaceError(f"the clone is at {head}, not {expected}")
     shutil.copytree(payload / "skills", root / "skills", symlinks=True, dirs_exist_ok=True)
     mounted = sorted(path.relative_to(root).as_posix() for path in (root / "skills").rglob("*") if path.is_file())
     workspace.exclude(root, workspace.mount_roots(mounted, tracked(root, head)))
@@ -101,6 +108,8 @@ def harvest(manifest_path, out):
         record["diff_bytes"] = len(diff)
     except workspace.WorkspaceError as exc:
         record["error"] = f"harvest: {exc}"
+    if manifest.get("review"):
+        record.update(workspace.head_state(root))
     record["workspace_bytes"] = workspace.disk_bytes(root)
     source, destination = HOME / manifest["transcripts"]["from"], out / "transcripts" / manifest["transcripts"]["to"]
     if source.is_dir():

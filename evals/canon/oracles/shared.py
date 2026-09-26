@@ -150,3 +150,10 @@ def apply_diff(checkout, diff):
             if (stage / path).is_symlink():
                 raise OracleError(f"workspace diff leaves a symlink at {path}")
         return {path: (stage / path).read_bytes() if (stage / path).is_file() else None for path in paths}
+
+
+def review_names(answer, location):
+    """Failures unless answer matches one of the location regexes."""
+    if any(re.search(pattern, answer, re.IGNORECASE) for pattern in location):
+        return []
+    return ["the review does not name the file or symbol under review"]
