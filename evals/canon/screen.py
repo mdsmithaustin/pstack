@@ -127,7 +127,9 @@ ERROR_LOG = "screen-error.log"
 LEGACY_CASES = {
     "observe-through-interface": "register-email",
     "translate-foreign-model": "paylane-webhooks",
+    "notation-not-runtime": "checkout-rules",
     "preparatory-refactor": "csv-export",
+    "fork-shared-helper": "payroll-overtime",
 }
 
 

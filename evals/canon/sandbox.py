@@ -561,9 +561,11 @@ def run_judge(backend, model, prompt, verdict_schema, repo=None, commit=None):
             with timed(record["timings"], "create_s"):
                 box = Sandbox.create(f"{PREFIX}judge-{backend}-{secrets.token_hex(4)}", conf["kit"], None, template, CONFIG["run_deny_network"])
             record["sandbox"] = box.name
-            box.unpack(payload, JUDGE_DIR)
             record["policy"] = box.policy()
-            record["reachable"] = box.reachable([*conf["api"], *CONFIG["run_deny_network"]])
+            record["reachable"] = box.reachable(conf["api"])
+            record["egress"], allowed = egress(box)
+            refuse_open_egress(allowed)
+            box.unpack(payload, JUDGE_DIR)
             record["version"] = box.exec("sh", "-c", f"{backend} --version").stdout.decode().strip()
             command = ["timeout", "--kill-after=30", str(JUDGE_TIMEOUT_S), *judge_command(backend, model, verdict_schema)]
             with timed(record["timings"], "judge_s"):

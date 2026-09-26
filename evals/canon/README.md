@@ -401,8 +401,9 @@ argv element, so the empty tool list is spelled `--tools=`.
   `opus` judges a Codex review (`review.JUDGE_FOR`). `screen.py judge --judge
   B:M` overrides that.
 - **Sandbox.** Each call gets its own sandbox from the agent kit, with the run
-  deny list, so only the kit's model API hosts are reachable, and the sandbox
-  is removed afterwards. It starts from the case repo's dependency template
+  deny list, and the sandbox is removed afterwards. Before the judge starts,
+  the same policy probe as a run's step 2 must deny every `run_deny_network`
+  host and example.org, or the call fails with that error and no verdict. It starts from the case repo's dependency template
   when one exists, because that template pins the CLI. A Codex judge needs
   it, since the kit's Codex does not list `gpt-6-sol`.
 - **Blinding.** The judge sees the rubric, the PR title, body, and diff, the
@@ -514,7 +515,9 @@ location)` with regexes for the flawed file or symbol, or the decoy's.
 
 ## Rule texts
 
-R6 is labeled "Observe through the caller's interface". It sits right before
+R7 says "Write Given, When, Then or Gherkin-style tests" where the draft said
+"these tests", because the current skill has no Given, When, Then paragraph. R6
+is labeled "Observe through the caller's interface". It sits right before
 **The fix** and narrows that paragraph's mock sentence to "For a mock at a
 system boundary, assert the payload it received, not that it was called", so
 both edits form one hunk. `preparatory-refactor` now sits in step 6 of the
