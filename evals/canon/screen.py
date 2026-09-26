@@ -120,6 +120,7 @@ ERROR_LOG = "screen-error.log"
 LEGACY_CASES = {
     "observe-through-interface": "register-email",
     "translate-foreign-model": "paylane-webhooks",
+    "preparatory-refactor": "csv-export",
 }
 
 

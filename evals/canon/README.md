@@ -343,9 +343,11 @@ delegate brief.
 These need Docker, `uv`, and a skill-ci checkout at `../skill-ci` or
 `$SKILL_CI` with its `runner.lock`. `audit` and `run` call the harness through
 `uv run <skill-ci>/tools/run_runner.py`. Without a running Docker daemon, the
-oracle tests that run answer code skip. The unit tests need neither skill-ci
-nor `uv`; only `audit` and `run` do. The `lint` workflow pulls the image and
-runs the unit tests on every pull request.
+oracle tests that run answer code skip. `audit` and `run` need skill-ci and
+`uv`, and so do the offline workspace runs in `test_workspace.py`, which skip
+without them. On every pull request the `lint` workflow pulls the image,
+checks out skill-ci at the commit `skill-checks.yml` pins, installs uv, and
+runs the unit tests.
 
 ```sh
 docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
