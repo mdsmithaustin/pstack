@@ -1,0 +1,8 @@
+{
+  "cases_from": "domain-words",
+  "arms": [
+    "current",
+    "cut"
+  ],
+  "source": "Upstream cursor/plugins #419 (b0b9c7a) cuts held by the port because their A/B ran an Opus 5.5 lead only. The cut arm removes the six held lines in feature, bug-fix, refactoring, poteto-tdd, never-block-on-the-human, and outcome-oriented-execution. A cut is safe on an agent when current and cut tie. Run on case session-lineage-usage (Feature playbook, hermes)."
+}

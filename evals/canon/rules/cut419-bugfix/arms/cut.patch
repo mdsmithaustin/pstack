@@ -1,0 +1,91 @@
+diff --git a/skills/poteto-mode/playbooks/bug-fix.md b/skills/poteto-mode/playbooks/bug-fix.md
+index 2dca2d68..3a72394b 100644
+--- a/skills/poteto-mode/playbooks/bug-fix.md
++++ b/skills/poteto-mode/playbooks/bug-fix.md
+@@ -6,12 +6,10 @@ Be scientific. Every shipped line traces to runtime evidence. Belt-and-suspender
+ 
+ 1. Reproduce it yourself on the matching surface via the control skill (Non-negotiables), even when a debug or instrumentation protocol says to ask the user to reproduce. Ask the user only with a stated, specific reason the control surface cannot reach the target, and only after driving it as far as it goes. If it won't reproduce directly, synthesize the trigger, tighten conditions, or instrument until it fires.
+ 2. Binary-search the cause. Form the candidate hypotheses, then rule them out until one survives. Seed them with `how` over the affected subsystem and the **why** skill for regression history. Each pass, take the split that cuts the most remaining problem space, get runtime evidence, eliminate. When program state is unclear, add instrumentation or logging and read it as the code runs. Don't guess. Drive a long or stubborn hunt with your CLI's loop mechanism (per the **pstack-harness** skill). Confirm the surviving *mechanism* with runtime evidence before the step-3 architect/interrogate fan-out.
+-3. Plan the fix. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using your configured bug-fix model and effort (default `sonnet`, effort per the **pstack-harness** skill) with a specific scope. Disjoint file sets get one delegate each in one message. Review the diff. A follow-up after review is a fresh delegate with consolidated scope, never a resume.
++3. Plan the fix. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent using your configured bug-fix model and effort (default `sonnet`, effort per the **pstack-harness** skill) with a specific scope. Disjoint file sets get one delegate each in one message. A follow-up after review is a fresh delegate with consolidated scope, never a resume.
+ 4. Verify on the same surface. The original repro now passes. "Inconclusive" or wrong-surface is not a pass. Flag it. Unit tests show branch behavior, not bug absence.
+ 5. Stage the commits so the failing repro lands before the fix in git history. See the **poteto-tdd** skill for the failing-test-first cadence when the bug has a cheap local test path. Skip it when the test would be expensive, integration-heavy, or unclear.
+    This is the canonical **sequence-verifiable-units** principle skill, the failing test first and the fix on top.
+ 6. Run **Opening a PR**.
+ 
+-Investigation fans out `how` + `why` as parallel subagents.
+-
+ **Reply:** what was broken, root cause, fix, how you verified. Paste failing-then-passing repro output verbatim.
+diff --git a/skills/poteto-mode/playbooks/feature.md b/skills/poteto-mode/playbooks/feature.md
+index ee69a76b..eab63d12 100644
+--- a/skills/poteto-mode/playbooks/feature.md
++++ b/skills/poteto-mode/playbooks/feature.md
+@@ -9,7 +9,7 @@
+    - **Independent workstreams.** Disjoint files, services, or layers parallelize. Shared writes serialize.
+    - **Shared mutable state.** Default to splitting the target (the **separate-before-serializing-shared-state** principle skill). Serialize only for real invariants.
+    - **Smallest safe decomposition.** If one worker is best, name why.
+-4. Delegate code-writing to a subagent using your configured feature model and effort (default `sonnet`, effort per the **pstack-harness** skill) with a specific scope (file paths, named data shape and its organizing structure per **principle-model-the-domain**, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic, and success criteria). Carry the checkpoint's independent workstreams into the briefs. Disjoint file sets get one delegate each, spawned at this level in one message. Coupled work gets one owner whose brief names the split it may make. Review every diff yourself. When the implementation admits multiple valid shapes (error handling, abstraction layer, test structure), delegate via the **arena** skill instead so the runners surface the alternatives and the cross-judge guards the pick. Mandatory: no skip-with-reason escape, and Laziness Protocol does not override it (the gain is review separation, not lines saved). You can spawn a subagent even though you are one. "The app is small" and "a subagent cannot spawn one" are both wrong. A subagent forbidden to spawn satisfies this by owning the diff directly with the same review separation. No "standing by" reply that waits on a nested agent. Comments per **Comments**. Surgical edits, re-ground against the source for upstream-derived files. Port shared-primitive improvements to all consumers and verify each. Commit liberally.
++4. Delegate code-writing to a subagent using your configured feature model and effort (default `sonnet`, effort per the **pstack-harness** skill) with a specific scope (file paths, named data shape and its organizing structure per **principle-model-the-domain**, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic, and success criteria). Carry the checkpoint's independent workstreams into the briefs. Disjoint file sets get one delegate each, spawned at this level in one message. Coupled work gets one owner whose brief names the split it may make. When the implementation admits multiple valid shapes (error handling, abstraction layer, test structure), delegate via the **arena** skill instead so the runners surface the alternatives and the cross-judge guards the pick. Mandatory: no skip-with-reason escape, and Laziness Protocol does not override it (the gain is review separation, not lines saved). A subagent forbidden to spawn satisfies this by owning the diff directly with the same review separation. No "standing by" reply that waits on a nested agent. Comments per **Comments**. Surgical edits, re-ground against the source for upstream-derived files. Port shared-primitive improvements to all consumers and verify each. Commit liberally.
+ 5. Verify on the matching surface against the accepted scope and integrated result, per [Prove It Works](../../principle-prove-it-works/SKILL.md). "Inconclusive" or wrong-surface is not a pass. Flag it.
+ 6. Rebase into small, ordered commits. Stack follow-ups.
+    Use the **sequence-verifiable-units** principle skill, building, verifying, and committing each small unit before the next.
+diff --git a/skills/poteto-mode/playbooks/refactoring.md b/skills/poteto-mode/playbooks/refactoring.md
+index 69ee8669..559af521 100644
+--- a/skills/poteto-mode/playbooks/refactoring.md
++++ b/skills/poteto-mode/playbooks/refactoring.md
+@@ -8,8 +8,8 @@ If the cleanup reveals a missing feature or a real bug, split it out and ship th
+ 2. Name the structure the code is missing per **principle-model-the-domain**. Boring code stays when the shape is already clear and local. The reshape must delete branches or invalid states, not add indirection.
+ 3. Name the target shape. State what the module layout, types, and call graph should be if built today (**principle-foundational-thinking**, **principle-redesign-from-first-principles**). If the target crosses a function boundary, run the **architect** skill for parallel design exploration of the shape before the move.
+ 4. Subtract before you add. Delete dead code, collapse one-caller wrappers, drop redundant validators, and remove orphan references before introducing the new shape (**principle-subtract-before-you-add**). The smallest change that reaches the target shape ships (**principle-laziness-protocol**). A speculative cleanup that "might help" gets reverted.
+-5. Move in small behavior-preserving steps, each keeping the pin green. For API reshapes, migrate every caller and delete the old API in the same wave (**principle-migrate-callers-then-delete-legacy-apis**). No compatibility shims, no parallel old-and-new paths. Spot-check every rename against the actual files. Renames silently miss usages in strings, prose, and back-references. If the repo has a GitNexus index (`.gitnexus/` exists), refresh it first (`gitnexus analyze --index-only`, incremental and a no-op when up to date; rerun it whenever a staleness notice appears mid-wave before the next graph query), then enumerate callers with `gitnexus impact <symbol>` and `gitnexus context <symbol>` before the wave — and still spot-check against the actual files: the index reflects the last analyzed commit and never sees uncommitted edits. Delegate the mechanical edits to a subagent using your configured refactoring model (default `sonnet`) with a specific scope (file paths, the names being moved, the behavior to hold). Review the diff yourself.
+-6. Prove behavior is unchanged on the real artifact, not "it compiles" (**principle-prove-it-works**). For larger reshapes, run an equivalence check: a script that diffs old-vs-new outputs, a recorded baseline replayed against the new code, or a smoke run on the matching surface via the relevant control skill. Own the verification yourself. Do not trust a delegate's "looks good" summary.
++5. Move in small behavior-preserving steps, each keeping the pin green. For API reshapes, migrate every caller and delete the old API in the same wave (**principle-migrate-callers-then-delete-legacy-apis**). No compatibility shims, no parallel old-and-new paths. Spot-check every rename against the actual files. Renames silently miss usages in strings, prose, and back-references. If the repo has a GitNexus index (`.gitnexus/` exists), refresh it first (`gitnexus analyze --index-only`, incremental and a no-op when up to date; rerun it whenever a staleness notice appears mid-wave before the next graph query), then enumerate callers with `gitnexus impact <symbol>` and `gitnexus context <symbol>` before the wave — and still spot-check against the actual files: the index reflects the last analyzed commit and never sees uncommitted edits. Delegate the mechanical edits to a subagent using your configured refactoring model (default `sonnet`) with a specific scope (file paths, the names being moved, the behavior to hold).
++6. Prove behavior is unchanged on the real artifact, not "it compiles" (**principle-prove-it-works**). For larger reshapes, run an equivalence check: a script that diffs old-vs-new outputs, a recorded baseline replayed against the new code, or a smoke run on the matching surface via the relevant control skill.
+ 7. Confirm the change is worth keeping. The success measure is reduced reader load (**principle-minimize-reader-load**). If the diff does not lower reader load somewhere, revert it.
+ 8. Rebase into small ordered commits. A subtraction commit, then the reshape, then any follow-on cleanup. Shape them with the **sequence-verifiable-units** principle skill, so each behavior-preserving slice stays green before the next. Run **Opening a PR**.
+ 
+diff --git a/skills/poteto-tdd/SKILL.md b/skills/poteto-tdd/SKILL.md
+index 890a975e..978066a3 100644
+--- a/skills/poteto-tdd/SKILL.md
++++ b/skills/poteto-tdd/SKILL.md
+@@ -21,7 +21,7 @@ Do not force a test when it would be impractical. If the available test would re
+ 
+ ## If a Failing Test Is Impractical
+ 
+-Do not silently skip the regression step. Before fixing, explicitly explain why a failing test is impossible or not worth the cost, then choose the closest executable regression check available. Examples include a targeted script, manual reproduction command, browser automation, snapshot comparison, log assertion, or focused integration check.
++Use the closest executable regression check instead: a targeted script, manual reproduction command, browser automation, snapshot comparison, log assertion, or focused integration check.
+ 
+ Prefer no new test over a bad test. A bad test is one that mostly tests mocks, encodes current implementation details, depends on timing or unrelated global state, needs expensive infrastructure for a small fix, or would be deleted immediately after proving the fix.
+ 
+@@ -30,7 +30,6 @@ Prefer no new test over a bad test. A bad test is one that mostly tests mocks, e
+ - Do not change tests merely to match a wrong implementation.
+ - Do not weaken existing assertions unless the expected behavior has genuinely changed and the reason is clear.
+ - Keep the regression test focused on the bug. Avoid broad fixture churn or unrelated coverage expansion.
+-- Do not add tests when the practical signal is weak. Use manual or scripted verification and say why.
+ - If the bug is flaky, make the test deterministic where possible and document the signal being locked down.
+ - If the bug exposes a broader class of failures, first land the focused regression path, then consider additional sibling coverage.
+ 
+diff --git a/skills/principle-outcome-oriented-execution/SKILL.md b/skills/principle-outcome-oriented-execution/SKILL.md
+index 4c2ed469..c49be0bc 100644
+--- a/skills/principle-outcome-oriented-execution/SKILL.md
++++ b/skills/principle-outcome-oriented-execution/SKILL.md
+@@ -13,7 +13,6 @@ Optimize for the intended, verifiable end state rather than preserving smooth in
+ **Core rule:**
+ - Prioritize end-state integrity over transitional stability
+ - Intermediate breakage is acceptable when it is planned, scoped, and reversible
+-- Always run final verification before declaring done
+ 
+ **Guardrails:**
+ - Use this for planned rewrites and migrations with explicit phase boundaries
+diff --git a/skills/principle-never-block-on-the-human/SKILL.md b/skills/principle-never-block-on-the-human/SKILL.md
+index 46d4107..9291adb 100644
+--- a/skills/principle-never-block-on-the-human/SKILL.md
++++ b/skills/principle-never-block-on-the-human/SKILL.md
+@@ -12,7 +12,6 @@ The human supervises asynchronously. Agents must stay unblocked. Make reasonable
+ 
+ **Pattern:**
+ - **Proceed, then present.** Do the work, show the result. Don't ask "should I do X?" Do X, explain why.
+-- **Reserve questions for genuine ambiguity.** Ask only when you cannot infer intent from context.
+ - **Make the system self-healing.** When you notice a problem, log it and fix it in the next round.
+ - **Supervision is async.** Design workflows for review-after-the-fact.
+ 
