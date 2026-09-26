@@ -1,0 +1,28 @@
+{
+  "cases_from": "route-domain-modeling",
+  "arms": [
+    "current",
+    "leaf",
+    "leaf+trigger"
+  ],
+  "source": "Pocock route E1 at Feature step 1, plus a Non-negotiables trigger",
+  "companions": [
+    "domain-modeling"
+  ],
+  "tier_map": [
+    {
+      "arm": "leaf",
+      "file": "poteto-mode/playbooks/feature.md",
+      "line": 5,
+      "tier": 1,
+      "why": "Rule text at the step where terms are settled, before architect names types. It carries its own availability gate and fallback."
+    },
+    {
+      "arm": "trigger",
+      "file": "poteto-mode/SKILL.md",
+      "line": 22,
+      "tier": 0,
+      "why": "Trigger in the Non-negotiables situation-to-skill form. The fallback points at Feature step 1 and restates no rule."
+    }
+  ]
+}

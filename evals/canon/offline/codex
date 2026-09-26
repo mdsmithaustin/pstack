@@ -2,21 +2,28 @@
 """Stand-in for `codex` that spends no model budget.
 
 It finds the case whose prompt it was given and reads the rule's patched file.
-A case that a variant shares with its source goes to the rule whose text is
-mounted. For a positive case it answers with samples/good.md when the mounted skills
+A workspace case's input path names its rule and case. A pasted-project case
+that a variant shares with its source goes to the rule whose text is mounted.
+For a positive case it answers with samples/good.md when the mounted skills
 carry the rule's new text and samples/bad.md otherwise. For a near-miss case it
 answers with samples/good.md in both arms. A correct screen then prints
 SEPARATES for every positive case, TIE-PASS for every near-miss case, and
 SEPARATES for every rule. When the workspace mounts skills/pstack, the poteto-mode
 entry's tree, it exits 3 unless the prompt starts with the explicit invocation
-and the tree is linked where Codex finds it.
+and the tree is linked where Codex finds it. For a workspace case it also
+applies the chosen sample's .diff to the checkout in its cwd, and exits 4 when
+there is no checkout or the sandbox forbids writes.
 
-For an arms rule, a case counts an arm as mounted when every line it adds is.
-Every arm reads every file any arm changes.
+For an arms rule, a workspace case's path also names the arm, and a positive
+case answers with good.md in every arm but current. A pasted-project case
+counts an arm as mounted when every line it adds is. Every arm reads every file
+any arm changes.
 """
 import glob
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,19 +38,27 @@ spec.loader.exec_module(screen)
 
 prompt = sys.stdin.read() or sys.argv[-1]
 mounted = "".join(Path(path).read_text() for path in glob.glob("skills/**/*.md", recursive=True))
-rule, case = screen.answered_case(screen.load_rules(), prompt, mounted)
+arm_workspace = os.environ.get("CANON_WORKSPACE")
+rule, case = screen.answered_case(screen.load_rules(), prompt, mounted, arm_workspace)
 entry = Path(".agents/skills")
 if Path("skills", screen.ENTRY_TREE).is_dir() and not (prompt.startswith("$poteto-mode ") and (entry / "poteto-mode" / "SKILL.md").is_file()):
     sys.exit(3)
 tree = screen.tracked("skills")
 if rule.paired:
     reads = [rule.target]
+    carried = screen.rule_mounted(rule, mounted, tree)
 else:
     reads = sorted({path for _, changed in screen.arm_trees(rule, tree)[1:] for path in screen.changed_paths(tree, changed)})
-carried = screen.rule_mounted(rule, mounted, tree)
+    carried = Path(arm_workspace).parts[-2] != "current" if case.workspace else screen.rule_mounted(rule, mounted, tree)
 root = ".agents/skills" if entry.exists() else "skills"
 sample = "good.md" if case.kind == "near-miss" or carried else "bad.md"
 answer = (case.root / "samples" / sample).read_text()
+if case.workspace:
+    # A workspace case edits the checkout in its cwd with the sample's diff,
+    # which needs the sandbox that allows writes there.
+    if "workspace-write" not in sys.argv or not Path(".git").is_dir():
+        sys.exit(4)
+    subprocess.run(["git", "apply", "--binary", str(case.root / "samples" / Path(sample).with_suffix(".diff"))], check=True)
 Path(sys.argv[sys.argv.index("--output-last-message") + 1]).write_text(answer)
 for event in (
     {"type": "thread.started", "thread_id": "offline"},

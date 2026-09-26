@@ -1,0 +1,1 @@
+Harness-name handling is scattered: `harness_aliases.py` wraps the registry in `harness_plugins.py`, `harness_availability.py` keeps its own list of Codex spellings, and `gateway_inference.py` keeps Claude and Codex spellings of its own. Deepen this so callers ask one module and the spelling lists come from the registry. No need to commit.

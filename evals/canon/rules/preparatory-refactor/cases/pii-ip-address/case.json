@@ -1,0 +1,13 @@
+{
+  "kind": "positive",
+  "domain": "feature-sequencing",
+  "timeout_s": 1800,
+  "expected_behavior": [
+    "Before adding the category, moves each PII category's label and pattern into one table and derives the pii_types enum and default in POLICY_REGISTRY from its keys, with the PII tests still green.",
+    "Adds the IP address category as one new table entry, without extending the pattern dict, the label dict, and the pii_types enum and default by hand."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  }
+}

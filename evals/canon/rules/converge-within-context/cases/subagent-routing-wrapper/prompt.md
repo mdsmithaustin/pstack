@@ -1,0 +1,1 @@
+In `omnigent/runner/subagent_routing.py`, `_harness_family` and `harness_family` both just wrap `_HARNESS_FAMILY` from `server/smart_routing.py`. Can you fold that wrapper away? Leave the changes uncommitted.

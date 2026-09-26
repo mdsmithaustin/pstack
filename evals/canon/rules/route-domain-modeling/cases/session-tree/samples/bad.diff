@@ -1,0 +1,95 @@
+diff --git a/hermes_cli/sessions_cmd.py b/hermes_cli/sessions_cmd.py
+index a10305f..33ac3b9 100644
+--- a/hermes_cli/sessions_cmd.py
++++ b/hermes_cli/sessions_cmd.py
+@@ -974,6 +974,23 @@ def _cmd_repair_routing(db, args):
+     print(f"\nRepaired {repaired} of {len(adoptable)} session(s).")
+ 
+ 
++def _print_node(node, depth=0, kind="session"):
++    title = node.get("title") or "untitled"
++    print(f"{'  ' * depth}{kind}: {node['id']}  {title}")
++    for child in node["chain"]:
++        _print_node(child, depth + 1, "compressed")
++    for fork in node["forks"]:
++        _print_node(fork, depth + 1, "fork")
++
++
++def _cmd_tree(db, args):
++    root = db.fork_children(args.session_id)
++    if root is None:
++        print(f"Session not found: {args.session_id}")
++        return
++    _print_node(root)
++
++
+ def _cmd_stats(db, args):
+     print(f"Total sessions: {db.session_count()}\nTotal messages: {db.message_count()}")
+     for src in ("cli", "telegram", "discord", "whatsapp", "slack"):
+@@ -1000,14 +1017,14 @@ _PRE_DB_HANDLERS = {
+     "repair-profiles": _cmd_repair_profiles,  # opens every profile's store itself
+     "set-journal-mode": _cmd_set_journal_mode,  # offline: must not open the store it converts
+ }
+-_OBSERVATIONAL_DB_ACTIONS = frozenset({"list", "stats", "pinned"})
++_OBSERVATIONAL_DB_ACTIONS = frozenset({"list", "stats", "pinned", "tree"})
+ _DB_HANDLERS = {
+     "list": _cmd_list, "export": _cmd_export, "delete": _cmd_delete, "rename": _cmd_rename, "pinned": _cmd_pinned,
+     "prune": partial(_cmd_prune_or_archive, action="prune"), "pin": partial(_cmd_pin, pinning=True),
+     "archive": partial(_cmd_prune_or_archive, action="archive"), "unpin": partial(_cmd_pin, pinning=False),
+     "retitle-skills": _cmd_retitle_skills, "browse": _cmd_browse, "optimize": _cmd_optimize,
+     "clean-markers": _cmd_clean_markers, "optimize-storage": _cmd_optimize_storage,
+-    "repair-routing": _cmd_repair_routing, "stats": _cmd_stats,
++    "repair-routing": _cmd_repair_routing, "stats": _cmd_stats, "tree": _cmd_tree,
+ }
+ 
+ 
+diff --git a/hermes_cli/subcommands/sessions.py b/hermes_cli/subcommands/sessions.py
+index d56bf4a..e0a7a14 100644
+--- a/hermes_cli/subcommands/sessions.py
++++ b/hermes_cli/subcommands/sessions.py
+@@ -249,6 +249,10 @@ def build_sessions_parser(subparsers, *, cmd_sessions: Callable) -> None:
+ 
+     sessions_subparsers.add_parser("stats", help="Show session store statistics")
+ 
++    sessions_tree = sessions_subparsers.add_parser(
++        "tree", help="Show a session's branches and compression continuations")
++    sessions_tree.add_argument("session_id", help="Session ID at the root of the tree")
++
+     sessions_rename = sessions_subparsers.add_parser(
+         "rename", help="Set or change a session's title")
+     sessions_rename.add_argument("session_id", help="Session ID to rename")
+diff --git a/hermes_state_compression.py b/hermes_state_compression.py
+index 7ea1e41..98ef093 100644
+--- a/hermes_state_compression.py
++++ b/hermes_state_compression.py
+@@ -672,6 +672,30 @@ class SessionCompressionMixin:
+             chain.append(child_id)
+         return chain
+ 
++    def fork_children(self, session_id: str) -> Optional[Dict[str, Any]]:
++        """Every child of *session_id*: its compression chain and its forks, recursively."""
++        session = self.get_session(session_id)
++        if not session:
++            return None
++        seen = {session_id}
++
++        def walk(node: Dict[str, Any]) -> Dict[str, Any]:
++            chain, forks = [], []
++            for row in self._read_all("SELECT * FROM sessions WHERE parent_session_id = ? ORDER BY started_at ASC",
++                                      (node["id"],)):
++                child = dict(row)
++                if child["id"] in seen:
++                    continue
++                seen.add(child["id"])
++                if self._is_compression_child_row(child):
++                    chain.append(walk(child))
++                elif self._is_explicit_fork_child_row(child):
++                    forks.append(walk(child))
++            return {"id": node["id"], "title": node.get("title"), "end_reason": node.get("end_reason"),
++                    "chain": chain, "forks": forks}
++
++        return walk(session)
++
+     def get_compression_tip(self, session_id: str) -> Optional[str]:
+         """Live tip of a compression chain (``get_compression_chain`` semantics); the input
+         id when no continuation exists."""

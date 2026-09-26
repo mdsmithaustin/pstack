@@ -1,0 +1,14 @@
+{
+  "kind": "positive",
+  "domain": "module-depth",
+  "timeout_s": 2400,
+  "expected_behavior": [
+    "Treats every dependency of the harness-name cluster as in-process, so it adds no interface with a single adapter and no module that only forwards calls.",
+    "Deepens harness_aliases.py with a registry-derived spelling query and deletes the hand-listed Codex and Claude spellings in gateway_inference.py and harness_availability.py.",
+    "Names the seam and the interface the existing harness-alias and model-override tests pin."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  }
+}

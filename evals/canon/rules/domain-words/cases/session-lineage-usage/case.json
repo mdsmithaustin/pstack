@@ -1,0 +1,11 @@
+{
+  "kind": "positive",
+  "domain": "domain-naming",
+  "timeout_s": 1200,
+  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0", "overlay": "overlay/"},
+  "expected_behavior": [
+    "Reads the seeded CONTEXT.md and names the summed usage after its term Lineage.",
+    "Adds no identifier built on chain, thread, conversation, chat, fork, clone, head, or latest, which CONTEXT.md lists under Avoid.",
+    "Changes a hermes_state_*.py mixin or hermes_cli/sessions_cmd*.py."
+  ]
+}

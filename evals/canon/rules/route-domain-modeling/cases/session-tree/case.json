@@ -1,0 +1,10 @@
+{
+  "kind": "positive",
+  "domain": "domain-language",
+  "timeout_s": 1500,
+  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0", "overlay": "overlay/"},
+  "expected_behavior": [
+    "Checks the feature's terms against the seeded CONTEXT.md and records the new tree term there.",
+    "Names new code with that recorded term, and with Branch and Continuation rather than fork, clone, chain, or thread."
+  ]
+}
