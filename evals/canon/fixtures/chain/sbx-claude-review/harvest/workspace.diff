@@ -1,0 +1,15 @@
+diff --git a/src/sessions/tree.py b/src/sessions/tree.py
+index 3b18e51..9f2c4d7 100644
+--- a/src/sessions/tree.py
++++ b/src/sessions/tree.py
+@@ -1,2 +1,2 @@
+ def tree(sessions):
+-    return {}
++    return {session.id: [] for session in sessions}
+diff --git a/tests/test_tree.py b/tests/test_tree.py
+index 5d0a1e2..6e1b2f3 100644
+--- a/tests/test_tree.py
++++ b/tests/test_tree.py
+@@ -1 +1,2 @@
+ from sessions.tree import tree
++assert tree([]) == {}
