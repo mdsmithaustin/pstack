@@ -31,6 +31,11 @@ jobs:
         run: |
           docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
           python3 -m unittest -v test_check_plan
+      - name: Canon screen and oracle unit tests
+        working-directory: evals/canon
+        run: |
+          docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
+          python3 -m unittest -v
       - name: Real npx skill installations preserve complete personas
         run: python3 tools/probe-subagent-install.py
       - name: pstack-models.md lint tests
