@@ -495,17 +495,22 @@ network rules that applied, `reachable`, the policy decision for each model
 API host, and `egress`, the decision for each probe host.
 
 After the harness returns, `run` scans the arm's run and harvest dirs. A file
-named `.credentials.json` or `auth.json`, or one that holds an `sk-` key, a
-`claudeAiOauth` record, or a JSON access or refresh token, fails the arm
-before grading and names each file. The scan does not delete them.
+named `.credentials.json` or `auth.json`, or one that holds an `sk-` key or a
+JSON access or refresh token, fails the arm before grading, and the error
+names each file. A match whose exact bytes also occur in the case's reference
+checkout does not count, so a transcript that quotes an upstream test fake
+passes. The scan does not delete the files it names.
 
-**Auth.** Credentials never enter this repo or a run directory. `sbx secret`
-stores them on the host, and the sandbox's proxy adds them to model API
-requests. The Codex kit writes a `~/.codex/config.toml` whose provider sends
+**Auth.** `sbx secret` stores the credentials on the host, and the sandbox's
+proxy adds them to model API requests. Nothing writes them to this repo. A run
+directory can still receive one, because harvest copies the agent's
+transcripts out of the sandbox. The scan above fails that arm and leaves the
+file for you to inspect and delete. The Codex kit writes a `~/.codex/config.toml` whose provider sends
 requests to `chatgpt.com/backend-api/codex` through that proxy with a
-placeholder token. The Claude kit writes `~/.claude/.credentials.json` when a
-sandbox is created, even from a template whose copy was deleted, and `sbx
-secret ls` lists the Anthropic secret as OAuth. On 2026-09-25 a Claude run
+placeholder token. The Claude kit writes `~/.claude/.credentials.json` inside
+the sandbox when it is created, even from a template whose copy was deleted,
+and `sbx secret ls` lists the Anthropic secret as OAuth. Whether that file
+holds a placeholder or a live OAuth token is unverified. On 2026-09-25 a Claude run
 inside the sandbox stopped with "OAuth session expired and could not be
 refreshed", so that stored token had most likely expired. Refresh it before a paid Claude run, for example by
 storing an API key with `sbx secret set anthropic`, and confirm with one short

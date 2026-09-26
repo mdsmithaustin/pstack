@@ -20,8 +20,8 @@ its last result event, and its full stream is kept as raw-stream.jsonl.
   sandbox.py gc                                          remove sandboxes a killed run left behind
 
 sbx.json pins the per-agent kit, the dependency sync per repo, the uv version,
-and the network each phase may reach. Auth never enters a file here: sbx's
-proxy adds the stored credentials to model API requests.
+and the network each phase may reach. It holds no credentials. sbx's proxy
+adds the stored ones to model API requests.
 """
 import argparse
 import contextlib
