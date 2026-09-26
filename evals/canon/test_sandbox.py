@@ -354,6 +354,13 @@ class JudgePolicyTests(unittest.TestCase):
         self.assertEqual(fake.agent_runs(), [])
         self.assertEqual(fake.calls[-1][:2], ["rm", "--force"])
 
+    def test_a_policy_answer_without_a_decision_refuses_the_judge_before_it_starts(self):
+        fake = FakeSbx(tree=None, unanswered={"example.org"})
+
+        with self.assertRaisesRegex(sandbox.SandboxError, r"^the sandbox's network policy does not deny example.org; "):
+            self.judge(fake)
+        self.assertEqual(fake.agent_runs(), [])
+
 
 def sandboxes_available():
     return (os.environ.get("CANON_SBX_E2E") == "1" and shutil.which("sbx") is not None
