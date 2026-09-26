@@ -48,7 +48,7 @@ jobs:
           path: .skill-ci
           persist-credentials: false
       - name: Install uv for the skill-ci harness
-        run: python3 -m pip install uv==0.12.7
+        run: python3 -m pip install --require-hashes -r tools/uv-requirements.txt
       - name: Canon screen and oracle unit tests
         working-directory: evals/canon
         env:
