@@ -141,8 +141,7 @@ class Sandbox:
         decisions = {}
         for host in hosts:
             proc = sbx("policy", "check", "network", "--sandbox", self.name, host, "--json", check=False)
-            answer = _json_or_text(proc.stdout)
-            decisions[host] = answer.get("allowed", answer.get("decision") == "allow") if isinstance(answer, dict) else None
+            decisions[host] = _allowed(_json_or_text(proc.stdout))
         return decisions
 
     def network_log(self):
@@ -159,6 +158,15 @@ def _json_or_text(data):
         return json.loads(text)
     except json.JSONDecodeError:
         return text
+
+
+def _allowed(answer):
+    """True or False from a `policy check --json` answer; None for any other shape."""
+    if not isinstance(answer, dict):
+        return None
+    if isinstance(answer.get("allowed"), bool):
+        return answer["allowed"]
+    return {"allow": True, "deny": False}.get(answer.get("decision"))
 
 
 def egress(box):
