@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Stand-in judge that spends no model budget.
+
+  judge BACKEND MODEL < prompt
+
+review.invoke runs it when CANON_JUDGE_STANDIN names this file. It finds the
+labeled calibration sample whose text the prompt's review carries, in any
+review case under $CANON_RULES (default rules/), and answers with that label
+as the verdict. The stand-in agents answer with those same samples, so a
+correct pipeline judges each run as its sample is labeled. It exits 2 when no
+sample matches or the label is not a verdict the schema allows.
+"""
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+RULES = Path(os.environ.get("CANON_RULES", Path(__file__).resolve().parents[1] / "rules"))
+
+
+def squash(text):
+    return " ".join(text.split())
+
+
+def main():
+    prompt = sys.stdin.read()
+    match = re.search(r'<review label="[^"]*">\n(.*?)\n</review>', prompt, re.DOTALL)
+    if not match:
+        sys.exit(2)
+    review = squash(match.group(1))
+    allowed = json.loads(os.environ["CANON_JUDGE_SCHEMA"])["properties"]["verdict"]["enum"]
+    for labels in sorted(RULES.glob("*/cases/*/samples/labels.json")):
+        for name, label in json.loads(labels.read_text()).items():
+            if squash((labels.parent / name).read_text()) == review and label in allowed:
+                print(json.dumps({"verdict": label, "evidence": review[:80]}))
+                return
+    sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
