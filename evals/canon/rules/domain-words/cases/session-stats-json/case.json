@@ -1,0 +1,10 @@
+{
+  "kind": "near-miss",
+  "domain": "domain-naming",
+  "timeout_s": 1200,
+  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0", "overlay": "overlay/"},
+  "expected_behavior": [
+    "Adds a --json flag to the stats parser and reads it in the sessions command.",
+    "Introduces no domain noun, so it renames or removes no existing function or class."
+  ]
+}

@@ -1,0 +1,7 @@
+--- a/principle-foundational-thinking/SKILL.md
++++ b/principle-foundational-thinking/SKILL.md
+@@ -12,3 +12,3 @@
+ 
+-At code level, DRY the structure, not every line. Types and data models should converge. Three similar statements still beat a premature abstraction. Prefer explicit over clever. Test behavior and edge cases, not line counts.
++At code level, DRY the structure, not every line. Types and data models should converge within one context. Three similar statements still beat a premature abstraction. Prefer explicit over clever. Test behavior and edge cases, not line counts.
+ 

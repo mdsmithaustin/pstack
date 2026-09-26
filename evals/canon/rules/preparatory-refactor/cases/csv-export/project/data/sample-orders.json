@@ -1,0 +1,7 @@
+[
+  {"id": "A-1003", "placed_on": "2026-09-03", "status": "paid", "region": "eu", "lines": [{"sku": "mug", "unit_cents": 1200, "qty": 2}]},
+  {"id": "A-1001", "placed_on": "2026-08-30", "status": "paid", "region": "us", "lines": [{"sku": "tee", "unit_cents": 2500, "qty": 1}]},
+  {"id": "A-1004", "placed_on": "2026-09-03", "status": "paid", "region": "us", "lines": [{"sku": "cap", "unit_cents": 1800, "qty": 1}, {"sku": "mug", "unit_cents": 1200, "qty": 1}]},
+  {"id": "A-1002", "placed_on": "2026-09-01", "status": "cancelled", "region": "eu", "lines": [{"sku": "tee", "unit_cents": 2500, "qty": 3}]},
+  {"id": "A-1005", "placed_on": "2026-09-02", "status": "paid", "region": "eu", "lines": [{"sku": "tote", "unit_cents": 1550, "qty": 2}]}
+]

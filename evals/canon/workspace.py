@@ -1,0 +1,350 @@
+#!/usr/bin/env python3
+"""Workspace cases: the agent works inside a checkout of a real upstream repo.
+
+A case opts in with case.json "workspace": {"repo": NAME, "commit": SHA,
+"overlay": "overlay/"}. The repo comes from a local bare mirror that holds the
+pinned commit at depth 1, so a run never touches the network or the user's own
+clone. The harness copies only single files into its workspace (flattened into
+inputs/), so the per-run entry wrapper materializes the checkout itself:
+
+  workspace.py fetch REPO COMMIT [--from PATH]     put COMMIT into the mirror
+  workspace.py wrap [--token T --discovery D] -- TARGET ARG...
+
+`wrap` runs in the harness workspace. It checks out the commit there, copies
+the overlay over it, and refuses to start the agent unless the result has the
+tree the build recorded. After the agent exits it writes the diff of
+everything the agent changed to a slot outside the workspace.
+"""
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+
+REPOS = {
+    "omnigent": "https://github.com/omnigent-ai/omnigent.git",
+    "hermes": "https://github.com/NousResearch/hermes-agent.git",
+}
+DEFAULT_CACHE = Path.home() / ".cache" / "canon-screen"
+TIMEOUT_S = 1800
+SHA = re.compile(r"^[0-9a-f]{40}$")
+REPO_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+# Our own git calls ignore user and system config, whose LFS filters, fsmonitor,
+# or diff prefixes would change what a checkout writes or a diff says.
+GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"}
+# The wrapper exits with this code, without starting the agent, when the
+# workspace cannot be built or does not match the recorded tree.
+REFUSED = 97
+
+
+class WorkspaceError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Spec:
+    repo: str
+    commit: str
+    # {path: bytes} copied over the checkout.
+    overlay: dict
+
+    @property
+    def key(self):
+        parts = [self.repo, self.commit, tree_digest(self.overlay)]
+        digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()
+        return f"{self.repo}-{self.commit[:12]}-{digest[:12]}"
+
+
+def tree_digest(files):
+    digest = hashlib.sha256()
+    for path in sorted(files):
+        digest.update(path.encode() + b"\0" + str(len(files[path])).encode() + b"\0" + files[path])
+    return digest.hexdigest()
+
+
+def read_files(root):
+    """{relative path: bytes} for every regular file under root, symlinks not followed."""
+    files = {}
+    for directory, dirs, names in os.walk(root):
+        dirs.sort()
+        for name in sorted(names):
+            path = Path(directory, name)
+            files[path.relative_to(root).as_posix()] = path.read_bytes()
+    return files
+
+
+def mounted_paths(root):
+    """Every file and symlink already under root, as posix paths."""
+    found = []
+    for directory, dirs, names in os.walk(root):
+        found += [Path(directory, name).relative_to(root).as_posix() for name in names]
+        found += [Path(directory, name).relative_to(root).as_posix() for name in dirs if Path(directory, name).is_symlink()]
+    return sorted(found)
+
+
+def parse_spec(case_root, raw):
+    if not isinstance(raw, dict) or set(raw) - {"repo", "commit", "overlay"} or not {"repo", "commit"} <= set(raw):
+        raise WorkspaceError(f"{case_root}/case.json workspace must be {{\"repo\", \"commit\", \"overlay\"}}, not {raw!r}")
+    if not isinstance(raw["repo"], str) or not REPO_NAME.match(raw["repo"]):
+        raise WorkspaceError(f"{case_root}/case.json workspace repo must name a mirror such as {sorted(REPOS)}, not {raw['repo']!r}")
+    if not isinstance(raw["commit"], str) or not SHA.match(raw["commit"]):
+        raise WorkspaceError(f"{case_root}/case.json workspace commit must be a full 40-character sha")
+    overlay = {}
+    if raw.get("overlay"):
+        root = (Path(case_root) / raw["overlay"]).resolve()
+        if Path(case_root).resolve() not in root.parents or not root.is_dir():
+            raise WorkspaceError(f"{case_root}/case.json workspace overlay {raw['overlay']!r} is not a directory inside the case")
+        overlay = read_files(root)
+    return Spec(raw["repo"], raw["commit"], overlay)
+
+
+def git(*args, cwd=None, env=None):
+    proc = subprocess.run(["git", *args], cwd=cwd, env={**os.environ, **GIT_ENV, **(env or {})}, capture_output=True)
+    if proc.returncode != 0:
+        raise WorkspaceError(f"git {' '.join(args[:2])} failed: {proc.stderr.decode(errors='replace').strip()[-400:]}")
+    return proc.stdout
+
+
+def cache_root():
+    return Path(os.environ.get("CANON_CACHE", DEFAULT_CACHE)).expanduser().resolve()
+
+
+def mirror_path(repo):
+    return cache_root() / "mirrors" / f"{repo}.git"
+
+
+def has_commit(mirror, commit):
+    probe = subprocess.run(["git", "--git-dir", str(mirror), "cat-file", "-e", f"{commit}^{{commit}}"],
+                           env={**os.environ, **GIT_ENV}, capture_output=True)
+    return mirror.is_dir() and probe.returncode == 0
+
+
+def fetch(repo, commit, source=None):
+    """Put commit into the repo's bare mirror at depth 1, from source (a clone or
+    URL) or the upstream URL. Idempotent."""
+    mirror = mirror_path(repo)
+    if not mirror.is_dir():
+        mirror.parent.mkdir(parents=True, exist_ok=True)
+        git("init", "-q", "--bare", str(mirror))
+    if not has_commit(mirror, commit):
+        git("--git-dir", str(mirror), "-c", "uploadpack.allowAnySHA1InWant=true",
+            "fetch", "-q", "--depth", "1", str(source or REPOS[repo]), commit)
+    if not has_commit(mirror, commit):
+        raise WorkspaceError(f"{repo} mirror still lacks {commit} after the fetch")
+    return mirror
+
+
+def require_mirror(spec):
+    mirror = mirror_path(spec.repo)
+    if not has_commit(mirror, spec.commit):
+        raise WorkspaceError(f"{mirror} lacks {spec.commit}; run `python3 evals/canon/workspace.py fetch {spec.repo} {spec.commit} --from <clone>`")
+    return mirror
+
+
+def tracked_paths(mirror, commit):
+    listing = git("--git-dir", str(mirror), "ls-tree", "-r", "-z", "--name-only", commit).decode()
+    return {path for path in listing.split("\0") if path}
+
+
+@contextmanager
+def staged(root, base):
+    """Env for git calls that see base plus everything under root that git does
+    not ignore, staged into a throwaway index so the workspace's own is untouched."""
+    with tempfile.TemporaryDirectory() as directory:
+        env = {"GIT_INDEX_FILE": str(Path(directory) / "index")}
+        git("read-tree", base, cwd=root, env=env)
+        git("add", "-A", cwd=root, env=env)
+        yield env
+
+
+def snapshot(root, base):
+    with staged(root, base) as env:
+        return git("write-tree", cwd=root, env=env).decode().strip()
+
+
+def ignore_line(path):
+    return "/" + re.sub(r"([*?\[\]\\!# ])", r"\\\1", path)
+
+
+def exclude(root, paths):
+    info = root / ".git" / "info"
+    info.mkdir(parents=True, exist_ok=True)
+    with (info / "exclude").open("a", encoding="utf-8") as handle:
+        handle.writelines(ignore_line(path) + "\n" for path in paths)
+
+
+def mount_roots(present, tracked):
+    """The shallowest path of each mounted file that is not a directory the
+    repo tracks: skills/ in a repo without one, skills/pstack in a repo whose
+    own skills/ it joins."""
+    tracked_dirs = {"/".join(path.split("/")[:depth]) for path in tracked for depth in range(1, path.count("/") + 1)}
+    roots = set()
+    for path in present:
+        parts = path.split("/")
+        roots.add(next("/".join(parts[:depth]) for depth in range(1, len(parts) + 1) if "/".join(parts[:depth]) not in tracked_dirs))
+    return sorted(roots)
+
+
+def materialize(root, mirror, commit, overlay):
+    """Check commit out into root beside the files already there, copy the
+    overlay over it, and return the tree id of the result. The directories
+    holding the files already in root (the mounted skills) are excluded from
+    git's view, so nothing the agent writes there reaches the diff."""
+    root = Path(root)
+    tracked = tracked_paths(mirror, commit)
+    roots = mount_roots(mounted_paths(root), tracked)
+    clash = sorted(path for path in tracked | set(overlay) if any(path == top or path.startswith(top + "/") for top in roots))
+    if clash:
+        raise WorkspaceError(f"the repo or overlay would overwrite mounted files: {clash[:5]}")
+    git("init", "-q", "--template=", cwd=root)
+    (root / ".git" / "objects" / "info").mkdir(parents=True, exist_ok=True)
+    (root / ".git" / "objects" / "info" / "alternates").write_text(str(Path(mirror) / "objects") + "\n")
+    if (Path(mirror) / "shallow").is_file():
+        shutil.copyfile(Path(mirror) / "shallow", root / ".git" / "shallow")
+    git("checkout", "-q", "--detach", commit, cwd=root)
+    for path, data in overlay.items():
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+    exclude(root, roots)
+    return snapshot(root, commit)
+
+
+def harvest(root, base):
+    """Binary diff from base to the workspace as it is now: edits, deletions,
+    and new files git does not ignore. Renames show as a deletion and an add."""
+    with staged(root, base) as env:
+        return git("-c", "core.quotePath=false", "diff", "--cached", "--binary", "--no-renames", "--no-color",
+                   "--no-ext-diff", "--no-textconv", base, cwd=root, env=env)
+
+
+def reference_checkout(spec):
+    """(path, tree) of the pinned checkout with the overlay, built once per spec
+    under the cache. Oracles apply a run's diff to it."""
+    mirror = require_mirror(spec)
+    path = cache_root() / "checkouts" / spec.key
+    record = path.with_name(path.name + ".tree")
+    if path.is_dir() and record.is_file():
+        return path, record.read_text().strip()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{spec.key}-", dir=path.parent))
+    try:
+        tree = materialize(staging, mirror, spec.commit, spec.overlay)
+        if path.exists():
+            shutil.rmtree(path)
+        os.replace(staging, path)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    record.write_text(tree + "\n")
+    return path, tree
+
+
+def expose(root, discovery, tree="skills/pstack"):
+    """Make the mounted skills discoverable at root/discovery. A repo without
+    that directory gets one symlink to the whole tree; a repo that tracks it
+    gets a copy of each skill beside its own."""
+    target = root / discovery
+    if not target.exists() and not target.is_symlink():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(os.path.relpath(root / tree, target.parent))
+        exclude(root, [discovery])
+        return
+    added = []
+    for skill in sorted(path for path in (root / tree).iterdir() if path.is_dir()):
+        if (target / skill.name).exists():
+            raise WorkspaceError(f"{discovery}/{skill.name} already exists in the repo")
+        shutil.copytree(skill, target / skill.name, symlinks=True)
+        added.append(f"{discovery}/{skill.name}")
+    exclude(root, added)
+
+
+def next_slot(root):
+    root.mkdir(parents=True, exist_ok=True)
+    for number in range(1, 10000):
+        slot = root / f"{number:04d}"
+        try:
+            slot.mkdir()
+            return slot
+        except FileExistsError:
+            continue
+    raise WorkspaceError(f"{root} has no free slot")
+
+
+def disk_bytes(root):
+    return sum(os.lstat(Path(directory, name)).st_size for directory, _, names in os.walk(root) for name in names)
+
+
+def wrap(argv, stdin=sys.stdin.buffer):
+    """The entry wrapper for a workspace case. Env CANON_WORKSPACE names the
+    arm's workspace dir (workspace.json and overlay/); CANON_HARVEST names the
+    directory that gets one numbered slot per run."""
+    split = argv.index("--")
+    options, command = argv[:split], argv[split + 1:]
+    token = options[options.index("--token") + 1] if "--token" in options else None
+    discovery = options[options.index("--discovery") + 1] if "--discovery" in options else None
+    arm = Path(os.environ["CANON_WORKSPACE"])
+    spec = json.loads((arm / "workspace.json").read_text())
+    slot = next_slot(Path(os.environ["CANON_HARVEST"]))
+    record = {"expected_tree": spec["tree"]}
+
+    def save():
+        (slot / "workspace.json").write_text(json.dumps(record, indent=2) + "\n")
+
+    root = Path.cwd()
+    started = time.monotonic()
+    try:
+        record["tree"] = materialize(root, Path(spec["mirror"]), spec["commit"], read_files(arm / "overlay"))
+        if record["tree"] != spec["tree"]:
+            raise WorkspaceError(f"materialized tree {record['tree']} is not the recorded {spec['tree']}")
+        if discovery:
+            expose(root, discovery)
+    except WorkspaceError as exc:
+        record["error"] = str(exc)
+        save()
+        print(f"workspace: {exc}", file=sys.stderr)
+        return REFUSED
+    record["materialize_s"] = round(time.monotonic() - started, 2)
+    save()
+    prompt = stdin.read()
+    if token:
+        prompt = token.encode() + b" " + prompt
+    record["agent_rc"] = subprocess.run(command, input=prompt).returncode
+    started = time.monotonic()
+    try:
+        diff = harvest(root, record["tree"])
+        (slot / "workspace.diff").write_bytes(diff)
+        record["diff_bytes"] = len(diff)
+    except WorkspaceError as exc:
+        record["error"] = f"harvest: {exc}"
+    record["harvest_s"] = round(time.monotonic() - started, 2)
+    record["workspace_bytes"] = disk_bytes(root)
+    save()
+    return record["agent_rc"]
+
+
+def main(argv):
+    if argv[:1] == ["wrap"]:
+        return wrap(argv[1:])
+    if argv[:1] == ["fetch"] and len(argv) in (3, 5) and (len(argv) == 3 or argv[3] == "--from"):
+        if not REPO_NAME.match(argv[1]) or not SHA.match(argv[2]) or (len(argv) == 3 and argv[1] not in REPOS):
+            print(f"workspace: fetch takes a repo name, a full sha, and --from unless the repo is one of {sorted(REPOS)}", file=sys.stderr)
+            return 2
+        print(fetch(argv[1], argv[2], argv[4] if len(argv) == 5 else None))
+        return 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except WorkspaceError as exc:
+        print(f"workspace: {exc}", file=sys.stderr)
+        sys.exit(1)

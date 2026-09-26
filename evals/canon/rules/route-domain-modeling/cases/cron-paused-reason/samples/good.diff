@@ -1,0 +1,20 @@
+diff --git a/hermes_cli/cron.py b/hermes_cli/cron.py
+index 5431dda..8e31924 100644
+--- a/hermes_cli/cron.py
++++ b/hermes_cli/cron.py
+@@ -215,6 +215,7 @@ def _last_run_display(job: Dict[str, Any]) -> str:
+ 
+ def _job_rows(job: Dict[str, Any]) -> List[tuple[str, str]]:
+     """``(label, value)`` detail rows for one job in ``cron list``."""
++    from cron.jobs import effective_job_state
+     # `repeat` / `deliver` may be present-but-null (dict-default only covers a missing key).
+     repeat_info = job.get("repeat") or {}
+     repeat_times = repeat_info.get("times")
+@@ -235,6 +236,7 @@ def _job_rows(job: Dict[str, Any]) -> List[tuple[str, str]]:
+         ("Mode", color("no-agent", Colors.DIM) + " (script stdout delivered directly)"
+          if job.get("no_agent") else ""),
+         ("Workdir", job.get("workdir")),
++        ("Reason", job.get("paused_reason") if effective_job_state(job) == "paused" else ""),
+         ("Last run", f"{job.get('last_run_at', '?')}  {_last_run_display(job)}"
+          if job.get("last_status") else ""),
+         ("Dispatch", _dispatch_display(job.get("last_dispatch"))),
