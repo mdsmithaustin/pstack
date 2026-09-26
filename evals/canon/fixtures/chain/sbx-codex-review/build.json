@@ -1,0 +1,1 @@
+{"entry": "poteto-mode", "target": "poteto-mode/SKILL.md", "cases": {"pr-review": {"workspace": {"repo": "omnigent"}, "review": {"branch": "pr-42", "title": "Add a session tree", "body_file": "pr-body.md", "refs": {"main": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4", "pr-42": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5"}}}}}

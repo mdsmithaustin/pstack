@@ -162,7 +162,9 @@ read one of them, or under `--entry poteto-mode` when one of them is
 `poteto-mode/SKILL.md`. Each arm after current gets its own rule line against
 current, `rule leaf vs current run-1 SEPARATES`. In `compare.json` these pair
 entries add `baseline` and `treatment`, and these rule entries add `arm`. `plan`
-lists an arm rule's arms and each arm's changed files.
+lists an arm rule's arms and each arm's changed files. `chain.py` counts every
+arm the build lists, and takes an arm's owner file to be the first file its
+patch changes.
 
 ## Entry modes
 
@@ -372,8 +374,9 @@ PR branch from the recorded ids, checks the PR branch out, and checks HEAD.
 **Harvest.** The review is the agent's final message, in `output.md` as for
 every run. Files it writes land in `workspace.diff`. For a review case the
 wrapper also records `head_after` and `refs_after`. A review must not modify
-the PR, but a nonempty diff or a moved HEAD is recorded, never a failure. The
-judge sees that diff as the files the reviewer changed or added.
+the PR, so a nonempty diff or a moved HEAD is a finding in `chain.py`'s
+`review.pr_modified` and `review.head_moved`, never a failure. The judge sees
+that diff as the files the reviewer changed or added.
 
 **Precheck and judge.** `oracle.py` is the precheck.
 `CHECKS[case](answer, workspace)` returns failures unless the review names the
@@ -550,7 +553,7 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 `test_review.py` (review checkouts, the judge, calibration, scores, and stopped
 runs, with an offline review run when skill-ci is present, and its
 `SandboxedReviewRunTests` gated on `CANON_SBX_E2E=1`), `test_review_cases.py`
-(the seeded review cases), `test_sandbox.py` (its sandbox runs need
+(the seeded review cases), `test_chain.py`, `test_sandbox.py` (its sandbox runs need
 `CANON_SBX_E2E=1`, see Sandboxed runs), and `test_oracles.py`, which loads `oracles/test_shared.py` and every
 `rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
 mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
@@ -605,7 +608,7 @@ does every pasted-project case.
 `--runner sbx` runs each workspace answer inside its own Docker Sandbox
 (`sbx`, v0.43.0 here) instead of on the host. A pasted-project case is
 refused under this runner. The harness still prepares, times, and grades each
-run, and `compare` reads the same directories as before.
+run, and `compare` and `chain.py` read the same directories as before.
 
 ```sh
 sbx version && sbx diagnose        # daemon healthy, authenticated
@@ -790,7 +793,9 @@ clone. It applies the sample diff and writes a trace with one worklist call and
 one poteto-agent spawn, plus transcripts for the lead and the delegate.
 Claude's trace carries two `result` events, and the test checks that
 `raw-stream.jsonl` holds both. Both agents print `SEPARATES`, and each takes
-about 50 seconds.
+about 50 seconds. `chain.py` over that output reports the worklist tool
+called, one spawn with the poteto-agent briefing, and the delegate's read of
+`poteto-mode/SKILL.md`, for both agents.
 The same stand-in, run through `screen.py run --runner sbx` on the three-arm
 rule `bundle-separate-contexts-harness` and its omnigent case
 `harness-families`, printed `leaf vs current: SEPARATES`, `leaf+trigger vs
@@ -799,6 +804,118 @@ current: SEPARATES`, and `leaf+trigger vs leaf: TIE-PASS`.
 ```sh
 (cd evals/canon && CANON_SBX_E2E=1 python3 -m unittest test_sandbox -v)
 ```
+
+## Chain census
+
+`chain.py` reads finished run dirs and reports, per run, how far the agent
+followed the poteto-mode chain. It records the entry and whether the invocation
+was injected, which playbooks the lead read, and whether it wrote a worklist and
+how much of it copies the playbook's steps. It also records each skill file read
+with its event index, whether the rule's owner file came before the first edit
+in a workspace case, subagent spawns and whether a Claude brief names the data
+shape, principle citations in the reply, and denied tool calls. It parses Claude
+stream-json and Codex `exec --json` traces into one event list, so both agents
+go through the same stage code. `test_chain.py` checks the parsers against
+trimmed real traces in `fixtures/chain/`.
+
+```sh
+python3 evals/canon/chain.py --markdown                 # stage rates per agent, workspace verdict cross-tab
+python3 evals/canon/chain.py --jsonl /tmp/chain.jsonl   # one JSON line per run
+```
+
+It reads `/private/tmp/canon-entry`, `/private/tmp/canon-ws`, and
+`/private/tmp/canon-screen` unless given roots. In those runs Codex's stream
+shows waits on a delegate but no spawn or brief, and Claude's `-p` sessions
+offer no worklist tool. Those stages read "not visible" or zero because of the
+harness, not the agent.
+
+A sandboxed run also harvests the agent's own transcripts next to its
+workspace diff, in `harvest/<run>/transcripts/`. Claude writes each delegate to
+`claude/<project>/<session>/subagents/agent-<id>.jsonl`, with a `.meta.json`
+naming its `agentType` and the lead's spawning `toolUseId`. Codex writes one
+rollout per thread under `codex/sessions/`. A child's `session_meta` names its
+`parent_thread_id` and `agent_role`. When those files exist, `chain.py` parses
+each delegate's reads, edits, spawns, worklist calls, and messages with actor
+`delegate`. It places them right after the spawn that started them, so every
+stage sees them. They fill `delegation.delegate_reads` and `delegate_edits`.
+Workspace edits are judged against the child's own cwd, which in a sandbox may
+sit under `/tmp`. A run without a `transcripts/` dir yields the same fields as
+before.
+
+Two stages use them:
+
+- `worklist_tool` gives `offered`, `called`, and `calls` for the lead. Claude's
+  init event says whether TodoWrite or TaskCreate was offered. Codex shows no
+  tool list, so `offered` stays `null` until the lead calls `update_plan`,
+  seen as a `todo_list` item or in the lead's rollout.
+- `delegate_persona` counts the lead's spawns whose delegate got the
+  poteto-agent briefing, with each spawn's role. A Claude spawn counts when it
+  names `poteto-agent` and the init event lists that agent, when the child's
+  meta says `poteto-agent`, or when the brief carries the persona body's first
+  line from `roles.json`. A Codex spawn counts when the child rollout's role is
+  `poteto-agent` or its first developer message is the installed-skill-paths
+  briefing. A Codex spawn's `collab_tool_call` prompt is its brief for the
+  data-shape stage. Codex 0.157 encrypts the task it sends a child, so its
+  children have no readable brief.
+
+**Worklist.** The pstack-harness contract puts the worklist on a structured
+tool when one is offered, else in the normal progress messages, which also
+take over after a rejected tool call. `worklist.carrier` is `tool`, `message`,
+or `none`. `valid_carrier` applies the contract to `tool_offered`, which is
+Claude's TodoWrite or TaskCreate in the init tools, or for Codex an
+`update_plan` in the rollout's tool list or any `update_plan` call, else
+`null`. A message counts as a worklist when it says worklist or names two
+playbook steps. Each numbered step of the matched playbook has an identity,
+its opening bold heading or else its first clause cut to five words, and
+pointers, the bold or backticked skill names in the step and the indented
+lines under it. An item keeps a pointer it names bare or with its `principle-`
+prefix. `worklist.steps` records per step whether some item keeps the
+identity and which pointers that item keeps. The stages are "worklist present
+via a valid carrier", "every playbook step listed", and "step pointers
+preserved (fraction)", a mean over runs. `verbatim_fraction` stays in the
+JSONL.
+
+**Delegate roles.** A routed skill may prescribe its delegates' role, and
+poteto-mode defers to it, so those delegates are not persona misses. `PRESCRIBED`
+in `chain.py` names each one. Comment Sicko is known by its role or its
+briefing line. A how explorer or explainer, why investigator or synthesizer,
+architect runner, interrogate reviewer, or reflect reviewer or synthesizer is
+known by its template's opening sentence or path in the brief, by the
+delegate's own read of that template, or by an agent path that names the
+skill, such as `/root/how_harness_family`. Arena and swarm ship no template,
+so their runners are known only by a brief or path that names them. The
+stage "implementation delegate ran as poteto-agent" counts code-writing
+delegates outside a routed skill. "delegate outside a routed skill got the
+poteto-agent briefing" counts every such delegate. `role_census` gives, per
+role, spawns, code-writing, prescribed, poteto-agent, and implementation
+misses, and `--markdown` prints it per agent.
+
+**Review route.** For a review case every row carries a `review` object,
+which is `null` for other cases. `route` lists the review skill files the
+lead read, in order and each once. The candidates are
+`poteto-mode/playbooks/investigation.md`, `interrogate/SKILL.md`, its
+`references/code-quality-review.md` and `references/reviewer-prompt.md`,
+`architect/references/design-red-flags.md`, `how/SKILL.md`, and any other
+poteto-mode playbook. `primary` is the first route, or `none`.
+`principle_leaves` splits the principle `SKILL.md` reads between lead and
+delegates. `delegated` gives the spawn count and each spawn's role, with
+interrogate reviewers known through `PRESCRIBED`. The object also holds
+`pr_modified` with `pr_paths`, `head_moved`, and the judge's combined verdict
+and calibration from `judge.json`. `--markdown` adds a review table per agent,
+with primary route counts, reference, leaf, and delegation rates, and primary
+route by combined verdict. Pass review run dirs as roots, since
+`/private/tmp/canon-review` is not a default root.
+
+**Result events.** A Claude lead that ends a turn while a background delegate
+runs emits a `result` each time. The last one is the answer, and
+`result_events` counts them. For a sandboxed Claude run, `chain.py` reads
+`harvest/<run>/raw-stream.jsonl` in place of `trace.jsonl` when it exists. A
+run that `screen.py regrade` graded takes its verdict from `regrade.json`.
+
+`fixtures/chain/sbx-codex/` holds trimmed files from a real Codex sandbox
+probe. `fixtures/chain/sbx-codex-roles/` and `claude-multi-result.jsonl` are
+trimmed from real `/private/tmp/canon-sbx` runs. `fixtures/chain/sbx-claude/`
+is synthetic.
 
 ## Reading the result
 
