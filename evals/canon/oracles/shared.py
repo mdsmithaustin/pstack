@@ -135,10 +135,18 @@ def apply_diff(checkout, diff):
 
         paths = [safe_path(record.split(b"\t", 2)[2].decode("utf-8", "surrogateescape"))
                  for record in git_apply("--numstat", "-z").split(b"\0") if record]
+        root = Path(checkout).resolve()
         for path in paths:
             source = Path(checkout) / path
+            if source.is_symlink():
+                raise OracleError(f"workspace diff touches a symlink in the checkout: {path}")
+            if not source.resolve().is_relative_to(root):
+                raise OracleError(f"workspace diff path resolves outside the checkout: {path}")
             if source.is_file():
                 (stage / path).parent.mkdir(parents=True, exist_ok=True)
                 (stage / path).write_bytes(source.read_bytes())
         git_apply("--binary", "--whitespace=nowarn")
+        for path in paths:
+            if (stage / path).is_symlink():
+                raise OracleError(f"workspace diff leaves a symlink at {path}")
         return {path: (stage / path).read_bytes() if (stage / path).is_file() else None for path in paths}
