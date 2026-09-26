@@ -142,6 +142,96 @@ class MaterializeTests(ShopRepo):
             workspace.materialize(root, self.mirror, self.commit, {})
 
 
+class ApplyDiffTests(unittest.TestCase):
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.base)
+        self.checkout = self.base / "checkout"
+        (self.checkout / "app").mkdir(parents=True)
+        (self.checkout / "app" / "orders.py").write_text("OLD = 1\n")
+        self.secret = self.base / "host-secret.txt"
+        self.secret.write_text("SECRET-HOST-CONTENT\n")
+
+    def test_diff_that_adds_a_symlink_to_a_host_file_is_refused(self):
+        plain = ("diff --git a/leak.txt b/leak.txt\nnew file mode 100644\n--- /dev/null\n+++ b/leak.txt\n"
+                 "@@ -0,0 +1 @@\n+not a link\n")
+        link = ("diff --git a/leak.txt b/leak.txt\nnew file mode 120000\n--- /dev/null\n+++ b/leak.txt\n"
+                f"@@ -0,0 +1 @@\n+{self.secret}\n\\ No newline at end of file\n")
+
+        self.assertEqual(apply_diff(self.checkout, plain), {"leak.txt": b"not a link\n"})
+        with self.assertRaisesRegex(OracleError, r"^workspace diff leaves a symlink at leak.txt$"):
+            apply_diff(self.checkout, link)
+
+    def test_diff_that_edits_a_symlink_in_the_checkout_is_refused(self):
+        (self.checkout / "app" / "alias.py").symlink_to("orders.py")
+        edit = ("diff --git a/app/{0} b/app/{0}\n--- a/app/{0}\n+++ b/app/{0}\n"
+                "@@ -1 +1 @@\n-OLD = 1\n+NEW = 2\n")
+
+        self.assertEqual(apply_diff(self.checkout, edit.format("orders.py")), {"app/orders.py": b"NEW = 2\n"})
+        with self.assertRaisesRegex(OracleError, r"^workspace diff touches a symlink in the checkout: app/alias.py$"):
+            apply_diff(self.checkout, edit.format("alias.py"))
+
+    def test_path_that_resolves_outside_the_checkout_is_refused(self):
+        (self.checkout / "docs").symlink_to(self.base)
+        edit = ("diff --git a/docs/host-secret.txt b/docs/host-secret.txt\n--- a/docs/host-secret.txt\n"
+                "+++ b/docs/host-secret.txt\n@@ -1 +1 @@\n-SECRET-HOST-CONTENT\n+changed\n")
+
+        with self.assertRaisesRegex(OracleError, r"^workspace diff path resolves outside the checkout: docs/host-secret.txt$"):
+            apply_diff(self.checkout, edit)
+
+
+API_KEY = "sk-" + "canon" * 5
+OAUTH = '{"claudeAi' + 'Oauth": {"accessToken": "' + "t" * 24 + '"}}'
+
+
+class CredentialScanTests(unittest.TestCase):
+    def setUp(self):
+        self.work = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.work)
+
+    def write(self, path, text):
+        (self.work / path).parent.mkdir(parents=True, exist_ok=True)
+        (self.work / path).write_text(text)
+
+    def test_credential_files_and_tokens_are_found_and_ordinary_mentions_are_not(self):
+        self.write("runs/orders-amend/with_skill/run-1/stream.jsonl", '{"text": "oauth flow, sk-short, task-' + "x" * 30 + '"}\n')
+        self.write("harvest/orders-amend/with_skill/run-1/transcripts/codex/auth.json", "{}\n")
+        self.write("harvest/orders-amend/with_skill/run-1/transcripts/claude/s1.jsonl", f'{{"key": "{API_KEY}"}}\n')
+        self.write("harvest/orders-amend/with_skill/run-2/raw-stream.jsonl", OAUTH + "\n")
+
+        self.assertEqual(workspace.credential_findings(self.work), [
+            ("harvest/orders-amend/with_skill/run-1/transcripts/claude/s1.jsonl", "API key"),
+            ("harvest/orders-amend/with_skill/run-1/transcripts/codex/auth.json", "credential file"),
+            ("harvest/orders-amend/with_skill/run-2/raw-stream.jsonl", "OAuth token"),
+        ])
+
+    def run_arm(self, leak):
+        rule, case = mock.Mock(id="orders-workspace"), mock.Mock(id="orders-amend")
+        calls = []
+
+        def harness(*arguments, env=None):
+            calls.append(arguments[0])
+            if arguments[0] == "run-agent":
+                self.write("out/codex/orders-workspace/orders-amend/amended/runs/orders-amend/with_skill/run-1/stream.jsonl",
+                           f'{{"text": "{leak}"}}\n')
+
+        with mock.patch.object(screen, "harness", harness), mock.patch.object(screen, "with_skill_rows"):
+            try:
+                screen.run_arm("codex", self.work / "out", rule, case, "amended", {"timeout_s": 60}, [], {}, "gpt-6-sol", 1, None)
+            except screen.ScreenError as exc:
+                return calls, str(exc)
+        return calls, None
+
+    def test_a_run_whose_output_holds_a_token_fails_before_grading(self):
+        self.assertEqual(self.run_arm("done"), (["prepare", "run-agent", "grade"], None))
+
+        work = self.work / "out" / "codex" / "orders-workspace" / "orders-amend" / "amended"
+        shutil.rmtree(self.work / "out")
+        self.assertEqual(self.run_arm(API_KEY), (["prepare", "run-agent"],
+                         f"{work}: credential material in the run output: "
+                         "runs/orders-amend/with_skill/run-1/stream.jsonl (API key)"))
+
+
 class HarvestTests(ShopRepo):
     def test_diff_carries_edits_deletions_and_new_files_but_not_mounted_skills(self):
         root = self.harness_workspace("run", "# Poteto mode\n")
@@ -161,12 +251,16 @@ class HarvestTests(ShopRepo):
             "app/orders.py": b"def place(order):\n    return order\n\ndef amend(order):\n    return order\n",
         })
 
-    def test_untouched_workspace_harvests_an_empty_diff(self):
+    def test_an_untouched_workspace_harvests_an_empty_diff_and_one_edit_harvests_only_that_edit(self):
         root = self.harness_workspace("idle", "# Poteto mode\n")
         tree = workspace.materialize(root, self.mirror, self.commit, self.spec.overlay)
 
-        self.assertEqual(workspace.harvest(root, tree), b"")
-        self.assertEqual(apply_diff(root, ""), {})
+        untouched = workspace.harvest(root, tree)
+        (root / "README.md").write_text("# Shop\nOrders can change.\n")
+
+        self.assertEqual((untouched, apply_diff(root, "")), (b"", {}))
+        self.assertEqual(workspace.harvest(root, tree).decode(), "diff --git a/README.md b/README.md\nindex a00621b..c08b66c 100644\n"
+                         "--- a/README.md\n+++ b/README.md\n@@ -1 +1,2 @@\n # Shop\n+Orders can change.\n")
 
     def test_run_dir_finds_its_diff_in_the_parallel_harvest_tree(self):
         work = self.base / "work"
@@ -286,15 +380,10 @@ class MountClashTests(unittest.TestCase):
     def test_repo_that_tracks_the_skill_root_is_refused(self):
         self.assertEqual(screen.mount_clashes({"skills/pstack/README.md"}, self.rule, "poteto-mode", self.skills), ["skills/pstack"])
 
-    def test_repo_skill_named_like_a_mounted_skill_is_refused_under_its_discovery_dir(self):
-        tracked = {".claude/skills/poteto-mode/SKILL.md", ".claude/skills/run-load-test/SKILL.md"}
+    def test_only_the_repo_skill_named_like_a_mounted_skill_is_refused_under_its_discovery_dir(self):
+        tracked = {"skills/tools/SKILL.md", ".claude/skills/poteto-mode/SKILL.md", ".claude/skills/run-load-test/SKILL.md"}
 
         self.assertEqual(screen.mount_clashes(tracked, self.rule, "poteto-mode", self.skills), [".claude/skills/poteto-mode"])
-
-    def test_repo_skills_beside_the_mounted_tree_are_fine(self):
-        tracked = {"skills/tools/SKILL.md", ".claude/skills/run-load-test/SKILL.md"}
-
-        self.assertEqual(screen.mount_clashes(tracked, self.rule, "poteto-mode", self.skills), [])
 
 
 class ShopRule(ShopRepo):
