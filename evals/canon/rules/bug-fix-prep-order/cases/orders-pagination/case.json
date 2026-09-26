@@ -1,0 +1,9 @@
+{
+  "kind": "near-miss",
+  "domain": "bug-fix-sequencing",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Fixes page_count with a one-line edit and adds a repro for an exact multiple of the page size.",
+    "Ships no refactor commit, because the fix is already a small edit in the current structure."
+  ]
+}

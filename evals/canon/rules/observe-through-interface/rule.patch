@@ -1,0 +1,14 @@
+--- a/principle-test-behavior-not-implementation/SKILL.md
++++ b/principle-test-behavior-not-implementation/SKILL.md
+@@ -20,8 +20,10 @@
+ - **Constant pin.** The assertion restates a hand-maintained constant, config default, table row, or prompt string: `expect(LIMITS.maxTools).toBe(8)`, `expect(PROMPT).toContain("You are")`.
+ - **Fixture asserts fixture.** The assertion reads data the test built or a value computed in `beforeEach`, and the subject never runs inside the body.
+ 
+-**The fix:** call the subject inside the test body with one concrete input and assert the literal output or the observable effect, `expect(slugify("Hello, World!")).toBe("hello-world")`. For an absence, assert the presence on the other input in the same test. For a constant, test the mechanism that reads it with one input instead of restating the value. For a mock, assert the payload it received or the state after the call, not that it was called. When no such assertion exists, delete the test.
++**Observe through the caller's interface.** Assert what comes out through the interface a caller uses: a return value, a response, a rendered view, or a message sent across a system boundary. Do not query the database or read private state to check an outcome. Read it back through the public interface. When stored state is the interface the caller uses, as in a migration or a repository adapter, that store is the interface.
++
++**The fix:** call the subject inside the test body with one concrete input and assert the literal output or the observable effect, `expect(slugify("Hello, World!")).toBe("hello-world")`. For an absence, assert the presence on the other input in the same test. For a constant, test the mechanism that reads it with one input instead of restating the value. For a mock at a system boundary, assert the payload it received, not that it was called. When no such assertion exists, delete the test.
+ 
+ **Keep** a test of a relation across a table's rows (a key present in two tables, a parent that exists), and a compile-time check in a `*.test-d.ts` file.
+ 
+ **Production prerequisites.** An acceptance test must not pass because its setup establishes state or ordering that production never establishes. Exercise the real initialization path or prove that the caller supplies the prerequisite. Ordinary fixture inputs that real callers can supply are valid.

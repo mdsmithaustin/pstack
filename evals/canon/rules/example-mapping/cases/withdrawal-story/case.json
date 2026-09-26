@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "requirements",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Writes Given, When, Then examples with literal amounts for the minimum, paid-out, and refused rules.",
+    "Carries a withdrawal that lands exactly on -£100 as an open question and never gives it a Then."
+  ]
+}

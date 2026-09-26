@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "type-design",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Sums prices through one money type whose addition refuses mixed currencies.",
+    "A cart with a EUR line and a USD line gets no single-number subtotal."
+  ]
+}
