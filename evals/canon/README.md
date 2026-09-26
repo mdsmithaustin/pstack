@@ -197,8 +197,10 @@ A rule that routes to another suite's skill names it in `rule.json`
 (default `~/.agents/skills`) into both arms. Under `--entry poteto-mode` the
 copy sits in `skills/pstack/<name>`, so the same link that exposes pstack
 also exposes the companion by name. Under `--entry skill` it sits in
-`skills/<name>` and its `SKILL.md` joins `skill_paths`. The build refuses a
-companion whose name matches a pstack skill.
+`skills/<name>` and its `SKILL.md` joins `skill_paths`. Under `--entry
+poteto-mode` the build refuses a companion whose name matches any pstack
+skill. Under `--entry skill` it refuses only a companion whose name matches
+one of the skills mounted for that rule.
 
 The one-change check reads only the pstack files, so companions never count
 as a second change. `build.json` records each companion's file count and a
@@ -216,21 +218,19 @@ goes on to the next arm, then exits 1 naming each failed arm.
 
 ## Rule texts
 
-R7 says "Write Given, When, Then or Gherkin-style tests" where the draft said
-"these tests", because the current skill has no Given, When, Then paragraph. R6
-is labeled "Observe through the caller's interface". It sits right before **The
-fix** and narrows that paragraph's mock sentence to "For a mock at a system
-boundary, assert the payload it received, not that it was called", so both edits
-form one hunk.
+R6 is labeled "Observe through the caller's interface". It sits right before
+**The fix** and narrows that paragraph's mock sentence to "For a mock at a
+system boundary, assert the payload it received, not that it was called", so
+both edits form one hunk.
 
 ## Model-free checks
 
 These need Docker, `uv`, and a skill-ci checkout at `../skill-ci` or
 `$SKILL_CI` with its `runner.lock`. `audit` and `run` call the harness through
 `uv run <skill-ci>/tools/run_runner.py`. Without a running Docker daemon, the
-oracle tests that run answer code skip. Tests that need skill-ci and `uv` skip
-without them. The `lint` workflow pulls the image and runs the unit tests on
-every pull request.
+oracle tests that run answer code skip. The unit tests need neither skill-ci
+nor `uv`; only `audit` and `run` do. The `lint` workflow pulls the image and
+runs the unit tests on every pull request.
 
 ```sh
 docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
