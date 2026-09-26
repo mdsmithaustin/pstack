@@ -14,6 +14,11 @@ and the tree is linked where Codex finds it. For a workspace case it also
 applies the chosen sample's .diff to the checkout in its cwd, and exits 4 when
 there is no checkout or the sandbox forbids writes.
 
+A review case answers with the labeled sample screen.standin_review picks:
+FOUND where good.md would go, MISSED where bad.md would, and CLEAN in both
+arms of a near-miss. It edits nothing, and exits 7 unless the PR branch is
+checked out, main exists, and the PR body sits in its cwd.
+
 For an arms rule, a workspace case's path also names the arm, and a positive
 case answers with good.md in every arm but current. A pasted-project case
 counts an arm as mounted when every line it adds is. Every arm reads every file
@@ -52,13 +57,22 @@ else:
     carried = Path(arm_workspace).parts[-2] != "current" if case.workspace else screen.rule_mounted(rule, mounted, tree)
 root = ".agents/skills" if entry.exists() else "skills"
 sample = "good.md" if case.kind == "near-miss" or carried else "bad.md"
+if case.review:
+    sample = screen.standin_review(case, carried).name
 answer = (case.root / "samples" / sample).read_text()
 if case.workspace:
     # A workspace case edits the checkout in its cwd with the sample's diff,
     # which needs the sandbox that allows writes there.
     if "workspace-write" not in sys.argv or not Path(".git").is_dir():
         sys.exit(4)
-    subprocess.run(["git", "apply", "--binary", str(case.root / "samples" / Path(sample).with_suffix(".diff"))], check=True)
+    if case.review:
+        def git(*args):
+            return subprocess.run(["git", *args], capture_output=True, text=True).stdout.strip()
+        if (git("rev-parse", "--abbrev-ref", "HEAD") != case.review["branch"] or not git("rev-parse", "--verify", "-q", "refs/heads/main")
+                or not Path(case.review["body_file"]).is_file()):
+            sys.exit(7)
+    else:
+        subprocess.run(["git", "apply", "--binary", str(case.root / "samples" / Path(sample).with_suffix(".diff"))], check=True)
 Path(sys.argv[sys.argv.index("--output-last-message") + 1]).write_text(answer)
 for event in (
     {"type": "thread.started", "thread_id": "offline"},
