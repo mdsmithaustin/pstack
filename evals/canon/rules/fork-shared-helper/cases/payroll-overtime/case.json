@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "shared-code-change",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Payroll pays time and a half after 38 hours.",
+    "The compliance hours report keeps its 40-hour split."
+  ]
+}

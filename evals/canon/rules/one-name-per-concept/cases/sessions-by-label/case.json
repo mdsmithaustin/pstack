@@ -1,0 +1,12 @@
+{
+  "kind": "near-miss",
+  "domain": "domain-naming",
+  "timeout_s": 2400,
+  "expected_behavior": [
+    "Filters the session list by label, the user's word and the code's word, in GET /v1/sessions and in SessionsNamespace.list."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  }
+}

@@ -1,0 +1,1 @@
+Can you review `insights-platform-active-time` against main before I merge it? It adds per-platform active time to the /insights report. Its description is saved in pr-body.md. Review only, no need to commit or push anything.

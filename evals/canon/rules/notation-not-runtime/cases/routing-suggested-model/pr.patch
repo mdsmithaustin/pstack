@@ -1,0 +1,406 @@
+From 5bf2713a5b437fc3322bbbc357e4c74bb0810ee4 Mon Sep 17 00:00:00 2001
+From: Lucia Ferreira <lucia.ferreira@example.com>
+Date: Sat, 19 Sep 2026 15:42:00 +0200
+Subject: [PATCH] feat(policies): name a suggested model when denying trivial
+ tasks
+
+deny_trivial_to_expensive_model tells the agent to "use a smaller model"
+but never says which one, so the agent guesses and often retries on
+another gated model. Add an optional suggested_model factory param that
+the DENY reason names, on both the fresh and the cached verdict path.
+Reject a suggestion that is itself listed in expensive_models.
+
+Cover the behaviour with Gherkin scenarios run through pytest-bdd.
+
+Signed-off-by: Lucia Ferreira <lucia.ferreira@example.com>
+---
+ omnigent/policies/builtins/routing.py         |  50 ++++++--
+ pyproject.toml                                |   2 +
+ .../builtins/features/suggested_model.feature |  37 ++++++
+ .../test_suggested_model_scenarios.py         | 113 ++++++++++++++++++
+ uv.lock                                       |  53 ++++++++
+ 5 files changed, 245 insertions(+), 10 deletions(-)
+ create mode 100644 tests/policies/builtins/features/suggested_model.feature
+ create mode 100644 tests/policies/builtins/test_suggested_model_scenarios.py
+
+diff --git a/omnigent/policies/builtins/routing.py b/omnigent/policies/builtins/routing.py
+index a806b81e8..98c863b4e 100644
+--- a/omnigent/policies/builtins/routing.py
++++ b/omnigent/policies/builtins/routing.py
+@@ -99,10 +99,30 @@ def _extract_response_text(response: object) -> str:
+     return content_text if isinstance(content_text, str) else ""
+ 
+ 
++def _trivial_reason(current_model: str, suggested_model: str | None) -> str:
++    """
++    Build the DENY reason for a trivial task sent to an expensive model.
++
++    :param current_model: The gated model the request targeted, e.g.
++        ``"databricks-claude-opus-4-6"``.
++    :param suggested_model: The model the operator wants trivial tasks
++        to use instead, e.g. ``"databricks-claude-haiku-4-5"``. ``None``
++        falls back to a generic "smaller model" hint.
++    :returns: The reason string surfaced to the agent.
++    """
++    alternative = f"'{suggested_model}'" if suggested_model else "a smaller model"
++    return (
++        f"This task appears trivial and does not warrant "
++        f"the expensive model '{current_model}'. Use "
++        f"{alternative} for simple tasks."
++    )
++
++
+ def deny_trivial_to_expensive_model(
+     *,
+     expensive_models: list[str],
+     classification_prompt: str = _DEFAULT_CLASSIFICATION_PROMPT,
++    suggested_model: str | None = None,
+ ) -> PolicyCallable:
+     """Factory: deny trivial tasks from using expensive models.
+ 
+@@ -125,10 +145,20 @@ def deny_trivial_to_expensive_model(
+         (``{"difficulty": "TRIVIAL"|"COMPLEX"}``); the prompt
+         only needs to describe the classification criteria, not
+         the output format.
++    :param suggested_model: Optional model id to name in the DENY
++        reason, e.g. ``"databricks-claude-haiku-4-5"``, so the agent
++        knows which model to retry with. Must not be one of
++        *expensive_models*.
+     :returns: An async policy callable that denies trivial
+         ``llm_request`` events targeting expensive models.
++    :raises ValueError: If *suggested_model* is itself gated.
+     """
+     gated = frozenset(expensive_models)
++    if suggested_model is not None and suggested_model in gated:
++        raise ValueError(
++            f"suggested_model {suggested_model!r} is listed in expensive_models; "
++            "trivial tasks would be denied on it too"
++        )
+ 
+     async def evaluate(event: PolicyEvent) -> PolicyResponse | None:
+         """Classify the user message and deny trivial calls to expensive models.
+@@ -168,11 +198,7 @@ def deny_trivial_to_expensive_model(
+         if cached == "TRIVIAL":
+             return {
+                 "result": "DENY",
+-                "reason": (
+-                    f"This task appears trivial and does not warrant "
+-                    f"the expensive model '{current_model}'. Use a "
+-                    f"smaller model for simple tasks."
+-                ),
++                "reason": _trivial_reason(current_model, suggested_model),
+             }
+         if cached == "COMPLEX":
+             return None
+@@ -218,11 +244,7 @@ def deny_trivial_to_expensive_model(
+             )
+             return {
+                 "result": "DENY",
+-                "reason": (
+-                    f"This task appears trivial and does not warrant "
+-                    f"the expensive model '{current_model}'. Use a "
+-                    f"smaller model for simple tasks."
+-                ),
++                "reason": _trivial_reason(current_model, suggested_model),
+                 "state_updates": [
+                     {"key": cache_key, "action": "set", "value": "TRIVIAL"},
+                 ],
+@@ -499,6 +521,14 @@ POLICY_REGISTRY: list[dict[str, object]] = [
+                         "via structured output, not the prompt)."
+                     ),
+                 },
++                "suggested_model": {
++                    "type": "string",
++                    "description": (
++                        "Model id named in the denial reason so the agent "
++                        "retries trivial tasks on it. Must not be one of "
++                        "expensive_models."
++                    ),
++                },
+             },
+             "required": ["expensive_models"],
+         },
+diff --git a/pyproject.toml b/pyproject.toml
+index 3dac4efd4..e5b3dbdf6 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -347,6 +347,8 @@ test = [
+     "hindsight-client>=0.4.0",
+     "nimble-python>=1.2.0,<2",
+     "pytest-asyncio>=0.21",
++    # Gherkin scenarios (.feature files) bound to pytest step definitions.
++    "pytest-bdd>=8.1.0",
+     "pytest-xdist>=3.6",
+     # Line coverage during the unit-test matrix. Each CI shard writes its
+     # own data file; the code-coverage workflow combines them. See
+diff --git a/tests/policies/builtins/features/suggested_model.feature b/tests/policies/builtins/features/suggested_model.feature
+new file mode 100644
+index 000000000..c4a2072c0
+--- /dev/null
++++ b/tests/policies/builtins/features/suggested_model.feature
+@@ -0,0 +1,37 @@
++Feature: Point trivial tasks at a suggested model
++  An operator gating expensive models can name the model trivial tasks
++  should use instead, so the agent knows where to retry after a denial.
++
++  Background:
++    Given the routing policy gates "databricks-claude-opus-4-6"
++
++  Scenario: A trivial task names the suggested model
++    Given the policy suggests "databricks-claude-haiku-4-5"
++    And the classifier rates the message trivial
++    When the agent sends "What is 2+2?" to "databricks-claude-opus-4-6"
++    Then the call is denied
++    And the reason tells the agent to use "databricks-claude-haiku-4-5"
++
++  Scenario: A cached trivial verdict still names the suggested model
++    Given the policy suggests "databricks-claude-haiku-4-5"
++    And the session already rated "What is 2+2?" trivial
++    When the agent sends "What is 2+2?" to "databricks-claude-opus-4-6"
++    Then the call is denied
++    And the reason tells the agent to use "databricks-claude-haiku-4-5"
++    And the classifier was not asked
++
++  Scenario: Without a suggestion the reason stays generic
++    Given the classifier rates the message trivial
++    When the agent sends "What is 2+2?" to "databricks-claude-opus-4-6"
++    Then the call is denied
++    And the reason tells the agent to use a smaller model
++
++  Scenario: A complex task is allowed whatever the suggestion
++    Given the policy suggests "databricks-claude-haiku-4-5"
++    And the classifier rates the message complex
++    When the agent sends "Refactor the billing module" to "databricks-claude-opus-4-6"
++    Then the call is allowed
++
++  Scenario: A gated model cannot be the suggestion
++    When the policy is configured to suggest "databricks-claude-opus-4-6"
++    Then configuration fails naming "databricks-claude-opus-4-6"
+diff --git a/tests/policies/builtins/test_suggested_model_scenarios.py b/tests/policies/builtins/test_suggested_model_scenarios.py
+new file mode 100644
+index 000000000..f9242970e
+--- /dev/null
++++ b/tests/policies/builtins/test_suggested_model_scenarios.py
+@@ -0,0 +1,113 @@
++"""
++Step definitions for ``features/suggested_model.feature``.
++
++Drives :func:`omnigent.policies.builtins.routing.deny_trivial_to_expensive_model`
++with a stub classifier and checks the verdict the agent would see.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import hashlib
++import json
++from typing import Any
++from unittest.mock import AsyncMock
++
++import pytest
++from pytest_bdd import given, parsers, scenarios, then, when
++
++from omnigent.policies.builtins.routing import (
++    _CACHE_KEY_PREFIX,
++    deny_trivial_to_expensive_model,
++)
++
++from .helpers import llm_request_event
++
++scenarios("features/suggested_model.feature")
++
++
++class _StubResponse:
++    """Classifier response exposing ``output_text`` like the SDK ``Response``."""
++
++    def __init__(self, output_text: str) -> None:
++        self.output_text = output_text
++
++
++@pytest.fixture
++def routing() -> dict[str, Any]:
++    """Mutable state shared by the steps of one scenario."""
++    return {"suggested_model": None, "session_state": {}, "classifier": AsyncMock()}
++
++
++@given(parsers.parse('the routing policy gates "{model}"'))
++def gated_model(routing: dict[str, Any], model: str) -> None:
++    routing["expensive_models"] = [model]
++
++
++@given(parsers.parse('the policy suggests "{model}"'))
++def suggestion(routing: dict[str, Any], model: str) -> None:
++    routing["suggested_model"] = model
++
++
++@given(parsers.parse("the classifier rates the message {difficulty}"))
++def classifier_rating(routing: dict[str, Any], difficulty: str) -> None:
++    body = json.dumps({"difficulty": difficulty.upper()})
++    routing["classifier"].return_value = _StubResponse(body)
++
++
++@given(parsers.parse('the session already rated "{message}" {difficulty}'))
++def cached_rating(routing: dict[str, Any], message: str, difficulty: str) -> None:
++    digest = hashlib.sha256(message.encode()).hexdigest()[:16]
++    routing["session_state"][f"{_CACHE_KEY_PREFIX}{digest}"] = difficulty.upper()
++
++
++@when(parsers.parse('the agent sends "{message}" to "{model}"'))
++def send(routing: dict[str, Any], message: str, model: str) -> None:
++    policy = deny_trivial_to_expensive_model(
++        expensive_models=routing["expensive_models"],
++        suggested_model=routing["suggested_model"],
++    )
++    event = llm_request_event(model=model, last_user_message=message)
++    event["session_state"] = routing["session_state"]
++    event["llm_client"] = type("_Client", (), {"create": routing["classifier"]})()
++    routing["verdict"] = asyncio.run(policy(event))
++
++
++@when(parsers.parse('the policy is configured to suggest "{model}"'))
++def configure_gated_suggestion(routing: dict[str, Any], model: str) -> None:
++    with pytest.raises(ValueError) as excinfo:
++        deny_trivial_to_expensive_model(
++            expensive_models=routing["expensive_models"],
++            suggested_model=model,
++        )
++    routing["error"] = str(excinfo.value)
++
++
++@then("the call is denied")
++def denied(routing: dict[str, Any]) -> None:
++    assert routing["verdict"]["result"] == "DENY"
++
++
++@then("the call is allowed")
++def allowed(routing: dict[str, Any]) -> None:
++    assert routing["verdict"]["result"] == "ALLOW"
++
++
++@then(parsers.parse('the reason tells the agent to use "{model}"'))
++def reason_names_model(routing: dict[str, Any], model: str) -> None:
++    assert f"Use '{model}' for simple tasks." in routing["verdict"]["reason"]
++
++
++@then("the reason tells the agent to use a smaller model")
++def reason_is_generic(routing: dict[str, Any]) -> None:
++    assert "Use a smaller model for simple tasks." in routing["verdict"]["reason"]
++
++
++@then("the classifier was not asked")
++def classifier_not_asked(routing: dict[str, Any]) -> None:
++    routing["classifier"].assert_not_awaited()
++
++
++@then(parsers.parse('configuration fails naming "{model}"'))
++def configuration_fails(routing: dict[str, Any], model: str) -> None:
++    assert model in routing["error"]
+diff --git a/uv.lock b/uv.lock
+index 7cb275bc7..c820b761a 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -1571,6 +1571,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/59/f6/95d1ed1ace7902d8e1ce698db31931cb87d4abe621ec2df24e69daf49ae9/geventhttpclient-2.3.9-cp314-cp314t-win_amd64.whl", hash = "sha256:b9bbcbc7d5d875e5180f2b1f1c6fa8e092ef80d9debfb6ba22a4ec28f0565395", size = 50300, upload-time = "2026-03-03T08:08:51.482Z" },
+ ]
+ 
++[[package]]
++name = "gherkin-official"
++version = "29.0.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/f3/d8/7a28537efd7638448f7512a0cce011d4e3bf1c7f4794ad4e9c87b3f1e98e/gherkin_official-29.0.0.tar.gz", hash = "sha256:dbea32561158f02280d7579d179b019160d072ce083197625e2f80a6776bb9eb", size = 32303, upload-time = "2024-08-12T09:41:09.595Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/f8/fc/b86c22ad3b18d8324a9d6fe5a3b55403291d2bf7572ba6a16efa5aa88059/gherkin_official-29.0.0-py3-none-any.whl", hash = "sha256:26967b0d537a302119066742669e0e8b663e632769330be675457ae993e1d1bc", size = 37085, upload-time = "2024-08-12T09:41:07.954Z" },
++]
++
+ [[package]]
+ name = "gitdb"
+ version = "4.0.12"
+@@ -3320,6 +3329,7 @@ dev = [
+     { name = "pyrefly" },
+     { name = "pytest" },
+     { name = "pytest-asyncio" },
++    { name = "pytest-bdd" },
+     { name = "pytest-cov" },
+     { name = "pytest-playwright" },
+     { name = "pytest-playwright-visual-snapshot" },
+@@ -3346,6 +3356,7 @@ test = [
+     { name = "nimble-python" },
+     { name = "pytest" },
+     { name = "pytest-asyncio" },
++    { name = "pytest-bdd" },
+     { name = "pytest-cov" },
+     { name = "pytest-playwright" },
+     { name = "pytest-playwright-visual-snapshot" },
+@@ -3468,6 +3479,7 @@ dev = [
+     { name = "pyrefly", specifier = "==1.1.1" },
+     { name = "pytest", specifier = ">=7.0" },
+     { name = "pytest-asyncio", specifier = ">=0.21" },
++    { name = "pytest-bdd", specifier = ">=8.1.0" },
+     { name = "pytest-cov", specifier = ">=5" },
+     { name = "pytest-playwright", specifier = ">=0.7" },
+     { name = "pytest-playwright-visual-snapshot", specifier = ">=0.5.1" },
+@@ -3494,6 +3506,7 @@ test = [
+     { name = "nimble-python", specifier = ">=1.2.0,<2" },
+     { name = "pytest", specifier = ">=7.0" },
+     { name = "pytest-asyncio", specifier = ">=0.21" },
++    { name = "pytest-bdd", specifier = ">=8.1.0" },
+     { name = "pytest-cov", specifier = ">=5" },
+     { name = "pytest-playwright", specifier = ">=0.7" },
+     { name = "pytest-playwright-visual-snapshot", specifier = ">=0.5.1" },
+@@ -4004,6 +4017,28 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/70/44/5191d2e4026f86a2a109053e194d3ba7a31a2d10a9c2348368c63ed4e85a/pandas-2.3.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:3869faf4bd07b3b66a9f462417d0ca3a9df29a9f6abd5d0d0dbab15dac7abe87", size = 13202175, upload-time = "2025-09-29T23:31:59.173Z" },
+ ]
+ 
++[[package]]
++name = "parse"
++version = "1.22.2"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/c6/ee/0d009de843577b7a4893517fe517b54791e576dedd00ed9209c8498eddc2/parse-1.22.2.tar.gz", hash = "sha256:8ff0b98202798b8cefa4f8fac06b670d6d00e5ec6ecbbacaf97ac0d0e93a54e6", size = 37675, upload-time = "2026-09-18T16:45:10.111Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/8e/a5/fa3a1c9cf935b6e3dedb85647ce9ee98decc830feaf63102c3b5b8a72558/parse-1.22.2-py2.py3-none-any.whl", hash = "sha256:b8ed6f889ca625b6b3aed4ec1439eb9421fde31814c2b1d550ccd8df5733a5b6", size = 21190, upload-time = "2026-09-18T16:45:09.146Z" },
++]
++
++[[package]]
++name = "parse-type"
++version = "0.6.6"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "parse" },
++    { name = "six" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/19/ea/42ba6ce0abba04ab6e0b997dcb9b528a4661b62af1fe1b0d498120d5ea78/parse_type-0.6.6.tar.gz", hash = "sha256:513a3784104839770d690e04339a8b4d33439fcd5dd99f2e4580f9fc1097bfb2", size = 98012, upload-time = "2025-08-11T22:53:48.066Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/85/8d/eef3d8cdccc32abdd91b1286884c99b8c3a6d3b135affcc2a7a0f383bb32/parse_type-0.6.6-py2.py3-none-any.whl", hash = "sha256:3ca79bbe71e170dfccc8ec6c341edfd1c2a0fc1e5cfd18330f93af938de2348c", size = 27085, upload-time = "2025-08-11T22:53:46.396Z" },
++]
++
+ [[package]]
+ name = "pendulum"
+ version = "3.2.0"
+@@ -4770,6 +4805,24 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/98/1c/b00940ab9eb8ede7897443b771987f2f4a76f06be02f1b3f01eb7567e24a/pytest_base_url-2.1.0-py3-none-any.whl", hash = "sha256:3ad15611778764d451927b2a53240c1a7a591b521ea44cebfe45849d2d2812e6", size = 5302, upload-time = "2024-01-31T22:42:58.897Z" },
+ ]
+ 
++[[package]]
++name = "pytest-bdd"
++version = "8.1.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "gherkin-official" },
++    { name = "mako" },
++    { name = "packaging" },
++    { name = "parse" },
++    { name = "parse-type" },
++    { name = "pytest" },
++    { name = "typing-extensions" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/2d/2f/14c2e55372a5718a93b56aea48cd6ccc15d2d245364e516cd7b19bbd07ad/pytest_bdd-8.1.0.tar.gz", hash = "sha256:ef0896c5cd58816dc49810e8ff1d632f4a12019fb3e49959b2d349ffc1c9bfb5", size = 56147, upload-time = "2024-12-05T21:45:58.83Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/9f/7d/1461076b0cc9a9e6fa8b51b9dea2677182ba8bc248d99d95ca321f2c666f/pytest_bdd-8.1.0-py3-none-any.whl", hash = "sha256:2124051e71a05ad7db15296e39013593f72ebf96796e1b023a40e5453c47e5fb", size = 49149, upload-time = "2024-12-05T21:45:56.184Z" },
++]
++
+ [[package]]
+ name = "pytest-cov"
+ version = "7.1.0"
+-- 
+2.54.0 (Apple Git-157)
+

@@ -304,8 +304,10 @@ tests skip when the mirror lacks the pinned commit.
 The omnigent cases grade the diff statically, with the AST of the Python files
 it touches. Their upstream tests need pyyaml, pydantic, and pytest, which the
 networkless image does not have. omnigent's `AGENTS.md` asks for `pre-commit`
-before any commit, so each prompt says there is no need to commit. None of
-these cases needs an overlay.
+before any commit, so each prompt says there is no need to commit. It also
+asks for a `@deprecated` marker on anything slated for removal, so the
+one-name check skips a `@deprecated` def and a parameter declared with
+`deprecated=True`. None of these cases needs an overlay.
 
 Each run costs one checkout. On an Apple silicon Mac on 2026-09-24, omnigent
 (5,545 files) took 1.0 s to check out, 0.3 s to diff, and 102 MB of disk.
@@ -497,6 +499,17 @@ stopped after the agent ran, whether its harvest slots are still numbered
 grades each run from its diff. Such a run's `compare.json` row carries
 `graded_from_diff` and `ungraded`. A review arm then needs `screen.py judge
 --out DIR`.
+
+## Authoring review cases
+
+`review_cases.py check [RULE/CASE ...]` runs the authoring checks the build
+does not: the patch applies to the pinned commit as one commit, it changes 50
+to 300 lines outside lockfiles, the lines it adds carry no meta vocabulary,
+the prompt names the branch and the body file, `rubric.md` does not carry the
+rule id, and every `FOUND` and `FALSE_ALARM` sample passes the precheck.
+`review_cases.py checkout RULE/CASE DEST` builds `main` and the PR branch
+for a look by hand. A review oracle calls `shared.review_names(answer,
+location)` with regexes for the flawed file or symbol, or the decoy's.
 
 ## Rule texts
 
@@ -773,6 +786,10 @@ one poteto-agent spawn, plus transcripts for the lead and the delegate.
 Claude's trace carries two `result` events, and the test checks that
 `raw-stream.jsonl` holds both. Both agents print `SEPARATES`, and each takes
 about 50 seconds.
+The same stand-in, run through `screen.py run --runner sbx` on the three-arm
+rule `bundle-separate-contexts-harness` and its omnigent case
+`harness-families`, printed `leaf vs current: SEPARATES`, `leaf+trigger vs
+current: SEPARATES`, and `leaf+trigger vs leaf: TIE-PASS`.
 
 ```sh
 (cd evals/canon && CANON_SBX_E2E=1 python3 -m unittest test_sandbox -v)

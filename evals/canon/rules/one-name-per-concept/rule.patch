@@ -1,0 +1,7 @@
+--- a/principle-model-the-domain/SKILL.md
++++ b/principle-model-the-domain/SKILL.md
+@@ -23,2 +23,4 @@
+ 
++**One name per concept.** When the user's word for a concept differs from the code's word, do not add the new word beside the old one. Either rename every occurrence in a preparatory commit, or keep the code's word and tell the user which word the code uses. When the user changes what a term means, treat it as a model change and update the glossary through the `domain-modeling` skill.
++
+ Do not force an abstraction. Prefer boring code if the current shape is already clear, local, and unlikely to grow. Be skeptical of an abstraction that adds indirection without removing branches, duplicated rules, invalid states, or lifecycle risk.

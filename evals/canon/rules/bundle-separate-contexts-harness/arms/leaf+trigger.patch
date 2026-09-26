@@ -1,0 +1,62 @@
+--- a/architect/references/runner-prompt.md
++++ b/architect/references/runner-prompt.md
+@@ -7,7 +7,7 @@
+ Apply the following discipline. The orchestrator compares candidates on these axes to pick a base.
+ 
+ - Caller's usage first. Write the README-style usage and two or three real call sites before the types, then derive the type sketch from them. The usage is the spec. The two must agree, so reconcile the sketch to the usage, not the reverse.
+-- Data structures first. Get the core types right and the code becomes obvious. Trace each dominant access pattern through the proposed structure. If the answer is "we'll add a map / index / cache later," the structure is wrong.
++- Data structures first. Get the core types right and the code becomes obvious. Trace each dominant access pattern through the proposed structure. If the answer is "we'll add a map / index / cache later," the structure is wrong. Choose the structure and the names per the **model-the-domain** principle skill.
+ - Interface depth. Compare the capability hidden behind the public surface relative to the size of that surface. Prefer a simple interface that pulls complexity into the callee, even when the implementation becomes less simple. Do not put transport or wire types on the public API. Parse into domain types behind the interface.
+ - Shared state: if two actors might both write, ask "what happens?" If the answer isn't "nothing," default to per-actor state with a merge at the read boundary, per the **separate-before-serializing-shared-state** principle skill.
+ - Make boundaries visible. `not implemented` errors for bodies, `// TODO` pseudocode for tricky logic, doc comments stating intent and invariants. A reader should trace data from input to output by reading types and signatures alone.
+--- a/poteto-mode/SKILL.md
++++ b/poteto-mode/SKILL.md
+@@ -56,7 +56,7 @@
+ 
+ **Architecture**
+ 
+-- **Model the Domain** (**principle-model-the-domain**). Writing stateful logic, or code that branches a lot or repeats a shape assumption across files. Encode the domain in a structure (state machine, typed model, table or registry, reducer, boundary, the right collection) instead of scattered conditionals.
++- **Model the Domain** (**principle-model-the-domain**). Writing stateful logic, code that branches a lot or repeats a shape assumption across files, naming a new type or function, or merging types or helpers that look alike. Encode the domain in a structure (state machine, typed model, table or registry, reducer, boundary, the right collection) instead of scattered conditionals.
+ - **Boundary Discipline** (**principle-boundary-discipline**). Wiring validation, error handling, or framework adapters. Guards at system boundaries, trust internal types, keep business logic pure.
+ - **Type System Discipline** (**principle-type-system-discipline**). Designing types or a signature in any typed language. Make illegal states unrepresentable, brand primitives, parse external data at boundaries.
+ - **Make Operations Idempotent** (**principle-make-operations-idempotent**). Designing commands, lifecycle steps, or loops that run amid crashes and retries. Converge to the same end state.
+--- a/poteto-mode/playbooks/feature.md
++++ b/poteto-mode/playbooks/feature.md
+@@ -3,7 +3,7 @@
+ **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
+ 
+ 1. `how` over the affected subsystem.
+-2. `architect` for parallel design exploration.
++2. `architect` for parallel design exploration. Name the data shape and its organizing structure per **principle-model-the-domain** before the arena runs, so the sketch uses them.
+ 3. Write the throughput checkpoint as four items in the same worklist. A dimension that genuinely does not apply (single file, no fan-out) keeps its item with `skipped: <reason>` rather than being dropped:
+    - **Blocking first steps.** Gates run before fan-out.
+    - **Independent workstreams.** Disjoint files, services, or layers parallelize. Shared writes serialize.
+--- a/principle-foundational-thinking/SKILL.md
++++ b/principle-foundational-thinking/SKILL.md
+@@ -10,7 +10,7 @@
+ 
+ **Data structures first.** Get the data shape right before writing logic. Define core types early, trace every access pattern, and choose structures that match the dominant paths.
+ 
+-At code level, DRY the structure, not every line. Types and data models should converge. Three similar statements still beat a premature abstraction. Prefer explicit over clever. Test behavior and edge cases, not line counts.
++At code level, DRY the structure, not every line. Types and data models should converge within one context. Three similar statements still beat a premature abstraction. Prefer explicit over clever. Test behavior and edge cases, not line counts.
+ 
+ **Concurrency corollary.** Before sharing state between actors, ask "what happens if another actor modifies this concurrently?" If not "nothing", isolate.
+ 
+--- a/principle-model-the-domain/SKILL.md
++++ b/principle-model-the-domain/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: principle-model-the-domain
+-description: "Apply when writing stateful logic, or when code branches a lot or repeats a shape assumption across files. Encode the domain in a structure instead of scattered conditionals."
++description: "Apply when writing stateful logic, when code branches a lot or repeats a shape assumption across files, when naming a new type or function, or when merging types or helpers that look alike. Encode the domain in a structure instead of scattered conditionals."
+ disable-model-invocation: true
+ ---
+ 
+@@ -19,6 +19,7 @@
+ - A module organized around one body of domain knowledge instead of a sequence such as load, validate, transform, and save. Execution order is not ownership.
+ - A small module boundary that gathers repeated behavior, ownership, or invariants.
+ - A queue, cache, index, graph/tree, or normalized collection where the data access pattern calls for it.
++- A separate type in each context when one word names different concepts in two parts of the codebase, instead of one merged type whose fields are optional per meaning. Share only what means the same thing in both, such as an id. Translate at the one place where the two contexts exchange data. Within one context, merge types and helpers that mean the same thing.
+ - Any other structure that fits. When none fits, work out what the code must never allow and how the data gets read, then find the structure that encodes exactly that.
+ 
+ Do not force an abstraction. Prefer boring code if the current shape is already clear, local, and unlikely to grow. Be skeptical of an abstraction that adds indirection without removing branches, duplicated rules, invalid states, or lifecycle risk.

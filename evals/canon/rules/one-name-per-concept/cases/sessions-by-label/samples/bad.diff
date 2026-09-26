@@ -1,0 +1,104 @@
+diff --git a/omnigent/server/routes/sessions/routes_core.py b/omnigent/server/routes/sessions/routes_core.py
+index 4a28f15..bbfa937 100644
+--- a/omnigent/server/routes/sessions/routes_core.py
++++ b/omnigent/server/routes/sessions/routes_core.py
+@@ -1280,6 +1280,7 @@ def register_core_routes(
+         project: str | None = Query(default=None),
+         pinned: bool = Query(default=False),
+         visibility: str = Query(default="all", pattern="^(all|mine|shared|archived)$"),
++        label: list[str] = Query(default=[]),
+     ) -> PaginatedList:
+         """
+         List sessions with cursor-based pagination.
+@@ -1333,6 +1334,9 @@ def register_core_routes(
+             owned. ``"archived"`` returns only archived sessions.
+             ``"all"`` (default) returns all accessible non-archived
+             sessions, matching the legacy behaviour.
++        :param label: ``key=value`` pairs, e.g. ``?label=team=infra``. Repeat
++            the parameter to require several; a session must carry every
++            one. Empty (default) disables the filter.
+         :returns: A :class:`PaginatedList` of
+             :class:`SessionListItem`.
+         """
+@@ -1349,6 +1353,12 @@ def register_core_routes(
+         # disabled entirely — no auth_provider).
+         user_id = _require_user(request, auth_provider)
+         normalized_query = search_query if search_query else None
++        label_filters: dict[str, str] = {}
++        for pair in label:
++            key, sep, value = pair.partition("=")
++            if not sep or not key:
++                raise HTTPException(status_code=400, detail=f"label filter must be key=value, got {pair!r}")
++            label_filters[key] = value
+         # Map the visibility filter to store-level ACL params.
+         # "mine": only sessions the caller owns — no accessible_by needed
+         #   because owner-level implies access.
+@@ -1420,6 +1430,7 @@ def register_core_routes(
+             pinned=pinned,
+             # Pins are per-user: filter to the caller's own pin key.
+             pinned_owner=user_id,
++            labels=label_filters or None,
+         )
+         # Side chats surface only as Workspace-rail tabs, so drop any
+         # side-chat-labeled fork from the sidebar list (it is still a normal
+diff --git a/omnigent/stores/conversation_store/__init__.py b/omnigent/stores/conversation_store/__init__.py
+index 75ddc7d..719a680 100644
+--- a/omnigent/stores/conversation_store/__init__.py
++++ b/omnigent/stores/conversation_store/__init__.py
+@@ -700,6 +700,7 @@ class ConversationStore(ABC):
+         pinned: bool = False,
+         pinned_owner: str | None = None,
+         title: str | None = None,
++        labels: Mapping[str, str] | None = None,
+     ) -> PagedList[Conversation]:
+         """
+         List conversations with cursor-based pagination.
+@@ -811,6 +812,9 @@ class ConversationStore(ABC):
+             Powers the ``(agent, title)`` child-session lookup in
+             ``sys_session_send`` so the server can resolve the target
+             in a single indexed query instead of fetching all children.
++        :param labels: When set, only return conversations that carry
++            every ``key: value`` pair as a label. ``None`` disables the
++            filter.
+         :returns: A :class:`PagedList` of :class:`Conversation`
+             objects.
+         :raises omnigent.errors.StaleCursorError: If the ``after``/``before``
+diff --git a/omnigent/stores/conversation_store/sqlalchemy_store.py b/omnigent/stores/conversation_store/sqlalchemy_store.py
+index 686fa9c..187b015 100644
+--- a/omnigent/stores/conversation_store/sqlalchemy_store.py
++++ b/omnigent/stores/conversation_store/sqlalchemy_store.py
+@@ -2651,6 +2651,7 @@ class SqlAlchemyConversationStore(ConversationStore):
+         pinned: bool = False,
+         pinned_owner: str | None = None,
+         title: str | None = None,
++        labels: Mapping[str, str] | None = None,
+     ) -> PagedList[Conversation]:
+         """
+         List conversations with cursor-based pagination.
+@@ -2710,6 +2711,9 @@ class SqlAlchemyConversationStore(ConversationStore):
+             loaded pagination window.
+         :param pinned_owner: The user whose pins ``pinned=True`` filters to.
+             ``None`` → the single-user ``local`` sentinel.
++        :param labels: When set, only return conversations that carry
++            every ``key: value`` pair as a label. ``None`` disables the
++            filter.
+         :param owned_by: When set, restrict to sessions the user owns
+             (an ``owner``-level grant) — stricter than ``accessible_by``,
+             which also matches sessions merely shared with them. Powers
+@@ -3028,6 +3032,16 @@ class SqlAlchemyConversationStore(ConversationStore):
+                         )
+                     )
+                 )
++            for label_key, label_value in (labels or {}).items():
++                stmt = stmt.where(
++                    SqlConversation.id.in_(
++                        select(SqlConversationLabel.conversation_id).where(
++                            SqlConversationLabel.workspace_id == current_workspace_id(),
++                            SqlConversationLabel.key == label_key,
++                            SqlConversationLabel.value == label_value,
++                        )
++                    )
++                )
+             if after:
+                 stmt = self._apply_cursor(
+                     session,
