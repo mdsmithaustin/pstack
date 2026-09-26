@@ -42,6 +42,11 @@ GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TER
 # The wrapper exits with this code, without starting the agent, when the
 # workspace cannot be built or does not match the recorded tree.
 REFUSED = 97
+CREDENTIAL_FILES = {".credentials.json", "auth.json"}
+CREDENTIAL_TOKENS = {
+    "API key": re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}"),
+    "OAuth token": re.compile(rb'claudeAiOauth|"(?:access|refresh)_?[Tt]oken"\s*:\s*"[^"\s]{20,}"'),
+}
 
 
 class WorkspaceError(Exception):
@@ -275,6 +280,21 @@ def next_slot(root):
         except FileExistsError:
             continue
     raise WorkspaceError(f"{root} has no free slot")
+
+
+def credential_findings(root):
+    """[(path under root, what it holds)] for each file that is an agent
+    credential file or holds an API key or OAuth token."""
+    root = Path(root)
+    findings = []
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.name in CREDENTIAL_FILES:
+            findings.append((relative, "credential file"))
+        elif path.is_file() and not path.is_symlink():
+            data = path.read_bytes()
+            findings += [(relative, kind) for kind, pattern in CREDENTIAL_TOKENS.items() if pattern.search(data)]
+    return findings
 
 
 def disk_bytes(root):
