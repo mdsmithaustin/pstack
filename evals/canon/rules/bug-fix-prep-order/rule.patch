@@ -1,0 +1,7 @@
+--- a/poteto-mode/playbooks/bug-fix.md
++++ b/poteto-mode/playbooks/bug-fix.md
+@@ -11,3 +11,4 @@
+ 5. Stage the commits so the failing repro lands before the fix in git history. See the **poteto-tdd** skill for the failing-test-first cadence when the bug has a cheap local test path. Skip it when the test would be expensive, integration-heavy, or unclear.
+    This is the canonical **sequence-verifiable-units** principle skill, the failing test first and the fix on top.
++   If the fix is awkward in the current structure, land a behavior-preserving refactor first with every existing test green. Then commit the failing repro, then the fix. Refactor only when it makes the fix commit smaller. When the fix is already a small edit, skip the refactor.
+ 6. Run **Opening a PR**.

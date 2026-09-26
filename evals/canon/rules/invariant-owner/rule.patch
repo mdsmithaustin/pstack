@@ -1,0 +1,7 @@
+--- a/principle-model-the-domain/SKILL.md
++++ b/principle-model-the-domain/SKILL.md
+@@ -19,3 +19,4 @@
+ - A module organized around one body of domain knowledge instead of a sequence such as load, validate, transform, and save. Execution order is not ownership.
+ - A small module boundary that gathers repeated behavior, ownership, or invariants.
++- One owner type for a rule that must hold across several objects, such as an order total that equals the sum of its lines. Change those objects only through the owner's operations. The operations can be pure functions in the owner's module that return a new value. Do not hand callers a mutable reference to the owned parts. Put an object inside the owner only when the rule binds it. A rule that spans two owners updates each owner in its own step.
+ - A queue, cache, index, graph/tree, or normalized collection where the data access pattern calls for it.
