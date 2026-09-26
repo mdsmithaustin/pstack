@@ -244,17 +244,19 @@ RUN_DENY = ["api.github.com", "archive.ubuntu.com", "codeload.github.com", "down
 
 class FakeSbx:
     """Stands in for the sbx CLI: records every argv and answers the calls
-    wrap makes. The policy allows the model API and the hosts in allowed."""
+    wrap makes. The policy allows the model API and the hosts in allowed, and
+    answers a check on a host in unanswered with JSON that carries no decision."""
 
-    def __init__(self, tree, allowed=()):
-        self.tree, self.allowed, self.calls = tree, {"api.openai.com", "chatgpt.com", *allowed}, []
+    def __init__(self, tree, allowed=(), unanswered=()):
+        self.tree, self.allowed, self.unanswered, self.calls = tree, {"api.openai.com", "chatgpt.com", *allowed}, set(unanswered), []
 
     def __call__(self, *args, input=None, capture=True, check=True):
         args = [str(arg) for arg in args]
         self.calls.append(args)
         stdout = b""
         if args[:2] == ["policy", "check"]:
-            stdout = json.dumps({"allowed": args[5] in self.allowed}).encode()
+            answer = {"host": args[5]} if args[5] in self.unanswered else {"allowed": args[5] in self.allowed}
+            stdout = json.dumps(answer).encode()
         elif args[:2] == ["policy", "ls"]:
             stdout = b'{"rules": []}'
         elif args[:2] == ["policy", "log"]:
@@ -315,6 +317,17 @@ class WrapPolicyTests(test_workspace.ShopRepo):
         self.assertEqual((record["egress"]["example.org"], record["egress"]["pypi.org"], record["egress"]["github.com"]), (True, True, False))
         self.assertEqual(fake.agent_runs(), [])
         self.assertEqual(fake.calls[-1], ["rm", "--force", record["sandbox"]])
+
+    def test_a_policy_answer_without_a_decision_refuses_the_run_before_the_agent_starts(self):
+        fake = FakeSbx(workspace.reference_checkout(self.spec)[1], unanswered={"example.org"})
+
+        code, _, record = self.wrap(fake)
+
+        self.assertEqual(code, workspace.REFUSED)
+        self.assertEqual(record["error"], "the sandbox's network policy does not deny example.org; "
+                                          "check the global policy with `sbx policy ls`")
+        self.assertEqual((record["egress"]["example.org"], record["egress"]["github.com"]), (None, False))
+        self.assertEqual(fake.agent_runs(), [])
 
 
 def sandboxes_available():

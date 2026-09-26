@@ -194,7 +194,8 @@ class CredentialScanTests(unittest.TestCase):
         (self.work / path).write_text(text)
 
     def test_credential_files_and_tokens_are_found_and_ordinary_mentions_are_not(self):
-        self.write("runs/orders-amend/with_skill/run-1/stream.jsonl", '{"text": "oauth flow, sk-short, task-' + "x" * 30 + '"}\n')
+        self.write("runs/orders-amend/with_skill/run-1/stream.jsonl",
+                   '{"text": "oauth flow, reads claudeAiOauth from the keychain, sk-short, task-' + "x" * 30 + '"}\n')
         self.write("harvest/orders-amend/with_skill/run-1/transcripts/codex/auth.json", "{}\n")
         self.write("harvest/orders-amend/with_skill/run-1/transcripts/claude/s1.jsonl", f'{{"key": "{API_KEY}"}}\n')
         self.write("harvest/orders-amend/with_skill/run-2/raw-stream.jsonl", OAUTH + "\n")
@@ -205,19 +206,24 @@ class CredentialScanTests(unittest.TestCase):
             ("harvest/orders-amend/with_skill/run-2/raw-stream.jsonl", "OAuth token"),
         ])
 
-    def run_arm(self, leak):
+    def run_arm(self, leak, case_build=None, output="runs/orders-amend/with_skill/run-1/stream.jsonl"):
         rule, case = mock.Mock(id="orders-workspace"), mock.Mock(id="orders-amend")
+        work = "out/codex/orders-workspace/orders-amend/amended"
         calls = []
 
         def harness(*arguments, env=None):
             calls.append(arguments[0])
             if arguments[0] == "run-agent":
-                self.write("out/codex/orders-workspace/orders-amend/amended/runs/orders-amend/with_skill/run-1/stream.jsonl",
-                           f'{{"text": "{leak}"}}\n')
+                self.write(f"{work}/{output}", f'{{"text": "{leak}"}}\n')
+                self.write(f"{work}/harvest/0001/workspace.json", '{"tree": "t1"}\n')
 
-        with mock.patch.object(screen, "harness", harness), mock.patch.object(screen, "with_skill_rows"):
+        def with_skill_rows(source, target):
+            target.write_text('{"run_dir": "orders-amend/with_skill/run-1"}\n')
+
+        with mock.patch.object(screen, "harness", harness), mock.patch.object(screen, "with_skill_rows", with_skill_rows):
             try:
-                screen.run_arm("codex", self.work / "out", rule, case, "amended", {"timeout_s": 60}, [], {}, "gpt-6-sol", 1, None)
+                screen.run_arm("codex", self.work / "out", rule, case, "amended", case_build or {"timeout_s": 60},
+                               [], {}, "gpt-6-sol", 1, None)
             except screen.ScreenError as exc:
                 return calls, str(exc)
         return calls, None
@@ -230,6 +236,20 @@ class CredentialScanTests(unittest.TestCase):
         self.assertEqual(self.run_arm(API_KEY), (["prepare", "run-agent"],
                          f"{work}: credential material in the run output: "
                          "runs/orders-amend/with_skill/run-1/stream.jsonl (API key)"))
+
+    def test_a_key_the_checkout_already_holds_passes_and_a_new_one_fails_before_grading(self):
+        fake = "sk-" + "fixture" * 4
+        self.write("checkout/tests/test_auth.py", f'KEY = "{fake}"\n')
+        case_build = {"timeout_s": 60, "workspace": {"checkout": str(self.work / "checkout"), "tree": "t1"}}
+        transcript = "harvest/0001/transcripts/claude/s1.jsonl"
+
+        self.assertEqual(self.run_arm(f"tests/test_auth.py has KEY = {fake}", case_build, transcript),
+                         (["prepare", "run-agent", "grade"], None))
+
+        work = self.work / "out" / "codex" / "orders-workspace" / "orders-amend" / "amended"
+        shutil.rmtree(self.work / "out")
+        self.assertEqual(self.run_arm(f"{fake} and {API_KEY}", case_build, transcript), (["prepare", "run-agent"],
+                         f"{work}: credential material in the run output: {transcript} (API key)"))
 
 
 class HarvestTests(ShopRepo):
