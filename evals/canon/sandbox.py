@@ -14,7 +14,7 @@ delegate's included), and the sandbox's network log back out. The sandbox is
 removed when the run ends. A Claude run's stream reaches the harness with only
 its last result event, and its full stream is kept as raw-stream.jsonl.
 
-  sandbox.py deps --agent A --repo R [--commit C]       build the dependency template for R at C
+  sandbox.py deps --agent A --repo R --commit C         build the dependency template for R at C
   sandbox.py probe --agent A [--repo R --commit C]      list the tools a run offers, at no model cost
   sandbox.py wrap --agent A [--token T --discovery D] -- ARG...   the harness entry wrapper
   sandbox.py gc                                          remove sandboxes a killed run left behind
@@ -57,6 +57,8 @@ RESERVE_S = 120
 CLAUDE_FLAGS = ("--setting-sources", "project", "--permission-mode", "bypassPermissions",
                 "--strict-mcp-config", "--allowedTools", "TodoWrite")
 CODEX_FLAGS = ("-c", "mcp_servers.mcp-gateway.enabled=false")
+# A host no rule names, so only a deny-by-default policy blocks it.
+EGRESS_SENTINEL = "example.org"
 
 
 class SandboxError(Exception):
@@ -157,6 +159,19 @@ def _json_or_text(data):
         return json.loads(text)
     except json.JSONDecodeError:
         return text
+
+
+def egress(box):
+    """({probe host: allowed}, [probe hosts the policy does not deny]). An
+    answer sbx could not give counts as not denied."""
+    decisions = box.reachable([*CONFIG["run_deny_network"], EGRESS_SENTINEL])
+    return decisions, sorted(host for host, allowed in decisions.items() if allowed is not False)
+
+
+def refuse_open_egress(allowed):
+    if allowed:
+        raise SandboxError(f"the sandbox's network policy does not deny {', '.join(allowed)}; "
+                           "check the global policy with `sbx policy ls`")
 
 
 def sandboxes():
@@ -437,6 +452,10 @@ def wrap(argv, stdin=sys.stdin.buffer):
             record["sandbox"] = name
             with timed(timings, "create_s"):
                 box = Sandbox.create(name, CONFIG["agents"][agent]["kit"], root, template, CONFIG["run_deny_network"])
+            record["policy"] = box.policy()
+            record["reachable"] = box.reachable(CONFIG["agents"][agent]["api"])
+            record["egress"], allowed = egress(box)
+            refuse_open_egress(allowed)
             with timed(timings, "setup_s"):
                 box.unpack(payload, PAYLOAD)
                 proc = box.exec("python3", f"{PAYLOAD}/sbx_inside.py", "setup", f"{PAYLOAD}/manifest.json", check=False)
@@ -446,8 +465,6 @@ def wrap(argv, stdin=sys.stdin.buffer):
                     raise workspace.WorkspaceError(f"sandbox setup: {record['setup']} {proc.stderr.decode(errors='replace')[-400:]}")
                 record["tree"] = record["setup"]["tree"]
                 record["versions"] = box.exec("sh", "-c", "claude --version 2>/dev/null; codex --version 2>/dev/null; uv --version").stdout.decode().split("\n")[:3]
-            record["policy"] = box.policy()
-            record["reachable"] = box.reachable([*CONFIG["agents"][agent]["api"], *CONFIG["run_deny_network"]])
             save()
             command, last_message = agent_command(agent, harness_argv)
             if os.environ.get("CANON_SBX_STANDIN"):
@@ -533,6 +550,8 @@ def probe(agent, repo=None, commit=None):
         try:
             template = deps_tag(agent, repo, commit) if inside["deps"] else None
             box = Sandbox.create(f"{PREFIX}probe-{agent}-{secrets.token_hex(3)}", conf["kit"], root, template, CONFIG["run_deny_network"])
+            egress_decisions, allowed = egress(box)
+            refuse_open_egress(allowed)
             box.unpack(payload, PAYLOAD)
             setup = box.exec("python3", f"{PAYLOAD}/sbx_inside.py", "setup", f"{PAYLOAD}/manifest.json", check=False)
             report = {"setup": _json_or_text(setup.stdout.strip().splitlines()[-1]) if setup.stdout.strip() else setup.stderr.decode()}
@@ -570,7 +589,8 @@ def probe(agent, repo=None, commit=None):
                                "poteto-agent role offered": "poteto-agent:" in text,
                                "poteto-mode injected": "name: poteto-mode" in json.dumps(body.get("input"))})
             report["policy"] = box.policy()
-            report["reachable"] = box.reachable([*conf["api"], *CONFIG["run_deny_network"]])
+            report["reachable"] = box.reachable(conf["api"])
+            report["egress"] = egress_decisions
             return report
         finally:
             if box is not None:
