@@ -12,6 +12,8 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 ## Non-negotiables
 
+**Start every multi-step task with a worklist whose first items are the matched playbook's steps.** The failure mode is a bespoke plan that drops the playbook's named steps and their principle pointers.
+
 The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
 
 Remaining triggers:
