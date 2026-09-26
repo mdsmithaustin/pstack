@@ -1,0 +1,7 @@
+--- a/spec-probes/SKILL.md
++++ b/spec-probes/SKILL.md
+@@ -44,3 +44,3 @@
+
+-- **resolved**: an acceptance criterion states the answer (`explicit`, checked by an ordinary test); or a held-out or property-based test will stand in for an edge you know but cannot fully write down (`backstop`); or, for a prohibition that needs human judgment rather than a test, `judgment`.
++- **resolved**: a Given, When, Then example with a literal Then states the answer (`explicit`, checked by an ordinary test); or a held-out or property-based test will stand in for an edge you know but cannot fully write down (`backstop`); or, for a prohibition that needs human judgment rather than a test, `judgment`.
+ - **dismissed**, with a reason. "N/A, input is a bounded enum, no boundary exists" is valid; silence is not. The reason is the audit trail.

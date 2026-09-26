@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "refactoring-subtraction",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Deletes banner and its tests, because only tests call it and the package entry point does not export it.",
+    "Keeps slugify, truncate, and the storefront output unchanged, with the suite green after every commit."
+  ]
+}

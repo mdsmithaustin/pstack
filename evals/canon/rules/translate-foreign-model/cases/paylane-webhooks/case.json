@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "integration-boundary",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Maps Paylane states onto the existing PaymentStatus values in one Paylane module.",
+    "Keeps Paylane's codes out of payments/model.py and payments/orders.py."
+  ]
+}
