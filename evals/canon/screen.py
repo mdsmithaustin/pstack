@@ -921,6 +921,10 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
     harness("run-agent", "--agent", agent, "--model", model, *backend,
             "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
             "--timeout", timeout or case_build["timeout_s"], env=run_env)
+    leaks = workspace.credential_findings(work)
+    if leaks:
+        raise ScreenError(f"{work}: credential material in the run output: "
+                          + ", ".join(f"{path} ({kind})" for path, kind in leaks))
     if "workspace" in case_build:
         file_harvest(work, case_build["workspace"]["tree"])
     harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
