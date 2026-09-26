@@ -522,10 +522,6 @@ class SandboxedReviewRunTests(ReviewCase):
         self.assertEqual((record["agent_rc"], record["refs"], record["head_after"], record["refs_after"]), (0, refs, refs["discount-cap"], refs))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class StandinCalibrationTests(unittest.TestCase):
     def test_standin_calibration_never_counts_for_the_model_judge(self):
         pr = {"title": "t", "body": "b", "diff": "d"}
@@ -539,3 +535,7 @@ class StandinCalibrationTests(unittest.TestCase):
         self.assertNotEqual(standin_key, model_key)
         self.assertEqual(standin_path.name, "standin-codex-gpt-6-sol.json")
         self.assertEqual(model_path.name, "model-codex-gpt-6-sol.json")
+
+
+if __name__ == "__main__":
+    unittest.main()
