@@ -330,6 +330,31 @@ class WrapPolicyTests(test_workspace.ShopRepo):
         self.assertEqual(fake.agent_runs(), [])
 
 
+class JudgePolicyTests(unittest.TestCase):
+    """sandbox.run_judge for a Claude judge, with sbx faked."""
+
+    def judge(self, fake):
+        with mock.patch.object(sandbox, "sbx", fake):
+            return sandbox.run_judge("claude", "sonnet", "Judge this review.", {"type": "object"})
+
+    def test_the_judge_runs_when_every_probe_host_is_denied(self):
+        fake = FakeSbx(tree=None)
+
+        record = self.judge(fake)
+
+        self.assertEqual(record["egress"], {**{host: False for host in RUN_DENY}, "example.org": False})
+        self.assertEqual([call[call.index("timeout") + 3] for call in fake.agent_runs()], ["claude"])
+
+    def test_a_policy_that_allows_a_probe_host_refuses_the_judge_before_it_starts(self):
+        fake = FakeSbx(tree=None, allowed={"example.org"})
+
+        with self.assertRaisesRegex(sandbox.SandboxError, r"^the sandbox's network policy does not deny example.org; "
+                                                          r"check the global policy with `sbx policy ls`$"):
+            self.judge(fake)
+        self.assertEqual(fake.agent_runs(), [])
+        self.assertEqual(fake.calls[-1][:2], ["rm", "--force"])
+
+
 def sandboxes_available():
     return (os.environ.get("CANON_SBX_E2E") == "1" and shutil.which("sbx") is not None
             and test_workspace.harness_available())
