@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "feature-sequencing",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Lands a behavior-preserving commit that separates building the report from rendering JSON before any CSV code.",
+    "The CSV commit adds a renderer without a format branch inside the function that filters and sorts rows."
+  ]
+}

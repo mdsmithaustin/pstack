@@ -41,13 +41,17 @@ rules/<id>/
   rule.json           {"source": "...", "companions": ["<skill>", ...]}; companions is optional
                       a placement variant has {"cases_from": "<rule>"} and no oracle.py or cases/
   oracle.py           CHECKS = {"<case-id>": check}; check(answer, project) returns failures
+                      (project is a shared.Workspace in a workspace case)
   test_oracle.py      unit tests that grade the samples
   cases/<case-id>/
     case.json         kind (positive or near-miss), domain, timeout_s, expected_behavior
+                      (timeout_s optional in a workspace case, default 1800)
     prompt.md         the user request; {project} expands to the project files
     project/          the fixture the answer edits
     samples/good.md   an answer that must pass
     samples/bad.md    an answer that must fail
+    overlay/          workspace cases only, in place of project/ (see Workspace cases)
+    samples/*.diff    workspace cases only, the edit each sample makes
 oracles/
   check.py            check.py <rule> <case> <output_dir>
   shared.py           answer parsing, Python helpers, the sandboxed container runner
@@ -55,7 +59,9 @@ oracles/
 ```
 
 Each arm root holds the grader next to the skill tree: `oracles/`, the rule's
-`oracle.py`, and the case's `project/`. It never holds `samples/`,
+`oracle.py`, and the case's `project/`. A workspace case's arm holds
+`workspace.json` naming the pinned checkout in place of `project/`, and a
+`workspace/` directory that the entry wrapper reads. It never holds `samples/`,
 `test_oracle.py`, or `oracles/test_*.py`. The answering agent works in a
 separate temporary workspace. A Claude trace showed its cwd under
 `/private/var/folders/.../claude-ws-*`, and a Codex run's `environment.json`
@@ -69,9 +75,10 @@ records `<isolated workspace>`.
    paths relative to `skills/` (`--- a/<skill>/SKILL.md`, `+++ b/<skill>/SKILL.md`).
 3. Add cases under `rules/<id>/cases/<case-id>/`, at least one of them
    `positive`. Give each a project-shaped id, `case.json`, `prompt.md`, and
-   `project/`. Add a near-miss case when the rule has an exception the agent must respect.
+   `project/`, or a `workspace` entry and `overlay/` (see Workspace cases).
+   Add a near-miss case when the rule has an exception the agent must respect.
 4. Write the prompt as an organic user request that does not name the rule. The
-   prompt with its project files, and the case id, must not contain
+   prompt with its project files or overlay, and the case id, must not contain
    these whole words in any case: eval, evals, evaluation, judge, experiment,
    rubric, score, compare, benchmark, candidate, arena. Ask for files inside
    `<file path="...">` tags, or commits inside `<commit message="...">` tags.
@@ -83,10 +90,12 @@ records `<isolated workspace>`.
 5. Write `rules/<id>/oracle.py`. Map every case id to a function that returns
    a list of failure strings, empty on a pass. The arm copies only this one
    file, so it may import only `shared` and the standard library, and read only
-   the `project` it is given.
+   the `project` it is given. A workspace case's check reads the
+   `Workspace` it is given.
 6. Add `samples/good.md` and `samples/bad.md` to every case, and assert their
    exact failure lists in `rules/<id>/test_oracle.py`, which imports
-   `from check import grade`.
+   `from check import grade`. A workspace case also needs `good.diff` and
+   `bad.diff`.
 7. Run the model-free checks below, passing `<id>` to the two offline runs.
    `plan` must list the rule with the expected patch kind, and both offline runs
    must print `SEPARATES` for the rule.
@@ -109,8 +118,10 @@ is refused. The arm copies the source's `oracle.py` under the variant's id.
 Name a variant `<rule>-index` when it places the rule in the poteto-mode index.
 `--case` picks which shared cases a paid run answers.
 
-The offline stand-in matches the prompt, and a case that a variant shares with
-its source goes to the rule whose inserted text is mounted.
+The offline stand-in reads the rule and case of a workspace case from the path
+of its input, `arms/<rule>/<case>/<arm>/workspace`. For a pasted-project case
+it matches the prompt, and a case that a variant shares with its source goes to
+the rule whose inserted text is mounted.
 
 ### Arm rules
 
@@ -165,7 +176,8 @@ that whole tree. A wrapper links the tree to `.claude/skills` for Claude or
 `.agents/skills` for Codex, the directories each agent searches for project
 skills. It then starts the prompt with `/poteto-mode ` for Claude or
 `$poteto-mode ` for Codex, and passes the rest through unchanged. Every case
-gets 900 seconds in this mode.
+gets 900 seconds in this mode, except a workspace case, which keeps its own
+timeout.
 
 Both agents need the link. `codex debug prompt-input` in a harness-shaped
 workspace listed only the system skill root until `.agents/skills` existed. A
@@ -185,9 +197,10 @@ no trace shows the injection. Under `--entry poteto-mode` a rule patched into
 wrapper starts every prompt with the invocation.
 
 Answers return files inside `<file path="...">` tags, because the harness
-discards the agent's workspace. Oracles that run answer code use the pinned
-`python:3.12-slim` image with no network, a read-only root, and no
-capabilities.
+discards the agent's workspace. Workspace cases are the exception. Their
+wrapper saves a diff outside the workspace before the harness deletes it.
+Oracles that run answer code use the pinned `python:3.12-slim` image with no
+network, a read-only root, and no capabilities.
 
 ## Companion skills
 
@@ -209,19 +222,118 @@ arm's copy differs from the source. Rules without companions build exactly as
 before. `compare` counts reads of companion files like reads of pstack files,
 and for a rule with companions it also names each companion the run read.
 
+## Workspace cases
+
+A pasted project is a few files, so a rule about how an agent explores a
+codebase cannot show an effect there. A workspace case puts the agent inside a
+real repo instead. Its `case.json` adds:
+
+```json
+"workspace": {"repo": "omnigent", "commit": "<40-character sha>", "overlay": "overlay/"}
+```
+
+`overlay/` sits in the case directory and holds files copied over the checkout,
+such as a seeded `CONTEXT.md`. The case has no `project/`, and its `prompt.md`
+has no `{project}`. `timeout_s` is optional and defaults to 1800 seconds under
+both entries. The meta-word check covers the prompt, the overlay paths, and the
+overlay text. It cannot cover the upstream repo.
+
+The checkout comes from a bare mirror under `$CANON_CACHE` (default
+`~/.cache/canon-screen`) that holds the pinned commit at depth 1. Put a commit
+there once, from a local clone or the upstream URL. Without `--from`, the fetch
+reads the upstream URL, which `workspace.py` knows only for `omnigent` and
+`hermes`.
+
+```sh
+python3 evals/canon/workspace.py fetch omnigent 02969a131c72d74c00c5800d8e82ae831f8ec5e5 --from <local clone>
+python3 evals/canon/workspace.py fetch hermes 130b8f2c5dbca93a81aa396dd2ba44420d78f6f0 --from <local clone>
+```
+
+The harness copies only single files into its workspace, flattened into
+`inputs/`, so the entry wrapper builds the checkout itself. It runs
+`workspace.py wrap` in the agent's cwd, which already holds the mounted skills.
+`wrap` runs `git init`, points the new repo at the mirror's objects through
+`alternates`, checks out the commit, copies the overlay, and adds the mounted
+skill directories to `.git/info/exclude`. It exits 97 without starting the
+agent when the checkout fails or its tree id differs from the one the build
+recorded. Under the poteto-mode entry it links the skills as before. A repo
+that already tracks `.claude/skills` gets a copy of each skill beside its own.
+Codex runs with `--sandbox workspace-write` for these cases.
+
+Claude runs through `claude-project-only`, whose `acceptEdits` mode denies
+Bash in a `-p` run. Claude Code 2.1.281 lists no Grep or Glob tool there, so
+without Bash it could not search a real repo while Codex runs git and grep. The
+workspace wrapper, and only that wrapper, appends `--allowedTools` rules for
+read-only commands by prefix: `git log`, `git show`, `git grep`, `git diff`,
+`git status`, `rg`, `grep`, `ls`, `find`, `wc`, `head`, and `sed -n`. It
+also appends `--disallowedTools` rules for the flags that make those commands
+run another program or delete files: `find -exec`, `-ok`, `-delete`,
+`rg --pre`, and `git grep -O`. A run with a model that does not exist, which
+costs nothing, accepted both flags on 2026-09-24, and an unknown flag fails
+the same run at parsing. No run has yet shown each rule matching a command.
+
+When the agent exits, `wrap` writes a binary diff of the workspace against that
+tree to a slot outside the workspace. The diff covers edits, deletions, and new
+files that git does not ignore. A rename shows as a deletion and an add. The
+harness seals each run directory, so `run` moves each slot to a parallel tree.
+The run dir `<out>/<agent>/<rule>/<case>/<arm>/runs/<run>` maps to
+`<out>/<agent>/<rule>/<case>/<arm>/harvest/<run>/workspace.diff`, beside a
+`workspace.json` with the tree id and timings. `run` refuses a run whose
+workspace had a different tree.
+
+`build` checks out the commit plus overlay once per spec under the cache and
+writes its path into the arm's `rules/<id>/cases/<case>/workspace.json`. The
+wrapper's input is the arm's `workspace/` directory, which holds
+`workspace.json` (repo, commit, mirror, tree id) and `overlay/`. `build.json`
+records the repo, commit, tree id, checkout path, and one hash per arm of the
+workspace input, and refuses the build if the hashes differ. It also refuses a
+repo that tracks a path the mounted skills take.
+
+A workspace case's check receives a `shared.Workspace` in place of the project.
+`workspace.checkout` is the pinned checkout with the overlay, and
+`workspace.diff` is the run's diff. `shared.apply_diff(checkout, diff)` returns
+the new bytes of every path the diff touches, with `None` for a deleted path.
+The samples are `good.md` and `bad.md` with a `good.diff` and `bad.diff` beside
+them. `test_oracle.py` passes `workspace=Workspace(checkout, diff)` to `grade`.
+The offline stand-in applies the chosen sample's diff in its cwd. The sample
+tests skip when the mirror lacks the pinned commit.
+
+The omnigent cases grade the diff statically, with the AST of the Python files
+it touches. Their upstream tests need pyyaml, pydantic, and pytest, which the
+networkless image does not have. omnigent's `AGENTS.md` asks for `pre-commit`
+before any commit, so each prompt says there is no need to commit. None of
+these cases needs an overlay.
+
+Each run costs one checkout. On an Apple silicon Mac on 2026-09-24, omnigent
+(5,545 files) took 1.0 s to check out, 0.3 s to diff, and 102 MB of disk.
+hermes (15,249 files) took 2.0 s, 0.8 s, and 189 MB. The harness deletes the
+workspace after each run. `run_agent_tasks` in `skill_benchmark.py` at the
+pinned commit c2a1735 creates it with `tempfile.TemporaryDirectory`. The
+mirrors take 38 MB and 76 MB once, and each reference checkout takes the same
+space as one run.
+
 ## Stopped runs
 
 Every command that takes `--out` appends the traceback of any error to
 `<out>/screen-error.log` and prints the log's path on both stdout and stderr.
 A caller that filters one stream still sees it. `run` logs a failed arm and
-goes on to the next arm, then exits 1 naming each failed arm.
+goes on to the next arm, then exits 1 naming each failed arm. An arm that
+stopped after the agent ran, whether its harvest slots are still numbered
+`0001`, ... or it has no `grade.json`, is recovered by `screen.py regrade
+--out DIR`. regrade maps the slots with the same tree check as `run`, then
+grades each run from its diff. Such a run's `compare.json` row carries
+`graded_from_diff` and `ungraded`.
 
 ## Rule texts
 
 R6 is labeled "Observe through the caller's interface". It sits right before
 **The fix** and narrows that paragraph's mock sentence to "For a mock at a
 system boundary, assert the payload it received, not that it was called", so
-both edits form one hunk.
+both edits form one hunk. `preparatory-refactor` now sits in step 6 of the
+Feature playbook, where the agent orders commits. Its earlier step 3 patch is
+kept as `rules/preparatory-refactor/rule.step3.patch`. Codex read that version
+and still shipped one commit, because a single-turn answer never writes a
+delegate brief.
 
 ## Model-free checks
 
@@ -241,16 +353,22 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent codex --entry poteto-mode --out "$(mktemp -d)/offline"
 ```
 
-`python3 -m unittest` runs `test_screen.py`, `test_arms.py`, and
-`test_oracles.py`, which loads `oracles/test_shared.py` and every
-`rules/*/test_oracle.py`. `audit` validates, audits, and prepares both arms of every
+`python3 -m unittest` runs `test_screen.py`, `test_arms.py`, `test_workspace.py`,
+and `test_oracles.py`, which loads `oracles/test_shared.py` and every
+`rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
+mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
+workspace rule through the offline pipeline and checks both harvested diffs. It
+points `$CANON_RULES` and `$CANON_CACHE` at that directory, so the rule never
+joins `rules/`. `audit` validates, audits, and prepares both arms of every
 case. A positive case's manifest accepts one readiness blocker, "no adversarial
 cases", because it holds one case. Any other blocker fails it. The last two
 commands run the whole pipeline with a stand-in `codex`. For a positive case it
 answers with `good.md` only when the rule text is mounted, and with `bad.md`
 otherwise. For a near-miss case it answers with `good.md` in both arms. When
 the workspace mounts `skills/pstack`, it exits 3 unless the prompt starts with
-`$poteto-mode ` and `.agents/skills` holds the tree. Both runs must print `SEPARATES` for every
+`$poteto-mode ` and `.agents/skills` holds the tree. For a workspace case it
+also applies the sample's `.diff` in its cwd, and exits 4 without a checkout or
+`--sandbox workspace-write`. Both runs must print `SEPARATES` for every
 positive case and every rule, and `TIE-PASS` for every near-miss case.
 
 ## Paid screen
@@ -273,6 +391,17 @@ has no shell tool without them. `screen.py compare --out DIR` reprints a
 finished run. Runs made before cases existed keep their old `compare.json`,
 which `plan` reads. `compare` refuses those directories so it cannot overwrite
 that file.
+
+`screen.py regrade --out DIR` grades every run of every workspace case again,
+from the run's harvested diff and its `output.md`, read as empty when it is
+missing. It uses the oracle and the checkout path in the arm's grader copy,
+`arms/<rule>/<case>/<arm>/rules/<rule>/`, which the harness graded with. It
+writes `regrade.json` beside each `grade.json` and leaves `grade.json` as it
+is. Then it reruns `compare`, which reads `regrade.json` whenever it is
+present. A run the harness called INVALID, for a missing or unparseable
+answer, gets `"graded_from_diff": true` in its `compare.json` row and a line in
+the printed table. A run with no harvested diff keeps the harness grade, and so
+does every pasted-project case.
 
 ## Reading the result
 

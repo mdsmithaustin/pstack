@@ -1,0 +1,13 @@
+{
+  "kind": "near-miss",
+  "domain": "module-depth",
+  "timeout_s": 1800,
+  "expected_behavior": [
+    "Rewrites native_terminal_name in harness_aliases.py to read terminal_name from the registry's native agent rows instead of stripping affixes.",
+    "Moves no seam: adds no module, Protocol, or ABC, and touches nothing beyond harness_aliases.py, harness_plugins.py, and tests."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  }
+}

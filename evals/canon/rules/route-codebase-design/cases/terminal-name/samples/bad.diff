@@ -1,0 +1,49 @@
+diff --git a/omnigent/harness_aliases.py b/omnigent/harness_aliases.py
+index c261da7..f9274e2 100644
+--- a/omnigent/harness_aliases.py
++++ b/omnigent/harness_aliases.py
+@@ -72,8 +72,6 @@ def native_terminal_name(harness: str | None) -> str | None:
+     """
+     if harness is None or not is_native_harness(harness):
+         return None
+-    canonical = canonicalize_harness(harness) or harness
+-    # Canonical native ids are ``<name>-native``; some accepted aliases keep the
+-    # reversed ``native-<name>`` spelling (not all are folded by
+-    # ``canonicalize_harness``), so strip either affix.
+-    return canonical.removesuffix("-native").removeprefix("native-")
++    from omnigent.harness_terminals import TERMINAL_NAMES
++
++    return TERMINAL_NAMES.terminal_name(canonicalize_harness(harness) or harness)
+diff --git a/omnigent/harness_terminals.py b/omnigent/harness_terminals.py
+new file mode 100644
+index 0000000..3a4bba3
+--- /dev/null
++++ b/omnigent/harness_terminals.py
+@@ -0,0 +1,27 @@
++"""Where native harness terminal names come from."""
++
++from __future__ import annotations
++
++from abc import ABC, abstractmethod
++
++from omnigent.harness_plugins import native_agents
++
++
++class TerminalNameSource(ABC):
++    """Maps a canonical native harness id to its terminal short-name."""
++
++    @abstractmethod
++    def terminal_name(self, canonical: str) -> str | None: ...
++
++
++class RegistryTerminalNames(TerminalNameSource):
++    """Reads terminal names from the native coding-agent rows."""
++
++    def terminal_name(self, canonical: str) -> str | None:
++        for agent in native_agents():
++            if canonical in (agent.harness, f"native-{agent.terminal_name}"):
++                return agent.terminal_name
++        return None
++
++
++TERMINAL_NAMES: TerminalNameSource = RegistryTerminalNames()

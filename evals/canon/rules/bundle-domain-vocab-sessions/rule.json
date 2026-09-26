@@ -1,0 +1,39 @@
+{
+  "cases_from": "domain-words",
+  "arms": [
+    "current",
+    "leaf",
+    "leaf+trigger"
+  ],
+  "source": "Evans EV-1, placed per disclosure-map.md sections 3 and 4 item 1-2",
+  "tier_map": [
+    {
+      "arm": "leaf",
+      "file": "principle-model-the-domain/SKILL.md",
+      "line": 24,
+      "tier": 2,
+      "why": "Rule text. The naming rule sits in the principle leaf, which the decision loads."
+    },
+    {
+      "arm": "trigger",
+      "file": "poteto-mode/SKILL.md",
+      "line": 59,
+      "tier": 0,
+      "why": "Trigger form only. The index when-clause gains the naming and merging activities, so the leaf loads when those decisions happen. The gist sentence is unchanged."
+    },
+    {
+      "arm": "trigger",
+      "file": "principle-model-the-domain/SKILL.md",
+      "line": 3,
+      "tier": 2,
+      "why": "Mirror of the index when-clause in the leaf description. Not a loader, since the leaf is gated against model invocation."
+    },
+    {
+      "arm": "trigger",
+      "file": "poteto-mode/playbooks/feature.md",
+      "line": 6,
+      "tier": 1,
+      "why": "Pointer at the step before types get names. It names the leaf and states no rule."
+    }
+  ]
+}

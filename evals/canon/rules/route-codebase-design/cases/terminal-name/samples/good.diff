@@ -1,0 +1,27 @@
+diff --git a/omnigent/harness_aliases.py b/omnigent/harness_aliases.py
+index c261da7..9b94370 100644
+--- a/omnigent/harness_aliases.py
++++ b/omnigent/harness_aliases.py
+@@ -6,7 +6,7 @@ Omnigent continues to use canonical harness identifiers internally.
+ 
+ from __future__ import annotations
+ 
+-from omnigent.harness_plugins import harness_aliases, native_harnesses
++from omnigent.harness_plugins import harness_aliases, native_agents, native_harnesses
+ 
+ HARNESS_ALIASES: dict[str, str] = harness_aliases()
+ 
+@@ -73,7 +73,9 @@ def native_terminal_name(harness: str | None) -> str | None:
+     if harness is None or not is_native_harness(harness):
+         return None
+     canonical = canonicalize_harness(harness) or harness
+-    # Canonical native ids are ``<name>-native``; some accepted aliases keep the
+-    # reversed ``native-<name>`` spelling (not all are folded by
+-    # ``canonicalize_harness``), so strip either affix.
+-    return canonical.removesuffix("-native").removeprefix("native-")
++    # Some accepted native spellings keep the reversed ``native-<name>`` form,
++    # which ``canonicalize_harness`` does not fold.
++    for agent in native_agents():
++        if canonical in (agent.harness, f"native-{agent.terminal_name}"):
++            return agent.terminal_name
++    return None

@@ -1,0 +1,7 @@
+--- a/poteto-mode/playbooks/feature.md
++++ b/poteto-mode/playbooks/feature.md
+@@ -4,3 +4,3 @@
+ 
+-1. `how` over the affected subsystem.
++1. `how` over the affected subsystem. If a `CONTEXT.md` or `CONTEXT-MAP.md` sits at the repo root, or the feature introduces a domain term the code does not yet name, and **domain-modeling** is available by name or trigger, use it to check the feature's terms against the glossary and record each resolved term before `architect` names types. Settle a term conflict from code evidence, and ask only when the product meaning itself is undecided. If the companion is absent, read the root `CONTEXT.md` and any `docs/adr/` record for the area during `how`, use its terms in type and function names, and list new or conflicting terms in the reply.
+ 2. `architect` for parallel design exploration.

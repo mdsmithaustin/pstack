@@ -1,0 +1,1 @@
+`hermes sessions stats --json` now prints the same numbers as one JSON object: `total_sessions`, `total_messages`, `sessions_by_source` and `database_size_mb`. Without the flag the text output is unchanged.

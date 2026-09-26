@@ -1,0 +1,13 @@
+{
+  "kind": "near-miss",
+  "domain": "domain-modeling",
+  "timeout_s": 1800,
+  "expected_behavior": [
+    "Removes _harness_family from omnigent/runner/subagent_routing.py, since it and harness_family read the same smart_routing table for the same purpose.",
+    "Leaves the provider-family and skill-vendor lookups as they are."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  }
+}

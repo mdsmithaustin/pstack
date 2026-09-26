@@ -1,10 +1,12 @@
 """Helpers every rule oracle shares: answer parsing, Python source reading,
-and the sandboxed container that runs answer code."""
+workspace diffs, and the sandboxed container that runs answer code."""
 import ast
 import json
+import os
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 PROBES = Path(__file__).resolve().parent / "probes"
@@ -16,6 +18,14 @@ COMMIT_TAG = re.compile(r'<commit message="([^"]*)">(.*?)</commit>', re.DOTALL)
 
 class OracleError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class Workspace:
+    """What a workspace case's oracle receives in place of the project files:
+    the pinned checkout with its overlay, and the diff the agent left on it."""
+    checkout: Path
+    diff: str
 
 
 def clean_body(body):
@@ -92,3 +102,43 @@ def run_jobs(trees, jobs):
     if proc.returncode != 0:
         raise OracleError(f"container probe failed (exit {proc.returncode}): {proc.stderr.strip()[-500:]}")
     return json.loads(proc.stdout)
+
+
+def workspace_diff(run_dir):
+    """The diff harvested from the agent's workspace for one run. The harness
+    seals each run dir, so the diff sits in a parallel tree: <work>/runs/<run>
+    maps to <work>/harvest/<run>/workspace.diff."""
+    run_dir = Path(run_dir).resolve()
+    runs = next((parent for parent in run_dir.parents if parent.name == "runs"), None)
+    path = runs.parent / "harvest" / run_dir.relative_to(runs) / "workspace.diff" if runs else None
+    if path is None or not path.is_file():
+        raise OracleError(f"no workspace diff was harvested for {run_dir}")
+    return path.read_bytes().decode("utf-8", "surrogateescape")
+
+
+def apply_diff(checkout, diff):
+    """{path: bytes after the diff, or None when the diff deletes it} for every
+    path the diff touches. Paths it leaves alone are read from checkout."""
+    data = diff.encode("utf-8", "surrogateescape")
+    if not data.strip():
+        return {}
+    with tempfile.TemporaryDirectory() as directory:
+        stage = Path(directory) / "tree"
+        stage.mkdir()
+        env = {**os.environ, "GIT_CEILING_DIRECTORIES": directory, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+        def git_apply(*args):
+            proc = subprocess.run(["git", "apply", *args], cwd=stage, env=env, input=data, capture_output=True, check=False)
+            if proc.returncode != 0:
+                raise OracleError(f"workspace diff does not apply to the checkout: {proc.stderr.decode(errors='replace').strip()[-300:]}")
+            return proc.stdout
+
+        paths = [safe_path(record.split(b"\t", 2)[2].decode("utf-8", "surrogateescape"))
+                 for record in git_apply("--numstat", "-z").split(b"\0") if record]
+        for path in paths:
+            source = Path(checkout) / path
+            if source.is_file():
+                (stage / path).parent.mkdir(parents=True, exist_ok=True)
+                (stage / path).write_bytes(source.read_bytes())
+        git_apply("--binary", "--whitespace=nowarn")
+        return {path: (stage / path).read_bytes() if (stage / path).is_file() else None for path in paths}
