@@ -20,7 +20,7 @@ hunks, a hunk with unchanged lines between its edits, and a patch that no
 longer matches `skills/`. Each arm gets its own manifest with the same case,
 prompt, and mount name. `screen.py` runs only the `with_skill` rows, grades
 each arm with the rule's executable oracle, and prints the pair side by side. No
-judge runs.
+judge runs, except for review cases.
 
 A rule has one or more cases. A `positive` case is one where the rule should
 change the answer. A `near-miss` case is one where the rule must not change it.
@@ -391,11 +391,11 @@ command. The pinned harness (c2a1735) renders every judge prompt through
 assertion" and puts `case_id` and the assertion into the payload. Its plain
 contract is fixed to `{passed, score, rationale}` (`verdict_schema_for`), so
 it cannot return a five-way verdict against a per-case rubric. The runner
-borrows the harness's CLI flags: Claude runs `claude -p --output-format json
---no-session-persistence --tools= --json-schema <schema>`, and Codex runs
-`codex exec --json --ephemeral --sandbox read-only --output-schema <schema>
---output-last-message <file>`. sbx refuses an empty argv element, so the
-empty tool list is spelled `--tools=`.
+borrows the harness's CLI flags, among others: Claude runs `claude -p
+--output-format json --no-session-persistence --tools= --json-schema
+<schema>`, and Codex runs `codex exec --json --ephemeral --sandbox read-only
+--output-schema <schema> --output-last-message <file>`. sbx refuses an empty
+argv element, so the empty tool list is spelled `--tools=`.
 
 - **Cross-family.** Codex `gpt-6-sol` judges a Claude review and Claude
   `opus` judges a Codex review (`review.JUDGE_FOR`). `screen.py judge --judge
@@ -451,7 +451,8 @@ that concern as a problem".
 **Calibration.** `screen.py calibrate [--judge B:M ...] RULE ...` judges every
 labeled sample of every review case with each judge (both by default). It
 prints agreement per label and stores the record under
-`$CANON_CACHE/calibration/<rule>/<case>/<backend>-<model>.json`. The record
+`$CANON_CACHE/calibration/<rule>/<case>/<runner>-<backend>-<model>.json`,
+where the runner is `model` or `standin`. The record
 is keyed by the prompt template version, judge, kind, rubric, and PR, so a
 change to any of them voids it. A case is calibrated for a judge only when
 every sample agreed. Otherwise its run verdicts carry `calibrated: false` with
@@ -544,9 +545,10 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 
 `python3 -m unittest` runs `test_screen.py`, `test_arms.py`, `test_workspace.py`,
 `test_review.py` (review checkouts, the judge, calibration, scores, and stopped
-runs, with an offline review run when skill-ci is present),
-`test_sandbox.py` (its sandbox runs need `CANON_SBX_E2E=1`,
-see Sandboxed runs), and `test_oracles.py`, which loads `oracles/test_shared.py` and every
+runs, with an offline review run when skill-ci is present, and its
+`SandboxedReviewRunTests` gated on `CANON_SBX_E2E=1`), `test_review_cases.py`
+(the seeded review cases), `test_sandbox.py` (its sandbox runs need
+`CANON_SBX_E2E=1`, see Sandboxed runs), and `test_oracles.py`, which loads `oracles/test_shared.py` and every
 `rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
 mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
 workspace rule through the offline pipeline and checks both harvested diffs. It
