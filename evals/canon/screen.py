@@ -93,11 +93,8 @@ LEAK = re.compile(r"\b(evals?|evaluation|judge|experiment|rubric|score|compare|b
 ERROR_LOG = "screen-error.log"
 # Runs made before rules had cases name no case. These are the cases they ran.
 LEGACY_CASES = {
-    "notation-not-runtime": "checkout-rules",
     "observe-through-interface": "register-email",
     "translate-foreign-model": "paylane-webhooks",
-    "preparatory-refactor": "csv-export",
-    "fork-shared-helper": "payroll-overtime",
 }
 
 
