@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "domain-naming",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Adds the pause under one name for the concept: either the code's Subscription or a full rename.",
+    "Leaves no tree where Membership and Subscription name the same thing."
+  ]
+}

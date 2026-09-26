@@ -1,0 +1,273 @@
+From 5331aefb05b2c97ab9a598f43fdde706b01a08ec Mon Sep 17 00:00:00 2001
+From: Tomasz Wierzbicki <tomasz.wierzbicki@example.com>
+Date: Fri, 25 Sep 2026 17:10:54 -0600
+Subject: [PATCH] feat(sessions): filter the session list by host
+
+Add a host_id filter to GET /v1/sessions and SessionsNamespace.list so
+a client can ask for the sessions launched on one host instead of
+paging through every session and checking host_id locally. Sessions
+with no host binding are excluded.
+
+The host binding lives on the metadata row, so the store resolves it
+the way the project filter resolves membership: an IN subquery when
+metadata shares the conversations database, a bounded prefetch when it
+does not.
+
+Signed-off-by: Tomasz Wierzbicki <tomasz.wierzbicki@example.com>
+---
+ omnigent/server/API.md                        |  5 ++++
+ .../server/routes/sessions/routes_core.py     |  6 +++++
+ .../stores/conversation_store/__init__.py     |  6 +++++
+ .../conversation_store/sqlalchemy_store.py    | 22 +++++++++++++++
+ .../omnigent_client/_sessions.py              |  6 +++++
+ .../frontends/sdk/test_sessions_namespace.py  | 16 +++++++++++
+ tests/server/routes/test_sessions_crud.py     | 27 +++++++++++++++++++
+ tests/stores/test_conversation_store.py       | 21 +++++++++++++++
+ 8 files changed, 109 insertions(+)
+
+diff --git a/omnigent/server/API.md b/omnigent/server/API.md
+index e90480949..6f5892742 100644
+--- a/omnigent/server/API.md
++++ b/omnigent/server/API.md
+@@ -680,6 +680,11 @@ sessions, `sub_agent` returns only sub-agent child sessions, and
+ `any` returns both. `any` powers the new-session agent picker's
+ discovery of agents that are only bound to sub-agent sessions.
+ 
++The `host_id` filter returns only sessions whose runner was launched
++on that host, matching the `host_id` field on each list item.
++Sessions with no host binding (for example ones started with
++`omnigent run`) are excluded. It combines with every other filter.
++
+ When liveness is wired, each list item includes two orthogonal signals
+ (matching `GET /health` for the same session id and the
+ `WS /v1/sessions/updates` list item fields):
+diff --git a/omnigent/server/routes/sessions/routes_core.py b/omnigent/server/routes/sessions/routes_core.py
+index 4a28f1553..d2783cfdd 100644
+--- a/omnigent/server/routes/sessions/routes_core.py
++++ b/omnigent/server/routes/sessions/routes_core.py
+@@ -1280,6 +1280,7 @@ def register_core_routes(
+         project: str | None = Query(default=None),
+         pinned: bool = Query(default=False),
+         visibility: str = Query(default="all", pattern="^(all|mine|shared|archived)$"),
++        host_id: str | None = Query(default=None),
+     ) -> PaginatedList:
+         """
+         List sessions with cursor-based pagination.
+@@ -1333,6 +1334,10 @@ def register_core_routes(
+             owned. ``"archived"`` returns only archived sessions.
+             ``"all"`` (default) returns all accessible non-archived
+             sessions, matching the legacy behaviour.
++        :param host_id: When set, return only sessions whose runner
++            was launched on this host, the same ``host_id`` each list
++            item reports. Sessions with no host binding are excluded.
++            ``None`` (default) disables the filter.
+         :returns: A :class:`PaginatedList` of
+             :class:`SessionListItem`.
+         """
+@@ -1420,6 +1425,7 @@ def register_core_routes(
+             pinned=pinned,
+             # Pins are per-user: filter to the caller's own pin key.
+             pinned_owner=user_id,
++            host_id=host_id,
+         )
+         # Side chats surface only as Workspace-rail tabs, so drop any
+         # side-chat-labeled fork from the sidebar list (it is still a normal
+diff --git a/omnigent/stores/conversation_store/__init__.py b/omnigent/stores/conversation_store/__init__.py
+index 75ddc7de7..417edc06f 100644
+--- a/omnigent/stores/conversation_store/__init__.py
++++ b/omnigent/stores/conversation_store/__init__.py
+@@ -700,6 +700,7 @@ class ConversationStore(ABC):
+         pinned: bool = False,
+         pinned_owner: str | None = None,
+         title: str | None = None,
++        host_id: str | None = None,
+     ) -> PagedList[Conversation]:
+         """
+         List conversations with cursor-based pagination.
+@@ -811,6 +812,11 @@ class ConversationStore(ABC):
+             Powers the ``(agent, title)`` child-session lookup in
+             ``sys_session_send`` so the server can resolve the target
+             in a single indexed query instead of fetching all children.
++        :param host_id: When set, only return conversations whose
++            runner was launched on this host (``metadata.host_id``),
++            e.g. ``"bdda8ba7e34130318b54dd872eb160af"``. Conversations
++            with no host binding never match. ``None`` disables the
++            filter.
+         :returns: A :class:`PagedList` of :class:`Conversation`
+             objects.
+         :raises omnigent.errors.StaleCursorError: If the ``after``/``before``
+diff --git a/omnigent/stores/conversation_store/sqlalchemy_store.py b/omnigent/stores/conversation_store/sqlalchemy_store.py
+index 686fa9c3e..d66a4e14e 100644
+--- a/omnigent/stores/conversation_store/sqlalchemy_store.py
++++ b/omnigent/stores/conversation_store/sqlalchemy_store.py
+@@ -2651,6 +2651,7 @@ class SqlAlchemyConversationStore(ConversationStore):
+         pinned: bool = False,
+         pinned_owner: str | None = None,
+         title: str | None = None,
++        host_id: str | None = None,
+     ) -> PagedList[Conversation]:
+         """
+         List conversations with cursor-based pagination.
+@@ -2718,6 +2719,9 @@ class SqlAlchemyConversationStore(ConversationStore):
+             can access but does NOT own — i.e. sessions shared with them
+             by another user. Requires ``accessible_by`` to be set.
+             ``False`` (default) disables the filter.
++        :param host_id: When set, restrict to conversations whose
++            ``metadata.host_id`` is this host. ``None`` disables the
++            filter.
+         :returns: A :class:`PagedList` of :class:`Conversation`
+             objects.
+         """
+@@ -3028,6 +3032,24 @@ class SqlAlchemyConversationStore(ConversationStore):
+                         )
+                     )
+                 )
++            if host_id is not None:
++                # The host binding lives on the Omnigent-side metadata row, so
++                # resolve it the way the project filter resolves membership.
++                host_stmt = select(SqlConversationMetadata.id).where(
++                    SqlConversationMetadata.workspace_id == current_workspace_id(),
++                    SqlConversationMetadata.host_id == host_id,
++                )
++                if self._conv_engine is self._engine:
++                    # Single-DB: an IN subquery, no ids through Python.
++                    on_host: Any = host_stmt
++                else:
++                    # Split-DB: prefetch, bounded to qualifying_ids when
++                    # permission-scoped so the IN list stays small.
++                    if qualifying_ids is not None:
++                        host_stmt = host_stmt.where(SqlConversationMetadata.id.in_(qualifying_ids))
++                    with self._session("list_conversations") as meta_sess:
++                        on_host = list(meta_sess.execute(host_stmt).scalars())
++                stmt = stmt.where(SqlConversation.id.in_(on_host))
+             if after:
+                 stmt = self._apply_cursor(
+                     session,
+diff --git a/sdks/python-client/omnigent_client/_sessions.py b/sdks/python-client/omnigent_client/_sessions.py
+index a90fe92b7..dfd21a857 100644
+--- a/sdks/python-client/omnigent_client/_sessions.py
++++ b/sdks/python-client/omnigent_client/_sessions.py
+@@ -610,6 +610,7 @@ class SessionsNamespace:
+         sort_by: str = "created_at",
+         include_archived: bool = False,
+         visibility: Literal["all", "mine", "shared", "archived"] = "all",
++        host_id: str | None = None,
+     ) -> list[SessionListItem]:
+         """
+         List sessions with cursor-based pagination.
+@@ -639,6 +640,9 @@ class SessionsNamespace:
+             by the caller. ``"archived"`` returns only archived sessions.
+             Without server authentication, ``"mine"`` and ``"shared"``
+             behave like ``"all"``. Always sent explicitly to the server.
++        :param host_id: Filter to sessions whose runner was launched
++            on this host. Sessions with no host binding are excluded.
++            ``None`` returns sessions on any host or none.
+         :returns: List of :class:`SessionListItem`.
+         :raises StaleCursorError: If ``after``/``before`` names a session
+             that has since been deleted. The walk cannot continue from
+@@ -661,6 +665,8 @@ class SessionsNamespace:
+             params["agent_name"] = agent_name
+         if include_archived:
+             params["include_archived"] = "true"
++        if host_id is not None:
++            params["host_id"] = host_id
+         resp = await self._http.get(
+             f"{self._base}/v1/sessions",
+             params=params,
+diff --git a/tests/frontends/sdk/test_sessions_namespace.py b/tests/frontends/sdk/test_sessions_namespace.py
+index 695a9f618..b2186218a 100644
+--- a/tests/frontends/sdk/test_sessions_namespace.py
++++ b/tests/frontends/sdk/test_sessions_namespace.py
+@@ -1393,6 +1393,22 @@ async def test_list_visibility_preserves_pagination_and_filters(
+     assert rows == []
+ 
+ 
++@pytest.mark.asyncio
++async def test_list_sends_host_id_filter() -> None:
++    """``host_id`` travels as the ``host_id`` query parameter."""
++
++    def handler(request: httpx.Request) -> httpx.Response:
++        assert request.url.path == "/v1/sessions"
++        assert request.url.params["host_id"] == "a1b2c3d4e5f67890abcdef1234567890"
++        return httpx.Response(200, json={"data": []})
++
++    ns, client = _make_namespace(handler)
++    try:
++        assert await ns.list(host_id="a1b2c3d4e5f67890abcdef1234567890") == []
++    finally:
++        await client.aclose()
++
++
+ @pytest.mark.asyncio
+ async def test_list_preserves_host_id_on_rows() -> None:
+     """``list()`` rows keep the server's ``host_id`` (and default to None).
+diff --git a/tests/server/routes/test_sessions_crud.py b/tests/server/routes/test_sessions_crud.py
+index fe2f04aa4..273511d3a 100644
+--- a/tests/server/routes/test_sessions_crud.py
++++ b/tests/server/routes/test_sessions_crud.py
+@@ -788,3 +788,30 @@ async def test_list_sessions_pinned_filter(
+     assert plain.id not in ids
+     # A pin belonging to another user must not appear for the caller.
+     assert other_user_pin.id not in ids
++
++
++# ── GET /v1/sessions?host_id= (filter) ───────────────────────────────
++
++
++async def test_list_sessions_filtered_by_host(
++    client: httpx.AsyncClient,
++    db_uri: str,
++) -> None:
++    """``?host_id=`` returns only sessions launched on that host."""
++    agent_store = SqlAlchemyAgentStore(db_uri)
++    conv_store = SqlAlchemyConversationStore(db_uri)
++    agent_id = generate_agent_id()
++    agent_store.create(agent_id, name="host-agent", bundle_location="test:///bundle")
++    laptop = "bdda8ba7e34130318b54dd872eb160af"
++    desktop = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
++    on_laptop = conv_store.create_conversation(agent_id=agent_id)
++    on_desktop = conv_store.create_conversation(agent_id=agent_id)
++    conv_store.create_conversation(agent_id=agent_id)  # never bound to a host
++    conv_store.set_host_id(on_laptop.id, laptop, workspace="/tmp/laptop")
++    conv_store.set_host_id(on_desktop.id, desktop, workspace="/tmp/desktop")
++
++    resp = await client.get("/v1/sessions", params={"host_id": laptop})
++    assert resp.status_code == 200
++    data = resp.json()["data"]
++    assert [s["id"] for s in data] == [on_laptop.id]
++    assert data[0]["host_id"] == laptop
+diff --git a/tests/stores/test_conversation_store.py b/tests/stores/test_conversation_store.py
+index e877eeb93..102b16f17 100644
+--- a/tests/stores/test_conversation_store.py
++++ b/tests/stores/test_conversation_store.py
+@@ -6509,6 +6509,27 @@ def test_list_conversations_filters_by_pinned_label(
+     assert conversation_store.list_conversations(pinned=True, pinned_owner="alice").data == []
+ 
+ 
++def test_list_conversations_filters_by_host_id(
++    conversation_store: SqlAlchemyConversationStore,
++) -> None:
++    """``host_id`` keeps only conversations bound to that host; a rebind moves
++    a conversation between hosts, and unbound conversations never match."""
++    laptop = "bdda8ba7e34130318b54dd872eb160af"
++    desktop = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
++    first = conversation_store.create_conversation(title="first")
++    second = conversation_store.create_conversation(title="second")
++    conversation_store.create_conversation(title="unbound")
++    conversation_store.set_host_id(first.id, laptop, workspace="/tmp/a")
++    conversation_store.set_host_id(second.id, desktop, workspace="/tmp/b")
++
++    assert [c.id for c in conversation_store.list_conversations(host_id=laptop).data] == [first.id]
++
++    conversation_store.set_host_id(second.id, laptop, workspace="/tmp/b")
++    on_laptop = conversation_store.list_conversations(host_id=laptop, order="asc")
++    assert [c.id for c in on_laptop.data] == [first.id, second.id]
++    assert conversation_store.list_conversations(host_id=desktop).data == []
++
++
+ def test_pinned_label_key_fits_column_for_long_user_ids() -> None:
+     """The per-user pin key must never overflow the ``String(128)`` label-key
+     column. Short ids stay verbatim (DB-readable); an over-long id (e.g. a long
+-- 
+2.54.0 (Apple Git-157)
+

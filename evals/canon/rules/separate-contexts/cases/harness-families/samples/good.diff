@@ -1,0 +1,757 @@
+diff --git a/omnigent/chat.py b/omnigent/chat.py
+index dc24589..be24aec 100644
+--- a/omnigent/chat.py
++++ b/omnigent/chat.py
+@@ -3905,7 +3905,7 @@ def _spec_used_families(agent_yaml: Path | None) -> list[str]:
+     else:
+         return []
+     try:
+-        from omnigent.onboarding.provider_config import PI_SURFACE, harness_family
++        from omnigent.onboarding.provider_config import PI_SURFACE, provider_family
+         from omnigent.spec import parse
+ 
+         spec = parse(root, expand_env=False)
+@@ -3918,7 +3918,7 @@ def _spec_used_families(agent_yaml: Path | None) -> list[str]:
+     def _walk(node: AgentSpec) -> None:
+         """Accumulate the surface for *node*'s harness and recurse into sub-agents."""
+         harness = canonicalize_harness(node.executor.harness_kind) or node.executor.harness_kind
+-        fam = harness_family(harness)
++        fam = provider_family(harness)
+         if fam is not None:
+             families.add(fam)
+         elif harness == PI_SURFACE:
+diff --git a/omnigent/cli.py b/omnigent/cli.py
+index 2336dd0..95a0037 100644
+--- a/omnigent/cli.py
++++ b/omnigent/cli.py
+@@ -13124,7 +13124,7 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
+     from omnigent.onboarding.detected import effective_config_with_detected
+     from omnigent.onboarding.provider_config import (
+         default_provider_for_harness,
+-        harness_family,
++        provider_family,
+         load_config,
+         load_providers,
+         provider_families,
+@@ -13134,7 +13134,7 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
+     brain_harness = _bundled_agent_brain_harness(name)
+     if brain_harness is None:
+         return
+-    family = harness_family(brain_harness)
++    family = provider_family(brain_harness)
+     if family is None:
+         return
+     # Best-effort: adopting a default must never crash a launch. Any malformed
+@@ -13218,14 +13218,14 @@ def _bundled_agent_brain_harness_fallback(name: str) -> str | None:
+     from omnigent.onboarding.provider_config import (
+         default_provider_for_harness,
+         first_available_provider,
+-        harness_family,
++        provider_family,
+         load_config,
+     )
+ 
+     brain_harness = _bundled_agent_brain_harness(name)
+     if brain_harness is None:
+         return None
+-    family = harness_family(brain_harness)
++    family = provider_family(brain_harness)
+     if family is None:
+         return None
+     try:
+diff --git a/omnigent/onboarding/harness_readiness.py b/omnigent/onboarding/harness_readiness.py
+index 3b0bffd..1b33420 100644
+--- a/omnigent/onboarding/harness_readiness.py
++++ b/omnigent/onboarding/harness_readiness.py
+@@ -63,7 +63,7 @@ from omnigent.onboarding.harness_install import (
+ )
+ from omnigent.onboarding.provider_config import (
+     _EXECUTOR_TYPE_HARNESS_ALIASES,
+-    _HARNESS_FAMILY,
++    _PROVIDER_FAMILY,
+     ANTHROPIC_FAMILY,
+     BEDROCK_KIND,
+     CLI_CONFIG_KIND,
+@@ -118,17 +118,17 @@ _FAMILY_CREDENTIAL_CHECK: dict[str, Callable[[], bool]] = {
+ # CLI-wrapping pi harnesses. Both the bare ``pi`` surface and the native
+ # ``pi-native`` wrapper launch the same ``pi`` binary (``canonicalize_harness``
+ # folds ``native-pi`` → ``pi-native``). Unlike claude/codex they have no
+-# ``_HARNESS_FAMILY`` entry — pi uses the ``PI_SURFACE`` sentinel — so they must
++# ``_PROVIDER_FAMILY`` entry — pi uses the ``PI_SURFACE`` sentinel — so they must
+ # be gated explicitly or they fail open like an unknown harness.
+ _PI_HARNESSES: frozenset[str] = frozenset({PI_SURFACE, "pi-native"})
+ 
+ # Surface name for Kimi Code in the readiness map. Mirrors :data:`PI_SURFACE`
+ # — kimi is a CLI-backed harness with its own backend (Moonshot AI's), not a
+-# member of the anthropic/openai families that :data:`_HARNESS_FAMILY` keys.
++# member of the anthropic/openai families that :data:`_PROVIDER_FAMILY` keys.
+ KIMI_SURFACE = "kimi"
+ 
+ # Native OpenCode harness. Like pi, it wraps a CLI (``opencode``) with no
+-# ``_HARNESS_FAMILY`` entry, so it must be gated explicitly or it would fail
++# ``_PROVIDER_FAMILY`` entry, so it must be gated explicitly or it would fail
+ # open like an unknown harness.
+ _OPENCODE_HARNESSES: frozenset[str] = frozenset({"opencode-native"})
+ 
+@@ -174,7 +174,7 @@ _DEVIN_NATIVE_HARNESSES: frozenset[str] = frozenset({"devin-native", "native-dev
+ # ``qwen-native`` / ``native-qwen`` (the native TUI via ``omni qwen``) all resolve
+ # to the same ``qwen`` binary (canonicalize_harness folds ``qwen-code`` → ``qwen``
+ # and ``native-qwen`` → ``qwen-native``). Unlike claude/codex they have no
+-# ``_HARNESS_FAMILY`` entry, so they must be gated explicitly or they fail open.
++# ``_PROVIDER_FAMILY`` entry, so they must be gated explicitly or they fail open.
+ _QWEN_HARNESSES: frozenset[str] = frozenset({QWEN_KEY, "qwen-code", "qwen-native", "native-qwen"})
+ 
+ 
+@@ -184,7 +184,7 @@ def _canonical_harness(harness: str) -> str:
+     Folds the user-facing alias (``claude`` → ``claude-sdk``) and the
+     executor-type spellings :attr:`AgentSpec.harness_kind` returns
+     (``claude_sdk`` → ``claude-sdk``, ``agents_sdk`` → ``openai-agents``)
+-    onto the canonical ids keyed in ``_HARNESS_FAMILY``.
++    onto the canonical ids keyed in ``_PROVIDER_FAMILY``.
+ 
+     :param harness: A harness id, e.g. ``"claude"``, ``"agents_sdk"``,
+         or ``"codex-native"``.
+@@ -199,7 +199,7 @@ def _install_key(canonical: str) -> str:
+     """Return the install-spec key whose CLI binary *canonical* requires.
+ 
+     :param canonical: A canonical CLI-wrapping harness id keyed in
+-        ``_HARNESS_FAMILY`` (e.g. ``"codex-native"``), ``"pi"``, or
++        ``_PROVIDER_FAMILY`` (e.g. ``"codex-native"``), ``"pi"``, or
+         ``"kimi"``.
+     :returns: ``"anthropic"`` / ``"openai"`` for the claude/codex CLIs,
+         :data:`~omnigent.onboarding.harness_install.KIMI_KEY` for kimi,
+@@ -214,7 +214,7 @@ def _install_key(canonical: str) -> str:
+         return OPENCODE_KEY
+     if canonical in _QWEN_HARNESSES:
+         return QWEN_KEY
+-    return _HARNESS_FAMILY.get(canonical) or PI_KEY
++    return _PROVIDER_FAMILY.get(canonical) or PI_KEY
+ 
+ 
+ def _harness_availability_core(harness: str) -> HarnessAvailability:
+@@ -305,7 +305,7 @@ def _harness_availability_core(harness: str) -> HarnessAvailability:
+         # logged-in user is ready without pasting a token into setup.
+         return gh_cli_github_token(copilot_github_host()) is not None
+     if (
+-        canonical not in _HARNESS_FAMILY
++        canonical not in _PROVIDER_FAMILY
+         and canonical not in _PI_HARNESSES
+         and canonical != KIMI_SURFACE
+         and canonical not in _KIMI_NATIVE_HARNESSES
+@@ -465,7 +465,7 @@ def _family_provider_configured(harness: str) -> bool:
+             else frozenset({SUBSCRIPTION_KIND})
+         )
+         return _provider_entry_locally_credentialed(
+-            provider, _HARNESS_FAMILY.get(harness), unusable
++            provider, _PROVIDER_FAMILY.get(harness), unusable
+         )
+     except Exception as exc:
+         # Readiness must never raise; a broken/unreadable config fails to
+@@ -499,7 +499,7 @@ def _family_fallback_provider_configured(harness: str) -> bool:
+     :returns: ``True`` when a locally credentialed non-subscription provider
+         entry (configured or ambient-detected) serves the harness's family.
+     """
+-    family = _HARNESS_FAMILY.get(harness)
++    family = _PROVIDER_FAMILY.get(harness)
+     if family is None:
+         return False
+     try:
+@@ -861,7 +861,7 @@ def _sdk_harness_availability(canonical: str) -> HarnessAvailability:
+         return True
+     if _global_auth_configured():
+         return True
+-    family = _HARNESS_FAMILY.get(canonical)
++    family = _PROVIDER_FAMILY.get(canonical)
+     if family is not None and _ambient_family_env_key_configured(family):
+         return True
+     if family == ANTHROPIC_FAMILY and (
+@@ -1020,7 +1020,7 @@ def harness_is_configured(harness: str) -> bool:
+ def _is_codex_family_harness(canonical: str) -> bool:
+     """Return whether a canonical harness uses Codex readiness semantics."""
+     return (
+-        canonical in CODEX_CANONICAL_HARNESSES and _HARNESS_FAMILY.get(canonical) == OPENAI_FAMILY
++        canonical in CODEX_CANONICAL_HARNESSES and _PROVIDER_FAMILY.get(canonical) == OPENAI_FAMILY
+     )
+ 
+ 
+@@ -1040,7 +1040,7 @@ def configured_harness_map() -> dict[str, HarnessAvailability]:
+         ``{"claude-native": False, "codex-native": "needs-auth",
+         "claude-sdk": "needs-auth", "pi": True, "qwen": True}``.
+     """
+-    spellings: set[str] = set(_HARNESS_FAMILY)
++    spellings: set[str] = set(_PROVIDER_FAMILY)
+     spellings.update(valid_harnesses())
+     spellings.update(harness_install_keys())
+     spellings.update(_EXECUTOR_TYPE_HARNESS_ALIASES)
+diff --git a/omnigent/onboarding/provider_config.py b/omnigent/onboarding/provider_config.py
+index 9d23287..0ff31ca 100644
+--- a/omnigent/onboarding/provider_config.py
++++ b/omnigent/onboarding/provider_config.py
+@@ -161,7 +161,7 @@ ProviderKind = Literal[
+ # ``pi`` harness consumes both families and so is absent here — callers
+ # needing a single family for ``pi`` fall back to whichever family the
+ # active provider configures (see :func:`_family_for_harness`).
+-_HARNESS_FAMILY: dict[str, str] = {
++_PROVIDER_FAMILY: dict[str, str] = {
+     "claude-sdk": ANTHROPIC_FAMILY,
+     # Native CLI harnesses. Specs (and the omnigent-compat translator)
+     # spell these "claude-native" / "codex-native"; the reversed
+@@ -205,7 +205,7 @@ _HARNESS_FAMILY: dict[str, str] = {
+ 
+ # Executor-type spellings that ``AgentSpec.harness_kind`` returns for SDK
+ # harnesses (the executor *type*, not a ``config["harness"]`` value) mapped
+-# to the canonical harness ids keyed in :data:`_HARNESS_FAMILY`.
++# to the canonical harness ids keyed in :data:`_PROVIDER_FAMILY`.
+ _EXECUTOR_TYPE_HARNESS_ALIASES: dict[str, str] = {
+     "claude_sdk": "claude-sdk",
+     "agents_sdk": "openai-agents",
+@@ -216,7 +216,7 @@ def provider_family_for_harness(harness: str | None) -> str | None:
+     """Return the provider family a harness consumes, or ``None``.
+ 
+     Maps a harness identifier to ``"anthropic"`` / ``"openai"``. Accepts both
+-    the canonical ids keyed in :data:`_HARNESS_FAMILY` and the executor-type
++    the canonical ids keyed in :data:`_PROVIDER_FAMILY` and the executor-type
+     spellings :attr:`AgentSpec.harness_kind` returns for SDK harnesses
+     (``"claude_sdk"`` → ``"claude-sdk"``, ``"agents_sdk"`` →
+     ``"openai-agents"``).
+@@ -235,7 +235,7 @@ def provider_family_for_harness(harness: str | None) -> str | None:
+         return None
+     canonical = canonicalize_harness(harness) or harness
+     canonical = _EXECUTOR_TYPE_HARNESS_ALIASES.get(canonical, canonical)
+-    return harness_family(canonical)
++    return provider_family(canonical)
+ 
+ 
+ @dataclass(frozen=True)
+@@ -1214,7 +1214,7 @@ def provider_credential_env_vars(
+     return frozenset(names)
+ 
+ 
+-def harness_family(harness: str) -> str | None:
++def provider_family(harness: str) -> str | None:
+     """Return the single model family a harness consumes, or ``None``.
+ 
+     Public accessor for the canonical harness→family map. ``None`` means
+@@ -1225,7 +1225,7 @@ def harness_family(harness: str) -> str | None:
+     :returns: ``"anthropic"`` / ``"openai"`` for a single-family harness, or
+         ``None`` for an unmapped / both-family harness.
+     """
+-    return _HARNESS_FAMILY.get(harness)
++    return _PROVIDER_FAMILY.get(harness)
+ 
+ 
+ def _cli_config_serves_pi(entry: ProviderEntry) -> bool:
+@@ -1420,7 +1420,7 @@ def default_provider_for_harness(config: dict[str, object], harness: str) -> Pro
+     :raises OmnigentError: If a provider is malformed, or more than one
+         default serves the resolved family.
+     """
+-    family = _HARNESS_FAMILY.get(harness)
++    family = _PROVIDER_FAMILY.get(harness)
+     if family is not None:
+         return get_default_provider(config, family)
+     # Unmapped (e.g. pi): an explicit pi-scope default is authoritative.
+@@ -1514,7 +1514,7 @@ def _family_for_harness(provider: ProviderEntry, harness: str) -> str | None:
+     :returns: ``"anthropic"`` / ``"openai"`` when the provider configures a
+         matching family, else ``None``.
+     """
+-    preferred = _HARNESS_FAMILY.get(harness)
++    preferred = _PROVIDER_FAMILY.get(harness)
+     if preferred is not None and preferred in provider.families:
+         return preferred
+     if preferred is not None:
+@@ -1559,7 +1559,7 @@ def harness_owns_its_credential(harness: str) -> bool:
+     the external agent authenticates itself, so describing an Omnigent
+     provider for one would name a credential the session never uses.
+ 
+-    A harness mapped in :data:`_HARNESS_FAMILY` is provider-routed at spawn
++    A harness mapped in :data:`_PROVIDER_FAMILY` is provider-routed at spawn
+     (e.g. qwen consumes the openai family via its gateway env) even when its
+     capability record declares own-auth for the unconfigured fallback, so it
+     is never declined here — its family default is genuinely what it runs on.
+@@ -1571,7 +1571,7 @@ def harness_owns_its_credential(harness: str) -> bool:
+     from omnigent.harness_plugins import harness_capabilities
+ 
+     canonical = canonicalize_harness(harness) or harness
+-    if canonical in _HARNESS_FAMILY:
++    if canonical in _PROVIDER_FAMILY:
+         return False
+     caps = harness_capabilities().get(canonical)
+     if caps is None:
+diff --git a/omnigent/repl/_repl.py b/omnigent/repl/_repl.py
+index 24a5ab1..3d0eca0 100644
+--- a/omnigent/repl/_repl.py
++++ b/omnigent/repl/_repl.py
+@@ -5098,7 +5098,7 @@ def _build_model_readout_lines(
+     from omnigent.onboarding.provider_config import (
+         PI_SURFACE,
+         describe_active_credential,
+-        harness_family,
++        provider_family,
+         harness_owns_its_credential,
+         load_providers,
+         provider_families,
+@@ -5160,7 +5160,7 @@ def _build_model_readout_lines(
+     # family — filter its alternates on the pi surface instead, which every
+     # kind but subscription serves (a CLI login can't drive pi).
+     providers = load_providers(config)
+-    fam = harness_family(harness)
++    fam = provider_family(harness)
+     surface = fam if fam is not None else PI_SURFACE
+     others = [
+         (name, entry)
+diff --git a/omnigent/runner/subagent_routing.py b/omnigent/runner/subagent_routing.py
+index 9c4c398..fcce0cd 100644
+--- a/omnigent/runner/subagent_routing.py
++++ b/omnigent/runner/subagent_routing.py
+@@ -486,27 +486,24 @@ def _opt_str(value: Any) -> str | None:
+     return value if isinstance(value, str) and value else None
+ 
+ 
+-def _harness_family(harness: str) -> str | None:
+-    from omnigent.server.smart_routing import _HARNESS_FAMILY
+-
+-    return _HARNESS_FAMILY.get(harness)
+-
+-
+-def harness_family(harness: str | None) -> str | None:
+-    """Return the model family *harness* belongs to.
++def routing_family(harness: str | None) -> str | None:
++    """Return the smart-routing model family *harness* belongs to.
+ 
+     The single family lookup shared by the hook path (native subagent
+     spawns) and the omnigent child-session path, so "in-family" means the
+-    same thing for both.
++    same thing for both. Not the provider family of
++    :func:`omnigent.onboarding.provider_config.provider_family`.
+ 
+     :param harness: Harness id, e.g. ``"codex-native"``. ``None`` or the
+         unresolved ``"auto"`` sentinel carry no family.
+     :returns: ``"claude"``, ``"gpt"``, ``"pi"``, or ``None`` when the
+         harness is unknown / multi-family.
+     """
++    from omnigent.server.smart_routing import _ROUTING_FAMILY
++
+     if harness is None or harness == "auto":
+         return None
+-    return _harness_family(harness)
++    return _ROUTING_FAMILY.get(harness)
+ 
+ 
+ def auto_harness_session(conv: Any, parent: Any = None) -> bool:
+@@ -538,7 +535,7 @@ def model_in_family(family: str | None, model: str) -> bool:
+     The ``"gpt"`` family means codex-compatible, not literally GPT: it
+     admits the GLM and Kimi ids codex serves over the same Responses wire.
+ 
+-    :param family: Family from :func:`harness_family`. ``None`` (unknown
++    :param family: Family from :func:`routing_family`. ``None`` (unknown
+         or multi-family harness) accepts every model.
+     :param model: Model id, e.g. ``"databricks-gpt-5-5"``.
+     :returns: ``True`` when the pairing is servable.
+@@ -599,7 +596,7 @@ def candidate_models(
+         # A catalog row can hold models the harness cannot speak (a codex
+         # ``"self"`` row lists Claude ids too), which earn a hard
+         # ``model_family_mismatch`` at dispatch.
+-        family = harness_family(candidate)
++        family = routing_family(candidate)
+         models = [m for m in models if model_in_family(family, m)]
+         # Offer each model under the spelling the gateway serves, so the
+         # spawn's model matches what routing resolves to; dedupe when the
+@@ -627,7 +624,7 @@ def _with_unadvertised_arms(models: list[str], family: str | None) -> list[str]:
+     cannot widen a family.
+ 
+     :param models: Servable ids offered so far, cheapest first.
+-    :param family: Family from :func:`harness_family`.
++    :param family: Family from :func:`routing_family`.
+     :returns: *models* plus any missing unadvertised arm of that family.
+     """
+     if not models or family != _UNADVERTISED_ARM_FAMILY:
+@@ -673,10 +670,10 @@ def _target_harness(
+     req_harness: str, picked_harness: str | None, picked_family: str | None
+ ) -> str:
+     """Name the harness a picked model should run on."""
+-    if picked_family is not None and picked_family == _harness_family(req_harness):
++    if picked_family is not None and picked_family == routing_family(req_harness):
+         return req_harness
+     counterpart = _COUNTERPART_HARNESS.get(req_harness)
+-    if counterpart is not None and _harness_family(counterpart) == picked_family:
++    if counterpart is not None and routing_family(counterpart) == picked_family:
+         return counterpart
+     return picked_harness or counterpart or req_harness
+ 
+@@ -883,11 +880,11 @@ def _decision_from_result(
+         )
+ 
+     picked_harness = _opt_str(getattr(result, "harness", None))
+-    family = _harness_family(picked_harness) if picked_harness else None
++    family = routing_family(picked_harness) if picked_harness else None
+     if family is None:
+         for harness_id, models in candidates.items():
+             if model in models:
+-                family = _harness_family(harness_id)
++                family = routing_family(harness_id)
+                 break
+     target = _target_harness(req.harness, picked_harness, family)
+     # The deny above carries no note: nothing spawned, so there is no ask to
+diff --git a/omnigent/runner/tool_dispatch.py b/omnigent/runner/tool_dispatch.py
+index 2aeb14e..9f5ef79 100644
+--- a/omnigent/runner/tool_dispatch.py
++++ b/omnigent/runner/tool_dispatch.py
+@@ -5444,7 +5444,7 @@ async def _spawn_family(
+ 
+     from omnigent.runner.subagent_routing import (
+         auto_harness_session,
+-        harness_family,
++        routing_family,
+         session_routing_class,
+         subagent_routing_enabled,
+     )
+@@ -5481,7 +5481,7 @@ async def _spawn_family(
+             harness_override=harness,
+         )
+         if not auto_harness_session(row):
+-            family = harness_family(harness)
++            family = routing_family(harness)
+     _spawn_family_cache[conversation_id] = family
+     return family
+ 
+@@ -5505,12 +5505,12 @@ def _in_spawn_family(builtins: list[_JsonObject], family: str | None) -> list[_J
+     """
+     if family is None:
+         return builtins
+-    from omnigent.runner.subagent_routing import harness_family
++    from omnigent.runner.subagent_routing import routing_family
+ 
+     kept: list[_JsonObject] = []
+     for row in builtins:
+         harness = row.get("harness")
+-        row_family = harness_family(harness) if isinstance(harness, str) else None
++        row_family = routing_family(harness) if isinstance(harness, str) else None
+         if row_family is None or row_family == family:
+             kept.append(row)
+     return kept
+diff --git a/omnigent/runner/turn_routing.py b/omnigent/runner/turn_routing.py
+index a9f9728..eb3ccf0 100644
+--- a/omnigent/runner/turn_routing.py
++++ b/omnigent/runner/turn_routing.py
+@@ -487,7 +487,7 @@ def out_of_parent_family(
+     """
+     from omnigent.runner.subagent_routing import (
+         auto_harness_session,
+-        harness_family,
++        routing_family,
+         subagent_routing_enabled,
+     )
+ 
+@@ -497,8 +497,8 @@ def out_of_parent_family(
+         return False
+     if auto_harness_session(conv, parent):
+         return False
+-    parent_family = harness_family(parent_harness)
+-    own_family = harness_family(harness)
++    parent_family = routing_family(parent_harness)
++    own_family = routing_family(harness)
+     return parent_family is not None and own_family is not None and parent_family != own_family
+ 
+ 
+diff --git a/omnigent/runtime/workflow.py b/omnigent/runtime/workflow.py
+index 8721cd3..4c2027b 100644
+--- a/omnigent/runtime/workflow.py
++++ b/omnigent/runtime/workflow.py
+@@ -62,7 +62,7 @@ from omnigent.onboarding.provider_config import (
+     ProviderEntry,
+     default_provider_for_harness,
+     first_available_provider,
+-    harness_family,
++    provider_family,
+     load_config,
+     load_providers,
+ )
+@@ -1149,7 +1149,7 @@ def _resolve_provider_for_build(
+     # persisted; the startup creds line names the same provider via
+     # :func:`first_available_provider`, so the readout cannot disagree.
+     if for_launch:
+-        family = harness_family(harness)
++        family = provider_family(harness)
+         if family is not None:
+             return first_available_provider(effective, family)
+     return None
+diff --git a/omnigent/server/routes/_sessions/orchestration.py b/omnigent/server/routes/_sessions/orchestration.py
+index ad4b637..ec8f02a 100644
+--- a/omnigent/server/routes/_sessions/orchestration.py
++++ b/omnigent/server/routes/_sessions/orchestration.py
+@@ -87,7 +87,7 @@ from omnigent.runner.session_init_protocol import build_runner_session_init_payl
+ from omnigent.runner.subagent_routing import (
+     ROUTING_DECISION_LABEL_KEY,
+     auto_harness_session,
+-    harness_family,
++    routing_family,
+     subagent_routing_enabled,
+ )
+ from omnigent.runner.transports.ws_tunnel.registry import TunnelRegistry
+@@ -5307,7 +5307,7 @@ def _pinned_spawn_family(parent: Conversation | None) -> str | None:
+         return None
+     if auto_harness_session(parent):
+         return None
+-    return harness_family(_resolve_harness(parent))
++    return routing_family(_resolve_harness(parent))
+ 
+ 
+ def _reject_out_of_family_child(
+@@ -5330,7 +5330,7 @@ def _reject_out_of_family_child(
+         differs from the family the parent's spawns are confined to.
+     """
+     family = _pinned_spawn_family(parent)
+-    child_family = harness_family(child_harness)
++    child_family = routing_family(child_harness)
+     if family is None or child_family is None or family == child_family:
+         return
+     parent_harness = _resolve_harness(parent)
+@@ -5369,8 +5369,8 @@ def _out_of_family_spawn_notice(
+     if parent is None or auto_harness_session(conv, parent):
+         return None
+     parent_harness = _resolve_harness(parent)
+-    parent_family = harness_family(parent_harness)
+-    child_family = harness_family(harness)
++    parent_family = routing_family(parent_harness)
++    child_family = routing_family(harness)
+     if parent_family is None or child_family is None or parent_family == child_family:
+         return None
+     return (
+@@ -5775,7 +5775,7 @@ async def _forward_event_to_runner(
+                 # a pi child could be handed a codex verdict it then ran pi on.
+                 _child_harness = _resolve_harness(conv)
+                 _child_pinned = _child_harness is not None and _child_harness != "auto"
+-                _child_family = harness_family(_child_harness) if _child_pinned else None
++                _child_family = routing_family(_child_harness) if _child_pinned else None
+                 # A single-harness candidate set is the honest offer for a
+                 # pinned child: the family filter alone still admits the other
+                 # harnesses in that family (a ``codex-native`` child would be
+diff --git a/omnigent/server/smart_routing.py b/omnigent/server/smart_routing.py
+index 4cc5df1..d0c3a37 100644
+--- a/omnigent/server/smart_routing.py
++++ b/omnigent/server/smart_routing.py
+@@ -98,7 +98,7 @@ _CURRENT_GENERATION_MODELS: Mapping[str, tuple[str, ...]] = MappingProxyType(
+     {"gpt": SMART_ROUTING_CURRENT_GENERATION_GPT}
+ )
+ 
+-_HARNESS_FAMILY: dict[str, str] = {
++_ROUTING_FAMILY: dict[str, str] = {
+     "claude-sdk": "claude",
+     "claude_sdk": "claude",
+     "claude-native": "claude",
+@@ -127,7 +127,7 @@ def infer_models(
+     """
+     if harness is None:
+         return None
+-    family = _HARNESS_FAMILY.get(harness)
++    family = _ROUTING_FAMILY.get(harness)
+     if family is None:
+         return None
+     curated = MODEL_LISTS.get(family)
+@@ -146,9 +146,9 @@ def models_in_family(harness: str | None, models: Iterable[str]) -> list[str]:
+     :param models: Candidate model ids, cheapest first.
+     :returns: The servable subset, order preserved.
+     """
+-    from omnigent.runner.subagent_routing import harness_family, model_in_family
++    from omnigent.runner.subagent_routing import routing_family, model_in_family
+ 
+-    family = harness_family(harness)
++    family = routing_family(harness)
+     if family is None:
+         return list(models)
+     return [model for model in models if model_in_family(family, model)]
+@@ -180,7 +180,7 @@ def catalog_models_for_harness(
+     own = catalog.get(harness)
+     if own:
+         return list(own)
+-    family = _HARNESS_FAMILY.get(harness)
++    family = _ROUTING_FAMILY.get(harness)
+     for worker, worker_models in catalog.items():
+         if not worker_models:
+             continue
+@@ -188,7 +188,7 @@ def catalog_models_for_harness(
+         if worker_harness is None:
+             continue
+         if worker_harness == harness or (
+-            family is not None and _HARNESS_FAMILY.get(worker_harness) == family
++            family is not None and _ROUTING_FAMILY.get(worker_harness) == family
+         ):
+             return list(worker_models)
+     if allow_self:
+@@ -1269,10 +1269,10 @@ def natural_harness_for_model(
+     ]
+     candidates = serving or order
+     family = _model_family(model)
+-    chosen = next((h for h in candidates if _HARNESS_FAMILY.get(h) == family), None)
++    chosen = next((h for h in candidates if _ROUTING_FAMILY.get(h) == family), None)
+     if chosen is None:
+         chosen = next(
+-            (h for h in candidates if _HARNESS_FAMILY.get(h) == _MULTI_MODEL_FAMILY), None
++            (h for h in candidates if _ROUTING_FAMILY.get(h) == _MULTI_MODEL_FAMILY), None
+         )
+     if chosen is None:
+         chosen = candidates[0] if candidates else None
+@@ -1507,7 +1507,7 @@ class TaskV1RouteOptionSource:
+ 
+     def _scenario(self, harnesses: Iterable[str]) -> str:
+         """Map a harness set to a router scenario key."""
+-        families = {_HARNESS_FAMILY.get(h) for h in harnesses}
++        families = {_ROUTING_FAMILY.get(h) for h in harnesses}
+         if families == {"claude"}:
+             return "cc"
+         if families == {"gpt"}:
+@@ -1527,7 +1527,7 @@ class TaskV1RouteOptionSource:
+         """
+         order = list(catalog) or list(harnesses)
+         family = _model_family(arm)
+-        match = next((h for h in order if _HARNESS_FAMILY.get(h) == family), None)
++        match = next((h for h in order if _ROUTING_FAMILY.get(h) == family), None)
+         if match is not None:
+             return match
+         return order[0] if order else None
+@@ -2033,7 +2033,7 @@ async def route_session_harness(
+         *session_id* when unset.
+     :param runner_client: HTTP client pointed at the runner (optional).
+     :param allowed_family: Restrict candidates to this harness family
+-        (:func:`omnigent.runner.subagent_routing.harness_family`), e.g.
++        (:func:`omnigent.runner.subagent_routing.routing_family`), e.g.
+         ``"gpt"`` for a child of a codex session. ``None`` offers every
+         auto-routing harness — only sessions in auto-harness mode.
+     :param harness_candidates: Replace the default SDK candidate set with an
+@@ -2092,7 +2092,7 @@ async def route_session_harness(
+         for h in (
+             _AUTO_ROUTING_HARNESSES if harness_candidates is None else tuple(harness_candidates)
+         )
+-        if allowed_family is None or _HARNESS_FAMILY.get(h) == allowed_family
++        if allowed_family is None or _ROUTING_FAMILY.get(h) == allowed_family
+     )
+     harness_models: dict[str, list[str]] = {}
+     harness_catalog: dict[str, list[_RunnerModel]] = {}
+diff --git a/omnigent/spec/skill_sources.py b/omnigent/spec/skill_sources.py
+index a2f761d..f4bca7f 100644
+--- a/omnigent/spec/skill_sources.py
++++ b/omnigent/spec/skill_sources.py
+@@ -35,7 +35,7 @@ _SKILL_FAMILIES = frozenset({"claude", "codex", "cursor", "pi", "antigravity", "
+ _ANTIGRAVITY_SDK_HARNESS = "antigravity"
+ 
+ 
+-def _harness_family(harness: str | None) -> str | None:
++def _skill_vendor(harness: str | None) -> str | None:
+     """
+     Map any harness spelling to its vendor family, or ``None``.
+ 
+@@ -115,7 +115,7 @@ def skill_source_context_from_env(
+     """Use the same ambient harness configuration for host and runner discovery."""
+     configured_claude_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+     codex_home: Path | None = None
+-    if _harness_family(harness) == "codex":
++    if _skill_vendor(harness) == "codex":
+         from omnigent.inner.codex_executor import _codex_home_config_source_from_env
+ 
+         # Nested runners can inherit a private Codex home; use its original source.
+@@ -235,7 +235,7 @@ def resolve_harness_skills(ctx: SkillSourceContext, harness: str | None) -> list
+     """
+     from omnigent.harness_aliases import is_native_harness
+ 
+-    family = _harness_family(harness)
++    family = _skill_vendor(harness)
+     provider = _SKILL_SOURCES.get(family, _generic_host_skills)
+     # The terminal-matching resolution — a native session types ``/name`` into
+     # the vendor CLI as plaintext, so its menu must mirror what that CLI loads —
+@@ -765,7 +765,7 @@ def devin_host_skills(ctx: SkillSourceContext) -> list[SkillSpec]:
+     return out
+ 
+ 
+-# Keyed by harness family (see _harness_family). A harness with no entry
++# Keyed by harness family (see _skill_vendor). A harness with no entry
+ # (qwen, openai-agents, the in-process antigravity SDK, …) falls through to
+ # _generic_host_skills in resolve_harness_skills — the ~/.claude/skills walk,
+ # whose skills omnigent resolves+injects regardless of vendor.
+diff --git a/tests/onboarding/test_provider_config.py b/tests/onboarding/test_provider_config.py
+index 54fb5e4..2679b72 100644
+--- a/tests/onboarding/test_provider_config.py
++++ b/tests/onboarding/test_provider_config.py
+@@ -14,7 +14,7 @@ from omnigent.onboarding.provider_config import (
+     PI_SURFACE,
+     FamilyConfig,
+     default_provider_for_harness,
+-    harness_family,
++    provider_family,
+     load_providers,
+     provider_families,
+     provider_family_for_harness,
+@@ -58,7 +58,7 @@ from omnigent.onboarding.provider_config import (
+     ],
+ )
+ def test_harness_family_maps_native_harness_spellings(harness: str, expected: str | None) -> None:
+-    """``harness_family`` resolves both native-harness spellings to a family.
++    """``provider_family`` resolves both native-harness spellings to a family.
+ 
+     Proves the fix for the multi-vendor startup header / ``/model`` readout:
+     nessie's sub-agents declare ``claude-native`` / ``codex-native``, which
+@@ -67,7 +67,7 @@ def test_harness_family_maps_native_harness_spellings(harness: str, expected: st
+     undetected. A regression that drops the canonical spellings returns
+     ``None`` here and the creds line would silently omit Codex.
+     """
+-    assert harness_family(harness) == expected
++    assert provider_family(harness) == expected
+ 
+ 
+ @pytest.mark.parametrize(
+diff --git a/tests/server/test_subagent_routing.py b/tests/server/test_subagent_routing.py
+index 598272b..3d5f316 100644
+--- a/tests/server/test_subagent_routing.py
++++ b/tests/server/test_subagent_routing.py
+@@ -29,7 +29,7 @@ from omnigent.runner.subagent_routing import (
+     ensure_session_router,
+     ensure_session_router_quietly,
+     forget_session_routing_class,
+-    harness_family,
++    routing_family,
+     make_server_relay_resolver,
+     model_in_family,
+     persist_subagent_decision,
+@@ -129,8 +129,8 @@ def test_candidate_models_applies_the_family_constraint_to_catalog_rows() -> Non
+     catalog = {"self": [GPT_MODEL, GLM_MODEL, KIMI_MODEL, CLAUDE_MODEL]}
+     candidates = candidate_models("codex-native", catalog=catalog)
+     assert candidates == {"codex-native": [GPT_MODEL, GLM_SERVABLE, KIMI_MODEL]}
+-    assert model_in_family(harness_family("codex-native"), GLM_MODEL) is True
+-    assert model_in_family(harness_family("claude-native"), GLM_MODEL) is False
++    assert model_in_family(routing_family("codex-native"), GLM_MODEL) is True
++    assert model_in_family(routing_family("claude-native"), GLM_MODEL) is False
+ 
+ 
+ def test_candidate_models_offers_glm_under_its_servable_alias() -> None:
+@@ -191,7 +191,7 @@ def test_spawn_candidates_respect_the_family_restriction(
+     candidates = candidate_models(harness, cross_harness=cross_harness)
+     assert set(candidates) == expected_harnesses
+     for name, models in candidates.items():
+-        family = harness_family(name)
++        family = routing_family(name)
+         assert all(model_in_family(family, model) for model in models)
+ 
+ 
+diff --git a/tests/spec/test_skill_sources.py b/tests/spec/test_skill_sources.py
+index b6ac6fc..0b2daef 100644
+--- a/tests/spec/test_skill_sources.py
++++ b/tests/spec/test_skill_sources.py
+@@ -7,7 +7,7 @@ import pytest
+ 
+ from omnigent.spec.skill_sources import (
+     SkillSourceContext,
+-    _harness_family,
++    _skill_vendor,
+     resolve_harness_skills,
+ )
+ 
+@@ -74,8 +74,8 @@ def _ctx(
+         ("", None),
+     ],
+ )
+-def test_harness_family(harness: str | None, expected: str | None) -> None:
+-    assert _harness_family(harness) == expected
++def test_skill_vendor(harness: str | None, expected: str | None) -> None:
++    assert _skill_vendor(harness) == expected
+ 
+ 
+ def test_devin_provider_lists_the_cli_reported_skills(

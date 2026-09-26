@@ -1,0 +1,18 @@
+{
+  "kind": "positive",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": [
+    "The review flags that the PR changes the shared agent.usage_pricing.format_duration_compact for the insights report, and that agent/turn_recovery.reset_hint also uses it for the rate-limit reset window, so a multi-day window (a weekly plan usage limit) now reads '~108h' instead of '~4.5d'. It asks for insights to get its own formatter (fork the helper) and for reset_hint's output to stay as it was."
+  ],
+  "workspace": {
+    "repo": "hermes",
+    "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(insights): show active time per platform",
+    "body_file": "pr-body.md",
+    "branch": "insights-platform-active-time"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "near-miss",
+  "domain": "test-authoring",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Adds the coupon, quantity, and empty-cart scenarios to the existing pytest-bdd suite under features/.",
+    "Adds no dependency and no second runner, and keeps pytest-bdd."
+  ]
+}

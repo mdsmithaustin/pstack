@@ -1,0 +1,6 @@
+--- a/principle-model-the-domain/SKILL.md
++++ b/principle-model-the-domain/SKILL.md
+@@ -21,2 +21,3 @@
+ - A queue, cache, index, graph/tree, or normalized collection where the data access pattern calls for it.
++- A separate type in each context when one word names different concepts in two parts of the codebase, instead of one merged type whose fields are optional per meaning. Share only what means the same thing in both, such as an id. Translate at the one place where the two contexts exchange data.
+ - Any other structure that fits. When none fits, work out what the code must never allow and how the data gets read, then find the structure that encodes exactly that.

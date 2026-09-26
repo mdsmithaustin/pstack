@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "deduplication",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Keeps payroll rounding and invoice rounding as separate code, so either can change without the other.",
+    "Net pay and invoice totals come out the same as before."
+  ]
+}
