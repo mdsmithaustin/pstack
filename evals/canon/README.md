@@ -812,21 +812,25 @@ followed the poteto-mode chain. It records the entry and whether the invocation
 was injected, which playbooks the lead read, and whether it wrote a worklist and
 how much of it copies the playbook's steps. It also records each skill file read
 with its event index, whether the rule's owner file came before the first edit
-in a workspace case, subagent spawns and whether a Claude brief names the data
+in a workspace case, subagent spawns and whether a spawn's brief names the data
 shape, principle citations in the reply, and denied tool calls. It parses Claude
 stream-json and Codex `exec --json` traces into one event list, so both agents
 go through the same stage code. `test_chain.py` checks the parsers against
-trimmed real traces in `fixtures/chain/`.
+real and synthetic traces in `fixtures/chain/`.
 
 ```sh
 python3 evals/canon/chain.py --markdown                 # stage rates per agent, workspace verdict cross-tab
 python3 evals/canon/chain.py --jsonl /tmp/chain.jsonl   # one JSON line per run
 ```
 
+`--markdown` counts only runs whose entry is poteto-mode, since a single-skill
+entry mounts no playbooks. It prints how many it left out, as "N single-skill
+entry run(s) left out."
+
 It reads `/private/tmp/canon-entry`, `/private/tmp/canon-ws`, and
 `/private/tmp/canon-screen` unless given roots. In those runs Codex's stream
 shows waits on a delegate but no spawn or brief, and Claude's `-p` sessions
-offer no worklist tool. Those stages read "not visible" or zero because of the
+offer no worklist tool. Those stages read "n/a" or zero because of the
 harness, not the agent.
 
 A sandboxed run also harvests the agent's own transcripts next to its
@@ -837,7 +841,8 @@ rollout per thread under `codex/sessions/`. A child's `session_meta` names its
 `parent_thread_id` and `agent_role`. When those files exist, `chain.py` parses
 each delegate's reads, edits, spawns, worklist calls, and messages with actor
 `delegate`. It places them right after the spawn that started them, so every
-stage sees them. They fill `delegation.delegate_reads` and `delegate_edits`.
+stage sees them. They fill `delegation.delegate_reads` and the top-level
+`delegate_edits`.
 Workspace edits are judged against the child's own cwd, which in a sandbox may
 sit under `/tmp`. A run without a `transcripts/` dir yields the same fields as
 before.
@@ -852,7 +857,7 @@ Two stages use them:
   poteto-agent briefing, with each spawn's role. A Claude spawn counts when it
   names `poteto-agent` and the init event lists that agent, when the child's
   meta says `poteto-agent`, or when the brief carries the persona body's first
-  line from `roles.json`. A Codex spawn counts when the child rollout's role is
+  sentence from `roles.json`. A Codex spawn counts when the child rollout's role is
   `poteto-agent` or its first developer message is the installed-skill-paths
   briefing. A Codex spawn's `collab_tool_call` prompt is its brief for the
   data-shape stage. Codex 0.157 encrypts the task it sends a child, so its
@@ -914,8 +919,10 @@ run that `screen.py regrade` graded takes its verdict from `regrade.json`.
 
 `fixtures/chain/sbx-codex/` holds trimmed files from a real Codex sandbox
 probe. `fixtures/chain/sbx-codex-roles/` and `claude-multi-result.jsonl` are
-trimmed from real `/private/tmp/canon-sbx` runs. `fixtures/chain/sbx-claude/`
-is synthetic.
+trimmed from real `/private/tmp/canon-sbx` runs. `fixtures/chain/sbx-claude/`,
+`fixtures/chain/sbx-claude-review/`, and `fixtures/chain/sbx-codex-review/` are
+synthetic, and so is the lead trace under `fixtures/chain/sbx-codex-delegates/`
+(its harvested child transcripts are real).
 
 ## Reading the result
 
