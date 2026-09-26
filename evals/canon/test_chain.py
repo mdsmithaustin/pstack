@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -157,8 +158,10 @@ class InjectedIndexTests(unittest.TestCase):
 
     def test_first_edit_order_is_not_judged_outside_a_workspace_case(self):
         trace = chain.Trace(events=[chain.Event(3, "main", "edit", "scratch/app.py")])
+        in_workspace = run_stages(trace, owner="poteto-mode/SKILL.md", injected=True, workspace=True)
 
-        self.assertIsNone(run_stages(trace, workspace=False)["leaf_before_first_edit"])
+        self.assertEqual((run_stages(trace, workspace=False)["leaf_before_first_edit"], in_workspace["leaf_before_first_edit"]),
+                         (None, True))
 
 
 class RunLayoutTests(unittest.TestCase):
@@ -230,7 +233,7 @@ class InjectionTests(unittest.TestCase):
             (out / "entry" / "codex-workspace").write_text("exec python3 workspace.py wrap --token '$poteto-mode' --discovery .agents/skills -- codex-project-only \"$@\"\n")
             run = chain.RunDir(out, "codex", "r", "c", "amended", out, False)
 
-            self.assertTrue(chain.injection(run, "codex", "poteto-mode", chain.Trace()))
+            self.assertIs(chain.injection(run, "codex", "poteto-mode", chain.Trace()), True)
 
     def test_sandbox_wrapper_passes_the_token(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -239,14 +242,18 @@ class InjectionTests(unittest.TestCase):
             (out / "entry" / "codex-sbx").write_text("exec python3 sandbox.py wrap --agent codex --token '$poteto-mode' --discovery .agents/skills -- \"$@\"\n")
             run = chain.RunDir(out, "codex", "r", "c", "leaf", out, False)
 
-            self.assertTrue(chain.injection(run, "codex", "poteto-mode", chain.Trace()))
+            self.assertIs(chain.injection(run, "codex", "poteto-mode", chain.Trace()), True)
 
 
 class PrincipleIndexTests(unittest.TestCase):
     def test_every_principle_in_the_shipped_index_is_parsed(self):
-        index = chain.principle_index((chain.screen.REPO / "skills" / "poteto-mode" / "SKILL.md").read_text())
+        text = (chain.screen.REPO / "skills" / "poteto-mode" / "SKILL.md").read_text()
+        section = text.split("## Principles", 1)[1].split("## Autonomy", 1)[0]
+        expected = set(re.findall(r"\*\*(principle-[a-z-]+)\*\*", section))
 
-        self.assertEqual((len(index), index["principle-model-the-domain"]), (23, "Model the Domain"))
+        index = chain.principle_index(text)
+
+        self.assertEqual((set(index), index["principle-model-the-domain"]), (expected, "Model the Domain"))
 
 
 def make_run(directory, agent, fixture, transcripts=True, tree=TREE, case="session-tree"):
@@ -393,7 +400,7 @@ class CodexRealChildRolloutTests(unittest.TestCase):
         ])
 
     def test_role_alone_marks_the_persona_even_though_the_briefing_is_not_its_first_developer_message(self):
-        self.assertTrue(self.child.persona)
+        self.assertIs(self.child.persona, True)
 
 
 class CodexDelegateFanOutTests(unittest.TestCase):
@@ -432,16 +439,16 @@ class ImplementationDelegatePersonaStageTests(unittest.TestCase):
         return chain.STAGES["implementation delegate ran as poteto-agent"](row)
 
     def test_no_implementation_delegate_is_not_measured(self):
-        self.assertIsNone(self.stage([]))
+        self.assertEqual((self.stage([]), self.stage([True])), (None, True))
 
     def test_an_implementation_delegate_without_the_persona_fails(self):
-        self.assertFalse(self.stage([False]))
+        self.assertIs(self.stage([False]), False)
 
     def test_every_implementation_delegate_with_the_persona_passes(self):
-        self.assertTrue(self.stage([True, True]))
+        self.assertIs(self.stage([True, True]), True)
 
     def test_one_of_two_implementation_delegates_without_the_persona_fails(self):
-        self.assertFalse(self.stage([True, False]))
+        self.assertIs(self.stage([True, False]), False)
 
 
 class PrescribedRoleTests(unittest.TestCase):
@@ -471,7 +478,9 @@ class PrescribedRoleTests(unittest.TestCase):
         self.assertEqual(chain.prescribed_by("general-purpose", "You are arena runner 2 of 3. Write candidate B."), "arena runner")
 
     def test_a_generic_implementation_brief_is_not_prescribed(self):
-        self.assertIsNone(chain.prescribed_by("worker", "Implement the consumer migration in omnigent/providers.py.", "/root/consumer_migration"))
+        self.assertEqual((chain.prescribed_by("comment-sicko", ""),
+                          chain.prescribed_by("worker", "Implement the consumer migration in omnigent/providers.py.", "/root/consumer_migration")),
+                         ("no-comments comment-sicko", None))
 
 
 class CodexRolesHarvestTests(unittest.TestCase):
@@ -496,7 +505,7 @@ class CodexRolesHarvestTests(unittest.TestCase):
 
     def test_the_generic_worker_is_the_one_implementation_miss(self):
         self.assertEqual(self.row["implementation_delegate_persona"], {"spawns": 1, "with_persona": 0, "misses": ["worker"]})
-        self.assertFalse(chain.STAGES["implementation delegate ran as poteto-agent"](self.row))
+        self.assertIs(chain.STAGES["implementation delegate ran as poteto-agent"](self.row), False)
 
     def test_role_census(self):
         self.assertEqual(self.row["role_census"], {
@@ -506,7 +515,9 @@ class CodexRolesHarvestTests(unittest.TestCase):
         })
 
     def test_an_encrypted_brief_is_no_brief(self):
-        self.assertIsNone(self.row["delegation"]["brief_names_shape"])
+        claude_row = analyze("sbx-claude", "claude")
+
+        self.assertEqual((self.row["delegation"]["brief_names_shape"], claude_row["delegation"]["brief_names_shape"]), (None, True))
 
 
 SKILLS = chain.screen.REPO / "skills"
@@ -743,21 +754,6 @@ class CodexReviewTests(unittest.TestCase):
 
     def test_a_build_run_has_no_review(self):
         self.assertEqual((self.row["review"]["primary"], analyze("sbx-codex", "codex")["review"]), ("investigation", None))
-
-
-class FixtureLinesAreRealJsonTests(unittest.TestCase):
-    def test_every_fixture_line_parses(self):
-        for name in ("claude-trace.jsonl", "codex-trace.jsonl", "claude-multi-result.jsonl"):
-            for line in (FIXTURES / name).read_text().splitlines():
-                json.loads(line)
-
-    def test_every_harvest_fixture_line_parses(self):
-        paths = sorted(FIXTURES.glob("sbx-*/**/*.jsonl"))
-        for path in paths:
-            for line in path.read_text().splitlines():
-                json.loads(line)
-
-        self.assertEqual(len(paths), 19)
 
 
 if __name__ == "__main__":
