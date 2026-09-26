@@ -31,8 +31,28 @@ jobs:
         run: |
           docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
           python3 -m unittest -v test_check_plan
+      - name: Read the skill-ci commit that skill-checks.yml pins
+        id: skill-ci
+        run: |
+          set -euo pipefail
+          sha=$(sed -n 's|^ *uses: mdsmithaustin/skill-ci/.github/workflows/skill-checks.yml@\([0-9a-f]\{40\}\)$|\1|p' .github/workflows/skill-checks.yml)
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::.github/workflows/skill-checks.yml pins no full skill-ci commit"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: mdsmithaustin/skill-ci
+          ref: ${{ steps.skill-ci.outputs.sha }}
+          path: .skill-ci
+          persist-credentials: false
+      - name: Install uv for the skill-ci harness
+        run: python3 -m pip install uv==0.12.7
       - name: Canon screen and oracle unit tests
         working-directory: evals/canon
+        env:
+          SKILL_CI: ${{ github.workspace }}/.skill-ci
         run: |
           docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
           python3 -m unittest -v
