@@ -4,6 +4,8 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,12 +57,11 @@ class OneChangeAcrossTreeTests(unittest.TestCase):
         self.assertEqual(change.kind, "replace")
 
     def test_every_shipped_rule_is_one_change_across_all_tracked_skills(self):
-        tree = screen.tracked("skills")
         rules = [rule for rule in screen.load_rules() if rule.paired]
         self.assertIn("value-type", [rule.id for rule in rules])
         for rule in rules:
             with self.subTest(rule=rule.id):
-                change = screen.rule_change(rule, tree)
+                change = screen.rule_change(rule, screen.rule_tree(rule))
                 self.assertEqual(change.target, rule.target)
                 self.assertTrue(change.inserted.strip())
 
@@ -312,7 +313,7 @@ class CompanionMountTests(unittest.TestCase):
         built = json.loads((self.out / "arms" / self.rule.id / "build.json").read_text())
         current, amended = ({path: data for path, data in screen.read_tree(self.arm(arm) / "pstack").items() if not path.startswith("domain-modeling/")} for arm in screen.ARMS)
         self.assertEqual((built["target"], built["patch_kind"]), ("poteto-mode/playbooks/feature.md", "insert"))
-        self.assertEqual(screen.single_change(current, amended), screen.rule_change(self.rule, screen.tracked("skills")))
+        self.assertEqual(screen.single_change(current, amended), screen.rule_change(self.rule, screen.rule_tree(self.rule)))
 
     def test_companion_named_like_a_pstack_skill_is_refused(self):
         rule = screen.Rule(self.rule.id, self.rule.source, self.rule.patch, self.rule.target, self.rule.cases, ("poteto-mode",))
@@ -334,8 +335,34 @@ class CompanionMountTests(unittest.TestCase):
         self.assertEqual(built["arms"], ["current", "amended"])
 
 
-class CasesFromRulesTests(unittest.TestCase):
-    """cases_from against a scratch rules directory."""
+SCREENED_AT = "5dea4e2daaaf468d9886abcd63e1f95c74477444"
+INDEX_SENTENCE = "Name things with the domain's words from the nearest `CONTEXT.md`, and never use a word it lists under `_Avoid_`."
+
+
+class IndexPlacementPatchTests(unittest.TestCase):
+    def test_the_index_variant_appends_one_sentence_to_the_model_the_domain_entry(self):
+        rule = screen.load_rule("domain-words-index")
+        tree = screen.rule_tree(rule)
+        path, _, body = screen.parse_patch(rule.patch)
+        change = screen.single_change(tree, screen.apply_patch(tree, rule.patch))
+
+        self.assertEqual((path, change.kind, change.inserted), ("poteto-mode/SKILL.md", "insert", " " + INDEX_SENTENCE))
+        self.assertEqual([tag for tag, _ in body], ["-", "+"])
+        self.assertTrue(body[1][1].startswith("- **Model the Domain**"))
+        self.assertTrue(body[1][1].endswith(INDEX_SENTENCE + "\n"))
+
+
+class CasesFromTests(unittest.TestCase):
+    def test_variant_runs_its_source_cases_under_its_own_id(self):
+        source, variant = screen.load_rule("domain-words"), screen.load_rule("domain-words-index")
+
+        self.assertEqual((variant.cases_from, variant.case_rule, variant.source), ("domain-words", "domain-words", "Evans EV-1"))
+        self.assertEqual([(case.id, case.kind, case.root) for case in variant.cases], [(case.id, case.kind, case.root) for case in source.cases])
+        self.assertEqual({case.rule for case in variant.cases}, {"domain-words-index"})
+
+
+class ScratchRules(unittest.TestCase):
+    """A scratch rules directory with a base rule and its variant."""
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -357,6 +384,8 @@ class CasesFromRulesTests(unittest.TestCase):
             (self.rules / rule_id / path).parent.mkdir(parents=True, exist_ok=True)
             (self.rules / rule_id / path).write_text(text)
 
+
+class CasesFromRulesTests(ScratchRules):
     def test_variant_inherits_source_and_companions(self):
         rule = screen.load_rule("scratch-variant")
 
@@ -396,6 +425,96 @@ class CasesFromRulesTests(unittest.TestCase):
             "scratch-copy/shop inside scratch-variant/shop",
             "scratch-variant/shop inside scratch-copy/shop",
         ])
+
+
+class SkillsAtTests(unittest.TestCase):
+    """A rule screens the skills/ tree at the commit its rule.json pins."""
+
+    def test_pinned_rule_reads_each_skill_file_as_git_holds_it_at_that_commit(self):
+        rule = screen.load_rule("domain-words")
+        path = "principle-model-the-domain/SKILL.md"
+        at_commit = subprocess.run(["git", "-C", str(screen.REPO), "show", f"{rule.skills_at}:skills/{path}"],
+                                   capture_output=True, check=True).stdout
+
+        tree = screen.rule_tree(rule)
+
+        self.assertEqual(tree[path], at_commit)
+        self.assertNotEqual(tree[path], (screen.REPO / "skills" / path).read_bytes())
+
+    def test_every_shipped_rule_pins_the_tree_it_was_screened_against(self):
+        self.assertEqual({rule.id: rule.skills_at for rule in screen.load_rules() if rule.skills_at != SCREENED_AT}, {})
+
+
+class SkillsAtRulesTests(ScratchRules):
+    def test_rule_without_a_pin_reads_the_working_tree(self):
+        rule = screen.load_rule("scratch-base")
+
+        self.assertIsNone(rule.skills_at)
+        self.assertEqual(screen.rule_tree(rule), screen.tracked("skills"))
+
+    def test_pin_that_is_not_a_full_commit_is_refused(self):
+        self.write("scratch-base", {"rule.json": '{"source": "S1", "skills_at": "5dea4e2d"}'})
+
+        with self.assertRaisesRegex(screen.ScreenError, "skills_at must be a full 40-character commit, not '5dea4e2d'"):
+            screen.load_rule("scratch-base")
+
+    def test_pin_to_a_commit_the_clone_lacks_is_refused(self):
+        self.write("scratch-base", {"rule.json": '{"source": "S1", "skills_at": "' + "0" * 40 + '"}'})
+
+        with self.assertRaisesRegex(screen.ScreenError, "cannot read skills/ at 0{40}"):
+            screen.rule_tree(screen.load_rule("scratch-base"))
+
+
+class VariantArmTests(unittest.TestCase):
+    def test_variant_arm_grades_with_the_source_oracle_under_its_own_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            (base / "skill-ci").mkdir()
+            (base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
+            rule = screen.load_rule("domain-words-index")
+            rule = dataclasses.replace(rule, cases=tuple(case for case in rule.cases if case.id == "shipment-tracking"))
+            with mock.patch.dict(os.environ, {"SKILL_CI": str(base / "skill-ci")}), contextlib.redirect_stdout(io.StringIO()):
+                screen.build(base / "out", [rule], "poteto-mode")
+            arm = base / "out" / "arms" / "domain-words-index" / "shipment-tracking" / "amended"
+            samples = ROOT / "rules" / "domain-words" / "cases" / "shipment-tracking" / "samples"
+            codes = {}
+            for sample in ("good.md", "bad.md"):
+                output = base / sample
+                output.mkdir()
+                (output / "output.md").write_text((samples / sample).read_text())
+                codes[sample] = subprocess.run([sys.executable, str(arm / "oracles" / "check.py"), "domain-words-index", "shipment-tracking", str(output)],
+                                               capture_output=True, text=True).returncode
+            command = json.loads((arm / screen.MANIFEST).read_text())["cases"][0]["assertions"][0]["command"]
+
+            self.assertEqual((arm / "rules" / "domain-words-index" / "oracle.py").read_bytes(), (ROOT / "rules" / "domain-words" / "oracle.py").read_bytes())
+            self.assertEqual(command, ["python3", "oracles/check.py", "domain-words-index", "shipment-tracking", "{output_dir}"])
+            self.assertEqual(codes, {"good.md": 0, "bad.md": 1})
+
+
+class AnsweredCaseTests(unittest.TestCase):
+    rules = [screen.load_rule("domain-words"), screen.load_rule("domain-words-index")]
+
+    def prompt(self, case_id):
+        return "$poteto-mode Task prompt:\n" + screen.render_prompt(next(case for case in self.rules[0].cases if case.id == case_id))
+
+    def test_workspace_path_names_the_rule_and_case(self):
+        path = "/o/arms/domain-words-index/session-lineage-usage/amended/workspace"
+
+        rule, case = screen.answered_case(self.rules, self.prompt("session-lineage-usage"), "", path)
+
+        self.assertEqual((rule.id, case.id), ("domain-words-index", "session-lineage-usage"))
+
+    def test_shared_pasted_case_goes_to_the_rule_whose_text_is_mounted(self):
+        mounted = "- **Model the Domain** ... " + INDEX_SENTENCE
+
+        rule, case = screen.answered_case(self.rules, self.prompt("shipment-tracking"), mounted)
+
+        self.assertEqual((rule.id, case.id), ("domain-words-index", "shipment-tracking"))
+
+    def test_shared_pasted_case_with_no_rule_text_mounted_goes_to_the_first_rule(self):
+        rule, case = screen.answered_case(self.rules, self.prompt("shipment-tracking"), "")
+
+        self.assertEqual((rule.id, case.id), ("domain-words", "shipment-tracking"))
 
 
 class SelectCasesTests(unittest.TestCase):

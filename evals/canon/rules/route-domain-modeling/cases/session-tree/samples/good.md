@@ -1,0 +1,1 @@
+`hermes sessions tree <session-id>` prints the session tree: each session with its compression continuations and its branches, indented under it. `CONTEXT.md` had no word for this, so I added **Session tree** there. `/fork` is only the CLI alias of `/branch`, so the tree calls those children branches. The walk is `session_tree` on the compression mixin.

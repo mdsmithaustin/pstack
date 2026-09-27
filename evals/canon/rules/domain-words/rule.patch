@@ -1,0 +1,7 @@
+--- a/principle-model-the-domain/SKILL.md
++++ b/principle-model-the-domain/SKILL.md
+@@ -23,2 +23,4 @@
+ 
++**Use the domain's words.** Name types, functions, and modules with the words the domain uses. Before you name anything, read the nearest `CONTEXT.md` if one exists and use its terms. Never use a word it lists under `_Avoid_`. Name an operation by the effect it has in the domain, not by the mechanism that performs it.
++
+ Do not force an abstraction. Prefer boring code if the current shape is already clear, local, and unlikely to grow. Be skeptical of an abstraction that adds indirection without removing branches, duplicated rules, invalid states, or lifecycle risk.

@@ -1,0 +1,1 @@
+Our security team wants the PII guardrail (`deny_pii_in_llm_request`) to also catch IPv4 addresses like 10.20.30.40, as its own category that admins can pick in the policy settings. Add that. No need to commit.

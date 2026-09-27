@@ -1,0 +1,57 @@
+diff --git a/omnigent/runner/subagent_routing.py b/omnigent/runner/subagent_routing.py
+index 9c4c398..c550835 100644
+--- a/omnigent/runner/subagent_routing.py
++++ b/omnigent/runner/subagent_routing.py
+@@ -486,12 +486,6 @@ def _opt_str(value: Any) -> str | None:
+     return value if isinstance(value, str) and value else None
+ 
+ 
+-def _harness_family(harness: str) -> str | None:
+-    from omnigent.server.smart_routing import _HARNESS_FAMILY
+-
+-    return _HARNESS_FAMILY.get(harness)
+-
+-
+ def harness_family(harness: str | None) -> str | None:
+     """Return the model family *harness* belongs to.
+ 
+@@ -504,9 +498,11 @@ def harness_family(harness: str | None) -> str | None:
+     :returns: ``"claude"``, ``"gpt"``, ``"pi"``, or ``None`` when the
+         harness is unknown / multi-family.
+     """
++    from omnigent.server.smart_routing import _HARNESS_FAMILY
++
+     if harness is None or harness == "auto":
+         return None
+-    return _harness_family(harness)
++    return _HARNESS_FAMILY.get(harness)
+ 
+ 
+ def auto_harness_session(conv: Any, parent: Any = None) -> bool:
+@@ -673,10 +669,10 @@ def _target_harness(
+     req_harness: str, picked_harness: str | None, picked_family: str | None
+ ) -> str:
+     """Name the harness a picked model should run on."""
+-    if picked_family is not None and picked_family == _harness_family(req_harness):
++    if picked_family is not None and picked_family == harness_family(req_harness):
+         return req_harness
+     counterpart = _COUNTERPART_HARNESS.get(req_harness)
+-    if counterpart is not None and _harness_family(counterpart) == picked_family:
++    if counterpart is not None and harness_family(counterpart) == picked_family:
+         return counterpart
+     return picked_harness or counterpart or req_harness
+ 
+@@ -883,11 +879,11 @@ def _decision_from_result(
+         )
+ 
+     picked_harness = _opt_str(getattr(result, "harness", None))
+-    family = _harness_family(picked_harness) if picked_harness else None
++    family = harness_family(picked_harness) if picked_harness else None
+     if family is None:
+         for harness_id, models in candidates.items():
+             if model in models:
+-                family = _harness_family(harness_id)
++                family = harness_family(harness_id)
+                 break
+     target = _target_harness(req.harness, picked_harness, family)
+     # The deny above carries no note: nothing spawned, so there is no ask to

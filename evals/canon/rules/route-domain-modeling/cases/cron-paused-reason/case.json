@@ -1,0 +1,10 @@
+{
+  "kind": "near-miss",
+  "domain": "domain-language",
+  "timeout_s": 1500,
+  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"},
+  "expected_behavior": [
+    "Shows the stored paused_reason in hermes cron list.",
+    "Creates no CONTEXT.md, CONTEXT-MAP.md, or docs/adr/ record, because the repo has no glossary and the change adds no term."
+  ]
+}

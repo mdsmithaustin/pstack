@@ -1,0 +1,21 @@
+--- a/poteto-mode/SKILL.md
++++ b/poteto-mode/SKILL.md
+@@ -19,6 +19,7 @@
+ - Nontrivial change, architecture decision, or "are we sure?" → the **how** skill.
+ - About to `AskQuestion` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. Sketch it via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation or Research whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle. Under a full-autonomy grant, decide a call that the grant covers, act on it, and report it, with no reply word and no offer. Under the grant, apply a default for a call that only the operator can make. Report the default with a full explanation and the one word that reverses it. Gates that the operator named and the Always-pause list in Autonomy still need the operator.
+ - Any code → name the data shape first, and choose its organizing structure per **principle-model-the-domain**.
++- A `CONTEXT.md` exists or the task introduces a domain term → **domain-modeling** when it is available by name or trigger, and the Feature step 1 fallback otherwise.
+ - Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing.
+ - Parallel fan-out → the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use **arena** for design or code bakeoffs with base selection and grafting.
+ - Any subagent spawn, per-subagent model pick, or structured question, when unsure how this CLI does it → the **pstack-harness** skill maps the mechanics (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent).
+--- a/poteto-mode/playbooks/feature.md
++++ b/poteto-mode/playbooks/feature.md
+@@ -2,7 +2,7 @@
+ 
+ **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
+ 
+-1. `how` over the affected subsystem.
++1. `how` over the affected subsystem. If a `CONTEXT.md` or `CONTEXT-MAP.md` sits at the repo root, or the feature introduces a domain term the code does not yet name, and **domain-modeling** is available by name or trigger, use it to check the feature's terms against the glossary and record each resolved term before `architect` names types. Settle a term conflict from code evidence, and ask only when the product meaning itself is undecided. If the companion is absent, read the root `CONTEXT.md` and any `docs/adr/` record for the area during `how`, use its terms in type and function names, and list new or conflicting terms in the reply.
+ 2. `architect` for parallel design exploration.
+ 3. Write the throughput checkpoint as four items in the same worklist. A dimension that genuinely does not apply (single file, no fan-out) keeps its item with `skipped: <reason>` rather than being dropped:
+    - **Blocking first steps.** Gates run before fan-out.

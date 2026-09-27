@@ -1,0 +1,1 @@
+`hermes sessions stats <session-id>` now sums input tokens, output tokens and spend over every row of the compressed conversation. The new `conversation_usage` walks `get_compression_chain` and the CLI prints the chain totals. With no id it prints the store totals as before.

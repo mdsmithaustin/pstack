@@ -1,0 +1,1 @@
+When a long chat gets compressed, its token and cost numbers end up split across several session rows. Add `hermes sessions stats <session-id>` that prints input tokens, output tokens and spend summed over the whole thing.

@@ -1,0 +1,43 @@
+diff --git a/hermes_cli/sessions_cmd.py b/hermes_cli/sessions_cmd.py
+index a10305f..fcb0af9 100644
+--- a/hermes_cli/sessions_cmd.py
++++ b/hermes_cli/sessions_cmd.py
+@@ -974,7 +974,14 @@ def _cmd_repair_routing(db, args):
+     print(f"\nRepaired {repaired} of {len(adoptable)} session(s).")
+ 
+ 
+-def _cmd_stats(db, args):
++def _cmd_store_stats(db, args):
++    if getattr(args, "json", False):
++        by_source = {src: c for src in ("cli", "telegram", "discord", "whatsapp", "slack")
++                     if (c := db.session_count(source=src)) > 0}
++        size = round(_size_mb(db.db_path), 1) if db.db_path.exists() else None
++        print(json.dumps({"total_sessions": db.session_count(), "total_messages": db.message_count(),
++                          "sessions_by_source": by_source, "database_size_mb": size}, indent=2))
++        return
+     print(f"Total sessions: {db.session_count()}\nTotal messages: {db.message_count()}")
+     for src in ("cli", "telegram", "discord", "whatsapp", "slack"):
+         if (c := db.session_count(source=src)) > 0:
+@@ -1007,7 +1014,7 @@ _DB_HANDLERS = {
+     "archive": partial(_cmd_prune_or_archive, action="archive"), "unpin": partial(_cmd_pin, pinning=False),
+     "retitle-skills": _cmd_retitle_skills, "browse": _cmd_browse, "optimize": _cmd_optimize,
+     "clean-markers": _cmd_clean_markers, "optimize-storage": _cmd_optimize_storage,
+-    "repair-routing": _cmd_repair_routing, "stats": _cmd_stats,
++    "repair-routing": _cmd_repair_routing, "stats": _cmd_store_stats,
+ }
+ 
+ 
+diff --git a/hermes_cli/subcommands/sessions.py b/hermes_cli/subcommands/sessions.py
+index d56bf4a..a0a1479 100644
+--- a/hermes_cli/subcommands/sessions.py
++++ b/hermes_cli/subcommands/sessions.py
+@@ -247,7 +247,8 @@ def build_sessions_parser(subparsers, *, cmd_sessions: Callable) -> None:
+     sessions_recover.add_argument(
+         "--report", type=Path, help="JSON report path (defaults to <output>.recovery.json)")
+ 
+-    sessions_subparsers.add_parser("stats", help="Show session store statistics")
++    sessions_stats = sessions_subparsers.add_parser("stats", help="Show session store statistics")
++    add_json_flag(sessions_stats, "Emit the statistics as one JSON object")
+ 
+     sessions_rename = sessions_subparsers.add_parser(
+         "rename", help="Set or change a session's title")

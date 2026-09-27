@@ -1,0 +1,10 @@
+{
+  "kind": "positive",
+  "domain": "module-depth",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Replaces the per-module tests on fetcher, validator, mapper, and cache with tests at the deepened pricing interface instead of keeping both.",
+    "Treats the owned pricing service as a remote-but-owned dependency: an HTTP adapter for production and an in-memory adapter the tests use, with no mocks.",
+    "Checkout, quotes, and the catalog export return the same results against the same pricing responses."
+  ]
+}
