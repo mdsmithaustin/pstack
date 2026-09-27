@@ -1,9 +1,10 @@
 import unittest
 
-from check import grade
+from check import RULES, grade
 
 RULE, CASE = "example-mapping", "withdrawal-story"
 INVENTED = "a Then asserts an outcome for a withdrawal that lands exactly on -£100"
+GOOD = (RULES / RULE / "cases" / CASE / "samples" / "good.md").read_text()
 
 
 class WithdrawalStoryTests(unittest.TestCase):
@@ -12,6 +13,23 @@ class WithdrawalStoryTests(unittest.TestCase):
 
     def test_invented_at_limit_outcome_fails(self):
         self.assertEqual(grade(RULE, CASE, "bad.md"), [INVENTED])
+
+    def test_minimum_example_that_pays_out_fails(self):
+        answer = GOOD.replace(
+            'Then the withdrawal is refused with "The minimum withdrawal is £10"\nAnd my balance is still £200',
+            "Then I receive £5\nAnd my balance is £195",
+        )
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            ["a Then for the minimum rule contradicts the story: I receive £5; my balance is £195"],
+        )
+
+    def test_paid_example_with_the_wrong_balance_fails(self):
+        answer = GOOD.replace("Then I receive £40\nAnd my balance is £10", "Then I receive £40\nAnd my balance is £50")
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            ["a Then for the paid rule contradicts the story: I receive £40; my balance is £50"],
+        )
 
     def test_prose_criteria_fail(self):
         answer = (

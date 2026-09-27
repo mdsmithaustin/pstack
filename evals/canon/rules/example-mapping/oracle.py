@@ -13,6 +13,8 @@ OPEN = re.compile(r"\?|\b(tbd|tbc|to be (decided|confirmed)|unknown|open questio
 MONEY = re.compile(r"(minus\s+|-\s*)?£\s*(-\s*)?(\d[\d,]*(?:\.\d+)?)", re.IGNORECASE)
 PLAIN_BALANCE = re.compile(r"\bbalance (?:is|of)\s+(-?\d+(?:\.\d+)?)\b", re.IGNORECASE)
 PLAIN_AMOUNT = re.compile(r"\bwithdraw(?:s|ing|al of)?\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
+REFUSAL = re.compile(r"\b(refus\w*|reject\w*|declin\w*|den(y|ies|ied)|insufficient|minimum withdrawal|fail(s|ed)?|unsuccessful|blocked|can ?not|can't|no (cash|money)|not (paid|dispensed|allowed|permitted|processed|approved)|(do|does|did)(n't| not) (receive|get))\b", re.IGNORECASE)
+STATED_BALANCE = re.compile(r"\bbalance (is|becomes|stays|remains|will be|should be)( still| now| unchanged at| at)*\s*(?=(minus\s+|-\s*)?£)", re.IGNORECASE)
 LIMIT = -100
 MINIMUM = 10
 
@@ -83,13 +85,18 @@ def amounts(text, skip_limit):
     return found
 
 
-def category(example):
+def terms(example):
     given, when = " ".join(example["given"]), " ".join(example["when"])
     balances = amounts(given, skip_limit=True) or [float(value) for value in PLAIN_BALANCE.findall(given)]
     withdrawals = amounts(when, skip_limit=True) or [float(value) for value in PLAIN_AMOUNT.findall(when)]
-    if not balances or not withdrawals:
+    return (balances[0], abs(withdrawals[0])) if balances and withdrawals else None
+
+
+def category(example):
+    found = terms(example)
+    if found is None:
         return None
-    balance, amount = balances[0], abs(withdrawals[0])
+    balance, amount = found
     if amount < MINIMUM:
         return "minimum"
     after = balance - amount
@@ -102,6 +109,16 @@ def category(example):
 
 def asserts(example):
     return any(line and not OPEN.search(line) for line in example["then"])
+
+
+def contradicts(rule, example):
+    then = " ".join(example["then"])
+    if bool(REFUSAL.search(then)) == (rule == "paid"):
+        return True
+    balance, amount = terms(example)
+    expected = balance - amount if rule == "paid" else balance
+    stated = [amounts(then[match.end():], skip_limit=False)[:1] for match in STATED_BALANCE.finditer(then)]
+    return any(round(value - expected, 2) for found in stated for value in found)
 
 
 def raises_limit_question(text):
@@ -120,8 +137,14 @@ def check_examples(answer, project):
         by_category.setdefault(category(example), []).append(example)
     failures = []
     for rule in ("minimum", "paid", "refused"):
-        if not any(asserts(example) for example in by_category.get(rule, [])):
+        stated = [example for example in by_category.get(rule, []) if asserts(example)]
+        if not stated:
             failures.append(f"no example with literal amounts and a Then for the {rule} rule")
+        failures.extend(
+            f"a Then for the {rule} rule contradicts the story: {'; '.join(example['then'])}"
+            for example in stated
+            if contradicts(rule, example)
+        )
     at_limit = by_category.get("at-limit", [])
     if any(asserts(example) for example in at_limit):
         failures.append("a Then asserts an outcome for a withdrawal that lands exactly on -£100")
