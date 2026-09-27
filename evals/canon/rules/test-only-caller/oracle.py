@@ -48,9 +48,19 @@ def common_failures(commits, outputs, greens):
     return failures
 
 
+def binds(node):
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return node.name
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+        return node.id
+    if isinstance(node, ast.alias):
+        return node.asname or node.name
+    return None
+
+
 def defines_banner(state):
     return any(
-        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "banner"
+        binds(node) == "banner"
         for path, body in state.items()
         if path.endswith(".py") and not is_test_path(path)
         for node in ast.walk(parse_python(path, body))

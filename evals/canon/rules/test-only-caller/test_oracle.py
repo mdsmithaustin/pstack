@@ -25,6 +25,22 @@ class TextkitTidyTests(unittest.TestCase):
             ],
         )
 
+    def test_keeping_the_helper_under_an_alias_fails(self):
+        good = (RULES / RULE / "cases" / TIDY / "samples" / "good.md").read_text()
+        answer = good.replace(
+            "    return text[: limit - len(suffix)].rstrip() + suffix\n</file>",
+            "    return text[: limit - len(suffix)].rstrip() + suffix\n\n\n"
+            "def _banner(text, width=40):\n"
+            '    inner = " " + text + " "\n'
+            "    if len(inner) >= width:\n"
+            "        return inner\n"
+            "    pad = width - len(inner)\n"
+            '    return "*" * (pad // 2) + inner + "*" * (pad - pad // 2)\n\n\n'
+            "banner = _banner\n</file>",
+            1,
+        )
+        self.assertEqual(grade(RULE, TIDY, text=answer), ["banner is still defined though only its tests call it"])
+
 
 class TextkitExportsTests(unittest.TestCase):
     def test_keeping_the_exported_helper_passes(self):
