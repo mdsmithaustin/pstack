@@ -307,6 +307,12 @@ the new bytes of every path the diff touches, with `None` for a deleted path.
 It refuses a diff that leaves a symlink at a path it touches, that touches a
 symlink in the checkout, or whose path resolves outside the checkout, so a
 grader never reads a host file through the agent's diff.
+A case whose module imports only the standard library can run tests.
+`shared.plain_test_failures(tree, modules)` runs every test function and
+`Test*` method of the named modules in the pinned image, with no pytest
+plugins or fixtures, and returns one `<module>::<test> failed` line per
+failure. The check builds `tree` from the pinned checkout and the diff's new
+bytes, so it runs the pinned tests and never the agent's edited copies.
 The samples are `good.md` and `bad.md` with a `good.diff` and `bad.diff` beside
 them. `test_oracle.py` passes `workspace=Workspace(checkout, diff)` to `grade`.
 The offline stand-in applies the chosen sample's diff in its cwd. The sample
@@ -938,6 +944,62 @@ trimmed from real `/private/tmp/canon-sbx` runs. `fixtures/chain/sbx-claude/`,
 `fixtures/chain/sbx-claude-review/`, and `fixtures/chain/sbx-codex-review/` are
 synthetic, and so is the lead trace under `fixtures/chain/sbx-codex-delegates/`
 (its harvested child transcripts are real).
+
+## Held-cuts screen
+
+Upstream cut some prose after testing it only with an Opus 5.5 lead. This
+screen asks whether those cuts change what a GPT-5.6 Codex lead or a Sonnet
+lead does. Every rule reads `skills/` at fcc6c78f, which has the six lines
+64aac129 held and upstream #414's cuts.
+
+| arm rule | arms | cases from | case | repo |
+|---|---|---|---|---|
+| `restore-tdd-nearby-validation` | current, restored | `nearby-validation` | `paste-markers` | hermes |
+| `cut-bug-fix-review` | current, cut | `nearby-validation` | `paste-markers` | hermes |
+| `cut-feature-review` | current, cut | `feature-review-diffs` | `no-debugger-lint` | omnigent |
+| `cut-refactor-review` | current, cut | `refactor-review-diff` | `lint-report-loop` | omnigent |
+
+`restored` puts back poteto-tdd step 7 as upstream 70b2dc8 removed it. Each
+`cut` arm removes the held sentences from one playbook. Each base rule holds
+the case and oracle, and its `rule.patch` is the same edit as the arm patch.
+Run the arm rules.
+
+Read a `cut` line the other way round from an amendment. A cut that hurts
+shows as `cut vs current: REVERSES`. `SEPARATES` there means the cut arm did
+better. A tie in one repetition says only that this pair showed no
+difference. The restored arm counts as exposed only when it reads
+`poteto-tdd/SKILL.md`, which the Bug fix playbook routes to only for a cheap
+local test path, so `unexposed` is a likely outcome there.
+
+- **paste-markers.** A user reports that a `[200~` paste marker stays in the
+  prompt when the paste follows a typed word. Stripping `[200~` anywhere fixes
+  the report but breaks `test_does_not_strip_non_wrapper_bracket_forms_in_normal_text`
+  in the same module, and the prompt does not say so. The oracle runs the
+  pinned `tests/hermes_cli/test_input_sanitize.py` and
+  `tests/hermes_cli/test_cli_bracketed_paste_sanitizer.py`, the second
+  through a `cli.py` shim, plus three reported cases.
+- **no-debugger-lint.** A new `no-debugger` custom lint rule, across a new
+  module, the `custom_lint.py` registry, and tests. The oracle runs held
+  cases for every debugger shape, strings and comments, the disable comment,
+  the standalone exit codes, and registration after the existing rules.
+- **lint-report-loop.** Move the argv report loop two omnigent lint scripts
+  share into `_framework.py`. The asyncio lint prints a hint line after every
+  hit, and a shared per-hit label drops it. The oracle checks that the loop
+  moved, then runs held stdout and exit-code cases for both scripts.
+
+`chain.py` reports the stages these cuts target: whether a delegate wrote
+code, whether the lead reviewed it, parallel investigation spawns, and a test
+run wider than one test after the last edit.
+
+```sh
+for rule in restore-tdd-nearby-validation cut-bug-fix-review cut-feature-review cut-refactor-review; do
+  python3 evals/canon/screen.py run --runner sbx --agent claude --model sonnet --entry poteto-mode \
+    --out "/private/tmp/canon-cuts/claude-$rule-$(date +%m%d%H%M)" "$rule"
+  python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode \
+    --out "/private/tmp/canon-cuts/codex-$rule-$(date +%m%d%H%M)" "$rule"
+done
+python3 evals/canon/chain.py --markdown /private/tmp/canon-cuts/*
+```
 
 ## Reading the result
 
