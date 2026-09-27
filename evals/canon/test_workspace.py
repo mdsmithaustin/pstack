@@ -142,6 +142,22 @@ class MaterializeTests(ShopRepo):
             workspace.materialize(root, self.mirror, self.commit, {})
 
 
+class ParseSpecTests(unittest.TestCase):
+    def test_overlay_symlink_to_a_host_file_is_not_read(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        (base / "secret.txt").write_text("host secret\n")
+        overlay = base / "case" / "overlay"
+        overlay.mkdir(parents=True)
+        (overlay / "CONTEXT.md").write_bytes(CONTEXT)
+        (overlay / "leak.txt").symlink_to(base / "secret.txt")
+
+        spec = workspace.parse_spec(base / "case", {"repo": "shop", "commit": "a" * 40, "overlay": "overlay/"})
+
+        self.assertEqual(spec.overlay, {"CONTEXT.md": CONTEXT})
+
+
 class ApplyDiffTests(unittest.TestCase):
     def setUp(self):
         self.base = Path(tempfile.mkdtemp())

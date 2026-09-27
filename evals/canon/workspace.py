@@ -81,7 +81,8 @@ def read_files(root):
         dirs.sort()
         for name in sorted(names):
             path = Path(directory, name)
-            files[path.relative_to(root).as_posix()] = path.read_bytes()
+            if not path.is_symlink():
+                files[path.relative_to(root).as_posix()] = path.read_bytes()
     return files
 
 
