@@ -540,6 +540,7 @@ interpreter live under `/opt/canon-deps`, outside every workspace. The source
 copy and the kit's credential files are deleted before `sbx template save`.
 At run time setup links `.venv` to that venv and reruns the same `uv sync`
 offline, which reinstalls the project's own editable packages from the clone.
+If that sync fails, setup refuses the run with the tail of uv's stderr.
 The agent runs with `UV_OFFLINE=1`, `UV_PYTHON_DOWNLOADS=never`, and the repo's
 env, so `uv run pytest` works without the network. The record of each build
 sits under `$CANON_CACHE/sbx/`.

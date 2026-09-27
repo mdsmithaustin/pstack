@@ -61,6 +61,8 @@ def link_deps(root, manifest):
         venv.symlink_to(deps["env"]["UV_PROJECT_ENVIRONMENT"])
         workspace.exclude(root, [".venv"])
     proc = subprocess.run(["uv", "sync", *deps["sync"]], cwd=root, env=env, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise workspace.WorkspaceError(f"offline uv sync failed ({proc.returncode}): {proc.stderr.strip()[-600:]}")
     return {"sync_rc": proc.returncode, "sync_s": round(time.monotonic() - started, 2), "sync_tail": proc.stderr[-600:]}
 
 

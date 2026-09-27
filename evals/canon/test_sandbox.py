@@ -217,6 +217,22 @@ class InsideTests(test_workspace.ShopRepo):
         with self.assertRaisesRegex(workspace.WorkspaceError, "the clone is at"):
             sbx_inside.setup(manifest)
 
+    def test_setup_refuses_when_the_offline_uv_sync_fails_and_keeps_its_stderr(self):
+        clone = self.clone()
+        manifest, _ = self.payload(clone, "claude")
+        record = json.loads(manifest.read_text())
+        record["deps"] = {"env": {"UV_PROJECT_ENVIRONMENT": str(self.base / "venv"), "UV_OFFLINE": "1"}, "sync": ["--frozen"]}
+        manifest.write_text(json.dumps(record))
+        bin_dir = self.base / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "uv").write_text("#!/bin/sh\necho 'error: Failed to fetch: `https://pypi.org/simple/pytest/`' >&2\nexit 2\n")
+        (bin_dir / "uv").chmod(0o755)
+
+        with mock.patch.dict(os.environ, {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}):
+            with self.assertRaisesRegex(workspace.WorkspaceError,
+                                        r"^offline uv sync failed \(2\): error: Failed to fetch: `https://pypi.org/simple/pytest/`$"):
+                sbx_inside.setup(manifest)
+
     def test_harvest_packs_the_diff_and_every_session_transcript(self):
         clone = self.clone()
         manifest, _ = self.payload(clone, "claude")
