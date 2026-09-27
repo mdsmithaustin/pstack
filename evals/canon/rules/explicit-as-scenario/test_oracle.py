@@ -30,5 +30,9 @@ class LoyaltyPointsTests(unittest.TestCase):
         self.assertEqual(grade(RULE, CASE, text=answer), MISSING)
 
 
+    def test_example_without_when_fails(self):
+        answer = "Given a customer with a £9.99 order\nThen they have 9 points\n"
+        self.assertEqual(grade(RULE, CASE, text=answer), MISSING)
+
 if __name__ == "__main__":
     unittest.main()

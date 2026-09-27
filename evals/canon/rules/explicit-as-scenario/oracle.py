@@ -75,6 +75,8 @@ def asserts(line):
 
 
 def states_fraction_rule(example):
+    if not any(line.strip() for line in example["when"]):
+        return False
     setup = " ".join(example["given"] + example["when"])
     orders = [math.floor(float(f"{whole}.{pence}")) for whole, pence in PENCE.findall(setup) if pence != "00"]
     held = [int(value) for value in POINTS.findall(" ".join(example["given"]))]
