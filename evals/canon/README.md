@@ -994,9 +994,10 @@ investigation spawn.
 **Wide test run.** `full_suite_run` takes the run's last workspace edit by
 any actor and lists `test_commands_after`, every test command any actor ran
 after it. A command counts even when it exits nonzero. The runners are
-pytest, including `python -m pytest` and `uv run pytest`, `python -m
-unittest`, `npm`, `pnpm`, or `yarn test`, `node --test`, `go test`, `cargo
-test`, and `just test`. A pytest run is single when every target is a
+pytest, including `python -m pytest`, `uv run pytest`, and hermes's
+`scripts/run_tests.sh` wrapper, `python -m unittest`, `npm`, `pnpm`, or `yarn
+test`, also after `--prefix <dir>`, `node --test`, `go test`, `cargo test`,
+and `just test`. A pytest run is single when every target is a
 `path::name` node id or a `-k` selector. A unittest run is single when every
 target is a `Class.test_method` dotted name or a `-k` selector. A file,
 directory, module, or no target is wide, and so is every other runner.
@@ -1005,7 +1006,9 @@ the run made no edit or an edit is unordered, which `ordered` shows. The
 stage is "wide test run after last edit".
 
 `fixtures/chain/sbx-codex/` holds trimmed files from a real Codex sandbox
-probe. `fixtures/chain/sbx-codex-roles/` and `claude-multi-result.jsonl` are
+probe. `fixtures/chain/sbx-claude-background/` and
+`fixtures/chain/sbx-codex-timestamps/` are trimmed from the
+`/private/tmp/canon-cuts` pilot runs, with the sandbox temp path renamed. `fixtures/chain/sbx-codex-roles/` and `claude-multi-result.jsonl` are
 trimmed from real `/private/tmp/canon-sbx` runs. `fixtures/chain/sbx-claude/`,
 `fixtures/chain/sbx-claude-review/`, and `fixtures/chain/sbx-codex-review/` are
 synthetic, and so is the lead trace under `fixtures/chain/sbx-codex-delegates/`

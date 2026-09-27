@@ -773,6 +773,15 @@ class TestCommandTests(unittest.TestCase):
             None, None, None,
         ])
 
+    def test_the_hermes_pytest_wrapper_and_npm_with_a_prefix_are_test_runs(self):
+        commands = [
+            "scripts/run_tests.sh tests/hermes_cli/test_input_sanitize.py; test_rc=$?",
+            "scripts/run_tests.sh tests/hermes_cli/test_input_sanitize.py::test_glued -q",
+            "npm --prefix apps/desktop test -- src/lib/composer-input-sanitize.test.ts",
+        ]
+
+        self.assertEqual([chain.test_scope(command) for command in commands], ["wide", "single", "wide"])
+
     def test_a_compound_command_is_as_wide_as_its_widest_test_run(self):
         self.assertEqual(chain.test_scope("cd app && pytest tests/test_a.py::test_x && pytest tests"), "wide")
 

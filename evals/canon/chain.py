@@ -395,6 +395,9 @@ PYTEST_VALUE_OPTIONS = {
     "--cov-report",
 }
 UNITTEST_VALUE_OPTIONS = {"-p", "-s", "-t"}
+# hermes's AGENTS.md has agents run pytest only through this wrapper.
+PYTEST_WRAPPERS = {"run_tests.sh"}
+PACKAGE_DIR_OPTIONS = {"--prefix", "-C", "--dir", "--cwd"}
 
 
 def command_words(tokens):
@@ -412,9 +415,10 @@ def command_words(tokens):
 
 
 def test_runner(words):
-    """(runner, arguments) of a stage that runs tests: "pytest", "unittest",
-    or "other" for npm, pnpm, or yarn test, node --test, go test, cargo test,
-    and just test. None for any other command."""
+    """(runner, arguments) of a stage that runs tests: "pytest" (or a pytest
+    wrapper script), "unittest", or "other" for npm, pnpm, or yarn test,
+    node --test, go test, cargo test, and just test. None for any other
+    command."""
     verbs = [word.rsplit("/", 1)[-1] for word in words]
     at = 0
     while at < len(words) and (verbs[at] in WRAPPERS or re.match(r"^\w+=", words[at])):
@@ -424,8 +428,11 @@ def test_runner(words):
         while at < len(words) and not (verbs[at] in ("pytest", "py.test") or re.fullmatch(r"python[\d.]*", verbs[at])):
             at += 1
     verb, rest = (verbs[at], words[at + 1:]) if at < len(words) else ("", [])
-    if verb in ("pytest", "py.test"):
+    if verb in ("pytest", "py.test") or verb in PYTEST_WRAPPERS:
         return "pytest", rest
+    if verb in ("npm", "pnpm", "yarn"):
+        while rest[:1] and rest[0] in PACKAGE_DIR_OPTIONS:
+            rest = rest[2:]
     if re.fullmatch(r"python[\d.]*", verb) and "-m" in rest[:-1]:
         module = rest[rest.index("-m") + 1]
         return (module, rest[rest.index("-m") + 2:]) if module in ("pytest", "unittest") else None
