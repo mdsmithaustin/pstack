@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"01a0d8c2-6671-7892-a003-c1c70d3c1453"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"collab_tool_call","tool":"spawn_agent","sender_thread_id":"01a0d8c2-6671-7892-a003-c1c70d3c1453","receiver_thread_ids":[],"prompt":"reply ok","agents_states":{},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"collab_tool_call","tool":"spawn_agent","sender_thread_id":"01a0d8c2-6671-7892-a003-c1c70d3c1453","receiver_thread_ids":["01a0d8c2-89f5-7dc3-8e00-4cdd2bcbb04f"],"prompt":"reply ok","agents_states":{"01a0d8c2-89f5-7dc3-8e00-4cdd2bcbb04f":{"status":"pending_init","message":null}},"status":"completed"}}
+{"type":"item.started","item":{"id":"item_1","type":"collab_tool_call","tool":"wait","sender_thread_id":"01a0d8c2-6671-7892-a003-c1c70d3c1453","receiver_thread_ids":["01a0d8c2-89f5-7dc3-8e00-4cdd2bcbb04f"],"prompt":null,"agents_states":{},"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_1","type":"collab_tool_call","tool":"wait","sender_thread_id":"01a0d8c2-6671-7892-a003-c1c70d3c1453","receiver_thread_ids":["01a0d8c2-89f5-7dc3-8e00-4cdd2bcbb04f"],"prompt":null,"agents_states":{"01a0d8c2-89f5-7dc3-8e00-4cdd2bcbb04f":{"status":"completed","message":"ok"}},"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"ok"}}
+{"type":"turn.completed","usage":{"input_tokens":32611,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":317,"reasoning_output_tokens":187}}
