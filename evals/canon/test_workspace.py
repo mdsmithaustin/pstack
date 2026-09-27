@@ -142,6 +142,39 @@ class MaterializeTests(ShopRepo):
             workspace.materialize(root, self.mirror, self.commit, {})
 
 
+class OverlayWriteTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.base = Path(directory.name)
+        self.root, self.host = self.base / "checkout", self.base / "host"
+        self.root.mkdir()
+        self.host.mkdir()
+
+    def test_overlay_under_a_symlinked_directory_is_refused_and_nothing_is_written_outside(self):
+        (self.root / "escape").symlink_to(self.host)
+
+        with self.assertRaisesRegex(workspace.WorkspaceError, r"^overlay path escape/payload.txt passes through a symlink in the checkout$"):
+            workspace.write_overlay(self.root, {"escape/payload.txt": b"x"})
+        self.assertEqual(list(self.host.iterdir()), [])
+
+    def test_overlay_onto_a_symlinked_file_is_refused(self):
+        (self.host / "target.txt").write_text("host\n")
+        (self.root / "CONTEXT.md").symlink_to(self.host / "target.txt")
+
+        with self.assertRaisesRegex(workspace.WorkspaceError, r"^overlay path CONTEXT.md passes through a symlink in the checkout$"):
+            workspace.write_overlay(self.root, {"CONTEXT.md": b"x"})
+        self.assertEqual((self.host / "target.txt").read_text(), "host\n")
+
+    def test_overlay_writes_new_and_existing_paths_under_the_checkout(self):
+        (self.root / "docs").mkdir()
+        (self.root / "docs" / "a.md").write_text("old\n")
+
+        workspace.write_overlay(self.root, {"docs/a.md": b"new\n", "notes/b.md": b"b\n"})
+
+        self.assertEqual(((self.root / "docs" / "a.md").read_text(), (self.root / "notes" / "b.md").read_text()), ("new\n", "b\n"))
+
+
 class ParseSpecTests(unittest.TestCase):
     def test_overlay_symlink_to_a_host_file_is_not_read(self):
         directory = tempfile.TemporaryDirectory()
@@ -539,6 +572,21 @@ class RegradeTests(ShopRule):
                                        "run_base": str(self.out / "codex" / "orders-workspace" / "orders-amend" / "amended" / "runs" / "orders-amend" / "with_skill" / "run-1")}]})
         self.assertEqual(amended.read_text(), graded)
         self.assertIn("amended: graded from the diff; the harness found no gradable answer", printed.getvalue())
+
+    def test_arm_whose_run_output_holds_credentials_is_not_regraded(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            screen.build(self.out, [self.rule], "poteto-mode")
+        self.finish("current", [("FAIL", "Done.\n", BAD_DIFF)])
+        amended = self.finish("amended", [("INVALID", None, GOOD_DIFF)])
+        (amended.parent / "runs" / "orders-amend" / "with_skill" / "run-1" / "stream.jsonl").write_text(json.dumps({"text": API_KEY}) + "\n")
+
+        with contextlib.redirect_stdout(io.StringIO()) as printed, contextlib.redirect_stderr(io.StringIO()):
+            screen.regrade(self.out)
+
+        self.assertFalse(amended.with_name("regrade.json").exists())
+        self.assertTrue(amended.parent.parent.joinpath("current", "regrade.json").exists())
+        self.assertIn("ScreenError: " + str(amended.parent) + ": credential material in the run output: "
+                      "runs/orders-amend/with_skill/run-1/stream.jsonl (API key)", printed.getvalue())
 
     def test_pasted_project_cases_keep_the_harness_grade(self):
         with contextlib.redirect_stdout(io.StringIO()):

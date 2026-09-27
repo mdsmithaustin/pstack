@@ -265,8 +265,9 @@ class FakeSbx:
     wrap makes. The policy allows the model API and the hosts in allowed, and
     answers a check on a host in unanswered with JSON that carries no decision."""
 
-    def __init__(self, tree, allowed=(), unanswered=()):
+    def __init__(self, tree, allowed=(), unanswered=(), setup_error=None):
         self.tree, self.allowed, self.unanswered, self.calls = tree, {"api.openai.com", "chatgpt.com", *allowed}, set(unanswered), []
+        self.setup_error = setup_error
 
     def __call__(self, *args, input=None, capture=True, check=True):
         args = [str(arg) for arg in args]
@@ -280,6 +281,8 @@ class FakeSbx:
         elif args[:2] == ["policy", "log"]:
             stdout = b"[]"
         elif args[0] == "exec" and "setup" in args:
+            if self.setup_error:
+                return subprocess.CompletedProcess(args, 1, b"", self.setup_error.encode())
             stdout = json.dumps({"tree": self.tree}).encode()
         elif args[0] == "cp" and args[2].startswith("/") and args[1].endswith(":/tmp/canon-out.tar"):
             with tarfile.open(args[2], "w") as archive:
@@ -347,6 +350,18 @@ class WrapPolicyTests(test_workspace.ShopRepo):
                                           "check the global policy with `sbx policy ls`")
         self.assertEqual((record["egress"]["example.org"], record["egress"]["github.com"]), (None, False))
         self.assertEqual(fake.agent_runs(), [])
+
+
+class ProbeSetupTests(unittest.TestCase):
+    def test_a_failed_setup_stops_the_probe_before_any_check_or_agent_runs(self):
+        fake = FakeSbx("unused", setup_error="WorkspaceError: the clone is at abc, not def")
+
+        with mock.patch.object(sandbox, "sbx", fake), \
+                self.assertRaisesRegex(sandbox.SandboxError, r"^sandbox setup failed \(1\): WorkspaceError: the clone is at abc, not def$"):
+            sandbox.probe("codex")
+
+        setup = next(index for index, call in enumerate(fake.calls) if call[0] == "exec" and "setup" in call)
+        self.assertEqual([call[0] for call in fake.calls[setup + 1:]], ["rm"])
 
 
 def sandboxes_available():

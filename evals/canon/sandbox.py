@@ -562,7 +562,9 @@ def probe(agent, repo=None, commit=None):
             refuse_open_egress(allowed)
             box.unpack(payload, PAYLOAD)
             setup = box.exec("python3", f"{PAYLOAD}/sbx_inside.py", "setup", f"{PAYLOAD}/manifest.json", check=False)
-            report = {"setup": _json_or_text(setup.stdout.strip().splitlines()[-1]) if setup.stdout.strip() else setup.stderr.decode()}
+            if setup.returncode != 0:
+                raise SandboxError(f"sandbox setup failed ({setup.returncode}): {setup.stderr.decode(errors='replace').strip()}")
+            report = {"setup": _json_or_text(setup.stdout.strip().splitlines()[-1] if setup.stdout.strip() else b"")}
             env = inside["deps"]["env"] if inside["deps"] else {}
             if inside["deps"]:
                 package = CONFIG["repos"][repo]["package"]

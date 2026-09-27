@@ -924,6 +924,16 @@ def log_error(out, context, exc):
     print(message, file=sys.stderr, flush=True)
 
 
+def refuse_leaks(work, case_build):
+    """Refuse an arm whose run output holds credential material, apart from
+    credential-shaped bytes the pinned checkout already holds."""
+    known = workspace.checkout_tokens(case_build["workspace"]["checkout"]) if "workspace" in case_build else set()
+    leaks = workspace.credential_findings(work, known)
+    if leaks:
+        raise ScreenError(f"{work}: credential material in the run output: "
+                          + ", ".join(f"{path} ({kind})" for path, kind in leaks))
+
+
 def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout):
     root = out / "arms" / rule.id / case.id / arm
     work = out / agent / rule.id / case.id / arm
@@ -939,11 +949,7 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
     harness("run-agent", "--agent", agent, "--model", model, *backend,
             "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
             "--timeout", timeout or case_build["timeout_s"], env=run_env)
-    known = workspace.checkout_tokens(case_build["workspace"]["checkout"]) if "workspace" in case_build else set()
-    leaks = workspace.credential_findings(work, known)
-    if leaks:
-        raise ScreenError(f"{work}: credential material in the run output: "
-                          + ", ".join(f"{path} ({kind})" for path, kind in leaks))
+    refuse_leaks(work, case_build)
     if "workspace" in case_build:
         file_harvest(work, case_build["workspace"]["tree"])
     harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
@@ -1134,6 +1140,7 @@ def regrade(out):
         if "workspace" not in build_info["cases"][case]:
             continue
         try:
+            refuse_leaks(work, build_info["cases"][case])
             map_slots(work, build_info["cases"][case]["workspace"]["tree"])
         except ScreenError as exc:
             log_error(out, f"regrade {agent}/{rule}/{case}/{arm}", exc)

@@ -77,10 +77,7 @@ def setup(manifest_path):
     shutil.copytree(payload / "skills", root / "skills", symlinks=True, dirs_exist_ok=True)
     mounted = sorted(path.relative_to(root).as_posix() for path in (root / "skills").rglob("*") if path.is_file())
     workspace.exclude(root, workspace.mount_roots(mounted, tracked(root, head)))
-    overlay = workspace.read_files(payload / "overlay")
-    for path, data in overlay.items():
-        (root / path).parent.mkdir(parents=True, exist_ok=True)
-        (root / path).write_bytes(data)
+    workspace.write_overlay(root, workspace.read_files(payload / "overlay"))
     if manifest.get("discovery"):
         workspace.expose(root, manifest["discovery"], manifest["tree"])
         record["persona"] = register_persona(root, manifest)

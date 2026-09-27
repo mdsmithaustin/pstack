@@ -241,7 +241,8 @@ real repo instead. Its `case.json` adds:
 ```
 
 `overlay/` sits in the case directory and holds files copied over the checkout,
-such as a seeded `CONTEXT.md`. The case has no `project/`, and its `prompt.md`
+such as a seeded `CONTEXT.md`. An overlay path that passes through a symlink the
+checkout holds is refused before any overlay file is written. The case has no `project/`, and its `prompt.md`
 has no `{project}`. `timeout_s` is optional and defaults to 1800 seconds under
 both entries. The meta-word check covers the prompt, the overlay paths, and the
 overlay text. It cannot cover the upstream repo.
@@ -508,7 +509,8 @@ named `.credentials.json` or `auth.json`, or one that holds an `sk-` key or a
 JSON access or refresh token, fails the arm before grading, and the error
 names each file. A match whose exact bytes also occur in the case's reference
 checkout does not count, so a transcript that quotes an upstream test fake
-passes. The scan does not delete the files it names.
+passes. The scan does not delete the files it names. `regrade` runs the same
+scan first and skips an arm it refuses, so a regrade never grades a leaked arm.
 
 **Auth.** `sbx secret` stores the credentials on the host, and the sandbox's
 proxy adds them to model API requests. Nothing writes them to this repo. A run
@@ -558,7 +560,8 @@ sits under `$CANON_CACHE/sbx/`.
 **Tools observed.** `sandbox.py probe` builds a run-shaped sandbox and lists
 what the agent is offered without a paid model call. Claude gets a model name
 that does not exist, and its init event lists tools, agents, and slash commands
-before it fails. Codex is pointed at a local server inside the sandbox that
+before it fails. A probe whose sandbox setup fails stops there with setup's
+stderr, before any check or agent runs. Codex is pointed at a local server inside the sandbox that
 records the request and answers 400. Observed on 2026-09-25, with and without
 a dependency template:
 

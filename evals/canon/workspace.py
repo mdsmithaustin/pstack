@@ -215,12 +215,25 @@ def materialize(root, mirror, commit, overlay):
     if (Path(mirror) / "shallow").is_file():
         shutil.copyfile(Path(mirror) / "shallow", root / ".git" / "shallow")
     git("checkout", "-q", "--detach", commit, cwd=root)
-    for path, data in overlay.items():
-        target = root / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
+    write_overlay(root, overlay)
     exclude(root, roots)
     return snapshot(root, commit)
+
+
+def write_overlay(root, overlay):
+    """Copy the overlay into the checkout at root. Every path is checked
+    before any is written, and one that passes through a symlink the checkout
+    holds is refused, so no write lands outside root."""
+    root = Path(root)
+    for path in overlay:
+        target = root
+        for part in Path(path).parts:
+            target = target / part
+            if target.is_symlink():
+                raise WorkspaceError(f"overlay path {path} passes through a symlink in the checkout")
+    for path, data in overlay.items():
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        (root / path).write_bytes(data)
 
 
 def harvest(root, base):
