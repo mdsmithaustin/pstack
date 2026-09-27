@@ -938,12 +938,67 @@ runs emits a `result` each time. The last one is the answer, and
 `harvest/<run>/raw-stream.jsonl` in place of `trace.jsonl` when it exists. A
 run that `screen.py regrade` graded takes its verdict from `regrade.json`.
 
+**Delegate returns.** Three stages ask when a delegate returned to the lead.
+A foreground Claude spawn returns in its Agent or Task tool_result. A
+background one first gets an "Async agent launched" result with its agentId.
+It returns later, in a `<task-notification>` user message that names its
+tool-use-id or its agentId as the task-id. A Codex child returns at the
+first `wait` whose `agents_states` shows it no longer pending or running.
+When the trace shows none of these, the child's own first `task_complete`
+stands in. Codex 0.157's stream shows no spawn and names no child in a
+wait. Its children are attached after the lead's last line, so they have no
+place in lead order. Each of these stages counts such delegates or edits as
+`unordered` and reads `null` where order decides the answer.
+
+**Delegate wrote code.** `delegated_code` is true when any delegate made a
+workspace edit, the same edits `delegate_edits` lists.
+
+**Lead review.** `lead_reviewed_delegate` gives `code_delegates`,
+`reviewed`, `all`, and `unordered`. A code-writing delegate counts as
+reviewed when the lead does one of these after the delegate returned and
+before the lead's last message:
+
+- It reads a file that delegate edited, with Read or with a shell read verb,
+  `rg`, or `grep` naming the file. Paths match on their trailing components,
+  so `src/tree.py` names `/workspace/app/src/tree.py`.
+- It runs `git diff`, `git show`, or `git status`.
+
+A delegate that never returns is not reviewed. `all` is `null` when no
+delegate wrote code or one of them is unordered. The stage is "lead reviewed
+code-writing delegate (all)".
+
+**Parallel investigation.** An investigation spawn is one whose delegate
+wrote no code. It is in flight from its spawn until it returns, or to the
+end of the trace. `parallel_investigation` gives `investigation_spawns`,
+`max_in_flight`, `parallel`, and `unordered`. `parallel` is true when two
+were in flight at once. It is `null` when two or more exist, fewer than two
+overlap, and one is unordered. A run without transcripts cannot tell which
+delegates wrote code, so every spawn counts as investigation there. The
+stage "parallel investigation spawns" leaves out runs with no
+investigation spawn.
+
+**Wide test run.** `full_suite_run` takes the run's last workspace edit by
+any actor and lists `test_commands_after`, every test command any actor ran
+after it. A command counts even when it exits nonzero. The runners are
+pytest, including `python -m pytest` and `uv run pytest`, `python -m
+unittest`, `npm`, `pnpm`, or `yarn test`, `node --test`, `go test`, `cargo
+test`, and `just test`. A pytest run is single when every target is a
+`path::name` node id or a `-k` selector. A unittest run is single when every
+target is a `Class.test_method` dotted name or a `-k` selector. A file,
+directory, module, or no target is wide, and so is every other runner.
+`wide` is true when some command after the edit is wide. It is `null` when
+the run made no edit or an edit is unordered, which `ordered` shows. The
+stage is "wide test run after last edit".
+
 `fixtures/chain/sbx-codex/` holds trimmed files from a real Codex sandbox
 probe. `fixtures/chain/sbx-codex-roles/` and `claude-multi-result.jsonl` are
 trimmed from real `/private/tmp/canon-sbx` runs. `fixtures/chain/sbx-claude/`,
 `fixtures/chain/sbx-claude-review/`, and `fixtures/chain/sbx-codex-review/` are
 synthetic, and so is the lead trace under `fixtures/chain/sbx-codex-delegates/`
 (its harvested child transcripts are real).
+`fixtures/chain/sbx-claude-delegates/` and `fixtures/chain/sbx-codex-parallel/`
+are synthetic too. They follow the return shapes above, the Claude ones as a
+Claude Code session transcript records them.
 
 ## Held-cuts screen
 

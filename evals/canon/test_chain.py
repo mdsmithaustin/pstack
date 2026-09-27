@@ -648,6 +648,19 @@ class CodexDelegateFlowTests(unittest.TestCase):
                          {"last_edit": 13, "ordered": False, "test_commands_after": [], "wide": None})
 
 
+class DelegateFlowMarkdownTests(unittest.TestCase):
+    def test_each_stage_has_a_rate_line_per_agent(self):
+        rows = [analyze("sbx-claude-delegates", "claude"), analyze("sbx-codex-parallel", "codex"), analyze("sbx-codex-delegates", "codex")]
+        names = ("delegate wrote code", "lead reviewed code-writing delegate (all)", "parallel investigation spawns", "wide test run after last edit")
+
+        self.assertEqual([line for line in chain.markdown(rows).splitlines()[:len(chain.STAGES) + 3] if line.split(" | ")[0][2:] in names], [
+            "| delegate wrote code | 1/1 | 2/2 |",
+            "| lead reviewed code-writing delegate (all) | 0/1 | 1/1 |",
+            "| parallel investigation spawns | 1/1 | 1/2 |",
+            "| wide test run after last edit | 0/1 | 1/1 |",
+        ])
+
+
 class ReviewWindowTests(unittest.TestCase):
     """The lead's review of a code-writing delegate counts only between the
     delegate's return and the lead's final message."""

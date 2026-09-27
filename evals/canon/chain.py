@@ -1492,6 +1492,10 @@ STAGES = {
         row["implementation_delegate_persona"]["with_persona"] == row["implementation_delegate_persona"]["spawns"]
         if row["implementation_delegate_persona"]["spawns"] else None
     ),
+    "delegate wrote code": lambda row: row["delegated_code"],
+    "lead reviewed code-writing delegate (all)": lambda row: row["lead_reviewed_delegate"]["all"],
+    "parallel investigation spawns": lambda row: row["parallel_investigation"]["parallel"] if row["parallel_investigation"]["investigation_spawns"] else None,
+    "wide test run after last edit": lambda row: row["full_suite_run"]["wide"],
 }
 FRACTION_STAGES = {"step pointers preserved (fraction)"}
 REVIEW_STAGES = {
