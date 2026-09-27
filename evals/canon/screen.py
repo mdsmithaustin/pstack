@@ -1233,10 +1233,15 @@ def review_pr(case):
             "diff": spec.review["patch"].decode(errors="replace")}
 
 
+def labeled_samples(case):
+    """{name: (label, text)} of a review case's calibration samples."""
+    return {name: (label, (case.root / "samples" / name).read_text()) for name, label in check_labels(case.root, case.kind).items()}
+
+
 def case_calibration(case, backend, model, rubric, pr):
     path = review.calibration_path(case.owner, case.id, backend, model)
     record = json.loads(path.read_text()) if path.is_file() else None
-    return review.calibration_status(record, review.calibration_key(backend, model, case.kind, rubric, pr))
+    return review.calibration_status(record, review.calibration_key(backend, model, case.kind, rubric, pr, labeled_samples(case)))
 
 
 def written_by(check, run_base):
@@ -1301,11 +1306,10 @@ def calibrate(rules, judges):
     for rule, case in reviewed:
         rubric, pr, spec = (case.root / "rubric.md").read_text(), review_pr(case), case_spec(case)
         checkout = workspace.reference_checkout(spec)[0]
-        labels = check_labels(case.root, case.kind)
+        labeled = labeled_samples(case)
         for backend, model in judges:
             samples = {}
-            for name, label in sorted(labels.items()):
-                answer = (case.root / "samples" / name).read_text()
+            for name, (label, answer) in sorted(labeled.items()):
                 record = review.judge(backend, model, case.kind, rubric, pr, answer, "", (rule.id, case.owner), spec.repo, spec.commit)
                 failures = check.grade(case.owner, case.id, text=answer, workspace=check.Workspace(checkout, ""))
                 samples[name] = {"label": label, "verdict": record["verdict"], "evidence": record.get("evidence"),
@@ -1314,7 +1318,7 @@ def calibrate(rules, judges):
                                  "prompt_sha256": record["prompt_sha256"]}
             table, agreed = review.agreement(samples)
             result = {"rule": case.owner, "case": case.id, "kind": case.kind, "backend": backend, "model": model,
-                      "template": review.TEMPLATE_VERSION, "key": review.calibration_key(backend, model, case.kind, rubric, pr),
+                      "template": review.TEMPLATE_VERSION, "key": review.calibration_key(backend, model, case.kind, rubric, pr, labeled),
                       "samples": samples, "agreement": table, "calibrated": agreed}
             path = review.calibration_path(case.owner, case.id, backend, model)
             path.parent.mkdir(parents=True, exist_ok=True)

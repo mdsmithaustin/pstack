@@ -462,10 +462,10 @@ that concern as a problem".
 labeled sample of every review case with each judge (both by default). It
 prints agreement per label and stores the record under
 `$CANON_CACHE/calibration/<rule>/<case>/<runner>-<backend>-<model>.json`,
-where the runner is `model` or `standin`. The record
-is keyed by the prompt template version, judge, kind, rubric, and PR, so a
-change to any of them voids it. A case is calibrated for a judge only when
-every sample agreed. Otherwise its run verdicts carry `calibrated: false` with
+where the runner is `model` or `standin`. The record is keyed by the prompt
+template version, judge, kind, rubric, PR, and the labeled samples with their
+labels, so a change to any of them voids it. A case is calibrated for a judge
+only when every sample agreed. Otherwise its run verdicts carry `calibrated: false` with
 the reason, `compare` prints `uncalibrated: <reason>`, and the rule line ends
 `[judge uncalibrated]`. The samples' precheck results are recorded too. A
 sample labeled `FOUND` whose precheck fails means the oracle and the label

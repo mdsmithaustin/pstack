@@ -341,17 +341,21 @@ class CalibrationMathTests(unittest.TestCase):
     def test_status_names_why_a_case_is_uncalibrated(self):
         agreed = {"key": "k", "samples": {"a": {"label": "CLEAN", "verdict": "CLEAN"}}}
         self.assertEqual(review.calibration_status(None, "k"), (False, "no calibration record"))
-        self.assertEqual(review.calibration_status(agreed, "other"), (False, "the guide, the PR, or the judge changed since calibration"))
+        self.assertEqual(review.calibration_status(agreed, "other"), (False, "the guide, the labeled samples, the PR, or the judge changed since calibration"))
         self.assertEqual(review.calibration_status({"key": "k", "samples": self.SAMPLES}, "k"),
                          (False, "judge disagrees with labels: review-missed-2.md labeled MISSED judged None; review-partial.md labeled PARTIAL judged MISSED"))
         self.assertEqual(review.calibration_status(agreed, "k"), (True, "every labeled sample agreed"))
 
-    def test_key_changes_with_the_rubric_the_pr_and_the_judge(self):
-        key = review.calibration_key("codex", "gpt-6-sol", "positive", "guide", PR)
-        self.assertEqual(key, review.calibration_key("codex", "gpt-6-sol", "positive", "guide", dict(PR)))
-        self.assertEqual(len({key, review.calibration_key("claude", "opus", "positive", "guide", PR),
-                              review.calibration_key("codex", "gpt-6-sol", "positive", "guide 2", PR),
-                              review.calibration_key("codex", "gpt-6-sol", "positive", "guide", {**PR, "diff": ""})}), 4)
+    def test_key_changes_with_the_rubric_the_pr_the_samples_and_the_judge(self):
+        samples = {"review-found.md": ("FOUND", "Found it.\n"), "review-missed.md": ("MISSED", "Looks fine.\n")}
+        key = review.calibration_key("codex", "gpt-6-sol", "positive", "guide", PR, samples)
+        self.assertEqual(key, review.calibration_key("codex", "gpt-6-sol", "positive", "guide", dict(PR), dict(reversed(samples.items()))))
+        self.assertEqual(len({key, review.calibration_key("claude", "opus", "positive", "guide", PR, samples),
+                              review.calibration_key("codex", "gpt-6-sol", "positive", "guide 2", PR, samples),
+                              review.calibration_key("codex", "gpt-6-sol", "positive", "guide", {**PR, "diff": ""}, samples),
+                              review.calibration_key("codex", "gpt-6-sol", "positive", "guide", PR, {**samples, "review-missed.md": ("PARTIAL", "Looks fine.\n")}),
+                              review.calibration_key("codex", "gpt-6-sol", "positive", "guide", PR, {**samples, "review-missed.md": ("MISSED", "Looks fine!\n")}),
+                              review.calibration_key("codex", "gpt-6-sol", "positive", "guide", PR, {"review-found.md": samples["review-found.md"]})}), 7)
 
 
 def row(kind, combined, precheck="PASS", calibrated=True):
@@ -501,9 +505,30 @@ class OfflineReviewRunTests(ReviewCase):
         with judge_env():
             self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric, pr), (True, "every labeled sample agreed"))
             self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric + "More.\n", pr),
-                             (False, "the guide, the PR, or the judge changed since calibration"))
+                             (False, "the guide, the labeled samples, the PR, or the judge changed since calibration"))
             self.assertEqual(screen.case_calibration(case, "codex", "gpt-6-sol", rubric, pr), (False, "no calibration record"))
         self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric, pr), (False, "no calibration record"))
+
+    def test_a_changed_sample_or_label_makes_the_case_uncalibrated_again(self):
+        case = self.cases["discount-cap"]
+        rubric, pr = (case.root / "rubric.md").read_text(), screen.review_pr(case)
+        labels, partial = case.root / "samples" / "labels.json", case.root / "samples" / "review-partial.md"
+        edits = {
+            "label": (labels, json.dumps({**json.loads(labels.read_text()), "review-partial.md": "MISSED"})),
+            "sample": (partial, partial.read_text() + "Also rename the helper.\n"),
+        }
+        for what, (path, text) in edits.items():
+            with self.subTest(what), judge_env():
+                with contextlib.redirect_stdout(io.StringIO()):
+                    screen.calibrate([self.rule], [("claude", "opus")])
+                self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric, pr), (True, "every labeled sample agreed"))
+                original = path.read_text()
+                path.write_text(text)
+                try:
+                    self.assertEqual(screen.case_calibration(case, "claude", "opus", rubric, pr),
+                                     (False, "the guide, the labeled samples, the PR, or the judge changed since calibration"))
+                finally:
+                    path.write_text(original)
 
 
 @unittest.skipUnless(os.environ.get("CANON_SBX_E2E") == "1" and shutil.which("sbx") and harness_available(),
@@ -526,11 +551,11 @@ class StandinCalibrationTests(unittest.TestCase):
     def test_standin_calibration_never_counts_for_the_model_judge(self):
         pr = {"title": "t", "body": "b", "diff": "d"}
         with mock.patch.dict(os.environ, {"CANON_JUDGE_STANDIN": "/bin/true"}):
-            standin_key = review.calibration_key("codex", "gpt-6-sol", "positive", "guide", pr)
+            standin_key = review.calibration_key("codex", "gpt-6-sol", "positive", "guide", pr, {})
             standin_path = review.calibration_path("r", "c", "codex", "gpt-6-sol")
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CANON_JUDGE_STANDIN", None)
-            model_key = review.calibration_key("codex", "gpt-6-sol", "positive", "guide", pr)
+            model_key = review.calibration_key("codex", "gpt-6-sol", "positive", "guide", pr, {})
             model_path = review.calibration_path("r", "c", "codex", "gpt-6-sol")
         self.assertNotEqual(standin_key, model_key)
         self.assertEqual(standin_path.name, "standin-codex-gpt-6-sol.json")

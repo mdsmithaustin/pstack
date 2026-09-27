@@ -226,8 +226,10 @@ def judge_runner():
     return "standin" if os.environ.get("CANON_JUDGE_STANDIN") else "model"
 
 
-def calibration_key(backend, model, kind, rubric, pr):
-    parts = [TEMPLATE_VERSION, judge_runner(), backend, model, kind, rubric, pr["title"], pr["body"], pr["diff"]]
+def calibration_key(backend, model, kind, rubric, pr, samples):
+    """samples is {name: (label, text)} of the case's labeled samples."""
+    parts = [TEMPLATE_VERSION, judge_runner(), backend, model, kind, rubric, pr["title"], pr["body"], pr["diff"],
+             sorted([name, label, text] for name, (label, text) in samples.items())]
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()
 
 
@@ -251,7 +253,7 @@ def calibration_status(record, key):
     if record is None:
         return False, "no calibration record"
     if record.get("key") != key:
-        return False, "the guide, the PR, or the judge changed since calibration"
+        return False, "the guide, the labeled samples, the PR, or the judge changed since calibration"
     misses = [f"{name} labeled {sample['label']} judged {sample['verdict']}" for name, sample in sorted(record["samples"].items())
               if sample["verdict"] != sample["label"]]
     if misses:
