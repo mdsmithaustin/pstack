@@ -1,0 +1,179 @@
+diff --git a/dev/lint/_framework.py b/dev/lint/_framework.py
+index b142eed..e167acd 100644
+--- a/dev/lint/_framework.py
++++ b/dev/lint/_framework.py
+@@ -16,7 +16,10 @@ from __future__ import annotations
+ 
+ import io
+ import re
++import sys
+ import tokenize
++from collections.abc import Callable
++from pathlib import Path
+ 
+ _DISABLE_RE = re.compile(r"custom-lint:\s*disable(-next)?=([a-z0-9-]+(?:\s*,\s*[a-z0-9-]+)*)")
+ # Cheap pre-screen so files with no markers skip tokenization entirely.
+@@ -49,3 +52,30 @@ def disabled_rules_by_line(source: str) -> dict[int, set[str]]:
+         # the whole lint run.
+         pass
+     return disabled
++
++
++def report_file_hits(
++    argv: list[str],
++    scan: Callable[[Path], list[tuple[int, str]]],
++    format_hit: Callable[[Path, int, str], str],
++    footer: str,
++) -> int:
++    """Scan every file in ``argv[1:]``, write each hit, then ``footer`` once.
++
++    Arguments that are not files are skipped. ``format_hit`` returns the full
++    text written for one hit, trailing newline included.
++
++    :returns: Exit code -- 0 on a clean scan, 1 if any hits.
++    """
++    failed = False
++    for arg in argv[1:]:
++        path = Path(arg)
++        if not path.is_file():
++            continue
++        for line, detail in scan(path):
++            failed = True
++            sys.stdout.write(format_hit(path, line, detail))
++    if failed:
++        sys.stdout.write(footer)
++        return 1
++    return 0
+diff --git a/dev/lint/lint_no_global_asyncio_patch.py b/dev/lint/lint_no_global_asyncio_patch.py
+index a8c0c4b..94a0aa1 100644
+--- a/dev/lint/lint_no_global_asyncio_patch.py
++++ b/dev/lint/lint_no_global_asyncio_patch.py
+@@ -61,6 +61,8 @@ import ast
+ import sys
+ from pathlib import Path
+ 
++from dev.lint._framework import report_file_hits
++
+ 
+ def _is_global_asyncio_literal(value: str) -> bool:
+     """Return True if ``value`` is a one-segment getattr off the
+@@ -219,6 +221,24 @@ def _is_flagged_call(node: ast.Call) -> bool:
+     return False
+ 
+ 
++_FOOTER = (
++    "\nPatching ``module.asyncio.sleep`` (or any other asyncio "
++    "attribute via a dotted path that walks through the asyncio "
++    "module) mutates the real asyncio module singleton, which "
++    "leaks into every other test running in the same process "
++    "(critical under pytest-xdist). Prefer adding a thin "
++    "``_sleep`` indirection in the production module and "
++    "patching that, or replace the module's ``asyncio`` binding "
++    "wholesale with a ``SimpleNamespace`` -- see the script "
++    "docstring for Option A / Option B examples.\n"
++)
++_HINT = "   hint: see dev/lint/lint_no_global_asyncio_patch.py docstring for correct shapes.\n"
++
++
++def _format_hit(path: Path, line: int, snippet: str) -> str:
++    return f"{path}:{line}: globally-clobbering asyncio patch detected: {snippet}\n{_HINT}"
++
++
+ def main(argv: list[str]) -> int:
+     """
+     Scan every file in ``argv[1:]`` and report violations.
+@@ -226,36 +246,7 @@ def main(argv: list[str]) -> int:
+     :param argv: Command-line args (``argv[0]`` is the script name).
+     :returns: Exit code -- 0 on clean scan, 1 if any hits.
+     """
+-    failed = False
+-    for arg in argv[1:]:
+-        path = Path(arg)
+-        if not path.is_file():
+-            continue
+-        hits = scan(path)
+-        if hits:
+-            failed = True
+-            for line, snippet in hits:
+-                sys.stdout.write(
+-                    f"{path}:{line}: globally-clobbering asyncio patch detected: {snippet}\n"
+-                )
+-                sys.stdout.write(
+-                    "   hint: see dev/lint/lint_no_global_asyncio_patch.py "
+-                    "docstring for correct shapes.\n"
+-                )
+-    if failed:
+-        sys.stdout.write(
+-            "\nPatching ``module.asyncio.sleep`` (or any other asyncio "
+-            "attribute via a dotted path that walks through the asyncio "
+-            "module) mutates the real asyncio module singleton, which "
+-            "leaks into every other test running in the same process "
+-            "(critical under pytest-xdist). Prefer adding a thin "
+-            "``_sleep`` indirection in the production module and "
+-            "patching that, or replace the module's ``asyncio`` binding "
+-            "wholesale with a ``SimpleNamespace`` -- see the script "
+-            "docstring for Option A / Option B examples.\n"
+-        )
+-        return 1
+-    return 0
++    return report_file_hits(argv, scan, _format_hit, _FOOTER)
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/dev/lint/lint_no_skipped_tests.py b/dev/lint/lint_no_skipped_tests.py
+index 0061d1f..1b84cf0 100644
+--- a/dev/lint/lint_no_skipped_tests.py
++++ b/dev/lint/lint_no_skipped_tests.py
+@@ -35,6 +35,8 @@ import ast
+ import sys
+ from pathlib import Path
+ 
++from dev.lint._framework import report_file_hits
++
+ 
+ def _is_skip_attribute(node: ast.expr) -> bool:
+     """Return True if ``node`` spells ``pytest.mark.skip`` (or ``mark.skip``).
+@@ -152,6 +154,15 @@ def scan(path: Path) -> list[tuple[int, str]]:
+     return hits
+ 
+ 
++_FOOTER = (
++    "\nSkipped tests are invisible coverage loss. If a test can't "
++    "pass, rewrite it for the current architecture or delete it. "
++    "For genuine environmental gates (missing binary, platform), "
++    "use ``@pytest.mark.skipif`` with a clear reason — this rule "
++    "only flags unconditional ``skip``.\n"
++)
++
++
+ def main(argv: list[str]) -> int:
+     """
+     Scan every file in ``argv[1:]`` and report unconditional skips.
+@@ -159,26 +170,7 @@ def main(argv: list[str]) -> int:
+     :param argv: Command-line args (``argv[0]`` is the script name).
+     :returns: Exit code — 0 on clean scan, 1 if any hits.
+     """
+-    failed = False
+-    for arg in argv[1:]:
+-        path = Path(arg)
+-        if not path.is_file():
+-            continue
+-        hits = scan(path)
+-        if hits:
+-            failed = True
+-            for line, msg in hits:
+-                sys.stdout.write(f"{path}:{line}: {msg}\n")
+-    if failed:
+-        sys.stdout.write(
+-            "\nSkipped tests are invisible coverage loss. If a test can't "
+-            "pass, rewrite it for the current architecture or delete it. "
+-            "For genuine environmental gates (missing binary, platform), "
+-            "use ``@pytest.mark.skipif`` with a clear reason — this rule "
+-            "only flags unconditional ``skip``.\n"
+-        )
+-        return 1
+-    return 0
++    return report_file_hits(argv, scan, lambda path, line, msg: f"{path}:{line}: {msg}\n", _FOOTER)
+ 
+ 
+ if __name__ == "__main__":

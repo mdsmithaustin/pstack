@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "refactoring",
+  "workspace": {"repo": "omnigent", "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"},
+  "expected_behavior": [
+    "Moves the shared argv scan-and-report loop into dev/lint/_framework.py and has both lint scripts call it.",
+    "Keeps every line each script prints, including the per-hit hint line lint_no_global_asyncio_patch.py writes after each hit, and keeps the exit codes."
+  ]
+}
