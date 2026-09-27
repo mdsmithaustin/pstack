@@ -63,7 +63,8 @@ EXPECTED_PLAYBOOK = {
     "payroll-invoice-rounding": "refactoring", "billing-cleanup": "refactoring", "delivery-dates": "refactoring",
     "textkit-exports": "refactoring", "textkit-tidy": "refactoring",
     "http-client-small": "refactoring", "http-client-swap": "refactoring",
-    "member-coupon": "bug-fix", "orders-pagination": "bug-fix", "zero-price": "bug-fix",
+    "no-debugger-lint": "feature", "lint-report-loop": "refactoring",
+    "member-coupon": "bug-fix", "orders-pagination": "bug-fix", "zero-price": "bug-fix", "paste-markers": "bug-fix",
     "withdrawal-story": None, "loyalty-points": None,
 }
 
