@@ -1,0 +1,151 @@
+diff --git a/dev/lint/custom_lint.py b/dev/lint/custom_lint.py
+index 2b45693..9fe356e 100644
+--- a/dev/lint/custom_lint.py
++++ b/dev/lint/custom_lint.py
+@@ -25,7 +25,7 @@ import sys
+ from collections.abc import Callable
+ from dataclasses import dataclass
+ 
+-from dev.lint import lint_session_list_visibility, lint_workspace_scoped_cache
++from dev.lint import lint_no_debugger, lint_session_list_visibility, lint_workspace_scoped_cache
+ 
+ 
+ @dataclass(frozen=True)
+@@ -49,6 +49,11 @@ RULES: list[Rule] = [
+         check=lint_session_list_visibility.check,
+         hint=lint_session_list_visibility.HINT,
+     ),
++    Rule(
++        name=lint_no_debugger.RULE_NAME,
++        check=lint_no_debugger.check,
++        hint=lint_no_debugger.HINT,
++    ),
+ ]
+ 
+ 
+diff --git a/dev/lint/lint_no_debugger.py b/dev/lint/lint_no_debugger.py
+new file mode 100644
+index 0000000..c73f558
+--- /dev/null
++++ b/dev/lint/lint_no_debugger.py
+@@ -0,0 +1,75 @@
++"""Flag debugger calls and imports left in committed Python.
++
++Catches ``breakpoint()``, ``<debugger>.set_trace()``, and ``import <debugger>`` /
++``from <debugger> import ...`` for pdb, ipdb, and pudb. Detection is AST-based,
++so strings and comments never match. Silence one line with
++``# custom-lint: disable=no-debugger`` (see :mod:`dev.lint._framework`).
++"""
++
++from __future__ import annotations
++
++import ast
++import subprocess
++import sys
++from pathlib import Path
++
++from dev.lint._framework import disabled_rules_by_line
++
++RULE_NAME = "no-debugger"
++HINT = "Remove the debugger call or import before committing."
++SCANNED_ROOTS = ("omnigent/", "tests/", "dev/")
++DEBUGGERS = frozenset({"pdb", "ipdb", "pudb"})
++
++
++def _hits(tree: ast.AST) -> list[tuple[int, str]]:
++    hits: list[tuple[int, str]] = []
++    for node in ast.walk(tree):
++        if isinstance(node, ast.Import):
++            hits += [(node.lineno, f"`import {alias.name}`") for alias in node.names if alias.name.split(".")[0] in DEBUGGERS]
++        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in DEBUGGERS:
++            hits.append((node.lineno, f"`from {node.module} import ...`"))
++        elif isinstance(node, ast.Call):
++            func = node.func
++            if isinstance(func, ast.Name) and func.id == "breakpoint":
++                hits.append((node.lineno, "`breakpoint()`"))
++            elif (isinstance(func, ast.Attribute) and func.attr == "set_trace"
++                  and isinstance(func.value, ast.Name) and func.value.id in DEBUGGERS):
++                hits.append((node.lineno, f"`{func.value.id}.set_trace()`"))
++    return sorted(hits)
++
++
++def scan(path: Path) -> list[tuple[int, str]]:
++    """``[(line, what), ...]`` for each debugger call or import in ``path``."""
++    try:
++        source = path.read_text()
++        tree = ast.parse(source)
++    except (OSError, SyntaxError, UnicodeDecodeError):
++        return []
++    disabled = disabled_rules_by_line(source)
++    return [(line, what) for line, what in _hits(tree) if RULE_NAME not in disabled.get(line, frozenset())]
++
++
++def _messages(paths: list[Path]) -> list[str]:
++    return [f"{path.as_posix()}:{line}: debugger {what} left in code" for path in paths for line, what in scan(path)]
++
++
++def check() -> list[str]:
++    """Rule entry point for the custom-lint runner: every tracked .py under the scanned roots."""
++    output = subprocess.check_output(["git", "ls-files", "-z", *SCANNED_ROOTS])
++    return _messages([Path(raw) for raw in output.decode().split("\0") if raw.endswith(".py")])
++
++
++def main(argv: list[str] | None = None) -> int:
++    """Scan the given files, or the full surface when none are given."""
++    args = (argv if argv is not None else sys.argv)[1:]
++    messages = _messages([Path(arg) for arg in args if Path(arg).is_file()]) if args else check()
++    if not messages:
++        return 0
++    for message in messages:
++        sys.stdout.write(f"{message}\n")
++    sys.stdout.write(f"\n{HINT}\n")
++    return 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/tests/dev/lint/test_lint_no_debugger.py b/tests/dev/lint/test_lint_no_debugger.py
+new file mode 100644
+index 0000000..9dab46d
+--- /dev/null
++++ b/tests/dev/lint/test_lint_no_debugger.py
+@@ -0,0 +1,39 @@
++"""Tests for the no-debugger custom lint rule (``dev/lint/lint_no_debugger.py``)."""
++
++from __future__ import annotations
++
++from pathlib import Path
++
++import dev.lint.custom_lint as custom_lint
++from dev.lint.lint_no_debugger import main, scan
++
++
++def test_scan_flags_calls_and_imports(tmp_path: Path) -> None:
++    f = tmp_path / "mod.py"
++    f.write_text("import pdb\nbreakpoint()\npdb.set_trace()\nfrom ipdb import set_trace\n")
++    assert [line for line, _ in scan(f)] == [1, 2, 3, 4]
++
++
++def test_scan_ignores_strings_comments_and_lookalike_names(tmp_path: Path) -> None:
++    f = tmp_path / "mod.py"
++    f.write_text('note = "breakpoint()"\n# pdb.set_trace()\nbreakpoints = []\n')
++    assert scan(f) == []
++
++
++def test_inline_disable(tmp_path: Path) -> None:
++    f = tmp_path / "mod.py"
++    f.write_text("breakpoint()  # custom-lint: disable=no-debugger\n")
++    assert scan(f) == []
++
++
++def test_main_exit_codes(tmp_path: Path) -> None:
++    dirty = tmp_path / "dirty.py"
++    dirty.write_text("breakpoint()\n")
++    clean = tmp_path / "clean.py"
++    clean.write_text("x = 1\n")
++    assert main(["lint_no_debugger.py", str(dirty)]) == 1
++    assert main(["lint_no_debugger.py", str(clean)]) == 0
++
++
++def test_registered_with_the_runner() -> None:
++    assert any(rule.name == "no-debugger" for rule in custom_lint.RULES)

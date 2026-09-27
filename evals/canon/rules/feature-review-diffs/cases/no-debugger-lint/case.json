@@ -1,0 +1,10 @@
+{
+  "kind": "positive",
+  "domain": "feature",
+  "workspace": {"repo": "omnigent", "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"},
+  "expected_behavior": [
+    "Adds dev/lint/lint_no_debugger.py and registers it in dev/lint/custom_lint.py as no-debugger, after the existing rules.",
+    "Flags breakpoint(), pdb/ipdb/pudb set_trace() calls, and pdb/ipdb/pudb imports, and no strings, comments, or lookalike names.",
+    "Honors the inline custom-lint disable comment, and runs standalone on given files with exit 1 and path:line: lines on hits, 0 when clean."
+  ]
+}
