@@ -75,6 +75,12 @@ CLAUDE_WORKLIST_TOOLS = {"TodoWrite", "TaskCreate", "TaskUpdate"}
 CLAUDE_WORKLIST_OFFERS = {"TodoWrite", "TaskCreate"}
 CODEX_WORKLIST_TOOL = "update_plan"
 CLAUDE_SPAWN_TOOLS = {"Agent", "Task"}
+# A child transcript has no permission_denied record, so a denial there is
+# told from an ordinary tool failure by the text Claude Code returns for it.
+CLAUDE_DENIAL_TEXTS = (
+    "Permission to use ", "Permission for this action was denied", "Claude requested permissions to use ",
+    "This Bash command contains multiple operations. The following part requires approval",
+)
 CODEX_SPAWN_TOOLS = {"spawn_agent", "spawn"}
 SHELL_WRAPPER = re.compile(r"^/bin/(?:ba|z)?sh -lc ")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*(?:\n|$)", re.DOTALL)
@@ -377,29 +383,43 @@ def json_records(lines):
             yield index, record
 
 
-def errored_tool_ids(records):
-    ids = set()
+def tool_results(record):
+    content = (record.get("message") or {}).get("content") if record.get("type") == "user" else None
+    return [block for block in content if isinstance(block, dict) and block.get("type") == "tool_result"] if isinstance(content, list) else []
+
+
+def tool_failures(records):
+    """(errored, denied) tool_use ids. A denial is a permission_denied record
+    or an errored result that carries a permission denial's text."""
+    errored, denied = set(), set()
     for _, record in records:
-        content = (record.get("message") or {}).get("content") if record.get("type") == "user" else None
-        for block in content if isinstance(content, list) else []:
-            if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("is_error"):
-                ids.add(block.get("tool_use_id"))
-    return ids
+        if record.get("type") == "system" and record.get("subtype") == "permission_denied":
+            denied.add(record.get("tool_use_id"))
+        for block in tool_results(record):
+            if block.get("is_error"):
+                errored.add(block.get("tool_use_id"))
+                content = block.get("content")
+                text = content if isinstance(content, str) else item_text(content)
+                if text.startswith(CLAUDE_DENIAL_TEXTS):
+                    denied.add(block.get("tool_use_id"))
+    return errored, denied
 
 
-def claude_events(records, tree, cwd, failed, agents=(), actor=None):
+def claude_events(records, tree, cwd, agents=(), actor=None):
     """(events, {tool_use id: Spawn}, {parent tool_use id: [events]}) of Claude
-    assistant records. Without an actor, a record that carries
-    parent_tool_use_id is a delegate's, echoed into the lead stream."""
-    events, spawns, echoed = [], {}, {}
+    assistant records and the results that deny their tool calls. Without an
+    actor, a record that carries parent_tool_use_id is a delegate's, echoed
+    into the lead stream."""
+    errored, denied = tool_failures(records)
+    failed = errored | denied
+    events, spawns, echoed, names = [], {}, {}, {}
     for index, record in records:
-        if record.get("type") != "assistant":
-            continue
         parent = record.get("parent_tool_use_id")
         who = actor or ("delegate" if parent else "main")
         where = record.get("cwd") or cwd
-        mine = []
-        content = (record.get("message") or {}).get("content")
+        mine = [Event(index, who, "denied", text=names.get(block.get("tool_use_id"), ""))
+                for block in tool_results(record) if block.get("tool_use_id") in denied]
+        content = (record.get("message") or {}).get("content") if record.get("type") == "assistant" else None
         for block in content if isinstance(content, list) else []:
             kind = block.get("type")
             if kind == "text" and block.get("text", "").strip():
@@ -407,6 +427,7 @@ def claude_events(records, tree, cwd, failed, agents=(), actor=None):
             if kind != "tool_use":
                 continue
             name, data, use_id = block.get("name"), block.get("input") or {}, block.get("id")
+            names[use_id] = name
             ok = use_id not in failed
             if name == "Read" and ok:
                 path = resolve(data.get("file_path", ""), tree)
@@ -446,7 +467,7 @@ def claude_events(records, tree, cwd, failed, agents=(), actor=None):
 
 def parse_claude(lines, tree):
     trace = Trace()
-    denied_ids, cwd, agents = set(), "", ()
+    cwd, agents = "", ()
     records = list(json_records(lines))
     for index, record in records:
         if record.get("type") == "system" and record.get("subtype") == "init":
@@ -455,16 +476,13 @@ def parse_claude(lines, tree):
             tools = record.get("tools") or []
             trace.worklist_tool_offered = bool(CLAUDE_WORKLIST_OFFERS & set(tools))
             agents = tuple(record.get("agents") or ())
-        if record.get("type") == "system" and record.get("subtype") == "permission_denied":
-            denied_ids.add(record.get("tool_use_id"))
-            trace.events.append(Event(index, "main", "denied", text=record.get("tool_name", "")))
     results = [record for _, record in records if record.get("type") == "result"]
     trace.result_events = len(results)
     if results:
         # A lead that ends a turn while a background delegate runs emits a
         # result each time; the last one is the answer.
         trace.final = results[-1].get("result") or ""
-    events, trace.spawns, echoed = claude_events(records, tree, cwd, denied_ids | errored_tool_ids(records), agents)
+    events, trace.spawns, echoed = claude_events(records, tree, cwd, agents)
     for key, inline in echoed.items():
         if key in trace.spawns:
             trace.spawns[key].inline = inline
@@ -481,7 +499,7 @@ def parse_claude_child(lines, meta, tree):
     if isinstance(brief, list):
         brief = "\n".join(block.get("text", "") for block in brief if isinstance(block, dict))
     cwd = next((record["cwd"] for _, record in records if record.get("cwd")), "")
-    events, spawns, _ = claude_events(records, tree, cwd, errored_tool_ids(records), actor="delegate")
+    events, spawns, _ = claude_events(records, tree, cwd, actor="delegate")
     role = meta.get("agentType")
     return Child(meta.get("toolUseId", ""), events, spawns, role, role == PERSONA_ROLE or has_persona(brief), brief or "")
 

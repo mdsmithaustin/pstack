@@ -62,6 +62,14 @@ class ClaudeTraceTests(unittest.TestCase):
     def test_permission_denials_are_counted(self):
         self.assertEqual(self.stages["tools_denied"], 2)
 
+    def test_a_delegate_denial_the_lead_echoes_counts_once_with_its_transcript(self):
+        lines = (FIXTURES / "claude-trace.jsonl").read_text().splitlines()
+        child = chain.parse_claude_child([json.dumps({"type": "user", "message": {"role": "user", "content": "Implement the sessions tree command."}}),
+                                          lines[10], lines[12]], {"toolUseId": "toolu_01J9z92p2dNEHL3MvAXDA43K", "agentType": "general-purpose"}, TREE)
+        trace = chain.attach(self.trace, [child])
+
+        self.assertEqual([(event.actor, event.text) for event in trace.events if event.kind == "denied"], [("main", "Bash"), ("delegate", "Bash")])
+
     def test_reply_cites_two_principles_whose_leaves_the_lead_never_read(self):
         self.assertEqual(self.stages["citations"], {
             "cited": ["principle-prove-it-works", "principle-test-behavior-not-implementation"],
@@ -345,9 +353,14 @@ class ClaudeSandboxHarvestTests(unittest.TestCase):
     def test_offered_task_tool_was_called_once(self):
         self.assertEqual(self.row["worklist_tool"], {"offered": True, "called": True, "calls": 1})
 
+    def test_a_denied_child_read_is_counted_and_a_lead_read_that_failed_is_not(self):
+        review = analyze("sbx-claude-review", "claude", tree=REVIEW_TREE, case="pr-review")
+
+        self.assertEqual((self.row["tools_denied"], review["tools_denied"]), (1, 0))
+
     def test_table_line(self):
         self.assertEqual(chain.table([self.row]).splitlines()[1].split(), [
-            "claude", "domain-words", "session-tree", "amended", "1", "UNGRADED", "-", "feature", "0.25", "y", "y", "2/0", "1/1", "0",
+            "claude", "domain-words", "session-tree", "amended", "1", "UNGRADED", "-", "feature", "0.25", "y", "y", "2/0", "1/1", "1",
         ])
 
 
