@@ -591,6 +591,34 @@ class ClaudeDelegateFlowTests(unittest.TestCase):
         self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 2, "parallel": True, "unordered": 0})
 
 
+class ClaudeBackgroundReviewTests(unittest.TestCase):
+    """A trimmed real Claude Code sandbox run of paste-markers. The lead cds
+    into apps/desktop, so both background poteto-agent children start there,
+    and one of them edits hermes_cli/ outside it. Each child returns in a
+    system task_notification record naming its tool_use_id, and the turn it
+    resumes opens with an init record whose cwd is apps/desktop. The lead then
+    Reads both edited files, reruns pytest, and runs git diff --stat."""
+
+    def setUp(self):
+        self.row = analyze("sbx-claude-background", "claude")
+
+    def test_system_task_notifications_are_the_returns(self):
+        trace = chain.parse_claude((FIXTURES / "sbx-claude-background" / "run" / "trace.jsonl").read_text().splitlines(), TREE)
+
+        self.assertEqual([(event.index, event.text) for event in trace.events if event.kind == "return"], [
+            (6, "toolu_01RKunguWUkRc5SWpSUoZxpd"), (8, "toolu_014FhjSSx43PqfuqRKPCEXfX"),
+        ])
+
+    def test_an_edit_outside_the_child_shell_cwd_is_still_in_the_checkout(self):
+        root = "/private/var/folders/xx/T/claude-ws-a72s0fdm/"
+        self.assertEqual(self.row["delegate_edits"], [root + path for path in (
+            "apps/desktop/src/lib/composer-input-sanitize.test.ts", "apps/desktop/src/lib/composer-input-sanitize.ts",
+            "hermes_cli/input_sanitize.py", "tests/hermes_cli/test_input_sanitize.py")])
+
+    def test_reads_after_both_notifications_review_both_delegates(self):
+        self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 2, "all": True, "unordered": 0})
+
+
 class CodexDelegateFlowTests(unittest.TestCase):
     """A synthetic Codex 0.149 exec --json run, whose stream shows each
     spawn_agent with its child thread and each wait with the child's final

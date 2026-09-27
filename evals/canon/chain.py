@@ -248,6 +248,7 @@ class Trace:
     slash_commands: tuple = ()
     worklist_tool_offered: bool = None  # None when the trace neither lists tools nor calls one
     result_events: int = None
+    cwd: str = ""  # the checkout the session started in
     spawns: dict = field(default_factory=dict)  # spawn key -> Spawn
 
 
@@ -517,12 +518,17 @@ def user_text(record):
 
 
 def claude_returns(record, spawns, agent_ids):
-    """The spawn keys a user record returns. A foreground spawn returns in
-    its Agent or Task tool_result. A background spawn's tool_result only says
-    the agent launched, with its agentId; it returns in a later
-    <task-notification> user message naming its tool-use-id, or its task-id
-    when a resumed agent notifies under another tool use."""
+    """The spawn keys a record returns. A foreground spawn returns in its
+    Agent or Task tool_result. A background spawn's tool_result only says the
+    agent launched, with its agentId; it returns in a later
+    <task-notification> user message, or in stream-json a system
+    task_notification record, naming its tool-use-id, or its task-id when a
+    resumed agent notifies under another tool use."""
     keys = []
+    if record.get("type") == "system" and record.get("subtype") == "task_notification":
+        key = record.get("tool_use_id")
+        key = key if key in spawns else agent_ids.get(record.get("task_id"))
+        return [key] if key else []
     for block in tool_results(record):
         key = block.get("tool_use_id")
         if key not in spawns:
@@ -556,7 +562,7 @@ def claude_events(records, tree, cwd, agents=(), actor=None):
     for index, record in records:
         parent = record.get("parent_tool_use_id")
         who = actor or ("delegate" if parent else "main")
-        where = record.get("cwd") or cwd
+        where = cwd or record.get("cwd", "")
         mine = [Event(index, who, "denied", text=names.get(block.get("tool_use_id"), ""))
                 for block in tool_results(record) if block.get("tool_use_id") in denied]
         mine += [Event(index, who, "return", text=key) for key in claude_returns(record, spawns, agent_ids)]
@@ -617,7 +623,10 @@ def parse_claude(lines, tree):
     records = list(json_records(lines))
     for index, record in records:
         if record.get("type") == "system" and record.get("subtype") == "init":
-            cwd = record.get("cwd", "")
+            # A turn resumed by a task notification opens with another init
+            # whose cwd is the lead's shell cwd at that moment, not the
+            # checkout, so only the first init names the checkout.
+            cwd = trace.cwd = trace.cwd or record.get("cwd", "")
             trace.slash_commands = tuple(record.get("slash_commands") or ())
             tools = record.get("tools") or []
             trace.worklist_tool_offered = bool(CLAUDE_WORKLIST_OFFERS & set(tools))
@@ -637,14 +646,19 @@ def parse_claude(lines, tree):
     return trace
 
 
-def parse_claude_child(lines, meta, tree):
+def parse_claude_child(lines, meta, tree, root=""):
     """One subagents/agent-<id>.jsonl and its meta.json. The first user
-    record's content is the brief."""
+    record's content is the brief. A child starts in its parent's shell cwd,
+    which may be a subdirectory of the checkout, so its edits are judged
+    against root, the lead's starting cwd, when the child's cwd sits inside
+    it, and against its own cwd otherwise, as in an isolated worktree."""
     records = list(json_records(lines))
     brief = next(((record.get("message") or {}).get("content") for _, record in records if record.get("type") == "user"), "")
     if isinstance(brief, list):
         brief = "\n".join(block.get("text", "") for block in brief if isinstance(block, dict))
     cwd = next((record["cwd"] for _, record in records if record.get("cwd")), "")
+    if root and (cwd == root or cwd.startswith(root.rstrip("/") + "/")):
+        cwd = root
     events, spawns, _ = claude_events(records, tree, cwd, actor="delegate")
     role = meta.get("agentType")
     return Child(meta.get("toolUseId", ""), events, spawns, role, role == PERSONA_ROLE or has_persona(brief), brief or "")
@@ -876,7 +890,7 @@ def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
         for path in sorted((transcripts / "claude").glob("*/*/subagents/agent-*.jsonl")):
             meta_path = path.with_name(path.name.removesuffix(".jsonl") + ".meta.json")
             meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
-            children.append(parse_claude_child(path.read_text(errors="replace").splitlines(), meta, tree))
+            children.append(parse_claude_child(path.read_text(errors="replace").splitlines(), meta, tree, trace.cwd))
         return attach(trace, children)
     lead = None
     for path in sorted((transcripts / "codex" / "sessions").rglob("rollout-*.jsonl")):

@@ -864,8 +864,13 @@ each delegate's reads, edits, spawns, worklist calls, and messages with actor
 `delegate`. It places them right after the spawn that started them, so every
 stage sees them. They fill `delegation.delegate_reads` and the top-level
 `delegate_edits`.
-Workspace edits are judged against the child's own cwd, which in a sandbox may
-sit under `/tmp`. A run without a `transcripts/` dir yields the same fields as
+A Claude lead's checkout is the cwd of its first `init` record. A turn that a
+task notification resumes opens with another `init`, whose cwd is wherever the
+lead's shell last moved. A Claude child starts in that shell cwd too, so its
+edits are judged against the lead's checkout when its cwd sits inside it, and
+against its own cwd otherwise, as in an isolated worktree. A Codex child's
+edits are judged against its own cwd. In a sandbox either may sit under
+`/tmp`. A run without a `transcripts/` dir yields the same fields as
 before.
 
 Two stages use them:
@@ -941,8 +946,9 @@ run that `screen.py regrade` graded takes its verdict from `regrade.json`.
 **Delegate returns.** Three stages ask when a delegate returned to the lead.
 A foreground Claude spawn returns in its Agent or Task tool_result. A
 background one first gets an "Async agent launched" result with its agentId.
-It returns later, in a `<task-notification>` user message that names its
-tool-use-id or its agentId as the task-id. A Codex child returns at the
+It returns later, in a `<task-notification>` user message or, in
+stream-json, a `system` record with subtype `task_notification`. Either names
+its tool-use-id, or its agentId as the task-id. A Codex child returns at the
 first `wait` whose `agents_states` shows it no longer pending or running.
 When the trace shows none of these, the child's own first `task_complete`
 stands in. Codex 0.157's stream shows no spawn and names no child in a
