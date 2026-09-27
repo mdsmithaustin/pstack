@@ -21,6 +21,12 @@ if owner_name:
     sys.exit(0 if result.wasSuccessful() else 1)
 getattr(module, qualname)()
 """
+RUN_WITHOUT_HANDLER = """
+import orders.http
+def handle(self, request):
+    raise AssertionError("OrdersApi.handle disabled")
+orders.http.OrdersApi.handle = handle
+""" + RUN_ONE_TEST
 
 
 def called(node):
@@ -92,19 +98,19 @@ def check_scenarios(answer, project):
                 tests.append((f"{module}:{qualname}", node, reach))
     if not tests:
         return ["no new test in the answer"]
+    trees = {"answer": {**project, **files}}
+    jobs = [{"tree": "answer", "argv": ["python3", "-c", runner, test_id]} for runner in (RUN_ONE_TEST, RUN_WITHOUT_HANDLER) for test_id, _, _ in tests]
+    results = iter(run_jobs(trees, jobs))
+    passed = {test_id: next(results)["rc"] == 0 for test_id, _, _ in tests}
+    uses_handler = {test_id: next(results)["rc"] != 0 for test_id, _, _ in tests}
     failures = []
     first_id, first_node, first_reach = tests[0]
-    if not called(first_node) & first_reach:
+    if not (called(first_node) & first_reach and uses_handler[first_id]):
         failures.append(f"the first new test, {first_id}, does not go through OrdersApi.handle")
     for label, status, status_names, message in EXAMPLES:
-        if not any(asserts_then(node, reach, status, status_names, message) for _, node, reach in tests):
+        if not any(uses_handler[test_id] and asserts_then(node, reach, status, status_names, message) for test_id, node, reach in tests):
             failures.append(f"no handler test asserts the {label} example's literal {status} and {message!r}")
-    trees = {"answer": {**project, **files}}
-    jobs = [{"tree": "answer", "argv": ["python3", "-c", RUN_ONE_TEST, test_id]} for test_id, _, _ in tests]
-    for (test_id, _, _), result in zip(tests, run_jobs(trees, jobs)):
-        if result["rc"] != 0:
-            failures.append(f"{test_id} fails against the answer's code")
+    failures += [f"{test_id} fails against the answer's code" for test_id, ok in passed.items() if not ok]
     return failures
-
 
 CHECKS = {"refund-window": check_scenarios}
