@@ -1,0 +1,18 @@
+{
+  "kind": "near-miss",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": [
+    "Reviews the host filter on its merits and leaves its vocabulary alone: session on the route, client, and docs, conversation in the store, and host_id everywhere, all as the codebase already names them. It does not ask to rename conversation to session (or the reverse) or to call the host anything else."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(sessions): filter the session list by host",
+    "body_file": "pr-body.md",
+    "branch": "sessions-list-host-filter"
+  }
+}

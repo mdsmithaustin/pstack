@@ -1,0 +1,41 @@
+--- a/poteto-mode/SKILL.md
++++ b/poteto-mode/SKILL.md
+@@ -56,7 +56,7 @@
+ 
+ **Architecture**
+ 
+-- **Model the Domain** (**principle-model-the-domain**). Writing stateful logic, or code that branches a lot or repeats a shape assumption across files. Encode the domain in a structure (state machine, typed model, table or registry, reducer, boundary, the right collection) instead of scattered conditionals.
++- **Model the Domain** (**principle-model-the-domain**). Writing stateful logic, code that branches a lot or repeats a shape assumption across files, naming a new type or function, or merging types or helpers that look alike. Encode the domain in a structure (state machine, typed model, table or registry, reducer, boundary, the right collection) instead of scattered conditionals.
+ - **Boundary Discipline** (**principle-boundary-discipline**). Wiring validation, error handling, or framework adapters. Guards at system boundaries, trust internal types, keep business logic pure.
+ - **Type System Discipline** (**principle-type-system-discipline**). Designing types or a signature in any typed language. Make illegal states unrepresentable, brand primitives, parse external data at boundaries.
+ - **Make Operations Idempotent** (**principle-make-operations-idempotent**). Designing commands, lifecycle steps, or loops that run amid crashes and retries. Converge to the same end state.
+--- a/poteto-mode/playbooks/feature.md
++++ b/poteto-mode/playbooks/feature.md
+@@ -3,7 +3,7 @@
+ **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
+ 
+ 1. `how` over the affected subsystem.
+-2. `architect` for parallel design exploration.
++2. `architect` for parallel design exploration. Name the data shape and its organizing structure per **principle-model-the-domain** before the arena runs, so the sketch uses them.
+ 3. Write the throughput checkpoint as four items in the same worklist. A dimension that genuinely does not apply (single file, no fan-out) keeps its item with `skipped: <reason>` rather than being dropped:
+    - **Blocking first steps.** Gates run before fan-out.
+    - **Independent workstreams.** Disjoint files, services, or layers parallelize. Shared writes serialize.
+--- a/principle-model-the-domain/SKILL.md
++++ b/principle-model-the-domain/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: principle-model-the-domain
+-description: "Apply when writing stateful logic, or when code branches a lot or repeats a shape assumption across files. Encode the domain in a structure instead of scattered conditionals."
++description: "Apply when writing stateful logic, when code branches a lot or repeats a shape assumption across files, when naming a new type or function, or when merging types or helpers that look alike. Encode the domain in a structure instead of scattered conditionals."
+ disable-model-invocation: true
+ ---
+ 
+@@ -21,6 +21,8 @@
+ - A queue, cache, index, graph/tree, or normalized collection where the data access pattern calls for it.
+ - Any other structure that fits. When none fits, work out what the code must never allow and how the data gets read, then find the structure that encodes exactly that.
+ 
++**One name per concept.** When the user's word for a concept differs from the code's word, do not add the new word beside the old one. Keep the code's word and tell the user which word the code uses, or rename every occurrence in a preparatory commit. When the user changes what a term means, treat it as a model change. Record the new meaning through **domain-modeling** if it is available by name or trigger. Otherwise list the term and its new meaning in your reply.
++
+ Do not force an abstraction. Prefer boring code if the current shape is already clear, local, and unlikely to grow. Be skeptical of an abstraction that adds indirection without removing branches, duplicated rules, invalid states, or lifecycle risk.
+ 
+ The sign that you skipped this is a new feature that grows an existing if/else chain by one more branch, or a second boolean that must stay in sync with the first. Temporal decomposition is another sign. Phase-named modules repeat the same domain rules across steps.

@@ -1,0 +1,142 @@
+diff --git a/omnigent/server/routes/sessions/routes_core.py b/omnigent/server/routes/sessions/routes_core.py
+index 4a28f15..8b468fe 100644
+--- a/omnigent/server/routes/sessions/routes_core.py
++++ b/omnigent/server/routes/sessions/routes_core.py
+@@ -1280,6 +1280,7 @@ def register_core_routes(
+         project: str | None = Query(default=None),
+         pinned: bool = Query(default=False),
+         visibility: str = Query(default="all", pattern="^(all|mine|shared|archived)$"),
++        tag: list[str] = Query(default=[]),
+     ) -> PaginatedList:
+         """
+         List sessions with cursor-based pagination.
+@@ -1333,6 +1334,9 @@ def register_core_routes(
+             owned. ``"archived"`` returns only archived sessions.
+             ``"all"`` (default) returns all accessible non-archived
+             sessions, matching the legacy behaviour.
++        :param tag: ``key=value`` pairs, e.g. ``?tag=team=infra``. Repeat
++            the parameter to require several; a session must carry every
++            one. Empty (default) disables the filter.
+         :returns: A :class:`PaginatedList` of
+             :class:`SessionListItem`.
+         """
+@@ -1349,6 +1353,12 @@ def register_core_routes(
+         # disabled entirely — no auth_provider).
+         user_id = _require_user(request, auth_provider)
+         normalized_query = search_query if search_query else None
++        tag_filters: dict[str, str] = {}
++        for pair in tag:
++            key, sep, value = pair.partition("=")
++            if not sep or not key:
++                raise HTTPException(status_code=400, detail=f"tag filter must be key=value, got {pair!r}")
++            tag_filters[key] = value
+         # Map the visibility filter to store-level ACL params.
+         # "mine": only sessions the caller owns — no accessible_by needed
+         #   because owner-level implies access.
+@@ -1420,6 +1430,7 @@ def register_core_routes(
+             pinned=pinned,
+             # Pins are per-user: filter to the caller's own pin key.
+             pinned_owner=user_id,
++            tags=tag_filters or None,
+         )
+         # Side chats surface only as Workspace-rail tabs, so drop any
+         # side-chat-labeled fork from the sidebar list (it is still a normal
+diff --git a/omnigent/stores/conversation_store/__init__.py b/omnigent/stores/conversation_store/__init__.py
+index 75ddc7d..c8c64bb 100644
+--- a/omnigent/stores/conversation_store/__init__.py
++++ b/omnigent/stores/conversation_store/__init__.py
+@@ -700,6 +700,7 @@ class ConversationStore(ABC):
+         pinned: bool = False,
+         pinned_owner: str | None = None,
+         title: str | None = None,
++        tags: Mapping[str, str] | None = None,
+     ) -> PagedList[Conversation]:
+         """
+         List conversations with cursor-based pagination.
+@@ -811,6 +812,9 @@ class ConversationStore(ABC):
+             Powers the ``(agent, title)`` child-session lookup in
+             ``sys_session_send`` so the server can resolve the target
+             in a single indexed query instead of fetching all children.
++        :param tags: When set, only return conversations that carry
++            every ``key: value`` pair as a label. ``None`` disables the
++            filter.
+         :returns: A :class:`PagedList` of :class:`Conversation`
+             objects.
+         :raises omnigent.errors.StaleCursorError: If the ``after``/``before``
+diff --git a/omnigent/stores/conversation_store/sqlalchemy_store.py b/omnigent/stores/conversation_store/sqlalchemy_store.py
+index 686fa9c..2a42c5a 100644
+--- a/omnigent/stores/conversation_store/sqlalchemy_store.py
++++ b/omnigent/stores/conversation_store/sqlalchemy_store.py
+@@ -2651,6 +2651,7 @@ class SqlAlchemyConversationStore(ConversationStore):
+         pinned: bool = False,
+         pinned_owner: str | None = None,
+         title: str | None = None,
++        tags: Mapping[str, str] | None = None,
+     ) -> PagedList[Conversation]:
+         """
+         List conversations with cursor-based pagination.
+@@ -2710,6 +2711,9 @@ class SqlAlchemyConversationStore(ConversationStore):
+             loaded pagination window.
+         :param pinned_owner: The user whose pins ``pinned=True`` filters to.
+             ``None`` → the single-user ``local`` sentinel.
++        :param tags: When set, only return conversations that carry
++            every ``key: value`` pair as a label. ``None`` disables the
++            filter.
+         :param owned_by: When set, restrict to sessions the user owns
+             (an ``owner``-level grant) — stricter than ``accessible_by``,
+             which also matches sessions merely shared with them. Powers
+@@ -3028,6 +3032,16 @@ class SqlAlchemyConversationStore(ConversationStore):
+                         )
+                     )
+                 )
++            for tag_key, tag_value in (tags or {}).items():
++                stmt = stmt.where(
++                    SqlConversation.id.in_(
++                        select(SqlConversationLabel.conversation_id).where(
++                            SqlConversationLabel.workspace_id == current_workspace_id(),
++                            SqlConversationLabel.key == tag_key,
++                            SqlConversationLabel.value == tag_value,
++                        )
++                    )
++                )
+             if after:
+                 stmt = self._apply_cursor(
+                     session,
+diff --git a/sdks/python-client/omnigent_client/_sessions.py b/sdks/python-client/omnigent_client/_sessions.py
+index a90fe92..5c2c425 100644
+--- a/sdks/python-client/omnigent_client/_sessions.py
++++ b/sdks/python-client/omnigent_client/_sessions.py
+@@ -610,6 +610,7 @@ class SessionsNamespace:
+         sort_by: str = "created_at",
+         include_archived: bool = False,
+         visibility: Literal["all", "mine", "shared", "archived"] = "all",
++        tags: dict[str, str] | None = None,
+     ) -> list[SessionListItem]:
+         """
+         List sessions with cursor-based pagination.
+@@ -639,13 +640,15 @@ class SessionsNamespace:
+             by the caller. ``"archived"`` returns only archived sessions.
+             Without server authentication, ``"mine"`` and ``"shared"``
+             behave like ``"all"``. Always sent explicitly to the server.
++        :param tags: Only sessions tagged with every pair, e.g.
++            ``{"team": "infra"}``. ``None`` disables the filter.
+         :returns: List of :class:`SessionListItem`.
+         :raises StaleCursorError: If ``after``/``before`` names a session
+             that has since been deleted. The walk cannot continue from
+             that cursor — restart it from the first page with no cursor.
+         :raises OmnigentError: On non-2xx status.
+         """
+-        params: dict[str, str | int] = {
++        params: dict[str, str | int | builtins.list[str]] = {
+             "limit": limit,
+             "order": order,
+             "sort_by": sort_by,
+@@ -661,6 +664,8 @@ class SessionsNamespace:
+             params["agent_name"] = agent_name
+         if include_archived:
+             params["include_archived"] = "true"
++        if tags:
++            params["tag"] = [f"{key}={value}" for key, value in tags.items()]
+         resp = await self._http.get(
+             f"{self._base}/v1/sessions",
+             params=params,

@@ -1,0 +1,14 @@
+{
+  "kind": "positive",
+  "domain": "domain-modeling",
+  "timeout_s": 2700,
+  "expected_behavior": [
+    "Finds that the four lookups answer three questions: the provider family (anthropic, openai), the smart-routing family (claude, gpt, pi), and the skill-directory vendor (claude, codex, cursor, devin).",
+    "Keeps one lookup per question under its own name, and merges only the subagent_routing wrapper over smart_routing's table.",
+    "Adds no function, table, or class that holds values from two of those lookups."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  }
+}

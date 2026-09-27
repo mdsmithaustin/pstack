@@ -1,0 +1,18 @@
+{
+  "kind": "positive",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": [
+    "Points out that omnigent/harness_family.py:harness_family uses one name and a kind= switch for two different concepts, the Smart Routing model family (claude, gpt, pi) and the skill-directory vendor (claude, codex, cursor, pi, antigravity, devin), and asks for two distinctly named lookups owned by routing and by skill discovery, keeping only the fold of the subagent_routing wrapper into the routing lookup."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "refactor(routing,skills): move harness family lookups into omnigent/harness_family.py",
+    "body_file": "pr-body.md",
+    "branch": "consolidate-harness-family"
+  }
+}

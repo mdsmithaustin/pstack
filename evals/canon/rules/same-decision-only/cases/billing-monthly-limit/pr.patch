@@ -1,0 +1,332 @@
+From 58d101f9df24c8d812b28477f604632f9080e59a Mon Sep 17 00:00:00 2001
+From: Adaeze Okonkwo <adaeze.okonkwo@example.com>
+Date: Fri, 25 Sep 2026 17:17:13 -0600
+Subject: [PATCH] feat(billing): change the monthly spend limit from /topup
+
+The Monthly limit screen was read-only and sent admins to the portal.
+Portal now accepts PUT /api/billing/monthly-cap from billing:manage
+tokens, so admins with Remote Spending on can set the limit here:
+
+- MonthlyCap carries ceilingUsd (the highest limit the org may set).
+- validate_monthly_limit mirrors the endpoint's accept/reject for
+  instant feedback; the server stays authoritative.
+- nous_billing.put_monthly_cap sends limitUsd as a JSON number.
+- The screen prompts for the new limit, notes when it lands below
+  this month's spend, and reuses the scope step-up and error copy.
+
+_billing_patch_auto_top_up becomes _billing_mutate(state, call, ...)
+so auto-reload and the limit share one scope/error path.
+---
+ agent/billing_view.py                         | 21 ++++++-
+ hermes_cli/cli_billing_mixin.py               | 55 ++++++++++++-----
+ hermes_cli/nous_billing.py                    |  5 ++
+ tests/agent/test_billing_view.py              | 24 ++++++++
+ tests/hermes_cli/test_cli_billing_limit.py    | 60 +++++++++++++++++++
+ tests/hermes_cli/test_nous_billing_request.py |  8 +++
+ 6 files changed, 158 insertions(+), 15 deletions(-)
+ create mode 100644 tests/hermes_cli/test_cli_billing_limit.py
+
+diff --git a/agent/billing_view.py b/agent/billing_view.py
+index ee603cc56e..745ff0a637 100644
+--- a/agent/billing_view.py
++++ b/agent/billing_view.py
+@@ -105,6 +105,7 @@ class MonthlyCap:
+     limit_usd: Optional[Decimal] = None
+     spent_this_month_usd: Optional[Decimal] = None
+     is_default_ceiling: bool = False
++    ceiling_usd: Optional[Decimal] = None  # highest limit the org may set; None when the server omits it
+ 
+ 
+ @dataclass(frozen=True)
+@@ -195,7 +196,7 @@ def _parse_payment_method(raw: dict) -> Optional[PaymentMethodInfo]:
+ @_dict_parser
+ def _parse_monthly_cap(raw: dict) -> MonthlyCap:
+     return MonthlyCap(limit_usd=parse_money(raw.get("limitUsd")), spent_this_month_usd=parse_money(raw.get("spentThisMonthUsd")),
+-                      is_default_ceiling=bool(raw.get("isDefaultCeiling")))
++                      is_default_ceiling=bool(raw.get("isDefaultCeiling")), ceiling_usd=parse_money(raw.get("ceilingUsd")))
+ 
+ 
+ @_dict_parser
+@@ -362,3 +363,21 @@ def validate_charge_amount(raw: str, *, min_usd: Optional[Decimal], max_usd: Opt
+     else:
+         return AmountValidation(ok=True, amount=amount)
+     return AmountValidation(ok=False, error=error)
++
++
++def validate_monthly_limit(raw: str, *, ceiling_usd: Optional[Decimal]) -> AmountValidation:
++    """Mirror ``PUT /api/billing/monthly-cap``'s accept/reject (``limitUsd`` > 0, multipleOf 0.01, at most
++    the org's ``ceilingUsd``) for instant UI feedback; server is authoritative. The limit caps what the
++    org can spend in a month; nothing is charged, so the charge bounds (``bounds.minUsd``) don't apply."""
++    limit = parse_money((raw or "").strip().lstrip("$").strip())
++    if limit is None:
++        error = "Enter a dollar amount, e.g. 500"
++    elif limit <= 0:
++        error = "Limit must be greater than $0"
++    elif limit != limit.quantize(Decimal("0.01")):
++        error = "Limit can't be smaller than a cent"
++    elif ceiling_usd is not None and limit > ceiling_usd:
++        error = f"Limit can't be above your org's {format_money(ceiling_usd)} ceiling"
++    else:
++        return AmountValidation(ok=True, amount=limit)
++    return AmountValidation(ok=False, error=error)
+diff --git a/hermes_cli/cli_billing_mixin.py b/hermes_cli/cli_billing_mixin.py
+index 81c72ad31f..0dcf2e0093 100644
+--- a/hermes_cli/cli_billing_mixin.py
++++ b/hermes_cli/cli_billing_mixin.py
+@@ -41,7 +41,7 @@ _ALLOW_REMOTE_SPENDING_CHOICES = [
+ _TOPUP_MENU_CHOICES = [
+     ("buy", "Add funds", "a single charge, added to your balance today"),
+     ("auto", "Auto-reload", "refill automatically when your balance runs low"),
+-    ("limit", "Monthly limit", "show the monthly spend cap (read-only)"),
++    ("limit", "Monthly limit", "view or change the monthly spend cap"),
+     ("portal", "Manage on portal", "open the billing page in your browser"),
+     ("cancel", "Cancel", "do nothing")]
+ _ADD_CARD_CHOICES = [
+@@ -53,6 +53,7 @@ _AUTO_RELOAD_TOP_CHOICES = [
+     ("off", "Turn off", "disable auto-reload"),
+     ("cancel", "Cancel", "do nothing")]
+ _AUTO_RELOAD_AGREE_CHOICES = [("agree", "Agree and turn on", "enable auto-reload"), ("cancel", "Cancel", "do nothing")]
++_LIMIT_CHOICES = [("change", "Change limit", "set a new monthly spend cap"), ("cancel", "Back", "keep the current limit")]
+ _CHANGE_PLAN_ROW = ("change", "Change plan", "upgrade or downgrade in the terminal")
+ _CHANGE_MENU_TAIL = [
+     ("portal", "Manage on portal", "open the billing page in your browser"), ("close", "Close", "do nothing")]
+@@ -65,6 +66,7 @@ _STEPUP_STALE_MSG = (
+ _NO_MANAGE_URL = "No manage URL available — is your portal configured?"
+ _KILLSWITCH_REASON_OVERVIEW = "A billing admin can turn it on from the portal's Hermes Agent page to add funds here."
+ _KILLSWITCH_REASON_BUY = "A billing admin can turn it on from the portal's Hermes Agent page before adding funds."
++_KILLSWITCH_REASON_LIMIT = "A billing admin can turn it on from the portal's Hermes Agent page to change the limit here."
+ 
+ 
+ class CLIBillingMixin:
+@@ -960,14 +962,16 @@ class CLIBillingMixin:
+         if self._modal_choice("Turn on auto-reload?", f"Below {format_money(threshold_amt)} → reload to {format_money(reload_amt)}", _AUTO_RELOAD_AGREE_CHOICES) != "agree":
+             print("  🟡 Cancelled.")
+             return
+-        if self._billing_patch_auto_top_up(state, enabled=True, threshold=float(threshold_amt), top_up_amount=float(reload_amt)):
++        from hermes_cli.nous_billing import patch_auto_top_up
++        if self._billing_mutate(state, patch_auto_top_up, enabled=True, threshold=float(threshold_amt), top_up_amount=float(reload_amt)):
+             print(f"  ✅ Auto-reload on: below {format_money(threshold_amt)} → reload to {format_money(reload_amt)}.")
+ 
+-    def _billing_patch_auto_top_up(self, state, **kwargs) -> bool:
+-        """PATCH auto-top-up; scope denials → step-up, other errors → renderer. True on success."""
+-        from hermes_cli.nous_billing import BillingError, BillingScopeRequired, patch_auto_top_up
++    def _billing_mutate(self, state, call, **kwargs) -> bool:
++        """Run a billing settings mutation (``call(**kwargs)``); scope denials → step-up, other errors →
++        renderer. True on success."""
++        from hermes_cli.nous_billing import BillingError, BillingScopeRequired
+         try:
+-            patch_auto_top_up(**kwargs)
++            call(**kwargs)
+         except BillingScopeRequired:
+             self._billing_handle_scope_required(state)
+             return False
+@@ -981,18 +985,41 @@ class CLIBillingMixin:
+         ar = state.auto_reload
+         thr = float(ar.threshold_usd) if ar and ar.threshold_usd is not None else 0.0
+         rel = float(ar.reload_to_usd) if ar and ar.reload_to_usd is not None else 0.0
+-        if self._billing_patch_auto_top_up(state, enabled=False, threshold=thr, top_up_amount=rel):
++        from hermes_cli.nous_billing import patch_auto_top_up
++        if self._billing_mutate(state, patch_auto_top_up, enabled=False, threshold=thr, top_up_amount=rel):
+             print("  ✅ Auto-reload turned off.")
+ 
+     def _billing_limit_screen(self, state):
+-        """Screen 5 — monthly spend limit (read-only; cap is portal-only)."""
+-        from agent.billing_view import format_money
++        """Screen 5 — monthly spend limit; admins (kill-switch on) can change it → PUT."""
++        from agent.billing_view import format_money, validate_monthly_limit
+         self._block_header("💳", "Monthly spend limit")
+         cap = state.monthly_cap
+         if cap is None or cap.limit_usd is None:
+             self._dim('No monthly cap visible (managed on the portal).')
+-        else:
+-            ceiling = " (default ceiling)" if cap.is_default_ceiling else ""
+-            print(f"  {format_money(cap.spent_this_month_usd)} of {format_money(cap.limit_usd)} used this month{ceiling}")
+-        self._dim('The monthly limit is set on the portal — the terminal shows it read-only.')
+-        self._billing_portal_hint(state)
++            self._billing_portal_hint(state)
++            return
++        ceiling = " (default ceiling)" if cap.is_default_ceiling else ""
++        print(f"  {format_money(cap.spent_this_month_usd)} of {format_money(cap.limit_usd)} used this month{ceiling}")
++        if not self._billing_require_admin(state, off_reason=_KILLSWITCH_REASON_LIMIT):
++            return
++        if not self._app:
++            print("  Run in the interactive CLI to change the monthly limit.")
++            self._billing_portal_hint(state)
++            return
++        if self._modal_choice("Monthly limit", f"Currently {format_money(cap.limit_usd)}", _LIMIT_CHOICES) != "change":
++            print("  🟡 Cancelled.")
++            return
++        up_to = f" (up to {format_money(cap.ceiling_usd)})" if cap.ceiling_usd is not None else ""
++        raw = self._prompt_text_input(f"  New monthly limit{up_to}: ")
++        if raw is None:  # cancelled (e.g. slash-worker can't prompt off-thread)
++            print("  🟡 Cancelled.")
++            return
++        v = validate_monthly_limit(raw, ceiling_usd=cap.ceiling_usd)
++        if not v.ok or v.amount is None:
++            print(f"  🔴 {v.error}")
++            return
++        if cap.spent_this_month_usd is not None and v.amount < cap.spent_this_month_usd:
++            self._dim(f"{format_money(cap.spent_this_month_usd)} is already spent this month — new charges are refused until the month resets.")
++        from hermes_cli.nous_billing import put_monthly_cap
++        if self._billing_mutate(state, put_monthly_cap, limit_usd=float(v.amount)):
++            print(f"  ✅ Monthly limit set to {format_money(v.amount)}.")
+diff --git a/hermes_cli/nous_billing.py b/hermes_cli/nous_billing.py
+index 805af1b2c5..4d09e2b9e6 100644
+--- a/hermes_cli/nous_billing.py
++++ b/hermes_cli/nous_billing.py
+@@ -319,6 +319,11 @@ def patch_auto_top_up(
+     return _request("PATCH", "/api/billing/auto-top-up", body=body, timeout=timeout)
+ 
+ 
++def put_monthly_cap(*, limit_usd: float | str, timeout: float = DEFAULT_TIMEOUT) -> dict[str, Any]:
++    """``PUT /api/billing/monthly-cap`` — set the org's monthly spend limit (scope required; JSON number)."""
++    return _request("PUT", "/api/billing/monthly-cap", body={"limitUsd": float(limit_usd)}, timeout=timeout)
++
++
+ def post_charge(*, amount_usd: float | str, idempotency_key: str, timeout: float = DEFAULT_TIMEOUT) -> dict[str, Any]:
+     """``POST /api/billing/charge`` — buy credits (scope required). Reuse the UUID ``idempotency_key`` on retry.
+ 
+diff --git a/tests/agent/test_billing_view.py b/tests/agent/test_billing_view.py
+index 99cc42b8b0..4af5075840 100644
+--- a/tests/agent/test_billing_view.py
++++ b/tests/agent/test_billing_view.py
+@@ -32,6 +32,7 @@ from agent.billing_view import (
+     new_idempotency_key,
+     parse_money,
+     validate_charge_amount,
++    validate_monthly_limit,
+ )
+ import hermes_cli.nous_billing as nb
+ from hermes_cli.nous_billing import (
+@@ -86,6 +87,7 @@ def _owner_payload() -> dict:
+         "limitUsd": "1000",
+         "spentThisMonthUsd": "180",
+         "isDefaultCeiling": True,
++        "ceilingUsd": "1000",
+     }
+     p["autoReload"] = {"enabled": True, "thresholdUsd": "20", "reloadToUsd": "100"}
+     return p
+@@ -149,6 +151,7 @@ def test_state_owner_tier_parse():
+         limit_usd=Decimal("1000"),
+         spent_this_month_usd=Decimal("180"),
+         is_default_ceiling=True,
++        ceiling_usd=Decimal("1000"),
+     )
+     assert s.auto_reload == AutoReload(
+         enabled=True, threshold_usd=Decimal("20"), reload_to_usd=Decimal("100")
+@@ -315,6 +318,27 @@ def test_validate_amount_rejections(raw, err_substr):
+     assert err_substr.lower() in (v.error or "").lower()
+ 
+ 
++@pytest.mark.parametrize(
++    "raw,err_substr",
++    [
++        ("", "dollar amount"),
++        ("0", "greater than"),
++        ("12.345", "cent"),
++        ("2500.01", "ceiling"),   # above monthlyCap.ceilingUsd
++    ],
++)
++def test_validate_monthly_limit_rejections(raw, err_substr):
++    v = validate_monthly_limit(raw, ceiling_usd=Decimal("2500"))
++    assert not v.ok
++    assert err_substr.lower() in (v.error or "").lower()
++
++
++@pytest.mark.parametrize("raw", ["5", "$2500", "  742.50 "])
++def test_validate_monthly_limit_accepts_any_positive_cent_amount_up_to_the_ceiling(raw):
++    v = validate_monthly_limit(raw, ceiling_usd=Decimal("2500"))
++    assert v.ok and v.amount == parse_money(raw.strip().lstrip("$"))
++
++
+ # ---------------------------------------------------------------------------
+ # HERMES_DEV_BILLING_FIXTURE — offline card/scope state scaffolding (T0)
+ # ---------------------------------------------------------------------------
+diff --git a/tests/hermes_cli/test_cli_billing_limit.py b/tests/hermes_cli/test_cli_billing_limit.py
+new file mode 100644
+index 0000000000..19394389c4
+--- /dev/null
++++ b/tests/hermes_cli/test_cli_billing_limit.py
+@@ -0,0 +1,60 @@
++"""/topup → Monthly limit: an admin changes the org's monthly spend cap from the terminal."""
++
++from __future__ import annotations
++
++from decimal import Decimal
++
++import pytest
++
++import hermes_cli.nous_billing as nb
++from agent.billing_view import BillingState, MonthlyCap
++from hermes_cli.cli_billing_mixin import CLIBillingMixin
++
++
++class _Host(CLIBillingMixin):
++    """The mixin with the terminal I/O replaced by scripted answers."""
++
++    def __init__(self, answers):
++        self._app = object()
++        self._answers = list(answers)
++        self.lines: list[str] = []
++
++    def _block_header(self, icon, title, *, rule=True):
++        self.lines.append(title)
++
++    def _dim(self, msg, *, icon="", lead=False):
++        self.lines.append(msg)
++
++    def _modal_choice(self, title, detail, choices):
++        return self._answers.pop(0)
++
++    def _prompt_text_input(self, prompt):
++        return self._answers.pop(0)
++
++
++def _admin_state() -> BillingState:
++    return BillingState(
++        logged_in=True, role="OWNER", cli_billing_enabled=True,
++        monthly_cap=MonthlyCap(limit_usd=Decimal("1000"), spent_this_month_usd=Decimal("180"),
++                               is_default_ceiling=True, ceiling_usd=Decimal("1000")))
++
++
++@pytest.fixture
++def puts(monkeypatch):
++    sent: list[dict] = []
++    monkeypatch.setattr(nb, "put_monthly_cap", lambda **kw: sent.append(kw) or {})
++    return sent
++
++
++def test_admin_lowers_the_monthly_limit(puts, capsys):
++    _Host(["change", "750"])._billing_limit_screen(_admin_state())
++
++    assert puts == [{"limit_usd": 750.0}]
++    assert "Monthly limit set to $750." in capsys.readouterr().out
++
++
++def test_limit_above_the_ceiling_is_refused_before_any_request(puts, capsys):
++    _Host(["change", "1500"])._billing_limit_screen(_admin_state())
++
++    assert puts == []
++    assert "$1000 ceiling" in capsys.readouterr().out
+diff --git a/tests/hermes_cli/test_nous_billing_request.py b/tests/hermes_cli/test_nous_billing_request.py
+index c19a7ed174..05d14246bd 100644
+--- a/tests/hermes_cli/test_nous_billing_request.py
++++ b/tests/hermes_cli/test_nous_billing_request.py
+@@ -159,6 +159,14 @@ def test_404_get_charge_status_maps_to_generic_billing_error(monkeypatch):
+     assert ei.value.status == 404
+ 
+ 
++def test_put_monthly_cap_sends_limit_as_json_number(monkeypatch):
++    seen = _sequence(monkeypatch, _FakeResp(b'{"limitUsd": "750"}'))
++
++    assert nb.put_monthly_cap(limit_usd="750") == {"limitUsd": "750"}
++    assert (seen[0]["method"], seen[0]["url"], seen[0]["data"]) == (
++        "PUT", "https://portal.example/api/billing/monthly-cap", {"limitUsd": 750.0})
++
++
+ 
+ 
+ 
+-- 
+2.54.0 (Apple Git-157)
+

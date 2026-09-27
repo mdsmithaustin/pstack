@@ -396,6 +396,10 @@ def manifest(agent, root, spec, discovery):
     record = {"agent": agent, "root": str(root), "commit": spec["commit"], "expected_tree": spec["tree"], "tree": tree,
               "discovery": discovery, "harness": conf["harness"] if discovery else None, "transcripts": conf["transcripts"],
               "deps": None}
+    if spec.get("review"):
+        # The clone may carry only the checked-out branch, so setup recreates
+        # main and the PR branch from these ids and checks the PR branch out.
+        record["review"] = {"branch": spec["review"]["branch"], "refs": spec["review"]["refs"]}
     if spec["repo"] in CONFIG["repos"]:
         record["deps"] = {"env": deps_env(spec["repo"]), "sync": CONFIG["repos"][spec["repo"]]["sync"]}
     return record
@@ -440,9 +444,12 @@ def wrap(argv, stdin=sys.stdin.buffer):
     try:
         with tempfile.TemporaryDirectory() as directory:
             with timed(timings, "materialize_s"):
-                record["host_tree"] = workspace.materialize(root, Path(spec["mirror"]), spec["commit"], workspace.read_files(arm / "overlay"))
+                record["host_tree"] = workspace.materialize(root, Path(spec["mirror"]), spec["commit"], workspace.read_files(arm / "overlay"),
+                                                            workspace.arm_review(arm, spec))
                 if record["host_tree"] != spec["tree"]:
                     raise workspace.WorkspaceError(f"materialized tree {record['host_tree']} is not the recorded {spec['tree']}")
+                if spec.get("review"):
+                    record["refs"] = workspace.check_refs(root, spec)
                 self_contained(root)
             inside = manifest(agent, root, spec, discovery)
             files = {"manifest.json": json.dumps(inside).encode(), "sbx_inside.py": CANON / "sbx_inside.py",
@@ -517,6 +524,64 @@ def wrap(argv, stdin=sys.stdin.buffer):
                 box.remove()
         save()
     return record["agent_rc"] if "error" not in record else workspace.REFUSED
+
+
+JUDGE_DIR = "/tmp/canon-judge"
+JUDGE_TIMEOUT_S = 600
+
+
+def judge_command(backend, model, verdict_schema):
+    """The judge's argv inside the sandbox: no tools, no session kept, the
+    verdict schema enforced by the CLI."""
+    if backend == "claude":
+        return ["claude", "-p", "--output-format", "json", "--no-session-persistence", "--model", model, "--tools=",
+                "--json-schema", json.dumps(verdict_schema, separators=(",", ":")), "--strict-mcp-config", "--setting-sources", "project"]
+    return ["codex", "exec", "--json", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only", "--model", model,
+            "--output-schema", f"{JUDGE_DIR}/schema.json", "--output-last-message", f"{JUDGE_DIR}/verdict.json", *CODEX_FLAGS, "-"]
+
+
+def run_judge(backend, model, prompt, verdict_schema, repo=None, commit=None):
+    """Run one judge call in its own sandbox. The run's deny list leaves the
+    sandbox only its kit's model API hosts. A repo with a dependency template
+    judges from that template, which pins the agent CLI; a Codex judge needs
+    one, because the kit's Codex does not list gpt-6-sol. Returns the judge's
+    raw output with the sandbox record."""
+    conf = CONFIG["agents"][backend]
+    template = deps_tag(backend, repo, commit) if repo in CONFIG["repos"] and commit else None
+    if template and template not in templates():
+        template = None
+    if template is None and backend == "codex":
+        hint = f" --repo {repo} --commit {commit}" if repo in CONFIG["repos"] else " --repo <repo> --commit <commit>"
+        raise SandboxError(f"a Codex judge needs a dependency template; build it with `python3 evals/canon/sandbox.py deps --agent codex{hint}`")
+    record = {"template": template, "timings": {}}
+    box = None
+    with tempfile.TemporaryDirectory() as directory:
+        payload = pack(directory, {"schema.json": json.dumps(verdict_schema).encode(), "cwd/.keep": b""})
+        try:
+            with timed(record["timings"], "create_s"):
+                box = Sandbox.create(f"{PREFIX}judge-{backend}-{secrets.token_hex(4)}", conf["kit"], None, template, CONFIG["run_deny_network"])
+            record["sandbox"] = box.name
+            record["policy"] = box.policy()
+            record["reachable"] = box.reachable(conf["api"])
+            record["egress"], allowed = egress(box)
+            refuse_open_egress(allowed)
+            box.unpack(payload, JUDGE_DIR)
+            record["version"] = box.exec("sh", "-c", f"{backend} --version").stdout.decode().strip()
+            command = ["timeout", "--kill-after=30", str(JUDGE_TIMEOUT_S), *judge_command(backend, model, verdict_schema)]
+            with timed(record["timings"], "judge_s"):
+                proc = box.exec(*command, workdir=f"{JUDGE_DIR}/cwd", input=prompt.encode(), check=False)
+            record["returncode"] = proc.returncode
+            record["stderr_tail"] = proc.stderr.decode(errors="replace")[-600:]
+            if backend == "claude":
+                record["raw"] = proc.stdout.decode(errors="replace")
+            else:
+                record["raw"] = box.exec("cat", f"{JUDGE_DIR}/verdict.json", check=False).stdout.decode(errors="replace")
+                record["stdout_tail"] = proc.stdout.decode(errors="replace")[-1500:]
+            record["network_log"] = box.network_log()
+        finally:
+            if box is not None:
+                box.remove()
+    return record
 
 
 def probe(agent, repo=None, commit=None):

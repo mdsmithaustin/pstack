@@ -1,0 +1,9 @@
+{
+  "kind": "near-miss",
+  "domain": "refactoring",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Keeps checkout_promise and carrier_deadline as separate functions with no shared helper, because marketing and the carrier contract change them for different reasons.",
+    "Leaves every delivery date unchanged."
+  ]
+}
