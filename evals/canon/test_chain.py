@@ -120,6 +120,19 @@ class CodexTraceTests(unittest.TestCase):
         self.assertEqual(chain.parse_codex([line], TREE, "/w/app").events, [chain.Event(0, "main", "edit", "/w/app/tree.py")])
 
 
+class CodexTodoListTests(unittest.TestCase):
+    """A Codex exec --json run that reads the Feature playbook and keeps its
+    four steps on the todo_list tool; only the completed item counts."""
+
+    def test_completed_todo_list_is_one_tool_worklist_of_every_step(self):
+        stages = run_stages(chain.parse_codex((FIXTURES / "codex-todo-list.jsonl").read_text().splitlines(), TREE))
+
+        self.assertEqual(({key: stages["worklist"][key] for key in ("tool_offered", "carrier", "valid_carrier", "steps_listed", "steps_total", "verbatim_fraction")}, stages["worklist_tool"]), (
+            {"tool_offered": True, "carrier": "tool", "valid_carrier": True, "steps_listed": 4, "steps_total": 4, "verbatim_fraction": 1.0},
+            {"offered": True, "called": True, "calls": 1},
+        ))
+
+
 class ShellEffectsTests(unittest.TestCase):
     def test_greater_than_inside_a_quoted_script_is_not_a_write(self):
         self.assertEqual(chain.shell_effects("""python3 -c "print(len(x) > 3)" """, TREE), ([], []))
