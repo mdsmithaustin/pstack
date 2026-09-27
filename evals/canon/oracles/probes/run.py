@@ -2,14 +2,15 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 request = json.load(sys.stdin)
 results = []
-for index, job in enumerate(request["jobs"]):
-    workdir = Path("/tmp") / f"job-{index}"
-    shutil.copytree(Path("/work") / job["tree"], workdir)
+for job in request["jobs"]:
+    workdir = Path(tempfile.mkdtemp(prefix="job-")) / "tree"
     try:
+        shutil.copytree(Path("/work") / job["tree"], workdir)
         proc = subprocess.run(
             job["argv"],
             cwd=workdir,
@@ -21,5 +22,6 @@ for index, job in enumerate(request["jobs"]):
         results.append({"rc": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr[-2000:]})
     except subprocess.TimeoutExpired:
         results.append({"rc": None, "stdout": "", "stderr": "timed out"})
-    shutil.rmtree(workdir, ignore_errors=True)
+    finally:
+        shutil.rmtree(workdir.parent, ignore_errors=True)
 json.dump(results, sys.stdout)

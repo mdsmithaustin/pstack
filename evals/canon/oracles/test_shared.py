@@ -39,3 +39,12 @@ class ContainerJobTests(unittest.TestCase):
             [result["stdout"] for result in results],
             ["['current'] ['b.py']\n", "['amended'] ['a.py']\n"],
         )
+
+    def test_job_cannot_plant_the_next_jobs_directory(self):
+        trees = {"current": {"a.py": "x = 1\n"}}
+        plant = ["python3", "-c", "import os; os.makedirs('/tmp/job-1/planted'); print('planted')"]
+        listing = ["python3", "-c", "import os; print(sorted(os.listdir('.')))"]
+
+        results = run_jobs(trees, [{"tree": "current", "argv": plant}, {"tree": "current", "argv": listing}])
+
+        self.assertEqual([result["stdout"] for result in results], ["planted\n", "['a.py']\n"])
