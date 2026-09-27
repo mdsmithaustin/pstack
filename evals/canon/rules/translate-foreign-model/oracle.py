@@ -50,13 +50,13 @@ def imports_domain(path, body):
 def check_translate(answer, project):
     files = parse_files(answer)
     failures = []
-    carriers = sorted(path for path, body in files.items() if not is_test_path(path) and PAYLANE_CODE.search(body))
+    carriers = sorted(path for path, body in files.items() if path.endswith(".py") and not is_test_path(path) and PAYLANE_CODE.search(body))
     if not carriers:
         return ["no module in the answer handles Paylane's status codes"]
     for path in carriers:
         if path in DOMAIN_FILES:
             failures.append(f"Paylane codes appear in domain module {path}")
-        elif path.endswith(".py") and not imports_domain(path, files[path]):
+        elif not imports_domain(path, files[path]):
             failures.append(f"{path} handles Paylane's codes but imports nothing from payments.model or payments.orders")
     if len(carriers) > 1:
         failures.append(f"Paylane codes spread across {len(carriers)} modules: {', '.join(carriers)}")
