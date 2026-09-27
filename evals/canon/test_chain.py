@@ -590,6 +590,14 @@ class StepSpecTests(unittest.TestCase):
         self.assertEqual(chain.exec_plan_text('await tools.update_plan({plan: [{step: "Pin the behavior", status: "pending"}, {"step": \'Name the shape\'}]});'),
                          "Pin the behavior\nName the shape")
 
+    def test_an_escaped_quote_stays_inside_its_step(self):
+        self.assertEqual(chain.exec_plan_text(r'tools.update_plan({plan: [{step: "Say \"done\" once"}]})'), r'Say \"done\" once')
+
+    def test_an_unclosed_step_of_many_escapes_returns_the_source(self):
+        source = 'tools.update_plan({plan: [{step: "' + "\\a" * 200
+
+        self.assertEqual(chain.exec_plan_text(source), source)
+
 
 class ClaudeMultiResultTests(unittest.TestCase):
     """A trimmed real Claude sandbox run (claude-bundle-one-name-tags-

@@ -580,7 +580,7 @@ def plan_text(arguments):
 
 def exec_plan_text(source):
     """The steps of a code-mode tools.update_plan({plan: [{step: "..."}]}) call."""
-    steps = [match.group(2) for match in re.finditer(r"""\bstep["']?\s*:\s*(["'`])((?:\\.|(?!\1).)*)\1""", source)]
+    steps = [match.group(2) for match in re.finditer(r"""\bstep["']?\s*:\s*(["'`])((?:\\.|(?!\1)[^\\])*)\1""", source)]
     return item_lines(steps) if steps else source
 
 
