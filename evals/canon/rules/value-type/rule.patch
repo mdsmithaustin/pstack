@@ -1,0 +1,6 @@
+--- a/principle-type-system-discipline/SKILL.md
++++ b/principle-type-system-discipline/SKILL.md
+@@ -17,2 +17,3 @@
+ - **Brand semantic primitives.** `UserId` and `OrderId` are strings underneath but should not be interchangeable. Newtypes in Rust, opaque types in Swift, value classes in Kotlin, phantom types in Haskell, branded intersections in TypeScript. Validate once at creation, trust the type downstream.
++- **Make values that mean something only together one type.** An amount with its currency is one concept, not two fields. Make it one immutable type. Put its arithmetic and its ordering on that type, and make them reject mixed units. Define its equality by its values. Give an id only to things that stay the same thing while their attributes change.
+ - **External data is untyped until parsed.** RPC payloads, JSON, IPC messages, CLI args, config files, environment variables, database rows. Have a parse function at every boundary that turns unstructured input into the typed model. See the **boundary-discipline** principle skill for where to put validation.

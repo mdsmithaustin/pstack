@@ -1,0 +1,10 @@
+{
+  "kind": "positive",
+  "domain": "feature",
+  "timeout_s": 600,
+  "expected_behavior": [
+    "The first new test posts a refund through OrdersApi.handle, not an inner window helper.",
+    "Each of the spec's three examples has a test through the handler that asserts its literal status and message.",
+    "The new tests pass against the answer's code."
+  ]
+}
