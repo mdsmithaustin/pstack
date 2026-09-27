@@ -223,7 +223,8 @@ def materialize(root, mirror, commit, overlay):
 def write_overlay(root, overlay):
     """Copy the overlay into the checkout at root. Every path is checked
     before any is written, and one that passes through a symlink the checkout
-    holds is refused, so no write lands outside root."""
+    holds is refused, so no write follows a symlink out of root. Paths come
+    from read_files, which yields only relative paths without '..'."""
     root = Path(root)
     for path in overlay:
         target = root
