@@ -21,6 +21,18 @@ class PaylaneWebhooksTests(unittest.TestCase):
             ],
         )
 
+    def test_constants_that_map_nothing_fail(self):
+        answer = (
+            '<file path="payments/paylane.py">\n'
+            '"""Paylane webhook states."""\n'
+            'STATES = ("AUTH_OK", "CAPTURED", "DECLINED", "REFUNDED_PARTIAL")\n'
+            "</file>\n"
+        )
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            ["payments/paylane.py handles Paylane's codes but imports nothing from payments.model or payments.orders"],
+        )
+
     def test_lowercase_copy_of_a_foreign_value_still_leaks(self):
         answer = (CASE_DIR / "samples" / "good.md").read_text() + (
             '\n<file path="payments/model.py">\n'
