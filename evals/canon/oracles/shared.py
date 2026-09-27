@@ -5,6 +5,7 @@ import json
 import re
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
 PROBES = Path(__file__).resolve().parent / "probes"
@@ -70,25 +71,38 @@ def original_test_sources(project):
 
 
 def run_jobs(trees, jobs):
+    """Run each job in a container that mounts only its own tree, so answer
+    code cannot read another arm's files. Results keep the order of jobs."""
+    groups = {}
+    for index, job in enumerate(jobs):
+        groups.setdefault(job["tree"], []).append(index)
+    results = [None] * len(jobs)
     with tempfile.TemporaryDirectory() as directory:
         stage = Path(directory)
-        # The probe runs as nobody, and TemporaryDirectory makes the stage 0700.
-        stage.chmod(0o755)
-        for name, files in trees.items():
-            for path, body in files.items():
+        for name in groups:
+            for path, body in trees[name].items():
                 target = stage / name / path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(body, encoding="utf-8")
-        command = [
-            "docker", "run", "--rm", "-i",
-            "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,size=64m",
-            "--memory", "512m", "--pids-limit", "256", "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges", "--user", "65534:65534",
-            "-e", "PYTHONDONTWRITEBYTECODE=1",
-            "-v", f"{stage}:/work:ro", "-v", f"{PROBES}:/probes:ro",
-            IMAGE, "python3", "/probes/run.py",
-        ]
-        proc = subprocess.run(command, input=json.dumps({"jobs": jobs}), capture_output=True, text=True, timeout=240, check=False)
+        with ThreadPoolExecutor() as pool:
+            outputs = pool.map(lambda name: run_container(stage / name, name, [jobs[index] for index in groups[name]]), groups)
+            for indexes, output in zip(groups.values(), outputs):
+                for index, result in zip(indexes, output):
+                    results[index] = result
+    return results
+
+
+def run_container(source, name, jobs):
+    command = [
+        "docker", "run", "--rm", "-i",
+        "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,size=64m",
+        "--memory", "512m", "--pids-limit", "256", "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges", "--user", "65534:65534",
+        "-e", "PYTHONDONTWRITEBYTECODE=1",
+        "-v", f"{source}:/work/{name}:ro", "-v", f"{PROBES}:/probes:ro",
+        IMAGE, "python3", "/probes/run.py",
+    ]
+    proc = subprocess.run(command, input=json.dumps({"jobs": jobs}), capture_output=True, text=True, timeout=240, check=False)
     if proc.returncode != 0:
         raise OracleError(f"container probe failed (exit {proc.returncode}): {proc.stderr.strip()[-500:]}")
     return json.loads(proc.stdout)

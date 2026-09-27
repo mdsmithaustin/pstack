@@ -1,7 +1,7 @@
 import unittest
 
 from check import RULES, grade
-from shared import parse_files
+from shared import parse_files, run_jobs
 
 
 class AnswerParsingTests(unittest.TestCase):
@@ -25,4 +25,17 @@ class ProbeOutputTests(unittest.TestCase):
         self.assertEqual(
             grade("value-type", "marketplace-subtotal", text=noisy),
             ["the probe output is not JSON: Expecting value: line 1 column 1 (char 0)"],
+        )
+
+
+class ContainerJobTests(unittest.TestCase):
+    def test_job_sees_only_its_own_tree(self):
+        trees = {"amended": {"a.py": "x = 1\n"}, "current": {"b.py": "y = 2\n"}}
+        listing = ["python3", "-c", "import os; print(sorted(os.listdir('/work')), sorted(os.listdir('.')))"]
+
+        results = run_jobs(trees, [{"tree": "current", "argv": listing}, {"tree": "amended", "argv": listing}])
+
+        self.assertEqual(
+            [result["stdout"] for result in results],
+            ["['current'] ['b.py']\n", "['amended'] ['a.py']\n"],
         )
