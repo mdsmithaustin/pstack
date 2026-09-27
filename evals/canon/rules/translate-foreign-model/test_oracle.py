@@ -52,3 +52,7 @@ class PaylaneWebhooksTests(unittest.TestCase):
             + "</file>\n"
         )
         self.assertEqual(grade(RULE, CASE, text=answer), ["PaymentStatus gains Paylane values: captured"])
+
+    def test_model_that_does_not_parse_fails(self):
+        answer = (CASE_DIR / "samples" / "good.md").read_text() + '\n<file path="payments/model.py">\nclass PaymentStatus(\n</file>\n'
+        self.assertEqual(grade(RULE, CASE, text=answer), ["payments/model.py does not parse: '(' was never closed at line 1"])

@@ -11,8 +11,8 @@ DOMAIN_FILES = ("payments/model.py", "payments/orders.py")
 DOMAIN_MODULES = ("payments.model", "payments.orders")
 
 
-def enum_members(body):
-    for node in ast.walk(ast.parse(body)):
+def enum_members(path, body):
+    for node in ast.walk(parse_python(path, body)):
         if isinstance(node, ast.ClassDef) and node.name == "PaymentStatus":
             members = set()
             for statement in node.body:
@@ -62,7 +62,7 @@ def check_translate(answer, project):
         failures.append(f"Paylane codes spread across {len(carriers)} modules: {', '.join(carriers)}")
     if "payments/model.py" in files:
         foreign = {re.sub(r"[^a-z]", "", code.lower()) for code in PAYLANE_CODES}
-        added = enum_members(files["payments/model.py"]) - enum_members(project["payments/model.py"])
+        added = enum_members("payments/model.py", files["payments/model.py"]) - enum_members("payments/model.py", project["payments/model.py"])
         leaked = sorted(member for member in added if re.sub(r"[^a-z]", "", member.lower()) in foreign)
         if leaked:
             failures.append(f"PaymentStatus gains Paylane values: {', '.join(leaked)}")
