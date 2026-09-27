@@ -57,12 +57,11 @@ class OneChangeAcrossTreeTests(unittest.TestCase):
         self.assertEqual(change.kind, "replace")
 
     def test_every_shipped_rule_is_one_change_across_all_tracked_skills(self):
-        tree = screen.tracked("skills")
         rules = [rule for rule in screen.load_rules() if rule.paired]
         self.assertIn("value-type", [rule.id for rule in rules])
         for rule in rules:
             with self.subTest(rule=rule.id):
-                change = screen.rule_change(rule, tree)
+                change = screen.rule_change(rule, screen.rule_tree(rule))
                 self.assertEqual(change.target, rule.target)
                 self.assertTrue(change.inserted.strip())
 
@@ -314,7 +313,7 @@ class CompanionMountTests(unittest.TestCase):
         built = json.loads((self.out / "arms" / self.rule.id / "build.json").read_text())
         current, amended = ({path: data for path, data in screen.read_tree(self.arm(arm) / "pstack").items() if not path.startswith("domain-modeling/")} for arm in screen.ARMS)
         self.assertEqual((built["target"], built["patch_kind"]), ("poteto-mode/playbooks/feature.md", "insert"))
-        self.assertEqual(screen.single_change(current, amended), screen.rule_change(self.rule, screen.tracked("skills")))
+        self.assertEqual(screen.single_change(current, amended), screen.rule_change(self.rule, screen.rule_tree(self.rule)))
 
     def test_companion_named_like_a_pstack_skill_is_refused(self):
         rule = screen.Rule(self.rule.id, self.rule.source, self.rule.patch, self.rule.target, self.rule.cases, ("poteto-mode",))
@@ -336,13 +335,14 @@ class CompanionMountTests(unittest.TestCase):
         self.assertEqual(built["arms"], ["current", "amended"])
 
 
+SCREENED_AT = "5dea4e2daaaf468d9886abcd63e1f95c74477444"
 INDEX_SENTENCE = "Name things with the domain's words from the nearest `CONTEXT.md`, and never use a word it lists under `_Avoid_`."
 
 
 class IndexPlacementPatchTests(unittest.TestCase):
     def test_the_index_variant_appends_one_sentence_to_the_model_the_domain_entry(self):
-        tree = screen.tracked("skills")
         rule = screen.load_rule("domain-words-index")
+        tree = screen.rule_tree(rule)
         path, _, body = screen.parse_patch(rule.patch)
         change = screen.single_change(tree, screen.apply_patch(tree, rule.patch))
 
@@ -361,8 +361,8 @@ class CasesFromTests(unittest.TestCase):
         self.assertEqual({case.rule for case in variant.cases}, {"domain-words-index"})
 
 
-class CasesFromRulesTests(unittest.TestCase):
-    """cases_from against a scratch rules directory."""
+class ScratchRules(unittest.TestCase):
+    """A scratch rules directory with a base rule and its variant."""
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -384,6 +384,8 @@ class CasesFromRulesTests(unittest.TestCase):
             (self.rules / rule_id / path).parent.mkdir(parents=True, exist_ok=True)
             (self.rules / rule_id / path).write_text(text)
 
+
+class CasesFromRulesTests(ScratchRules):
     def test_variant_inherits_source_and_companions(self):
         rule = screen.load_rule("scratch-variant")
 
@@ -423,6 +425,44 @@ class CasesFromRulesTests(unittest.TestCase):
             "scratch-copy/shop inside scratch-variant/shop",
             "scratch-variant/shop inside scratch-copy/shop",
         ])
+
+
+class SkillsAtTests(unittest.TestCase):
+    """A rule screens the skills/ tree at the commit its rule.json pins."""
+
+    def test_pinned_rule_reads_each_skill_file_as_git_holds_it_at_that_commit(self):
+        rule = screen.load_rule("domain-words")
+        path = "principle-model-the-domain/SKILL.md"
+        at_commit = subprocess.run(["git", "-C", str(screen.REPO), "show", f"{rule.skills_at}:skills/{path}"],
+                                   capture_output=True, check=True).stdout
+
+        tree = screen.rule_tree(rule)
+
+        self.assertEqual(tree[path], at_commit)
+        self.assertNotEqual(tree[path], (screen.REPO / "skills" / path).read_bytes())
+
+    def test_every_shipped_rule_pins_the_tree_it_was_screened_against(self):
+        self.assertEqual({rule.id: rule.skills_at for rule in screen.load_rules() if rule.skills_at != SCREENED_AT}, {})
+
+
+class SkillsAtRulesTests(ScratchRules):
+    def test_rule_without_a_pin_reads_the_working_tree(self):
+        rule = screen.load_rule("scratch-base")
+
+        self.assertIsNone(rule.skills_at)
+        self.assertEqual(screen.rule_tree(rule), screen.tracked("skills"))
+
+    def test_pin_that_is_not_a_full_commit_is_refused(self):
+        self.write("scratch-base", {"rule.json": '{"source": "S1", "skills_at": "5dea4e2d"}'})
+
+        with self.assertRaisesRegex(screen.ScreenError, "skills_at must be a full 40-character commit, not '5dea4e2d'"):
+            screen.load_rule("scratch-base")
+
+    def test_pin_to_a_commit_the_clone_lacks_is_refused(self):
+        self.write("scratch-base", {"rule.json": '{"source": "S1", "skills_at": "' + "0" * 40 + '"}'})
+
+        with self.assertRaisesRegex(screen.ScreenError, "cannot read skills/ at 0{40}"):
+            screen.rule_tree(screen.load_rule("scratch-base"))
 
 
 class VariantArmTests(unittest.TestCase):

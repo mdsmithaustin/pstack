@@ -6,7 +6,9 @@ does not compare a skill against no skill.
 
 ## What runs
 
-For each case of each rule, `screen.py` builds two arms from the working tree:
+For each case of each rule, `screen.py` builds two arms from `skills/` as the
+rule's `skills_at` commit holds it, or from the working tree when the rule names
+no commit:
 
 - `current` holds the git-tracked files under `skills/`, copied unchanged.
 - `amended` holds the same files with `rules/<id>/rule.patch` applied.
@@ -40,6 +42,7 @@ rules/<id>/
   rule.patch          one hunk against skills/
   rule.json           {"source": "...", "companions": ["<skill>", ...]}; companions is optional
                       a placement variant has {"cases_from": "<rule>"} and no oracle.py or cases/
+                      "skills_at": "<commit>" screens skills/ as that commit holds it
   oracle.py           CHECKS = {"<case-id>": check}; check(answer, project) returns failures
                       (project is a shared.Workspace in a workspace case)
   test_oracle.py      unit tests that grade the samples
@@ -71,6 +74,11 @@ records `<isolated workspace>`.
 
 1. Create `rules/<id>/rule.json` with the research source. If the rule routes
    to a skill that users install beside pstack, list it in `companions`.
+   Set `skills_at` to the full commit whose `skills/` the patch is written
+   against. The screen reads `skills/` at that commit through `git archive`,
+   so a rule keeps screening the text it was measured on after main moves or
+   ships the rule itself. A rule without `skills_at` screens the working tree.
+   A variant does not inherit `skills_at`; its own `rule.json` names it.
 2. Write `rules/<id>/rule.patch` as one hunk against the tracked file, with
    paths relative to `skills/` (`--- a/<skill>/SKILL.md`, `+++ b/<skill>/SKILL.md`).
 3. Add cases under `rules/<id>/cases/<case-id>/`, at least one of them

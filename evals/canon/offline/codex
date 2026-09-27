@@ -43,7 +43,7 @@ rule, case = screen.answered_case(screen.load_rules(), prompt, mounted, arm_work
 entry = Path(".agents/skills")
 if Path("skills", screen.ENTRY_TREE).is_dir() and not (prompt.startswith("$poteto-mode ") and (entry / "poteto-mode" / "SKILL.md").is_file()):
     sys.exit(3)
-tree = screen.tracked("skills")
+tree = screen.rule_tree(rule)
 if rule.paired:
     reads = [rule.target]
     carried = screen.rule_mounted(rule, mounted, tree)

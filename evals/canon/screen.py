@@ -61,6 +61,7 @@ import dataclasses
 import difflib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -68,6 +69,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import traceback
@@ -91,6 +93,7 @@ ENTRY_TIMEOUT_S = 900
 DEFAULT_RUNS_ROOT = Path("/private/tmp/canon-entry")
 DEFAULT_COMPANIONS_ROOT = Path.home() / ".agents" / "skills"
 COMPANION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
 # Codex docs: "$skill" works even when agents/openai.yaml disables implicit use.
 ENTRY_INVOCATION = {"claude": ("/poteto-mode", ".claude/skills"), "codex": ("$poteto-mode", ".agents/skills")}
 # claude-project-only runs -p under acceptEdits, which denies Bash, and Claude
@@ -157,6 +160,8 @@ class Rule:
     cases_from: str = None
     # An arms rule's ((arm, patch), ...) for every arm after current, in order.
     arm_patches: tuple = ()
+    # The commit whose skills/ the rule was screened against; None screens the working tree.
+    skills_at: str = None
 
     @property
     def paired(self):
@@ -305,8 +310,11 @@ def load_rule(rule_id):
     companions = spec.get("companions", [])
     if not isinstance(companions, list) or not all(isinstance(name, str) and COMPANION_NAME.match(name) for name in companions):
         raise ScreenError(f"rules/{rule_id}/rule.json companions must be a list of skill directory names, not {companions!r}")
+    skills_at = spec.get("skills_at")
+    if skills_at is not None and not (isinstance(skills_at, str) and COMMIT.match(skills_at)):
+        raise ScreenError(f"rules/{rule_id}/rule.json skills_at must be a full 40-character commit, not {skills_at!r}")
     target = sorted(patch_paths(arm_patches[0][1])[1])[0] if arm_patches else parse_patch(patch)[0]
-    return Rule(rule_id, spec["source"], patch, target, cases, tuple(companions), spec.get("cases_from"), arm_patches)
+    return Rule(rule_id, spec["source"], patch, target, cases, tuple(companions), spec.get("cases_from"), arm_patches, skills_at)
 
 
 def load_rules(requested=()):
@@ -317,7 +325,13 @@ def load_rules(requested=()):
     return [load_rule(rule_id) for rule_id in (requested or known)]
 
 
-def tracked(scope):
+def tracked(scope, commit=None):
+    if commit is not None:
+        archive = subprocess.run(["git", "-C", str(REPO), "archive", "--format=tar", commit, "--", scope], capture_output=True)
+        if archive.returncode != 0:
+            raise ScreenError(f"cannot read {scope}/ at {commit}: {archive.stderr.decode().strip()}")
+        with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
+            return {member.name.removeprefix("skills/"): tar.extractfile(member).read() for member in tar if member.isfile()}
     listing = subprocess.run(
         ["git", "-C", str(REPO), "ls-files", "-z", "--", scope],
         capture_output=True, check=True,
@@ -326,6 +340,10 @@ def tracked(scope):
     if not paths:
         raise ScreenError(f"{scope} has no tracked files")
     return {path.removeprefix("skills/"): (REPO / path).read_bytes() for path in paths}
+
+
+def rule_tree(rule):
+    return tracked("skills", rule.skills_at)
 
 
 def companions_root():
@@ -536,8 +554,7 @@ def answered_case(rules, prompt, mounted, arm_workspace=None):
         named = tuple(Path(arm_workspace).parts[-4:-2])
         matches = [(rule, case) for rule, case in matches if (rule.id, case.id) == named]
     elif len(matches) > 1:
-        tree = tracked("skills")
-        matches.sort(key=lambda match: not rule_mounted(match[0], mounted, tree))
+        matches.sort(key=lambda match: not rule_mounted(match[0], mounted, rule_tree(match[0])))
     if not matches:
         raise ScreenError("no case matches the prompt")
     return matches[0]
@@ -665,11 +682,11 @@ def build(out, rules, entry="skill"):
     for rule in rules:
         if entry == "skill":
             skill, tree_dir = rule.skill, "skills"
-            current = {path: data for path, data in tracked("skills").items() if path.split("/", 1)[0] in rule.skills}
+            current = {path: data for path, data in rule_tree(rule).items() if path.split("/", 1)[0] in rule.skills}
             others = [name for name in rule.skills if name != skill and f"{name}/SKILL.md" in current]
             skill_paths = [f"skills/{name}/SKILL.md" for name in (skill, *others)]
         else:
-            skill, tree_dir, current = ENTRY_SKILL, ENTRY_TREE, tracked("skills")
+            skill, tree_dir, current = ENTRY_SKILL, ENTRY_TREE, rule_tree(rule)
             skill_paths = [ENTRY_TREE]
         trees = arm_trees(rule, current)
         if rule.paired:
@@ -1270,15 +1287,15 @@ def past_runs(roots, rules, trees):
 
 def plan(roots):
     rules = {rule.id: rule for rule in load_rules()}
-    tree = tracked("skills")
     trees, changes = {}, {}
     for rule in rules.values():
+        trees[rule.id] = {}
         try:
-            trees[rule.id] = dict(arm_trees(rule, tree))
-            changes[rule.id] = single_change(tree, trees[rule.id]["amended"]) if rule.paired else None
+            trees[rule.id] = {"current": rule_tree(rule)}
+            trees[rule.id] = dict(arm_trees(rule, trees[rule.id]["current"]))
+            changes[rule.id] = single_change(trees[rule.id]["current"], trees[rule.id]["amended"]) if rule.paired else None
         except ScreenError as exc:
             changes[rule.id] = exc
-            trees[rule.id] = {"current": tree}
     runs = past_runs(roots, rules, trees)
     for rule in rules.values():
         change = changes[rule.id]
@@ -1289,7 +1306,7 @@ def plan(roots):
         print(f"{rule.id}  [{rule.source}]  skills/{rule.target}  {kind}" + (f"  companions {', '.join(rule.companions)}" if rule.companions else ""))
         if not rule.paired and not isinstance(change, ScreenError):
             for arm in rule.arm_names[1:]:
-                print(f"  arm {arm}: {', '.join(changed_paths(tree, trees[rule.id][arm]))}")
+                print(f"  arm {arm}: {', '.join(changed_paths(trees[rule.id]['current'], trees[rule.id][arm]))}")
         for case in rule.cases:
             seen = runs.get((rule.id, case.id))
             print(f"  {case.id:20} {case.kind:9}  {'; '.join(seen) if seen else 'not run'}")
