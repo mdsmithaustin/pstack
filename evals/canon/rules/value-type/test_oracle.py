@@ -51,5 +51,14 @@ class MarketplaceSubtotalTests(unittest.TestCase):
             ["a cart with a EUR line and a USD line gets one amount as its subtotal: Money(amount_cents=3799, currency='EUR')"],
         )
 
+    def test_subtotal_with_extra_leading_digits_fails(self):
+        answer = (SAMPLES / "good.md").read_text().replace(
+            'f"{money.amount_cents / 100:.2f} {currency}"', 'f"{money.amount_cents / 100 + 100:.2f} {currency}"'
+        )
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            ["the subtotal of a EUR-only cart is {'EUR': '145.97 EUR'}, expected 45.97 EUR"],
+        )
+
     def test_no_subtotal_fails(self):
         self.assertEqual(grade(RULE, CASE, text="No change."), ["the summary has no subtotal"])

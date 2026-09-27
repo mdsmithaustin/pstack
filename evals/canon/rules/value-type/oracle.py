@@ -1,5 +1,6 @@
 """Add money through one type that refuses mixed currencies."""
 import json
+import re
 
 from shared import parse_files, parse_python, run_jobs
 
@@ -57,7 +58,7 @@ def check_money(answer, project):
         failures.append(f"the summary of a EUR-only cart raises {eur['raised']}")
     elif not eur["found"]:
         failures.append("the summary has no subtotal")
-    elif "4597" not in eur["text"] and "45.97" not in eur["text"]:
+    elif not {4597, 45.97} & {float(number.replace(",", ".")) for number in re.findall(r"\d+(?:[.,]\d+)?", eur["text"])}:
         failures.append(f"the subtotal of a EUR-only cart is {eur['text']}, expected 45.97 EUR")
     if "raised" not in mixed and mixed["found"] and mixed["single"]:
         failures.append(f"a cart with a EUR line and a USD line gets one amount as its subtotal: {mixed['text']}")
