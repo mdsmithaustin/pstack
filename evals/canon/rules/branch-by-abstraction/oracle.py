@@ -108,7 +108,7 @@ def check_small(answer, project):
         failures.append(f"{OLD} still exists")
     for path in imports(final, "app.httpclient"):
         failures.append(f"{path} still imports app.httpclient")
-    for path in new_modules(project, final):
+    for path in sorted({path for tree in trees[1:] for path in new_modules(project, tree)}):
         failures.append(f"adds module {path} between the callers and platform_http")
     if not imports(final, "platform_http"):
         failures.append("no module uses platform_http")

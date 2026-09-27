@@ -50,5 +50,16 @@ class HttpClientSmallTests(unittest.TestCase):
         )
 
 
+    def test_interface_added_then_deleted_before_the_final_commit_fails(self):
+        samples = RULES / RULE / "cases" / SMALL / "samples"
+        seam = (samples / "bad.md").read_text(encoding="utf-8")
+        swap = (samples / "good.md").read_text(encoding="utf-8").replace(
+            '<file path="app/httpclient.py"></file>', '<file path="app/httpclient.py"></file>\n<file path="app/api.py"></file>'
+        )
+        self.assertEqual(
+            grade(RULE, SMALL, text=seam + "\n" + swap),
+            ["adds module app/api.py between the callers and platform_http"],
+        )
+
 if __name__ == "__main__":
     unittest.main()
