@@ -1,10 +1,11 @@
+import difflib
 import json
 import re
 import sys
 import unittest
 
 from check import RULES, grade
-from shared import Workspace
+from shared import Workspace, apply_diff
 
 sys.path.insert(0, str(RULES.parent))
 import workspace  # noqa: E402
@@ -73,4 +74,20 @@ class PiiIpAddressTests(unittest.TestCase):
                 "omnigent/policies/builtins/safety.py lists the PII category keys by hand in 4 places: "
                 "_PII_CATEGORY_PATTERNS, _PII_CATEGORY_LABELS, POLICY_REGISTRY enum, POLICY_REGISTRY default",
             ],
+        )
+
+    def test_restructure_with_an_ip_key_outside_the_category_table_fails(self):
+        checkout = omnigent_checkout(self.CASE)
+        good = (RULES / RULE / "cases" / self.CASE / "samples" / "good.diff").read_text()
+        safety = "omnigent/policies/builtins/safety.py"
+        restructured = re.sub(r'\n    "ip_address": _PiiCategory\(.*?\n    \),', "", apply_diff(checkout, good)[safety].decode(), flags=re.DOTALL)
+        self.assertNotIn('"ip_address"', restructured)
+        context = "omnigent/policies/builtins/context.py"
+        edits = {safety: restructured, context: (checkout / context).read_text(encoding="utf-8") + '\nAUDIT_FIELD = "ip_address"\n'}
+        diff = "".join("".join(difflib.unified_diff((checkout / path).read_text(encoding="utf-8").splitlines(True),
+                                                    new.splitlines(True), f"a/{path}", f"b/{path}"))
+                       for path, new in edits.items())
+        self.assertEqual(
+            grade(RULE, self.CASE, text="Added the IP address category.", workspace=Workspace(checkout, diff)),
+            ["no PII category key for IP addresses is added"],
         )

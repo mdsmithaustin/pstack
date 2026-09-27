@@ -4,7 +4,6 @@ import csv
 import io
 import json
 import re
-from collections import Counter
 
 from shared import apply_diff, functions, is_test_path, parse_commits, parse_python, run_jobs
 
@@ -146,8 +145,16 @@ def category_lists(tree):
     return found
 
 
-def string_constants(tree):
-    return Counter(node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str))
+def category_keys(tree):
+    """Every string inside a dict, list, tuple, or set literal that also names
+    every PII category key, so a table of records counts as well as a dict."""
+    keys = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Dict, ast.List, ast.Tuple, ast.Set)):
+            strings = {child.value for child in ast.walk(node) if isinstance(child, ast.Constant) and isinstance(child.value, str)}
+            if PII_KEYS <= strings:
+                keys |= strings
+    return keys
 
 
 def schema_keys(tree, field):
@@ -171,7 +178,7 @@ def check_pii_category(answer, workspace):
         old = before.read_text(encoding="utf-8") if before.is_file() else ""
         new = changed[path].decode("utf-8") if path in changed else old
         tree = parse_python(path, new)
-        added |= any(IP_KEY.fullmatch(value) for value in string_constants(tree) - string_constants(parse_python(path, old)))
+        added |= any(IP_KEY.fullmatch(key) for key in category_keys(tree) - category_keys(parse_python(path, old)))
         lists = category_lists(tree)
         if len(lists) > 1:
             failures.append(f"{path} lists the PII category keys by hand in {len(lists)} places: {', '.join(lists)}")
