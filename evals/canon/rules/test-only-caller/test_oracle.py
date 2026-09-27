@@ -41,6 +41,31 @@ class TextkitTidyTests(unittest.TestCase):
         )
         self.assertEqual(grade(RULE, TIDY, text=answer), ["banner is still defined though only its tests call it"])
 
+    def test_deleting_the_helper_after_reshaping_the_kept_code_fails(self):
+        good = (RULES / RULE / "cases" / TIDY / "samples" / "good.md").read_text()
+        _, first, second = good.split("<commit ")
+        tests = "<file" + first.split("<file", 2)[2].split("</commit>")[0]
+        flattened = second.split("<file", 1)[1].split("</file>")[0]
+        banner = (RULES / RULE / "cases" / TIDY / "project" / "textkit" / "format.py").read_text().split("\n\n\ndef banner", 1)[1]
+        answer = (
+            '<commit message="Flatten slugify and truncate">\n<file' + flattened.rstrip("\n") + "\n\n\ndef banner" + banner + "</file>\n</commit>\n"
+            '<commit message="Delete banner, which only its tests call">\n<file' + flattened + "</file>\n" + tests + "</commit>\n"
+        )
+        self.assertEqual(
+            grade(RULE, TIDY, text=answer),
+            ["commit 1 ('Flatten slugify and truncate') reshapes slugify or truncate before banner is deleted"],
+        )
+
+    def test_deleting_the_tests_before_the_helper_fails(self):
+        good = (RULES / RULE / "cases" / TIDY / "samples" / "good.md").read_text()
+        _, first, second = good.split("<commit ")
+        code, tests = first.split("</file>\n", 1)
+        answer = (
+            '<commit message="Delete banner tests">\n' + tests.split("</commit>")[0] + "</commit>\n"
+            '<commit message="Delete banner">\n<file' + code.split("<file", 1)[1] + "</file>\n</commit>\n<commit " + second
+        )
+        self.assertEqual(grade(RULE, TIDY, text=answer), ["commit 2 ('Delete banner') deletes banner without its tests"])
+
 
 class TextkitExportsTests(unittest.TestCase):
     def test_keeping_the_exported_helper_passes(self):

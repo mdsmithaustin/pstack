@@ -2,7 +2,7 @@
 import ast
 import json
 
-from shared import is_test_path, parse_commits, parse_python, run_jobs
+from shared import functions, is_test_path, normalized_source, parse_commits, parse_python, run_jobs
 
 PROBE = (
     "import json\n"
@@ -67,6 +67,25 @@ def defines_banner(state):
     )
 
 
+def tests_name_banner(state):
+    return any(
+        (isinstance(node, ast.Name) and node.id == "banner") or (isinstance(node, ast.alias) and node.name == "banner")
+        for path, body in state.items()
+        if path.endswith(".py") and is_test_path(path)
+        for node in ast.walk(parse_python(path, body))
+    )
+
+
+def kept_sources(state):
+    return sorted(
+        normalized_source(body, node)
+        for path, body in state.items()
+        if path.endswith(".py") and not is_test_path(path)
+        for node in functions(parse_python(path, body))
+        if node.name in ("slugify", "truncate")
+    )
+
+
 def check_textkit_tidy(answer, project):
     commits, states, outputs, greens = replay(answer, project)
     if not commits:
@@ -74,6 +93,15 @@ def check_textkit_tidy(answer, project):
     failures = common_failures(commits, outputs, greens)
     if defines_banner(states[-1]):
         failures.append("banner is still defined though only its tests call it")
+        return failures
+    deleted = next(index for index in range(1, len(states)) if not defines_banner(states[index]))
+    failures += [
+        f"commit {index} ({commits[index - 1][0]!r}) reshapes slugify or truncate before banner is deleted"
+        for index in range(1, deleted)
+        if kept_sources(states[index]) != kept_sources(states[index - 1])
+    ]
+    if not tests_name_banner(states[deleted - 1]):
+        failures.append(f"commit {deleted} ({commits[deleted - 1][0]!r}) deletes banner without its tests")
     return failures
 
 
