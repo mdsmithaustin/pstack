@@ -576,6 +576,20 @@ class ClaudeDelegateFlowTests(unittest.TestCase):
             "test_commands_after": ["uv run pytest tests/test_tree.py::test_nested -q 2>&1 | tail -5"], "wide": False,
         })
 
+    def test_foreground_results_and_background_notifications_are_the_returns(self):
+        trace = chain.parse_claude((FIXTURES / "sbx-claude-delegates" / "run" / "trace.jsonl").read_text().splitlines(), TREE)
+
+        self.assertEqual([(event.index, event.text) for event in trace.events if event.kind == "return"], [
+            (6, "toolu_01SpawnExploreStore"), (7, "toolu_01SpawnExploreRender"),
+            (9, "toolu_01SpawnBuildTree"), (12, "toolu_01SpawnBuildTests"),
+        ])
+
+    def test_the_lead_read_the_first_builder_file_and_only_tested_after_the_second(self):
+        self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 1, "all": False, "unordered": 0})
+
+    def test_the_second_background_explorer_was_spawned_before_the_first_returned(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 2, "parallel": True, "unordered": 0})
+
 
 class CodexDelegateFlowTests(unittest.TestCase):
     """A synthetic Codex 0.149 exec --json run, whose stream shows each
@@ -603,9 +617,65 @@ class CodexDelegateFlowTests(unittest.TestCase):
         self.assertEqual(analyze("sbx-codex", "codex")["full_suite_run"],
                          {"last_edit": None, "ordered": True, "test_commands_after": [], "wide": None})
 
+    def test_git_diff_after_the_builder_wait_reviews_it(self):
+        self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 1, "reviewed": 1, "all": True, "unordered": 0})
+
+    def test_two_explorers_awaited_in_one_wait_ran_in_parallel(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 2, "parallel": True, "unordered": 0})
+
+    def test_without_a_wait_the_child_task_complete_is_its_return(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "codex", "sbx-codex-parallel")
+            lines = trace_path.read_text().splitlines()
+            trace_path.write_text("\n".join(line for line in lines if '"id": "item_5"' not in line) + "\n")
+            row = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual(row["lead_reviewed_delegate"], {"code_delegates": 1, "reviewed": 1, "all": True, "unordered": 0})
+
+    def test_a_delegate_whose_spawn_the_stream_never_shows_has_no_lead_order(self):
+        row = analyze("sbx-codex-delegates", "codex")
+
+        self.assertEqual((row["lead_reviewed_delegate"], row["parallel_investigation"]), (
+            {"code_delegates": 1, "reviewed": 0, "all": None, "unordered": 1},
+            {"investigation_spawns": 1, "max_in_flight": 0, "parallel": False, "unordered": 1},
+        ))
+
+    def test_no_code_writing_delegate_is_not_measured(self):
+        self.assertEqual(analyze("sbx-codex", "codex")["lead_reviewed_delegate"], {"code_delegates": 0, "reviewed": 0, "all": None, "unordered": 0})
+
     def test_edits_of_a_child_whose_spawn_the_stream_never_shows_cannot_be_ordered(self):
         self.assertEqual(analyze("sbx-codex-delegates", "codex")["full_suite_run"],
                          {"last_edit": 13, "ordered": False, "test_commands_after": [], "wide": None})
+
+
+class ReviewWindowTests(unittest.TestCase):
+    """The lead's review of a code-writing delegate counts only between the
+    delegate's return and the lead's final message."""
+
+    def stage(self, *events):
+        spawn = chain.Event(1, "main", "spawn")
+        trace = chain.Trace(events=[spawn, *events], spawns={"t1": chain.Spawn(spawn, code_writing=True, edits=frozenset({"/w/app/src/tree.py"}))})
+        return run_stages(trace)["lead_reviewed_delegate"]["reviewed"]
+
+    def test_a_read_before_the_return_or_after_the_final_message_does_not_count(self):
+        self.assertEqual((
+            self.stage(chain.Event(2, "main", "view", "src/tree.py"), chain.Event(3, "main", "return", text="t1"), chain.Event(4, "main", "message", text="Done.")),
+            self.stage(chain.Event(3, "main", "return", text="t1"), chain.Event(4, "main", "message", text="Done."), chain.Event(5, "main", "shell", text="git status")),
+            self.stage(chain.Event(3, "main", "return", text="t1"), chain.Event(4, "main", "shell", text="sed -n '1,40p' src/tree.py"), chain.Event(5, "main", "message", text="Done.")),
+        ), (0, 0, 1))
+
+    def test_shell_reads_of_the_edited_file_and_git_inspection_count(self):
+        self.assertEqual([chain.reviews(chain.Event(0, "main", "shell", text=command), {"/w/app/src/tree.py"}) for command in (
+            "cat src/tree.py", "head -20 app/src/tree.py | nl", "rg -n tree src/tree.py", "git --no-pager diff -- src",
+            "git -C /w/app show HEAD", "git status --short", "cat src/other.py", "rg -n src/tree.py docs", "git log -3",
+        )], [True, True, True, True, True, True, False, False, False])
+
+    def test_sequential_foreground_explorers_are_not_parallel(self):
+        first, second = chain.Event(1, "main", "spawn"), chain.Event(3, "main", "spawn")
+        trace = chain.Trace(events=[first, chain.Event(2, "main", "return", text="a"), second, chain.Event(4, "main", "return", text="b")],
+                            spawns={"a": chain.Spawn(first), "b": chain.Spawn(second)})
+
+        self.assertEqual(run_stages(trace)["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 1, "parallel": False, "unordered": 0})
 
 
 class TestCommandTests(unittest.TestCase):
