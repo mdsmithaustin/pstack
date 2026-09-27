@@ -14,6 +14,7 @@ MONEY = re.compile(r"(minus\s+|-\s*)?£\s*(-\s*)?(\d[\d,]*(?:\.\d+)?)", re.IGNOR
 PLAIN_BALANCE = re.compile(r"\bbalance (?:is|of)\s+(-?\d+(?:\.\d+)?)\b", re.IGNORECASE)
 PLAIN_AMOUNT = re.compile(r"\bwithdraw(?:s|ing|al of)?\s+(\d+(?:\.\d+)?)\b", re.IGNORECASE)
 REFUSAL = re.compile(r"\b(refus\w*|reject\w*|declin\w*|den(y|ies|ied)|insufficient|minimum withdrawal|fail(s|ed)?|unsuccessful|blocked|can ?not|can't|no (cash|money)|not (paid|dispensed|allowed|permitted|processed|approved)|(do|does|did)(n't| not) (receive|get))\b", re.IGNORECASE)
+RECEIVED = re.compile(r"\b(receive[sd]?|gets?|got|(is|are|get|gets) (paid|dispensed|given))\s+(exactly\s+|the\s+)?(?=(minus\s+|-\s*)?£)", re.IGNORECASE)
 STATED_BALANCE = re.compile(r"\bbalance (is|becomes|stays|remains|will be|should be)( still| now| unchanged at| at)*\s*(?=(minus\s+|-\s*)?£)", re.IGNORECASE)
 LIMIT = -100
 MINIMUM = 10
@@ -118,7 +119,10 @@ def contradicts(rule, example):
     balance, amount = terms(example)
     expected = balance - amount if rule == "paid" else balance
     stated = [amounts(then[match.end():], skip_limit=False)[:1] for match in STATED_BALANCE.finditer(then)]
-    return any(round(value - expected, 2) for found in stated for value in found)
+    received = [amounts(then[match.end():], skip_limit=False)[:1] for match in RECEIVED.finditer(then)] if rule == "paid" else []
+    return any(round(value - expected, 2) for found in stated for value in found) or any(
+        round(abs(value) - amount, 2) for found in received for value in found
+    )
 
 
 def raises_limit_question(text):

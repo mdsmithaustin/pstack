@@ -31,6 +31,13 @@ class WithdrawalStoryTests(unittest.TestCase):
             ["a Then for the paid rule contradicts the story: I receive £40; my balance is £50"],
         )
 
+    def test_paid_example_with_the_wrong_amount_received_fails(self):
+        answer = GOOD.replace("Then I receive £40\nAnd my balance is £10", "Then I receive £999\nAnd my balance is £10")
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            ["a Then for the paid rule contradicts the story: I receive £999; my balance is £10"],
+        )
+
     def test_prose_criteria_fail(self):
         answer = (
             "- Withdrawals under £10 are refused.\n"
