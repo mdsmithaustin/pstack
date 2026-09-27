@@ -113,6 +113,12 @@ class CodexTraceTests(unittest.TestCase):
             "cited": ["principle-laziness-protocol", "principle-model-the-domain"], "unread": [], "only_read": True,
         })
 
+    def test_file_change_keyed_by_path_is_an_edit(self):
+        line = json.dumps({"type": "item.completed", "item": {"id": "item_9", "type": "file_change", "status": "completed",
+                                                              "changes": {"/w/app/tree.py": {"type": "update"}, "/tmp/scratch.md": {"type": "add"}}}})
+
+        self.assertEqual(chain.parse_codex([line], TREE, "/w/app").events, [chain.Event(0, "main", "edit", "/w/app/tree.py")])
+
 
 class ShellEffectsTests(unittest.TestCase):
     def test_greater_than_inside_a_quoted_script_is_not_a_write(self):

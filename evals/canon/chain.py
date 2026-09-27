@@ -508,9 +508,7 @@ def parse_codex(lines, tree, cwd=""):
             if item.get("exit_code") == 0:
                 trace.events += [Event(index, "main", "edit", path) for path in writes if in_workspace(path, cwd, tree)]
         elif kind == "file_change" and item.get("status") == "completed":
-            for change in item.get("changes") or []:
-                if in_workspace(change.get("path", ""), cwd, tree):
-                    trace.events.append(Event(index, "main", "edit", change["path"]))
+            trace.events += [Event(index, "main", "edit", path) for path in file_change_paths(item) if in_workspace(path, cwd, tree)]
         elif kind == "todo_list":
             trace.worklist_tool_offered = True
             trace.events.append(Event(index, "main", "worklist", text=item_lines(entry.get("text", "") for entry in item.get("items") or [])))
