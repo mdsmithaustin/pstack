@@ -14,8 +14,9 @@ def enum_members(body):
         if isinstance(node, ast.ClassDef) and node.name == "PaymentStatus":
             members = set()
             for statement in node.body:
-                if isinstance(statement, ast.Assign):
-                    for target in statement.targets:
+                if isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                    targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+                    for target in targets:
                         if isinstance(target, ast.Name):
                             members.add(target.id)
                     if isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str):

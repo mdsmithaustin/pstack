@@ -30,3 +30,13 @@ class PaylaneWebhooksTests(unittest.TestCase):
             + "</file>\n"
         )
         self.assertEqual(grade(RULE, CASE, text=answer), ["PaymentStatus gains Paylane values: captured"])
+
+    def test_annotated_copy_of_a_foreign_value_still_leaks(self):
+        answer = (CASE_DIR / "samples" / "good.md").read_text() + (
+            '\n<file path="payments/model.py">\n'
+            + (CASE_DIR / "project" / "payments" / "model.py").read_text().replace(
+                '    FAILED = "failed"\n', '    FAILED = "failed"\n    CAPTURED_PAYMENT: str = "captured"\n'
+            )
+            + "</file>\n"
+        )
+        self.assertEqual(grade(RULE, CASE, text=answer), ["PaymentStatus gains Paylane values: captured"])
