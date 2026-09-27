@@ -270,7 +270,8 @@ binary first on `PATH`, so the `exec codex` in `codex-project-only` finds it.
 The shim also links every executable `codex-*` file beside the binary, because
 Codex starts helpers such as `codex-code-mode-host` from its own directory and
 has no shell tool without them. `screen.py compare --out DIR` reprints a
-finished run. Runs made before cases existed keep their old `compare.json`,
+finished run. `--arm NAME` runs only the named arms and writes no
+`compare.json`. Run the other arms into the same `--out`, then `compare` it. Runs made before cases existed keep their old `compare.json`,
 which `plan` reads. `compare` refuses those directories so it cannot overwrite
 that file.
 

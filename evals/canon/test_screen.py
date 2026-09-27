@@ -409,5 +409,49 @@ class SelectCasesTests(unittest.TestCase):
             screen.select_cases(screen.load_rules(["two-hats"]), ["no-such-case"])
 
 
+
+class ArmSelectionTests(unittest.TestCase):
+    """screen.py run --arm, with the agent, the manifest audit, and each arm's
+    answer and grade stubbed out, since those shell out to the harness."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name).resolve()
+        (base / "skill-ci").mkdir()
+        (base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
+        self.out = base / "out"
+        for patch in (
+            mock.patch.dict(os.environ, {"SKILL_CI": str(base / "skill-ci")}),
+            mock.patch.object(screen, "agent_env", return_value={}),
+            mock.patch.object(screen, "check_manifest"),
+            mock.patch.object(screen, "run_arm"),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def run_screen(self, *arms):
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            code = screen.main(["run", "--agent", "codex", "--out", str(self.out), *(f"--arm={arm}" for arm in arms), "value-type"])
+        return code, printed.getvalue()
+
+    def test_unknown_arm_is_refused(self):
+        with self.assertRaisesRegex(SystemExit, "^unknown arm\\(s\\): currentt$"):
+            self.run_screen("currentt")
+
+    def test_partial_run_writes_no_comparison(self):
+        code, printed = self.run_screen("current")
+
+        self.assertEqual(code, 0)
+        self.assertIn(f"ran only current; run the other arms into {self.out}, then compare --out {self.out}\n", printed)
+        self.assertFalse((self.out / "compare.json").exists())
+
+    def test_every_arm_named_writes_the_comparison(self):
+        code, _ = self.run_screen("current", "amended")
+
+        self.assertEqual(code, 0)
+        self.assertTrue((self.out / "compare.json").is_file())
+
 if __name__ == "__main__":
     unittest.main()

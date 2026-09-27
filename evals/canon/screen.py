@@ -751,7 +751,11 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
 def run(agent, out, rules, model, runs, timeout, entry="skill", only_arms=()):
     """Answer and grade every arm of every case. An arm that fails is
     logged with its traceback and skipped, so the other arms still run; the
-    run then exits nonzero naming each failed arm."""
+    run then exits nonzero naming each failed arm. A run limited to some
+    arms writes no comparison, since the pairs it would print are incomplete."""
+    unknown = sorted(set(only_arms) - {arm for rule in rules for arm in rule.arm_names})
+    if unknown:
+        raise SystemExit(f"unknown arm(s): {', '.join(unknown)}")
     env = agent_env(agent, out)
     built = build(out, rules, entry)
     failed = []
@@ -774,7 +778,10 @@ def run(agent, out, rules, model, runs, timeout, entry="skill", only_arms=()):
                 except Exception as exc:  # noqa: BLE001
                     log_error(out, f"{agent}/{rule.id}/{case.id}/{arm}", exc)
                     failed.append(f"{rule.id}/{case.id}/{arm}")
-    compare(out)
+    if only_arms and any(set(rule.arm_names) - set(only_arms) for rule in rules):
+        print(f"ran only {', '.join(only_arms)}; run the other arms into {out}, then compare --out {out}")
+    else:
+        compare(out)
     if failed:
         raise ScreenError(f"{len(failed)} arm(s) or case(s) failed: {', '.join(failed)}; see {out / ERROR_LOG}")
 
@@ -1045,7 +1052,7 @@ def main(argv=None):
     p.add_argument("--timeout", type=int, help="seconds per answer; default 900 under the poteto-mode entry, else the case's timeout_s")
     p.add_argument("--entry", choices=ENTRIES, default="skill")
     p.add_argument("--case", action="append", default=[], help="run only these case ids (repeatable)")
-    p.add_argument("--arm", action="append", default=[], help="run only these arms (repeatable), e.g. --arm current")
+    p.add_argument("--arm", action="append", default=[], help="run only these arms (repeatable), e.g. --arm current; compare waits for the rest")
     p.add_argument("rules", nargs="*")
     p = sub.add_parser("compare")
     p.add_argument("--out", type=Path, required=True)
