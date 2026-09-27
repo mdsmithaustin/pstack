@@ -676,6 +676,40 @@ class CodexDelegateFlowTests(unittest.TestCase):
                          {"last_edit": 13, "ordered": False, "test_commands_after": [], "wide": None})
 
 
+class CodexTimestampOrderTests(unittest.TestCase):
+    """A trimmed real Codex 0.157 sandbox run of no-debugger-lint, whose
+    stream shows no spawn and names no child in a wait. Its harvest holds the
+    lead rollout and eight child rollouts, every line timestamped. A
+    poteto-agent child edits four files and finishes at 22:00:00, a
+    comment-sicko child edits lint_no_debugger.py at 22:00:25 and finishes at
+    22:00:54, and at 22:01:27 the lead reads lint_no_debugger.py and runs
+    pytest over tests/dev/lint."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-timestamps", "codex")
+
+    def test_reads_after_each_child_task_complete_review_both_code_writers(self):
+        self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 2, "all": True, "unordered": 0})
+
+    def test_the_lead_pytest_after_the_comment_sicko_edit_is_a_wide_run(self):
+        suite = self.row["full_suite_run"]
+
+        first = "sed -n '1,240p' dev/lint/lint_no_debugger.py && uv run --no-sync pytest -q tests/dev/lint &&"
+        self.assertEqual((suite["ordered"], suite["wide"], suite["test_commands_after"][0][:len(first)]), (True, True, first))
+
+    def test_three_explorers_ran_at_once(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 6, "max_in_flight": 3, "parallel": True, "unordered": 0})
+
+    def test_without_the_lead_rollout_the_children_stay_unordered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "codex", "sbx-codex-timestamps")
+            harvest = chain.harvest_dir(trace_path.parent)
+            next(harvest.rglob("rollout-*-01a0e4da-7a83-77b3-8b58-c80d2299db2b.jsonl")).unlink()
+            row = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual(row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 0, "all": None, "unordered": 2})
+
+
 class DelegateFlowMarkdownTests(unittest.TestCase):
     def test_each_stage_has_a_rate_line_per_agent(self):
         rows = [analyze("sbx-claude-delegates", "claude"), analyze("sbx-codex-parallel", "codex"), analyze("sbx-codex-delegates", "codex")]

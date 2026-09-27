@@ -952,9 +952,17 @@ its tool-use-id, or its agentId as the task-id. A Codex child returns at the
 first `wait` whose `agents_states` shows it no longer pending or running.
 When the trace shows none of these, the child's own first `task_complete`
 stands in. Codex 0.157's stream shows no spawn and names no child in a
-wait. Its children are attached after the lead's last line, so they have no
-place in lead order. Each of these stages counts such delegates or edits as
-`unordered` and reads `null` where order decides the answer.
+wait, so its children are placed by time. Every rollout line carries a
+timestamp. The lead's rollout, the one whose first `session_meta` has
+`thread_source` `user`, records the stream's messages, commands, and collab
+calls in the same order, so the kth of each kind in one is the kth in the
+other. That gives each stream line a time. A child's spawn sits at its
+rollout's first line, and each of its events, its `task_complete` included,
+sits after the last lead line at or before it. When the harvest holds no lead
+rollout, or the two disagree on kinds or commands, the children are attached
+after the lead's last line with no place in lead order. Each of these stages
+counts such delegates or edits as `unordered` and reads `null` where order
+decides the answer.
 
 **Delegate wrote code.** `delegated_code` is true when any delegate made a
 workspace edit, the same edits `delegate_edits` lists.

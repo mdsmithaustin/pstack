@@ -29,12 +29,14 @@ holds raw-stream.jsonl is read from it: the sandbox wrapper keeps the agent's
 whole stream there and hands the harness a copy with one result event.
 """
 import argparse
+import bisect
 import importlib.util
 import json
 import re
 import shlex
 import sys
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
 
 CANON = Path(__file__).resolve().parent
@@ -198,7 +200,9 @@ def prescribed_by(role, brief, path=None, reads=()):
 class Event:
     """One thing a run did, in trace order. actor is "main" or "delegate".
     index is the lead trace line. A delegate's event takes its spawn's index
-    and extends the spawn's sub with its own line in the child transcript."""
+    and extends the spawn's sub with its own line in the child transcript,
+    or, for a Codex child whose spawn the stream never shows, takes the lead
+    line its timestamp follows with sub (timestamp, its own line)."""
     index: int
     actor: str
     kind: str  # read, view, edit, shell, spawn, wait, return, done, worklist, worklist-rejected, message, denied
@@ -206,6 +210,7 @@ class Event:
     partial: bool = False
     text: str = ""
     sub: tuple = ()
+    at: float = None  # epoch seconds of the rollout line, for a Codex rollout event
 
 
 def order(event):
@@ -224,7 +229,7 @@ class Spawn:
     prescribed: str = None  # "<skill> <name>" when a routed skill prescribes its role
     reads: frozenset = frozenset()
     inline: list = field(default_factory=list)  # its events the lead stream already echoed
-    placed: bool = True  # False when the trace never shows the spawn, so its events have no place in lead order
+    placed: bool = True  # False when neither the trace nor a timestamp places the spawn in lead order
 
 
 @dataclass
@@ -239,6 +244,7 @@ class Child:
     brief: str = ""
     path: str = None
     worklist_tool_offered: bool = None  # True when its rollout lists or calls update_plan
+    started: float = None  # epoch seconds of its rollout's first line
 
 
 @dataclass
@@ -781,9 +787,12 @@ def parse_codex_rollout(lines, tree):
     the file. Only the file's first session_meta is this rollout's own
     identity (thread_source, parent_thread_id, agent_role, agent_path), so
     later ones are ignored."""
-    meta, events, spawns, brief, task, developer, offered = {}, [], {}, None, None, "", None
+    meta, events, spawns, brief, task, developer, offered, started = {}, [], {}, None, None, "", None, None
     for index, record in json_records(lines):
         payload = record.get("payload") or {}
+        at = epoch(record.get("timestamp"))
+        started = at if started is None else started
+        mark = len(events)
         if lists_update_plan(payload):
             offered = True
         if record.get("type") == "session_meta":
@@ -823,16 +832,29 @@ def parse_codex_rollout(lines, tree):
                 events += codex_collab(index, "delegate", item, spawns)
         elif record.get("type") == "event_msg" and payload.get("type") == "task_complete":
             events.append(Event(index, "delegate", "done"))
+        stamped = {id(event): replace(event, at=at) for event in events[mark:]}
+        events[mark:] = stamped.values()
+        for spawn in spawns.values():
+            spawn.event = stamped.get(id(spawn.event), spawn.event)
     role = codex_role(meta)
     brief = task or brief
     persona = role == PERSONA_ROLE or developer.startswith(CODEX_BRIEFING_HEAD) or has_persona(brief)
-    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "", codex_path(meta), offered)
+    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "", codex_path(meta), offered, started)
 
 
-def attach(trace, children):
+def epoch(stamp):
+    """Epoch seconds of an ISO 8601 rollout timestamp, or None."""
+    try:
+        return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+    except (AttributeError, ValueError):
+        return None
+
+
+def attach(trace, children, clock=None):
     """Merge each child's events into trace right after the spawn that started
     it, a parent before its own children. A child whose spawn the trace never
-    shows goes after the last event."""
+    shows is placed by its rollout timestamps when clock (lead_clock) maps
+    them to lead lines, and otherwise goes after the last event, unordered."""
     pending = list(children)
     while pending:
         ready = [child for child in pending if child.link in trace.spawns]
@@ -840,7 +862,11 @@ def attach(trace, children):
             base_index = max((event.index for event in trace.events), default=-1) + 1
             ready = pending
             for offset, child in enumerate(ready):
-                trace.spawns[child.link] = Spawn(Event(base_index + offset, "delegate", "spawn"), placed=False)
+                if clock and child.started is not None:
+                    spawn = Event(clock(child.started), "delegate", "spawn", sub=(child.started, -1), at=child.started)
+                    trace.spawns[child.link] = Spawn(spawn)
+                else:
+                    trace.spawns[child.link] = Spawn(Event(base_index + offset, "delegate", "spawn"), placed=False)
         for child in ready:
             spawn = trace.spawns[child.link]
             echoed = {id(event) for event in spawn.inline}
@@ -861,8 +887,8 @@ def attach(trace, children):
             spawn.code_writing = spawn.code_writing or bool(spawn.edits)
             spawn.reads = spawn.reads | {event.path for event in child.events if event.kind == "read"}
             base = spawn.event
-            moved = {id(event): replace(event, index=base.index, sub=base.sub + (event.index,),
-                                        text=child.link if event.kind == "done" else event.text) for event in child.events}
+            moved = {id(event): replace(event, text=child.link if event.kind == "done" else event.text,
+                                        **placement(event, base, clock)) for event in child.events}
             trace.events += moved.values()
             for key, inner in child.spawns.items():
                 inner.event = moved[id(inner.event)]
@@ -871,6 +897,39 @@ def attach(trace, children):
         pending = [child for child in pending if id(child) not in done]
     trace.events.sort(key=order)
     return trace
+
+
+def placement(event, base, clock):
+    """Where a child event sorts: at its own timestamp when its spawn was
+    placed by one, else right after its spawn."""
+    if clock and base.at is not None:
+        at = base.at if event.at is None else event.at
+        return {"index": clock(at), "sub": (at, event.index)}
+    return {"index": base.index, "sub": base.sub + (event.index,)}
+
+
+def lead_clock(trace, lead):
+    """A map from a rollout timestamp to the lead stream line it follows, or
+    None. The exec stream carries no timestamps, but the lead's rollout
+    records the same messages, commands, and collab calls in the same order,
+    each stamped, so the kth of each in one is the kth in the other. None when
+    the two disagree on kinds or commands, so nothing is placed by a guess."""
+    kinds = {"message", "shell", "wait", "spawn"}
+    streamed = [event for event in trace.events if event.actor == "main" and event.kind in kinds]
+    stamped = [event for event in lead.events if event.kind in kinds]
+
+    def shape(events):
+        return [(event.kind, event.text if event.kind == "shell" else "") for event in events]
+
+    if not streamed or shape(streamed) != shape(stamped) or any(event.at is None for event in stamped):
+        return None
+    anchors = sorted((mark.at, event.index) for event, mark in zip(streamed, stamped))
+    times = [at for at, _ in anchors]
+
+    def line(at):
+        before = bisect.bisect_right(times, at)
+        return anchors[before - 1][1] if before else -1
+    return line
 
 
 def harvest_dir(run_path):
@@ -903,7 +962,7 @@ def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
         trace.worklist_tool_offered = True
     if lead and not any(event.kind == "worklist" and event.actor == "main" for event in trace.events):
         trace.events += [replace(event, index=len(lead_lines), actor="main", sub=(event.index,)) for event in lead.events if event.kind == "worklist"]
-    return attach(trace, children)
+    return attach(trace, children, lead_clock(trace, lead) if lead else None)
 
 
 def normalize(text):
