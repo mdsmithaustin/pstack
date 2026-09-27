@@ -7,6 +7,8 @@ description: "Use for \"how does X work\", code walkthroughs before changing som
 
 Explore the codebase to answer "how does X work?" questions. Produce architectural explanations at the level of a senior engineer onboarding onto a subsystem, enough to build a working mental model, not so much that it reads like annotated source code.
 
+Each spawn below names a role line in the pstack models config and a default. Set `model` to that line's value, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), or to the default if the config or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the spawn mechanism rejects a value, use the default and say so. If it rejects the default, use the closest valid model of the same family from its error message.
+
 ## Step 1. Assess Complexity
 
 If the scope is ambiguous, state your interpretation and explore. The user can redirect.
@@ -23,7 +25,7 @@ If the repo has a GitNexus index (`.gitnexus/` exists), refresh it first — run
 Decompose the question into 2 to 4 exploration angles, each a distinct slice of the subsystem. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill. Spawn all explorers in a single message:
 
 - `subagent_type`: `general-purpose`
-- `model`: your configured how-explorer model (default `sonnet`), with its configured effort per the **pstack-harness** skill
+- `model`: the `how explorer` line, default `sonnet`
 - `readonly`: `true`
 
 Each explorer gets the prompt in `references/explorer-prompt.md` with its angle filled in. Then go to Step 3.
@@ -33,7 +35,7 @@ Each explorer gets the prompt in `references/explorer-prompt.md` with its angle 
 Spawn one Task subagent that explores and explains in one pass:
 
 - `subagent_type`: `general-purpose`
-- `model`: your configured how-explainer model (default `opus`), with its configured effort per the **pstack-harness** skill
+- `model`: the `how explainer` line, default `opus`
 - `readonly`: `true`
 
 Build its prompt from `references/explainer-prompt.md` with the Direct exploration instructions. Omit Explorer Findings and Synthesis. Go to Step 4.
@@ -43,7 +45,7 @@ Build its prompt from `references/explainer-prompt.md` with the Direct explorati
 Once all explorers have returned, spawn one Task subagent to synthesize their findings into one explanation:
 
 - `subagent_type`: `general-purpose`
-- `model`: your configured how-explainer model (default `opus`), with its configured effort per the **pstack-harness** skill
+- `model`: the `how explainer` line, default `opus`
 - `readonly`: `true`
 
 Build its prompt from `references/explainer-prompt.md` with every explorer's findings and the Synthesis instructions. Omit Direct exploration.

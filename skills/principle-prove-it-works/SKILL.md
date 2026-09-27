@@ -15,15 +15,6 @@ Check the real thing, not a proxy:
 - Read the actual value, not a cached or derived representation
 - When verification fails, suspect the observation method before suspecting the system
 
-Code and features:
-1. Build it (necessary but not sufficient)
-2. Run it and exercise the actual feature path
-3. Check the full chain: does data flow from input to output?
-4. For integrations, test the full communication path end-to-end
-
-Delegation: trust artifacts, not self-reports.
-When verifying delegated work, inspect the actual output artifact (git diff, file contents, runtime behavior), not the delegate's summary.
-
 ## Account for the accepted scope
 
 Check against the original accepted requirements. A plan, summary, or delegation cannot silently narrow them. Link each requirement to evidence or an explicit gap in the existing task record. An unmet requirement prevents a full completion claim. Preserve any `backstop` or `judgment` tags and record authorized scope changes separately. Reuse a runner's record when one exists.

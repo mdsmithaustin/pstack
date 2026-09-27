@@ -9,6 +9,8 @@ Investigate the motivation and intent behind code.
 
 Companion to the `how` skill. `how` answers what the code does and how it works. `why` answers what forces led to its shape.
 
+Each spawn below names a role line in the pstack models config and a default. Set `model` to that line's value, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), or to the default if the config or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the spawn mechanism rejects a value, use the default and say so. If it rejects the default, use the closest valid model of the same family from its error message.
+
 ## Operating Posture
 
 Operate as a **careful, cautious, and precise investigator**. Be honest about what you know vs what you're inferring. Read `references/epistemics.md` for the full confidence framework and phrasing guide. The synthesizer must follow it.
@@ -78,7 +80,7 @@ Launch all matching investigators in a single message so they run concurrently. 
 
 Subagent config (each):
 - `subagent_type`: `general-purpose`
-- `model`: your configured why-investigators model (default `sonnet`), with its configured effort per the **pstack-harness** skill
+- `model`: the `why investigators` line, default `sonnet`
 - `readonly`: `false` (agent mode). **Do not use readonly/Ask mode.** It strips MCP access, which disables MCP-backed investigators entirely. Investigators still shouldn't write anything.
 
 Each investigator gets:
@@ -122,7 +124,7 @@ If your scope assessment suggests a single-commit trivial target where the PR de
 Spawn one synthesizer subagent:
 
 - `subagent_type`: `general-purpose`
-- `model`: your configured why-synthesizer model (default `opus`), with its configured effort per the **pstack-harness** skill
+- `model`: the `why synthesizer` line, default `opus`
 - `readonly`: `false` (agent mode). The synthesizer's quality check spot-verifies citations, which can require MCP access. Readonly/Ask mode strips MCPs and defeats that.
 
 The synthesizer gets:
