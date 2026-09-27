@@ -555,6 +555,39 @@ class CodexRolesHarvestTests(unittest.TestCase):
         self.assertEqual((self.row["delegation"]["brief_names_shape"], claude_row["delegation"]["brief_names_shape"]), (None, True))
 
 
+class ClaudeDelegateFlowTests(unittest.TestCase):
+    """A synthetic Claude sandbox run in the real shapes of Claude Code
+    2.1: two general-purpose explorers spawned in the background, each
+    answered at once by an "Async agent launched" tool_result and later by a
+    <task-notification> user message naming its tool-use-id; then two
+    foreground poteto-agent builders, each returning in its Agent
+    tool_result. The lead reads the tree builder's file after it returns, runs
+    one pytest node id after the test builder returns, and ends."""
+
+    def setUp(self):
+        self.row = analyze("sbx-claude-delegates", "claude")
+
+    def test_a_delegate_edit_is_delegated_code(self):
+        self.assertIs(self.row["delegated_code"], True)
+
+
+class CodexDelegateFlowTests(unittest.TestCase):
+    """A synthetic Codex 0.149 exec --json run, whose stream shows each
+    spawn_agent with its child thread and each wait with the child's final
+    state: two explorers spawned together and awaited in one wait, then a
+    poteto-agent builder whose rollout edits the tree and runs one node id.
+    The lead runs git diff and the tests directory after the builder's wait."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-parallel", "codex")
+
+    def test_a_child_rollout_edit_is_delegated_code(self):
+        self.assertIs(self.row["delegated_code"], True)
+
+    def test_a_run_whose_delegate_only_reads_has_no_delegated_code(self):
+        self.assertIs(analyze("sbx-codex", "codex")["delegated_code"], False)
+
+
 SKILLS = chain.screen.REPO / "skills"
 SKILL_NAMES = {path.parent.name for path in SKILLS.glob("*/SKILL.md")}
 PLAYBOOKS = {name: (SKILLS / "poteto-mode" / "playbooks" / f"{name}.md").read_text() for name in ("feature", "refactoring")}

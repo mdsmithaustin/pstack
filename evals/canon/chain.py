@@ -921,6 +921,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         counts["implementation_misses"] += spawn in implementers and not spawn.persona
     cited = cited_principles(trace.final, principles)
     unread = [slug for slug in cited if f"{slug}/SKILL.md" not in first_read]
+    delegate_edits = sorted({event.path for event in edits if event.actor == "delegate"})
     return {
         "playbook_read": playbooks,
         "playbook_expected": expected,
@@ -956,7 +957,8 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
             "brief_names_shape": any(DATA_SHAPE.search(spawn.event.text or "") for spawn in briefed) if briefed and any(spawn.event.text for spawn in briefed) else None,
             "delegate_reads": sorted({event.path for event in reads if event.actor == "delegate"}),
         },
-        "delegate_edits": sorted({event.path for event in edits if event.actor == "delegate"}),
+        "delegate_edits": delegate_edits,
+        "delegated_code": bool(delegate_edits),
         "delegate_census": [
             {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona, "prescribed": spawn.prescribed}
             for spawn in briefed
