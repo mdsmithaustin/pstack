@@ -55,9 +55,24 @@ def ordered_tests(path, tree):
             yield node.name, node
 
 
-def asserts_then(node, status, status_names, message):
-    constants = {child.value for child in ast.walk(node) if isinstance(child, ast.Constant)}
-    attributes = {child.attr for child in ast.walk(node) if isinstance(child, ast.Attribute)}
+def response_assertions(node, reach):
+    """Assertions in a test whose arguments hold a handler result or a name bound from one."""
+    names, grew = set(), True
+    touches = lambda expr: bool(called(expr) & reach) or any(isinstance(child, ast.Name) and child.id in names for child in ast.walk(expr))
+    while grew:
+        bound = {target.id for child in ast.walk(node) if isinstance(child, ast.Assign) and touches(child.value) for target in child.targets if isinstance(target, ast.Name)}
+        grew, names = bool(bound - names), names | bound
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call) and str(getattr(child.func, "attr", "")).startswith("assert") and any(touches(arg) for arg in child.args):
+            yield child
+        elif isinstance(child, ast.Assert) and touches(child.test):
+            yield child.test
+
+
+def asserts_then(node, reach, status, status_names, message):
+    asserted = [child for assertion in response_assertions(node, reach) for child in ast.walk(assertion)]
+    constants = {child.value for child in asserted if isinstance(child, ast.Constant)}
+    attributes = {child.attr for child in asserted if isinstance(child, ast.Attribute)}
     has_status = any(value == status and type(value) is int for value in constants) or bool(attributes & status_names)
     return has_status and message in constants
 
@@ -74,15 +89,15 @@ def check_scenarios(answer, project):
         reach = handler_callers(tree)
         for qualname, node in ordered_tests(path, tree):
             if normalized_source(body, node) not in original:
-                tests.append((f"{module}:{qualname}", node, bool(called(node) & reach)))
+                tests.append((f"{module}:{qualname}", node, reach))
     if not tests:
         return ["no new test in the answer"]
     failures = []
-    first_id, _, first_through_handler = tests[0]
-    if not first_through_handler:
+    first_id, first_node, first_reach = tests[0]
+    if not called(first_node) & first_reach:
         failures.append(f"the first new test, {first_id}, does not go through OrdersApi.handle")
     for label, status, status_names, message in EXAMPLES:
-        if not any(through and asserts_then(node, status, status_names, message) for _, node, through in tests):
+        if not any(asserts_then(node, reach, status, status_names, message) for _, node, reach in tests):
             failures.append(f"no handler test asserts the {label} example's literal {status} and {message!r}")
     trees = {"answer": {**project, **files}}
     jobs = [{"tree": "answer", "argv": ["python3", "-c", RUN_ONE_TEST, test_id]} for test_id, _, _ in tests]

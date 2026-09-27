@@ -35,3 +35,14 @@ class RefundWindowTests(unittest.TestCase):
 
     def test_answer_without_tests_fails(self):
         self.assertEqual(grade(RULE, CASE, text="Done."), ["no new test in the answer"])
+
+    def test_example_literals_outside_the_response_assertion_fail(self):
+        answer = (SAMPLES / "good.md").read_text().replace(
+            "        self.assertEqual(response.status, 422)\n        self.assertEqual(response.body, {\"error\": \"refund window closed\"})",
+            "        self.assertEqual(422, 422)\n        self.assertEqual(\"refund window closed\", \"refund window closed\")",
+        )
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            ["no handler test asserts the window closed example's literal 422 and 'refund window closed'"],
+        )
+
