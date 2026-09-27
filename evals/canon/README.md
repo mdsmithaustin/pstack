@@ -520,10 +520,12 @@ prompt. `sbx secret set` supports `--oauth` for OpenAI only.
 **Network.** The run requires the host's global policy to deny by default;
 `sbx policy ls` shows it, and the probe in step 2 refuses a run where it does
 not. Each agent kit adds
-its own hosts to that sandbox. Claude's kit adds the Anthropic API and the
-claude.com hosts. Codex's kit adds chatgpt.com, the OpenAI API, GitHub, npm,
-and the Ubuntu archives. A run sandbox adds a per-sandbox deny rule for every package index
-and source host in `sbx.json` `run_deny_network`, so a run reaches only its
+its own hosts to that sandbox. Claude's kit adds the Anthropic API,
+platform.claude.com, claude.com, code.claude.com, downloads.claude.ai,
+bridge.claudeusercontent.com, and mcp-proxy.anthropic.com (`sbx policy ls
+--wide` on 2026-09-27). Codex's kit adds chatgpt.com, the OpenAI API, GitHub, npm,
+and the Ubuntu archives. A run sandbox adds a per-sandbox deny rule for every package index,
+source host, and non-model kit host in `sbx.json` `run_deny_network`, so a run reaches only its
 model API. A local deny can only narrow egress. The dependency build is the one
 step that reaches PyPI, GitHub releases, astral.sh, and the npm registry,
 through per-sandbox allow rules (`build_network`) on a sandbox that is removed

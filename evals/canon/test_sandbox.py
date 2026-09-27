@@ -253,9 +253,11 @@ class InsideTests(test_workspace.ShopRepo):
         self.assertTrue((self.base / "out.tar").is_file())
 
 
-RUN_DENY = ["api.github.com", "archive.ubuntu.com", "codeload.github.com", "download.docker.com", "files.pythonhosted.org",
-            "github.com", "objects.githubusercontent.com", "ports.ubuntu.com", "pypi.org", "raw.githubusercontent.com",
-            "registry.npmjs.org", "release-assets.githubusercontent.com", "releases.astral.sh", "security.ubuntu.com"]
+RUN_DENY = ["api.github.com", "archive.ubuntu.com", "bridge.claudeusercontent.com", "claude.com", "code.claude.com",
+            "codeload.github.com", "download.docker.com", "downloads.claude.ai", "files.pythonhosted.org", "github.com",
+            "mcp-proxy.anthropic.com", "objects.githubusercontent.com", "platform.claude.com", "ports.ubuntu.com", "pypi.org",
+            "raw.githubusercontent.com", "registry.npmjs.org", "release-assets.githubusercontent.com", "releases.astral.sh",
+            "security.ubuntu.com"]
 
 
 class FakeSbx:
@@ -323,14 +325,15 @@ class WrapPolicyTests(test_workspace.ShopRepo):
         self.assertEqual(len(fake.agent_runs()), 1)
 
     def test_a_policy_that_allows_a_probe_host_refuses_the_run_before_the_agent_starts(self):
-        fake = FakeSbx(workspace.reference_checkout(self.spec)[1], allowed={"example.org", "pypi.org"})
+        fake = FakeSbx(workspace.reference_checkout(self.spec)[1], allowed={"example.org", "platform.claude.com", "pypi.org"})
 
         code, _, record = self.wrap(fake)
 
         self.assertEqual(code, workspace.REFUSED)
-        self.assertEqual(record["error"], "the sandbox's network policy does not deny example.org, pypi.org; "
+        self.assertEqual(record["error"], "the sandbox's network policy does not deny example.org, platform.claude.com, pypi.org; "
                                           "check the global policy with `sbx policy ls`")
-        self.assertEqual((record["egress"]["example.org"], record["egress"]["pypi.org"], record["egress"]["github.com"]), (True, True, False))
+        self.assertEqual((record["egress"]["example.org"], record["egress"]["platform.claude.com"], record["egress"]["pypi.org"],
+                          record["egress"]["github.com"]), (True, True, True, False))
         self.assertEqual(fake.agent_runs(), [])
         self.assertEqual(fake.calls[-1], ["rm", "--force", record["sandbox"]])
 
