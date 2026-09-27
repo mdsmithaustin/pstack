@@ -34,6 +34,24 @@ class CartQuantityTests(unittest.TestCase):
             ],
         )
 
+    def test_app_mutating_a_line_outside_the_routes_fails(self):
+        app = (RULES / RULE / "cases" / CASE / "project" / "shop" / "app.py").read_text().replace(
+            "def handle(store, method: str, path: str, body: dict | None = None):\n",
+            "def handle(store, method: str, path: str, body: dict | None = None):\n"
+            '    patch = re.match(r"^/cart/([^/]+)/lines/([^/]+)$", path)\n'
+            '    if method == "PATCH" and patch:\n'
+            "        order = store.get(patch.group(1))\n"
+            "        for i, line in enumerate(order.lines):\n"
+            "            if line.sku == patch.group(2):\n"
+            '                order.total_cents += line.unit_price_cents * (body["quantity"] - line.quantity)\n'
+            '                order.lines[i].quantity = body["quantity"]\n'
+            "        return 200, {}\n",
+        )
+        self.assertEqual(
+            grade(RULE, CASE, text=f'<file path="shop/app.py">\n{app}</file>\n'),
+            ["shop/app.py indexes into .lines[", "shop/app.py assigns .total_cents", "shop/app.py assigns .quantity"],
+        )
+
     def test_missing_route_fails(self):
         self.assertEqual(
             grade(RULE, CASE, text="No change."),

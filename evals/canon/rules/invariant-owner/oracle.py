@@ -2,7 +2,7 @@
 import ast
 import json
 
-from shared import parse_files, parse_python, run_jobs
+from shared import is_test_path, parse_files, parse_python, run_jobs
 
 PROBE = """
 import json
@@ -17,6 +17,7 @@ _, cart = handle(store, "GET", "/cart/o1")
 print(json.dumps({"status": status, "total": cart["total_cents"], "mug": [line["quantity"] for line in cart["lines"] if line["sku"] == "MUG"]}))
 """
 OWNED = ("total_cents", "quantity")
+OWNER = "shop/order.py"
 
 
 def assigned_attributes(tree):
@@ -32,7 +33,7 @@ def check_owner(answer, project):
     files = parse_files(answer)
     failures = []
     for path, body in sorted(files.items()):
-        if not (path.startswith("shop/routes/") and path.endswith(".py")):
+        if not path.endswith(".py") or path == OWNER or is_test_path(path):
             continue
         if ".lines[" in body:
             failures.append(f"{path} indexes into .lines[")
