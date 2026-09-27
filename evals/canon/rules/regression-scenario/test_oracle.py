@@ -31,4 +31,21 @@ class ZeroPriceTests(unittest.TestCase):
 
     def test_literal_that_already_held_fails(self):
         answer = (SAMPLES / "good.md").read_text().replace('self.assertEqual(format_price(0), "$0.00")', 'self.assertEqual(format_price(5), "$0.05")')
-        self.assertEqual(grade(RULE, CASE, text=answer), ["new tests pass on the code before the fix"])
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            ["no new test asserts the zero-price label '$0.00'", "new tests pass on the code before the fix"],
+        )
+
+    def test_literal_unrelated_to_the_subject_fails(self):
+        answer = (SAMPLES / "good.md").read_text().replace(
+            'self.assertEqual(format_price(0), "$0.00")',
+            'self.assertNotEqual(format_price(0), "")\n        self.assertEqual("marker", "marker")',
+        )
+        self.assertEqual(grade(RULE, CASE, text=answer), [f"{TEST} asserts no literal expected label"])
+
+    def test_wrong_label_for_zero_fails(self):
+        answer = (SAMPLES / "good.md").read_text().replace('"$0.00"', '"$1.00"').replace(
+            "    if cents is None:\n        return \"\"\n",
+            "    if cents is None:\n        return \"\"\n    if cents == 0:\n        return \"$1.00\"\n",
+        )
+        self.assertEqual(grade(RULE, CASE, text=answer), ["no new test asserts the zero-price label '$0.00'"])

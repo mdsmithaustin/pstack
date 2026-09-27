@@ -6,6 +6,7 @@ from pathlib import PurePosixPath
 from shared import is_test_path, normalized_source, original_test_sources, parse_files, parse_python, run_jobs
 
 SUBJECT = "shop/pricing.py"
+EXPECTED = "$0.00"
 EQUALITY = {"assertEqual", "assertEquals"}
 RUN_ONE_TEST = """
 import importlib, sys, unittest
@@ -23,15 +24,24 @@ def is_literal(node):
     return isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value != ""
 
 
-def asserts_literal(test):
+def calls_subject(node):
+    return any(isinstance(call, ast.Call) and getattr(call.func, "attr", getattr(call.func, "id", None)) == "format_price" for call in ast.walk(node))
+
+
+def asserted_labels(test):
+    """Literal labels the test asserts a format_price result, or a name bound to one, equals."""
+    results = {target.id for node in ast.walk(test) if isinstance(node, ast.Assign) and calls_subject(node.value) for target in node.targets if isinstance(target, ast.Name)}
+    is_result = lambda side: calls_subject(side) or isinstance(side, ast.Name) and side.id in results
+    labels = set()
     for node in ast.walk(test):
-        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) in EQUALITY and any(is_literal(arg) for arg in node.args[:2]):
-            return True
-        if isinstance(node, ast.Assert) and isinstance(node.test, ast.Compare):
-            compare = node.test
-            if all(isinstance(op, ast.Eq) for op in compare.ops) and any(is_literal(side) for side in [compare.left, *compare.comparators]):
-                return True
-    return False
+        sides = []
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) in EQUALITY:
+            sides = node.args[:2]
+        elif isinstance(node, ast.Assert) and isinstance(node.test, ast.Compare) and all(isinstance(op, ast.Eq) for op in node.test.ops):
+            sides = [node.test.left, *node.test.comparators]
+        if any(is_result(side) for side in sides):
+            labels |= {side.value for side in sides if is_literal(side)}
+    return labels
 
 
 def new_tests(files, project):
@@ -55,7 +65,10 @@ def check_regression(answer, project):
     tests = new_tests(files, project)
     if not tests:
         return ["no new test in the answer"]
-    failures = [f"{test_id} asserts no literal expected label" for test_id, node in tests if not asserts_literal(node)]
+    labels = {test_id: asserted_labels(node) for test_id, node in tests}
+    failures = [f"{test_id} asserts no literal expected label" for test_id, found in labels.items() if not found]
+    if not failures and not any(EXPECTED in found for found in labels.values()):
+        failures.append(f"no new test asserts the zero-price label {EXPECTED!r}")
     fixed = {**project, **files}
     before = {**fixed, SUBJECT: project[SUBJECT]}
     trees = {"fixed": fixed, "before": before}
