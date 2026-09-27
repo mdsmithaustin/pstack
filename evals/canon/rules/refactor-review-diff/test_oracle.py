@@ -43,6 +43,15 @@ class LintReportLoopTests(unittest.TestCase):
             ["held_output::test_asyncio_report_keeps_a_hint_after_every_hit failed"],
         )
 
+    def test_a_package_import_the_hook_cannot_resolve_changes_every_output(self):
+        diff = sample_diff("good.diff").replace("+from _framework import", "+from dev.lint._framework import")
+
+        self.assertEqual(grade(RULE, CASE, "good.md", workspace=sample_workspace(diff)), [
+            f"held_output::{name} failed" for name in (
+                "test_skip_report", "test_skip_report_repeats_a_repeated_path", "test_skip_clean_is_silent",
+                "test_asyncio_report_keeps_a_hint_after_every_hit", "test_asyncio_clean_skips_directories")
+        ])
+
     def test_no_change_is_not_the_refactor(self):
         self.assertEqual(
             grade(RULE, CASE, "good.md", workspace=sample_workspace("")),

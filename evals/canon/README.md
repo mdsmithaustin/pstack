@@ -1046,7 +1046,11 @@ local test path, so `unexposed` is a likely outcome there.
 - **lint-report-loop.** Move the argv report loop two omnigent lint scripts
   share into `_framework.py`. The asyncio lint prints a hint line after every
   hit, and a shared per-hit label drops it. The oracle checks that the loop
-  moved, then runs held stdout and exit-code cases for both scripts.
+  moved, then runs held stdout and exit-code cases for both scripts. It runs
+  each script as the pre-commit hook does, `python3 dev/lint/<script>.py
+  <files>` from the repo root, so `from _framework import` resolves and
+  `from dev.lint._framework import` does not. The venv's editable install
+  exposes only `omnigent*`, so the hook cannot import `dev` either.
 
 `chain.py` reports the stages these cuts target: whether a delegate wrote
 code, whether the lead reviewed it, parallel investigation spawns, and a test

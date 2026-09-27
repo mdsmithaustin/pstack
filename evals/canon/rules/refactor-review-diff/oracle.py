@@ -23,12 +23,16 @@ SKIP_HITS = (
     "tests/test_skip_dirty.py:3: `@pytest.mark.skip` on `test_x`: skipped tests rot invisibly; rewrite or delete\n"
     "tests/test_skip_dirty.py:6: `pytestmark = pytest.mark.skip(...)` at module scope skips every test in the file\n"
 )
-HELD_OUTPUT = f'''import contextlib
-import io
-import os
+# The pre-commit hook runs each script by path from the repo root, as
+# `.venv/bin/python dev/lint/<script>.py <files>`, so dev/lint is on sys.path
+# and the repo root is not: the venv's editable install exposes only omnigent*.
+HELD_OUTPUT = f'''import os
+import shutil
+import subprocess
+import sys
 import tempfile
 
-from dev.lint import lint_no_global_asyncio_patch, lint_no_skipped_tests
+ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 def lines(*rows):
@@ -43,33 +47,29 @@ FILES = {{
 }}
 
 
-def run(module, *paths):
-    home = os.getcwd()
-    with tempfile.TemporaryDirectory() as directory:
-        os.chdir(directory)
-        try:
-            os.mkdir("tests")
-            for path, text in FILES.items():
-                with open(path, "w") as handle:
-                    handle.write(text)
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                code = module.main(["hook.py", *paths])
-            return code, out.getvalue()
-        finally:
-            os.chdir(home)
+def run(script, *paths):
+    with tempfile.TemporaryDirectory() as repo:
+        shutil.copytree(os.path.join(ROOT, "dev"), os.path.join(repo, "dev"))
+        os.mkdir(os.path.join(repo, "tests"))
+        for path, text in FILES.items():
+            with open(os.path.join(repo, path), "w") as handle:
+                handle.write(text)
+        env = {{key: value for key, value in os.environ.items() if key != "PYTHONPATH"}}
+        proc = subprocess.run([sys.executable, f"dev/lint/{{script}}.py", *paths], cwd=repo, env=env,
+                              capture_output=True, text=True, timeout=30)
+        return proc.returncode, proc.stdout
 
 
 def test_skip_report():
-    assert run(lint_no_skipped_tests, "tests/test_skip_dirty.py", "tests/missing.py", "tests/test_skip_clean.py") == (1, {SKIP_HITS + SKIP_FOOTER!r})
+    assert run("lint_no_skipped_tests", "tests/test_skip_dirty.py", "tests/missing.py", "tests/test_skip_clean.py") == (1, {SKIP_HITS + SKIP_FOOTER!r})
 
 
 def test_skip_report_repeats_a_repeated_path():
-    assert run(lint_no_skipped_tests, "tests/test_skip_dirty.py", "tests/test_skip_dirty.py") == (1, {SKIP_HITS + SKIP_HITS + SKIP_FOOTER!r})
+    assert run("lint_no_skipped_tests", "tests/test_skip_dirty.py", "tests/test_skip_dirty.py") == (1, {SKIP_HITS + SKIP_HITS + SKIP_FOOTER!r})
 
 
 def test_skip_clean_is_silent():
-    assert run(lint_no_skipped_tests, "tests/test_skip_clean.py") == (0, "")
+    assert run("lint_no_skipped_tests", "tests/test_skip_clean.py") == (0, "")
 
 
 def test_asyncio_report_keeps_a_hint_after_every_hit():
@@ -80,11 +80,11 @@ def test_asyncio_report_keeps_a_hint_after_every_hit():
         + {HINT!r}
         + {ASYNCIO_FOOTER!r}
     )
-    assert run(lint_no_global_asyncio_patch, "tests/test_aio_clean.py", "tests/test_aio_dirty.py") == (1, expected)
+    assert run("lint_no_global_asyncio_patch", "tests/test_aio_clean.py", "tests/test_aio_dirty.py") == (1, expected)
 
 
 def test_asyncio_clean_skips_directories():
-    assert run(lint_no_global_asyncio_patch, "tests/test_aio_clean.py", "tests") == (0, "")
+    assert run("lint_no_global_asyncio_patch", "tests/test_aio_clean.py", "tests") == (0, "")
 '''
 
 

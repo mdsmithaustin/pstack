@@ -44,7 +44,7 @@ index a8c0c4b..cd238a4 100644
  import sys
  from pathlib import Path
  
-+from dev.lint._framework import report_file_hits
++from _framework import report_file_hits
 +
  
  def _is_global_asyncio_literal(value: str) -> bool:
@@ -115,7 +115,7 @@ index 0061d1f..9888099 100644
  import sys
  from pathlib import Path
  
-+from dev.lint._framework import report_file_hits
++from _framework import report_file_hits
 +
  
  def _is_skip_attribute(node: ast.expr) -> bool:
