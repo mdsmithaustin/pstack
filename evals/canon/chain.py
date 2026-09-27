@@ -349,7 +349,8 @@ def shell_effects(command, tree):
                 writes.append(words[-1])
                 continue
             if verb in WRITE_VERBS:
-                writes += [word for word in words[1:] if not word.startswith("-")]
+                operands = [word for word in words[1:] if not word.startswith("-")]
+                writes += operands[-1:] if verb == "cp" else operands
                 continue
             if verb not in READ_VERBS:
                 continue

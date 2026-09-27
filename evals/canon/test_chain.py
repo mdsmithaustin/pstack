@@ -148,6 +148,9 @@ class ShellEffectsTests(unittest.TestCase):
     def test_redirect_outside_quotes_is_a_write(self):
         self.assertEqual(chain.shell_effects("echo hi > notes.txt", TREE), ([], ["notes.txt"]))
 
+    def test_cp_writes_only_its_destination(self):
+        self.assertEqual(chain.shell_effects("cp -p src/tree.py backup.py", TREE), ([], ["backup.py"]))
+
     def test_for_loop_reads_every_word(self):
         reads, _ = chain.shell_effects(
             "/bin/zsh -lc 'for n in how architect; do cat skills/pstack/$n/SKILL.md; done'", TREE)
