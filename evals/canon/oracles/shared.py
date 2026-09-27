@@ -118,6 +118,52 @@ def run_container(source, name, jobs):
     return json.loads(proc.stdout)
 
 
+PLAIN_RUNNER = """import contextlib, importlib, inspect, io, json, sys
+failures = []
+out = sys.stdout
+sys.stdout = io.StringIO()
+for name in sys.argv[1:]:
+    try:
+        module = importlib.import_module(name)
+    except BaseException as exc:
+        failures.append(f"{name} does not import: {type(exc).__name__}")
+        continue
+    cases = []
+    for key, value in vars(module).items():
+        if key.startswith("test") and inspect.isfunction(value) and value.__module__ == name:
+            cases.append((f"{name}::{key}", None, value))
+        elif key.startswith("Test") and inspect.isclass(value) and value.__module__ == name:
+            for attr, method in vars(value).items():
+                if attr.startswith("test") and inspect.isfunction(method):
+                    cases.append((f"{name}::{key}::{attr}", value, attr))
+    if not cases:
+        failures.append(f"{name} holds no test functions")
+    for label, owner, target in cases:
+        try:
+            if owner is None:
+                target()
+            else:
+                instance = owner()
+                if hasattr(instance, "setup_method"):
+                    instance.setup_method()
+                getattr(instance, target)()
+        except BaseException:
+            failures.append(f"{label} failed")
+out.write(json.dumps(failures))
+"""
+
+
+def plain_test_failures(tree, modules):
+    """Failures from running every test function and Test* class method of
+    the named modules in the container, pytest-style but with no plugins or
+    fixtures. tree is {path: text}; the modules import from it."""
+    job = {"tree": "suite", "argv": ["python3", "_plain_runner.py", *modules], "timeout": 60}
+    result = run_jobs({"suite": {**tree, "_plain_runner.py": PLAIN_RUNNER}}, [job])[0]
+    if result["rc"] != 0:
+        raise OracleError(f"the test runner stopped (exit {result['rc']}): {result['stderr'].strip()[-300:]}")
+    return json.loads(result["stdout"])
+
+
 def workspace_diff(run_dir):
     """The diff harvested from the agent's workspace for one run. The harness
     seals each run dir, so the diff sits in a parallel tree: <work>/runs/<run>
