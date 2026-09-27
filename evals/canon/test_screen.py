@@ -195,6 +195,12 @@ class RuleVerdictTests(unittest.TestCase):
         self.assertEqual(screen.rule_verdict(outcomes), ("not-separated", ["bdd invalid"]))
 
 
+    def test_near_miss_that_never_read_the_change_cannot_show_the_rule_held(self):
+        outcomes = [("plain", "positive", "separates"), ("bdd", "near-miss", "unexposed")]
+
+        self.assertEqual(screen.rule_verdict(outcomes), ("not-separated", ["bdd unexposed"]))
+
+
 class NearMissThatNeverRanTests(unittest.TestCase):
     def test_missing_near_miss_blocks_the_rule(self):
         outcomes = [("plain", "positive", "separates"), ("bdd", "near-miss", "missing")]

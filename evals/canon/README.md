@@ -25,7 +25,7 @@ judge runs.
 A rule has one or more cases. A `positive` case is one where the rule should
 change the answer. A `near-miss` case is one where the rule must not change it.
 A rule `SEPARATES` only when every positive case separates and no near-miss case
-reverses or goes ungraded.
+reverses, goes ungraded, or is unexposed.
 
 `screen.py plan` lists every rule with its source, owner file, patch kind,
 companions, and cases. It also shows each finished run found under `--runs-root`, which can be
@@ -278,7 +278,8 @@ that file.
 
 Read the rule line first, then the case lines. A near-miss case that never ran
 shows as `missing` and blocks the rule. An `unexposed` pair is not a tie. It
-means the amended arm never read the patched file. One repetition cannot show
+means the amended arm never read the patched file, and it blocks the rule for a
+near-miss case too. One repetition cannot show
 that a rule helps. It shows whether the pair separates in the predicted
 direction. When both arms pass a positive case, the case cannot show a
 difference. If neither agent separates, drop the rule rather than tuning the

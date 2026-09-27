@@ -862,10 +862,10 @@ def differing_files(case_root, build_info, baseline, treatment):
 def rule_verdict(outcomes):
     """outcomes: [(case id, case kind, pair outcome)] for one rule, agent, and run,
     with outcome "missing" for a built case that has no grade. Returns (verdict,
-    reasons). A near-miss that went ungraded or never ran cannot show it held,
-    so it blocks the verdict like a reversal does."""
+    reasons). A near-miss that went ungraded, never ran, or never read the
+    change cannot show it held, so it blocks the verdict like a reversal does."""
     reasons = [f"{case} {outcome}" for case, kind, outcome in outcomes
-               if (kind == "positive" and outcome != "separates") or (kind == "near-miss" and outcome in ("reverses", "invalid", "missing"))]
+               if (kind == "positive" and outcome != "separates") or (kind == "near-miss" and outcome in ("reverses", "invalid", "missing", "unexposed"))]
     if not any(kind == "positive" for _, kind, _ in outcomes):
         reasons.append("no positive case ran")
     return ("separates" if not reasons else "not-separated"), reasons
