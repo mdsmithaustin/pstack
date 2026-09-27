@@ -570,6 +570,12 @@ class ClaudeDelegateFlowTests(unittest.TestCase):
     def test_a_delegate_edit_is_delegated_code(self):
         self.assertIs(self.row["delegated_code"], True)
 
+    def test_one_failing_node_id_after_the_last_edit_is_not_a_wide_run(self):
+        self.assertEqual(self.row["full_suite_run"], {
+            "last_edit": 11, "ordered": True,
+            "test_commands_after": ["uv run pytest tests/test_tree.py::test_nested -q 2>&1 | tail -5"], "wide": False,
+        })
+
 
 class CodexDelegateFlowTests(unittest.TestCase):
     """A synthetic Codex 0.149 exec --json run, whose stream shows each
@@ -586,6 +592,44 @@ class CodexDelegateFlowTests(unittest.TestCase):
 
     def test_a_run_whose_delegate_only_reads_has_no_delegated_code(self):
         self.assertIs(analyze("sbx-codex", "codex")["delegated_code"], False)
+
+    def test_the_lead_tests_directory_after_the_child_node_id_is_a_wide_run(self):
+        self.assertEqual(self.row["full_suite_run"], {
+            "last_edit": 5, "ordered": True,
+            "test_commands_after": ["uv run pytest tests/test_tree.py::test_nested", "uv run pytest -q tests/"], "wide": True,
+        })
+
+    def test_a_run_without_edits_has_no_last_edit(self):
+        self.assertEqual(analyze("sbx-codex", "codex")["full_suite_run"],
+                         {"last_edit": None, "ordered": True, "test_commands_after": [], "wide": None})
+
+    def test_edits_of_a_child_whose_spawn_the_stream_never_shows_cannot_be_ordered(self):
+        self.assertEqual(analyze("sbx-codex-delegates", "codex")["full_suite_run"],
+                         {"last_edit": 13, "ordered": False, "test_commands_after": [], "wide": None})
+
+
+class TestCommandTests(unittest.TestCase):
+    def test_runners_and_their_scope(self):
+        commands = [
+            "pytest", "python -m pytest tests/test_tree.py", "uv run --frozen pytest tests/test_tree.py::test_nested -q",
+            "uv run pytest -k nested", "uv run pytest tests -k nested", "python3 -m pytest 'tests/test_tree.py::TestTree::test_a' tests/test_tree.py::test_b",
+            "python3 -m unittest test_chain -v", "python -m unittest tests.test_tree.TreeTests.test_nested", "python -m unittest -k nested",
+            "python -m unittest discover -s tests", "npm test", "pnpm test -- --watch=false", "yarn test", "node --test",
+            "go test ./...", "cargo test", "just test", "UV_OFFLINE=1 uv run pytest -x --tb=short tests/test_tree.py::test_nested 2>&1 | tail -3",
+            "git diff", "python3 tools/check-links.py", "rg -n pytest",
+        ]
+
+        self.assertEqual([chain.test_scope(command) for command in commands], [
+            "wide", "wide", "single",
+            "single", "wide", "single",
+            "wide", "single", "single",
+            "wide", "wide", "wide", "wide", "wide",
+            "wide", "wide", "wide", "single",
+            None, None, None,
+        ])
+
+    def test_a_compound_command_is_as_wide_as_its_widest_test_run(self):
+        self.assertEqual(chain.test_scope("cd app && pytest tests/test_a.py::test_x && pytest tests"), "wide")
 
 
 SKILLS = chain.screen.REPO / "skills"

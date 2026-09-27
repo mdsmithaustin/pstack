@@ -193,7 +193,7 @@ class Event:
     and extends the spawn's sub with its own line in the child transcript."""
     index: int
     actor: str
-    kind: str  # read, edit, spawn, wait, worklist, worklist-rejected, message, denied
+    kind: str  # read, edit, shell, spawn, wait, worklist, worklist-rejected, message, denied
     path: str = ""
     partial: bool = False
     text: str = ""
@@ -215,6 +215,7 @@ class Spawn:
     prescribed: str = None  # "<skill> <name>" when a routed skill prescribes its role
     reads: frozenset = frozenset()
     inline: list = field(default_factory=list)  # its events the lead stream already echoed
+    placed: bool = True  # False when the trace never shows the spawn, so its events have no place in lead order
 
 
 @dataclass
@@ -293,17 +294,22 @@ def expand_loop(match):
     return "; ".join(variable.sub(word, body) for word in words.split())
 
 
+def unwrap(command):
+    """The script a `/bin/bash -lc '...'` wrapper runs, else the command."""
+    if not SHELL_WRAPPER.match(command):
+        return command
+    body = SHELL_WRAPPER.sub("", command, count=1)
+    try:
+        return shlex.split(body)[0]
+    except (ValueError, IndexError):
+        return body.strip("'\"")
+
+
 def split_shell(command):
     """[[stage tokens, ...] per pipeline], split only at unquoted operators,
     with heredoc bodies dropped. Operators stay out of the stage tokens except
     redirects, which stay where they are."""
-    if SHELL_WRAPPER.match(command):
-        body = SHELL_WRAPPER.sub("", command, count=1)
-        try:
-            command = shlex.split(body)[0]
-        except (ValueError, IndexError):
-            command = body.strip("'\"")
-    command = FOR_LOOP.sub(expand_loop, unquoted_newlines_to_semicolons(HEREDOC.sub("\n", command)))
+    command = FOR_LOOP.sub(expand_loop, unquoted_newlines_to_semicolons(HEREDOC.sub("\n", unwrap(command))))
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
@@ -362,6 +368,95 @@ def shell_effects(command, tree):
                 partial = verb in TRIM_VERBS or trimmed_later or (verb == "sed" and sed_is_partial(words, tree[path]))
                 reads.append((path, partial))
     return reads, writes
+
+
+REDIRECTS = {">", ">>", ">&", "&>", ">|", "<"}
+WRAPPERS = {"env", "time", "exec", "nice", "command"}
+RUN_WRAPPERS = {"uv", "poetry", "pdm", "hatch", "pipenv", "rye"}
+PYTEST_VALUE_OPTIONS = {
+    "-m", "-p", "-c", "-o", "-W", "-n", "-r", "--deselect", "--ignore", "--ignore-glob", "--rootdir", "--maxfail", "--tb",
+    "--junitxml", "--junit-xml", "--durations", "--basetemp", "--log-level", "--import-mode", "--timeout", "--confcutdir",
+    "--cov-report",
+}
+UNITTEST_VALUE_OPTIONS = {"-p", "-s", "-t"}
+
+
+def command_words(tokens):
+    """A stage's tokens without redirects, their targets, or the file
+    descriptor a redirect names."""
+    words, skip = [], False
+    for at, token in enumerate(tokens):
+        if skip:
+            skip = False
+        elif token in REDIRECTS:
+            skip = True
+        elif not (token.isdigit() and tokens[at + 1:at + 2] and tokens[at + 1] in REDIRECTS):
+            words.append(token)
+    return words
+
+
+def test_runner(words):
+    """(runner, arguments) of a stage that runs tests: "pytest", "unittest",
+    or "other" for npm, pnpm, or yarn test, node --test, go test, cargo test,
+    and just test. None for any other command."""
+    verbs = [word.rsplit("/", 1)[-1] for word in words]
+    at = 0
+    while at < len(words) and (verbs[at] in WRAPPERS or re.match(r"^\w+=", words[at])):
+        at += 1
+    if at + 1 < len(words) and verbs[at] in RUN_WRAPPERS and words[at + 1] == "run":
+        at += 2
+        while at < len(words) and not (verbs[at] in ("pytest", "py.test") or re.fullmatch(r"python[\d.]*", verbs[at])):
+            at += 1
+    verb, rest = (verbs[at], words[at + 1:]) if at < len(words) else ("", [])
+    if verb in ("pytest", "py.test"):
+        return "pytest", rest
+    if re.fullmatch(r"python[\d.]*", verb) and "-m" in rest[:-1]:
+        module = rest[rest.index("-m") + 1]
+        return (module, rest[rest.index("-m") + 2:]) if module in ("pytest", "unittest") else None
+    if (verb in ("npm", "pnpm", "yarn") and (rest[:1] in (["test"], ["t"]) or rest[:2] == ["run", "test"])
+            or verb == "node" and "--test" in rest or verb in ("go", "cargo", "just") and rest[:1] == ["test"]):
+        return "other", rest
+    return None
+
+
+def single_test(runner, arguments):
+    """Whether every target a pytest or unittest run names is one test id: a
+    pytest path::name node id, a unittest Class.test_method dotted target,
+    or a -k selector. A file, directory, module, or no target is wider, and
+    so is every other runner."""
+    targets, selectors, skip = [], 0, False
+    values = PYTEST_VALUE_OPTIONS if runner == "pytest" else UNITTEST_VALUE_OPTIONS
+    for argument in arguments:
+        if skip:
+            skip = False
+        elif argument == "-k":
+            selectors, skip = selectors + 1, True
+        elif argument.startswith("-k") and not argument.startswith("--"):
+            selectors += 1
+        elif argument in values:
+            skip = True
+        elif not argument.startswith("-"):
+            targets.append(argument)
+    if runner == "pytest":
+        return bool(targets or selectors) and all("::" in target for target in targets)
+    if runner == "unittest":
+        parts = [target.split(".") for target in targets]
+        return bool(targets or selectors) and all(
+            len(part) >= 2 and part[-1].startswith("test") and part[-2][:1].isupper() for part in parts)
+    return False
+
+
+def test_scope(command):
+    """"wide" when some test run in the command is wider than one test id,
+    "single" when every test run names only test ids, None when it runs no
+    tests."""
+    scopes = set()
+    for stages in split_shell(command):
+        for tokens in stages:
+            found = test_runner(command_words(tokens))
+            if found:
+                scopes.add("single" if single_test(*found) else "wide")
+    return "wide" if "wide" in scopes else "single" if scopes else None
 
 
 def in_workspace(path, cwd, tree):
@@ -442,7 +537,11 @@ def claude_events(records, tree, cwd, agents=(), actor=None):
                 path = resolve(f"{data.get('skill', '')}/SKILL.md", tree)
                 if path:
                     mine.append(Event(index, who, "read", path))
-            elif name == "Bash" and ok:
+            elif name == "Bash" and use_id not in denied:
+                # A test run that fails errors, and still ran.
+                mine.append(Event(index, who, "shell", text=data.get("command", "")))
+                if not ok:
+                    continue
                 reads, writes = shell_effects(data.get("command", ""), tree)
                 mine += [Event(index, who, "read", path, partial) for path, partial in reads]
                 mine += [Event(index, who, "edit", path) for path in writes if in_workspace(path, where, tree)]
@@ -523,6 +622,7 @@ def parse_codex(lines, tree, cwd=""):
             trace.events.append(Event(index, "main", "message", text=item.get("text", "")))
             trace.final = item.get("text", "")
         elif kind == "command_execution":
+            trace.events.append(Event(index, "main", "shell", text=unwrap(item.get("command", ""))))
             reads, writes = shell_effects(item.get("command", ""), tree)
             trace.events += [Event(index, "main", "read", path, partial) for path, partial in reads]
             if item.get("exit_code") == 0:
@@ -649,6 +749,7 @@ def parse_codex_rollout(lines, tree):
             elif kind == "AgentMessage":
                 events.append(Event(index, "delegate", "message", text=item_text(item.get("content"))))
             elif kind == "CommandExecution":
+                events.append(Event(index, "delegate", "shell", text=codex_command(item.get("command"))))
                 reads, writes = shell_effects(codex_command(item.get("command")), tree)
                 events += [Event(index, "delegate", "read", path, partial) for path, partial in reads]
                 if item.get("exit_code") == 0:
@@ -674,7 +775,7 @@ def attach(trace, children):
             base_index = max((event.index for event in trace.events), default=-1) + 1
             ready = pending
             for offset, child in enumerate(ready):
-                trace.spawns[child.link] = Spawn(Event(base_index + offset, "delegate", "spawn"))
+                trace.spawns[child.link] = Spawn(Event(base_index + offset, "delegate", "spawn"), placed=False)
         for child in ready:
             spawn = trace.spawns[child.link]
             echoed = {id(event) for event in spawn.inline}
@@ -850,6 +951,31 @@ def cited_principles(text, principles):
     return cited
 
 
+def lead_ordered(trace):
+    """Whether an event has a place in lead order. A child whose spawn the
+    trace never shows is attached after the lead's last line, so its events
+    and every later one carry no order relative to the lead."""
+    horizon = min((spawn.event.index for spawn in trace.spawns.values() if not spawn.placed), default=None)
+    return lambda event: horizon is None or event.index < horizon
+
+
+def full_suite_run(trace, ordered):
+    """Test commands any actor ran after the run's last workspace edit, and
+    whether one of them is wider than a single test id (test_scope). wide is
+    None when the run made no edit, or when an edit has no lead order."""
+    edits = [event for event in trace.events if event.kind == "edit"]
+    last = edits[-1] if edits else None
+    after = [event.text for event in trace.events
+             if last and event.kind == "shell" and order(event) > order(last) and test_scope(event.text)]
+    known = all(ordered(event) for event in edits)
+    return {
+        "last_edit": last.index if last else None,
+        "ordered": known,
+        "test_commands_after": after,
+        "wide": None if last is None or not known else any(test_scope(command) == "wide" for command in after),
+    }
+
+
 def stages(trace, *, case, owner, injected, playbook_texts, principles, workspace, skill_names=()):
     """Every chain stage of one run, from its events. skill_names are the
     mounted skills a playbook step may point at."""
@@ -959,6 +1085,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         },
         "delegate_edits": delegate_edits,
         "delegated_code": bool(delegate_edits),
+        "full_suite_run": full_suite_run(trace, lead_ordered(trace)),
         "delegate_census": [
             {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona, "prescribed": spawn.prescribed}
             for spawn in briefed
