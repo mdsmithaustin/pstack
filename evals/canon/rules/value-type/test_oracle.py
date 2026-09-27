@@ -36,5 +36,20 @@ class MarketplaceSubtotalTests(unittest.TestCase):
             ],
         )
 
+    def test_slotted_money_object_with_one_currency_fails(self):
+        answer = (SAMPLES / "good.md").read_text().replace(
+            "@dataclass(frozen=True)\nclass Money:", "@dataclass(frozen=True, slots=True)\nclass Money:"
+        ).replace(
+            "def __add__(self, other: \"Money\") -> \"Money\":\n        if other.currency != self.currency:",
+            "def __add__(self, other: \"Money\") -> \"Money\":\n        if False:",
+        ).replace(
+            '"subtotal": subtotal(cart),',
+            '"subtotal": sum((Money(l.price.amount_cents, l.price.currency).times(l.quantity) for l in cart.lines[1:]), Money(cart.lines[0].price.amount_cents, cart.lines[0].price.currency).times(cart.lines[0].quantity)),',
+        )
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            ["a cart with a EUR line and a USD line gets one amount as its subtotal: Money(amount_cents=3799, currency='EUR')"],
+        )
+
     def test_no_subtotal_fails(self):
         self.assertEqual(grade(RULE, CASE, text="No change."), ["the summary has no subtotal"])

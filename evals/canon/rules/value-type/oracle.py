@@ -24,8 +24,8 @@ def single_amount(value):
         return True
     if isinstance(value, str):
         return len(re.findall(r"\d+(?:[.,]\d+)?", value)) == 1
-    fields = value if isinstance(value, dict) else getattr(value, "__dict__", {})
-    return isinstance(fields.get("currency"), str)
+    currency = value.get("currency") if isinstance(value, dict) else getattr(value, "currency", None)
+    return isinstance(currency, str)
 
 
 def probe(cart):
