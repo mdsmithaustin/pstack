@@ -57,12 +57,13 @@ def branch_count(state):
 
 
 def test_sources(state):
-    return {
-        normalized_source(body, node)
-        for path, body in state.items()
-        if path.endswith(".py") and is_test_path(path)
-        for node in functions(parse_python(path, body))
-    }
+    sources = set()
+    for path, body in state.items():
+        if path.endswith(".py") and is_test_path(path):
+            tree = parse_python(path, body)
+            assignments = [node for node in ast.walk(tree) if isinstance(node, (ast.Assign, ast.AnnAssign))]
+            sources.update(normalized_source(body, node) for node in functions(tree) + assignments)
+    return sources
 
 
 def check_two_hats(answer, project):
@@ -81,8 +82,7 @@ def check_two_hats(answer, project):
     golden = json.loads(charges[0])
     target = json.dumps([0 if isinstance(value, int) and order["subtotal_cents"] >= FREE_FROM else value for order, value in zip(ORDERS, golden)])
 
-    originals = test_sources(project)
-    kept = [originals & test_sources(state) for state in states]
+    tests = [test_sources(state) for state in states]
 
     failures = []
     last = len(states) - 1
@@ -98,7 +98,7 @@ def check_two_hats(answer, project):
         message = commits[index - 1][0]
         restructures = removed_source_lines(states[index - 1], states[index]) >= RESTRUCTURE_LINES
         behaves = charges[index] != charges[index - 1]
-        edits_expectation = kept[index] != kept[index - 1]
+        edits_expectation = bool(tests[index - 1] - tests[index])
         if restructures and (behaves or edits_expectation):
             failures.append(f"commit {index} ({message!r}) restructures the code and changes behavior or an existing expected value")
         elif restructures and not suites[index]:

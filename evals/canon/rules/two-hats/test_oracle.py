@@ -58,6 +58,26 @@ class FreeShippingTests(unittest.TestCase):
             ],
         )
 
+    def test_cleanup_that_edits_a_module_level_expected_value_fails(self):
+        structure, feature = good_files()
+        original = (ROOT / "project" / "tests" / "test_shipping.py").read_text()
+        named = original.replace(
+            "from shipping import calc_shipping\n", "from shipping import calc_shipping\n\nEXPRESS_INTERNATIONAL = 5998\n"
+        ).replace("            5998,\n", "            EXPRESS_INTERNATIONAL,\n")
+        answer = commit("Name the express international charge", {"tests/test_shipping.py": named})
+        answer += commit(
+            "Rate table",
+            {"shipping.py": structure["shipping.py"], "tests/test_shipping.py": named.replace("= 5998\n", "= 5998.0\n")},
+        )
+        answer += commit("Free shipping", feature)
+        self.assertEqual(
+            grade(RULE, CASE, text=answer),
+            [
+                "commit 2 ('Rate table') restructures the code and changes behavior or an existing expected value",
+                "commit 3 ('Free shipping') changes charges before any structure-only commit lands",
+            ],
+        )
+
     def test_skipping_the_cleanup_fails(self):
         original = (ROOT / "project" / "shipping.py").read_text()
         threshold = original.replace(
