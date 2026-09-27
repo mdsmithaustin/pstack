@@ -9,6 +9,7 @@ list of failures. Answer code runs only inside a networkless, read-only
 container.
 """
 import importlib.util
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -46,6 +47,8 @@ def evaluate(rule, case, output_dir):
         return load_oracle(rule)[case](answer, load_project(rule, case))
     except OracleError as exc:
         return [str(exc)]
+    except json.JSONDecodeError as exc:
+        return [f"the probe output is not JSON: {exc}"]
 
 
 def grade(rule, case, sample=None, text=None):
