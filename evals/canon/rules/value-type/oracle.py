@@ -42,6 +42,13 @@ mixed = Cart((CartLine("BOOK", "nordlicht-books", Price(1299, "EUR"), 1), CartLi
 print(json.dumps({"eur": probe(eur), "mixed": probe(mixed)}))
 """
 
+NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?(?!\w)")
+
+
+def is_eur_subtotal(text):
+    numbers = {float(number.replace(",", ".")) for number in NUMBER.findall(text)}
+    return bool(numbers) and numbers <= {4597, 45.97}
+
 
 def check_money(answer, project):
     tree = {**project, **parse_files(answer)}
@@ -58,7 +65,7 @@ def check_money(answer, project):
         failures.append(f"the summary of a EUR-only cart raises {eur['raised']}")
     elif not eur["found"]:
         failures.append("the summary has no subtotal")
-    elif not {4597, 45.97} & {float(number.replace(",", ".")) for number in re.findall(r"\d+(?:[.,]\d+)?", eur["text"])}:
+    elif not is_eur_subtotal(eur["text"]):
         failures.append(f"the subtotal of a EUR-only cart is {eur['text']}, expected 45.97 EUR")
     if "raised" not in mixed and mixed["found"] and mixed["single"]:
         failures.append(f"a cart with a EUR line and a USD line gets one amount as its subtotal: {mixed['text']}")
