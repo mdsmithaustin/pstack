@@ -132,7 +132,10 @@ def check_orders_pagination(answer, project):
         message = commits[index - 1][0]
         if outputs[index] == outputs[index - 1]:
             failures.append(f"commit {index} ({message!r}) changes code without changing paging; a refactor ships beside a one-line fix")
-        elif removed_lines(states[index - 1], states[index]) > SMALL_FIX_LINES:
+            continue
+        if greens[index - 1]:
+            failures.append(f"commit {index} ({message!r}) changes paging while the suite is green; no failing repro lands first")
+        if removed_lines(states[index - 1], states[index]) > SMALL_FIX_LINES:
             failures.append(f"commit {index} ({message!r}) restructures the code inside the fix")
     return failures
 

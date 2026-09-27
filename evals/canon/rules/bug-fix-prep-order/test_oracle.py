@@ -52,6 +52,13 @@ class OrdersPaginationTests(unittest.TestCase):
             ["commit 1 ('Gather paging math into a Pager') changes code without changing paging; a refactor ships beside a one-line fix"],
         )
 
+    def test_fix_without_a_failing_repro_first_fails(self):
+        _, fix = commits(PAGES, "good.md")
+        self.assertEqual(
+            grade(RULE, PAGES, text=fix),
+            ["commit 1 ('Round page count up instead of always adding a page') changes paging while the suite is green; no failing repro lands first"],
+        )
+
     def test_fix_folded_into_a_reshape_fails(self):
         _, repro, fix = commits(PAGES, "bad.md")
         self.assertEqual(
