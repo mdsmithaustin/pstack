@@ -17,6 +17,7 @@ class ProjectsDashboardTests(unittest.TestCase):
             [
                 "tests.test_board:BoardTest.test_archive_project marks its phases with comments",
                 "tests.test_board:BoardTest.test_archive_project acts again after asserting",
+                "tests.test_board:BoardTest.test_archive_project does not separate its Given, When and Then with blank lines",
             ],
         )
 
@@ -32,6 +33,13 @@ class ProjectsDashboardTests(unittest.TestCase):
             'self.assertEqual(board.dashboard(), ["Gemini"])', 'self.assertIn("Gemini", board.dashboard())'
         )
         self.assertEqual(grade(RULE, CASE, text=answer), ["new tests still pass when archiving keeps the project on the dashboard"])
+
+    def test_phases_run_together_without_blank_lines_fail(self):
+        answer = (SAMPLES / "good.md").read_text().replace(
+            'board.create_project("Gemini")\n\n        board.archive_project(apollo.id)\n\n',
+            'board.create_project("Gemini")\n        board.archive_project(apollo.id)\n',
+        )
+        self.assertEqual(grade(RULE, CASE, text=answer), [f"{TEST} does not separate its Given, When and Then with blank lines"])
 
     def test_answer_without_tests_fails(self):
         self.assertEqual(grade(RULE, CASE, text="Done."), ["no new test in the answer"])

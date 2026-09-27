@@ -64,6 +64,12 @@ def shape_failures(test_id, node, source):
     actions = [statement for statement in statements[last_setup + 1:] if called(statement) & ACTIONS]
     if len(actions) != 1:
         failures.append(f"{test_id} has {len(actions)} actions after its setup, not one")
+        return failures
+    lines = source.splitlines()
+    blank_between = lambda before, after: any(not line.strip() for line in lines[before.end_lineno - node.lineno + 1:after.lineno - node.lineno])
+    phases = [statements[index] for index in (last_setup, statements.index(actions[0]), first_assert) if 0 <= index < len(statements)]
+    if not all(blank_between(before, after) for before, after in zip(phases, phases[1:]) if before.lineno < after.lineno):
+        failures.append(f"{test_id} does not separate its Given, When and Then with blank lines")
     return failures
 
 
