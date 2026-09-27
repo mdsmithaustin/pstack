@@ -1,0 +1,13 @@
+diff --git a/hermes_cli/input_sanitize.py b/hermes_cli/input_sanitize.py
+index e073f37..22e5d21 100644
+--- a/hermes_cli/input_sanitize.py
++++ b/hermes_cli/input_sanitize.py
+@@ -6,7 +6,7 @@ import re
+ 
+ # Degraded visible bracketed-paste forms, matched only at boundaries so embedded literals stay intact.
+ _BOUNDARY_SUBS = (
+-    (re.compile(r"(^|[\s\n>:\]\)])\[200~"), r"\1"),
++    (re.compile(r"\[200~"), ""),
+     (re.compile(r"\[201~(?=$|[\s\n<\[\(\):;.,!?])"), ""),
+     (re.compile(r"(^|[\s\n>:\]\)])00~"), r"\1"),
+     (re.compile(r"01~(?=$|[\s\n<\[\(\):;.,!?])"), ""),

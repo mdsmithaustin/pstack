@@ -1,0 +1,22 @@
+diff --git a/hermes_cli/input_sanitize.py b/hermes_cli/input_sanitize.py
+index e073f37..c7be32c 100644
+--- a/hermes_cli/input_sanitize.py
++++ b/hermes_cli/input_sanitize.py
+@@ -12,6 +12,9 @@ _BOUNDARY_SUBS = (
+     (re.compile(r"01~(?=$|[\s\n<\[\(\):;.,!?])"), ""),
+ )
+ 
++# A degraded opening marker glued to typed text, stripped only when its closing marker follows at a boundary.
++_GLUED_OPENING = re.compile(r"\[200~(?=[\s\S]*?\[201~(?:$|[\s\n<\[\(\):;.,!?]))")
++
+ # Corruption signature from desktop bracketed-paste leaks (#62557).
+ _DESKTOP_PASTE_ARTIFACT = "~[[e"
+ 
+@@ -23,6 +26,7 @@ def strip_leaked_bracketed_paste_wrappers(text: str) -> str:
+         return text
+     for wrapper in ("\x1b[200~", "\x1b[201~", "^[[200~", "^[[201~"):
+         text = text.replace(wrapper, "")
++    text = _GLUED_OPENING.sub("", text)
+     for pattern, repl in _BOUNDARY_SUBS:
+         text = pattern.sub(repl, text)
+     return text
