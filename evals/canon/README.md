@@ -1224,6 +1224,16 @@ investigation", "parallel investigation spawns", and "investigation before
 first edit". A `SEPARATES` on `zsh-first-tab` with no change in those stages
 says the arm helped some other way.
 
+
+**Result, 2026-09-28.** The pilot ran one paired run per rule and agent on Sonnet and gpt-5.6-sol leads, plus two `spawn-step` runs per case on an Opus lead. The step changed nothing on either model, so it did not ship:
+
+- Claude spawned no investigator in any of the 8 runs: 4 Sonnet (current and spawn-step) and 4 Opus (spawn-step). It read the rewritten step in 5 of the 6 spawn-step runs, then read the source itself and fixed the bug in 10 to 17 tool calls. The lead had `Task` with `Explore`, `general-purpose`, and `poteto-agent` available, and it opened no worklist.
+- Codex spawned parallel `how` and `why` investigators before its first edit in all 4 runs, with the step and without it.
+- Every run passed its hidden tests.
+- On `zsh-first-tab`, Codex's investigators found a686dbdd26, 8c4bec6155, 6d30b4a7e3, and 6b81590c55 with `git log` in the history checkout. The history case reaches the agent.
+
+Claude treats investigation fan-out as a proportionality call on a single-file bug, and it passed without it. A case that separates the two behaviors needs a bug whose cause spans subsystems and lives in history.
+
 ## Reading the result
 
 Read the rule line first, then the case lines. A near-miss case that never ran
