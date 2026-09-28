@@ -1029,6 +1029,15 @@ investigation" is true when a run has any investigation spawn, so a run with
 none reads as a miss. The stage "parallel investigation spawns" rates only
 the runs that delegated investigation.
 
+**Investigation first.** `investigation_before_first_edit` gives the event
+index of the lead's first investigation spawn (the same spawns as parallel
+investigation), of its own first workspace edit, and of its first
+code-writing spawn, with `before`. `before` is true when the investigation
+spawn comes before both, a missing edit or code-writing spawn counting as
+later. It is false when the run has no investigation spawn or the spawn comes
+at or after either, and `null` when one of the three has no lead order. The
+stage is "investigation before first edit".
+
 **Wide test run.** `full_suite_run` takes the run's last workspace edit by
 any actor and lists `test_commands_after`, every test command any actor ran
 after it. A command counts even when it exits nonzero. The runners are
