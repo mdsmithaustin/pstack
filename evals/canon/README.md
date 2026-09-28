@@ -1134,13 +1134,15 @@ This screen asks whether a Bug fix step 2 that spawns investigators before
 the lead reads source changes what the lead does and what it ships. The
 `spawn-step` arm tells the lead to spawn the `how` skill's explainer over the
 affected subsystem and a **why** skill investigator over its regression
-history, in one message, and to reproduce while they run. Every rule reads
-`skills/` at 4fe21347.
+history, in one message, and to reproduce while they run. `spawn-step-paste`
+and `spawn-step-history` read `skills/` at 4fe21347, and the `spawn-step-hard`
+rules at 324b3e80, whose `skills/` tree is the same.
 
 | arm rule | arms | cases from | case | repo | history |
 |---|---|---|---|---|---|
 | `spawn-step-paste` | current, spawn-step | `nearby-validation` | `paste-markers` | hermes | no |
 | `spawn-step-history` | current, spawn-step | `bug-fix-spawn-step` | `zsh-first-tab` | hermes | yes |
+| `spawn-step-hard` | current, spawn-step | `bug-fix-hard-history` | `subshell-push` | omnigent | yes |
 
 The base rule `bug-fix-spawn-step` holds the zsh case and its oracle, and its
 `rule.patch` is the same edit as the arm patch. Run the arm rules.
@@ -1219,7 +1221,13 @@ for rule in spawn-step-paste spawn-step-history; do
   python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode --runs 2 \
     --timeout 2700 --out "/private/tmp/canon-spawn/codex-$rule-$(date +%m%d%H%M)" "$rule"
 done
-python3 evals/canon/chain.py --markdown /private/tmp/canon-spawn/*
+for i in 1 2 3 4; do
+  python3 evals/canon/screen.py run --runner sbx --agent claude --model sonnet --entry poteto-mode --timeout 2700 \
+    --out "/private/tmp/canon-hard/claude-$i-$(date +%m%d%H%M)" spawn-step-hard
+done
+python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode --runs 2 \
+  --timeout 2700 --arm current --out "/private/tmp/canon-hard/codex-$(date +%m%d%H%M)" spawn-step-hard
+python3 evals/canon/chain.py --markdown /private/tmp/canon-spawn/* /private/tmp/canon-hard/*
 ```
 
 Read `spawn-step vs current` per case, then the chain stages "delegated
@@ -1235,6 +1243,52 @@ says the arm helped some other way.
 - On `zsh-first-tab`, Codex's investigators found a686dbdd26, 8c4bec6155, 6d30b4a7e3, and 6b81590c55 with `git log` in the history checkout. The history case reaches the agent.
 
 Claude treats investigation fan-out as a proportionality call on a single-file bug, and it passed without it. A case that separates the two behaviors needs a bug whose cause spans subsystems and lives in history.
+
+`spawn-step-hard` runs that case with the same two arms. Its base rule
+`bug-fix-hard-history` holds `subshell-push` on omnigent 02969a13 with
+history, and both rules read `skills/` at 324b3e80, whose `skills/` matches
+4fe21347. The case needs the omnigent history mirror, fetched with
+`workspace.py fetch omnigent 02969a131c72d74c00c5800d8e82ae831f8ec5e5
+--history`, which holds 4,112 commits.
+
+- **subshell-push.** A user reports that the GitHub policy denies a push to a
+  fork but allows `(git push <fork> main)`. The cause is the shell parser in
+  `omnigent/policies/builtins/_shell.py`, which the GitHub and
+  working-directory policies share. It splits segments only on chaining
+  operators, so `(`, `{`, and `<(` hide the command from both policies.
+  Patching `github.py` alone leaves `{ … }`, `<( … )`, and the wrapped `cd`
+  open. The obvious fix splits on `(){}`. e6b1c83a (#7999) shipped that split,
+  then a quote-aware version, and reverted both in the same squash. Its
+  message says splitting broke brace expansion (`main{,} feature` pushed the
+  second branch), escaped quotes, and comments with an apostrophe. It asks
+  for a follow-up that extracts `<(…)` bodies and strips leading grouping
+  tokens. No code comment or test at the pin says so, and the quote-aware
+  splitter passes every pinned test.
+
+The oracle runs the pinned `test_github.py`, `test_working_dir.py`, and
+`test_shell_nesting.py` with a small pytest stand-in (parametrize, raises,
+asyncio) and stubs for the modules that need pydantic. A pinned test counts
+only when it passes on the checkout. The 8 engine and registry tests that
+need the real modules fail on both trees. It then runs twelve held cases
+against the diff's tree:
+
+- the four wrapped pushes to the fork are denied
+- the two wrapped `cd /etc` are denied
+- brace expansion, a brace list, an escaped quote, and an apostrophe in a comment still deny
+- a wrapped push to `acme/storefront` main and a wrapped `cd` inside the workspace are allowed
+
+The good sample strips grouping in `_shell.py` and drops the local paren
+strip in `working_dir.py`. The `(){}` split fails 3 pinned tests and the two
+brace cases. The quote-aware split fails the four history cases and no pinned
+test. The `github.py`-only patch fails five of the six wrapped cases. With
+omnigent's test group installed, pytest on the host gave the same verdicts
+for the checkout and all three samples.
+
+**Result on `subshell-push`, 2026-09-28.** This ran 4 paired Claude Sonnet runs, current against spawn-step, and 2 Codex gpt-5.6-sol runs on `current`, each with a 2700 s cap.
+
+- **Claude passed 8 of 8, in both arms.** No run delegated investigation or code, including the spawn-step arm. Every run fixed the shared parser, `_shell.py`, rather than `github.py`, by stripping grouping tokens and extracting `<(…)` bodies, and none took the quote-aware splitter. 4 of the 8 listed e6b1c83a in a `git log --oneline` of the parser or `github.py`, which shows only its title. No run read its message, where the revert is, so every run reached the fix from the code.
+- **Codex failed 2 of 2.** One run left the brace-group and process-substitution pushes open, and the brace-group `cd`. The other denied a wrapped push to the allowed repo and branch, because it left trailing parentheses on the refspec. One of the two delegated investigation, and both delegated the code change.
+- **Reading.** On a multi-module bug, a Claude lead that investigates inline did not lose correctness. No run read the history, so this case did not test whether history helps: the correct fix is reachable from the code alone. The spawn step is not proposed.
 
 ## Reading the result
 
