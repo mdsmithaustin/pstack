@@ -191,9 +191,21 @@ PRESCRIBED = (
 )
 
 
+def path_skill(path):
+    """The routed skill a Codex agent path's segment under /root names, as
+    /root/architect_candidate_2 names architect, or None."""
+    top = path.split("/")[2] if path and path.startswith("/root/") else ""
+    return next((entry.skill for entry in PRESCRIBED if entry.named_by_path and re.match(rf"{re.escape(entry.skill)}(?:[_-]|$)", top)), None)
+
+
 def prescribed_by(role, brief, path=None, reads=()):
-    """"<skill> <name>" of the routed-skill role a delegate holds, or None."""
-    return next((f"{entry.skill} {entry.name}" for entry in PRESCRIBED if entry.matches(role, brief, path, reads)), None)
+    """"<skill> <name>" of the routed-skill role a delegate holds, or None.
+    A skill its path names under /root decides, so an architect candidate
+    that read the how explainer prompt while grounding stays an architect
+    runner."""
+    named = path_skill(path)
+    return next((f"{entry.skill} {entry.name}" for entry in PRESCRIBED
+                 if named in (None, entry.skill) and entry.matches(role, brief, path, reads)), None)
 
 
 @dataclass(frozen=True)

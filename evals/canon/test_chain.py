@@ -770,6 +770,28 @@ class InspectionWindowTests(unittest.TestCase):
         self.assertEqual(run_stages(trace)["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 1, "parallel": False, "unordered": 0})
 
 
+class CodexNestedInvestigationTests(unittest.TestCase):
+    """A trimmed real Codex 0.157 sandbox run of no-debugger-lint
+    (r3-codex-cut-feature-review, current, run 1) with four of its ten
+    children. how_lint_subsystem spawns its own direct_explainer and waits on
+    it. architect_candidate_1 and architect_candidate_2 read the how
+    explainer prompt while grounding their designs."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-nested", "codex", tree={
+            **TREE, "architect/references/runner-prompt.md": 10,
+            "how/references/explorer-prompt.md": 10, "how/references/explainer-prompt.md": 10,
+        })
+
+    def test_an_architect_path_decides_the_role_over_a_how_template_read(self):
+        self.assertEqual([(entry["path"], entry["prescribed"]) for entry in self.row["delegate_census"]], [
+            ("/root/how_lint_subsystem", "how explorer"),
+            ("/root/how_lint_subsystem/direct_explainer", "how explorer"),
+            ("/root/architect_candidate_1", "architect runner"),
+            ("/root/architect_candidate_2", "architect runner"),
+        ])
+
+
 class InvestigationSpawnTests(unittest.TestCase):
     """Spawns placed at one lead index, as Codex children are, each returned
     at a later index."""
