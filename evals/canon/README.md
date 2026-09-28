@@ -917,7 +917,10 @@ briefing line. A how explorer or explainer, why investigator or synthesizer,
 architect runner, interrogate reviewer, or reflect reviewer or synthesizer is
 known by its template's opening sentence or path in the brief, by the
 delegate's own read of that template, or by an agent path that names the
-skill, such as `/root/how_harness_family`. Arena and swarm ship no template,
+skill, such as `/root/how_harness_family`. When the segment under `/root`
+names a skill, that skill decides, so `/root/architect_candidate_2` stays an
+architect runner even though it read the how explainer prompt while
+grounding. Arena and swarm ship no template,
 so their runners are known only by a brief or path that names them. The
 stage "implementation delegate ran as poteto-agent" counts code-writing
 delegates outside a routed skill. "delegate outside a routed skill got the
@@ -993,9 +996,12 @@ diff. A delegate that never returns is not inspected. `all` is `null` when
 no delegate wrote code or one of them is unordered. The stage is "lead
 inspected code-writing delegate's work (all)".
 
-**Parallel investigation.** An investigation spawn is a delegate that
-`prescribed_by` gives a `how` or `why` role, or an unprescribed delegate of
-an explore type (Claude's `Explore`, Codex's `explorer`) that wrote no code.
+**Parallel investigation.** An investigation spawn is a delegate the lead
+spawned itself that `prescribed_by` gives a `how` or `why` role, or an
+unprescribed delegate of an explore type (Claude's `Explore`, Codex's
+`explorer`) that the lead spawned and that wrote no code. A Codex child of a
+child, such as `/root/how_lint_subsystem/direct_explainer`, runs while its
+parent waits on it, so it is part of its parent's investigation and does not count.
 A delegate another routed skill prescribes (architect, arena, interrogate,
 reflect, swarm, no-comments) is never investigation, even when it only
 reads. So a Codex architect cross-judge spawned as `explorer` stays out,
@@ -1025,8 +1031,8 @@ the run made no edit or an edit is unordered, which `ordered` shows. The
 stage is "wide test run after last edit".
 
 `fixtures/chain/sbx-codex/` holds trimmed files from a real Codex sandbox
-probe. `fixtures/chain/sbx-claude-background/` and
-`fixtures/chain/sbx-codex-timestamps/` are trimmed from the
+probe. `fixtures/chain/sbx-claude-background/`,
+`fixtures/chain/sbx-codex-timestamps/`, and `fixtures/chain/sbx-codex-nested/` are trimmed from the
 `/private/tmp/canon-cuts` pilot runs, with the sandbox temp path renamed. `fixtures/chain/sbx-codex-roles/` and `claude-multi-result.jsonl` are
 trimmed from real `/private/tmp/canon-sbx` runs. `fixtures/chain/sbx-claude/`,
 `fixtures/chain/sbx-claude-review/`, and `fixtures/chain/sbx-codex-review/` are
