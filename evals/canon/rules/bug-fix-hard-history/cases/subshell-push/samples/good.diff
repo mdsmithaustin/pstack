@@ -1,0 +1,77 @@
+diff --git a/omnigent/policies/builtins/_shell.py b/omnigent/policies/builtins/_shell.py
+index b306ea74..55efd592 100644
+--- a/omnigent/policies/builtins/_shell.py
++++ b/omnigent/policies/builtins/_shell.py
+@@ -202,7 +202,7 @@ def is_shell_interpreter(tokens: list[str]) -> bool:
+ 
+ def _extract_command_substitutions(command: str) -> tuple[str, list[str]]:
+     """
+-    Pull ``$(...)`` and backtick command-substitution bodies out of a command.
++    Pull ``$(...)``, ``<(...)``, ``>(...)``, and backtick bodies out of a command.
+ 
+     A substitution body is itself a command the shell *runs* — its output is
+     interpolated — so ``x=$(git push <url>)`` executes the push even though the
+@@ -222,7 +222,7 @@ def _extract_command_substitutions(command: str) -> tuple[str, list[str]]:
+     i, n = 0, len(command)
+     while i < n:
+         ch = command[i]
+-        if ch == "$" and i + 1 < n and command[i + 1] == "(":
++        if ch in "$<>" and i + 1 < n and command[i + 1] == "(":
+             depth, j = 1, i + 2
+             while j < n and depth > 0:
+                 if command[j] == "(":
+@@ -285,6 +285,32 @@ def split_command_segments(command: str) -> list[str]:
+     return segments
+ 
+ 
++def _strip_grouping(tokens: list[str]) -> list[str]:
++    """
++    Drop the subshell and brace-group punctuation around one segment's command.
++
++    Segments are split only on chaining operators, so ``( git push … )`` and
++    ``{ git push …; }`` reach the policies with ``(`` or ``{`` as the apparent
++    command. Stripping the punctuation here, rather than splitting on it, keeps
++    brace expansion such as ``main{,}`` inside its token.
++
++    :param tokens: shlex-split tokens of one segment, e.g.
++        ``["(git", "push", "origin", "main)"]``.
++    :returns: The tokens without the grouping punctuation, e.g.
++        ``["git", "push", "origin", "main"]``.
++    """
++    tokens = list(tokens)
++    while tokens and tokens[0] in ("(", "{"):
++        tokens.pop(0)
++    if tokens and tokens[0].startswith("("):
++        tokens[0] = tokens[0].lstrip("(")
++    while tokens and tokens[-1] in (")", "}"):
++        tokens.pop()
++    if tokens and tokens[-1].endswith(")"):
++        tokens[-1] = tokens[-1].rstrip(")")
++    return [token for token in tokens if token]
++
++
+ def real_invocation_tokens(tokens: list[str]) -> list[str]:
+     """
+     Drop leading env-assignments and command wrappers to reach the real argv.
+@@ -304,6 +330,7 @@ def real_invocation_tokens(tokens: list[str]) -> list[str]:
+     :returns: Tokens starting at the real command (``["git", "push"]``), or
+         empty when nothing remains.
+     """
++    tokens = _strip_grouping(tokens)
+     index = 0
+     while index < len(tokens):
+         token = tokens[index]
+diff --git a/omnigent/policies/builtins/working_dir.py b/omnigent/policies/builtins/working_dir.py
+index a6524929..6e8053a4 100644
+--- a/omnigent/policies/builtins/working_dir.py
++++ b/omnigent/policies/builtins/working_dir.py
+@@ -216,8 +216,7 @@ def _classify_segment(tokens: list[str], block_cd: bool, block_worktree: bool) -
+     :returns: The parsed :class:`_DirOp`, or ``None`` when the segment is not a
+         gated command.
+     """
+-    # Strip a leading subshell paren so ``(cd /x`` is still seen as ``cd``.
+-    head = tokens[0].lstrip("(")
++    head = tokens[0]
+     if head == "git":
+         git_tokens = ["git", *tokens[1:]]
+         return _classify_git(git_tokens, block_cd, block_worktree)

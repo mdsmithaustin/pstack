@@ -1,0 +1,13 @@
+diff --git a/omnigent/policies/builtins/_shell.py b/omnigent/policies/builtins/_shell.py
+index b306ea74..db36d1a8 100644
+--- a/omnigent/policies/builtins/_shell.py
++++ b/omnigent/policies/builtins/_shell.py
+@@ -278,7 +278,7 @@ def split_command_segments(command: str) -> list[str]:
+         ``["cd /repo", "npm test"]``.
+     """
+     outer, bodies = _extract_command_substitutions(command)
+-    parts = re.split(r"&&|\|\||[;|\n&]", outer)
++    parts = re.split(r"&&|\|\||[;|\n&(){}]", outer)
+     segments = [seg.strip() for seg in parts if seg.strip()]
+     for body in bodies:
+         segments.extend(split_command_segments(body))

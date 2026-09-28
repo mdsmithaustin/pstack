@@ -1,0 +1,7 @@
+Fixed in the shell parser both command policies share, `omnigent/policies/builtins/_shell.py`.
+
+**Cause.** `split_command_segments` splits only on chaining operators, so `(git push <fork> main)` reaches the GitHub policy as one segment whose first token is `(git`. It is not `git`, so the policy abstains and the push is allowed. The working-directory policy has the same hole for `( cd /etc )` and `{ cd /etc; }`; its own `lstrip("(")` only covered `(cd`. Process substitution, `cat <(git push ...)`, was never extracted at all.
+
+**Fix.** `real_invocation_tokens` now drops subshell and brace-group punctuation around a segment's command, and command-substitution extraction also pulls out `<(...)` and `>(...)` bodies. The working-directory policy's local paren strip is gone, since the shared parser covers it. I did not split on `(){}`: #7999 tried that and reverted it, because splitting broke brace expansion (`main{,} release` pushed the second branch) and a quote-aware splitter hid pushes behind escaped quotes and apostrophes in comments. The revert asked for this shape: extract the bodies and strip leading grouping tokens.
+
+**Verification.** The parenthesized, spaced, brace-group, and process-substitution pushes to the fork are denied, and the wrapped push to `acme/storefront` main is still allowed. `( cd /etc )` and `{ cd /etc; }` are denied. The GitHub, working-directory, and shell-nesting policy tests pass.

@@ -1,0 +1,15 @@
+diff --git a/omnigent/policies/builtins/github.py b/omnigent/policies/builtins/github.py
+index 8164293f..c9b60510 100644
+--- a/omnigent/policies/builtins/github.py
++++ b/omnigent/policies/builtins/github.py
+@@ -955,6 +955,10 @@ def _classify_shell_command(command: str, _depth: int = 0) -> list[_ShellOp]:
+                 )
+             )
+             continue
++        # Strip a leading subshell paren so ``(git push`` is still seen as ``git``.
++        tokens = [tokens[0].lstrip("("), *tokens[1:]]
++        if tokens[-1].endswith(")"):
++            tokens[-1] = tokens[-1].rstrip(")")
+         if tokens[0] == "git":
+             op = _classify_git(tokens)
+         elif tokens[0] == "gh":

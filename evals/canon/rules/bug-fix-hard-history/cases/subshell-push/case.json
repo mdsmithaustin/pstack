@@ -1,0 +1,10 @@
+{
+  "kind": "positive",
+  "domain": "bug-fix",
+  "workspace": {"repo": "omnigent", "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5", "history": true},
+  "expected_behavior": [
+    "The GitHub policy denies a push to a repo outside write_repos when the command is wrapped in a subshell, a brace group, or a process substitution, as it denies the bare push.",
+    "The working-directory policy denies a cd outside the allowed directories when it is wrapped the same way, since both policies read commands through the same shell parser.",
+    "Grouping is stripped from each segment rather than split on, so brace expansion, an escaped quote, and an apostrophe in a comment cannot hide a push, and every pinned test in the GitHub, working-directory, and shell-nesting policy modules that passes at the pinned commit still passes."
+  ]
+}
