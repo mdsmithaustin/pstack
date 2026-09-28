@@ -348,11 +348,21 @@ def split_shell(command):
     return pipelines
 
 
+def write_path(target, cwd):
+    """Where a shell write lands, relative to the cd before it in the same
+    command, or None when an unexpanded variable, substitution, or home path
+    hides it. Agents point those at scratch files outside the checkout."""
+    if re.search(r"[$`]", target + cwd) or target.startswith("~") or cwd.startswith("~"):
+        return None
+    return target if target.startswith("/") or not cwd else f"{cwd.rstrip('/')}/{target}"
+
+
 def shell_effects(command, tree):
     """(reads, writes) of one shell command: reads as (tree path, partial),
-    writes as the paths a redirect, sed -i, or a write verb names. Search
-    commands (rg, grep, find, ls, wc) read nothing."""
-    reads, writes, cwd = [], [], ""
+    writes as the paths a redirect, sed -i, or a write verb names, joined to
+    the command's own cd (write_path). Search commands (rg, grep, find, ls,
+    wc) read nothing."""
+    reads, targets, cwd = [], [], ""
     for stages in split_shell(command):
         first = stages[0]
         if first[0] == "cd" and len(first) > 1:
@@ -362,18 +372,18 @@ def shell_effects(command, tree):
         for tokens in stages:
             for at, token in enumerate(tokens[:-1]):
                 if token in (">", ">>") and tokens[at + 1] != "/dev/null":
-                    writes.append(tokens[at + 1])
+                    targets.append((tokens[at + 1], cwd))
             words = [token for at, token in enumerate(tokens) if token not in (">", ">>", ">&", "<") and (at == 0 or tokens[at - 1] not in (">", ">>", ">&", "<"))]
             if not words:
                 continue
             verb = words[0].rsplit("/", 1)[-1]
             options = [word for word in words[1:] if word.startswith("-")]
             if verb in ("sed", "perl") and any(option.startswith(("-i", "-pi")) for option in options):
-                writes.append(words[-1])
+                targets.append((words[-1], cwd))
                 continue
             if verb in WRITE_VERBS:
                 operands = [word for word in words[1:] if not word.startswith("-")]
-                writes += operands[-1:] if verb == "cp" else operands
+                targets += [(operand, cwd) for operand in (operands[-1:] if verb == "cp" else operands)]
                 continue
             if verb not in READ_VERBS:
                 continue
@@ -383,7 +393,7 @@ def shell_effects(command, tree):
                     continue
                 partial = verb in TRIM_VERBS or trimmed_later or (verb == "sed" and sed_is_partial(words, tree[path]))
                 reads.append((path, partial))
-    return reads, writes
+    return reads, [path for path in (write_path(target, where) for target, where in targets) if path]
 
 
 REDIRECTS = {">", ">>", ">&", "&>", ">|", "<"}
