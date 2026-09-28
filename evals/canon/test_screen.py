@@ -316,7 +316,7 @@ class CompanionMountTests(unittest.TestCase):
         self.assertEqual(screen.single_change(current, amended), screen.rule_change(self.rule, screen.rule_tree(self.rule)))
 
     def test_companion_named_like_a_pstack_skill_is_refused(self):
-        rule = screen.Rule(self.rule.id, self.rule.source, self.rule.patch, self.rule.target, self.rule.cases, ("poteto-mode",))
+        rule = dataclasses.replace(self.rule, companions=("poteto-mode",))
 
         with self.assertRaisesRegex(screen.ScreenError, "companion poteto-mode collides"):
             screen.build(self.out, [rule], "poteto-mode")
