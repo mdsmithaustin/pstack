@@ -85,10 +85,10 @@ Upstream #414 (70b2dc8, 15 cuts) and #419 (b0b9c7a) justified their lead-side cu
 
 - 14 of #414's cuts, plus #419's poteto-tdd, never-block, and outcome-oriented cuts, keep their rule in the same file or in poteto-mode, so the text settles them.
 - The rest ran through the held-cuts screen in `evals/canon` on gpt-5.6-sol and Sonnet leads, 3 paired runs per arm, graded by hidden tests and the chain census:
-  - The review lines in `feature`, `bug-fix`, and `refactoring`: the lead reviewed the delegate's diff in every run where a delegate wrote code, with the lines and without them.
+  - The review lines in `feature`, `bug-fix`, and `refactoring`: the lead inspected the delegate's work (a read of an edited file, or git diff, show, or status) in every run where a delegate wrote code, with the lines and without them.
   - The nested-spawn reminder: Codex delegated in every run either way, and Sonnet delegated more often without it.
   - The `how` + `why` fan-out line: Codex fanned out in every run either way, and Sonnet never did either way.
-  - #414's poteto-tdd "Run nearby validation" step: no restored run read poteto-tdd, and a test run wider than one test followed the last edit in 45 of 48 runs.
+  - #414's poteto-tdd "Run nearby validation" step: no restored run read poteto-tdd, and a test run wider than one test followed the last edit in 47 of 48 runs.
   - Hidden tests passed in 16 of 24 runs without the cuts and 19 of 24 with them.
 
 ## What deliberately did not change
