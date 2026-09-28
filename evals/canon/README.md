@@ -863,7 +863,11 @@ rollout per thread under `codex/sessions/`. A child's `session_meta` names its
 each delegate's reads, edits, spawns, worklist calls, and messages with actor
 `delegate`. It places them right after the spawn that started them, so every
 stage sees them. They fill `delegation.delegate_reads` and the top-level
-`delegate_edits`.
+`delegate_edits`. A Claude background delegate's events all sit at its spawn
+index too, though the lead keeps working while it runs. So `full_suite_run`
+can count a lead test run made mid-delegate as after the last edit. No pilot
+result changes: across all 6 Claude code-writing delegates, the lead ran no
+test while one was running.
 A Claude lead's checkout is the cwd of its first `init` record. A turn that a
 task notification resumes opens with another `init`, whose cwd is wherever the
 lead's shell last moved. A Claude child starts in that shell cwd too, so its
@@ -965,11 +969,17 @@ counts such delegates or edits as `unordered` and reads `null` where order
 decides the answer.
 
 **Delegate wrote code.** `delegated_code` is true when any delegate made a
-workspace edit, the same edits `delegate_edits` lists.
+workspace edit, the same edits `delegate_edits` lists. A workspace edit is an
+edit tool call, or a shell redirect, `sed -i`, or write verb, whose path lands
+in the checkout. A relative shell write path joins the `cd` before it in the
+same command, so `cd /tmp && cat > sanity.mjs` writes `/tmp/sanity.mjs`. A
+write to an unexpanded variable or substitution (`"$tmpclean"`,
+`"$(dirname "$scratch")"`) or a `~` path is not an edit. Agents aim those at
+scratch files outside the checkout.
 
-**Lead review.** `lead_reviewed_delegate` gives `code_delegates`,
+**Lead inspection.** `lead_reviewed_delegate` gives `code_delegates`,
 `reviewed`, `all`, and `unordered`. A code-writing delegate counts as
-reviewed when the lead does one of these after the delegate returned and
+inspected when the lead does one of these after the delegate returned and
 before the lead's last message:
 
 - It reads a file that delegate edited, with Read or with a shell read verb,
@@ -977,9 +987,11 @@ before the lead's last message:
   so `src/tree.py` names `/workspace/app/src/tree.py`.
 - It runs `git diff`, `git show`, or `git status`.
 
-A delegate that never returns is not reviewed. `all` is `null` when no
-delegate wrote code or one of them is unordered. The stage is "lead reviewed
-code-writing delegate (all)".
+One read of one edited file, or a bare `git status`, is enough, so the
+stage shows the lead looked at the work, not that it reviewed the whole
+diff. A delegate that never returns is not inspected. `all` is `null` when
+no delegate wrote code or one of them is unordered. The stage is "lead
+inspected code-writing delegate's work (all)".
 
 **Parallel investigation.** An investigation spawn is a delegate that
 `prescribed_by` gives a `how` or `why` role, or an unprescribed delegate of
@@ -1003,7 +1015,7 @@ any actor and lists `test_commands_after`, every test command any actor ran
 after it. A command counts even when it exits nonzero. The runners are
 pytest, including `python -m pytest`, `uv run pytest`, and hermes's
 `scripts/run_tests.sh` wrapper, `python -m unittest`, `npm`, `pnpm`, or `yarn
-test`, also after `--prefix <dir>`, `node --test`, `go test`, `cargo test`,
+test`, also after `--prefix`, `-C`, `--dir`, or `--cwd <dir>`, `node --test`, `go test`, `cargo test`,
 and `just test`. A pytest run is single when every target is a
 `path::name` node id or a `-k` selector. A unittest run is single when every
 target is a `Class.test_method` dotted name or a `-k` selector. A file,
@@ -1071,7 +1083,7 @@ local test path, so `unexposed` is a likely outcome there.
   exposes only `omnigent*`, so the hook cannot import `dev` either.
 
 `chain.py` reports the stages these cuts target: whether a delegate wrote
-code, whether the lead reviewed it, parallel investigation spawns, and a test
+code, whether the lead inspected its work, parallel investigation spawns, and a test
 run wider than one test after the last edit.
 
 ```sh

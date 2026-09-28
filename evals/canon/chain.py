@@ -1598,7 +1598,7 @@ STAGES = {
         if row["implementation_delegate_persona"]["spawns"] else None
     ),
     "delegate wrote code": lambda row: row["delegated_code"],
-    "lead reviewed code-writing delegate (all)": lambda row: row["lead_reviewed_delegate"]["all"],
+    "lead inspected code-writing delegate's work (all)": lambda row: row["lead_reviewed_delegate"]["all"],
     "delegated investigation": lambda row: row["delegated_investigation"],
     "parallel investigation spawns": lambda row: row["parallel_investigation"]["parallel"] if row["delegated_investigation"] else None,
     "wide test run after last edit": lambda row: row["full_suite_run"]["wide"],

@@ -606,7 +606,7 @@ class ClaudeDelegateFlowTests(unittest.TestCase):
         self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 2, "parallel": True, "unordered": 0})
 
 
-class ClaudeBackgroundReviewTests(unittest.TestCase):
+class ClaudeBackgroundInspectionTests(unittest.TestCase):
     """A trimmed real Claude Code sandbox run of paste-markers. The lead cds
     into apps/desktop, so both background poteto-agent children start there,
     and one of them edits hermes_cli/ outside it. Each child returns in a
@@ -630,7 +630,7 @@ class ClaudeBackgroundReviewTests(unittest.TestCase):
             "apps/desktop/src/lib/composer-input-sanitize.test.ts", "apps/desktop/src/lib/composer-input-sanitize.ts",
             "hermes_cli/input_sanitize.py", "tests/hermes_cli/test_input_sanitize.py")])
 
-    def test_reads_after_both_notifications_review_both_delegates(self):
+    def test_reads_after_both_notifications_inspect_both_delegates(self):
         self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 2, "all": True, "unordered": 0})
 
 
@@ -660,7 +660,7 @@ class CodexDelegateFlowTests(unittest.TestCase):
         self.assertEqual(analyze("sbx-codex", "codex")["full_suite_run"],
                          {"last_edit": None, "ordered": True, "test_commands_after": [], "wide": None})
 
-    def test_git_diff_after_the_builder_wait_reviews_it(self):
+    def test_git_diff_after_the_builder_wait_inspects_it(self):
         self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 1, "reviewed": 1, "all": True, "unordered": 0})
 
     def test_two_explorers_awaited_in_one_wait_ran_in_parallel(self):
@@ -703,7 +703,7 @@ class CodexTimestampOrderTests(unittest.TestCase):
     def setUp(self):
         self.row = analyze("sbx-codex-timestamps", "codex")
 
-    def test_reads_after_each_child_task_complete_review_both_code_writers(self):
+    def test_reads_after_each_child_task_complete_inspect_both_code_writers(self):
         self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 2, "all": True, "unordered": 0})
 
     def test_the_lead_pytest_after_the_comment_sicko_edit_is_a_wide_run(self):
@@ -728,20 +728,20 @@ class CodexTimestampOrderTests(unittest.TestCase):
 class DelegateFlowMarkdownTests(unittest.TestCase):
     def test_each_stage_has_a_rate_line_per_agent(self):
         rows = [analyze("sbx-claude-delegates", "claude"), analyze("sbx-codex-parallel", "codex"), analyze("sbx-codex-delegates", "codex")]
-        names = ("delegate wrote code", "lead reviewed code-writing delegate (all)", "delegated investigation", "parallel investigation spawns",
+        names = ("delegate wrote code", "lead inspected code-writing delegate's work (all)", "delegated investigation", "parallel investigation spawns",
                  "wide test run after last edit")
 
         self.assertEqual([line for line in chain.markdown(rows).splitlines()[:len(chain.STAGES) + 3] if line.split(" | ")[0][2:] in names], [
             "| delegate wrote code | 1/1 | 2/2 |",
-            "| lead reviewed code-writing delegate (all) | 0/1 | 1/1 |",
+            "| lead inspected code-writing delegate's work (all) | 0/1 | 1/1 |",
             "| delegated investigation | 1/1 | 2/2 |",
             "| parallel investigation spawns | 1/1 | 1/2 |",
             "| wide test run after last edit | 0/1 | 1/1 |",
         ])
 
 
-class ReviewWindowTests(unittest.TestCase):
-    """The lead's review of a code-writing delegate counts only between the
+class InspectionWindowTests(unittest.TestCase):
+    """The lead's inspection of a code-writing delegate counts only between the
     delegate's return and the lead's final message."""
 
     def stage(self, *events):
