@@ -170,8 +170,10 @@ def cache_root():
     return Path(os.environ.get("CANON_CACHE", DEFAULT_CACHE)).expanduser().resolve()
 
 
-def mirror_path(repo):
-    return cache_root() / "mirrors" / f"{repo}.git"
+def mirror_path(repo, history=False):
+    """A history mirror sits apart from the depth-1 one, so deepening it never
+    changes a checkout made by code that copies the mirror's shallow file."""
+    return cache_root() / "mirrors" / f"{repo}{'.history' if history else ''}.git"
 
 
 def has_commit(mirror, commit):
@@ -194,7 +196,7 @@ def fetch(repo, commit, source=None, history=False):
     """Put commit into the repo's bare mirror, from source (a clone or URL) or
     the upstream URL: at depth 1, or with every ancestor when history is set.
     Idempotent."""
-    mirror = mirror_path(repo)
+    mirror = mirror_path(repo, history)
     if not mirror.is_dir():
         mirror.parent.mkdir(parents=True, exist_ok=True)
         git("init", "-q", "--bare", str(mirror))
@@ -207,7 +209,7 @@ def fetch(repo, commit, source=None, history=False):
 
 
 def require_mirror(spec):
-    mirror = mirror_path(spec.repo)
+    mirror = mirror_path(spec.repo, spec.history)
     if not (has_history if spec.history else has_commit)(mirror, spec.commit):
         flag = " --history" if spec.history else ""
         raise WorkspaceError(f"{mirror} lacks {'the history of ' if spec.history else ''}{spec.commit}; "

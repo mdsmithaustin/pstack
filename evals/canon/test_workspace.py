@@ -169,6 +169,14 @@ class HistoryTests(HistoryRepo):
 
         self.assertEqual(self.log(root), "Keep legacy orders readable (#12)\nShop\n")
 
+    def test_history_fetch_leaves_the_depth_one_mirror_alone(self):
+        shallow = (self.mirror / "shallow").read_text()
+
+        mirror = workspace.fetch("shop", self.head, self.upstream, history=True)
+
+        self.assertEqual((mirror.name, (self.mirror / "shallow").read_text()), ("shop.history.git", shallow))
+        self.assertFalse(workspace.has_commit(self.mirror, self.head))
+
     def test_other_cases_see_only_the_pinned_commit_even_from_a_full_mirror(self):
         mirror = workspace.fetch("shop", self.head, self.upstream, history=True)
         root = self.harness_workspace("pinned", "# Poteto mode\n")
