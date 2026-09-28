@@ -304,7 +304,7 @@ workspace had a different tree.
 `build` checks out the commit plus overlay once per spec under the cache and
 writes its path into the arm's `rules/<id>/cases/<case>/workspace.json`. The
 wrapper's input is the arm's `workspace/` directory, which holds
-`workspace.json` (repo, commit, mirror, tree id) and `overlay/`. `build.json`
+`workspace.json` (repo, commit, mirror, tree id, and `history` for a history case) and `overlay/`. `build.json`
 records the repo, commit, tree id, checkout path, and one hash per arm of the
 workspace input, and refuses the build if the hashes differ. It also refuses a
 repo that tracks a path the mounted skills take.
@@ -1038,7 +1038,9 @@ code-writing spawn, with `before`. `before` is true when the investigation
 spawn comes before both, a missing edit or code-writing spawn counting as
 later. It is false when the run has no investigation spawn or the spawn comes
 at or after either, and `null` when one of the three has no lead order. The
-stage is "investigation before first edit".
+stage is "investigation before first edit". An edit made only through a script,
+such as a `python3` heredoc that opens a file for writing, is not seen as an
+edit, so a spawn after it can still count as before.
 
 **Wide test run.** `full_suite_run` takes the run's last workspace edit by
 any actor and lists `test_commands_after`, every test command any actor ran
@@ -1162,7 +1164,8 @@ change what the lead reads first but cannot hand it a regression's story.
   `_hermes "$@"`, 8c4bec6155 "fix(cli): repair broken zsh completion
   generation" swapped it for `compdef` with a test, 6d30b4a7e3 added
   `test_zsh_eval_style_source_registers_after_compinit`, and 6b81590c55's
-  suite-wide prune removed the zsh tests. The pinned
+  suite-wide prune removed those two regression tests. The remaining zsh
+  syntax tests went later, in d09dacf66a. The pinned
   `tests/hermes_cli/test_completion.py` has none.
 
 The oracle runs the pinned `tests/hermes_cli/test_completion.py` and four
@@ -1223,7 +1226,6 @@ Read `spawn-step vs current` per case, then the chain stages "delegated
 investigation", "parallel investigation spawns", and "investigation before
 first edit". A `SEPARATES` on `zsh-first-tab` with no change in those stages
 says the arm helped some other way.
-
 
 **Result, 2026-09-28.** The pilot ran one paired run per rule and agent on Sonnet and gpt-5.6-sol leads, plus two `spawn-step` runs per case on an Opus lead. The step changed nothing on either model, so it did not ship:
 
