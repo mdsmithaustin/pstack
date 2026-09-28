@@ -733,6 +733,8 @@ def write_arm_workspace(root, spec, tree, pr=None):
         (arm / "overlay" / path).parent.mkdir(parents=True, exist_ok=True)
         (arm / "overlay" / path).write_bytes(data)
     record = {"repo": spec.repo, "commit": spec.commit, "mirror": str(workspace.mirror_path(spec.repo)), "tree": tree}
+    if spec.history:
+        record["history"] = True
     if pr:
         (arm / "pr.patch").write_bytes(spec.review["patch"])
         record["review"] = pr

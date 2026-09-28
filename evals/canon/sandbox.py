@@ -395,7 +395,7 @@ def manifest(agent, root, spec, discovery):
     tree = "skills/pstack" if discovery else "skills"
     record = {"agent": agent, "root": str(root), "commit": spec["commit"], "expected_tree": spec["tree"], "tree": tree,
               "discovery": discovery, "harness": conf["harness"] if discovery else None, "transcripts": conf["transcripts"],
-              "deps": None}
+              "deps": None, "history": spec.get("history", False)}
     if spec.get("review"):
         # The clone may carry only the checked-out branch, so setup recreates
         # main and the PR branch from these ids and checks the PR branch out.
@@ -445,7 +445,7 @@ def wrap(argv, stdin=sys.stdin.buffer):
         with tempfile.TemporaryDirectory() as directory:
             with timed(timings, "materialize_s"):
                 record["host_tree"] = workspace.materialize(root, Path(spec["mirror"]), spec["commit"], workspace.read_files(arm / "overlay"),
-                                                            workspace.arm_review(arm, spec))
+                                                            workspace.arm_review(arm, spec), spec.get("history", False))
                 if record["host_tree"] != spec["tree"]:
                     raise workspace.WorkspaceError(f"materialized tree {record['host_tree']} is not the recorded {spec['tree']}")
                 if spec.get("review"):

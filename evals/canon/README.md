@@ -260,6 +260,14 @@ python3 evals/canon/workspace.py fetch omnigent 02969a131c72d74c00c5800d8e82ae83
 python3 evals/canon/workspace.py fetch hermes 130b8f2c5dbca93a81aa396dd2ba44420d78f6f0 --from <local clone>
 ```
 
+The agent's checkout shows only the pinned commit: `git log` prints one
+commit, however deep the mirror is. A case whose evidence lives in the repo's
+history adds `"history": true` to its `workspace`, and its checkout shows every
+ancestor of the pinned commit. Its mirror needs that history, so fetch it with
+`--history` (`workspace.py fetch omnigent <commit> --history`). The build, the
+wrapper, and the sandbox refuse a history case whose mirror or clone lacks it.
+Deepening a mirror changes nothing for the cases without the flag.
+
 The harness copies only single files into its workspace, flattened into
 `inputs/`, so the entry wrapper builds the checkout itself. It runs
 `workspace.py wrap` in the agent's cwd, which already holds the mounted skills.

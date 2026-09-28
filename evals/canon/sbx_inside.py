@@ -81,6 +81,8 @@ def setup(manifest_path):
     head = workspace.git("rev-parse", "HEAD", cwd=root).decode().strip()
     if head != expected:
         raise workspace.WorkspaceError(f"the clone is at {head}, not {expected}")
+    if manifest.get("history") and (root / ".git" / "shallow").is_file():
+        raise workspace.WorkspaceError(f"the clone lacks the history of {head}")
     shutil.copytree(payload / "skills", root / "skills", symlinks=True, dirs_exist_ok=True)
     mounted = sorted(path.relative_to(root).as_posix() for path in (root / "skills").rglob("*") if path.is_file())
     workspace.exclude(root, workspace.mount_roots(mounted, tracked(root, head)))
