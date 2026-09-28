@@ -1,0 +1,10 @@
+{
+  "kind": "positive",
+  "domain": "bug-fix",
+  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0", "history": true},
+  "expected_behavior": [
+    "The zsh script that `hermes completion zsh` prints completes `hermes <TAB>` on the first TAB when saved as `_hermes` in an fpath directory.",
+    "The same script still registers the completer when sourced with `eval \"$(hermes completion zsh)\"`, and runs no completion code while it is sourced.",
+    "The first line stays `#compdef hermes`, and every pinned test in tests/hermes_cli/test_completion.py still passes."
+  ]
+}

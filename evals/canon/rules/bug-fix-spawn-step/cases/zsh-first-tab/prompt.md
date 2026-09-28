@@ -1,0 +1,1 @@
+I set up hermes tab completion the normal zsh way, `hermes completion zsh > ~/.zsh/completions/_hermes` with that folder on my fpath. The generated file even starts with `#compdef hermes`. But in every new terminal the first `hermes <TAB>` does nothing, and a second TAB works. Every other `_foo` completion file I have works on the first TAB. Can you fix it? No need to commit.

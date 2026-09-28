@@ -142,6 +142,72 @@ class MaterializeTests(ShopRepo):
             workspace.materialize(root, self.mirror, self.commit, {})
 
 
+class HistoryRepo(ShopRepo):
+    """The pinned commit sits one commit above the root commit."""
+
+    def setUp(self):
+        super().setUp()
+        upstream = self.base / "upstream"
+        (upstream / "app" / "legacy.py").write_text("OLD = 2\n")
+        git(upstream, "commit", "-qam", "Keep legacy orders readable (#12)")
+        self.head = git(upstream, "rev-parse", "HEAD").strip()
+        self.upstream = upstream
+
+    def log(self, root):
+        return git(root, "log", "--format=%s")
+
+
+class HistoryTests(HistoryRepo):
+    """A history case sees both commits, and every other case sees only the
+    pinned commit."""
+
+    def test_history_case_sees_every_ancestor_of_the_pinned_commit(self):
+        mirror = workspace.fetch("shop", self.head, self.upstream, history=True)
+        root = self.harness_workspace("history", "# Poteto mode\n")
+
+        workspace.materialize(root, mirror, self.head, {}, history=True)
+
+        self.assertEqual(self.log(root), "Keep legacy orders readable (#12)\nShop\n")
+
+    def test_history_fetch_leaves_the_depth_one_mirror_alone(self):
+        shallow = (self.mirror / "shallow").read_text()
+
+        mirror = workspace.fetch("shop", self.head, self.upstream, history=True)
+
+        self.assertEqual((mirror.name, (self.mirror / "shallow").read_text()), ("shop.history.git", shallow))
+        self.assertFalse(workspace.has_commit(self.mirror, self.head))
+
+    def test_other_cases_see_only_the_pinned_commit_even_from_a_full_mirror(self):
+        mirror = workspace.fetch("shop", self.head, self.upstream, history=True)
+        root = self.harness_workspace("pinned", "# Poteto mode\n")
+
+        workspace.materialize(root, mirror, self.head, {})
+
+        self.assertEqual(self.log(root), "Keep legacy orders readable (#12)\n")
+
+    def test_history_case_refuses_a_mirror_that_holds_only_the_pinned_commit(self):
+        mirror = workspace.fetch("shop", self.head, self.upstream)
+        root = self.harness_workspace("shallow", "# Poteto mode\n")
+
+        with self.assertRaisesRegex(workspace.WorkspaceError, "lacks the history of"):
+            workspace.materialize(root, mirror, self.head, {}, history=True)
+
+    def test_spec_reads_the_history_flag(self):
+        spec = workspace.parse_spec(self.base, {"repo": "shop", "commit": self.head, "history": True})
+
+        self.assertEqual((spec.history, workspace.parse_spec(self.base, {"repo": "shop", "commit": self.head}).history), (True, False))
+        with self.assertRaisesRegex(workspace.WorkspaceError, "history must be true or absent"):
+            workspace.parse_spec(self.base, {"repo": "shop", "commit": self.head, "history": "yes"})
+
+    def test_arm_workspace_records_history_only_when_the_case_asks(self):
+        records = []
+        for name, history in (("with", True), ("without", False)):
+            screen.write_arm_workspace(self.base / name, workspace.Spec("shop", self.head, {}, history=history), "t")
+            records.append(json.loads((self.base / name / "workspace" / "workspace.json").read_text()).get("history"))
+
+        self.assertEqual(records, [True, None])
+
+
 class OverlayWriteTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -173,6 +239,14 @@ class OverlayWriteTests(unittest.TestCase):
         workspace.write_overlay(self.root, {"docs/a.md": b"new\n", "notes/b.md": b"b\n"})
 
         self.assertEqual(((self.root / "docs" / "a.md").read_text(), (self.root / "notes" / "b.md").read_text()), ("new\n", "b\n"))
+
+
+class SpecKeyTests(unittest.TestCase):
+    def test_a_history_checkout_gets_its_own_cache_key_and_others_keep_theirs(self):
+        plain = workspace.Spec("hermes", "a" * 40, {})
+
+        self.assertNotEqual(workspace.Spec("hermes", "a" * 40, {}, history=True).key, plain.key)
+        self.assertEqual(plain.key, "hermes-aaaaaaaaaaaa-ec04279dd948")
 
 
 class ParseSpecTests(unittest.TestCase):
@@ -351,12 +425,12 @@ pathlib.Path("app/orders.py").write_text("changed\\n")
 
 
 class WrapTests(ShopRepo):
-    def run_wrap(self, tree):
+    def run_wrap(self, tree, **record):
         root = self.harness_workspace("wrapped", "# Poteto mode\n")
         arm = self.base / "arm"
         (arm / "overlay").mkdir(parents=True)
         (arm / "overlay" / "CONTEXT.md").write_bytes(CONTEXT)
-        (arm / "workspace.json").write_text(json.dumps({"repo": "shop", "commit": self.commit, "mirror": str(self.mirror), "tree": tree}))
+        (arm / "workspace.json").write_text(json.dumps({"repo": "shop", "commit": self.commit, "mirror": str(self.mirror), "tree": tree, **record}))
         (self.base / "agent.py").write_text(AGENT)
         environment = {"CANON_WORKSPACE": str(arm), "CANON_HARVEST": str(self.base / "harvest")}
         previous = Path.cwd()
@@ -379,6 +453,18 @@ class WrapTests(ShopRepo):
         self.assertEqual((root / "prompt-seen.txt").read_text(), "$poteto-mode Add amendments.")
         self.assertEqual(sorted(apply_diff(workspace.reference_checkout(self.spec)[0], (slot / "workspace.diff").read_text())),
                          ["app/orders.py", "prompt-seen.txt"])
+
+    def test_wrapper_refuses_a_history_case_on_a_mirror_without_its_history(self):
+        upstream = self.base / "upstream"
+        (upstream / "README.md").write_text("# Shop\nMore.\n")
+        git(upstream, "commit", "-qam", "Second")
+        self.commit = git(upstream, "rev-parse", "HEAD").strip()
+        workspace.fetch("shop", self.commit, upstream)
+
+        code, root, record, slot = self.run_wrap("0" * 40, history=True)
+
+        self.assertEqual(code, workspace.REFUSED)
+        self.assertIn("lacks the history of", record["error"])
 
     def test_wrapper_refuses_a_workspace_that_is_not_the_recorded_tree(self):
         code, root, record, slot = self.run_wrap("0" * 40)

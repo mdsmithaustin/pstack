@@ -3,11 +3,12 @@
 
 A case opts in with case.json "workspace": {"repo": NAME, "commit": SHA,
 "overlay": "overlay/"}. The repo comes from a local bare mirror that holds the
-pinned commit at depth 1, so a run never touches the network or the user's own
-clone. The harness copies only single files into its workspace (flattened into
+pinned commit, so a run never touches the network or the user's own clone. The
+checkout shows only the pinned commit, unless the case adds "history": true,
+which shows every ancestor and needs a mirror fetched with --history. The harness copies only single files into its workspace (flattened into
 inputs/), so the per-run entry wrapper materializes the checkout itself:
 
-  workspace.py fetch REPO COMMIT [--from PATH]     put COMMIT into the mirror
+  workspace.py fetch REPO COMMIT [--from PATH] [--history]   put COMMIT into the mirror
   workspace.py wrap [--token T --discovery D] -- TARGET ARG...
 
 `wrap` runs in the harness workspace. It checks out the commit there, copies
@@ -73,12 +74,16 @@ class Spec:
     overlay: dict
     # A review case's {"patch": bytes, "title", "branch", "body_file"}, else None.
     review: dict = None
+    # Whether the checkout shows the pinned commit's ancestors.
+    history: bool = False
 
     @property
     def key(self):
         parts = [self.repo, self.commit, tree_digest(self.overlay)]
         if self.review:
             parts.append([hashlib.sha256(self.review["patch"]).hexdigest(), self.review["title"], self.review["branch"]])
+        if self.history:
+            parts.append("history")
         digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()
         return f"{self.repo}-{self.commit[:12]}-{digest[:12]}"
 
@@ -133,8 +138,10 @@ def parse_review(case_root, raw):
 
 
 def parse_spec(case_root, raw, review=None):
-    if not isinstance(raw, dict) or set(raw) - {"repo", "commit", "overlay"} or not {"repo", "commit"} <= set(raw):
-        raise WorkspaceError(f"{case_root}/case.json workspace must be {{\"repo\", \"commit\", \"overlay\"}}, not {raw!r}")
+    if not isinstance(raw, dict) or set(raw) - {"repo", "commit", "overlay", "history"} or not {"repo", "commit"} <= set(raw):
+        raise WorkspaceError(f"{case_root}/case.json workspace must have repo and commit, and may have overlay and history, not {raw!r}")
+    if raw.get("history", True) is not True:
+        raise WorkspaceError(f"{case_root}/case.json workspace history must be true or absent, not {raw['history']!r}")
     if not isinstance(raw["repo"], str) or not REPO_NAME.match(raw["repo"]):
         raise WorkspaceError(f"{case_root}/case.json workspace repo must name a mirror such as {sorted(REPOS)}, not {raw['repo']!r}")
     if not isinstance(raw["commit"], str) or not SHA.match(raw["commit"]):
@@ -145,12 +152,13 @@ def parse_spec(case_root, raw, review=None):
         if Path(case_root).resolve() not in root.parents or not root.is_dir():
             raise WorkspaceError(f"{case_root}/case.json workspace overlay {raw['overlay']!r} is not a directory inside the case")
         overlay = read_files(root)
+    history = raw.get("history", False)
     if review is None:
-        return Spec(raw["repo"], raw["commit"], overlay)
+        return Spec(raw["repo"], raw["commit"], overlay, history=history)
     review, body = parse_review(case_root, review)
     if set(body) & set(overlay):
         raise WorkspaceError(f"{case_root}/case.json review body_file {review['body_file']!r} is also an overlay file")
-    return Spec(raw["repo"], raw["commit"], {**overlay, **body}, review)
+    return Spec(raw["repo"], raw["commit"], {**overlay, **body}, review, history)
 
 
 def git(*args, cwd=None, env=None):
@@ -164,8 +172,10 @@ def cache_root():
     return Path(os.environ.get("CANON_CACHE", DEFAULT_CACHE)).expanduser().resolve()
 
 
-def mirror_path(repo):
-    return cache_root() / "mirrors" / f"{repo}.git"
+def mirror_path(repo, history=False):
+    """A history mirror sits apart from the depth-1 one, so fetching history
+    never deepens the mirror that depth-1 checkouts read."""
+    return cache_root() / "mirrors" / f"{repo}{'.history' if history else ''}.git"
 
 
 def has_commit(mirror, commit):
@@ -174,25 +184,43 @@ def has_commit(mirror, commit):
     return mirror.is_dir() and probe.returncode == 0
 
 
-def fetch(repo, commit, source=None):
-    """Put commit into the repo's bare mirror at depth 1, from source (a clone or
-    URL) or the upstream URL. Idempotent."""
-    mirror = mirror_path(repo)
+def has_history(mirror, commit):
+    """Whether the mirror holds every ancestor of commit: no shallow boundary
+    of the mirror is reachable from it."""
+    shallow = Path(mirror) / "shallow"
+    boundary = set(shallow.read_text().split()) if shallow.is_file() else set()
+    if not has_commit(mirror, commit):
+        return False
+    return not boundary or boundary.isdisjoint(git("--git-dir", str(mirror), "rev-list", commit).decode().split())
+
+
+# git's own value for --unshallow. Unlike --unshallow, it also works on a
+# mirror that is not shallow yet.
+INFINITE_DEPTH = "2147483647"
+
+
+def fetch(repo, commit, source=None, history=False):
+    """Put commit into the repo's bare mirror, from source (a clone or URL) or
+    the upstream URL: at depth 1, or with every ancestor when history is set.
+    Idempotent."""
+    mirror = mirror_path(repo, history)
     if not mirror.is_dir():
         mirror.parent.mkdir(parents=True, exist_ok=True)
         git("init", "-q", "--bare", str(mirror))
-    if not has_commit(mirror, commit):
+    if not (has_history if history else has_commit)(mirror, commit):
         git("--git-dir", str(mirror), "-c", "uploadpack.allowAnySHA1InWant=true",
-            "fetch", "-q", "--depth", "1", str(source or REPOS[repo]), commit)
-    if not has_commit(mirror, commit):
-        raise WorkspaceError(f"{repo} mirror still lacks {commit} after the fetch")
+            "fetch", "-q", "--depth", INFINITE_DEPTH if history else "1", str(source or REPOS[repo]), commit)
+    if not (has_history if history else has_commit)(mirror, commit):
+        raise WorkspaceError(f"{repo} mirror still lacks {'the history of ' if history else ''}{commit} after the fetch")
     return mirror
 
 
 def require_mirror(spec):
-    mirror = mirror_path(spec.repo)
-    if not has_commit(mirror, spec.commit):
-        raise WorkspaceError(f"{mirror} lacks {spec.commit}; run `python3 evals/canon/workspace.py fetch {spec.repo} {spec.commit} --from <clone>`")
+    mirror = mirror_path(spec.repo, spec.history)
+    if not (has_history if spec.history else has_commit)(mirror, spec.commit):
+        flag = " --history" if spec.history else ""
+        raise WorkspaceError(f"{mirror} lacks {'the history of ' if spec.history else ''}{spec.commit}; "
+                             f"run `python3 evals/canon/workspace.py fetch {spec.repo} {spec.commit} --from <clone>{flag}`")
     return mirror
 
 
@@ -270,12 +298,16 @@ def head_state(root):
             "refs_after": dict(line.split(" ", 1) for line in listing.splitlines() if line)}
 
 
-def materialize(root, mirror, commit, overlay, review=None):
+def materialize(root, mirror, commit, overlay, review=None, history=False):
     """Check commit out into root beside the files already there, copy the
     overlay over it, and return the tree id of the result. The directories
     holding the files already in root (the mounted skills) are excluded from
     git's view, so nothing the agent writes there reaches the diff. A review
-    checks out the PR branch that commit_review builds before the overlay."""
+    checks out the PR branch that commit_review builds before the overlay.
+    The checkout's history ends at commit unless history is set, however deep
+    the mirror is."""
+    if history and not has_history(mirror, commit):
+        raise WorkspaceError(f"{mirror} lacks the history of {commit}; fetch it with --history")
     root = Path(root)
     tracked = tracked_paths(mirror, commit)
     roots = mount_roots(mounted_paths(root), tracked)
@@ -285,8 +317,8 @@ def materialize(root, mirror, commit, overlay, review=None):
     git("init", "-q", "--template=", cwd=root)
     (root / ".git" / "objects" / "info").mkdir(parents=True, exist_ok=True)
     (root / ".git" / "objects" / "info" / "alternates").write_text(str(Path(mirror) / "objects") + "\n")
-    if (Path(mirror) / "shallow").is_file():
-        shutil.copyfile(Path(mirror) / "shallow", root / ".git" / "shallow")
+    if not history:
+        (root / ".git" / "shallow").write_text(commit + "\n")
     git("checkout", "-q", "--detach", commit, cwd=root)
     base = commit_review(root, commit, review)[review["branch"]] if review else commit
     write_overlay(root, overlay)
@@ -331,7 +363,7 @@ def reference_checkout(spec):
     path.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{spec.key}-", dir=path.parent))
     try:
-        tree = materialize(staging, mirror, spec.commit, spec.overlay, spec.review)
+        tree = materialize(staging, mirror, spec.commit, spec.overlay, spec.review, spec.history)
         if path.exists():
             shutil.rmtree(path)
         os.replace(staging, path)
@@ -445,7 +477,8 @@ def wrap(argv, stdin=sys.stdin.buffer):
     started = time.monotonic()
     review = arm_review(arm, spec)
     try:
-        record["tree"] = materialize(root, Path(spec["mirror"]), spec["commit"], read_files(arm / "overlay"), review)
+        record["tree"] = materialize(root, Path(spec["mirror"]), spec["commit"], read_files(arm / "overlay"), review,
+                                     spec.get("history", False))
         if record["tree"] != spec["tree"]:
             raise WorkspaceError(f"materialized tree {record['tree']} is not the recorded {spec['tree']}")
         if review:
@@ -481,11 +514,13 @@ def wrap(argv, stdin=sys.stdin.buffer):
 def main(argv):
     if argv[:1] == ["wrap"]:
         return wrap(argv[1:])
+    history = argv[-1:] == ["--history"]
+    argv = argv[:-1] if history else argv
     if argv[:1] == ["fetch"] and len(argv) in (3, 5) and (len(argv) == 3 or argv[3] == "--from"):
         if not REPO_NAME.match(argv[1]) or not SHA.match(argv[2]) or (len(argv) == 3 and argv[1] not in REPOS):
             print(f"workspace: fetch takes a repo name, a full sha, and --from unless the repo is one of {sorted(REPOS)}", file=sys.stderr)
             return 2
-        print(fetch(argv[1], argv[2], argv[4] if len(argv) == 5 else None))
+        print(fetch(argv[1], argv[2], argv[4] if len(argv) == 5 else None, history))
         return 0
     print(__doc__, file=sys.stderr)
     return 2

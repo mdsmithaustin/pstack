@@ -147,7 +147,7 @@ def build(root, spec, dest):
     dest.mkdir(parents=True, exist_ok=True)
     if any(dest.iterdir()):
         raise ReviewError(f"{dest} is not empty")
-    workspace.materialize(dest, mirror, parsed.commit, {})
+    workspace.materialize(dest, mirror, parsed.commit, {}, history=parsed.history)
     git("checkout", "-q", "-B", "main", cwd=dest)
     git("checkout", "-q", "-b", spec["review"]["branch"], cwd=dest)
     git("apply", "--index", "--binary", "--whitespace=nowarn", str(root / spec["review"]["patch"]), cwd=dest)

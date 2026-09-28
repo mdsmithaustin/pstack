@@ -1,0 +1,19 @@
+diff --git a/hermes_cli/completion.py b/hermes_cli/completion.py
+index 7c62c56..193be3c 100644
+--- a/hermes_cli/completion.py
++++ b/hermes_cli/completion.py
+@@ -193,7 +193,13 @@ _hermes() {{
+     esac
+ }}
+ 
+-compdef _hermes hermes
++# Autoloaded from an fpath file, the first call runs this file, which must
++# call _hermes itself; sourced with eval, it registers the completer instead.
++if [[ "${{funcstack[1]}}" == _hermes ]]; then
++    _hermes "$@"
++else
++    compdef _hermes hermes
++fi
+ """
+ 
+ 

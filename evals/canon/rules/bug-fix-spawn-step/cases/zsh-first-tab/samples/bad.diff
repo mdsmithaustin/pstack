@@ -1,0 +1,13 @@
+diff --git a/hermes_cli/completion.py b/hermes_cli/completion.py
+index 7c62c56..aea3d81 100644
+--- a/hermes_cli/completion.py
++++ b/hermes_cli/completion.py
+@@ -193,7 +193,7 @@ _hermes() {{
+     esac
+ }}
+ 
+-compdef _hermes hermes
++_hermes "$@"
+ """
+ 
+ 
