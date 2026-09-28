@@ -162,6 +162,21 @@ class ShellEffectsTests(unittest.TestCase):
 
         self.assertEqual(reads, [("poteto-mode/playbooks/refactoring.md", False)])
 
+    def test_writes_that_land_outside_the_checkout_are_not_edits(self):
+        def edits(command):
+            line = json.dumps({"type": "item.completed", "item": {"type": "command_execution", "command": command, "exit_code": 0}})
+            return [event.path for event in chain.parse_codex([line], TREE, "/w/app").events if event.kind == "edit"]
+
+        self.assertEqual([edits(command) for command in (
+            "tmpclean=$(mktemp /tmp/scratch_clean_XXXX.py) && printf 'x = 1\\n' > \"$tmpclean\" && rm -f \"$tmpfile\" \"$tmpclean\"",
+            "scratch=$(mktemp -d)/scratch_debugger.py\nprintf 'def f():\\n    breakpoint()\\n' > \"$scratch\"\nrm -rf \"$(dirname \"$scratch\")\"",
+            "probe_dir=$(mktemp -d /tmp/no-debugger-review.XXXXXX); probe_file=\"$probe_dir/probe.py\"; printf '%s\\n' 'import pdb' > \"$probe_file\"",
+            "cd /tmp && cat > sanity.mjs <<'EOF'\nconsole.log('ALL PASS')\nEOF\nnode sanity.mjs",
+            "printf 'x\\n' > ~/notes.txt",
+            "cd src && printf 'x\\n' > tree_notes.py",
+            "echo hi > notes.txt",
+        )], [[], [], [], [], [], ["src/tree_notes.py"], ["notes.txt"]])
+
     def test_head_pipe_and_short_sed_range_are_partial(self):
         reads, _ = chain.shell_effects("cat how/SKILL.md | head -3; sed -n '1,4p' architect/SKILL.md; sed -n '1,40p' unslop/SKILL.md", TREE)
 
