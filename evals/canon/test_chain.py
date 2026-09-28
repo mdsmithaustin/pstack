@@ -557,7 +557,7 @@ class CodexRolesHarvestTests(unittest.TestCase):
 
 class ClaudeDelegateFlowTests(unittest.TestCase):
     """A synthetic Claude sandbox run in the real shapes of Claude Code
-    2.1: two general-purpose explorers spawned in the background, each
+    2.1: two Explore delegates spawned in the background, each
     answered at once by an "Async agent launched" tool_result and later by a
     <task-notification> user message naming its tool-use-id; then two
     foreground poteto-agent builders, each returning in its Agent
@@ -697,8 +697,8 @@ class CodexTimestampOrderTests(unittest.TestCase):
         first = "sed -n '1,240p' dev/lint/lint_no_debugger.py && uv run --no-sync pytest -q tests/dev/lint &&"
         self.assertEqual((suite["ordered"], suite["wide"], suite["test_commands_after"][0][:len(first)]), (True, True, first))
 
-    def test_three_explorers_ran_at_once(self):
-        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 6, "max_in_flight": 3, "parallel": True, "unordered": 0})
+    def test_architect_runners_are_not_investigation_and_the_two_explorers_ran_apart(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 1, "parallel": False, "unordered": 0})
 
     def test_without_the_lead_rollout_the_children_stay_unordered(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -713,11 +713,13 @@ class CodexTimestampOrderTests(unittest.TestCase):
 class DelegateFlowMarkdownTests(unittest.TestCase):
     def test_each_stage_has_a_rate_line_per_agent(self):
         rows = [analyze("sbx-claude-delegates", "claude"), analyze("sbx-codex-parallel", "codex"), analyze("sbx-codex-delegates", "codex")]
-        names = ("delegate wrote code", "lead reviewed code-writing delegate (all)", "parallel investigation spawns", "wide test run after last edit")
+        names = ("delegate wrote code", "lead reviewed code-writing delegate (all)", "delegated investigation", "parallel investigation spawns",
+                 "wide test run after last edit")
 
         self.assertEqual([line for line in chain.markdown(rows).splitlines()[:len(chain.STAGES) + 3] if line.split(" | ")[0][2:] in names], [
             "| delegate wrote code | 1/1 | 2/2 |",
             "| lead reviewed code-writing delegate (all) | 0/1 | 1/1 |",
+            "| delegated investigation | 1/1 | 2/2 |",
             "| parallel investigation spawns | 1/1 | 1/2 |",
             "| wide test run after last edit | 0/1 | 1/1 |",
         ])
@@ -748,9 +750,31 @@ class ReviewWindowTests(unittest.TestCase):
     def test_sequential_foreground_explorers_are_not_parallel(self):
         first, second = chain.Event(1, "main", "spawn"), chain.Event(3, "main", "spawn")
         trace = chain.Trace(events=[first, chain.Event(2, "main", "return", text="a"), second, chain.Event(4, "main", "return", text="b")],
-                            spawns={"a": chain.Spawn(first), "b": chain.Spawn(second)})
+                            spawns={"a": chain.Spawn(first, role="Explore"), "b": chain.Spawn(second, role="Explore")})
 
         self.assertEqual(run_stages(trace)["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 1, "parallel": False, "unordered": 0})
+
+
+class InvestigationSpawnTests(unittest.TestCase):
+    """Spawns placed at one lead index, as Codex children are, each returned
+    at a later index."""
+
+    def stage(self, *spawns):
+        events = [chain.Event(1, "main", "spawn", sub=(n,)) for n in range(len(spawns))]
+        returns = [chain.Event(2 + n, "main", "return", text=f"s{n}") for n in range(len(spawns))]
+        keyed = {f"s{n}": chain.Spawn(event, role=role, path=path) for n, (event, (role, path)) in enumerate(zip(events, spawns))}
+        row = run_stages(chain.Trace(events=[*events, *returns], spawns=keyed))
+        return row["parallel_investigation"], row["delegated_investigation"]
+
+    def test_read_only_architect_candidates_are_not_investigation(self):
+        self.assertEqual(self.stage(*[("poteto-agent", f"/root/architect_{name}") for name in ("ast", "table", "boundary")]), (
+            {"investigation_spawns": 0, "max_in_flight": 0, "parallel": False, "unordered": 0}, False))
+
+    def test_how_roles_and_unprescribed_explore_types_are_investigation(self):
+        self.assertEqual(self.stage(
+            ("explorer", "/root/how_custom_lint"), ("Explore", None), ("explorer", "/root/scan_callers"),
+            ("explorer", "/root/architect_judge"), ("general-purpose", None), ("poteto-agent", "/root/design_a"),
+        ), ({"investigation_spawns": 3, "max_in_flight": 3, "parallel": True, "unordered": 0}, True))
 
 
 class TestCommandTests(unittest.TestCase):
