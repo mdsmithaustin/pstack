@@ -1,0 +1,12 @@
+diff --git a/omnigent/runner/subagent_routing.py b/omnigent/runner/subagent_routing.py
+index 9c4c398..5dbe207 100644
+--- a/omnigent/runner/subagent_routing.py
++++ b/omnigent/runner/subagent_routing.py
+@@ -487,6 +487,7 @@ def _opt_str(value: Any) -> str | None:
+ 
+ 
+ def _harness_family(harness: str) -> str | None:
++    # Kept: the routing family is its own lookup, apart from the provider family.
+     from omnigent.server.smart_routing import _HARNESS_FAMILY
+ 
+     return _HARNESS_FAMILY.get(harness)

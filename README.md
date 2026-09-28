@@ -39,7 +39,7 @@ use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) at the start of a task. it r
 
 ### just use [`/poteto-mode`](./skills/poteto-mode/SKILL.md)
 
-this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-four playbooks:
+this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-five playbooks:
 
 ```
 /poteto-mode this pr has a subtle bug where the scroll drifts every 750ms even when idle. repro
@@ -52,12 +52,13 @@ morning.
 ```
 
 <details>
-<summary>the twenty-four playbooks</summary>
+<summary>the twenty-five playbooks</summary>
 
 | playbook | for |
 |---|---|
 | [investigation](./skills/poteto-mode/playbooks/investigation.md) | a read-only question about current code or its history. how does x work, why was y built this way, are we sure. |
 | [research](./skills/poteto-mode/playbooks/research.md) (port addition) | external, domain, or dependency evidence for a decision, with sources and explicit gaps. |
+| [code review](./skills/poteto-mode/playbooks/code-review.md) (port addition) | review someone else's pr, branch, or diff for design and correctness before it merges, with the review lens and no edits to their branch. |
 | [bug fix](./skills/poteto-mode/playbooks/bug-fix.md) | reproduce a defect, root-cause it, and fix with runtime evidence. |
 | [perf](./skills/poteto-mode/playbooks/perf-issue.md) | trace a measured slowness and improve it against a baseline. |
 | [hillclimb](./skills/poteto-mode/playbooks/hillclimb.md) | sustained, scientific improvement of one metric against a target, looping hypotheses with before/after measurement and one commit per accepted win. |
@@ -293,6 +294,7 @@ Run the full CI-equivalent checks from the repository root:
 .venv/bin/python -m unittest discover -s tools -p 'test_*.py'
 docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
 (cd evals/verify-commands/oracles && python3 -m unittest -v test_check_plan)
+(cd evals/canon && python3 -m unittest -v)
 .venv/bin/python tools/probe-subagent-install.py
 .venv/bin/python -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'
 .venv/bin/python skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
@@ -303,7 +305,7 @@ lefthook validate
 git diff --check
 ```
 
-Each command exits nonzero when its check fails. The three unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
+Each command exits nonzero when its check fails. The four unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
 
 Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 

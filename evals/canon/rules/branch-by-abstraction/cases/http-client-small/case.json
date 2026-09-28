@@ -1,0 +1,9 @@
+{
+  "kind": "near-miss",
+  "domain": "migration-planning",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Moves both callers onto platform_http and deletes app/httpclient.py in one change.",
+    "Adds no module between the callers and platform_http, and keeps the suite green after every commit."
+  ]
+}

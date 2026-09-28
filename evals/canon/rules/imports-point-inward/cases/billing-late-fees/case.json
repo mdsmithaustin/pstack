@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "layering",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Statements add a 2% late fee to invoices more than 30 days past due, except for flagged customers.",
+    "billing/invoices.py and the project modules it imports import no storage, IO, framework, or adapter module, type-only imports included."
+  ]
+}

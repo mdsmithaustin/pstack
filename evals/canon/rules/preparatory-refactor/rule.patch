@@ -1,0 +1,10 @@
+--- a/poteto-mode/playbooks/feature.md
++++ b/poteto-mode/playbooks/feature.md
+@@ -13,6 +13,7 @@
+ 5. Verify on the matching surface against the accepted scope and integrated result, per [Prove It Works](../../principle-prove-it-works/SKILL.md). "Inconclusive" or wrong-surface is not a pass. Flag it.
+ 6. Rebase into small, ordered commits. Stack follow-ups.
+    Use the **sequence-verifiable-units** principle skill, building, verifying, and committing each small unit before the next.
++   If the feature would be one small edit in a different structure, land that restructure first as its own behavior-preserving commit with all tests green, then put the feature commit on top. Skip it when the feature commit would not get smaller.
+ 7. If the design is contested, `interrogate` before shipping.
+ 8. Run **Opening a PR**.
+ 

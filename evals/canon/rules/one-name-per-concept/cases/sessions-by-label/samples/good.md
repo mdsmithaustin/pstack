@@ -1,0 +1,3 @@
+- `GET /v1/sessions?label=env=test` keeps sessions that carry every `key=value` pair given. A pair without `=` returns 400.
+- `list_conversations(labels=...)` joins on the label table the way `pinned` does.
+- `client.sessions.list(labels={"env": "test"})` sends the pairs.

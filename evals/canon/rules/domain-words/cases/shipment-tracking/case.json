@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "domain-naming",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Reads CONTEXT.md and names the new code with its term Shipment.",
+    "Adds no identifier built on the word delivery, which CONTEXT.md lists under Avoid."
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "kind": "near-miss",
+  "domain": "deduplication",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Merges the repeated tax rounding in invoice and credit note totals into one place.",
+    "Invoice and credit note totals come out the same as before."
+  ]
+}

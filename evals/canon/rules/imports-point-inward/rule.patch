@@ -1,0 +1,7 @@
+--- a/principle-boundary-discipline/SKILL.md
++++ b/principle-boundary-discipline/SKILL.md
+@@ -26,3 +26,3 @@
+ Code organization:
+-- Business logic in pure functions with no framework dependencies
++- Business logic in pure functions. Point imports inward. Domain and policy modules import nothing from frameworks, drivers, ORMs, IO libraries, generated schema types, or adapter modules. Type-only imports count. Adapters import the domain. The domain never imports an adapter. When policy needs an outside value, the shell fetches it and passes it in as plain data.
+ - Parse functions: pure transforms from raw bytes to typed state

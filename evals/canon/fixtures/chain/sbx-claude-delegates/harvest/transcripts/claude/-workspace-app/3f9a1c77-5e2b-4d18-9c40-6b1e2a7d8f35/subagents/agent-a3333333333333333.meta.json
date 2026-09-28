@@ -1,0 +1,1 @@
+{"agentType": "poteto-agent", "description": "Add the tree to src/sessions/tree.py. Data shape: a dict from session id to child ids.", "toolUseId": "toolu_01SpawnBuildTree"}

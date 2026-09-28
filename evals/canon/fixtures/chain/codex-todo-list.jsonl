@@ -1,0 +1,5 @@
+{"type": "thread.started", "thread_id": "01a0d53e-0000-7000-8000-000000000001"}
+{"type": "item.completed", "item": {"id": "item_0", "type": "command_execution", "command": "/bin/zsh -lc 'cat skills/pstack/poteto-mode/playbooks/feature.md'", "aggregated_output": "", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_1", "type": "todo_list", "items": [{"text": "`how` over the affected subsystem.", "completed": false}]}}
+{"type": "item.completed", "item": {"id": "item_1", "type": "todo_list", "items": [{"text": "`how` over the affected subsystem.", "completed": true}, {"text": "`architect` for parallel design exploration.", "completed": true}, {"text": "Write the throughput checkpoint.", "completed": false}, {"text": "Delegate code-writing to a subagent.", "completed": false}]}}
+{"type": "turn.completed"}

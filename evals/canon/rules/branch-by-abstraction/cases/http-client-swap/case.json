@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "migration-planning",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Plans the migration as several PRs whose last PR deletes app/httpclient.py.",
+    "The plan deletes any module the first PR adds in front of the client, and every first-PR commit keeps the suite green."
+  ]
+}

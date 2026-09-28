@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "test-authoring",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "The new test names the free subscriber and the paid article through the client helpers.",
+    "It builds no WSGI environ, header, or start_response inline in the test body."
+  ]
+}

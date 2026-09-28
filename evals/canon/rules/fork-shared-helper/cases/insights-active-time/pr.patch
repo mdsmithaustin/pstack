@@ -1,0 +1,175 @@
+From c288557bec5b569c778f8369af81fcbb210d32f6 Mon Sep 17 00:00:00 2001
+From: Tomasz Wierzbicki <tomasz.wierzbicki@example.com>
+Date: Fri, 25 Sep 2026 17:13:54 -0600
+Subject: [PATCH] feat(insights): show active time per platform
+
+The Platforms table in /insights counted sessions, messages and tokens
+but not time, so a gateway user could not see where their hours went.
+Each platform row now carries active_seconds (summed ended-session
+length, same drift guard as the overview) and both the terminal table
+and the gateway summary render it.
+
+Summed active time across 30 days routinely passes a day, and the
+compact duration used to switch to fractional days there ("2.2d"),
+which reads like calendar days. Durations now keep counting in hours
+("52h 10m").
+---
+ agent/insights.py            | 30 +++++++++++++++++++++++-------
+ agent/usage_pricing.py       |  9 ++++-----
+ tests/agent/test_insights.py | 28 ++++++++++++++++++++++++++++
+ 3 files changed, 55 insertions(+), 12 deletions(-)
+
+diff --git a/agent/insights.py b/agent/insights.py
+index 53ac36a7c9..1dbd282ed1 100644
+--- a/agent/insights.py
++++ b/agent/insights.py
+@@ -76,6 +76,18 @@ def _day(ts: Any) -> str:
+     return safe_strftime(datetime.fromtimestamp(ts), "%b %d") if ts and (ts := coerce_epoch(ts)) else "?"
+ 
+ 
++def _active_seconds(session: Dict[str, Any]) -> float:
++    """Wall-clock length of an ended session; 0 when a timestamp is missing or the clock drifted
++    backwards (ended before it started)."""
++    started, ended = session.get("started_at"), session.get("ended_at")
++    return ended - started if started and ended and ended > started else 0.0
++
++
++def _active_label(platform_row: Dict[str, Any]) -> str:
++    """``3h 15m`` for a platform row's summed session time; ``—`` when none of its sessions ended."""
++    return format_duration_compact(platform_row["active_seconds"]) if platform_row["active_seconds"] else "—"
++
++
+ def _scoped(before: str, after: str = "", *, src: str = " AND s.source = ?") -> tuple[str, str]:
+     """(unfiltered, source-filtered) query pair sharing one body. Built once at class definition,
+     so no runtime value can alter query structure."""
+@@ -290,9 +302,7 @@ class InsightsEngine:
+             (models_with_pricing if known else models_without_pricing).add(_short_model(model))
+         if models:
+             total_cost = sum(float(m.get("cost") or 0.0) for m in models)
+-        # Guard against negative durations from clock drift.
+-        durations = [s["ended_at"] - s["started_at"] for s in sessions
+-                     if s.get("started_at") and s.get("ended_at") and s["ended_at"] > s["started_at"]]
++        durations = [d for d in map(_active_seconds, sessions) if d]
+         started = [s["started_at"] for s in sessions if s.get("started_at")]
+         n = len(sessions)
+         return {
+@@ -377,11 +387,13 @@ class InsightsEngine:
+         return sorted(result, key=lambda x: (x["total_tokens"], x["sessions"]), reverse=True)
+ 
+     def _compute_platform_breakdown(self, sessions: List[Dict]) -> List[Dict]:
+-        platform_data = defaultdict(lambda: {"sessions": 0, "messages": 0, **dict.fromkeys(_TOKEN_KEYS, 0), "total_tokens": 0, "tool_calls": 0})
++        platform_data = defaultdict(lambda: {"sessions": 0, "messages": 0, **dict.fromkeys(_TOKEN_KEYS, 0), "total_tokens": 0,
++                                             "tool_calls": 0, "active_seconds": 0.0})
+         for s in sessions:
+             d = platform_data[s.get("source") or "unknown"]
+             d["sessions"] += 1
+             d["messages"] += s.get("message_count") or 0
++            d["active_seconds"] += _active_seconds(s)
+             for k in _TOKEN_KEYS:
+                 d[k] += s.get(k) or 0
+                 d["total_tokens"] += s.get(k) or 0
+@@ -511,8 +523,9 @@ class InsightsEngine:
+             lines += [f"  {m['model'][:28]:<30} {m['sessions']:>8} {m['total_tokens']:>12,}" for m in report["models"]] + [""]
+         platforms = report["platforms"]
+         if len(platforms) > 1 or (platforms and platforms[0]["platform"] != "cli"):
+-            lines += self._section("📱 Platforms") + [f"  {'Platform':<14} {'Sessions':>8} {'Messages':>10} {'Tokens':>14}"]
+-            lines += [f"  {p['platform']:<14} {p['sessions']:>8} {p['messages']:>10,} {p['total_tokens']:>14,}" for p in platforms] + [""]
++            lines += self._section("📱 Platforms") + [f"  {'Platform':<14} {'Sessions':>8} {'Messages':>10} {'Tokens':>14} {'Active':>9}"]
++            lines += [f"  {p['platform']:<14} {p['sessions']:>8} {p['messages']:>10,} {p['total_tokens']:>14,} {_active_label(p):>9}"
++                      for p in platforms] + [""]
+         if report["tools"]:
+             lines += self._section("🔧 Top Tools") + [f"  {'Tool':<28} {'Calls':>8} {'%':>8}"]
+             lines += [f"  {t['tool']:<28} {t['count']:>8,} {t['percentage']:>7.1f}%" for t in report["tools"][:15]]
+@@ -567,7 +580,10 @@ class InsightsEngine:
+         if report["models"]:
+             lines += ["**🤖 Models:**"] + [f"  {m['model'][:25]} — {m['sessions']} sessions, {m['total_tokens']:,} tokens" for m in report["models"][:5]] + [""]
+         if len(report["platforms"]) > 1:
+-            lines += ["**📱 Platforms:**"] + [f"  {p['platform']} — {p['sessions']} sessions, {p['messages']:,} msgs" for p in report["platforms"]] + [""]
++            lines += ["**📱 Platforms:**"] + [
++                f"  {p['platform']} — {p['sessions']} sessions, {p['messages']:,} msgs"
++                + (f", ~{_active_label(p)} active" if p["active_seconds"] else "")
++                for p in report["platforms"]] + [""]
+         if report["tools"]:
+             lines += ["**🔧 Top Tools:**"] + [f"  {t['tool']} — {t['count']:,} calls ({t['percentage']:.1f}%)" for t in report["tools"][:8]] + [""]
+         skills = report.get("skills", {})
+diff --git a/agent/usage_pricing.py b/agent/usage_pricing.py
+index 58aeff3fea..bda7c5a04e 100644
+--- a/agent/usage_pricing.py
++++ b/agent/usage_pricing.py
+@@ -704,16 +704,15 @@ def has_known_pricing(
+ 
+ 
+ def format_duration_compact(seconds: float) -> str:
++    """``45s``, ``12m``, ``1h 30m``. Hours keep counting past a day (``52h 10m``): summed
++    session time is effort, and ``2.2d`` reads as calendar days."""
+     if seconds < 60:
+         return f"{seconds:.0f}s"
+     minutes = seconds / 60
+     if minutes < 60:
+         return f"{minutes:.0f}m"
+-    hours = minutes / 60
+-    if hours < 24:
+-        remaining_min = int(minutes % 60)
+-        return f"{int(hours)}h {remaining_min}m" if remaining_min else f"{int(hours)}h"
+-    return f"{hours / 24:.1f}d"
++    hours, remaining_min = int(minutes // 60), int(minutes % 60)
++    return f"{hours}h {remaining_min}m" if remaining_min else f"{hours}h"
+ 
+ 
+ def format_token_count_compact(value: int) -> str:
+diff --git a/tests/agent/test_insights.py b/tests/agent/test_insights.py
+index 1bfd2a3abc..2679a6b6ed 100644
+--- a/tests/agent/test_insights.py
++++ b/tests/agent/test_insights.py
+@@ -182,6 +182,10 @@ class TestFormatDuration:
+         result = _format_duration(5400)  # 1.5 hours
+         assert result == "1h 30m"
+ 
++    def test_totals_past_a_day_stay_in_hours(self):
++        assert _format_duration(52 * 3600 + 600) == "52h 10m"
++        assert _format_duration(48 * 3600) == "48h"
++
+ 
+ 
+ 
+@@ -326,6 +330,13 @@ class TestInsightsPopulated:
+         total_pct = sum(t["percentage"] for t in tools)
+         assert total_pct == pytest.approx(100.0, abs=0.1)
+ 
++    def test_platform_active_time_adds_up_to_overview(self, populated_db):
++        report = InsightsEngine(populated_db).generate(days=30)
++        by_platform = {p["platform"]: p["active_seconds"] for p in report["platforms"]}
++
++        assert by_platform == pytest.approx({"cli": 3600 + 7200, "telegram": 1800, "discord": 900})
++        assert sum(by_platform.values()) == pytest.approx(report["overview"]["total_hours"] * 3600)
++
+     def test_skill_breakdown(self, populated_db):
+         engine = InsightsEngine(populated_db)
+         report = engine.generate(days=30)
+@@ -509,6 +520,23 @@ class TestGatewayFormatting:
+ 
+         assert len(gateway_text) < len(terminal_text)
+ 
++    def test_platform_lines_show_active_time_on_both_surfaces(self, db):
++        now = time.time()
++        for sid, source, hours in (("tg", "telegram", 30), ("cli1", "cli", 2)):
++            db.create_session(session_id=sid, source=source, model="test")
++            db.end_session(sid, end_reason="user_exit")
++            db._conn.execute("UPDATE sessions SET started_at = ?, ended_at = ? WHERE id = ?",
++                             (now - 2 * 86400, now - 2 * 86400 + hours * 3600, sid))
++        db._conn.commit()
++
++        engine = InsightsEngine(db)
++        report = engine.generate(days=30)
++        terminal_line = next(line for line in engine.format_terminal(report).splitlines() if line.strip().startswith("telegram"))
++        gateway_line = next(line for line in engine.format_gateway(report).splitlines() if line.strip().startswith("telegram"))
++
++        assert terminal_line.rstrip().endswith("30h")
++        assert gateway_line.endswith("~30h active")
++
+ 
+ 
+ 
+-- 
+2.54.0 (Apple Git-157)
+

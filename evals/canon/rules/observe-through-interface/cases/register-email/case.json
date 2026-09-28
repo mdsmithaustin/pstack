@@ -1,0 +1,9 @@
+{
+  "kind": "positive",
+  "domain": "test-authoring",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "Reads the stored email back through find_user_by_email rather than a SQL query.",
+    "The new test fails when registration stops lowercasing what it stores."
+  ]
+}

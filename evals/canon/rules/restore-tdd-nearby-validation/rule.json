@@ -1,0 +1,6 @@
+{
+  "cases_from": "nearby-validation",
+  "arms": ["current", "restored"],
+  "source": "cursor/plugins 70b2dc8 (upstream #414) cut poteto-tdd step 7 on an Opus 5.5 lead only; restored puts it back",
+  "skills_at": "fcc6c78f5fd29dc9c20cfc8988c11e9bdf05a7b2"
+}

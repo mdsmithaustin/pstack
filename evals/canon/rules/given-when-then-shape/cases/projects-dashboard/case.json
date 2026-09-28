@@ -1,0 +1,10 @@
+{
+  "kind": "positive",
+  "domain": "test-authoring",
+  "timeout_s": 300,
+  "expected_behavior": [
+    "The new test sets up projects, archives one once, and only then asserts the dashboard.",
+    "It separates setup, action, and assertion with blank lines, not Given, When, Then comments.",
+    "The new test fails when archiving leaves the project on the dashboard."
+  ]
+}

@@ -1,0 +1,1 @@
+`_harness_family` is gone. `harness_family` now reads `smart_routing._HARNESS_FAMILY` itself, and the four internal callers use `harness_family`. `_harness_family(x)` and `harness_family(x)` returned the same value for every input, `None` and `"auto"` included, so behavior is unchanged.

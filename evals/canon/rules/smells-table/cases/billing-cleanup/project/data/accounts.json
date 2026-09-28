@@ -1,0 +1,12 @@
+{
+  "customers": [
+    {"id": "c1", "name": "Anja Weber", "tier": "gold", "country": "DE", "tax_exempt": false, "loyalty_years": 6, "credit_cents": 500, "street": "Torstr. 1", "city": "Berlin", "postal_code": "10119"},
+    {"id": "c2", "name": "Luc Martin", "tier": "silver", "country": "FR", "tax_exempt": false, "loyalty_years": 2, "credit_cents": 0, "street": "12 rue Oberkampf", "city": "Paris", "postal_code": "75011"},
+    {"id": "c3", "name": "Dana Cole", "tier": "standard", "country": "US", "tax_exempt": true, "loyalty_years": 9, "credit_cents": 999999, "street": "", "city": "Austin", "postal_code": "78701"}
+  ],
+  "lines": {
+    "c1": [{"qty": 3, "unit_cents": 1999}, {"qty": 1, "unit_cents": 4500}],
+    "c2": [{"qty": 10, "unit_cents": 250}],
+    "c3": [{"qty": 2, "unit_cents": 12000}]
+  }
+}

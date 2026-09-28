@@ -1,0 +1,65 @@
+diff --git a/omnigent/harness_names.py b/omnigent/harness_names.py
+new file mode 100644
+index 0000000..d628a8a
+--- /dev/null
++++ b/omnigent/harness_names.py
+@@ -0,0 +1,37 @@
++"""One entry point for harness-name questions."""
++
++from __future__ import annotations
++
++from typing import Protocol
++
++from omnigent import gateway_inference, harness_aliases, harness_availability
++
++
++class HarnessNameResolver(Protocol):
++    """Answers every harness-name question callers ask."""
++
++    def canonical(self, harness: str | None) -> str | None: ...
++
++    def is_native(self, harness: str | None) -> bool: ...
++
++    def spellings(self, family: str) -> tuple[str, ...]: ...
++
++
++class RegistryHarnessNameResolver:
++    """Resolves names through the plugin registry."""
++
++    def canonical(self, harness: str | None) -> str | None:
++        return harness_aliases.canonicalize_harness(harness)
++
++    def is_native(self, harness: str | None) -> bool:
++        return harness_aliases.is_native_harness(harness)
++
++    def spellings(self, family: str) -> tuple[str, ...]:
++        if family == "codex":
++            return tuple(sorted(harness_availability.CODEX_CANONICAL_HARNESSES))
++        if family == "claude":
++            return gateway_inference.CLAUDE_GATEWAY_HARNESSES
++        return (family,)
++
++
++resolver: HarnessNameResolver = RegistryHarnessNameResolver()
+diff --git a/omnigent/models/model_override.py b/omnigent/models/model_override.py
+index a0b195c..013cc3c 100644
+--- a/omnigent/models/model_override.py
++++ b/omnigent/models/model_override.py
+@@ -12,7 +12,7 @@ from __future__ import annotations
+ import re
+ 
+ from omnigent.harness_aliases import canonicalize_harness, is_native_harness
+-from omnigent.harness_availability import CODEX_CANONICAL_HARNESSES
++from omnigent.harness_names import resolver
+ from omnigent.harness_plugins import model_env_keys
+ 
+ # Generous-but-safe upper bound; real ids ("databricks-claude-opus-4-8",
+@@ -182,7 +182,7 @@ def model_family_mismatch(harness: str, model: str) -> str | None:
+             "Kimi models or the pi / openai-agents worker for any other "
+             "gateway model."
+         )
+-    if canon in CODEX_CANONICAL_HARNESSES and not is_codex_compatible_model(model):
++    if canon in resolver.spellings("codex") and not is_codex_compatible_model(model):
+         return (
+             f"harness {canon!r} only runs codex-compatible models (id naming "
+             f"'gpt', 'codex', 'glm', or 'kimi'); got {model!r}. Use the "
