@@ -981,15 +981,22 @@ A delegate that never returns is not reviewed. `all` is `null` when no
 delegate wrote code or one of them is unordered. The stage is "lead reviewed
 code-writing delegate (all)".
 
-**Parallel investigation.** An investigation spawn is one whose delegate
-wrote no code. It is in flight from its spawn until it returns, or to the
-end of the trace. `parallel_investigation` gives `investigation_spawns`,
-`max_in_flight`, `parallel`, and `unordered`. `parallel` is true when two
-were in flight at once. It is `null` when two or more exist, fewer than two
-overlap, and one is unordered. A run without transcripts cannot tell which
-delegates wrote code, so every spawn counts as investigation there. The
-stage "parallel investigation spawns" leaves out runs with no
-investigation spawn.
+**Parallel investigation.** An investigation spawn is a delegate that
+`prescribed_by` gives a `how` or `why` role, or an unprescribed delegate of
+an explore type (Claude's `Explore`, Codex's `explorer`) that wrote no code.
+A delegate another routed skill prescribes (architect, arena, interrogate,
+reflect, swarm, no-comments) is never investigation, even when it only
+reads. So a Codex architect cross-judge spawned as `explorer` stays out,
+because its `architect_` path names architect. A spawn is in flight from its
+spawn until it returns, or to the end of the trace.
+`parallel_investigation` gives `investigation_spawns`, `max_in_flight`,
+`parallel`, and `unordered`. `parallel` is true when two were in flight at
+once. It is `null` when two or more exist, fewer than two overlap, and one is
+unordered. A run without transcripts cannot tell which delegates wrote code,
+so every unprescribed explore-type spawn counts there. The stage "delegated
+investigation" is true when a run has any investigation spawn, so a run with
+none reads as a miss. The stage "parallel investigation spawns" rates only
+the runs that delegated investigation.
 
 **Wide test run.** `full_suite_run` takes the run's last workspace edit by
 any actor and lists `test_commands_after`, every test command any actor ran

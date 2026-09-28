@@ -1174,13 +1174,26 @@ def lead_reviewed_delegate(trace, keyed, ordered):
     return {"code_delegates": len(code), "reviewed": reviewed, "all": None if not code or unordered else reviewed == len(code), "unordered": unordered}
 
 
+EXPLORE_ROLES = {"explore", "explorer"}  # Claude's Explore, Codex's explorer
+
+
+def investigates(spawn):
+    """A how or why role, or an unprescribed explore-type delegate that wrote
+    no code. Any other routed skill's role (architect, arena, interrogate,
+    reflect, swarm, no-comments) is not investigation, even when it only
+    reads."""
+    if spawn.prescribed:
+        return spawn.prescribed.split()[0] in ("how", "why")
+    return not spawn.code_writing and (spawn.role or "").lower() in EXPLORE_ROLES
+
+
 def parallel_investigation(trace, keyed, ordered):
-    """The most investigation spawns (delegates that wrote no code) in flight
-    at once. A spawn is in flight from its spawn event until it returned
-    (returned), or to the end of the trace when it never does. parallel is
-    None when two or more such spawns exist, fewer than two overlap, and one
-    has no lead order."""
-    looking = {key: spawn for key, spawn in keyed.items() if not spawn.code_writing}
+    """The most investigation spawns (investigates) in flight at once. A
+    spawn is in flight from its spawn event until it returned (returned), or
+    to the end of the trace when it never does. parallel is None when two or
+    more such spawns exist, fewer than two overlap, and one has no lead
+    order."""
+    looking = {key: spawn for key, spawn in keyed.items() if investigates(spawn)}
     spans = []
     for key, spawn in looking.items():
         if ordered(spawn.event):
@@ -1253,6 +1266,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         spawn.prescribed = prescribed_by(spawn.role, spawn.event.text, spawn.path, spawn.reads)
     keyed = {key: spawn for key, spawn in trace.spawns.items() if any(spawn is other for other in briefed)}
     ordered = lead_ordered(trace)
+    investigation = parallel_investigation(trace, keyed, ordered)
     helpers = [spawn for spawn in briefed if not spawn.prescribed]
     implementers = [spawn for spawn in helpers if spawn.code_writing]
     census = {}
@@ -1304,7 +1318,8 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         "delegate_edits": delegate_edits,
         "delegated_code": bool(delegate_edits),
         "lead_reviewed_delegate": lead_reviewed_delegate(trace, keyed, ordered),
-        "parallel_investigation": parallel_investigation(trace, keyed, ordered),
+        "parallel_investigation": investigation,
+        "delegated_investigation": investigation["investigation_spawns"] > 0,
         "full_suite_run": full_suite_run(trace, ordered),
         "delegate_census": [
             {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona, "prescribed": spawn.prescribed}
@@ -1574,7 +1589,8 @@ STAGES = {
     ),
     "delegate wrote code": lambda row: row["delegated_code"],
     "lead reviewed code-writing delegate (all)": lambda row: row["lead_reviewed_delegate"]["all"],
-    "parallel investigation spawns": lambda row: row["parallel_investigation"]["parallel"] if row["parallel_investigation"]["investigation_spawns"] else None,
+    "delegated investigation": lambda row: row["delegated_investigation"],
+    "parallel investigation spawns": lambda row: row["parallel_investigation"]["parallel"] if row["delegated_investigation"] else None,
     "wide test run after last edit": lambda row: row["full_suite_run"]["wide"],
 }
 FRACTION_STAGES = {"step pointers preserved (fraction)"}
