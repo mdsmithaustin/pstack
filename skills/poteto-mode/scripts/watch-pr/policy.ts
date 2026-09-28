@@ -1,4 +1,4 @@
-import { WatcherQueryError, resolveChecks } from "./github.ts";
+import { ChecksUnavailable, WatcherQueryError, resolveChecks } from "./github.ts";
 import type * as T from "./types.ts";
 import { nonEmpty } from "./types.ts";
 export function assessGitHubMerge(args: {
@@ -65,6 +65,13 @@ export async function readSnapshot(args: {
     return { kind: "closed", context: args.context, facts };
   const reviewState = await args.reader.reviewState(args.context);
   const checks = await resolveChecks(args.reader, args.context);
+  if (
+    checks.checks.length === 0 &&
+    (facts.mergeable !== "MERGEABLE" || facts.mergeStateStatus !== "CLEAN")
+  )
+    throw new ChecksUnavailable(
+      `no checks reported while GitHub merge state is ${facts.mergeable}/${facts.mergeStateStatus}`
+    );
   const failed = nonEmpty(
     checks.checks.filter(
       (check): check is T.FailedCheck => check.kind === "failed"

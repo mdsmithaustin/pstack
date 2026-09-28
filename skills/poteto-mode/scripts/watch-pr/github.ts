@@ -597,12 +597,18 @@ export class GhGitHubReader implements T.GitHubReader {
     if ([0, 1, 8].includes(result.code) && result.stdout.trim()) {
       try {
         const value = parseJson(result.stdout, "gh pr checks");
-        if (Array.isArray(value))
+        if (Array.isArray(value) && (value.length > 0 || result.code === 0))
           return { kind: "checks", checks: value.map(parseFastCheck) };
       } catch (error) {
         if (!(error instanceof WatcherQueryError)) throw error;
       }
     }
+    if (
+      result.code === 1 &&
+      result.stdout.trim() === "" &&
+      /^no checks reported on the '.+' branch$/.test(result.stderr.trim())
+    )
+      return { kind: "checks", checks: [] };
     return { kind: "unusable", exitCode: result.code, stderr: result.stderr };
   }
   async checkRollupPage(
@@ -616,7 +622,7 @@ export class GhGitHubReader implements T.GitHubReader {
       at(value, ["data", "repository", "pullRequest", "commits", "nodes"]),
       "commits.nodes"
     );
-    if (commits.length === 0) return { checks: [], endCursor: null };
+    if (commits.length === 0) missing("commits.nodes[0]");
     const commit = record(
       at(commits[commits.length - 1], ["commit"]),
       "commit"
@@ -627,9 +633,10 @@ export class GhGitHubReader implements T.GitHubReader {
       at(commit, ["statusCheckRollup", "contexts"]),
       "contexts"
     );
-    const checks = list(contexts.nodes, "contexts.nodes")
-      .map(mapRollupNode)
-      .filter((check): check is T.Check => check !== null);
+    const checks = list(contexts.nodes, "contexts.nodes").map((node) => {
+      const check = mapRollupNode(node);
+      return check ?? missing("contexts.nodes", node);
+    });
     const page = record(contexts.pageInfo, "contexts.pageInfo");
     if (typeof page.hasNextPage !== "boolean")
       missing("contexts.pageInfo.hasNextPage", page.hasNextPage);
@@ -637,7 +644,9 @@ export class GhGitHubReader implements T.GitHubReader {
       page.endCursor,
       "contexts.pageInfo.endCursor"
     );
-    return { checks, endCursor: page.hasNextPage && cursor ? cursor : null };
+    if (page.hasNextPage && cursor === null)
+      missing("contexts.pageInfo.endCursor");
+    return { checks, endCursor: page.hasNextPage ? cursor : null };
   }
   async reviewState(context: T.PrContext): Promise<T.ReviewState> {
     return parseReviewState(
@@ -686,10 +695,8 @@ export async function resolveChecks(
   } while (after !== null);
   const fallback = nonEmpty(checks);
   if (fallback !== null) return { source: "graphql-rollup", checks: fallback };
-  const suffix =
-    fast.kind === "unusable"
-      ? `fast path exit=${fast.exitCode}; GraphQL rollup was empty${firstLine(fast.stderr) ? `; ${firstLine(fast.stderr)}` : ""}`
-      : "fast path and GraphQL rollup were empty";
+  if (fast.kind === "checks") return { source: "graphql-rollup", checks: [] };
+  const suffix = `fast path exit=${fast.exitCode}; GraphQL rollup was empty${firstLine(fast.stderr) ? `; ${firstLine(fast.stderr)}` : ""}`;
   throw new ChecksUnavailable(`could not read PR checks: ${suffix}`);
 }
 export async function resolveContext(args: {

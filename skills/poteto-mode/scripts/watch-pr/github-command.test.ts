@@ -71,9 +71,19 @@ describe("gh check command boundary", () => {
     });
   });
 
+  it("confirms an empty successful JSON response with the rollup", async () => {
+    const result = await readChecks({ code: 0, stdout: "[]", stderr: "" });
+    expect(result).toEqual({
+      code: 0,
+      stdout: '{"source":"graphql-rollup","checks":[]}\n',
+      stderr: "",
+    });
+  });
+
   it("keeps command errors unavailable even when the rollup is empty", async () => {
     for (const fixture of [
       { code: 1, stderr: "HTTP 403: resource not accessible by integration\n" },
+      { code: 1, stderr: "HTTP 403\n", stdout: "[]" },
       { code: 1, stderr: "no checks reported on the 'feature' branch\nHTTP 403\n" },
       { code: 8, stderr: "no checks reported on the 'feature' branch\n" },
     ]) {
@@ -91,6 +101,21 @@ describe("gh check command boundary", () => {
     });
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("missing commits.nodes[0]");
+  });
+
+  it("does not hide incomplete pagination as an empty rollup", async () => {
+    const result = await readChecks({
+      code: 1,
+      stderr: "no checks reported on the 'feature' branch\n",
+      rollup: { data: { repository: { pullRequest: { commits: { nodes: [
+        { commit: { statusCheckRollup: { contexts: {
+          nodes: [],
+          pageInfo: { hasNextPage: true, endCursor: null },
+        } } } },
+      ] } } } } },
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("missing contexts.pageInfo.endCursor");
   });
 
   it("does not drop an unknown check kind into a successful empty collection", async () => {
