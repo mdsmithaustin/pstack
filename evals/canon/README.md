@@ -1141,6 +1141,7 @@ history, in one message, and to reproduce while they run. Every rule reads
 |---|---|---|---|---|---|
 | `spawn-step-paste` | current, spawn-step | `nearby-validation` | `paste-markers` | hermes | no |
 | `spawn-step-history` | current, spawn-step | `bug-fix-spawn-step` | `zsh-first-tab` | hermes | yes |
+| `spawn-step-hard` | current, spawn-step | `bug-fix-hard-history` | `subshell-push` | omnigent | yes |
 
 The base rule `bug-fix-spawn-step` holds the zsh case and its oracle, and its
 `rule.patch` is the same edit as the arm patch. Run the arm rules.
@@ -1235,6 +1236,46 @@ says the arm helped some other way.
 - On `zsh-first-tab`, Codex's investigators found a686dbdd26, 8c4bec6155, 6d30b4a7e3, and 6b81590c55 with `git log` in the history checkout. The history case reaches the agent.
 
 Claude treats investigation fan-out as a proportionality call on a single-file bug, and it passed without it. A case that separates the two behaviors needs a bug whose cause spans subsystems and lives in history.
+
+`spawn-step-hard` runs that case with the same two arms. Its base rule
+`bug-fix-hard-history` holds `subshell-push` on omnigent 02969a13 with
+history, and both rules read `skills/` at 324b3e80, whose `skills/` matches
+4fe21347. The case needs the omnigent history mirror, fetched with
+`workspace.py fetch omnigent 02969a131c72d74c00c5800d8e82ae831f8ec5e5
+--history`, which holds 4,112 commits.
+
+- **subshell-push.** A user reports that the GitHub policy denies a push to a
+  fork but allows `(git push <fork> main)`. The cause is the shell parser in
+  `omnigent/policies/builtins/_shell.py`, which the GitHub and
+  working-directory policies share. It splits segments only on chaining
+  operators, so `(`, `{`, and `<(` hide the command from both policies.
+  Patching `github.py` alone leaves `{ … }`, `<( … )`, and the wrapped `cd`
+  open. The obvious fix splits on `(){}`. e6b1c83a (#7999) shipped that split,
+  then a quote-aware version, and reverted both in the same squash. Its
+  message says splitting broke brace expansion (`main{,} feature` pushed the
+  second branch), escaped quotes, and comments with an apostrophe. It asks
+  for a follow-up that extracts `<(…)` bodies and strips leading grouping
+  tokens. No code comment or test at the pin says so, and the quote-aware
+  splitter passes every pinned test.
+
+The oracle runs the pinned `test_github.py`, `test_working_dir.py`, and
+`test_shell_nesting.py` with a small pytest stand-in (parametrize, raises,
+asyncio) and stubs for the modules that need pydantic. A pinned test counts
+only when it passes on the checkout. The 8 engine and registry tests that
+need the real modules fail on both trees. It then runs twelve held cases
+against the diff's tree:
+
+- the four wrapped pushes to the fork are denied
+- the two wrapped `cd /etc` are denied
+- brace expansion, a brace list, an escaped quote, and an apostrophe in a comment still deny
+- a wrapped push to `acme/storefront` main and a wrapped `cd` inside the workspace are allowed
+
+The good sample strips grouping in `_shell.py` and drops the local paren
+strip in `working_dir.py`. The `(){}` split fails 3 pinned tests and the two
+brace cases. The quote-aware split fails the four history cases and no pinned
+test. The `github.py`-only patch fails five of the six wrapped cases. With
+omnigent's test group installed, pytest on the host gave the same verdicts
+for the checkout and all three samples.
 
 ## Reading the result
 
