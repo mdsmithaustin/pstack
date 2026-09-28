@@ -73,5 +73,24 @@ class ReviewNamesTests(unittest.TestCase):
         self.assertEqual(review_names("LGTM", (r"_parse_tag_filter",)), ["the review does not name the file or symbol under review"])
 
 
+class HistoryBuildTests(unittest.TestCase):
+    def test_a_history_review_case_is_materialized_with_its_history(self):
+        seen = []
+
+        def recording(root, mirror, commit, overlay, review=None, history=False):
+            seen.append(history)
+            raise RuntimeError("stop after materialize")
+
+        spec = workspace.Spec("hermes", "a" * 40, {}, history=True)
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(workspace, "parse_spec", return_value=spec), \
+                mock.patch.object(workspace, "require_mirror", return_value=Path(directory) / "mirror"), \
+                mock.patch.object(workspace, "materialize", recording), \
+                self.assertRaisesRegex(RuntimeError, "stop after materialize"):
+            review_cases.build(Path(directory), {"workspace": {}, "review": {}}, Path(directory) / "repo")
+
+        self.assertEqual(seen, [True])
+
+
 if __name__ == "__main__":
     unittest.main()
