@@ -1,0 +1,6 @@
+{
+  "cases_from": "bug-fix-hard-history",
+  "arms": ["current", "spawn-step"],
+  "source": "bug-fix step 2 rewritten to spawn a how explainer and a why investigator before the lead reads source, on a bug whose cause spans a shared parser and two policies and whose safe fix only git history describes",
+  "skills_at": "324b3e80f60b09f5247e801129eb4f31b519850f"
+}
