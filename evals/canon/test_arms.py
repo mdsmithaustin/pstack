@@ -177,6 +177,14 @@ class ArmPatchTests(unittest.TestCase):
         self.assertEqual(screen.rule_mounted(rule, TREE["poteto-mode/SKILL.md"].decode(), TREE), False)
         self.assertEqual(screen.rule_mounted(rule, "# Poteto mode\nRead.\n", TREE), True)
 
+    def test_a_cut_is_mounted_even_when_another_skill_keeps_the_same_text(self):
+        cut = "--- a/poteto-mode/SKILL.md\n+++ b/poteto-mode/SKILL.md\n@@ -2 +2 @@\n-Read the leaf.\n+Read.\n"
+        rule = screen.Rule("r", "S", cut, "poteto-mode/SKILL.md", ())
+        tree = {**TREE, "poteto-mode/playbooks/perf-issue.md": b"1. Read the leaf.\n"}
+
+        self.assertEqual(screen.rule_mounted(rule, "# Poteto mode\nRead the leaf.\n1. Read the leaf.\n", tree), False)
+        self.assertEqual(screen.rule_mounted(rule, "# Poteto mode\nRead.\n1. Read the leaf.\n", tree), True)
+
     def test_pair_rule_that_adds_text_is_mounted_where_the_new_text_is(self):
         add = "--- a/poteto-mode/SKILL.md\n+++ b/poteto-mode/SKILL.md\n@@ -2 +2 @@\n-Read the leaf.\n+Read the leaf twice.\n"
         rule = screen.Rule("r", "S", add, "poteto-mode/SKILL.md", ())
