@@ -177,6 +177,13 @@ class ShellEffectsTests(unittest.TestCase):
             "echo hi > notes.txt",
         )], [[], [], [], [], [], ["src/tree_notes.py"], ["notes.txt"]])
 
+    def test_a_cd_the_command_cannot_resolve_keeps_later_writes_as_edits(self):
+        self.assertEqual([chain.shell_effects(command, TREE)[1] for command in (
+            'cd "$(git rev-parse --show-toplevel)" && cp a.py b.py',
+            'cd "$ROOT" && sed -i s/a/b/ src/x.py',
+            "(cd /tmp && echo x > scratch.txt); echo y > b.py",
+        )], [["b.py"], ["src/x.py"], ["scratch.txt", "b.py"]])
+
     def test_head_pipe_and_short_sed_range_are_partial(self):
         reads, _ = chain.shell_effects("cat how/SKILL.md | head -3; sed -n '1,4p' architect/SKILL.md; sed -n '1,40p' unslop/SKILL.md", TREE)
 
