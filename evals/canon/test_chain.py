@@ -791,6 +791,9 @@ class CodexNestedInvestigationTests(unittest.TestCase):
             ("/root/architect_candidate_2", "architect runner"),
         ])
 
+    def test_a_how_explorer_waiting_on_its_own_child_is_one_investigation(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 1, "max_in_flight": 1, "parallel": False, "unordered": 0})
+
 
 class InvestigationSpawnTests(unittest.TestCase):
     """Spawns placed at one lead index, as Codex children are, each returned

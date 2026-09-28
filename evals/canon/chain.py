@@ -1200,10 +1200,14 @@ EXPLORE_ROLES = {"explore", "explorer"}  # Claude's Explore, Codex's explorer
 
 
 def investigates(spawn):
-    """A how or why role, or an unprescribed explore-type delegate that wrote
-    no code. Any other routed skill's role (architect, arena, interrogate,
-    reflect, swarm, no-comments) is not investigation, even when it only
-    reads."""
+    """A delegate the lead spawned itself with a how or why role, or an
+    unprescribed explore-type delegate the lead spawned that wrote no code.
+    Any other routed skill's role (architect, arena, interrogate, reflect,
+    swarm, no-comments) is not investigation, even when it only reads. A
+    Codex child of a child, such as /root/how_x/direct_explainer, runs while
+    its parent waits on it, so it is part of its parent's investigation."""
+    if spawn.path and spawn.path.rpartition("/")[0] != "/root":
+        return False
     if spawn.prescribed:
         return spawn.prescribed.split()[0] in ("how", "why")
     return not spawn.code_writing and (spawn.role or "").lower() in EXPLORE_ROLES
