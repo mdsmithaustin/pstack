@@ -347,6 +347,19 @@ class PortableSkillPaths(unittest.TestCase):
         self.assertIn("could not clone canonical pstack source", failed.stderr)
         self.assertNotIn("installed-fallback", failed.stdout)
 
+    def test_documented_validator_command_rejects_a_live_lane_without_a_model(self) -> None:
+        command = inline_command(PORTABLE_PATHS, "check-plan.mjs")
+        for model in ("<swarm workers model>", "", "   ", "\t"):
+            with self.subTest(model=model):
+                plan = self.consumer / "unfilled plan.md"
+                plan.write_text(valid_plan().replace("Ten lanes on `sonnet`", f"Ten lanes on `{model}`"), encoding="utf-8")
+                result = self._run_contract(
+                    self.source / "skills/pstack-harness/SKILL.md",
+                    f'PLAN_PATH={shlex_quote(plan)}\n{command}',
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Verify, live lacks", result.stderr)
+
     def test_documented_validator_command_rejects_a_structurally_invalid_plan(self) -> None:
         command = inline_command(PORTABLE_PATHS, "check-plan.mjs")
         plan = self.consumer / "invalid plan.md"
