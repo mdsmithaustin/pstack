@@ -75,12 +75,14 @@ def diff_to(source):
     return f"diff --git a/{MODULE} b/{MODULE}\n" + lines if lines else ""
 
 
-HISTORY_READY = workspace.has_history(workspace.mirror_path("hermes", True), HERMES)
-NEEDS_MIRROR = f"needs the history of hermes {HERMES}; run workspace.py fetch hermes {HERMES} --history"
+class NeedsHermesHistory(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not workspace.has_history(workspace.mirror_path("hermes", True), HERMES):
+            raise unittest.SkipTest(f"needs the history of hermes {HERMES}; run workspace.py fetch hermes {HERMES} --history")
 
 
-@unittest.skipUnless(HISTORY_READY, NEEDS_MIRROR)
-class ZshFirstTabTests(unittest.TestCase):
+class ZshFirstTabTests(NeedsHermesHistory):
     def test_guarded_call_passes_the_pinned_module_and_both_installs(self):
         self.assertEqual(grade(RULE, CASE, "good.md", workspace=sample_workspace(sample_diff("good.diff"))), [])
 
@@ -157,9 +159,8 @@ def generated_script(source):
     return namespace["generate_zsh"](parser)
 
 
-@unittest.skipUnless(HISTORY_READY, NEEDS_MIRROR)
 @unittest.skipUnless(shutil.which("zsh"), "needs zsh on PATH to check the structural grade against real zsh")
-class RealZshCalibrationTests(unittest.TestCase):
+class RealZshCalibrationTests(NeedsHermesHistory):
     """The grader's image has no zsh, so it grades the script's structure. This
     checks each structural verdict against what zsh does with the same script."""
 

@@ -139,7 +139,7 @@ def parse_review(case_root, raw):
 
 def parse_spec(case_root, raw, review=None):
     if not isinstance(raw, dict) or set(raw) - {"repo", "commit", "overlay", "history"} or not {"repo", "commit"} <= set(raw):
-        raise WorkspaceError(f"{case_root}/case.json workspace must be {{\"repo\", \"commit\", \"overlay\", \"history\"}}, not {raw!r}")
+        raise WorkspaceError(f"{case_root}/case.json workspace must have repo and commit, and may have overlay and history, not {raw!r}")
     if raw.get("history", True) is not True:
         raise WorkspaceError(f"{case_root}/case.json workspace history must be true or absent, not {raw['history']!r}")
     if not isinstance(raw["repo"], str) or not REPO_NAME.match(raw["repo"]):
@@ -173,8 +173,8 @@ def cache_root():
 
 
 def mirror_path(repo, history=False):
-    """A history mirror sits apart from the depth-1 one, so deepening it never
-    changes a checkout made by code that copies the mirror's shallow file."""
+    """A history mirror sits apart from the depth-1 one, so fetching history
+    never deepens the mirror that depth-1 checkouts read."""
     return cache_root() / "mirrors" / f"{repo}{'.history' if history else ''}.git"
 
 
@@ -194,6 +194,11 @@ def has_history(mirror, commit):
     return not boundary or boundary.isdisjoint(git("--git-dir", str(mirror), "rev-list", commit).decode().split())
 
 
+# git's own value for --unshallow. Unlike --unshallow, it also works on a
+# mirror that is not shallow yet.
+INFINITE_DEPTH = "2147483647"
+
+
 def fetch(repo, commit, source=None, history=False):
     """Put commit into the repo's bare mirror, from source (a clone or URL) or
     the upstream URL: at depth 1, or with every ancestor when history is set.
@@ -204,7 +209,7 @@ def fetch(repo, commit, source=None, history=False):
         git("init", "-q", "--bare", str(mirror))
     if not (has_history if history else has_commit)(mirror, commit):
         git("--git-dir", str(mirror), "-c", "uploadpack.allowAnySHA1InWant=true",
-            "fetch", "-q", "--depth", "2147483647" if history else "1", str(source or REPOS[repo]), commit)
+            "fetch", "-q", "--depth", INFINITE_DEPTH if history else "1", str(source or REPOS[repo]), commit)
     if not (has_history if history else has_commit)(mirror, commit):
         raise WorkspaceError(f"{repo} mirror still lacks {'the history of ' if history else ''}{commit} after the fetch")
     return mirror
