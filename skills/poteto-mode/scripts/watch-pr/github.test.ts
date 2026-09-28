@@ -63,6 +63,32 @@ describe("checks fallback chain", () => {
     expect(reader.calls).toEqual(["checksFastPath", "checkRollupPage:null"]);
   });
 
+  it("confirms a successful empty fast path with the GraphQL rollup", async () => {
+    const reader = fakeReader({ fastPath: { kind: "checks", checks: [] } });
+    expect(await resolveChecks(reader, context)).toEqual({
+      source: "graphql-rollup",
+      checks: [],
+    });
+  });
+
+  it("does not hide a GraphQL query failure behind an empty fast path", async () => {
+    const failure = new WatcherQueryError({
+      kind: "command-exit",
+      retryable: true,
+      code: 1,
+      detail: "GraphQL: resource not accessible by integration",
+    });
+    const reader = {
+      ...fakeReader({ fastPath: { kind: "checks", checks: [] } }),
+      async checkRollupPage() {
+        throw failure;
+      },
+    };
+    await expect(resolveChecks(reader, context)).rejects.toThrow(
+      "GraphQL: resource not accessible by integration"
+    );
+  });
+
   it("fails closed when both paths are empty", async () => {
     const reader = fakeReader({
       fastPath: {

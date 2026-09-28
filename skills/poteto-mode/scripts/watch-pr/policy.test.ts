@@ -91,6 +91,66 @@ describe("readiness truth table", () => {
   });
 });
 
+describe("PRs with no checks", () => {
+  const noChecks = () => fakeReader({
+    fastPath: { kind: "checks", checks: [] },
+    commitRollups: [{ oid: "head", state: null }],
+  });
+
+  it("reports a clean mergeable PR with confirmed no checks as ready", async () => {
+    const snapshot = await readSnapshot({
+      reader: noChecks(),
+      context: context(1),
+      pendingHistory: "include",
+      allowDraft: false,
+    });
+    expect(classifyPr(snapshot)).toMatchObject({
+      kind: "ready",
+      pr: { proof: { ci: { kind: "ci-clean", all: [], hadPreviousPassingCi: false } } },
+    });
+  });
+
+  it("keeps unresolved review threads blocking a PR with no checks", async () => {
+    const reader = {
+      ...noChecks(),
+      async reviewState() {
+        return { threads: [{ id: "unresolved", firstComment: null, bot: null }], pendingBots: [] };
+      },
+    };
+    const snapshot = await readSnapshot({
+      reader,
+      context: context(1),
+      pendingHistory: "include",
+      allowDraft: false,
+    });
+    expect(classifyPr(snapshot)).toMatchObject({
+      kind: "blocker",
+      blocker: { kind: "review-threads", threads: [{ id: "unresolved" }] },
+    });
+  });
+
+  it("does not treat unknown or blocked merge states as proven no-checks readiness", async () => {
+    for (const facts of [
+      { mergeable: "UNKNOWN", mergeStateStatus: "CLEAN" },
+      { mergeable: "MERGEABLE", mergeStateStatus: "UNKNOWN" },
+      { mergeable: "MERGEABLE", mergeStateStatus: "BLOCKED" },
+    ] as const) {
+      const reader = {
+        ...noChecks(),
+        async pullRequest(requested: PrContext) {
+          return { ...await noChecks().pullRequest(requested), ...facts };
+        },
+      };
+      await expect(readSnapshot({
+        reader,
+        context: context(1),
+        pendingHistory: "include",
+        allowDraft: false,
+      })).rejects.toThrow("no checks reported while GitHub merge state is");
+    }
+  });
+});
+
 describe("snapshot query planning", () => {
   it("does not query commit rollups while queued checks are pending", async () => {
     const reader = fakeReader({
