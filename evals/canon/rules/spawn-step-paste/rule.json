@@ -1,0 +1,6 @@
+{
+  "cases_from": "nearby-validation",
+  "arms": ["current", "spawn-step"],
+  "source": "bug-fix step 2 rewritten to spawn a how explainer and a why investigator before the lead reads source; a Sonnet lead spawned neither in 24 runs, a gpt-5.6-sol lead spawned both in 12 of 12",
+  "skills_at": "4fe213477eda148bbcdfdeea61b5b08209cbc993"
+}

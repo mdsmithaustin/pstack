@@ -338,6 +338,8 @@ class CompanionMountTests(unittest.TestCase):
 SCREENED_AT = "5dea4e2daaaf468d9886abcd63e1f95c74477444"
 # The held-cuts screen reads the tree after the 2026-09-24 upstream sync, where the held lines are present.
 CUTS_SCREENED_AT = "fcc6c78f5fd29dc9c20cfc8988c11e9bdf05a7b2"
+# The spawn-step screen reads the tree after the upstream port through 12d587d.
+SPAWN_SCREENED_AT = "4fe213477eda148bbcdfdeea61b5b08209cbc993"
 INDEX_SENTENCE = "Name things with the domain's words from the nearest `CONTEXT.md`, and never use a word it lists under `_Avoid_`."
 
 
@@ -444,7 +446,7 @@ class SkillsAtTests(unittest.TestCase):
         self.assertNotEqual(tree[path], (screen.REPO / "skills" / path).read_bytes())
 
     def test_every_shipped_rule_pins_the_tree_it_was_screened_against(self):
-        self.assertEqual({rule.id: rule.skills_at for rule in screen.load_rules() if rule.skills_at not in (SCREENED_AT, CUTS_SCREENED_AT)}, {})
+        self.assertEqual({rule.id: rule.skills_at for rule in screen.load_rules() if rule.skills_at not in (SCREENED_AT, CUTS_SCREENED_AT, SPAWN_SCREENED_AT)}, {})
 
 
 class SkillsAtRulesTests(ScratchRules):
