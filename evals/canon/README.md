@@ -1134,8 +1134,9 @@ This screen asks whether a Bug fix step 2 that spawns investigators before
 the lead reads source changes what the lead does and what it ships. The
 `spawn-step` arm tells the lead to spawn the `how` skill's explainer over the
 affected subsystem and a **why** skill investigator over its regression
-history, in one message, and to reproduce while they run. Every rule reads
-`skills/` at 4fe21347.
+history, in one message, and to reproduce while they run. `spawn-step-paste`
+and `spawn-step-history` read `skills/` at 4fe21347, and the `spawn-step-hard`
+rules at 324b3e80, whose `skills/` tree is the same.
 
 | arm rule | arms | cases from | case | repo | history |
 |---|---|---|---|---|---|
@@ -1220,7 +1221,13 @@ for rule in spawn-step-paste spawn-step-history; do
   python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode --runs 2 \
     --timeout 2700 --out "/private/tmp/canon-spawn/codex-$rule-$(date +%m%d%H%M)" "$rule"
 done
-python3 evals/canon/chain.py --markdown /private/tmp/canon-spawn/*
+for i in 1 2 3 4; do
+  python3 evals/canon/screen.py run --runner sbx --agent claude --model sonnet --entry poteto-mode --timeout 2700 \
+    --out "/private/tmp/canon-hard/claude-$i-$(date +%m%d%H%M)" spawn-step-hard
+done
+python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode --runs 2 \
+  --timeout 2700 --arm current --out "/private/tmp/canon-hard/codex-$(date +%m%d%H%M)" spawn-step-hard
+python3 evals/canon/chain.py --markdown /private/tmp/canon-spawn/* /private/tmp/canon-hard/*
 ```
 
 Read `spawn-step vs current` per case, then the chain stages "delegated
@@ -1279,9 +1286,9 @@ for the checkout and all three samples.
 
 **Result on `subshell-push`, 2026-09-28.** This ran 4 paired Claude Sonnet runs, current against spawn-step, and 2 Codex gpt-5.6-sol runs on `current`, each with a 2700 s cap.
 
-- **Claude passed 8 of 8, in both arms.** No run delegated investigation or code, including the spawn-step arm. Every run fixed the shared parser, `_shell.py`, rather than `github.py`. 4 of the 8 found e6b1c83a (#7999) and its revert with their own `git log` or `git blame`, inline. The other 4 went straight to stripping grouping tokens and extracting `<(…)` bodies, so none took the quote-aware splitter.
-- **Codex failed 2 of 2.** One run left the brace-group and process-substitution pushes open. The other denied a wrapped push to the allowed repo and branch. One of the two delegated investigation.
-- **Reading.** On a multi-module bug with its reason in history, a Claude lead that investigates inline did not lose correctness. The correct fix here is also a natural one, so history helped but was not required. The spawn step is not proposed.
+- **Claude passed 8 of 8, in both arms.** No run delegated investigation or code, including the spawn-step arm. Every run fixed the shared parser, `_shell.py`, rather than `github.py`, by stripping grouping tokens and extracting `<(…)` bodies, and none took the quote-aware splitter. 4 of the 8 listed e6b1c83a in a `git log --oneline` of the parser or `github.py`, which shows only its title. No run read its message, where the revert is, so every run reached the fix from the code.
+- **Codex failed 2 of 2.** One run left the brace-group and process-substitution pushes open, and the brace-group `cd`. The other denied a wrapped push to the allowed repo and branch, because it left trailing parentheses on the refspec. One of the two delegated investigation, and both delegated the code change.
+- **Reading.** On a multi-module bug, a Claude lead that investigates inline did not lose correctness. No run read the history, so this case did not test whether history helps: the correct fix is reachable from the code alone. The spawn step is not proposed.
 
 ## Reading the result
 
