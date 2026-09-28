@@ -29,12 +29,14 @@ holds raw-stream.jsonl is read from it: the sandbox wrapper keeps the agent's
 whole stream there and hands the harness a copy with one result event.
 """
 import argparse
+import bisect
 import importlib.util
 import json
 import re
 import shlex
 import sys
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
 
 CANON = Path(__file__).resolve().parent
@@ -63,7 +65,8 @@ EXPECTED_PLAYBOOK = {
     "payroll-invoice-rounding": "refactoring", "billing-cleanup": "refactoring", "delivery-dates": "refactoring",
     "textkit-exports": "refactoring", "textkit-tidy": "refactoring",
     "http-client-small": "refactoring", "http-client-swap": "refactoring",
-    "member-coupon": "bug-fix", "orders-pagination": "bug-fix", "zero-price": "bug-fix",
+    "no-debugger-lint": "feature", "lint-report-loop": "refactoring",
+    "member-coupon": "bug-fix", "orders-pagination": "bug-fix", "zero-price": "bug-fix", "paste-markers": "bug-fix",
     "withdrawal-story": None, "loyalty-points": None,
 }
 
@@ -82,6 +85,14 @@ CLAUDE_DENIAL_TEXTS = (
     "This Bash command contains multiple operations. The following part requires approval",
 )
 CODEX_SPAWN_TOOLS = {"spawn_agent", "spawn"}
+CODEX_WAIT_TOOLS = {"wait", "wait_agent"}
+CODEX_RUNNING = {"pending_init", "running"}
+ASYNC_LAUNCH = "Async agent launched"
+AGENT_ID = re.compile(r"\bagentId: (\w+)")
+NOTIFICATION = re.compile(r"<task-notification>.*?</task-notification>", re.DOTALL)
+NOTIFICATION_TAG = r"<{0}>([^<]+)</{0}>"
+REVIEW_GIT = {"diff", "show", "status"}
+SEARCH_VERBS = {"rg", "grep"}
 SHELL_WRAPPER = re.compile(r"^/bin/(?:ba|z)?sh -lc ")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n.*?\n\s*\2\s*(?:\n|$)", re.DOTALL)
 DATA_SHAPE = re.compile(r"data shape|organizing structure|principle-[a-z-]+|model[- ]the[- ]domain", re.IGNORECASE)
@@ -180,23 +191,38 @@ PRESCRIBED = (
 )
 
 
+def path_skill(path):
+    """The routed skill a Codex agent path's segment under /root names, as
+    /root/architect_candidate_2 names architect, or None."""
+    top = path.split("/")[2] if path and path.startswith("/root/") else ""
+    return next((entry.skill for entry in PRESCRIBED if entry.named_by_path and re.match(rf"{re.escape(entry.skill)}(?:[_-]|$)", top)), None)
+
+
 def prescribed_by(role, brief, path=None, reads=()):
-    """"<skill> <name>" of the routed-skill role a delegate holds, or None."""
-    return next((f"{entry.skill} {entry.name}" for entry in PRESCRIBED if entry.matches(role, brief, path, reads)), None)
+    """"<skill> <name>" of the routed-skill role a delegate holds, or None.
+    A skill its path names under /root decides, so an architect candidate
+    that read the how explainer prompt while grounding stays an architect
+    runner."""
+    named = path_skill(path)
+    return next((f"{entry.skill} {entry.name}" for entry in PRESCRIBED
+                 if named in (None, entry.skill) and entry.matches(role, brief, path, reads)), None)
 
 
 @dataclass(frozen=True)
 class Event:
     """One thing a run did, in trace order. actor is "main" or "delegate".
     index is the lead trace line. A delegate's event takes its spawn's index
-    and extends the spawn's sub with its own line in the child transcript."""
+    and extends the spawn's sub with its own line in the child transcript,
+    or, for a Codex child whose spawn the stream never shows, takes the lead
+    line its timestamp follows with sub (timestamp, its own line)."""
     index: int
     actor: str
-    kind: str  # read, edit, spawn, wait, worklist, worklist-rejected, message, denied
+    kind: str  # read, view, edit, shell, spawn, wait, return, done, worklist, worklist-rejected, message, denied
     path: str = ""
     partial: bool = False
     text: str = ""
     sub: tuple = ()
+    at: float = None  # epoch seconds of the rollout line, for a Codex rollout event
 
 
 def order(event):
@@ -211,9 +237,11 @@ class Spawn:
     persona: bool = False
     path: str = None
     code_writing: bool = False
+    edits: frozenset = frozenset()
     prescribed: str = None  # "<skill> <name>" when a routed skill prescribes its role
     reads: frozenset = frozenset()
     inline: list = field(default_factory=list)  # its events the lead stream already echoed
+    placed: bool = True  # False when neither the trace nor a timestamp places the spawn in lead order
 
 
 @dataclass
@@ -228,6 +256,7 @@ class Child:
     brief: str = ""
     path: str = None
     worklist_tool_offered: bool = None  # True when its rollout lists or calls update_plan
+    started: float = None  # epoch seconds of its rollout's first line
 
 
 @dataclass
@@ -237,6 +266,7 @@ class Trace:
     slash_commands: tuple = ()
     worklist_tool_offered: bool = None  # None when the trace neither lists tools nor calls one
     result_events: int = None
+    cwd: str = ""  # the checkout the session started in
     spawns: dict = field(default_factory=dict)  # spawn key -> Spawn
 
 
@@ -292,17 +322,22 @@ def expand_loop(match):
     return "; ".join(variable.sub(word, body) for word in words.split())
 
 
+def unwrap(command):
+    """The script a `/bin/bash -lc '...'` wrapper runs, else the command."""
+    if not SHELL_WRAPPER.match(command):
+        return command
+    body = SHELL_WRAPPER.sub("", command, count=1)
+    try:
+        return shlex.split(body)[0]
+    except (ValueError, IndexError):
+        return body.strip("'\"")
+
+
 def split_shell(command):
     """[[stage tokens, ...] per pipeline], split only at unquoted operators,
     with heredoc bodies dropped. Operators stay out of the stage tokens except
     redirects, which stay where they are."""
-    if SHELL_WRAPPER.match(command):
-        body = SHELL_WRAPPER.sub("", command, count=1)
-        try:
-            command = shlex.split(body)[0]
-        except (ValueError, IndexError):
-            command = body.strip("'\"")
-    command = FOR_LOOP.sub(expand_loop, unquoted_newlines_to_semicolons(HEREDOC.sub("\n", command)))
+    command = FOR_LOOP.sub(expand_loop, unquoted_newlines_to_semicolons(HEREDOC.sub("\n", unwrap(command))))
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
@@ -325,32 +360,45 @@ def split_shell(command):
     return pipelines
 
 
+def write_path(target, cwd):
+    """Where a shell write lands, relative to the cd before it in the same
+    command, or None when an unexpanded variable, substitution, or home path
+    hides it. Agents point those at scratch files outside the checkout."""
+    if re.search(r"[$`]", target + cwd) or target.startswith("~") or cwd.startswith("~"):
+        return None
+    return target if target.startswith("/") or not cwd else f"{cwd.rstrip('/')}/{target}"
+
+
 def shell_effects(command, tree):
     """(reads, writes) of one shell command: reads as (tree path, partial),
-    writes as the paths a redirect, sed -i, or a write verb names. Search
-    commands (rg, grep, find, ls, wc) read nothing."""
-    reads, writes, cwd = [], [], ""
+    writes as the paths a redirect, sed -i, or a write verb names, joined to
+    the command's own cd (write_path). Search commands (rg, grep, find, ls,
+    wc) read nothing."""
+    reads, targets, cwd = [], [], ""
+    # split_shell drops subshell parentheses, so a cd inside one would leak
+    # into the commands after it.
+    subshell_cd = bool(re.search(r"\(\s*cd\b", command))
     for stages in split_shell(command):
         first = stages[0]
         if first[0] == "cd" and len(first) > 1:
-            cwd = first[1]
+            cwd = "" if subshell_cd or re.search(r"[$`]", first[1]) else first[1]
             continue
         trimmed_later = any(stage[0] in TRIM_VERBS or (stage[0] == "sed" and "-n" in stage) for stage in stages[1:])
         for tokens in stages:
             for at, token in enumerate(tokens[:-1]):
                 if token in (">", ">>") and tokens[at + 1] != "/dev/null":
-                    writes.append(tokens[at + 1])
+                    targets.append((tokens[at + 1], cwd))
             words = [token for at, token in enumerate(tokens) if token not in (">", ">>", ">&", "<") and (at == 0 or tokens[at - 1] not in (">", ">>", ">&", "<"))]
             if not words:
                 continue
             verb = words[0].rsplit("/", 1)[-1]
             options = [word for word in words[1:] if word.startswith("-")]
             if verb in ("sed", "perl") and any(option.startswith(("-i", "-pi")) for option in options):
-                writes.append(words[-1])
+                targets.append((words[-1], cwd))
                 continue
             if verb in WRITE_VERBS:
                 operands = [word for word in words[1:] if not word.startswith("-")]
-                writes += operands[-1:] if verb == "cp" else operands
+                targets += [(operand, cwd) for operand in (operands[-1:] if verb == "cp" else operands)]
                 continue
             if verb not in READ_VERBS:
                 continue
@@ -360,7 +408,103 @@ def shell_effects(command, tree):
                     continue
                 partial = verb in TRIM_VERBS or trimmed_later or (verb == "sed" and sed_is_partial(words, tree[path]))
                 reads.append((path, partial))
-    return reads, writes
+    return reads, [path for path in (write_path(target, where) for target, where in targets) if path]
+
+
+REDIRECTS = {">", ">>", ">&", "&>", ">|", "<"}
+WRAPPERS = {"env", "time", "exec", "nice", "command"}
+RUN_WRAPPERS = {"uv", "poetry", "pdm", "hatch", "pipenv", "rye"}
+PYTEST_VALUE_OPTIONS = {
+    "-m", "-p", "-c", "-o", "-W", "-n", "-r", "--deselect", "--ignore", "--ignore-glob", "--rootdir", "--maxfail", "--tb",
+    "--junitxml", "--junit-xml", "--durations", "--basetemp", "--log-level", "--import-mode", "--timeout", "--confcutdir",
+    "--cov-report",
+}
+UNITTEST_VALUE_OPTIONS = {"-p", "-s", "-t"}
+# hermes's AGENTS.md has agents run pytest only through this wrapper.
+PYTEST_WRAPPERS = {"run_tests.sh"}
+PACKAGE_DIR_OPTIONS = {"--prefix", "-C", "--dir", "--cwd"}
+
+
+def command_words(tokens):
+    """A stage's tokens without redirects, their targets, or the file
+    descriptor a redirect names."""
+    words, skip = [], False
+    for at, token in enumerate(tokens):
+        if skip:
+            skip = False
+        elif token in REDIRECTS:
+            skip = True
+        elif not (token.isdigit() and tokens[at + 1:at + 2] and tokens[at + 1] in REDIRECTS):
+            words.append(token)
+    return words
+
+
+def test_runner(words):
+    """(runner, arguments) of a stage that runs tests: "pytest" (or a pytest
+    wrapper script), "unittest", or "other" for npm, pnpm, or yarn test,
+    node --test, go test, cargo test, and just test. None for any other
+    command."""
+    verbs = [word.rsplit("/", 1)[-1] for word in words]
+    at = 0
+    while at < len(words) and (verbs[at] in WRAPPERS or re.match(r"^\w+=", words[at])):
+        at += 1
+    if at + 1 < len(words) and verbs[at] in RUN_WRAPPERS and words[at + 1] == "run":
+        at += 2
+        while at < len(words) and not (verbs[at] in ("pytest", "py.test") or re.fullmatch(r"python[\d.]*", verbs[at])):
+            at += 1
+    verb, rest = (verbs[at], words[at + 1:]) if at < len(words) else ("", [])
+    if verb in ("pytest", "py.test") or verb in PYTEST_WRAPPERS:
+        return "pytest", rest
+    if verb in ("npm", "pnpm", "yarn"):
+        while rest[:1] and rest[0] in PACKAGE_DIR_OPTIONS:
+            rest = rest[2:]
+    if re.fullmatch(r"python[\d.]*", verb) and "-m" in rest[:-1]:
+        module = rest[rest.index("-m") + 1]
+        return (module, rest[rest.index("-m") + 2:]) if module in ("pytest", "unittest") else None
+    if (verb in ("npm", "pnpm", "yarn") and (rest[:1] in (["test"], ["t"]) or rest[:2] == ["run", "test"])
+            or verb == "node" and "--test" in rest or verb in ("go", "cargo", "just") and rest[:1] == ["test"]):
+        return "other", rest
+    return None
+
+
+def single_test(runner, arguments):
+    """Whether every target a pytest or unittest run names is one test id: a
+    pytest path::name node id, a unittest Class.test_method dotted target,
+    or a -k selector. A file, directory, module, or no target is wider, and
+    so is every other runner."""
+    targets, selectors, skip = [], 0, False
+    values = PYTEST_VALUE_OPTIONS if runner == "pytest" else UNITTEST_VALUE_OPTIONS
+    for argument in arguments:
+        if skip:
+            skip = False
+        elif argument == "-k":
+            selectors, skip = selectors + 1, True
+        elif argument.startswith("-k") and not argument.startswith("--"):
+            selectors += 1
+        elif argument in values:
+            skip = True
+        elif not argument.startswith("-"):
+            targets.append(argument)
+    if runner == "pytest":
+        return bool(targets or selectors) and all("::" in target for target in targets)
+    if runner == "unittest":
+        parts = [target.split(".") for target in targets]
+        return bool(targets or selectors) and all(
+            len(part) >= 2 and part[-1].startswith("test") and part[-2][:1].isupper() for part in parts)
+    return False
+
+
+def test_scope(command):
+    """"wide" when some test run in the command is wider than one test id,
+    "single" when every test run names only test ids, None when it runs no
+    tests."""
+    scopes = set()
+    for stages in split_shell(command):
+        for tokens in stages:
+            found = test_runner(command_words(tokens))
+            if found:
+                scopes.add("single" if single_test(*found) else "wide")
+    return "wide" if "wide" in scopes else "single" if scopes else None
 
 
 def in_workspace(path, cwd, tree):
@@ -406,20 +550,60 @@ def tool_failures(records):
     return errored, denied
 
 
+def user_text(record):
+    content = (record.get("message") or {}).get("content") if record.get("type") == "user" else None
+    return content if isinstance(content, str) else item_text(content) if isinstance(content, list) else ""
+
+
+def claude_returns(record, spawns, agent_ids):
+    """The spawn keys a record returns. A foreground spawn returns in its
+    Agent or Task tool_result. A background spawn's tool_result only says the
+    agent launched, with its agentId; it returns in a later
+    <task-notification> user message, or in stream-json a system
+    task_notification record, naming its tool-use-id, or its task-id when a
+    resumed agent notifies under another tool use."""
+    keys = []
+    if record.get("type") == "system" and record.get("subtype") == "task_notification":
+        key = record.get("tool_use_id")
+        key = key if key in spawns else agent_ids.get(record.get("task_id"))
+        return [key] if key else []
+    for block in tool_results(record):
+        key = block.get("tool_use_id")
+        if key not in spawns:
+            continue
+        content = block.get("content")
+        text = content if isinstance(content, str) else item_text(content)
+        if text.lstrip().startswith(ASYNC_LAUNCH):
+            launched = AGENT_ID.search(text)
+            if launched:
+                agent_ids[launched.group(1)] = key
+        else:
+            keys.append(key)
+    for note in NOTIFICATION.findall(user_text(record)):
+        use_id = re.search(NOTIFICATION_TAG.format("tool-use-id"), note)
+        task_id = re.search(NOTIFICATION_TAG.format("task-id"), note)
+        key = use_id.group(1) if use_id and use_id.group(1) in spawns else agent_ids.get(task_id.group(1)) if task_id else None
+        if key:
+            keys.append(key)
+    return keys
+
+
 def claude_events(records, tree, cwd, agents=(), actor=None):
     """(events, {tool_use id: Spawn}, {parent tool_use id: [events]}) of Claude
-    assistant records and the results that deny their tool calls. Without an
-    actor, a record that carries parent_tool_use_id is a delegate's, echoed
-    into the lead stream."""
+    assistant records, the results that deny their tool calls, and the
+    results and notifications that return a spawn. Without an actor, a record
+    that carries parent_tool_use_id is a delegate's, echoed into the lead
+    stream."""
     errored, denied = tool_failures(records)
     failed = errored | denied
-    events, spawns, echoed, names = [], {}, {}, {}
+    events, spawns, echoed, names, agent_ids = [], {}, {}, {}, {}
     for index, record in records:
         parent = record.get("parent_tool_use_id")
         who = actor or ("delegate" if parent else "main")
-        where = record.get("cwd") or cwd
+        where = cwd or record.get("cwd", "")
         mine = [Event(index, who, "denied", text=names.get(block.get("tool_use_id"), ""))
                 for block in tool_results(record) if block.get("tool_use_id") in denied]
+        mine += [Event(index, who, "return", text=key) for key in claude_returns(record, spawns, agent_ids)]
         content = (record.get("message") or {}).get("content") if record.get("type") == "assistant" else None
         for block in content if isinstance(content, list) else []:
             kind = block.get("type")
@@ -431,6 +615,7 @@ def claude_events(records, tree, cwd, agents=(), actor=None):
             names[use_id] = name
             ok = use_id not in failed
             if name == "Read" and ok:
+                mine.append(Event(index, who, "view", data.get("file_path", "")))
                 path = resolve(data.get("file_path", ""), tree)
                 if path:
                     lines_total = tree[path]
@@ -441,7 +626,11 @@ def claude_events(records, tree, cwd, agents=(), actor=None):
                 path = resolve(f"{data.get('skill', '')}/SKILL.md", tree)
                 if path:
                     mine.append(Event(index, who, "read", path))
-            elif name == "Bash" and ok:
+            elif name == "Bash" and use_id not in denied:
+                # A test run that fails errors, and still ran.
+                mine.append(Event(index, who, "shell", text=data.get("command", "")))
+                if not ok:
+                    continue
                 reads, writes = shell_effects(data.get("command", ""), tree)
                 mine += [Event(index, who, "read", path, partial) for path, partial in reads]
                 mine += [Event(index, who, "edit", path) for path in writes if in_workspace(path, where, tree)]
@@ -472,7 +661,10 @@ def parse_claude(lines, tree):
     records = list(json_records(lines))
     for index, record in records:
         if record.get("type") == "system" and record.get("subtype") == "init":
-            cwd = record.get("cwd", "")
+            # A turn resumed by a task notification opens with another init
+            # whose cwd is the lead's shell cwd at that moment, not the
+            # checkout, so only the first init names the checkout.
+            cwd = trace.cwd = trace.cwd or record.get("cwd", "")
             trace.slash_commands = tuple(record.get("slash_commands") or ())
             tools = record.get("tools") or []
             trace.worklist_tool_offered = bool(CLAUDE_WORKLIST_OFFERS & set(tools))
@@ -492,14 +684,19 @@ def parse_claude(lines, tree):
     return trace
 
 
-def parse_claude_child(lines, meta, tree):
+def parse_claude_child(lines, meta, tree, root=""):
     """One subagents/agent-<id>.jsonl and its meta.json. The first user
-    record's content is the brief."""
+    record's content is the brief. A child starts in its parent's shell cwd,
+    which may be a subdirectory of the checkout, so its edits are judged
+    against root, the lead's starting cwd, when the child's cwd sits inside
+    it, and against its own cwd otherwise, as in an isolated worktree."""
     records = list(json_records(lines))
     brief = next(((record.get("message") or {}).get("content") for _, record in records if record.get("type") == "user"), "")
     if isinstance(brief, list):
         brief = "\n".join(block.get("text", "") for block in brief if isinstance(block, dict))
     cwd = next((record["cwd"] for _, record in records if record.get("cwd")), "")
+    if root and (cwd == root or cwd.startswith(root.rstrip("/") + "/")):
+        cwd = root
     events, spawns, _ = claude_events(records, tree, cwd, actor="delegate")
     role = meta.get("agentType")
     return Child(meta.get("toolUseId", ""), events, spawns, role, role == PERSONA_ROLE or has_persona(brief), brief or "")
@@ -522,6 +719,7 @@ def parse_codex(lines, tree, cwd=""):
             trace.events.append(Event(index, "main", "message", text=item.get("text", "")))
             trace.final = item.get("text", "")
         elif kind == "command_execution":
+            trace.events.append(Event(index, "main", "shell", text=unwrap(item.get("command", ""))))
             reads, writes = shell_effects(item.get("command", ""), tree)
             trace.events += [Event(index, "main", "read", path, partial) for path, partial in reads]
             if item.get("exit_code") == 0:
@@ -532,22 +730,26 @@ def parse_codex(lines, tree, cwd=""):
             trace.worklist_tool_offered = True
             trace.events.append(Event(index, "main", "worklist", text=item_lines(entry.get("text", "") for entry in item.get("items") or [])))
         elif kind == "collab_tool_call":
-            event = codex_collab(index, "main", item, trace.spawns)
-            trace.events.append(event)
+            trace.events += codex_collab(index, "main", item, trace.spawns)
     return trace
 
 
 def codex_collab(index, actor, item, spawns):
-    """The event of one collab tool call. A spawn registers a Spawn under each
-    thread it started, with the role when the item names one."""
+    """The events of one collab tool call. A spawn registers a Spawn under
+    each thread it started, with the role when the item names one. A wait
+    returns each child thread its agents_states shows no longer running;
+    Codex 0.157 names none."""
     tool = item.get("tool", "")
     if tool not in CODEX_SPAWN_TOOLS:
-        return Event(index, actor, "wait", text=tool)
+        states = (item.get("agents_states") or {}) if tool in CODEX_WAIT_TOOLS else {}
+        return [Event(index, actor, "wait", text=tool)] + [
+            Event(index, actor, "return", text=key) for key, state in states.items()
+            if (state or {}).get("status") not in CODEX_RUNNING]
     event = Event(index, actor, "spawn", text=item.get("prompt") or "")
     roles = {agent.get("thread_id"): agent.get("agent_role") for agent in item.get("receiver_agents") or []}
     for key in item.get("receiver_thread_ids") or [f"#{index}"]:
         spawns[key] = Spawn(event, roles.get(key), has_persona(event.text))
-    return event
+    return [event]
 
 
 def item_text(content):
@@ -617,9 +819,12 @@ def parse_codex_rollout(lines, tree):
     the file. Only the file's first session_meta is this rollout's own
     identity (thread_source, parent_thread_id, agent_role, agent_path), so
     later ones are ignored."""
-    meta, events, spawns, brief, task, developer, offered = {}, [], {}, None, None, "", None
+    meta, events, spawns, brief, task, developer, offered, started = {}, [], {}, None, None, "", None, None
     for index, record in json_records(lines):
         payload = record.get("payload") or {}
+        at = epoch(record.get("timestamp"))
+        started = at if started is None else started
+        mark = len(events)
         if lists_update_plan(payload):
             offered = True
         if record.get("type") == "session_meta":
@@ -648,6 +853,7 @@ def parse_codex_rollout(lines, tree):
             elif kind == "AgentMessage":
                 events.append(Event(index, "delegate", "message", text=item_text(item.get("content"))))
             elif kind == "CommandExecution":
+                events.append(Event(index, "delegate", "shell", text=codex_command(item.get("command"))))
                 reads, writes = shell_effects(codex_command(item.get("command")), tree)
                 events += [Event(index, "delegate", "read", path, partial) for path, partial in reads]
                 if item.get("exit_code") == 0:
@@ -655,17 +861,32 @@ def parse_codex_rollout(lines, tree):
             elif kind == "FileChange" and item.get("status", "completed") == "completed":
                 events += [Event(index, "delegate", "edit", path) for path in file_change_paths(item) if in_workspace(path, cwd, tree)]
             elif kind == "CollabAgentToolCall":
-                events.append(codex_collab(index, "delegate", item, spawns))
+                events += codex_collab(index, "delegate", item, spawns)
+        elif record.get("type") == "event_msg" and payload.get("type") == "task_complete":
+            events.append(Event(index, "delegate", "done"))
+        stamped = {id(event): replace(event, at=at) for event in events[mark:]}
+        events[mark:] = stamped.values()
+        for spawn in spawns.values():
+            spawn.event = stamped.get(id(spawn.event), spawn.event)
     role = codex_role(meta)
     brief = task or brief
     persona = role == PERSONA_ROLE or developer.startswith(CODEX_BRIEFING_HEAD) or has_persona(brief)
-    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "", codex_path(meta), offered)
+    return meta, Child(meta.get("id", ""), events, spawns, role, persona, brief or "", codex_path(meta), offered, started)
 
 
-def attach(trace, children):
+def epoch(stamp):
+    """Epoch seconds of an ISO 8601 rollout timestamp, or None."""
+    try:
+        return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+    except (AttributeError, ValueError):
+        return None
+
+
+def attach(trace, children, clock=None):
     """Merge each child's events into trace right after the spawn that started
     it, a parent before its own children. A child whose spawn the trace never
-    shows goes after the last event."""
+    shows is placed by its rollout timestamps when clock (lead_clock) maps
+    them to lead lines, and otherwise goes after the last event, unordered."""
     pending = list(children)
     while pending:
         ready = [child for child in pending if child.link in trace.spawns]
@@ -673,7 +894,11 @@ def attach(trace, children):
             base_index = max((event.index for event in trace.events), default=-1) + 1
             ready = pending
             for offset, child in enumerate(ready):
-                trace.spawns[child.link] = Spawn(Event(base_index + offset, "delegate", "spawn"))
+                if clock and child.started is not None:
+                    spawn = Event(clock(child.started), "delegate", "spawn", sub=(child.started, -1), at=child.started)
+                    trace.spawns[child.link] = Spawn(spawn)
+                else:
+                    trace.spawns[child.link] = Spawn(Event(base_index + offset, "delegate", "spawn"), placed=False)
         for child in ready:
             spawn = trace.spawns[child.link]
             echoed = {id(event) for event in spawn.inline}
@@ -690,10 +915,12 @@ def attach(trace, children):
             spawn.role = spawn.role or child.role
             spawn.persona = spawn.persona or child.persona
             spawn.path = spawn.path or child.path
-            spawn.code_writing = spawn.code_writing or any(event.kind == "edit" for event in child.events)
+            spawn.edits = spawn.edits | {event.path for event in child.events if event.kind == "edit"}
+            spawn.code_writing = spawn.code_writing or bool(spawn.edits)
             spawn.reads = spawn.reads | {event.path for event in child.events if event.kind == "read"}
             base = spawn.event
-            moved = {id(event): replace(event, index=base.index, sub=base.sub + (event.index,)) for event in child.events}
+            moved = {id(event): replace(event, text=child.link if event.kind == "done" else event.text,
+                                        **placement(event, base, clock)) for event in child.events}
             trace.events += moved.values()
             for key, inner in child.spawns.items():
                 inner.event = moved[id(inner.event)]
@@ -702,6 +929,39 @@ def attach(trace, children):
         pending = [child for child in pending if id(child) not in done]
     trace.events.sort(key=order)
     return trace
+
+
+def placement(event, base, clock):
+    """Where a child event sorts: at its own timestamp when its spawn was
+    placed by one, else right after its spawn."""
+    if clock and base.at is not None:
+        at = base.at if event.at is None else event.at
+        return {"index": clock(at), "sub": (at, event.index)}
+    return {"index": base.index, "sub": base.sub + (event.index,)}
+
+
+def lead_clock(trace, lead):
+    """A map from a rollout timestamp to the lead stream line it follows, or
+    None. The exec stream carries no timestamps, but the lead's rollout
+    records the same messages, commands, and collab calls in the same order,
+    each stamped, so the kth of each in one is the kth in the other. None when
+    the two disagree on kinds or commands, so nothing is placed by a guess."""
+    kinds = {"message", "shell", "wait", "spawn"}
+    streamed = [event for event in trace.events if event.actor == "main" and event.kind in kinds]
+    stamped = [event for event in lead.events if event.kind in kinds]
+
+    def shape(events):
+        return [(event.kind, event.text if event.kind == "shell" else "") for event in events]
+
+    if not streamed or shape(streamed) != shape(stamped) or any(event.at is None for event in stamped):
+        return None
+    anchors = sorted((mark.at, event.index) for event, mark in zip(streamed, stamped))
+    times = [at for at, _ in anchors]
+
+    def line(at):
+        before = bisect.bisect_right(times, at)
+        return anchors[before - 1][1] if before else -1
+    return line
 
 
 def harvest_dir(run_path):
@@ -721,7 +981,7 @@ def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
         for path in sorted((transcripts / "claude").glob("*/*/subagents/agent-*.jsonl")):
             meta_path = path.with_name(path.name.removesuffix(".jsonl") + ".meta.json")
             meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
-            children.append(parse_claude_child(path.read_text(errors="replace").splitlines(), meta, tree))
+            children.append(parse_claude_child(path.read_text(errors="replace").splitlines(), meta, tree, trace.cwd))
         return attach(trace, children)
     lead = None
     for path in sorted((transcripts / "codex" / "sessions").rglob("rollout-*.jsonl")):
@@ -734,7 +994,7 @@ def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
         trace.worklist_tool_offered = True
     if lead and not any(event.kind == "worklist" and event.actor == "main" for event in trace.events):
         trace.events += [replace(event, index=len(lead_lines), actor="main", sub=(event.index,)) for event in lead.events if event.kind == "worklist"]
-    return attach(trace, children)
+    return attach(trace, children, lead_clock(trace, lead) if lead else None)
 
 
 def normalize(text):
@@ -849,6 +1109,131 @@ def cited_principles(text, principles):
     return cited
 
 
+def lead_ordered(trace):
+    """Whether an event has a place in lead order. A child whose spawn the
+    trace never shows is attached after the lead's last line, so its events
+    and every later one carry no order relative to the lead."""
+    horizon = min((spawn.event.index for spawn in trace.spawns.values() if not spawn.placed), default=None)
+    return lambda event: horizon is None or event.index < horizon
+
+
+def full_suite_run(trace, ordered):
+    """Test commands any actor ran after the run's last workspace edit, and
+    whether one of them is wider than a single test id (test_scope). wide is
+    None when the run made no edit, or when an edit has no lead order."""
+    edits = [event for event in trace.events if event.kind == "edit"]
+    last = edits[-1] if edits else None
+    after = [event.text for event in trace.events
+             if last and event.kind == "shell" and order(event) > order(last) and test_scope(event.text)]
+    known = all(ordered(event) for event in edits)
+    return {
+        "last_edit": last.index if last else None,
+        "ordered": known,
+        "test_commands_after": after,
+        "wide": None if last is None or not known else any(test_scope(command) == "wide" for command in after),
+    }
+
+
+def same_file(one, other):
+    """Whether two spellings of a path name one file: the shorter is a whole
+    component suffix of the longer, so src/tree.py names /w/app/src/tree.py."""
+    one, other = ([part for part in path.split("/") if part and part != "."] for path in (one, other))
+    short, long = sorted((one, other), key=len)
+    return bool(short) and long[-len(short):] == short
+
+
+def git_subcommand(words):
+    at = 1
+    while at < len(words) and words[at].startswith("-"):
+        at += 2 if words[at] in ("-C", "-c") else 1
+    return words[at] if at < len(words) else None
+
+
+def reviews(event, edited):
+    """Whether one lead event inspects a delegate's work: a Read (view) of a
+    file it edited, a shell read verb or rg/grep naming such a file as an
+    operand, or any git diff, git show, or git status."""
+    if event.kind == "view":
+        return any(same_file(event.path, path) for path in edited)
+    if event.kind != "shell":
+        return False
+    for stages in split_shell(event.text):
+        for tokens in stages:
+            words = command_words(tokens)
+            verb = words[0].rsplit("/", 1)[-1] if words else ""
+            if verb == "git" and git_subcommand(words) in REVIEW_GIT:
+                return True
+            elif verb in READ_VERBS or verb in SEARCH_VERBS:
+                operands = [word for word in words[1:] if not word.startswith("-")]
+                operands = operands[1:] if verb in SEARCH_VERBS else operands
+                if any(same_file(operand, path) for operand in operands for path in edited):
+                    return True
+    return False
+
+
+def returned(trace, key, spawn):
+    """The event where a spawn's delegate returned to its parent: the first
+    parent-side return (a Claude tool_result or task-notification, a Codex
+    wait that shows the child finished) after the spawn, else the child's own
+    first task_complete when that is all the trace has."""
+    later = [event for event in trace.events if event.text == key and order(event) > order(spawn.event)]
+    return next((event for event in later if event.kind == "return"), None) or next((event for event in later if event.kind == "done"), None)
+
+
+def lead_reviewed_delegate(trace, keyed, ordered):
+    """For each code-writing delegate among keyed ({key: Spawn}), whether the
+    lead (actor main) inspected its work (reviews) after it returned
+    (returned) and before the lead's last message. A delegate that never
+    returns is not reviewed. all is None when there is no code-writing
+    delegate, or when one has no lead order (lead_ordered)."""
+    code = {key: spawn for key, spawn in keyed.items() if spawn.code_writing}
+    unordered = sum(not ordered(spawn.event) for spawn in code.values())
+    finals = [event for event in trace.events if event.actor == "main" and event.kind == "message"]
+    end = order(finals[-1]) if finals else None
+    reviewed = 0
+    for key, spawn in code.items():
+        back = returned(trace, key, spawn)
+        reviewed += bool(back and ordered(spawn.event) and any(
+            event.actor == "main" and order(back) < order(event) and (end is None or order(event) < end) and reviews(event, spawn.edits)
+            for event in trace.events))
+    return {"code_delegates": len(code), "reviewed": reviewed, "all": None if not code or unordered else reviewed == len(code), "unordered": unordered}
+
+
+EXPLORE_ROLES = {"explore", "explorer"}  # Claude's Explore, Codex's explorer
+
+
+def investigates(spawn):
+    """A delegate the lead spawned itself with a how or why role, or an
+    unprescribed explore-type delegate the lead spawned that wrote no code.
+    Any other routed skill's role (architect, arena, interrogate, reflect,
+    swarm, no-comments) is not investigation, even when it only reads. A
+    Codex child of a child, such as /root/how_x/direct_explainer, runs while
+    its parent waits on it, so it is part of its parent's investigation."""
+    if spawn.path and spawn.path.rpartition("/")[0] != "/root":
+        return False
+    if spawn.prescribed:
+        return spawn.prescribed.split()[0] in ("how", "why")
+    return not spawn.code_writing and (spawn.role or "").lower() in EXPLORE_ROLES
+
+
+def parallel_investigation(trace, keyed, ordered):
+    """The most investigation spawns (investigates) in flight at once. A
+    spawn is in flight from its spawn event until it returned (returned), or
+    to the end of the trace when it never does. parallel is None when two or
+    more such spawns exist, fewer than two overlap, and one has no lead
+    order."""
+    looking = {key: spawn for key, spawn in keyed.items() if investigates(spawn)}
+    spans = []
+    for key, spawn in looking.items():
+        if ordered(spawn.event):
+            back = returned(trace, key, spawn)
+            spans.append((order(spawn.event), order(back) if back else None))
+    most = max((sum(start <= at and (end is None or at < end) for start, end in spans) for at, _ in spans), default=0)
+    unordered = len(looking) - len(spans)
+    parallel = True if most >= 2 else None if unordered and len(looking) >= 2 else False
+    return {"investigation_spawns": len(looking), "max_in_flight": most, "parallel": parallel, "unordered": unordered}
+
+
 def stages(trace, *, case, owner, injected, playbook_texts, principles, workspace, skill_names=()):
     """Every chain stage of one run, from its events. skill_names are the
     mounted skills a playbook step may point at."""
@@ -908,6 +1293,9 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         briefed = list(trace.spawns.values())
     for spawn in briefed:
         spawn.prescribed = prescribed_by(spawn.role, spawn.event.text, spawn.path, spawn.reads)
+    keyed = {key: spawn for key, spawn in trace.spawns.items() if any(spawn is other for other in briefed)}
+    ordered = lead_ordered(trace)
+    investigation = parallel_investigation(trace, keyed, ordered)
     helpers = [spawn for spawn in briefed if not spawn.prescribed]
     implementers = [spawn for spawn in helpers if spawn.code_writing]
     census = {}
@@ -920,6 +1308,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         counts["implementation_misses"] += spawn in implementers and not spawn.persona
     cited = cited_principles(trace.final, principles)
     unread = [slug for slug in cited if f"{slug}/SKILL.md" not in first_read]
+    delegate_edits = sorted({event.path for event in edits if event.actor == "delegate"})
     return {
         "playbook_read": playbooks,
         "playbook_expected": expected,
@@ -955,7 +1344,12 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
             "brief_names_shape": any(DATA_SHAPE.search(spawn.event.text or "") for spawn in briefed) if briefed and any(spawn.event.text for spawn in briefed) else None,
             "delegate_reads": sorted({event.path for event in reads if event.actor == "delegate"}),
         },
-        "delegate_edits": sorted({event.path for event in edits if event.actor == "delegate"}),
+        "delegate_edits": delegate_edits,
+        "delegated_code": bool(delegate_edits),
+        "lead_reviewed_delegate": lead_reviewed_delegate(trace, keyed, ordered),
+        "parallel_investigation": investigation,
+        "delegated_investigation": investigation["investigation_spawns"] > 0,
+        "full_suite_run": full_suite_run(trace, ordered),
         "delegate_census": [
             {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona, "prescribed": spawn.prescribed}
             for spawn in briefed
@@ -1222,6 +1616,11 @@ STAGES = {
         row["implementation_delegate_persona"]["with_persona"] == row["implementation_delegate_persona"]["spawns"]
         if row["implementation_delegate_persona"]["spawns"] else None
     ),
+    "delegate wrote code": lambda row: row["delegated_code"],
+    "lead inspected code-writing delegate's work (all)": lambda row: row["lead_reviewed_delegate"]["all"],
+    "delegated investigation": lambda row: row["delegated_investigation"],
+    "parallel investigation spawns": lambda row: row["parallel_investigation"]["parallel"] if row["delegated_investigation"] else None,
+    "wide test run after last edit": lambda row: row["full_suite_run"]["wide"],
 }
 FRACTION_STAGES = {"step pointers preserved (fraction)"}
 REVIEW_STAGES = {

@@ -170,6 +170,20 @@ class ArmPatchTests(unittest.TestCase):
         self.assertEqual(screen.rule_mounted(rule, mounted + "- Restructure first when the feature would then be one small edit.\n", TREE), True)
 
 
+    def test_pair_rule_that_cuts_text_is_mounted_only_where_the_cut_text_is_gone(self):
+        cut = "--- a/poteto-mode/SKILL.md\n+++ b/poteto-mode/SKILL.md\n@@ -2 +2 @@\n-Read the leaf.\n+Read.\n"
+        rule = screen.Rule("r", "S", cut, "poteto-mode/SKILL.md", ())
+
+        self.assertEqual(screen.rule_mounted(rule, TREE["poteto-mode/SKILL.md"].decode(), TREE), False)
+        self.assertEqual(screen.rule_mounted(rule, "# Poteto mode\nRead.\n", TREE), True)
+
+    def test_pair_rule_that_adds_text_is_mounted_where_the_new_text_is(self):
+        add = "--- a/poteto-mode/SKILL.md\n+++ b/poteto-mode/SKILL.md\n@@ -2 +2 @@\n-Read the leaf.\n+Read the leaf twice.\n"
+        rule = screen.Rule("r", "S", add, "poteto-mode/SKILL.md", ())
+
+        self.assertEqual(screen.rule_mounted(rule, TREE["poteto-mode/SKILL.md"].decode(), TREE), False)
+        self.assertEqual(screen.rule_mounted(rule, "# Poteto mode\nRead the leaf twice.\n", TREE), True)
+
 def grade(verdict):
     return {"PASS": True, "FAIL": False}[verdict]
 

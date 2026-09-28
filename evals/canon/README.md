@@ -307,6 +307,12 @@ the new bytes of every path the diff touches, with `None` for a deleted path.
 It refuses a diff that leaves a symlink at a path it touches, that touches a
 symlink in the checkout, or whose path resolves outside the checkout, so a
 grader never reads a host file through the agent's diff.
+A case whose module imports only the standard library can run tests.
+`shared.plain_test_failures(tree, modules)` runs every test function and
+`Test*` method of the named modules in the pinned image, with no pytest
+plugins or fixtures, and returns one `<module>::<test> failed` line per
+failure. The check builds `tree` from the pinned checkout and the diff's new
+bytes, so it runs the pinned tests and never the agent's edited copies.
 The samples are `good.md` and `bad.md` with a `good.diff` and `bad.diff` beside
 them. `test_oracle.py` passes `workspace=Workspace(checkout, diff)` to `grade`.
 The offline stand-in applies the chosen sample's diff in its cwd. The sample
@@ -857,9 +863,18 @@ rollout per thread under `codex/sessions/`. A child's `session_meta` names its
 each delegate's reads, edits, spawns, worklist calls, and messages with actor
 `delegate`. It places them right after the spawn that started them, so every
 stage sees them. They fill `delegation.delegate_reads` and the top-level
-`delegate_edits`.
-Workspace edits are judged against the child's own cwd, which in a sandbox may
-sit under `/tmp`. A run without a `transcripts/` dir yields the same fields as
+`delegate_edits`. A Claude background delegate's events all sit at its spawn
+index too, though the lead keeps working while it runs. So `full_suite_run`
+can count a lead test run made mid-delegate as after the last edit. No pilot
+result changes: across all 6 Claude code-writing delegates, the lead ran no
+test while one was running.
+A Claude lead's checkout is the cwd of its first `init` record. A turn that a
+task notification resumes opens with another `init`, whose cwd is wherever the
+lead's shell last moved. A Claude child starts in that shell cwd too, so its
+edits are judged against the lead's checkout when its cwd sits inside it, and
+against its own cwd otherwise, as in an isolated worktree. A Codex child's
+edits are judged against its own cwd. In a sandbox either may sit under
+`/tmp`. A run without a `transcripts/` dir yields the same fields as
 before.
 
 Two stages use them:
@@ -902,7 +917,10 @@ briefing line. A how explorer or explainer, why investigator or synthesizer,
 architect runner, interrogate reviewer, or reflect reviewer or synthesizer is
 known by its template's opening sentence or path in the brief, by the
 delegate's own read of that template, or by an agent path that names the
-skill, such as `/root/how_harness_family`. Arena and swarm ship no template,
+skill, such as `/root/how_harness_family`. When the segment under `/root`
+names a skill, that skill decides, so `/root/architect_candidate_2` stays an
+architect runner even though it read the how explainer prompt while
+grounding. Arena and swarm ship no template,
 so their runners are known only by a brief or path that names them. The
 stage "implementation delegate ran as poteto-agent" counts code-writing
 delegates outside a routed skill. "delegate outside a routed skill got the
@@ -932,12 +950,161 @@ runs emits a `result` each time. The last one is the answer, and
 `harvest/<run>/raw-stream.jsonl` in place of `trace.jsonl` when it exists. A
 run that `screen.py regrade` graded takes its verdict from `regrade.json`.
 
+**Delegate returns.** Three stages ask when a delegate returned to the lead.
+A foreground Claude spawn returns in its Agent or Task tool_result. A
+background one first gets an "Async agent launched" result with its agentId.
+It returns later, in a `<task-notification>` user message or, in
+stream-json, a `system` record with subtype `task_notification`. Either names
+its tool-use-id, or its agentId as the task-id. A Codex child returns at the
+first `wait` whose `agents_states` shows it no longer pending or running.
+When the trace shows none of these, the child's own first `task_complete`
+stands in. Codex 0.157's stream shows no spawn and names no child in a
+wait, so its children are placed by time. Every rollout line carries a
+timestamp. The lead's rollout, the one whose first `session_meta` has
+`thread_source` `user`, records the stream's messages, commands, and collab
+calls in the same order, so the kth of each kind in one is the kth in the
+other. That gives each stream line a time. A child's spawn sits at its
+rollout's first line, and each of its events, its `task_complete` included,
+sits after the last lead line at or before it. When the harvest holds no lead
+rollout, or the two disagree on kinds or commands, the children are attached
+after the lead's last line with no place in lead order. Each of these stages
+counts such delegates or edits as `unordered` and reads `null` where order
+decides the answer.
+
+**Delegate wrote code.** `delegated_code` is true when any delegate made a
+workspace edit, the same edits `delegate_edits` lists. A workspace edit is an
+edit tool call, or a shell redirect, `sed -i`, or write verb, whose path lands
+in the checkout. A relative shell write path joins the `cd` before it in the
+same command, so `cd /tmp && cat > sanity.mjs` writes `/tmp/sanity.mjs`. A
+write to an unexpanded variable or substitution (`"$tmpclean"`,
+`"$(dirname "$scratch")"`) or a `~` path is not an edit. Agents aim those at
+scratch files outside the checkout. A `cd` to a variable or substitution, or
+any `cd` inside a subshell, leaves later relative writes unjoined, so they
+still count as edits. A `cd` in one tool call does not carry into the next,
+and `cd ..` is not resolved, so a relative write after either counts as an
+edit.
+
+**Lead inspection.** `lead_reviewed_delegate` gives `code_delegates`,
+`reviewed`, `all`, and `unordered`. A code-writing delegate counts as
+inspected when the lead does one of these after the delegate returned and
+before the lead's last message:
+
+- It reads a file that delegate edited, with Read or with a shell read verb,
+  `rg`, or `grep` naming the file. Paths match on their trailing components,
+  so `src/tree.py` names `/workspace/app/src/tree.py`.
+- It runs `git diff`, `git show`, or `git status`.
+
+One read of one edited file, or a bare `git status`, is enough, so the
+stage shows the lead looked at the work, not that it reviewed the whole
+diff. A delegate that never returns is not inspected. `all` is `null` when
+no delegate wrote code or one of them is unordered. The stage is "lead
+inspected code-writing delegate's work (all)".
+
+**Parallel investigation.** An investigation spawn is a delegate the lead
+spawned itself that `prescribed_by` gives a `how` or `why` role, or an
+unprescribed delegate of an explore type (Claude's `Explore`, Codex's
+`explorer`) that the lead spawned and that wrote no code. A Codex child of a
+child, such as `/root/how_lint_subsystem/direct_explainer`, runs while its
+parent waits on it, so it is part of its parent's investigation and does not count.
+A delegate another routed skill prescribes (architect, arena, interrogate,
+reflect, swarm, no-comments) is never investigation, even when it only
+reads. So a Codex architect cross-judge spawned as `explorer` stays out,
+because its `architect_` path names architect. A spawn is in flight from its
+spawn until it returns, or to the end of the trace.
+`parallel_investigation` gives `investigation_spawns`, `max_in_flight`,
+`parallel`, and `unordered`. `parallel` is true when two were in flight at
+once. It is `null` when two or more exist, fewer than two overlap, and one is
+unordered. A run without transcripts cannot tell which delegates wrote code,
+so every unprescribed explore-type spawn counts there. The stage "delegated
+investigation" is true when a run has any investigation spawn, so a run with
+none reads as a miss. The stage "parallel investigation spawns" rates only
+the runs that delegated investigation.
+
+**Wide test run.** `full_suite_run` takes the run's last workspace edit by
+any actor and lists `test_commands_after`, every test command any actor ran
+after it. A command counts even when it exits nonzero. The runners are
+pytest, including `python -m pytest`, `uv run pytest`, and hermes's
+`scripts/run_tests.sh` wrapper, `python -m unittest`, `npm`, `pnpm`, or `yarn
+test`, also after `--prefix`, `-C`, `--dir`, or `--cwd <dir>`, `node --test`, `go test`, `cargo test`,
+and `just test`. A pytest run is single when every target is a
+`path::name` node id or a `-k` selector. A unittest run is single when every
+target is a `Class.test_method` dotted name or a `-k` selector. A file,
+directory, module, or no target is wide, and so is every other runner.
+`wide` is true when some command after the edit is wide. It is `null` when
+the run made no edit or an edit is unordered, which `ordered` shows. The
+stage is "wide test run after last edit".
+
 `fixtures/chain/sbx-codex/` holds trimmed files from a real Codex sandbox
-probe. `fixtures/chain/sbx-codex-roles/` and `claude-multi-result.jsonl` are
+probe. `fixtures/chain/sbx-claude-background/`,
+`fixtures/chain/sbx-codex-timestamps/`, and `fixtures/chain/sbx-codex-nested/` are trimmed from the
+`/private/tmp/canon-cuts` pilot runs, with the sandbox temp path renamed. `fixtures/chain/sbx-codex-roles/` and `claude-multi-result.jsonl` are
 trimmed from real `/private/tmp/canon-sbx` runs. `fixtures/chain/sbx-claude/`,
 `fixtures/chain/sbx-claude-review/`, and `fixtures/chain/sbx-codex-review/` are
 synthetic, and so is the lead trace under `fixtures/chain/sbx-codex-delegates/`
 (its harvested child transcripts are real).
+`fixtures/chain/sbx-claude-delegates/` and `fixtures/chain/sbx-codex-parallel/`
+are synthetic too. They follow the return shapes above, the Claude ones as a
+Claude Code session transcript records them.
+
+## Held-cuts screen
+
+Upstream cut some prose after testing it only with an Opus 5.5 lead. This
+screen asks whether those cuts change what a GPT-5.6 Codex lead or a Sonnet
+lead does. Every rule reads `skills/` at fcc6c78f, which has the six lines
+64aac129 held and upstream #414's cuts.
+
+| arm rule | arms | cases from | case | repo |
+|---|---|---|---|---|
+| `restore-tdd-nearby-validation` | current, restored | `nearby-validation` | `paste-markers` | hermes |
+| `cut-bug-fix-review` | current, cut | `nearby-validation` | `paste-markers` | hermes |
+| `cut-feature-review` | current, cut | `feature-review-diffs` | `no-debugger-lint` | omnigent |
+| `cut-refactor-review` | current, cut | `refactor-review-diff` | `lint-report-loop` | omnigent |
+
+`restored` puts back poteto-tdd step 7 as upstream 70b2dc8 removed it. Each
+`cut` arm removes the held sentences from one playbook. Each base rule holds
+the case and oracle, and its `rule.patch` is the same edit as the arm patch.
+Run the arm rules.
+
+Read a `cut` line the other way round from an amendment. A cut that hurts
+shows as `cut vs current: REVERSES`. `SEPARATES` there means the cut arm did
+better. A tie in one repetition says only that this pair showed no
+difference. The restored arm counts as exposed only when it reads
+`poteto-tdd/SKILL.md`, which the Bug fix playbook routes to only for a cheap
+local test path, so `unexposed` is a likely outcome there.
+
+- **paste-markers.** A user reports that a `[200~` paste marker stays in the
+  prompt when the paste follows a typed word. Stripping `[200~` anywhere fixes
+  the report but breaks `test_does_not_strip_non_wrapper_bracket_forms_in_normal_text`
+  in the same module, and the prompt does not say so. The oracle runs the
+  pinned `tests/hermes_cli/test_input_sanitize.py` and
+  `tests/hermes_cli/test_cli_bracketed_paste_sanitizer.py`, the second
+  through a `cli.py` shim, plus three reported cases.
+- **no-debugger-lint.** A new `no-debugger` custom lint rule, across a new
+  module, the `custom_lint.py` registry, and tests. The oracle runs held
+  cases for every debugger shape, strings and comments, the disable comment,
+  the standalone exit codes, and registration after the existing rules.
+- **lint-report-loop.** Move the argv report loop two omnigent lint scripts
+  share into `_framework.py`. The asyncio lint prints a hint line after every
+  hit, and a shared per-hit label drops it. The oracle checks that the loop
+  moved, then runs held stdout and exit-code cases for both scripts. It runs
+  each script as the pre-commit hook does, `python3 dev/lint/<script>.py
+  <files>` from the repo root, so `from _framework import` resolves and
+  `from dev.lint._framework import` does not. The venv's editable install
+  exposes only `omnigent*`, so the hook cannot import `dev` either.
+
+`chain.py` reports the stages these cuts target: whether a delegate wrote
+code, whether the lead inspected its work, parallel investigation spawns, and a test
+run wider than one test after the last edit.
+
+```sh
+for rule in restore-tdd-nearby-validation cut-bug-fix-review cut-feature-review cut-refactor-review; do
+  python3 evals/canon/screen.py run --runner sbx --agent claude --model sonnet --entry poteto-mode \
+    --out "/private/tmp/canon-cuts/claude-$rule-$(date +%m%d%H%M)" "$rule"
+  python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode \
+    --out "/private/tmp/canon-cuts/codex-$rule-$(date +%m%d%H%M)" "$rule"
+done
+python3 evals/canon/chain.py --markdown /private/tmp/canon-cuts/*
+```
 
 ## Reading the result
 

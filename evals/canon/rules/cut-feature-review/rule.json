@@ -1,0 +1,6 @@
+{
+  "cases_from": "feature-review-diffs",
+  "arms": ["current", "cut"],
+  "source": "upstream #419 cut held in 64aac129: feature step 4 own-review and spawn-even-as-a-subagent sentences",
+  "skills_at": "fcc6c78f5fd29dc9c20cfc8988c11e9bdf05a7b2"
+}

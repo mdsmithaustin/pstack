@@ -162,6 +162,28 @@ class ShellEffectsTests(unittest.TestCase):
 
         self.assertEqual(reads, [("poteto-mode/playbooks/refactoring.md", False)])
 
+    def test_writes_that_land_outside_the_checkout_are_not_edits(self):
+        def edits(command):
+            line = json.dumps({"type": "item.completed", "item": {"type": "command_execution", "command": command, "exit_code": 0}})
+            return [event.path for event in chain.parse_codex([line], TREE, "/w/app").events if event.kind == "edit"]
+
+        self.assertEqual([edits(command) for command in (
+            "tmpclean=$(mktemp /tmp/scratch_clean_XXXX.py) && printf 'x = 1\\n' > \"$tmpclean\" && rm -f \"$tmpfile\" \"$tmpclean\"",
+            "scratch=$(mktemp -d)/scratch_debugger.py\nprintf 'def f():\\n    breakpoint()\\n' > \"$scratch\"\nrm -rf \"$(dirname \"$scratch\")\"",
+            "probe_dir=$(mktemp -d /tmp/no-debugger-review.XXXXXX); probe_file=\"$probe_dir/probe.py\"; printf '%s\\n' 'import pdb' > \"$probe_file\"",
+            "cd /tmp && cat > sanity.mjs <<'EOF'\nconsole.log('ALL PASS')\nEOF\nnode sanity.mjs",
+            "printf 'x\\n' > ~/notes.txt",
+            "cd src && printf 'x\\n' > tree_notes.py",
+            "echo hi > notes.txt",
+        )], [[], [], [], [], [], ["src/tree_notes.py"], ["notes.txt"]])
+
+    def test_a_cd_the_command_cannot_resolve_keeps_later_writes_as_edits(self):
+        self.assertEqual([chain.shell_effects(command, TREE)[1] for command in (
+            'cd "$(git rev-parse --show-toplevel)" && cp a.py b.py',
+            'cd "$ROOT" && sed -i s/a/b/ src/x.py',
+            "(cd /tmp && echo x > scratch.txt); echo y > b.py",
+        )], [["b.py"], ["src/x.py"], ["scratch.txt", "b.py"]])
+
     def test_head_pipe_and_short_sed_range_are_partial(self):
         reads, _ = chain.shell_effects("cat how/SKILL.md | head -3; sed -n '1,4p' architect/SKILL.md; sed -n '1,40p' unslop/SKILL.md", TREE)
 
@@ -553,6 +575,286 @@ class CodexRolesHarvestTests(unittest.TestCase):
         claude_row = analyze("sbx-claude", "claude")
 
         self.assertEqual((self.row["delegation"]["brief_names_shape"], claude_row["delegation"]["brief_names_shape"]), (None, True))
+
+
+class ClaudeDelegateFlowTests(unittest.TestCase):
+    """A synthetic Claude sandbox run in the real shapes of Claude Code
+    2.1: two Explore delegates spawned in the background, each
+    answered at once by an "Async agent launched" tool_result and later by a
+    <task-notification> user message naming its tool-use-id; then two
+    foreground poteto-agent builders, each returning in its Agent
+    tool_result. The lead reads the tree builder's file after it returns, runs
+    one pytest node id after the test builder returns, and ends."""
+
+    def setUp(self):
+        self.row = analyze("sbx-claude-delegates", "claude")
+
+    def test_a_delegate_edit_is_delegated_code(self):
+        self.assertIs(self.row["delegated_code"], True)
+
+    def test_one_failing_node_id_after_the_last_edit_is_not_a_wide_run(self):
+        self.assertEqual(self.row["full_suite_run"], {
+            "last_edit": 11, "ordered": True,
+            "test_commands_after": ["uv run pytest tests/test_tree.py::test_nested -q 2>&1 | tail -5"], "wide": False,
+        })
+
+    def test_foreground_results_and_background_notifications_are_the_returns(self):
+        trace = chain.parse_claude((FIXTURES / "sbx-claude-delegates" / "run" / "trace.jsonl").read_text().splitlines(), TREE)
+
+        self.assertEqual([(event.index, event.text) for event in trace.events if event.kind == "return"], [
+            (6, "toolu_01SpawnExploreStore"), (7, "toolu_01SpawnExploreRender"),
+            (9, "toolu_01SpawnBuildTree"), (12, "toolu_01SpawnBuildTests"),
+        ])
+
+    def test_the_lead_read_the_first_builder_file_and_only_tested_after_the_second(self):
+        self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 1, "all": False, "unordered": 0})
+
+    def test_the_second_background_explorer_was_spawned_before_the_first_returned(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 2, "parallel": True, "unordered": 0})
+
+
+class ClaudeBackgroundInspectionTests(unittest.TestCase):
+    """A trimmed real Claude Code sandbox run of paste-markers. The lead cds
+    into apps/desktop, so both background poteto-agent children start there,
+    and one of them edits hermes_cli/ outside it. Each child returns in a
+    system task_notification record naming its tool_use_id, and the turn it
+    resumes opens with an init record whose cwd is apps/desktop. The lead then
+    Reads both edited files, reruns pytest, and runs git diff --stat."""
+
+    def setUp(self):
+        self.row = analyze("sbx-claude-background", "claude")
+
+    def test_system_task_notifications_are_the_returns(self):
+        trace = chain.parse_claude((FIXTURES / "sbx-claude-background" / "run" / "trace.jsonl").read_text().splitlines(), TREE)
+
+        self.assertEqual([(event.index, event.text) for event in trace.events if event.kind == "return"], [
+            (6, "toolu_01RKunguWUkRc5SWpSUoZxpd"), (8, "toolu_014FhjSSx43PqfuqRKPCEXfX"),
+        ])
+
+    def test_an_edit_outside_the_child_shell_cwd_is_still_in_the_checkout(self):
+        root = "/private/var/folders/xx/T/claude-ws-a72s0fdm/"
+        self.assertEqual(self.row["delegate_edits"], [root + path for path in (
+            "apps/desktop/src/lib/composer-input-sanitize.test.ts", "apps/desktop/src/lib/composer-input-sanitize.ts",
+            "hermes_cli/input_sanitize.py", "tests/hermes_cli/test_input_sanitize.py")])
+
+    def test_reads_after_both_notifications_inspect_both_delegates(self):
+        self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 2, "all": True, "unordered": 0})
+
+
+class CodexDelegateFlowTests(unittest.TestCase):
+    """A synthetic Codex 0.149 exec --json run, whose stream shows each
+    spawn_agent with its child thread and each wait with the child's final
+    state: two explorers spawned together and awaited in one wait, then a
+    poteto-agent builder whose rollout edits the tree and runs one node id.
+    The lead runs git diff and the tests directory after the builder's wait."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-parallel", "codex")
+
+    def test_a_child_rollout_edit_is_delegated_code(self):
+        self.assertIs(self.row["delegated_code"], True)
+
+    def test_a_run_whose_delegate_only_reads_has_no_delegated_code(self):
+        self.assertIs(analyze("sbx-codex", "codex")["delegated_code"], False)
+
+    def test_the_lead_tests_directory_after_the_child_node_id_is_a_wide_run(self):
+        self.assertEqual(self.row["full_suite_run"], {
+            "last_edit": 5, "ordered": True,
+            "test_commands_after": ["uv run pytest tests/test_tree.py::test_nested", "uv run pytest -q tests/"], "wide": True,
+        })
+
+    def test_a_run_without_edits_has_no_last_edit(self):
+        self.assertEqual(analyze("sbx-codex", "codex")["full_suite_run"],
+                         {"last_edit": None, "ordered": True, "test_commands_after": [], "wide": None})
+
+    def test_git_diff_after_the_builder_wait_inspects_it(self):
+        self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 1, "reviewed": 1, "all": True, "unordered": 0})
+
+    def test_two_explorers_awaited_in_one_wait_ran_in_parallel(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 2, "parallel": True, "unordered": 0})
+
+    def test_without_a_wait_the_child_task_complete_is_its_return(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "codex", "sbx-codex-parallel")
+            lines = trace_path.read_text().splitlines()
+            trace_path.write_text("\n".join(line for line in lines if '"id": "item_5"' not in line) + "\n")
+            row = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual(row["lead_reviewed_delegate"], {"code_delegates": 1, "reviewed": 1, "all": True, "unordered": 0})
+
+    def test_a_delegate_whose_spawn_the_stream_never_shows_has_no_lead_order(self):
+        row = analyze("sbx-codex-delegates", "codex")
+
+        self.assertEqual((row["lead_reviewed_delegate"], row["parallel_investigation"]), (
+            {"code_delegates": 1, "reviewed": 0, "all": None, "unordered": 1},
+            {"investigation_spawns": 1, "max_in_flight": 0, "parallel": False, "unordered": 1},
+        ))
+
+    def test_no_code_writing_delegate_is_not_measured(self):
+        self.assertEqual(analyze("sbx-codex", "codex")["lead_reviewed_delegate"], {"code_delegates": 0, "reviewed": 0, "all": None, "unordered": 0})
+
+    def test_edits_of_a_child_whose_spawn_the_stream_never_shows_cannot_be_ordered(self):
+        self.assertEqual(analyze("sbx-codex-delegates", "codex")["full_suite_run"],
+                         {"last_edit": 13, "ordered": False, "test_commands_after": [], "wide": None})
+
+
+class CodexTimestampOrderTests(unittest.TestCase):
+    """A trimmed real Codex 0.157 sandbox run of no-debugger-lint, whose
+    stream shows no spawn and names no child in a wait. Its harvest holds the
+    lead rollout and eight child rollouts, every line timestamped. A
+    poteto-agent child edits four files and finishes at 22:00:00, a
+    comment-sicko child edits lint_no_debugger.py at 22:00:25 and finishes at
+    22:00:54, and at 22:01:27 the lead reads lint_no_debugger.py and runs
+    pytest over tests/dev/lint."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-timestamps", "codex")
+
+    def test_reads_after_each_child_task_complete_inspect_both_code_writers(self):
+        self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 2, "all": True, "unordered": 0})
+
+    def test_the_lead_pytest_after_the_comment_sicko_edit_is_a_wide_run(self):
+        suite = self.row["full_suite_run"]
+
+        first = "sed -n '1,240p' dev/lint/lint_no_debugger.py && uv run --no-sync pytest -q tests/dev/lint &&"
+        self.assertEqual((suite["ordered"], suite["wide"], suite["test_commands_after"][0][:len(first)]), (True, True, first))
+
+    def test_architect_runners_are_not_investigation_and_the_two_explorers_ran_apart(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 1, "parallel": False, "unordered": 0})
+
+    def test_without_the_lead_rollout_the_children_stay_unordered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "codex", "sbx-codex-timestamps")
+            harvest = chain.harvest_dir(trace_path.parent)
+            next(harvest.rglob("rollout-*-01a0e4da-7a83-77b3-8b58-c80d2299db2b.jsonl")).unlink()
+            row = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual(row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 0, "all": None, "unordered": 2})
+
+
+class DelegateFlowMarkdownTests(unittest.TestCase):
+    def test_each_stage_has_a_rate_line_per_agent(self):
+        rows = [analyze("sbx-claude-delegates", "claude"), analyze("sbx-codex-parallel", "codex"), analyze("sbx-codex-delegates", "codex")]
+        names = ("delegate wrote code", "lead inspected code-writing delegate's work (all)", "delegated investigation", "parallel investigation spawns",
+                 "wide test run after last edit")
+
+        self.assertEqual([line for line in chain.markdown(rows).splitlines()[:len(chain.STAGES) + 3] if line.split(" | ")[0][2:] in names], [
+            "| delegate wrote code | 1/1 | 2/2 |",
+            "| lead inspected code-writing delegate's work (all) | 0/1 | 1/1 |",
+            "| delegated investigation | 1/1 | 2/2 |",
+            "| parallel investigation spawns | 1/1 | 1/2 |",
+            "| wide test run after last edit | 0/1 | 1/1 |",
+        ])
+
+
+class InspectionWindowTests(unittest.TestCase):
+    """The lead's inspection of a code-writing delegate counts only between the
+    delegate's return and the lead's final message."""
+
+    def stage(self, *events):
+        spawn = chain.Event(1, "main", "spawn")
+        trace = chain.Trace(events=[spawn, *events], spawns={"t1": chain.Spawn(spawn, code_writing=True, edits=frozenset({"/w/app/src/tree.py"}))})
+        return run_stages(trace)["lead_reviewed_delegate"]["reviewed"]
+
+    def test_a_read_before_the_return_or_after_the_final_message_does_not_count(self):
+        self.assertEqual((
+            self.stage(chain.Event(2, "main", "view", "src/tree.py"), chain.Event(3, "main", "return", text="t1"), chain.Event(4, "main", "message", text="Done.")),
+            self.stage(chain.Event(3, "main", "return", text="t1"), chain.Event(4, "main", "message", text="Done."), chain.Event(5, "main", "shell", text="git status")),
+            self.stage(chain.Event(3, "main", "return", text="t1"), chain.Event(4, "main", "shell", text="sed -n '1,40p' src/tree.py"), chain.Event(5, "main", "message", text="Done.")),
+        ), (0, 0, 1))
+
+    def test_shell_reads_of_the_edited_file_and_git_inspection_count(self):
+        self.assertEqual([chain.reviews(chain.Event(0, "main", "shell", text=command), {"/w/app/src/tree.py"}) for command in (
+            "cat src/tree.py", "head -20 app/src/tree.py | nl", "rg -n tree src/tree.py", "git --no-pager diff -- src",
+            "git -C /w/app show HEAD", "git status --short", "cat src/other.py", "rg -n src/tree.py docs", "git log -3",
+        )], [True, True, True, True, True, True, False, False, False])
+
+    def test_sequential_foreground_explorers_are_not_parallel(self):
+        first, second = chain.Event(1, "main", "spawn"), chain.Event(3, "main", "spawn")
+        trace = chain.Trace(events=[first, chain.Event(2, "main", "return", text="a"), second, chain.Event(4, "main", "return", text="b")],
+                            spawns={"a": chain.Spawn(first, role="Explore"), "b": chain.Spawn(second, role="Explore")})
+
+        self.assertEqual(run_stages(trace)["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 1, "parallel": False, "unordered": 0})
+
+
+class CodexNestedInvestigationTests(unittest.TestCase):
+    """A trimmed real Codex 0.157 sandbox run of no-debugger-lint
+    (r3-codex-cut-feature-review, current, run 1) with four of its ten
+    children. how_lint_subsystem spawns its own direct_explainer and waits on
+    it. architect_candidate_1 and architect_candidate_2 read the how
+    explainer prompt while grounding their designs."""
+
+    def setUp(self):
+        self.row = analyze("sbx-codex-nested", "codex", tree={
+            **TREE, "architect/references/runner-prompt.md": 10,
+            "how/references/explorer-prompt.md": 10, "how/references/explainer-prompt.md": 10,
+        })
+
+    def test_an_architect_path_decides_the_role_over_a_how_template_read(self):
+        self.assertEqual([(entry["path"], entry["prescribed"]) for entry in self.row["delegate_census"]], [
+            ("/root/how_lint_subsystem", "how explorer"),
+            ("/root/how_lint_subsystem/direct_explainer", "how explorer"),
+            ("/root/architect_candidate_1", "architect runner"),
+            ("/root/architect_candidate_2", "architect runner"),
+        ])
+
+    def test_a_how_explorer_waiting_on_its_own_child_is_one_investigation(self):
+        self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 1, "max_in_flight": 1, "parallel": False, "unordered": 0})
+
+
+class InvestigationSpawnTests(unittest.TestCase):
+    """Spawns placed at one lead index, as Codex children are, each returned
+    at a later index."""
+
+    def stage(self, *spawns):
+        events = [chain.Event(1, "main", "spawn", sub=(n,)) for n in range(len(spawns))]
+        returns = [chain.Event(2 + n, "main", "return", text=f"s{n}") for n in range(len(spawns))]
+        keyed = {f"s{n}": chain.Spawn(event, role=role, path=path) for n, (event, (role, path)) in enumerate(zip(events, spawns))}
+        row = run_stages(chain.Trace(events=[*events, *returns], spawns=keyed))
+        return row["parallel_investigation"], row["delegated_investigation"]
+
+    def test_read_only_architect_candidates_are_not_investigation(self):
+        self.assertEqual(self.stage(*[("poteto-agent", f"/root/architect_{name}") for name in ("ast", "table", "boundary")]), (
+            {"investigation_spawns": 0, "max_in_flight": 0, "parallel": False, "unordered": 0}, False))
+
+    def test_how_roles_and_unprescribed_explore_types_are_investigation(self):
+        self.assertEqual(self.stage(
+            ("explorer", "/root/how_custom_lint"), ("Explore", None), ("explorer", "/root/scan_callers"),
+            ("explorer", "/root/architect_judge"), ("general-purpose", None), ("poteto-agent", "/root/design_a"),
+        ), ({"investigation_spawns": 3, "max_in_flight": 3, "parallel": True, "unordered": 0}, True))
+
+
+class TestCommandTests(unittest.TestCase):
+    def test_runners_and_their_scope(self):
+        commands = [
+            "pytest", "python -m pytest tests/test_tree.py", "uv run --frozen pytest tests/test_tree.py::test_nested -q",
+            "uv run pytest -k nested", "uv run pytest tests -k nested", "python3 -m pytest 'tests/test_tree.py::TestTree::test_a' tests/test_tree.py::test_b",
+            "python3 -m unittest test_chain -v", "python -m unittest tests.test_tree.TreeTests.test_nested", "python -m unittest -k nested",
+            "python -m unittest discover -s tests", "npm test", "pnpm test -- --watch=false", "yarn test", "node --test",
+            "go test ./...", "cargo test", "just test", "UV_OFFLINE=1 uv run pytest -x --tb=short tests/test_tree.py::test_nested 2>&1 | tail -3",
+            "git diff", "python3 tools/check-links.py", "rg -n pytest",
+        ]
+
+        self.assertEqual([chain.test_scope(command) for command in commands], [
+            "wide", "wide", "single",
+            "single", "wide", "single",
+            "wide", "single", "single",
+            "wide", "wide", "wide", "wide", "wide",
+            "wide", "wide", "wide", "single",
+            None, None, None,
+        ])
+
+    def test_the_hermes_pytest_wrapper_and_npm_with_a_prefix_are_test_runs(self):
+        commands = [
+            "scripts/run_tests.sh tests/hermes_cli/test_input_sanitize.py; test_rc=$?",
+            "scripts/run_tests.sh tests/hermes_cli/test_input_sanitize.py::test_glued -q",
+            "npm --prefix apps/desktop test -- src/lib/composer-input-sanitize.test.ts",
+        ]
+
+        self.assertEqual([chain.test_scope(command) for command in commands], ["wide", "single", "wide"])
+
+    def test_a_compound_command_is_as_wide_as_its_widest_test_run(self):
+        self.assertEqual(chain.test_scope("cd app && pytest tests/test_a.py::test_x && pytest tests"), "wide")
 
 
 SKILLS = chain.screen.REPO / "skills"

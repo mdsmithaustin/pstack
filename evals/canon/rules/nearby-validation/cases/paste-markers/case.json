@@ -1,0 +1,10 @@
+{
+  "kind": "positive",
+  "domain": "bug-fix",
+  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"},
+  "expected_behavior": [
+    "Strips a degraded [200~ opening marker that sits right after a typed word when its [201~ closing marker follows.",
+    "Keeps literal [200~ and [201~ text that is not a leaked paste, so every pinned test in tests/hermes_cli/test_input_sanitize.py and tests/hermes_cli/test_cli_bracketed_paste_sanitizer.py still passes.",
+    "Leaves the pinned tests as they are rather than changing an expectation to fit the fix."
+  ]
+}
