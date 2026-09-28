@@ -82,6 +82,8 @@ class Spec:
         parts = [self.repo, self.commit, tree_digest(self.overlay)]
         if self.review:
             parts.append([hashlib.sha256(self.review["patch"]).hexdigest(), self.review["title"], self.review["branch"]])
+        if self.history:
+            parts.append("history")
         digest = hashlib.sha256(json.dumps(parts).encode()).hexdigest()
         return f"{self.repo}-{self.commit[:12]}-{digest[:12]}"
 
