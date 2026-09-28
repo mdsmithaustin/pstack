@@ -326,12 +326,14 @@ class FakeSbx:
 class WrapPolicyTests(test_workspace.ShopRepo):
     """sandbox.py wrap for a Codex run, with sbx faked."""
 
+    wrap_spec = {}
+
     def wrap(self, fake):
         root = self.harness_workspace("wrapped", "# Poteto mode\n")
         arm = self.base / "arm"
         (arm / "overlay").mkdir(parents=True)
         (arm / "overlay" / "CONTEXT.md").write_bytes(test_workspace.CONTEXT)
-        (arm / "workspace.json").write_text(json.dumps({"repo": "shop", "commit": self.commit, "mirror": str(self.mirror), "tree": fake.tree}))
+        (arm / "workspace.json").write_text(json.dumps({"repo": "shop", "commit": self.commit, "mirror": str(self.mirror), "tree": fake.tree, **self.wrap_spec}))
         environment = {"CANON_WORKSPACE": str(arm), "CANON_HARVEST": str(self.base / "harvest")}
         previous = Path.cwd()
         os.chdir(root)
@@ -342,6 +344,26 @@ class WrapPolicyTests(test_workspace.ShopRepo):
         finally:
             os.chdir(previous)
         return code, root, json.loads((self.base / "harvest" / "0001" / "workspace.json").read_text())
+
+    def test_a_history_case_is_materialized_with_history_and_carries_it_into_the_manifest(self):
+        fake = FakeSbx(workspace.reference_checkout(self.spec)[1])
+        calls = []
+        real = workspace.materialize
+
+        def recording(*args):
+            calls.append(args[-1])
+            return real(*args[:-1], False)
+
+        with mock.patch.object(workspace, "materialize", recording):
+            original = self.wrap_spec
+            self.wrap_spec = {"history": True}
+            try:
+                self.wrap(fake)
+            finally:
+                self.wrap_spec = original
+
+        self.assertEqual(calls, [True])
+        self.assertIs(sandbox.manifest("codex", Path("/w"), {"repo": "shop", "commit": "c", "tree": "t", "history": True}, None)["history"], True)
 
     def test_create_clones_the_checkout_denies_the_run_list_and_mounts_nothing_else(self):
         fake = FakeSbx(workspace.reference_checkout(self.spec)[1])

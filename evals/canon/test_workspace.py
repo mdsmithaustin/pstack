@@ -241,6 +241,14 @@ class OverlayWriteTests(unittest.TestCase):
         self.assertEqual(((self.root / "docs" / "a.md").read_text(), (self.root / "notes" / "b.md").read_text()), ("new\n", "b\n"))
 
 
+class SpecKeyTests(unittest.TestCase):
+    def test_a_history_checkout_gets_its_own_cache_key_and_others_keep_theirs(self):
+        plain = workspace.Spec("hermes", "a" * 40, {})
+
+        self.assertNotEqual(workspace.Spec("hermes", "a" * 40, {}, history=True).key, plain.key)
+        self.assertEqual(plain.key, "hermes-aaaaaaaaaaaa-ec04279dd948")
+
+
 class ParseSpecTests(unittest.TestCase):
     def test_overlay_symlink_to_a_host_file_is_not_read(self):
         directory = tempfile.TemporaryDirectory()
