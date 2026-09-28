@@ -550,14 +550,15 @@ def rule_mounted(rule, mounted, tree):
     """Whether the mounted skill text carries the rule: a pair rule's inserted
     text, or every line some arm adds that the current tree lacks. A pair rule
     whose inserted text the current file already holds, such as a cut, is
-    mounted where its removed text is gone."""
+    mounted where its removed text occurs fewer times than in the current
+    tree, since another skill may hold the same text."""
+    text = b"\n".join(tree.values()).decode(errors="replace")
     if rule.paired:
         change = rule_change(rule, tree)
         inserted, removed = change.inserted.strip(), change.removed.strip()
         if inserted and inserted not in tree[change.target].decode(errors="replace"):
             return inserted in mounted
-        return removed not in mounted
-    text = b"\n".join(tree.values()).decode(errors="replace")
+        return mounted.count(removed) < text.count(removed)
     for _, patch in rule.arm_patches:
         added = [line[1:].strip() for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++")]
         new = [line for line in added if line and line not in text]
