@@ -76,20 +76,19 @@ After every upstream agent change, run `python3 tools/generate-subagents.py`. Fa
 
 Run `python3 -m unittest discover -s tools -p 'test_subagents.py'` with Python 3.12. Failure signal: nonzero exit or zero collected tests. Run `python3 tools/probe-subagent-install.py` for actual pinned project installations with symlinks and copies. Failure signal: nonzero exit; the JSON report identifies the failed case. The probe uses temporary roots and never registers roles into the user's real configuration. Native loader and child-behavior checks require separate live-session evidence.
 
-## Held upstream cuts
+## Single-model upstream cuts
 
-Upstream removes instructions it judges a single lead model no longer needs. The port runs on Codex too, so a cut whose evidence covers only that model waits until the same A/B runs on Codex. The port takes a cut without that check only when the rule survives in the same file, or when upstream's A/B already covered a GPT model.
+Upstream removes instructions it judges a single lead model no longer needs. The port runs on Codex too, so a cut whose evidence covers only that model waits until the port checks it on a GPT lead. The port takes a cut without that check only when the rule survives in the same file or in poteto-mode, or when upstream's A/B already covered a GPT model.
 
-Held from upstream #419 (b0b9c7a), whose A/B ran an Opus 5.5 lead only:
+Upstream #414 (70b2dc8, 15 cuts) and #419 (b0b9c7a) justified their lead-side cuts with Opus 5.5 runs only. The port checked them on 2026-09-27 and took all of them:
 
-- `feature` step 4: "Review every diff yourself." and "You can spawn a subagent even though you are one" with its two named excuses.
-- `bug-fix` step 3: "Review the diff.", and the closing "Investigation fans out `how` + `why`" line.
-- `refactoring` steps 5 and 6: "Review the diff yourself." and the "Own the verification yourself" sentences.
-- `poteto-tdd`: the explain-first opening of the impractical-test paragraph, and the weak-signal bullet.
-- `principle-never-block-on-the-human`: "Reserve questions for genuine ambiguity."
-- `principle-outcome-oriented-execution`: "Always run final verification before declaring done."
-
-The 15 cuts from upstream #414 (70b2dc8) came in with #57 before this rule and rest on the same Opus 5.5 evidence. They get the same Codex check.
+- 14 of #414's cuts, plus #419's poteto-tdd, never-block, and outcome-oriented cuts, keep their rule in the same file or in poteto-mode, so the text settles them.
+- The rest ran through the held-cuts screen in `evals/canon` on gpt-5.6-sol and Sonnet leads, 3 paired runs per arm, graded by hidden tests and the chain census:
+  - The review lines in `feature`, `bug-fix`, and `refactoring`: the lead reviewed the delegate's diff in every run where a delegate wrote code, with the lines and without them.
+  - The nested-spawn reminder: Codex delegated in every run either way, and Sonnet delegated more often without it.
+  - The `how` + `why` fan-out line: Codex fanned out in every run either way, and Sonnet never did either way.
+  - #414's poteto-tdd "Run nearby validation" step: no restored run read poteto-tdd, and a test run wider than one test followed the last edit in 45 of 48 runs.
+  - Hidden tests passed in 16 of 24 runs on the current skills and 19 of 24 with the cuts.
 
 ## What deliberately did not change
 
@@ -106,4 +105,4 @@ Manually:
 1. `git remote add upstream https://github.com/cursor/plugins.git` (sparse-checkout `pstack`).
 2. Diff upstream's `pstack/` against the SHA in `.github/upstream-sha` (originally the import commit).
 3. Reapply the substitution map to the incoming hunks, keep the port additions intact, regenerate and check the role bundle, and bump `.github/upstream-sha`.
-4. Hold any cut that upstream justifies by one model's behavior, and list it under **Held upstream cuts**, unless it meets that section's bar.
+4. Hold any cut that upstream justifies by one model's behavior until it meets the bar in **Single-model upstream cuts**.
