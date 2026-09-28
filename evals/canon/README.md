@@ -1277,6 +1277,12 @@ test. The `github.py`-only patch fails five of the six wrapped cases. With
 omnigent's test group installed, pytest on the host gave the same verdicts
 for the checkout and all three samples.
 
+**Result on `subshell-push`, 2026-09-28.** This ran 4 paired Claude Sonnet runs, current against spawn-step, and 2 Codex gpt-5.6-sol runs on `current`, each with a 2700 s cap.
+
+- **Claude passed 8 of 8, in both arms.** No run delegated investigation or code, including the spawn-step arm. Every run fixed the shared parser, `_shell.py`, rather than `github.py`. 4 of the 8 found e6b1c83a (#7999) and its revert with their own `git log` or `git blame`, inline. The other 4 went straight to stripping grouping tokens and extracting `<(…)` bodies, so none took the quote-aware splitter.
+- **Codex failed 2 of 2.** One run left the brace-group and process-substitution pushes open. The other denied a wrapped push to the allowed repo and branch. One of the two delegated investigation.
+- **Reading.** On a multi-module bug with its reason in history, a Claude lead that investigates inline did not lose correctness. The correct fix here is also a natural one, so history helped but was not required. The spawn step is not proposed.
+
 ## Reading the result
 
 Read the rule line first, then the case lines. A near-miss case that never ran
