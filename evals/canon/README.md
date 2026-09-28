@@ -651,8 +651,10 @@ run uses 0.157.0. The kit image alone carried Codex 0.149.1 on 2026-09-25,
 and the model catalog and tool list below were observed on that kit-only
 version. Its catalog lists gpt-5.6-sol, terra, and luna, but not gpt-6-sol,
 the host screen's default, so pass `--model` for Codex.
-Set `CANON_SBX_STANDIN=evals/canon/offline/sbx-agent` to run the same command
-at no model cost.
+Set `CANON_SBX_STANDIN="$PWD/evals/canon/offline/sbx-agent"` to run the same
+command at no model cost. The path must be absolute, because the wrapper runs
+it from the harness workspace. A relative one makes every run exit 97 with
+"sbx-agent plan returned non-zero exit status 2".
 
 Each run goes through `sandbox.py wrap`, which does this:
 
@@ -1123,6 +1125,104 @@ for rule in restore-tdd-nearby-validation cut-bug-fix-review cut-feature-review 
 done
 python3 evals/canon/chain.py --markdown /private/tmp/canon-cuts/*
 ```
+
+## Spawn-step screen
+
+This screen asks whether a Bug fix step 2 that spawns investigators before
+the lead reads source changes what the lead does and what it ships. The
+`spawn-step` arm tells the lead to spawn the `how` skill's explainer over the
+affected subsystem and a **why** skill investigator over its regression
+history, in one message, and to reproduce while they run. Every rule reads
+`skills/` at 4fe21347.
+
+| arm rule | arms | cases from | case | repo | history |
+|---|---|---|---|---|---|
+| `spawn-step-paste` | current, spawn-step | `nearby-validation` | `paste-markers` | hermes | no |
+| `spawn-step-history` | current, spawn-step | `bug-fix-spawn-step` | `zsh-first-tab` | hermes | yes |
+
+The base rule `bug-fix-spawn-step` holds the zsh case and its oracle, and its
+`rule.patch` is the same edit as the arm patch. Run the arm rules.
+
+Eval mirrors are depth 1, so only a case with `"history": true` shows the
+agent any git history. `paste-markers` is not one, so its checkout gives a
+`why` investigator one commit and no history to read. There, a spawn step can
+change what the lead reads first but cannot hand it a regression's story.
+`zsh-first-tab` is the case where history holds the answer.
+
+- **zsh-first-tab.** A user saved `hermes completion zsh` as `_hermes` on
+  their fpath, and the first `hermes <TAB>` in every new shell completes
+  nothing. compinit autoloads `_hermes` from that file, so the first TAB runs
+  the file as the function's body. The file ends with `compdef _hermes
+  hermes`, which only registers the function the body just defined. The
+  obvious fix ends the file with `_hermes "$@"`, as other completion files do.
+  That breaks the documented install, `eval "$(hermes completion zsh)"`,
+  which then runs `_arguments` outside a completion and never calls
+  `compdef`. The script's header comment names the eval install. Only git
+  history says the bare call was tried and failed. a686dbdd26 shipped
+  `_hermes "$@"`, 8c4bec6155 "fix(cli): repair broken zsh completion
+  generation" swapped it for `compdef` with a test, 6d30b4a7e3 added
+  `test_zsh_eval_style_source_registers_after_compinit`, and 6b81590c55's
+  suite-wide prune removed the zsh tests. The pinned
+  `tests/hermes_cli/test_completion.py` has none.
+
+The oracle runs the pinned `tests/hermes_cli/test_completion.py` and four
+held checks against the completion module the diff leaves. The grader image
+has no zsh, so the held checks read the generated script's structure. The
+script's lines outside any function body count as its top level, and a line
+counts as guarded when an enclosing `if` or `case`, or the line itself,
+names `funcstack`, `zsh_eval_context` or `ZSH_EVAL_CONTEXT`, `compstate`, or
+`$0`. The checks are:
+
+- line 1 is `#compdef hermes`
+- a top-level `compdef _hermes hermes` exists
+- a top-level call to `_hermes` exists
+- no top-level call to `_hermes` is unguarded
+
+A structural pass is not a zsh run. The checks cannot tell which branch a
+guard takes, so an inverted guard passes and breaks both installs. They fail
+a working guard written with another test, such as `[[ ${(%):-%N} == _hermes
+]]`, and miss a fix in `hermes_cli/main.py` that post-processes the script. Brace counting
+ignores only single-quoted text, so a function written on one line, or a
+brace inside double quotes, can hide or expose a line.
+`RealZshCalibrationTests` in the rule's `test_oracle.py` runs when `zsh` is
+on `PATH`. For ten endings of the script, it checks the structural grade
+and what a fresh `zsh -f -i` does on the first TAB from an fpath file and
+after `eval`, and whether `eval` prints an error. On zsh 5.9 the grade passed
+exactly the endings that worked in both installs with no error, except two. The inverted
+guard passed and works in neither. The `${(%):-%N}` guard failed and works in
+both. Each run takes about 30 seconds.
+
+The case needs the history mirror, fetched once:
+
+```sh
+python3 evals/canon/workspace.py fetch hermes 130b8f2c5dbca93a81aa396dd2ba44420d78f6f0 --history
+```
+
+On 2026-09-28 the fetch took 29 minutes over the network. The mirror holds
+41,953 commits and 382,628 objects in one 867 MB pack. A fetch killed partway
+leaves a `tmp_pack_*` file in the mirror's `objects/pack/`, and the next
+`fetch` starts over; delete the stale temp pack by hand. On an Apple silicon
+Mac, a history checkout took 2.2 s, as a depth-1 one does. Staging it for a
+sandbox took 2.9 s more to repack, since the clone carries the 846 MB of
+history, and a plain clone of the staged copy held all 41,953 commits. In
+sandboxed stand-in runs of `spawn-step-history`, each arm took 4.9 to 5.1 s
+to check out and repack, 4.2 to 4.8 s to create, 4.0 to 4.7 s for setup,
+and 3.0 to 3.6 s to harvest, for both agents.
+
+```sh
+for rule in spawn-step-paste spawn-step-history; do
+  python3 evals/canon/screen.py run --runner sbx --agent claude --model sonnet --entry poteto-mode --runs 4 \
+    --out "/private/tmp/canon-spawn/claude-$rule-$(date +%m%d%H%M)" "$rule"
+  python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol --entry poteto-mode --runs 2 \
+    --timeout 2700 --out "/private/tmp/canon-spawn/codex-$rule-$(date +%m%d%H%M)" "$rule"
+done
+python3 evals/canon/chain.py --markdown /private/tmp/canon-spawn/*
+```
+
+Read `spawn-step vs current` per case, then the chain stages "delegated
+investigation", "parallel investigation spawns", and "investigation before
+first edit". A `SEPARATES` on `zsh-first-tab` with no change in those stages
+says the arm helped some other way.
 
 ## Reading the result
 
