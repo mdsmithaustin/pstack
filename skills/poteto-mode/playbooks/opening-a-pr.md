@@ -20,7 +20,17 @@ Use these sections in order. Drop a section when it has nothing to say.
 - `## Blast Radius`. In one to three sentences, name who or what the change touches and why the change is safe or risky. State the continuing cost if main stays red without the fix.
 - `## Verification`. Name each real run path and its outcome. For a performance change, report one primary number with its unit in `before → after` form. Link the arena or swarm directory for the remaining evidence. Do not include sample-size methodology, swarm recitals, or metric tables.
 
-After these sections, attach videos or screenshots when they prove a claim. Do not paste full SHAs, swarm or arena lane recitals, lever-correction essays, file-by-file checklists, or "CLEAN" verdicts. Put these details in a linked artifact. Do not use `## Summary` or `## Test plan` boilerplate. A commit body does not restate its subject.
+After these sections, attach videos or screenshots when they prove a claim, and follow any attachment rule the repo's `AGENTS.md` or PR template sets, such as a Demo section. Do not paste full SHAs, swarm or arena lane recitals, lever-correction essays, file-by-file checklists, or "CLEAN" verdicts. Put these details in a linked artifact. Do not use `## Summary` or `## Test plan` boilerplate. A commit body does not restate its subject.
+
+
+**Attachments.** Upload through the forge, not a browser. Pass `--attach <path>` to `gh pr create`, `gh pr edit`, or `gh pr comment`, once per file, with alt text after `#` (`--attach './login.png#The login error'`). A body that references the local path, such as `![alt](./login.png)`, gets that reference rewritten to the upload. `--attach` needs gh 2.99.0 or later and push access. When `gh pr edit --help` does not list it, upload each file through the API and embed the `url` it returns:
+
+```sh
+gh api --method POST "https://uploads.github.com/user-attachments/assets?name=login.png&content_type=image/png&repository_id=$(gh api repos/OWNER/REPO --jq .id)" \
+  -H "Content-Type: image/png" --input login.png
+```
+
+That endpoint is undocumented, so check its result. After posting, read the body back with `gh pr view <number> --json body` and request each `https://github.com/user-attachments/assets/` URL with `curl -s -o /dev/null -w '%{http_code}' -L -H "Authorization: Bearer $(gh auth token)" <url>`. It must return `200`. A signed-out request can fail on a working upload, so it proves nothing. Report an upload blocker only after both routes fail, and quote their errors.
 
 **Forge.** Resolve the forge before the first PR operation and keep that choice for create, edit, view, watch, and merge. GitHub CLI (`gh`) is the default. If `command -v origin` succeeds and Origin can resolve the repository, prefer `origin pr ...`. If Origin is absent or cannot resolve the repository, stay on `gh` and record the fallback. Do not require Graphite (`gt`).
 
