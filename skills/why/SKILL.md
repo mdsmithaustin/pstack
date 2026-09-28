@@ -9,7 +9,7 @@ Investigate the motivation and intent behind code.
 
 Companion to the `how` skill. `how` answers what the code does and how it works. `why` answers what forces led to its shape.
 
-Each spawn below names a role line in the pstack models config and a default. Set `model` to that line's value, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), or to the default if the config or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the spawn mechanism rejects a value, use the default and say so. If it rejects the default, use the closest valid model of the same family from its error message.
+Each spawn below names a role line in the pstack models config and a default. Set `model` to that line's value, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), or to the default if the config or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the spawn mechanism rejects a value, handle it per the **pstack-harness** skill.
 
 ## Operating Posture
 
