@@ -1234,6 +1234,23 @@ def parallel_investigation(trace, keyed, ordered):
     return {"investigation_spawns": len(looking), "max_in_flight": most, "parallel": parallel, "unordered": unordered}
 
 
+def investigation_before_first_edit(trace, keyed, ordered):
+    """Whether the lead's first investigation spawn (investigates) among keyed
+    came before both its own first workspace edit and its first code-writing
+    spawn, either absent counting as later. before is False when there is no
+    investigation spawn, and None when one of the three events has no lead
+    order (lead_ordered)."""
+    first = lambda events: min(events, key=order, default=None)
+    looking = first([spawn.event for spawn in keyed.values() if investigates(spawn)])
+    edit = first([event for event in trace.events if event.actor == "main" and event.kind == "edit"])
+    code = first([spawn.event for spawn in keyed.values() if spawn.code_writing])
+    rivals = [event for event in (edit, code) if event]
+    before = (False if looking is None else None if not all(map(ordered, [looking, *rivals]))
+              else all(order(looking) < order(event) for event in rivals))
+    return {"first_investigation": looking and looking.index, "first_lead_edit": edit and edit.index,
+            "first_code_spawn": code and code.index, "before": before}
+
+
 def stages(trace, *, case, owner, injected, playbook_texts, principles, workspace, skill_names=()):
     """Every chain stage of one run, from its events. skill_names are the
     mounted skills a playbook step may point at."""
@@ -1349,6 +1366,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         "lead_reviewed_delegate": lead_reviewed_delegate(trace, keyed, ordered),
         "parallel_investigation": investigation,
         "delegated_investigation": investigation["investigation_spawns"] > 0,
+        "investigation_before_first_edit": investigation_before_first_edit(trace, keyed, ordered),
         "full_suite_run": full_suite_run(trace, ordered),
         "delegate_census": [
             {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona, "prescribed": spawn.prescribed}
@@ -1620,6 +1638,7 @@ STAGES = {
     "lead inspected code-writing delegate's work (all)": lambda row: row["lead_reviewed_delegate"]["all"],
     "delegated investigation": lambda row: row["delegated_investigation"],
     "parallel investigation spawns": lambda row: row["parallel_investigation"]["parallel"] if row["delegated_investigation"] else None,
+    "investigation before first edit": lambda row: row["investigation_before_first_edit"]["before"],
     "wide test run after last edit": lambda row: row["full_suite_run"]["wide"],
 }
 FRACTION_STAGES = {"step pointers preserved (fraction)"}

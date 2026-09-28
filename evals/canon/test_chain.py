@@ -612,6 +612,10 @@ class ClaudeDelegateFlowTests(unittest.TestCase):
     def test_the_second_background_explorer_was_spawned_before_the_first_returned(self):
         self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 2, "parallel": True, "unordered": 0})
 
+    def test_the_explorers_were_spawned_before_the_first_builder(self):
+        self.assertEqual(self.row["investigation_before_first_edit"],
+                         {"first_investigation": 2, "first_lead_edit": None, "first_code_spawn": 8, "before": True})
+
 
 class ClaudeBackgroundInspectionTests(unittest.TestCase):
     """A trimmed real Claude Code sandbox run of paste-markers. The lead cds
@@ -639,6 +643,10 @@ class ClaudeBackgroundInspectionTests(unittest.TestCase):
 
     def test_reads_after_both_notifications_inspect_both_delegates(self):
         self.assertEqual(self.row["lead_reviewed_delegate"], {"code_delegates": 2, "reviewed": 2, "all": True, "unordered": 0})
+
+    def test_a_run_with_only_builders_did_not_investigate_first(self):
+        self.assertEqual(self.row["investigation_before_first_edit"],
+                         {"first_investigation": None, "first_lead_edit": None, "first_code_spawn": 2, "before": False})
 
 
 class CodexDelegateFlowTests(unittest.TestCase):
@@ -673,6 +681,10 @@ class CodexDelegateFlowTests(unittest.TestCase):
     def test_two_explorers_awaited_in_one_wait_ran_in_parallel(self):
         self.assertEqual(self.row["parallel_investigation"], {"investigation_spawns": 2, "max_in_flight": 2, "parallel": True, "unordered": 0})
 
+    def test_the_explorers_were_spawned_before_the_builder(self):
+        self.assertEqual(self.row["investigation_before_first_edit"],
+                         {"first_investigation": 2, "first_lead_edit": None, "first_code_spawn": 5, "before": True})
+
     def test_without_a_wait_the_child_task_complete_is_its_return(self):
         with tempfile.TemporaryDirectory() as directory:
             trace_path = make_run(directory, "codex", "sbx-codex-parallel")
@@ -689,6 +701,10 @@ class CodexDelegateFlowTests(unittest.TestCase):
             {"code_delegates": 1, "reviewed": 0, "all": None, "unordered": 1},
             {"investigation_spawns": 1, "max_in_flight": 0, "parallel": False, "unordered": 1},
         ))
+
+    def test_an_investigation_with_no_lead_order_is_not_placed_before_the_first_edit(self):
+        self.assertEqual(analyze("sbx-codex-delegates", "codex")["investigation_before_first_edit"],
+                         {"first_investigation": 12, "first_lead_edit": None, "first_code_spawn": 13, "before": None})
 
     def test_no_code_writing_delegate_is_not_measured(self):
         self.assertEqual(analyze("sbx-codex", "codex")["lead_reviewed_delegate"], {"code_delegates": 0, "reviewed": 0, "all": None, "unordered": 0})
@@ -736,13 +752,14 @@ class DelegateFlowMarkdownTests(unittest.TestCase):
     def test_each_stage_has_a_rate_line_per_agent(self):
         rows = [analyze("sbx-claude-delegates", "claude"), analyze("sbx-codex-parallel", "codex"), analyze("sbx-codex-delegates", "codex")]
         names = ("delegate wrote code", "lead inspected code-writing delegate's work (all)", "delegated investigation", "parallel investigation spawns",
-                 "wide test run after last edit")
+                 "investigation before first edit", "wide test run after last edit")
 
         self.assertEqual([line for line in chain.markdown(rows).splitlines()[:len(chain.STAGES) + 3] if line.split(" | ")[0][2:] in names], [
             "| delegate wrote code | 1/1 | 2/2 |",
             "| lead inspected code-writing delegate's work (all) | 0/1 | 1/1 |",
             "| delegated investigation | 1/1 | 2/2 |",
             "| parallel investigation spawns | 1/1 | 1/2 |",
+            "| investigation before first edit | 1/1 | 1/1 |",
             "| wide test run after last edit | 0/1 | 1/1 |",
         ])
 
@@ -822,6 +839,27 @@ class InvestigationSpawnTests(unittest.TestCase):
             ("explorer", "/root/how_custom_lint"), ("Explore", None), ("explorer", "/root/scan_callers"),
             ("explorer", "/root/architect_judge"), ("general-purpose", None), ("poteto-agent", "/root/design_a"),
         ), ({"investigation_spawns": 3, "max_in_flight": 3, "parallel": True, "unordered": 0}, True))
+
+
+class InvestigationBeforeFirstEditTests(unittest.TestCase):
+    """One explorer spawned at index 3, after a lead edit or a code-writing
+    spawn at index 2, or with nothing before it."""
+
+    def stage(self, before):
+        explore = chain.Event(3, "main", "spawn")
+        spawns = {"x": chain.Spawn(explore, role="Explore")}
+        if before == "spawn":
+            spawns["b"] = chain.Spawn(chain.Event(2, "main", "spawn"), role="poteto-agent", code_writing=True)
+        events = sorted([spawn.event for spawn in spawns.values()] + [chain.Event(2 if before == "edit" else 4, "main", "edit", "/w/app/src/tree.py")],
+                        key=chain.order)
+        return run_stages(chain.Trace(events=events, spawns=spawns))["investigation_before_first_edit"]
+
+    def test_a_lead_edit_or_code_spawn_before_the_first_explorer_is_not_investigation_first(self):
+        self.assertEqual((self.stage("edit"), self.stage("spawn"), self.stage(None)), (
+            {"first_investigation": 3, "first_lead_edit": 2, "first_code_spawn": None, "before": False},
+            {"first_investigation": 3, "first_lead_edit": 4, "first_code_spawn": 2, "before": False},
+            {"first_investigation": 3, "first_lead_edit": 4, "first_code_spawn": None, "before": True},
+        ))
 
 
 class TestCommandTests(unittest.TestCase):
