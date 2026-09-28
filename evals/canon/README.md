@@ -978,7 +978,11 @@ in the checkout. A relative shell write path joins the `cd` before it in the
 same command, so `cd /tmp && cat > sanity.mjs` writes `/tmp/sanity.mjs`. A
 write to an unexpanded variable or substitution (`"$tmpclean"`,
 `"$(dirname "$scratch")"`) or a `~` path is not an edit. Agents aim those at
-scratch files outside the checkout.
+scratch files outside the checkout. A `cd` to a variable or substitution, or
+any `cd` inside a subshell, leaves later relative writes unjoined, so they
+still count as edits. A `cd` in one tool call does not carry into the next,
+and `cd ..` is not resolved, so a relative write after either counts as an
+edit.
 
 **Lead inspection.** `lead_reviewed_delegate` gives `code_delegates`,
 `reviewed`, `all`, and `unordered`. A code-writing delegate counts as

@@ -375,10 +375,13 @@ def shell_effects(command, tree):
     the command's own cd (write_path). Search commands (rg, grep, find, ls,
     wc) read nothing."""
     reads, targets, cwd = [], [], ""
+    # split_shell drops subshell parentheses, so a cd inside one would leak
+    # into the commands after it.
+    subshell_cd = bool(re.search(r"\(\s*cd\b", command))
     for stages in split_shell(command):
         first = stages[0]
         if first[0] == "cd" and len(first) > 1:
-            cwd = first[1]
+            cwd = "" if subshell_cd or re.search(r"[$`]", first[1]) else first[1]
             continue
         trimmed_later = any(stage[0] in TRIM_VERBS or (stage[0] == "sed" and "-n" in stage) for stage in stages[1:])
         for tokens in stages:
