@@ -958,10 +958,18 @@ Each run goes through `sandbox.py wrap`, which does this:
 
 The harness takes exactly one terminal `result` event from a Claude stream.
 A poteto-mode lead emits one each time it ends a turn while a background
-delegate runs, and one more at the end. So for Claude the wrapper reads the
-agent's stdout line by line, forwards every other line in order, and writes
-the last `result` line last, after any task notification that followed it. It writes the whole stream to `raw-stream.jsonl`
-in the harvest dir. Codex's stream passes through unchanged.
+delegate runs, and one more at the end. Task notifications and an
+interrupted delegate's events can still follow that last one. So for Claude
+the wrapper reads the agent's stdout line by line, drops every `result` line
+but the last, forwards the rest in order, and writes the last `result` after
+them. It writes the whole stream to `raw-stream.jsonl` in the harvest dir.
+Codex's stream passes through unchanged. A run recorded before the wrapper
+moved the last `result` to the end, with events after it, is INVALID in
+`grade.json`. regrade
+grades it from its diff and marks it `graded_from_diff`. Its `events.json`,
+which exposure reads, is intact, so the stored trace is left as it is.
+`last_result_only` over its `raw-stream.jsonl` gives the stream the harness
+would now accept.
 
 The harvest dir of a run holds `workspace.diff`, `workspace.json`,
 `network-log.json`, `raw-stream.jsonl` for Claude, and
@@ -1576,8 +1584,16 @@ checkout's copy of the file and never to the agent's, so an agent cannot edit
 them and pytest keeps the appended definition of a name. The merged test files
 also hold tests for later work on main, so only the tests the PR added or
 changed are copied. Where a PR test pins a choice the prompt does not state (a
-private constant, a threshold, a Windows host), the case runs a port without
-it and says so in `oracle.py`. A static check reads only the lines the diff
+private constant, a threshold, a Windows host, the shape of a `known_issues`
+entry, the function that skips a doomed Windows build), the case runs a port
+without it and says so in `oracle.py`. `hermes-known-issues` builds every
+fixture from the `known_issues` the agent's own `plugin-catalog/hindsight.yaml`
+declares, and C9 counts each parsed issue's text in the CLI output.
+`hermes-desktop-skip` checks the Windows skip through the update tail,
+`source_build.build_update_products`. `omnigent-task-notify` K1 parses a
+notification with the bridge, POSTs it as the forwarder does, and reads
+`is_meta` from the stored item, so the flag may be set in the bridge or the
+route. A static check reads only the lines the diff
 adds, and is used only where the ask is about the agent's own tests. An ask
 that is taste is not graded, and its case's `expected_behavior` ends with a
 "Not graded" line that names it.
@@ -1593,6 +1609,11 @@ changes. `samples/bad.diff` is the pre-review head. `test_oracle.py` asserts the
 exact failures of both and skips a case whose mirror lacks its commit or whose
 image this machine has not built. One sample grades in 4 to 6 seconds, and 15
 for `hermes-known-issues`, which runs the agent's own tests twice more.
+
+regrade grades with the oracle each arm copied at build time. To regrade a
+finished screen with a fixed oracle, copy the out dir, copy the rule's
+`oracle.py` over `arms/<rule>/<case>/<arm>/rules/<rule>/oracle.py` in the copy,
+and run `screen.py regrade --out` on the copy.
 
 ## Reading the result
 
