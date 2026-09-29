@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Repro for the Claude Code transcript slug bug in worktree-audit.sh.
-
-Claude Code names a project's transcript directory by replacing every
-non-alphanumeric character of the resolved cwd with "-". The script's slug
-line only replaces "/", so a repo path containing "." or "_" (like
-my_repo.v2) looks in the wrong directory and never finds a recent chat.
-"""
 from __future__ import annotations
 
 import json
@@ -13,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import date
@@ -25,6 +19,7 @@ def _have(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
+@unittest.skipUnless(sys.platform == "darwin", "worktree-audit.sh uses BSD stat and date")
 @unittest.skipUnless(_have("rg"), "worktree-audit.sh shells out to rg to read transcripts")
 @unittest.skipUnless(_have("jq"), "worktree-audit.sh shells out to jq to read PR state")
 class WorktreeAuditTranscriptSlugTest(unittest.TestCase):
