@@ -1,0 +1,244 @@
+diff --git a/apps/shared/src/gateway-contract.generated.ts b/apps/shared/src/gateway-contract.generated.ts
+index a9114276..e6bbc56f 100644
+--- a/apps/shared/src/gateway-contract.generated.ts
++++ b/apps/shared/src/gateway-contract.generated.ts
+@@ -4047,6 +4047,7 @@ export interface PluginsManageResult {
+   warnings?: string[] | null
+   missing_env?: string[] | null
+   python_dependencies?: string[] | null
++  known_issues?: string[] | null
+   after_install_path?: string | null
+   enabled?: boolean | null
+   sha?: string | null
+diff --git a/apps/shared/src/gateway-contract.openrpc.json b/apps/shared/src/gateway-contract.openrpc.json
+index f922bcb5..837b833c 100644
+--- a/apps/shared/src/gateway-contract.openrpc.json
++++ b/apps/shared/src/gateway-contract.openrpc.json
+@@ -21601,6 +21601,21 @@
+             "default": null,
+             "title": "Python Dependencies"
+           },
++          "known_issues": {
++            "anyOf": [
++              {
++                "items": {
++                  "type": "string"
++                },
++                "type": "array"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "default": null,
++            "title": "Known Issues"
++          },
+           "after_install_path": {
+             "anyOf": [
+               {
+diff --git a/hermes_cli/plugin_catalog.py b/hermes_cli/plugin_catalog.py
+index 0f81d1b7..612f8d77 100644
+--- a/hermes_cli/plugin_catalog.py
++++ b/hermes_cli/plugin_catalog.py
+@@ -91,6 +91,7 @@ class PluginCatalogEntry:
+     title: str = ""              # human name ("NVIDIA App"); empty = derived from ``name``
+     onboarding: bool = False     # curated: offered on the desktop onboarding card
+     capabilities: CatalogCapabilities = field(default_factory=CatalogCapabilities)
++    known_issues: List[str] = field(default_factory=list)  # #124058: informational; drivers come from plugin-catalog/*.yaml
+ 
+     @property
+     def install_identifier(self) -> str:
+@@ -110,6 +111,7 @@ class PluginCatalogEntry:
+                 "provides_tools": list(caps.provides_tools), "provides_hooks": list(caps.provides_hooks),
+                 "provides_middleware": list(caps.provides_middleware), "requires_env": list(caps.requires_env),
+             },
++            "known_issues": list(self.known_issues),
+         }
+ 
+ 
+@@ -167,6 +169,7 @@ def entry_from_mapping(data: Any, label: str) -> Optional[PluginCatalogEntry]:
+         version=version, image=image, screenshots=screenshots, readme=data.get("readme") is not False,
+         platforms=_str_list(data.get("platforms")),
+         title=str(data.get("title") or "").strip(), onboarding=data.get("onboarding") is True,
++        known_issues=_str_list(data.get("known_issues")),
+         capabilities=CatalogCapabilities(
+             provides_tools=_str_list(caps.get("provides_tools")), provides_hooks=_str_list(caps.get("provides_hooks")),
+             provides_middleware=_str_list(caps.get("provides_middleware")),
+@@ -482,4 +485,9 @@ def entry_capability_summary(entry: PluginCatalogEntry) -> str:
+         bits.append(f"Platforms: {', '.join(entry.platforms)}.")
+     if entry.requires_hermes:
+         bits.append(f"Requires Hermes {entry.requires_hermes}.")
++    if entry.known_issues:
++        # #124058: informational — the catalog documents traps (unsupported
++        # install-method/mode combinations); surface them at install prompts
++        # without blocking the install.
++        bits.append(f"Known issues: {'; '.join(entry.known_issues)}.")
+     return " ".join(bits)
+diff --git a/hermes_cli/plugins_cmd_install.py b/hermes_cli/plugins_cmd_install.py
+index 8d69e1eb..f4d54547 100644
+--- a/hermes_cli/plugins_cmd_install.py
++++ b/hermes_cli/plugins_cmd_install.py
+@@ -269,6 +269,14 @@ def _refuse_unavailable_portable_plugin(plugin_name: str, tree: Path) -> None:
+         )
+ 
+ 
++def _known_issue_warnings(entry) -> list[str]:
++    """Catalog ``known_issues`` are informational (#124058): surface them as warnings, never a gate.
++
++    The guard for the traps they describe belongs at the mode-selection seam (#122341 / #123771).
++    """
++    return [f"Known issue: {issue}" for issue in entry.known_issues]
++
++
+ def _install_plugin_core(
+     identifier: str,
+     *,
+@@ -539,6 +547,7 @@ def dashboard_install_plugin(
+         entry = catalog.get_live_catalog_entry(catalog_name)
+         if entry is None:
+             return {"ok": False, "error": f"'{catalog_name}' is not in the Hermes plugin catalog."}
++        warnings.extend(_known_issue_warnings(entry))
+         identifier = entry.install_identifier
+     else:
+         warnings.append("Custom (unreviewed) source — not from the Hermes catalog.")
+@@ -593,4 +602,5 @@ def dashboard_install_plugin(
+         "python_dependencies": deps,
+         "missing_env": [s["name"] for s in _pc()._missing_env_specs(installed_manifest)],
+         "after_install_path": str(ap) if ap.exists() else None, "enabled": enable, **activated,
++        "known_issues": list(entry.known_issues) if entry else [],
+     }
+diff --git a/plugin-catalog/hindsight.yaml b/plugin-catalog/hindsight.yaml
+index 66e4a836..aa55eba0 100644
+--- a/plugin-catalog/hindsight.yaml
++++ b/plugin-catalog/hindsight.yaml
+@@ -13,6 +13,8 @@ maintainer: vectorize-io
+ tier: community
+ category: memory
+ requires_hermes: ">=0.21.4"
++known_issues:
++  - "Local embedded mode is not supported on PM-managed Hermes with this plugin pin — it still calls the retired lazy-install path for `hindsight-all`, which loops update takeover on every conversation. On managed installs prefer `local_external` or cloud mode."
+ docs_url: https://hindsight.vectorize.io/sdks/integrations/hermes
+ image: https://raw.githubusercontent.com/vectorize-io/hindsight/176f8c2de1369f569c489b831d143b78128b5535/hindsight-integrations/hermes/docs/banner.png
+ capabilities:
+diff --git a/scripts/validate_plugin_catalog.py b/scripts/validate_plugin_catalog.py
+index d1bdbda5..c5da7f11 100755
+--- a/scripts/validate_plugin_catalog.py
++++ b/scripts/validate_plugin_catalog.py
+@@ -72,6 +72,7 @@ KNOWN_KEYS = {
+     "capabilities",
+     "title",
+     "onboarding",
++    "known_issues",
+ }
+ # Cosmetic labels attached to the pin. ``version`` is never parsed; ``image`` and ``screenshots``
+ # may only point at GitHub so the Desktop catalog browser and the docs site never fetch from
+diff --git a/tests/hermes_cli/test_plugin_catalog_known_issues.py b/tests/hermes_cli/test_plugin_catalog_known_issues.py
+new file mode 100644
+index 00000000..4aa4fd76
+--- /dev/null
++++ b/tests/hermes_cli/test_plugin_catalog_known_issues.py
+@@ -0,0 +1,91 @@
++"""#124058: catalog ``known_issues`` is an informational field.
++
++The catalog (``plugin-catalog/hindsight.yaml``) documents in prose that
++``local_embedded`` mode is unsupported on PM-managed Hermes with the current
++pin (it calls the retired lazy-install path for ``hindsight-all`` and loops
++update takeovers). The field is machine-readable but informational: it must
++parse and round-trip, and the install summaries must surface the text — it
++must never block an install (the guard belongs at the mode-selection seam;
++see teknium1's review on #124037 and #122341 / #123771).
++"""
++
++from pathlib import Path
++
++from hermes_cli.plugin_catalog import (
++    PluginCatalogEntry,
++    entry_capability_summary,
++    entry_from_mapping,
++    load_catalog,
++)
++
++
++def _entry(**overrides):
++    base = dict(
++        name="hindsight",
++        repo="https://github.com/vectorize-io/hindsight",
++        sha="176f8c2de1369f569c489b831d143b78128b5535",
++        tier="community",
++        category="memory",
++    )
++    base.update(overrides)
++    return entry_from_mapping(base, "test-entry")
++
++
++def test_known_issues_parse_round_trip(tmp_path):
++    """known_issues parses from dict and YAML into the entry and to_dict rewrites it identically."""
++    entry = _entry(known_issues=["First issue.", "Second issue."])
++    assert isinstance(entry, PluginCatalogEntry)
++    assert entry.known_issues == ["First issue.", "Second issue."]
++    assert entry.to_dict()["known_issues"] == ["First issue.", "Second issue."]
++
++    # YAML → entry → to_dict: structural round-trip on a scratch catalog, so
++    # the test never pins the prose of the live hindsight entry.
++    catalog_dir = tmp_path / "catalog"
++    catalog_dir.mkdir()
++    (catalog_dir / "hindsight.yaml").write_text(
++        "name: hindsight\n"
++        "repo: https://github.com/vectorize-io/hindsight\n"
++        "sha: 176f8c2de1369f569c489b831d143b78128b5535\n"
++        "description: test entry\n"
++        "maintainer: vectorize-io\n"
++        "known_issues:\n"
++        "  - 'Trap one.'\n"
++        "  - 'Trap two.'\n"
++    )
++    loaded = load_catalog(catalog_dir)
++    assert len(loaded) == 1
++    assert loaded[0].known_issues == ["Trap one.", "Trap two."]
++    assert loaded[0].to_dict()["known_issues"] == ["Trap one.", "Trap two."]
++
++    # Missing key defaults to an empty list; to_dict always emits the key.
++    assert _entry().known_issues == []
++    assert _entry().to_dict()["known_issues"] == []
++
++
++def test_install_summary_shows_known_issues(monkeypatch):
++    """The dashboard install result and capability summary surface the text; install still proceeds."""
++    from hermes_cli.plugins_cmd_install import dashboard_install_plugin
++
++    entry = _entry(known_issues=["Local embedded mode is not supported on PM-managed Hermes."])
++    monkeypatch.setattr("hermes_cli.plugins_cmd_catalog.get_live_catalog_entry", lambda _n: entry)
++    monkeypatch.setattr(
++        "hermes_cli.plugins_cmd._resolve_git_url",
++        lambda _i: ("https://github.com/vectorize-io/hindsight.git", None))
++    monkeypatch.setattr("hermes_cli.plugins_cmd_catalog.raise_if_removed", lambda *a: None)
++    monkeypatch.setattr(
++        "hermes_cli.plugins_cmd_catalog.install_catalog_entry",
++        lambda *a, **k: (Path("/tmp/hindsight-target"), {"manifest": 1}, "hindsight"))
++    monkeypatch.setattr("hermes_cli.plugins_cmd._python_dependency_summary", lambda _t, w: None)
++    monkeypatch.setattr("hermes_cli.plugins_cmd._set_plugin_enabled", lambda *a, **k: None)
++    monkeypatch.setattr("hermes_cli.plugins_cmd._missing_env_specs", lambda _m: [])
++    monkeypatch.setattr("hermes_cli.plugins_activation.activate_plugin_now", lambda _n: {})
++
++    result = dashboard_install_plugin("", force=False, enable=False, catalog_name="hindsight")
++    assert result["ok"] is True  # informational — the install is not refused
++    assert result["known_issues"] == ["Local embedded mode is not supported on PM-managed Hermes."]
++    assert any(w.startswith("Known issue:") for w in result["warnings"])
++
++    # The catalog capability summary (shown at install/enable prompts and in the UI) carries the text.
++    summary = entry_capability_summary(entry)
++    assert "Known issues:" in summary
++    assert "Local embedded mode is not supported on PM-managed Hermes." in summary
+diff --git a/tui_gateway/contracts/tools_mcp_plugins.py b/tui_gateway/contracts/tools_mcp_plugins.py
+index 35e26891..37ddf1f1 100644
+--- a/tui_gateway/contracts/tools_mcp_plugins.py
++++ b/tui_gateway/contracts/tools_mcp_plugins.py
+@@ -750,6 +750,8 @@ class PluginsManageResult(Result):
+     missing_env: list[str] | None = None
+     # ``install`` → the manifest's ``python_dependencies`` the installer applied (``[]`` when none).
+     python_dependencies: list[str] | None = None
++    # ``install`` from the catalog → the entry's informational ``known_issues`` (``[]`` when none).
++    known_issues: list[str] | None = None
+     after_install_path: str | None = None
+     enabled: bool | None = None
+     sha: str | None = None

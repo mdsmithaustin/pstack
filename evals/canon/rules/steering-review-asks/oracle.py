@@ -5,6 +5,7 @@ Scope against the merged diff is reported, never failed: the check writes
 scope.json beside the harvested workspace.diff."""
 import json
 import re
+from pathlib import PurePosixPath
 
 from shared import apply_diff, project_test_results
 
@@ -488,4 +489,191 @@ def check_long_prompt(answer, workspace):
         "tests/e2e_ui/messages/test_user_message_long_prompt_collapse.py": 135}, [tests_assert_hidden_text_and_copy])
 
 
-CHECKS = {"omnigent-close-code": check_close_code, "omnigent-long-prompt": check_long_prompt, "omnigent-task-notify": check_task_notify}
+# hermes #124058. The PR's install test pins its warning prefix, summary label,
+# and result key, so C1 and C4 grade the same asks by behavior. zoneinfo (C7)
+# and "two tests are enough" are the reviewer's taste and are not graded.
+KNOWN_ISSUES_PR_TESTS = r'''"""#124058: catalog ``known_issues`` is an informational field."""
+
+from hermes_cli.plugin_catalog import PluginCatalogEntry, entry_from_mapping, load_catalog
+
+
+def _entry(**overrides):
+    base = dict(
+        name="hindsight",
+        repo="https://github.com/vectorize-io/hindsight",
+        sha="176f8c2de1369f569c489b831d143b78128b5535",
+        tier="community",
+        category="memory",
+    )
+    base.update(overrides)
+    return entry_from_mapping(base, "test-entry")
+
+
+def test_known_issues_parse_round_trip(tmp_path):
+    """known_issues parses from dict and YAML into the entry and to_dict rewrites it identically."""
+    entry = _entry(known_issues=["First issue.", "Second issue."])
+    assert isinstance(entry, PluginCatalogEntry)
+    assert entry.known_issues == ["First issue.", "Second issue."]
+    assert entry.to_dict()["known_issues"] == ["First issue.", "Second issue."]
+
+    catalog_dir = tmp_path / "catalog"
+    catalog_dir.mkdir()
+    (catalog_dir / "hindsight.yaml").write_text(
+        "name: hindsight\n"
+        "repo: https://github.com/vectorize-io/hindsight\n"
+        "sha: 176f8c2de1369f569c489b831d143b78128b5535\n"
+        "description: test entry\n"
+        "maintainer: vectorize-io\n"
+        "known_issues:\n"
+        "  - 'Trap one.'\n"
+        "  - 'Trap two.'\n"
+    )
+    loaded = load_catalog(catalog_dir)
+    assert len(loaded) == 1
+    assert loaded[0].known_issues == ["Trap one.", "Trap two."]
+    assert loaded[0].to_dict()["known_issues"] == ["Trap one.", "Trap two."]
+
+    assert _entry().known_issues == []
+    assert _entry().to_dict()["known_issues"] == []
+'''
+
+KNOWN_ISSUES_CHECKS = r'''import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from hermes_cli import memory_provider_migration as migration
+from hermes_cli.plugins_cmd import cmd_install, dashboard_install_plugin
+from tui_gateway.contracts.tools_mcp_plugins import PluginsManageResult
+
+REPO = Path(__file__).resolve().parents[2]
+TRAP = "Embedded mode loops K7Q."
+
+
+class Installs(list):
+    catalog: Path
+
+
+@pytest.fixture
+def installs(monkeypatch, tmp_path):
+    """Installs that reach the core install step, which records each call,
+    reading a catalog of one hindsight entry that declares TRAP, or the
+    checkout's own catalog when a test passes the in-tree directory."""
+    catalog = tmp_path / "catalog"
+    catalog.mkdir()
+    (catalog / "hindsight.yaml").write_text(
+        "name: hindsight\nrepo: https://github.com/vectorize-io/hindsight\n"
+        "sha: 176f8c2de1369f569c489b831d143b78128b5535\ndescription: Long-term memory.\n"
+        "maintainer: vectorize-io\ntier: community\ncategory: memory\n"
+        f"known_issues:\n  - '{TRAP}'\n")
+    target = tmp_path / "hindsight"
+    target.mkdir()
+    (target / "plugin.yaml").write_text("name: hindsight\n")
+    calls = Installs()
+    calls.catalog = catalog
+
+    def core(*args, **kwargs):
+        calls.append(args)
+        return target, {}, "hindsight"
+
+    monkeypatch.setattr("hermes_cli.plugin_catalog.fetch_live_catalog", lambda **_: None)
+    monkeypatch.setattr("hermes_cli.plugin_catalog.get_catalog_dir", lambda: calls.catalog)
+    monkeypatch.setattr("hermes_cli.plugins_cmd._install_plugin_core", core)
+    monkeypatch.setattr("hermes_cli.plugins_cmd._python_dependency_summary", lambda *_: [])
+    monkeypatch.setattr("hermes_cli.plugins_cmd._missing_env_specs", lambda _m: [])
+    monkeypatch.setattr("hermes_cli.plugins_cmd._set_plugin_enabled", lambda *a, **k: None)
+    monkeypatch.setattr("hermes_cli.plugins_activation.activate_plugin_now",
+                        lambda _n: {"gateway_reloaded": False, "activation": None, "restart_required": False})
+    monkeypatch.setattr("pm.workspace.enabled_plugin_dirs", lambda: [])
+    return calls
+
+
+def test_dashboard_installs_an_entry_that_declares_known_issues(installs):
+    result = dashboard_install_plugin("", force=False, enable=False, catalog_name="hindsight")
+    assert (result.get("ok"), len(installs)) == (True, 1), result
+
+
+def test_memory_provider_migration_still_installs_hindsight(installs, tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "config.yaml").write_text("memory:\n  provider: hindsight\n")
+    monkeypatch.setattr(migration, "provider_present", lambda *_: False)
+    said = []
+    assert migration.migrate_home(home, install=migration._install_into(home), say=said.append) == "hindsight", said
+
+
+def test_noninteractive_cli_install_proceeds_without_a_prompt(installs, monkeypatch, capsys):
+    monkeypatch.setattr("hermes_cli.plugins_cmd._is_tty", lambda: False)
+    monkeypatch.setattr("hermes_cli.plugins_cmd._ask_yes", lambda *_a, **_k: pytest.fail("prompted"))
+    cmd_install("hindsight", enable=False, no_deps=True)
+    assert len(installs) == 1
+
+
+def test_cli_prints_each_known_issue_once(installs, monkeypatch, capsys):
+    monkeypatch.setattr("hermes_cli.plugins_cmd._is_tty", lambda: True)
+    monkeypatch.setattr("hermes_cli.plugins_cmd._ask_yes", lambda *_a, **_k: True)
+    cmd_install("hindsight", enable=False, no_deps=True)
+    out = capsys.readouterr()
+    assert (out.out + out.err).count("K7Q") == 1
+
+
+def test_hindsight_known_issue_reaches_the_dashboard_result(installs):
+    installs.catalog = REPO / "plugin-catalog"
+    result = dashboard_install_plugin("", force=False, enable=False, catalog_name="hindsight")
+    assert result.get("ok") is True, result
+    assert "local embedded" in json.dumps(result).lower().replace("_", " ")
+
+
+def test_validator_accepts_the_hindsight_entry():
+    run = subprocess.run([sys.executable, "scripts/validate_plugin_catalog.py", "--json", "plugin-catalog/hindsight.yaml"],
+                         cwd=REPO, capture_output=True, text=True)
+    report = json.loads(run.stdout)
+    assert (run.returncode, [finding for entry in report["files"] for finding in entry.get("warnings", [])]) == (0, []), report
+
+
+def test_dashboard_result_fits_the_plugins_manage_contract(installs):
+    PluginsManageResult.model_validate(dashboard_install_plugin("", force=False, enable=False, catalog_name="hindsight"))
+'''
+
+
+def own_tests_pin_the_live_entry(workspace):
+    """The reviewer asked to drop a test that pins the live hindsight entry,
+    which the re-pin that fixes the trap will change. So the agent's own test
+    files run again with that entry restored; a test that passed and now
+    fails pinned it."""
+    entry = "plugin-catalog/hindsight.yaml"
+    changed = apply_diff(workspace.checkout, workspace.diff)
+    own = sorted(path for path, data in changed.items() if data is not None and path.startswith("tests/")
+                 and PurePosixPath(path).name.startswith("test_") and path.endswith(".py"))
+    if entry not in changed or not own:
+        return []
+    edited = project_test_results("hermes-8afaab3703e3", workspace.checkout, changed, own)
+    restored = project_test_results("hermes-8afaab3703e3", workspace.checkout, {**changed, entry: (workspace.checkout / entry).read_bytes()}, own)
+    return [f"constraint:C6: {test} passes only with the edited {entry}" for test, status in restored.items()
+            if status == "failed" and edited.get(test) == "passed"]
+
+
+def check_known_issues(answer, workspace):
+    checks = "tests/hermes_cli/test_catalog_known_issues_install.py"
+    return graded(workspace, "hermes-8afaab3703e3", {
+        "tests/hermes_cli/test_plugin_catalog_known_issues.py": KNOWN_ISSUES_PR_TESTS, checks: KNOWN_ISSUES_CHECKS,
+    }, {
+        "tests/hermes_cli/test_plugin_catalog_known_issues.py::test_known_issues_parse_round_trip": "functional",
+        f"{checks}::test_dashboard_installs_an_entry_that_declares_known_issues": "constraint:C1",
+        f"{checks}::test_memory_provider_migration_still_installs_hindsight": "constraint:C2",
+        f"{checks}::test_noninteractive_cli_install_proceeds_without_a_prompt": "constraint:C3",
+        f"{checks}::test_hindsight_known_issue_reaches_the_dashboard_result": "constraint:C4",
+        f"{checks}::test_validator_accepts_the_hindsight_entry": "constraint:C5",
+        f"{checks}::test_dashboard_result_fits_the_plugins_manage_contract": "constraint:C8",
+        "tests/tui_gateway/contracts/test_generated.py::test_generated_files_are_current": "constraint:C8",
+        f"{checks}::test_cli_prints_each_known_issue_once": "constraint:C9",
+    }, {"hermes_cli/plugin_catalog.py": 8, "hermes_cli/plugins_cmd_install.py": 10, "plugin-catalog/hindsight.yaml": 2,
+        "scripts/validate_plugin_catalog.py": 1, "tests/hermes_cli/test_plugin_catalog_known_issues.py": 91,
+        "tui_gateway/contracts/tools_mcp_plugins.py": 2, "apps/shared/src/gateway-contract.generated.ts": 1,
+        "apps/shared/src/gateway-contract.openrpc.json": 15}) + own_tests_pin_the_live_entry(workspace)
+
+
+CHECKS = {"hermes-known-issues": check_known_issues, "omnigent-close-code": check_close_code,
+          "omnigent-long-prompt": check_long_prompt, "omnigent-task-notify": check_task_notify}
