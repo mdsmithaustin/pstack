@@ -40,13 +40,21 @@ class Arm(NamedTuple):
     subagent_type: str
     model: str
     expected_effort: str
+    prompt_prefix: str = ""
+
+
+def arm_prompt(arm: Arm, task: str) -> str:
+    if arm.prompt_prefix:
+        return f"{arm.prompt_prefix}\n\n{task}"
+    return task
 
 
 def spawn_case(project: Path, session_effort: str, arms: list[Arm]) -> dict:
     session_id = str(uuid.uuid4())
+    task = "Reply with the single word OK and nothing else."
     instructions = "; ".join(
         f"one with subagent_type {arm.subagent_type!r}, model {arm.model!r}, description '[{arm.tag}] probe', "
-        "prompt 'Reply with the single word OK and nothing else.'"
+        f"prompt {arm_prompt(arm, task)!r}"
         for arm in arms
     )
     prompt = (
@@ -97,18 +105,19 @@ def spawn_case(project: Path, session_effort: str, arms: list[Arm]) -> dict:
     return {"session_id": session_id, "session_effort": session_effort, "observed": observed, "mismatches": mismatches}
 
 
-CASES = [
-    ("dispatch-and-fallback", "high", [
-        Arm("wrapper", "pstack-effort-low", "sonnet", "low"),
-        Arm("control", "general-purpose", "sonnet", "high"),
-    ]),
-    ("downward-override", "max", [
-        Arm("downward", "pstack-effort-high", "sonnet", "high"),
-    ]),
-    ("persona-combination", "high", [
-        Arm("persona", "pstack-effort-xhigh", "sonnet", "xhigh"),
-    ]),
-]
+def build_cases(persona_briefing: str) -> list[tuple[str, str, list[Arm]]]:
+    return [
+        ("dispatch-and-fallback", "high", [
+            Arm("wrapper", "pstack-effort-low", "sonnet", "low"),
+            Arm("control", "general-purpose", "sonnet", "high"),
+        ]),
+        ("downward-override", "max", [
+            Arm("downward", "pstack-effort-high", "sonnet", "high"),
+        ]),
+        ("persona-combination", "high", [
+            Arm("persona", "pstack-effort-xhigh", "sonnet", "xhigh", persona_briefing),
+        ]),
+    ]
 
 
 def main() -> int:
@@ -121,7 +130,11 @@ def main() -> int:
         version = subprocess.run(["claude", "--version"], capture_output=True, text=True, check=True).stdout.strip()
         report["claude_version"] = version
         project = build_project(run_root)
-        for name, session_effort, arms in CASES:
+        persona_briefing = subprocess.run(
+            [sys.executable, "skills/pstack-harness/scripts/subagents.py", "brief", "poteto-agent"],
+            cwd=ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        for name, session_effort, arms in build_cases(persona_briefing):
             try:
                 case = spawn_case(project, session_effort, arms)
             except (OSError, AssertionError, RuntimeError, subprocess.TimeoutExpired) as error:
