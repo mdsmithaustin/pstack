@@ -45,6 +45,19 @@ class ReplayedPullRequest(unittest.TestCase):
             return failures, json.loads((Path(directory) / "scope.json").read_text())
 
 
+class DesktopSkipTests(ReplayedPullRequest):
+    CASE, IMAGE = "hermes-desktop-skip", "hermes-8afaab3703e3"
+
+    def test_pr_head_spares_its_desktop_reopens_it_and_gates_windows_tests_by_host(self):
+        self.assertEqual(self.grade_sample("good"), ([], {"outside_footprint": [], "added": 108, "merged_added": 108}))
+
+    def test_pre_review_fix_claims_no_app_and_patches_the_host_in_tests(self):
+        self.assertEqual(self.grade_sample("bad")[0], [
+            "constraint:C2: tests/hermes_cli/test_desktop_update_tail.py::test_hermes_desktop_reopens_the_app_it_did_not_rebuild failed",
+            "constraint:C3: tests/hermes_cli/test_gui_command.py patches sys.platform on 3 added line(s)",
+        ])
+
+
 class KnownIssuesTests(ReplayedPullRequest):
     CASE, IMAGE = "hermes-known-issues", "hermes-8afaab3703e3"
 

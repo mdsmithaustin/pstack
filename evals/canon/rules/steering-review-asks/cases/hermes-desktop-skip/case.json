@@ -1,0 +1,12 @@
+{
+  "kind": "positive",
+  "domain": "bug-fix",
+  "workspace": {"repo": "hermes", "commit": "d0288be5b3330d2442e3907185b8e9d0958297bb"},
+  "expected_behavior": [
+    "functional: on Windows and POSIX, _stop_desktop_processes_locking_build spares a Desktop ancestor and its helpers at the pack-time call and the swap, and still stops an unrelated Desktop from the same release tree.",
+    "functional: a Windows packaged build under its own Desktop returns without stopping that Desktop, packing, touching its files, or leaving a staging directory, and a POSIX packaged build under its Desktop still packs.",
+    "C2: hermes desktop on the skip path reopens the app it kept, or exits non-zero, and never prints that no launchable app was found.",
+    "C3: added tests never patch sys.platform; Windows-only tests use @pytest.mark.platforms, per AGENTS.md.",
+    "Not graded: naming the in-app Update now route in the skip notice (C1 in the draft), which the reviewer marked non-blocking and which only its wording can show."
+  ]
+}

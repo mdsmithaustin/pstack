@@ -1,0 +1,210 @@
+diff --git a/hermes_cli/main_desktop.py b/hermes_cli/main_desktop.py
+index ed094416..0c5b5dbb 100644
+--- a/hermes_cli/main_desktop.py
++++ b/hermes_cli/main_desktop.py
+@@ -409,6 +409,32 @@ def _electron_dir(project_root: Path) -> Path:
+     return project_root / "node_modules" / "electron"
+ 
+ 
++def _runs_from(proc, release_dir: Path) -> bool:
++    """True when *proc*'s executable lives inside *release_dir* (False when it cannot be read)."""
++    try:
++        return release_dir in Path(proc.exe()).resolve().parents
++    except Exception:
++        return False
++
++
++def _desktop_ancestor_in(desktop_dir: Path) -> Optional[int]:
++    """PID of a Desktop from this build's ``release`` tree that is one of OUR ancestors, else None.
++
++    That Desktop is running this process (its backend's launch-time update tail, or a
++    `hermes update` it spawned). On Windows it holds the exe lock the promotion rename
++    needs, and it cannot be stopped without killing this process first. Never raises."""
++    try:
++        import psutil
++        release_dir = (desktop_dir / "release").resolve()
++        ancestors = list(psutil.Process(os.getpid()).parents())
++    except Exception:
++        return None
++    for parent in ancestors:
++        if _runs_from(parent, release_dir):
++            return int(parent.pid)
++    return None
++
++
+ def _stop_desktop_processes_locking_build(desktop_dir: Path, *, also_posix: bool = False) -> list[int]:
+     """Terminate a running desktop app whose exe lives INSIDE this build's ``release`` tree.
+ 
+@@ -428,13 +454,17 @@ def _stop_desktop_processes_locking_build(desktop_dir: Path, *, also_posix: bool
+         return []
+ 
+     me = os.getpid()
+-    # On POSIX, never stop a Desktop that is one of OUR ancestors. A
+-    # historical Desktop (v2026.7.1 Linux in-app update) runs `hermes update`
+-    # as a child with piped stdout/stderr and owns the post-update rebuild and
+-    # relaunch. Killing it breaks those pipes (EPIPE fails the update) and
+-    # leaves nobody to relaunch. It also outlives the swap safely because it
+-    # relaunches itself afterwards. Windows keeps stopping it: there, the exe
+-    # lock would make the rename fail anyway.
++    # Never stop a Desktop that is one of OUR ancestors, on any platform: this
++    # process lives in its tree. A historical Desktop (v2026.7.1 Linux in-app
++    # update) runs `hermes update` as a child with piped stdout/stderr and owns
++    # the post-update rebuild and relaunch. Killing it breaks those pipes (EPIPE
++    # fails the update) and leaves nobody to relaunch. On Windows the same holds
++    # for the launch-time tail a Desktop's own backend runs
++    # (venv_sync._finish_source_update): stopping that Desktop took the whole
++    # tree down with it before the tail could clear its markers, so every
++    # launch repeated it (#123499). The exe lock that stop was meant to free
++    # cannot be freed by the process that holds it alive; build_prepared_desktop
++    # skips that doomed build instead (_desktop_ancestor_in).
+     #
+     # Spare that Desktop's whole process tree, not just its main process. Its
+     # zygote, renderer, GPU and network-service helpers run the same release
+@@ -443,23 +473,18 @@ def _stop_desktop_processes_locking_build(desktop_dir: Path, *, also_posix: bool
+     # quit, so it outlives the update forever. (That is the v2026.7.1 Linux
+     # in-app update E2E: the receipt succeeds and then the app hangs.)
+     spared: set[int] = set()
+-    if sys.platform != "win32":
+-        try:
+-            ancestors = list(psutil.Process(me).parents())
+-        except Exception:
+-            ancestors = []
+-        for parent in ancestors:
+-            spared.add(parent.pid)
+-            try:
+-                parent_exe = Path(parent.exe()).resolve()
+-            except Exception:
+-                continue
+-            # Only a Desktop ancestor's descendants. Every process descends from
+-            # init, so sparing all ancestors' trees would spare everything.
+-            if release_dir not in parent_exe.parents:
+-                continue
+-            with contextlib.suppress(Exception):
+-                spared.update(child.pid for child in parent.children(recursive=True))
++    try:
++        ancestors = list(psutil.Process(me).parents())
++    except Exception:
++        ancestors = []
++    for parent in ancestors:
++        spared.add(parent.pid)
++        # Only a Desktop ancestor's descendants. Every process descends from
++        # init, so sparing all ancestors' trees would spare everything.
++        if not _runs_from(parent, release_dir):
++            continue
++        with contextlib.suppress(Exception):
++            spared.update(child.pid for child in parent.children(recursive=True))
+     victims = []
+     try:
+         proc_iter = psutil.process_iter(["pid", "exe"])
+@@ -1249,6 +1274,16 @@ def build_prepared_desktop(desktop_dir: Path, *, source_mode: bool, npm: str, en
+     """Build prepared desktop sources, then publish the verified staged app."""
+     from pm.progress import run_contained
+ 
++    if not source_mode and sys.platform == "win32" and (ancestor := _desktop_ancestor_in(desktop_dir)):
++        # The Desktop running this build holds the exe lock the promotion rename needs,
++        # and stopping it would kill this process first (#123499). Packing would only
++        # produce a build that cannot be installed; leave the app as it is. Its content
++        # stamp stays stale, so `hermes desktop` run outside the app rebuilds it
++        # (_desktop_build_needed), and the in-app update completes with desktop=True.
++        print(f"  ⚠ Skipped rebuilding the desktop app: this update is running inside it (pid {ancestor}),")
++        print("    and Windows locks a running app's files. Quit Hermes Desktop and run `hermes desktop`")
++        print("    from a terminal, or use Update now in Settings → About, to rebuild and reopen it.")
++        return None
+     build_label = "source build" if source_mode else "packaged app"
+     build_env = dict(env)
+     if sys.platform == "win32":
+@@ -1486,7 +1521,8 @@ def cmd_gui(args: argparse.Namespace):
+                                         explicit=force_build or getattr(args, "build_only", False))
+             built = build_prepared_desktop(desktop_dir, source_mode=source_mode, npm=npm, env=build_env)
+             if not source_mode:
+-                packaged_executable = built
++                # None only when the build was skipped under its own Desktop: reopen the app it kept.
++                packaged_executable = built or packaged_executable
+         else:
+             build_label = "source build" if source_mode else "packaged app"
+             desktop_launch_notice(f"✓ Desktop {build_label} is up to date (content stamp matches)", source_mode=source_mode)
+diff --git a/tests/hermes_cli/test_gui_command.py b/tests/hermes_cli/test_gui_command.py
+index 5539631a..50ade4ad 100644
+--- a/tests/hermes_cli/test_gui_command.py
++++ b/tests/hermes_cli/test_gui_command.py
+@@ -1299,13 +1299,13 @@ def test_stop_desktop_processes_locking_build_posix_swap_bypasses_early_return(t
+     assert main_desktop._stop_desktop_processes_locking_build(desktop_dir, also_posix=True) == [100]
+ 
+ 
+-@pytest.mark.platforms("posix")  # Windows must stop the exe-locking ancestor too
+-def test_posix_swap_spares_the_desktop_driving_this_update(tmp_path, monkeypatch):
+-    """A historical Desktop runs `hermes update` as a piped child and relaunches
+-    itself afterwards; stopping it breaks the update's stdout (EPIPE). Its
+-    renderer/GPU/zygote helpers run the same exe but are not our ancestors;
+-    stopping them leaves a main process that can neither draw nor quit. Only an
+-    unrelated Desktop from the same release tree is stopped."""
++def _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, *, also_posix):
++    """A Desktop's own process tree runs this update (a historical Desktop's piped
++    `hermes update` child, or the launch-time tail its backend runs). Stopping that
++    Desktop kills the update with it. Its renderer/GPU/zygote helpers run the same
++    exe but are not our ancestors; stopping them leaves a main process that can
++    neither draw nor quit. Only an unrelated Desktop from the same release tree is
++    stopped."""
+     root = _make_desktop_tree(tmp_path)
+     desktop_dir = root / "apps" / "desktop"
+     live_exe = desktop_dir / "release" / _packaged_exe_rel()
+@@ -1351,7 +1351,45 @@ def test_posix_swap_spares_the_desktop_driving_this_update(tmp_path, monkeypatch
+ 
+     monkeypatch.setitem(sys.modules, "psutil", _FakePsutil)
+ 
+-    assert main_desktop._stop_desktop_processes_locking_build(desktop_dir, also_posix=True) == [300]
++    assert main_desktop._stop_desktop_processes_locking_build(desktop_dir, also_posix=also_posix) == [300]
++
++
++@pytest.mark.platforms("posix")
++def test_posix_swap_spares_the_desktop_driving_this_update(tmp_path, monkeypatch):
++    """A historical Desktop runs `hermes update` as a piped child and relaunches
++    itself afterwards; stopping it breaks the update's stdout (EPIPE)."""
++    _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, also_posix=True)
++
++
++@pytest.mark.platforms("windows")
++@pytest.mark.parametrize("also_posix", [False, True])
++def test_windows_stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, also_posix):
++    """A Desktop's own backend runs the launch-time update tail; stopping that Desktop
++    killed the tail before it could clear its markers, so every launch repeated it
++    (#123499). The pack-time call and the swap alike spare it."""
++    _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, also_posix=also_posix)
++
++
++@pytest.mark.platforms("windows")
++def test_windows_build_under_its_own_desktop_skips_instead_of_killing_it(tmp_path, monkeypatch, capsys):
++    """#123499: a Desktop's backend runs the interrupted-update tail at launch. Packing there
++    can only end in a promotion the Desktop's exe lock refuses, and stopping that Desktop
++    kills the tail first. The build is skipped, so the tail finishes and clears its markers."""
++    desktop_dir = _make_desktop_tree(tmp_path) / "apps" / "desktop"
++    live_exe = desktop_dir / "release" / _packaged_exe_rel()
++    live_exe.parent.mkdir(parents=True)
++    live_exe.write_text("old", encoding="utf-8")
++    backend = types.SimpleNamespace(pid=40, exe=lambda: str(tmp_path / "python.exe"))
++    desktop = types.SimpleNamespace(pid=41, exe=lambda: str(live_exe))
++    monkeypatch.setitem(sys.modules, "psutil", types.SimpleNamespace(
++        Process=lambda pid: types.SimpleNamespace(parents=lambda: [backend, desktop])))
++    monkeypatch.setattr(main_desktop, "_stop_desktop_processes_locking_build",
++                        lambda *a, **k: pytest.fail("must not stop the Desktop running this build"))
++    monkeypatch.setattr("pm.progress.run_contained", lambda *a, **k: pytest.fail("must not pack"))
++
++    assert main_desktop.build_prepared_desktop(desktop_dir, source_mode=False, npm="npm", env={}) is None
++    assert "pid 41" in capsys.readouterr().out
++    assert not list(desktop_dir.glob(f"{main_desktop._DESKTOP_STAGING_PREFIX}*"))
+ 
+ 
+ def test_gui_failed_pack_leaves_previous_app_untouched(tmp_path, monkeypatch, capsys):
+diff --git a/website/docs/getting-started/updating.md b/website/docs/getting-started/updating.md
+index c6be34a9..bef23da2 100644
+--- a/website/docs/getting-started/updating.md
++++ b/website/docs/getting-started/updating.md
+@@ -138,7 +138,7 @@ For an admitted source checkout, `hermes update` runs these phases:
+ 3. **Post-pull syntax validation + auto-rollback** — after the pull, Hermes compiles the nine critical files every `hermes` invocation imports at startup. If any fails to parse (e.g. an orphan merge-conflict marker, an accidentally truncated file), Hermes runs `git reset --hard <pre-pull-sha>` to roll the install back so your shell stays bootable. Re-run `hermes update` once the upstream fix lands.
+ 4. **Dependency preparation** — PM provisions required tools and prepares a complete Python environment from the new lock, existing extras, and enabled plugin requirements. It validates that environment before publishing its selection. A plugin never fails the update. A plugin that no longer fits the new core is added to `plugins.disabled` in every profile that enables it (a memory provider has `memory.provider` cleared). That covers a `requires-python` that excludes Hermes's Python, a `manifest_version` newer than this Hermes supports, and dependencies that the resolver proves can't resolve alongside core and earlier plugins in config order, or that fail their own build. A download or network failure gets one retry and is disabled if it fails again. The update prints `⚠ Disabled plugin '<name>' in <home>: <reason>`, records it in the receipt's warnings, and continues. Re-enable it with `hermes plugins enable <name>` once the plugin ships a compatible release, or once the network is back. A `requires_hermes` range the running version misses never disables a plugin, because a source checkout without release tags can read as an older release. That plugin sits out instead (`⚠ Left plugin '<name>' … out of this update`), stays enabled, and rejoins once Hermes reports a version it accepts. A secondary profile whose config cannot be read sits out the same way until the config is fixed. Only a core that cannot build on its own fails this step.
+ 5. **Config migration** — detects new config options added since your version and prompts you to set them
+-6. **Desktop rebuild (stage-and-swap)** — if the Hermes Desktop app was built from this checkout, it is rebuilt so the GUI matches the new code. The rebuild packs into a temporary staging directory next to `apps/desktop/release/`, verifies the staged app, and only then renames it over the previous build (on Windows a real-time scanner briefly holding `release/win-unpacked` is ridden out with a few short retries). A rebuild that fails at any point — corrupt Electron download, missing dependency, disk full — leaves the previous app untouched and launchable; the update fails at that step, and `hermes desktop --build-only --force-build` or the next `hermes update` retries the rebuild. On macOS the rebuilt bundle is then copied (with `ditto`, signature intact) over a stale `/Applications/Hermes.app` or `~/Applications/Hermes.app`, so the copy Finder and the Dock launch matches the backend; an installed copy that is currently running is left alone and the update tells you to quit it and run `hermes update` again.
++6. **Desktop rebuild (stage-and-swap)** — if the Hermes Desktop app was built from this checkout, it is rebuilt so the GUI matches the new code. The rebuild packs into a temporary staging directory next to `apps/desktop/release/`, verifies the staged app, and only then renames it over the previous build (on Windows a real-time scanner briefly holding `release/win-unpacked` is ridden out with a few short retries). A rebuild that fails at any point — corrupt Electron download, missing dependency, disk full — leaves the previous app untouched and launchable; the update fails at that step, and `hermes desktop --build-only --force-build` or the next `hermes update` retries the rebuild. On macOS the rebuilt bundle is then copied (with `ditto`, signature intact) over a stale `/Applications/Hermes.app` or `~/Applications/Hermes.app`, so the copy Finder and the Dock launch matches the backend; an installed copy that is currently running is left alone and the update tells you to quit it and run `hermes update` again. On Windows, when the update finishes from inside the Desktop app it would rebuild (the app completing an interrupted update at launch), the rebuild is skipped with a notice instead: Windows locks a running app's files, and stopping the app would end the update with it. The rest of the update completes; quit Hermes Desktop and run `hermes desktop` from a terminal, or use **Update now** in **Settings → About**, to rebuild and reopen it.
+ 7. **Gateway auto-restart**: running gateways are refreshed after the update completes. Service-managed gateways (systemd on Linux, launchd on macOS) restart through the service manager. Manual gateways are relaunched when Hermes can map their PID to a profile. Manually launched `hermes serve` / `hermes dashboard` backends are different: the updater leaves them running and asks their owner to restart them. See [Manual backend restart reminders](#manual-backend-restart-reminders). Backends owned by a running Desktop app remain the app's responsibility.
+ 8. **Multiplex migration (multi-profile installs)** — once the fleet is verified on the new code, an install with two or more profiles that still run **one gateway per profile** is folded into a single multiplexed default gateway when nothing blocks it (same as `hermes gateway migrate --multiplex --yes`); if a blocker exists (a bot token shared by two profiles, a secondary profile binding a port with no `/p/<profile>/` ingress) the update prints the blockers with their fixes and changes nothing. Single-profile installs are never touched. See [Migrating from per-profile gateways](../user-guide/multi-profile-gateways.md#migrating-from-per-profile-gateways).
+ 

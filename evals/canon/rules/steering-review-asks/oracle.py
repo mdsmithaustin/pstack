@@ -675,5 +675,201 @@ def check_known_issues(answer, workspace):
         "apps/shared/src/gateway-contract.openrpc.json": 15}) + own_tests_pin_the_live_entry(workspace)
 
 
-CHECKS = {"hermes-known-issues": check_known_issues, "omnigent-close-code": check_close_code,
-          "omnigent-long-prompt": check_long_prompt, "omnigent-task-notify": check_task_notify}
+
+# hermes #123510, graded at the PR head, since the rebase merge carries
+# unrelated main changes. Its Windows tests skip on a Linux host, so the
+# functional set also runs them, and its dropped POSIX-still-packs test, with
+# the host faked. The repo forbids that fake in its own tests (C3), not here.
+DESKTOP_SKIP_PR_TESTS = r'''
+
+def _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, *, also_posix):
+    root = _make_desktop_tree(tmp_path)
+    desktop_dir = root / "apps" / "desktop"
+    live_exe = desktop_dir / "release" / _packaged_exe_rel()
+    live_exe.parent.mkdir(parents=True)
+    live_exe.write_text("old", encoding="utf-8")
+
+    class _FakeProc:
+        def __init__(self, pid, exe, children=()):
+            self.info = {"pid": pid, "exe": exe}
+            self.pid = pid
+            self._children = list(children)
+
+        def exe(self):
+            return self.info["exe"]
+
+        def children(self, recursive=False):
+            assert recursive
+            return self._children
+
+        def terminate(self):
+            return None
+
+    renderer = _FakeProc(101, str(live_exe))
+    gpu = _FakeProc(102, str(live_exe))
+    driver = _FakeProc(100, str(live_exe), children=[renderer, gpu])
+    shell = _FakeProc(1, "/usr/bin/bash", children=[driver, renderer, gpu, _FakeProc(300, str(live_exe))])
+    other = shell._children[-1]
+
+    class _FakePsutil:
+        @staticmethod
+        def Process(pid):
+            assert pid == os.getpid()
+            return types.SimpleNamespace(parents=lambda: [driver, shell])
+
+        @staticmethod
+        def process_iter(attrs):
+            return [driver, renderer, gpu, other]
+
+        @staticmethod
+        def wait_procs(victims, timeout=5):
+            return [], []
+
+    monkeypatch.setitem(sys.modules, "psutil", _FakePsutil)
+
+    assert main_desktop._stop_desktop_processes_locking_build(desktop_dir, also_posix=also_posix) == [300]
+
+
+@pytest.mark.platforms("posix")
+def test_posix_swap_spares_the_desktop_driving_this_update(tmp_path, monkeypatch):
+    _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, also_posix=True)
+
+
+@pytest.mark.parametrize("also_posix", [False, True])
+def test_windows_stop_spares_the_desktop_driving_this_update_on_a_faked_host(tmp_path, monkeypatch, also_posix):
+    monkeypatch.setattr(sys, "platform", "win32")
+    _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, also_posix=also_posix)
+'''
+
+DESKTOP_SKIP_CHECKS = r'''import contextlib
+import os
+import sys
+import types
+
+import pytest
+
+from hermes_cli import main_desktop
+
+ANCESTOR, HELPER, UNRELATED, BACKEND = 41, 42, 300, 40
+
+
+class Proc:
+    def __init__(self, pid, exe, stopped, children=()):
+        self.pid, self.info, self._stopped, self._children = pid, {"pid": pid, "exe": exe}, stopped, list(children)
+
+    def exe(self):
+        return self.info["exe"]
+
+    def children(self, recursive=False):
+        return self._children
+
+    def terminate(self):
+        self._stopped.append(self.pid)
+
+    kill = terminate
+
+
+@pytest.fixture
+def windows_tree(tmp_path, monkeypatch):
+    """A win-unpacked Desktop (pid 41, helper 42) that runs this process, and an
+    unrelated Desktop (pid 300) from the same release tree, on a faked Windows host."""
+    root = tmp_path / "hermes-agent"
+    desktop_dir = root / "apps" / "desktop"
+    live_exe = desktop_dir / "release" / "win-unpacked" / "Hermes.exe"
+    live_exe.parent.mkdir(parents=True)
+    (desktop_dir / "package.json").write_text("{}", encoding="utf-8")
+    live_exe.write_text("old", encoding="utf-8")
+    stopped, packs = [], []
+    helper = Proc(HELPER, str(live_exe), stopped)
+    desktop = Proc(ANCESTOR, str(live_exe), stopped, children=[helper])
+    backend = Proc(BACKEND, str(tmp_path / "python.exe"), stopped)
+    monkeypatch.setitem(sys.modules, "psutil", types.SimpleNamespace(
+        Process=lambda pid: types.SimpleNamespace(pid=pid, parents=lambda: [backend, desktop]),
+        process_iter=lambda attrs=None: [desktop, helper, Proc(UNRELATED, str(live_exe), stopped)],
+        wait_procs=lambda procs, timeout=None: ([], [])))
+    monkeypatch.setattr("pm.ensure", lambda tool, base_env=None, **_: types.SimpleNamespace(env=dict(base_env or {})))
+    monkeypatch.setattr("pm.progress.run_contained", lambda cmd, *_a, **_k: packs.append(list(cmd)))
+    # shutil.which reads _winapi once sys.platform says win32, which Linux lacks.
+    monkeypatch.setattr(main_desktop.shutil, "which", lambda cmd, *_a, **_k: cmd)
+    monkeypatch.setattr(sys, "platform", "win32")
+    return types.SimpleNamespace(root=root, desktop_dir=desktop_dir, live_exe=live_exe, stopped=stopped, packs=packs)
+
+
+def test_windows_build_under_its_own_desktop_finishes_without_stopping_it(windows_tree):
+    main_desktop.build_prepared_desktop(windows_tree.desktop_dir, source_mode=False, npm="npm", env={})
+    leftovers = sorted(path.name for path in windows_tree.desktop_dir.iterdir())
+    assert ([pid for pid in windows_tree.stopped if pid in (ANCESTOR, HELPER)], windows_tree.packs,
+            windows_tree.live_exe.read_text(encoding="utf-8"), leftovers) == ([], [], "old", ["package.json", "release"])
+
+
+def test_posix_packaged_build_under_its_desktop_still_packs(windows_tree, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    # Promotion fails without a real packed app; only whether it packed matters.
+    with contextlib.suppress(Exception):
+        main_desktop.build_prepared_desktop(windows_tree.desktop_dir, source_mode=False, npm="npm", env={})
+    assert windows_tree.packs
+
+
+class Launched(Exception):
+    pass
+
+
+def test_hermes_desktop_reopens_the_app_it_did_not_rebuild(windows_tree, monkeypatch, capsys):
+    for name, stub in {
+        "hermes_cli.main": types.SimpleNamespace(PROJECT_ROOT=windows_tree.root, explicit_cli_profile=lambda: None),
+        "hermes_cli.source_build": types.SimpleNamespace(
+            prepare_source_dependencies=lambda *a, **k: None,
+            source_build_env=lambda env, **k: {**env, "PATH": os.environ.get("PATH", "")}),
+        "hermes_cli.steward": types.SimpleNamespace(is_bundled_payload=lambda root: False),
+        "hermes_cli.linux_desktop_entry": types.SimpleNamespace(launched_from_shell=lambda: False),
+    }.items():
+        monkeypatch.setitem(sys.modules, name, stub)
+
+    def launch(exe):
+        raise Launched(exe)
+
+    monkeypatch.setattr(main_desktop, "_desktop_launch_env", lambda args: ({}, []))
+    monkeypatch.setattr(main_desktop, "_desktop_build_needed", lambda *a, **k: True)
+    monkeypatch.setattr(main_desktop, "_register_linux_desktop_entry", lambda **k: None)
+    monkeypatch.setattr(main_desktop, "_packaged_desktop_launch_command", launch)
+    args = types.SimpleNamespace(skip_build=False, build_only=False, force_build=False, source=False, fake_boot=False,
+                                 ignore_existing=False, hermes_root=None, cwd=None, setup_tcc_identity=False,
+                                 identity=None, local=False)
+    try:
+        main_desktop.cmd_gui(args)
+        outcome = None
+    except Launched as launched:
+        outcome = str(launched.args[0]) == str(windows_tree.live_exe)
+    except SystemExit as exc:
+        outcome = exc.code not in (0, None)
+    out = capsys.readouterr().out
+    assert (outcome, "no launchable app" in out, ANCESTOR in windows_tree.stopped) == (True, False, False), out
+'''
+
+PLATFORM_PATCH = re.compile(r"""setattr\([^)]*\bsys\b[^)]*["']platform["']|\bsys\.platform\s*=(?!=)"""
+                            r"""|patch(?:\.object)?\(\s*(?:["']sys\.platform["']|sys\s*,\s*["']platform["'])""")
+
+
+def tests_never_patch_the_host(added):
+    """AGENTS.md: host-specific behaviour is tested on that host with
+    @pytest.mark.platforms, never by patching sys.platform. Lines already in
+    the checkout do not count against the agent."""
+    patched = {path: sum(1 for line in lines if PLATFORM_PATCH.search(line)) for path, lines in added.items() if is_test_file(path)}
+    return [f"constraint:C3: {path} patches sys.platform on {count} added line(s)" for path, count in patched.items() if count]
+
+
+def check_desktop_skip(answer, workspace):
+    pr_tests, checks = "tests/hermes_cli/test_gui_command.py", "tests/hermes_cli/test_desktop_update_tail.py"
+    return graded(workspace, "hermes-8afaab3703e3", {pr_tests: DESKTOP_SKIP_PR_TESTS, checks: DESKTOP_SKIP_CHECKS}, {
+        f"{pr_tests}::test_posix_swap_spares_the_desktop_driving_this_update": "functional",
+        f"{pr_tests}::test_windows_stop_spares_the_desktop_driving_this_update_on_a_faked_host": "functional",
+        f"{checks}::test_windows_build_under_its_own_desktop_finishes_without_stopping_it": "functional",
+        f"{checks}::test_posix_packaged_build_under_its_desktop_still_packs": "functional",
+        f"{checks}::test_hermes_desktop_reopens_the_app_it_did_not_rebuild": "constraint:C2",
+    }, {"hermes_cli/main_desktop.py": 61, "tests/hermes_cli/test_gui_command.py": 46, "website/docs/getting-started/updating.md": 1},
+        [tests_never_patch_the_host])
+
+
+CHECKS = {"hermes-desktop-skip": check_desktop_skip, "hermes-known-issues": check_known_issues,
+          "omnigent-close-code": check_close_code, "omnigent-long-prompt": check_long_prompt,
+          "omnigent-task-notify": check_task_notify}
