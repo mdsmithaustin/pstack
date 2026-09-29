@@ -4,6 +4,7 @@ import ast
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +13,7 @@ from pathlib import Path, PurePosixPath
 
 PROBES = Path(__file__).resolve().parent / "probes"
 IMAGE = "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+PROJECT_IMAGES = Path(__file__).resolve().parent.parent / "images" / "images.json"
 
 FILE_TAG = re.compile(r'<file path="([^"\n]+)">(.*?)</file>', re.DOTALL)
 COMMIT_TAG = re.compile(r'<commit message="([^"]*)">(.*?)</commit>', re.DOTALL)
@@ -162,6 +164,41 @@ def plain_test_failures(tree, modules):
     if result["rc"] != 0:
         raise OracleError(f"the test runner stopped (exit {result['rc']}): {result['stderr'].strip()[-300:]}")
     return json.loads(result["stdout"])
+
+
+def project_test_results(image, checkout, files, tests):
+    """{test id: "passed", "failed", or "skipped"} from running the named test
+    files of a real checkout in a dependency image from images/images.json,
+    offline. files is apply_diff's {path: bytes or None}, laid over a copy of
+    checkout, so the run never writes to the checkout itself."""
+    images = json.loads(PROJECT_IMAGES.read_text()) if PROJECT_IMAGES.is_file() else {}
+    if image not in images:
+        raise OracleError(f"no dependency image {image!r}; build it with images/build.py")
+    with tempfile.TemporaryDirectory() as directory:
+        stage = Path(directory) / "work"
+        shutil.copytree(checkout, stage, symlinks=True, ignore=shutil.ignore_patterns(".git"))
+        for path, data in files.items():
+            target = stage / safe_path(path)
+            if not target.parent.resolve().is_relative_to(stage.resolve()):
+                raise OracleError(f"{path} resolves outside the checkout copy")
+            if data is None:
+                target.unlink(missing_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+        command = [
+            "docker", "run", "--rm",
+            "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,exec,size=1g",
+            "--memory", "4g", "--pids-limit", "1024", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges", "--user", "65534:65534",
+            "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1",
+            "-v", f"{stage}:/work", "-v", f"{PROBES}:/probes:ro", "-w", "/work",
+            images[image]["id"], "python3", "/probes/project_tests.py", *tests,
+        ]
+        proc = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
+    if proc.returncode != 0:
+        raise OracleError(f"project tests stopped (exit {proc.returncode}): {proc.stderr.strip()[-500:]}")
+    return json.loads(proc.stdout)
 
 
 def workspace_diff(run_dir):

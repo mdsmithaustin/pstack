@@ -1,7 +1,11 @@
+import json
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
 
 from check import RULES, grade
-from shared import parse_files, plain_test_failures, run_jobs
+from shared import PROJECT_IMAGES, OracleError, parse_files, plain_test_failures, project_test_results, run_jobs
 
 
 class AnswerParsingTests(unittest.TestCase):
@@ -80,3 +84,65 @@ class PlainTestRunnerTests(unittest.TestCase):
     def test_module_with_no_tests_is_a_failure(self):
         tree = {**self.TREE, "tests/test_calc.py": "X = 1\n"}
         self.assertEqual(plain_test_failures(tree, ["tests.test_calc"]), ["tests.test_calc holds no test functions"])
+
+
+def built_image(name):
+    images = json.loads(PROJECT_IMAGES.read_text()) if PROJECT_IMAGES.is_file() else {}
+    try:
+        found = name in images and subprocess.run(["docker", "image", "inspect", images[name]["id"]],
+                                                  capture_output=True, timeout=60, check=False).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        found = False
+    if not found:
+        raise unittest.SkipTest(f"needs the {name} image; build it with images/build.py")
+    return name
+
+
+class ProjectImageTests(unittest.TestCase):
+    def test_unknown_image_is_refused(self):
+        with self.assertRaisesRegex(OracleError, "no dependency image 'nothing-here'"):
+            project_test_results("nothing-here", Path("."), {}, ["tests/test_calc.py"])
+
+
+class ProjectTestRunnerTests(unittest.TestCase):
+    CHECKOUT = {
+        "calc.py": "def double(x):\n    return x * 3\n",
+        "tests/test_calc.py": (
+            "import socket\nimport pytest\nfrom calc import double\n\n"
+            "def test_zero():\n    assert double(0) == 0\n\n"
+            "def test_two():\n    assert double(2) == 4\n\n"
+            "@pytest.mark.skip\ndef test_later():\n    pass\n\n"
+            "def test_network():\n    socket.create_connection((\"1.1.1.1\", 53), timeout=5)\n"
+        ),
+        "web/package.json": "{}\n",
+        "web/src/calc.test.ts": "import { expect, test } from 'vitest'\n\ntest('adds', () => { expect(1 + 1).toBe(2) })\n",
+    }
+
+    def setUp(self):
+        self.image = built_image("omnigent-336207801509")
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.checkout = Path(directory.name)
+        for path, body in self.CHECKOUT.items():
+            (self.checkout / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.checkout / path).write_text(body)
+
+    def test_outcomes_are_named_per_test_and_the_network_is_off(self):
+        self.assertEqual(
+            project_test_results(self.image, self.checkout, {}, ["tests/test_calc.py", "web/src/calc.test.ts"]),
+            {"tests.test_calc::test_zero": "passed", "tests.test_calc::test_two": "failed",
+             "tests.test_calc::test_later": "skipped", "tests.test_calc::test_network": "failed",
+             "web/src/calc.test.ts::adds": "passed"},
+        )
+
+    def test_diff_files_replace_and_delete_checkout_files_in_a_copy(self):
+        fixed = {"calc.py": b"def double(x):\n    return x * 2\n", "tests/test_calc.py": None}
+        self.assertEqual(
+            project_test_results(self.image, self.checkout, fixed, ["tests/test_calc.py"]),
+            {"tests/test_calc.py": "failed"},
+        )
+        self.assertEqual(
+            project_test_results(self.image, self.checkout, {"calc.py": fixed["calc.py"]}, ["tests/test_calc.py::test_two"]),
+            {"tests.test_calc::test_two": "passed"},
+        )
+        self.assertEqual((self.checkout / "calc.py").read_text(), self.CHECKOUT["calc.py"])

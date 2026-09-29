@@ -60,6 +60,10 @@ oracles/
   check.py            check.py <rule> <case> <output_dir>
   shared.py           answer parsing, Python helpers, the sandboxed container runner
   probes/run.py       runs answer code inside the container
+  probes/project_tests.py  runs a checkout's own tests inside a dependency image
+images/
+  <repo>/Dockerfile   a repo's test dependencies, from its lockfiles at one commit
+  build.py            build.py <repo> <commit>; records the image id in images.json
 ```
 
 Each arm root holds the grader next to the skill tree: `oracles/`, the rule's
@@ -366,6 +370,19 @@ A case whose module imports only the standard library can run tests.
 plugins or fixtures, and returns one `<module>::<test> failed` line per
 failure. The check builds `tree` from the pinned checkout and the diff's new
 bytes, so it runs the pinned tests and never the agent's edited copies.
+A case whose tests need third-party packages runs them in a dependency image
+instead. `images/<repo>/Dockerfile` installs the repo's Python and web test
+dependencies from its own lockfiles, and the image holds none of its source.
+`python3 evals/canon/images/build.py <repo> <commit>` builds it from the
+manifests and lockfiles the mirror holds at that commit, and records the image
+id in `images/images.json` under `<repo>-<commit[:12]>`. The images are local
+builds, so another machine builds its own and gets a different id.
+`shared.project_test_results(image, checkout, files, tests)` lays `files`, the
+result of `apply_diff`, over a copy of the checkout. It runs the named test
+files or pytest node ids with no network, a read-only root, and resource
+limits, and returns `{test id: "passed", "failed", or "skipped"}`. Python files
+run under pytest, other files under vitest in the nearest directory with a
+`package.json`. A named file that reports no tests counts as failed.
 The samples are `good.md` and `bad.md` with a `good.diff` and `bad.diff` beside
 them. `test_oracle.py` passes `workspace=Workspace(checkout, diff)` to `grade`.
 The offline stand-in applies the chosen sample's diff in its cwd. The sample
@@ -373,8 +390,8 @@ tests skip when the mirror lacks the pinned commit.
 
 The omnigent cases grade the diff statically, with the AST of the Python files
 it touches. Their upstream tests need pyyaml, pydantic, and pytest, which the
-networkless image does not have. omnigent's `AGENTS.md` asks for `pre-commit`
-before any commit, so each prompt says there is no need to commit. It also
+standard-library image does not have, and they predate the dependency images.
+omnigent's `AGENTS.md` asks for `pre-commit` before any commit, so each prompt says there is no need to commit. It also
 asks for a `@deprecated` marker on anything slated for removal, so the
 one-name check skips a `@deprecated` def and a parameter declared with
 `deprecated=True`. None of these cases needs an overlay.
@@ -602,7 +619,9 @@ delegate brief.
 These need Docker, `uv`, and a skill-ci checkout at `../skill-ci` or
 `$SKILL_CI` with its `runner.lock`. `audit` and `run` call the harness through
 `uv run <skill-ci>/tools/run_runner.py`. Without a running Docker daemon, the
-oracle tests that run answer code skip. `audit` and `run` need skill-ci and
+oracle tests that run answer code skip. The `project_test_results` tests
+skip unless this machine has built the `omnigent-336207801509` image, which the
+`lint` workflow does not build. `audit` and `run` need skill-ci and
 `uv`, and so do the offline workspace runs in `test_workspace.py`, which skip
 without them. On every pull request the `lint` workflow pulls the image,
 checks out skill-ci at the commit `skill-checks.yml` pins, installs uv, and
