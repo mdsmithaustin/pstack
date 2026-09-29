@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from typing import NamedTuple
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -34,12 +35,19 @@ def build_project(run_root: Path) -> Path:
     return project
 
 
-def spawn_case(project: Path, session_effort: str, arms: list[tuple[str, str, str, str]]) -> dict:
+class Arm(NamedTuple):
+    tag: str
+    subagent_type: str
+    model: str
+    expected_effort: str
+
+
+def spawn_case(project: Path, session_effort: str, arms: list[Arm]) -> dict:
     session_id = str(uuid.uuid4())
     instructions = "; ".join(
-        f"one with subagent_type {atype!r}, model {model!r}, description '[{tag}] probe', "
+        f"one with subagent_type {arm.subagent_type!r}, model {arm.model!r}, description '[{arm.tag}] probe', "
         "prompt 'Reply with the single word OK and nothing else.'"
-        for tag, atype, model, _ in arms
+        for arm in arms
     )
     prompt = (
         f"Use the Agent tool (Task tool) to spawn exactly {len(arms)} subagents in a single "
@@ -75,30 +83,30 @@ def spawn_case(project: Path, session_effort: str, arms: list[tuple[str, str, st
         })
 
     mismatches = []
-    for tag, expected_type, _, expected_effort in arms:
-        row = next((item for item in observed if item["tag"] == tag), None)
+    for arm in arms:
+        row = next((item for item in observed if item["tag"] == arm.tag), None)
         if row is None:
-            mismatches.append({"tag": tag, "field": "missing", "expected": expected_type, "observed": "no spawn"})
+            mismatches.append({"tag": arm.tag, "field": "missing", "expected": arm.subagent_type, "observed": "no spawn"})
             continue
-        if row["agent_type"] != expected_type:
-            mismatches.append({"tag": tag, "field": "agent_type", "expected": expected_type, "observed": row["agent_type"]})
-        if row["effort"] != expected_effort:
-            mismatches.append({"tag": tag, "field": "effort", "expected": expected_effort, "observed": row["effort"]})
-        if row["per_turn_effort"] != expected_effort:
-            mismatches.append({"tag": tag, "field": "per_turn_effort", "expected": expected_effort, "observed": row["per_turn_effort"]})
+        if row["agent_type"] != arm.subagent_type:
+            mismatches.append({"tag": arm.tag, "field": "agent_type", "expected": arm.subagent_type, "observed": row["agent_type"]})
+        if row["effort"] != arm.expected_effort:
+            mismatches.append({"tag": arm.tag, "field": "effort", "expected": arm.expected_effort, "observed": row["effort"]})
+        if row["per_turn_effort"] != arm.expected_effort:
+            mismatches.append({"tag": arm.tag, "field": "per_turn_effort", "expected": arm.expected_effort, "observed": row["per_turn_effort"]})
     return {"session_id": session_id, "session_effort": session_effort, "observed": observed, "mismatches": mismatches}
 
 
 CASES = [
     ("dispatch-and-fallback", "high", [
-        ("wrapper", "pstack-effort-low", "sonnet", "low"),
-        ("control", "general-purpose", "sonnet", "high"),
+        Arm("wrapper", "pstack-effort-low", "sonnet", "low"),
+        Arm("control", "general-purpose", "sonnet", "high"),
     ]),
     ("downward-override", "max", [
-        ("downward", "pstack-effort-high", "sonnet", "high"),
+        Arm("downward", "pstack-effort-high", "sonnet", "high"),
     ]),
     ("persona-combination", "high", [
-        ("persona", "pstack-effort-xhigh", "sonnet", "xhigh"),
+        Arm("persona", "pstack-effort-xhigh", "sonnet", "xhigh"),
     ]),
 ]
 
