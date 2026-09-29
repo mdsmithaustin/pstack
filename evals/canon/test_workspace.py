@@ -20,7 +20,7 @@ SPEC.loader.exec_module(screen)
 sys.path.insert(0, str(ROOT / "oracles"))
 
 import workspace  # noqa: E402
-from shared import OracleError, apply_diff, workspace_diff  # noqa: E402
+from shared import OracleError, apply_diff, harvested_diff, workspace_diff  # noqa: E402
 
 UPSTREAM = {
     "app/orders.py": "def place(order):\n    return order\n",
@@ -412,6 +412,8 @@ class HarvestTests(ShopRepo):
         (work / "harvest" / "orders-amend" / "with_skill" / "workspace.diff").write_text(BAD_DIFF)
 
         self.assertEqual(workspace_diff(work / "runs" / "orders-amend" / "with_skill"), BAD_DIFF)
+        self.assertEqual(harvested_diff(work / "runs" / "orders-amend" / "with_skill"),
+                         (work / "harvest" / "orders-amend" / "with_skill" / "workspace.diff").resolve())
         with self.assertRaisesRegex(OracleError, "no workspace diff was harvested"):
             workspace_diff(work / "runs" / "other" / "with_skill")
 

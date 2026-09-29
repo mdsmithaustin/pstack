@@ -360,7 +360,9 @@ repo that tracks a path the mounted skills take.
 
 A workspace case's check receives a `shared.Workspace` in place of the project.
 `workspace.checkout` is the pinned checkout with the overlay, and
-`workspace.diff` is the run's diff. `shared.apply_diff(checkout, diff)` returns
+`workspace.diff` is the run's diff. `workspace.harvest` is the directory that holds
+the run's `workspace.diff`, where a check may write a report beside it. It is
+`None` when a test builds the `Workspace` from a sample. `shared.apply_diff(checkout, diff)` returns
 the new bytes of every path the diff touches, with `None` for a deleted path.
 It refuses a diff that leaves a symlink at a path it touches, that touches a
 symlink in the checkout, or whose path resolves outside the checkout, so a

@@ -26,9 +26,12 @@ class OracleError(Exception):
 @dataclass(frozen=True)
 class Workspace:
     """What a workspace case's oracle receives in place of the project files:
-    the pinned checkout with its overlay, and the diff the agent left on it."""
+    the pinned checkout with its overlay, and the diff the agent left on it.
+    harvest is the directory holding a graded run's diff, where a check may
+    write a report beside it; None when the diff did not come from a run."""
     checkout: Path
     diff: str
+    harvest: Path | None = None
 
 
 def clean_body(body):
@@ -201,16 +204,20 @@ def project_test_results(image, checkout, files, tests):
     return json.loads(proc.stdout)
 
 
-def workspace_diff(run_dir):
-    """The diff harvested from the agent's workspace for one run. The harness
-    seals each run dir, so the diff sits in a parallel tree: <work>/runs/<run>
-    maps to <work>/harvest/<run>/workspace.diff."""
+def harvested_diff(run_dir):
+    """The path of the diff harvested from the agent's workspace for one run.
+    The harness seals each run dir, so the diff sits in a parallel tree:
+    <work>/runs/<run> maps to <work>/harvest/<run>/workspace.diff."""
     run_dir = Path(run_dir).resolve()
     runs = next((parent for parent in run_dir.parents if parent.name == "runs"), None)
     path = runs.parent / "harvest" / run_dir.relative_to(runs) / "workspace.diff" if runs else None
     if path is None or not path.is_file():
         raise OracleError(f"no workspace diff was harvested for {run_dir}")
-    return path.read_bytes().decode("utf-8", "surrogateescape")
+    return path
+
+
+def workspace_diff(run_dir):
+    return harvested_diff(run_dir).read_bytes().decode("utf-8", "surrogateescape")
 
 
 def apply_diff(checkout, diff):
