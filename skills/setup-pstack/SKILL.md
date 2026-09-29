@@ -11,7 +11,7 @@ The inline defaults are written as short model aliases (`fable`, `opus`, `sonnet
 
 ## Steps
 
-### 0. Check personas and optional native registration
+### 0a. Check personas and optional native registration
 
 Read the **pstack-harness** skill's [named-role contract](../pstack-harness/references/named-roles.md). Resolve its logical installed skills root through [portable-paths.md](../pstack-harness/references/portable-paths.md), then run:
 
@@ -26,6 +26,14 @@ Offer native registration for Claude Code or Codex when the user wants it. Use t
 For Claude Code, say what registration adds: the two personas and the five `pstack-effort-<level>` agents, which let a written `@effort` apply to subagents here. Before a Claude Code install, read both config layers as step 2 does and list every role whose effort is written for this harness, with that effort. Say those roles run at it once the agents load, and every other role keeps the session effort. Report the `roles` rows and the `efforts` rows separately from live loading. When the install report says `agents_directory: created`, the agents load only in a fresh session, so tell the user to start one. Otherwise a running session picks them up, unless it was started with `--disable-slash-commands` or the directory came from `--add-dir`. In every case check the live catalog before claiming an effort applies.
 
 Report payload readiness, native-file status, and live role loading separately. Check the requested destination and inspect the live role catalog before claiming native availability. Filesystem output always leaves activation unverified. Codex project registrations require project trust. Do not edit trust settings automatically. Check a fresh session after registration changes; when a loader requires a restart, say so and use full-brief delegation until loading is confirmed. Keep these observations separate from the model choices below.
+
+### 0b. Check the structured task tools
+
+poteto-mode keeps its worklist in the harness's structured task tool when that tool is on. Whichever CLI runs this skill, check both switches below, since one models file serves both, and report each as on or off. A change applies from the next session. Edit a file only after the user says yes. Then add the key to the existing file and keep every other key.
+
+- **Claude Code** has the task tools on every model when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is `1` in the environment or in the `env` block of `~/.claude/settings.json`, `.claude/settings.json`, or `.claude/settings.local.json`. When the switch is off, recommend `"env": {"CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"}` in `~/.claude/settings.json` for every project or in `.claude/settings.local.json` for this one, and say that a `settings.local.json` created by hand needs a `.gitignore` line. Also say that with tool search on, the default, the task tools arrive deferred, and Sonnet then kept no worklist in 4 of 4 `/poteto-mode` runs against one task per playbook step in 2 of 2 runs with `ENABLE_TOOL_SEARCH=false`. That setting raised a trivial first turn from 25,770 to 45,907 input tokens on 2.1.284 in 2026-09, so leave the choice to the user.
+- **Codex** has the plan tool when `config.toml` under `$CODEX_HOME` or `~/.codex/` holds `[tools.update_plan]` followed by `enabled = true`. Codex's published `docs/config.md` omits the key, so treat it as observed on 0.158.0-alpha.2.1. When the switch is off, recommend those two lines. Codex rejects a bare `update_plan = true`.
+- **Hermes** has no known switch. Report nothing to change.
 
 ### 1. Detect available models and efforts
 
