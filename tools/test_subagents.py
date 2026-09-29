@@ -369,9 +369,6 @@ sys.exit(module.main())
             first_bytes = self.effort_path(level).read_bytes()
             second_bytes = (second_project / ".claude/agents" / f"pstack-effort-{level}.md").read_bytes()
             self.assertEqual(first_bytes, second_bytes)
-        # the two roots are literal copies, not aliases of one install, so roles legitimately drift
-        # (same as the "copied" case in test_aliases_of_one_installation_share_native_files); effort
-        # bytes carry no root, so the first root's own script must still see them as current
         report = json.loads(self.run_cli("check", "--harness", "claude-code", "--project", second_project, expected=1).stdout)
         self.assertEqual({row["native_file"] for row in report["efforts"]}, {"current"})
 
@@ -403,7 +400,6 @@ sys.exit(module.main())
         self.native("claude-code")
         template = self.installed / "pstack-harness/references/subagents/effort-delegate.md"
 
-        # a squatted effort file must block only the effort group; the persona group upgrades regardless
         self.effort_path("max").write_text("squatted content")
         self.mutate_body("\nA persona revision.\n")
         report = json.loads(self.native("claude-code", expected=1).stdout)
@@ -412,7 +408,6 @@ sys.exit(module.main())
         self.effort_path("max").unlink()
         self.native("claude-code")
 
-        # mirror case: a squatted persona file must block only the persona group
         self.role_path("poteto-agent", "claude-code").write_text("squatted content")
         template.write_text(template.read_text() + "\nAnother revision.\n")
         report = json.loads(self.native("claude-code", expected=1).stdout)

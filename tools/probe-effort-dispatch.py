@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""Live probe: proves the generated `pstack-effort-<level>.md` Claude Code agents
-actually carry their written reasoning effort into a spawned child, that a plain
-`general-purpose` spawn keeps the session's effort instead, and that a written
-level overrides the session's effort in both directions.
-
-Not run in CI: needs an authenticated `claude` CLI and spends real tokens. Rerun
-by hand after a Claude Code upgrade or a change to effort-delegate.md. Modeled
-on tools/probe-subagent-install.py: build a scratch project, run real commands,
-assert, write report.json, exit 1 on any failure.
-
-Each spawned child's `subagents/agent-<id>.meta.json` records the Agent call's
-own agentType/description/model, keyed by the same id as its transcript
-`subagents/agent-<id>.jsonl`, so cases match observed effort back to which arm
-produced it without parsing the parent's own transcript at all.
-"""
 from __future__ import annotations
 
 import json
@@ -50,8 +35,6 @@ def build_project(run_root: Path) -> Path:
 
 
 def spawn_case(project: Path, session_effort: str, arms: list[tuple[str, str, str, str]]) -> dict:
-    """arms: (tag, subagent_type, model, expected_effort). Spawns every arm in
-    one message, in parallel, matching how a real pstack fan-out dispatches."""
     session_id = str(uuid.uuid4())
     instructions = "; ".join(
         f"one with subagent_type {atype!r}, model {model!r}, description '[{tag}] probe', "
