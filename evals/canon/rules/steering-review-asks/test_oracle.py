@@ -99,7 +99,8 @@ class TaskNotifyTests(ReplayedPullRequest):
 
     def test_pre_review_guard_requires_every_optional_tag(self):
         self.assertEqual(self.grade_sample("bad")[0], [
-            "constraint:K1: tests/test_task_notification_context.py::test_notification_without_optional_tags_is_kept_as_hidden_context failed",
+            "constraint:K1: tests/server/integration/test_task_notification_stored.py"
+            "::test_notification_without_optional_tags_is_kept_as_hidden_context failed",
             "constraint:K2: web/src/lib/itemsToBlocks.legacy.test.ts::K2 hides stored notifications without the optional tags failed",
             "constraint:K4: no added test holds a task notification without <tool-use-id>",
         ])

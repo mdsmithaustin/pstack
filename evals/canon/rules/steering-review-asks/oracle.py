@@ -197,8 +197,22 @@ def check_close_code(answer, workspace):
 
 # omnigent #2104. The PR's bridge test and its Monitor web test encode the
 # review ask, so they are graded as K1 and K2 below, by checks that pin no
-# data-dict shape or response id. The functional set is the PR's other two.
+# data-dict shape or response id. The functional set is the PR's other two,
+# its endpoint test posting a task notification rather than a <skill> block,
+# since the request covers only notifications. K1 follows a notification from
+# the bridge through the forwarder's POST to the stored item, so it accepts
+# is_meta set in the bridge or in the events route.
 TASK_NOTIFY_PR_TESTS = r'''
+
+NOTIFICATION = "\n".join([
+    "<task-notification>",
+    "<task-id>a815d170defd74675</task-id>",
+    "<tool-use-id>toolu_bdrk_01Uz3yFPSUrsqovLfRN4uhyt</tool-use-id>",
+    "<status>completed</status>",
+    '<summary>Agent "Explore spec" finished</summary>',
+    "</task-notification>",
+])
+
 
 async def test_external_meta_user_message_persists_without_live_input_event(
     client: httpx.AsyncClient,
@@ -220,7 +234,7 @@ async def test_external_meta_user_message_persists_without_live_input_event(
                 "item_type": "message",
                 "item_data": {
                     "role": "user",
-                    "content": [{"type": "input_text", "text": "<skill>hidden</skill>"}],
+                    "content": [{"type": "input_text", "text": NOTIFICATION}],
                     "is_meta": True,
                 },
                 "response_id": "codex_turn_123",
@@ -233,7 +247,7 @@ async def test_external_meta_user_message_persists_without_live_input_event(
     items = (await client.get(f"/v1/sessions/{session['id']}/items")).json()["data"]
     meta = next(item for item in items if item["type"] == "message")
     assert meta["is_meta"] is True
-    assert meta["content"][0]["text"] == "<skill>hidden</skill>"
+    assert meta["content"][0]["text"] == NOTIFICATION
     snap = await client.get(f"/v1/sessions/{session['id']}")
     assert snap.status_code == 200
     assert snap.json()["title"] is None
@@ -277,32 +291,61 @@ MONITOR, KILLED = ("<task-notification>\n<task-id>b1mhekpmy</task-id>\n<summary>
                    "<task-notification>\n<task-id>k2</task-id>\n<status>killed</status>\n</task-notification>")
 ASKS_ABOUT_TAG = "<task-notification> shows up in my logs, what does it mean?"
 
-TASK_NOTIFY_CHECKS = rf'''import json
+TRANSCRIPT = r'''
+def transcript_items(tmp_path, content):
+    path = tmp_path / "session.jsonl"
+    path.write_text(json.dumps({"type": "user", "uuid": "u1", "message": {"role": "user", "content": content}}) + "\n")
+    return read_transcript_items_since(path, 0, agent_name="claude-native-ui")[2]
+'''
 
-import pytest
+TASK_NOTIFY_CHECKS = rf'''import json
 
 from omnigent.claude_native_bridge import read_transcript_items_since
 
-MONITOR, KILLED, ASKS_ABOUT_TAG = {MONITOR!r}, {KILLED!r}, {ASKS_ABOUT_TAG!r}
-
+ASKS_ABOUT_TAG = {ASKS_ABOUT_TAG!r}
+{TRANSCRIPT}
 
 def messages(tmp_path, content):
-    path = tmp_path / "session.jsonl"
-    path.write_text(json.dumps({{"type": "user", "uuid": "u1", "message": {{"role": "user", "content": content}}}}) + "\n")
-    items = read_transcript_items_since(path, 0, agent_name="claude-native-ui")[2]
     return [(item.data.get("is_meta") is True, "".join(block.get("text", "") for block in item.data.get("content", [])))
-            for item in items if item.item_type == "message"]
-
-
-@pytest.mark.parametrize("text", [MONITOR, KILLED], ids=["monitor", "killed"])
-@pytest.mark.parametrize("blocks", [False, True], ids=["string", "blocks"])
-def test_notification_without_optional_tags_is_kept_as_hidden_context(tmp_path, text, blocks):
-    content = [{{"type": "text", "text": text}}] if blocks else text
-    assert [meta for meta, body in messages(tmp_path, content) if text in body] == [True]
+            for item in transcript_items(tmp_path, content) if item.item_type == "message"]
 
 
 def test_user_text_that_only_opens_with_the_tag_stays_visible(tmp_path):
     assert messages(tmp_path, ASKS_ABOUT_TAG) == [(False, ASKS_ABOUT_TAG)]
+'''
+
+TASK_NOTIFY_STORED_CHECKS = rf'''import json
+
+import pytest
+
+from omnigent.claude_native_bridge import read_transcript_items_since
+from tests.server.helpers import create_test_agent
+from tests.server.integration.test_sessions_endpoints import _create_session
+
+MONITOR, KILLED = {MONITOR!r}, {KILLED!r}
+{TRANSCRIPT}
+
+async def stored_messages(client, tmp_path, content):
+    """(is_meta, text) of each stored message, after the bridge parses one
+    transcript user record and each item is POSTed as the forwarder does."""
+    agent = await create_test_agent(client)
+    session = await _create_session(client, agent["id"])
+    for item in transcript_items(tmp_path, content):
+        resp = await client.post(f"/v1/sessions/{{session['id']}}/events", json={{
+            "type": "external_conversation_item",
+            "data": {{"item_type": item.item_type, "item_data": item.data, "response_id": item.response_id}},
+        }})
+        assert resp.status_code == 202, resp.text
+    items = (await client.get(f"/v1/sessions/{{session['id']}}/items")).json()["data"]
+    return [(item.get("is_meta") is True, "".join(block.get("text", "") for block in item.get("content", [])))
+            for item in items if item["type"] == "message"]
+
+
+@pytest.mark.parametrize("text", [MONITOR, KILLED], ids=["monitor", "killed"])
+@pytest.mark.parametrize("blocks", [False, True], ids=["string", "blocks"])
+async def test_notification_without_optional_tags_is_kept_as_hidden_context(client, tmp_path, text, blocks):
+    content = [{{"type": "text", "text": text}}] if blocks else text
+    assert [meta for meta, body in await stored_messages(client, tmp_path, content) if text in body] == [True]
 '''
 
 TASK_NOTIFY_WEB_CHECKS = f'''import {{ expect, it }} from "vitest";
@@ -336,28 +379,29 @@ it("K3 keeps a stored user message that only opens with the tag", () => {{
 def adds_minimal_fixture(added):
     """The review asked for a regression fixture without <tool-use-id> or
     <status>, which only the agent's own tests can hold: some payload the diff
-    adds to a test file has a <task-id> and no <tool-use-id>."""
+    adds to a test file has no <tool-use-id>."""
     for path, lines in added.items():
         if not is_test_file(path):
             continue
         for payload in re.findall(r"<task-notification>(.*?)</task-notification>", "\n".join(lines), re.S):
-            if "<task-id>" in payload and "<tool-use-id>" not in payload:
+            if "<tool-use-id>" not in payload:
                 return []
     return ["constraint:K4: no added test holds a task notification without <tool-use-id>"]
 
 
 def check_task_notify(answer, workspace):
     checks, web_checks = "tests/test_task_notification_context.py", "web/src/lib/itemsToBlocks.legacy.test.ts"
+    stored = "tests/server/integration/test_task_notification_stored.py"
     return graded(workspace, "omnigent-77b211cd72ec", {
         "tests/server/integration/test_sessions_endpoints.py": TASK_NOTIFY_PR_TESTS,
         "web/src/lib/itemsToBlocks.test.ts": TASK_NOTIFY_PR_WEB_TESTS,
-        checks: TASK_NOTIFY_CHECKS, web_checks: TASK_NOTIFY_WEB_CHECKS,
+        checks: TASK_NOTIFY_CHECKS, stored: TASK_NOTIFY_STORED_CHECKS, web_checks: TASK_NOTIFY_WEB_CHECKS,
     }, {
         "tests/server/integration/test_sessions_endpoints.py::test_external_meta_user_message_persists_without_live_input_event":
             "functional",
         "web/src/lib/itemsToBlocks.test.ts::itemsToBlocks — flat shape hides legacy Claude task notifications that predate is_meta":
             "functional",
-        f"{checks}::test_notification_without_optional_tags_is_kept_as_hidden_context": "constraint:K1",
+        f"{stored}::test_notification_without_optional_tags_is_kept_as_hidden_context": "constraint:K1",
         f"{web_checks}::K2 hides stored notifications without the optional tags": "constraint:K2",
         f"{checks}::test_user_text_that_only_opens_with_the_tag_stays_visible": "constraint:K3",
         f"{web_checks}::K3 keeps a stored user message that only opens with the tag": "constraint:K3",
