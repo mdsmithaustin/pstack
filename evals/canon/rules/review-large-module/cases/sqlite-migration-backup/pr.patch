@@ -1,0 +1,288 @@
+diff --git a/omnigent/db/utils.py b/omnigent/db/utils.py
+index ab6553c..ff100e8 100644
+--- a/omnigent/db/utils.py
++++ b/omnigent/db/utils.py
+@@ -6,11 +6,12 @@ import hashlib
+ import logging
+ import os
+ import random
++import shutil
+ import threading
+ import time
+ import uuid
+ from collections.abc import Callable, Iterator
+-from contextlib import AbstractContextManager, contextmanager
++from contextlib import AbstractContextManager, closing, contextmanager
+ from contextvars import ContextVar
+ from datetime import datetime, timezone
+ from pathlib import Path
+@@ -765,6 +766,103 @@ def _verify_db_revision_is_supported(
+         ) from exc
+ 
+ 
++# ── SQLite backups before automatic migrations ────────────
++#
++# An automatic upgrade rewrites tables in place. For a local SQLite file, a copy
++# taken just before it is the cheapest way back if the upgrade fails midway.
++
++_SQLITE_BACKUP_KEEP_ENV = "OMNIGENT_SQLITE_BACKUP_KEEP"
++_DEFAULT_SQLITE_BACKUP_KEEP = 3
++_SQLITE_BACKUP_MARKER = ".pre-migrate-"
++
++
++def sqlite_database_path(db_uri: str) -> Path | None:
++    """
++    Return the file behind a SQLite URL, or ``None`` when there is none.
++
++    :param db_uri: SQLAlchemy database URL, e.g.
++        ``"sqlite:////home/me/.omnigent/omnigent.db"``.
++    :returns: The absolute database path, or ``None`` for other
++        dialects and in-memory databases.
++    """
++    url = make_url(db_uri)
++    if url.get_backend_name() != "sqlite" or url.database in (None, "", ":memory:"):
++        return None
++    return Path(url.database).expanduser().resolve()
++
++
++def backup_sqlite_database(
++    db_uri: str,
++    from_revision: str,
++    *,
++    keep: int | None = None,
++    now: datetime | None = None,
++) -> Path | None:
++    """
++    Copy a SQLite database aside before its schema is upgraded.
++
++    Writes ``<db file>.pre-migrate-<UTC time>-<from_revision>`` next to
++    the database through SQLite's online backup API, which includes
++    committed WAL contents and is safe while other connections are
++    open. The copy gets the source file's permission bits. Only the
++    newest *keep* backups of that database are kept. When the disk has
++    less free space than the database, the backup is skipped with a
++    warning rather than failing startup.
++
++    :param db_uri: SQLAlchemy database URL, e.g.
++        ``"sqlite:////home/me/.omnigent/omnigent.db"``.
++    :param from_revision: The revision being upgraded from, e.g.
++        ``"8a4f1e9c2b07"``.
++    :param keep: How many backups to keep. ``None`` reads
++        ``OMNIGENT_SQLITE_BACKUP_KEEP`` (default 3); ``0`` writes none.
++    :param now: Timestamp for the file name; defaults to now (UTC).
++    :returns: The backup path, or ``None`` when no backup was written
++        (not SQLite, in-memory, no file yet, or disabled).
++    """
++    import sqlite3
++
++    if keep is None:
++        keep = _env_int(_SQLITE_BACKUP_KEEP_ENV, _DEFAULT_SQLITE_BACKUP_KEEP, minimum=0)
++    source = sqlite_database_path(db_uri)
++    if keep == 0 or source is None or not source.is_file():
++        return None
++    size = source.stat().st_size
++    free = shutil.disk_usage(source.parent).free
++    if free < size:
++        _logger.warning(
++            "Skipping the pre-migration backup of %s: %d bytes free, database is %d bytes",
++            source,
++            free,
++            size,
++        )
++        return None
++    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
++    prefix = f"{source.name}{_SQLITE_BACKUP_MARKER}"
++    target = source.with_name(f"{prefix}{stamp}-{from_revision}")
++    # Create the file with the source's mode so a 0600 database never has a
++    # world-readable copy, even briefly.
++    os.close(os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, source.stat().st_mode & 0o777))
++    try:
++        with closing(sqlite3.connect(source)) as src, closing(sqlite3.connect(target)) as dst:
++            src.backup(dst)
++    except BaseException:
++        target.unlink(missing_ok=True)
++        raise
++    # Timestamps are fixed-width, so name order is age order.
++    backups = sorted(path for path in source.parent.iterdir() if path.name.startswith(prefix))
++    for stale in backups[:-keep]:
++        stale.unlink(missing_ok=True)
++    _logger.info("Backed up %s to %s before migrating from %s", source, target, from_revision)
++    return target
++
++
++def _backup_hint(backup: Path | None) -> str:
++    """The recovery sentence for a failed automatic migration."""
++    if backup is None:
++        return "Take a backup of your database, then run"
++    return f"A copy of the database from before this attempt is at {backup}. Run"
++
++
+ def _initialize_or_verify_schema(engine: Engine, db_uri: str) -> None:
+     """
+     Bring a fresh or stale database to head before the server starts.
+@@ -775,7 +873,8 @@ def _initialize_or_verify_schema(engine: Engine, db_uri: str) -> None:
+       head. This covers brand-new SQLite files and freshly created
+       Postgres schemas.
+     - **At head** — no-op.
+-    - **Behind head** — log a warning, attempt an automatic Alembic
++    - **Behind head** — log a warning, back up a SQLite file (see
++      :func:`backup_sqlite_database`), attempt an automatic Alembic
+       upgrade to head, then verify that the database reached head.
+       If the migration fails, re-raise with context so the server
+       still terminates with an actionable error instead of continuing
+@@ -808,13 +907,14 @@ def _initialize_or_verify_schema(engine: Engine, db_uri: str) -> None:
+             current,
+             head,
+         )
++        backup = backup_sqlite_database(db_uri, current)
+         try:
+             _run_migrations(engine, db_uri)
+         except Exception as exc:
+             raise RuntimeError(
+                 f"Omnigent database schema is out of date "
+                 f"(found revision {current!r}, expected {head!r}) "
+-                f"and automatic migration failed. Take a backup of your database, then run\n"
++                f"and automatic migration failed. {_backup_hint(backup)}\n"
+                 f"\n"
+                 f"    omnigent debug db-upgrade {db_uri!r}\n"
+                 f"\n"
+@@ -826,7 +926,7 @@ def _initialize_or_verify_schema(engine: Engine, db_uri: str) -> None:
+             raise RuntimeError(
+                 f"Omnigent automatic database migration did not reach head "
+                 f"(started at {current!r}, now at {migrated!r}, expected {head!r}). "
+-                f"Take a backup of your database, then run\n"
++                f"{_backup_hint(backup)}\n"
+                 f"\n"
+                 f"    omnigent debug db-upgrade {db_uri!r}\n"
+                 f"\n"
+diff --git a/tests/db/test_sqlite_migration_backup.py b/tests/db/test_sqlite_migration_backup.py
+new file mode 100644
+index 0000000..ddb8678
+--- /dev/null
++++ b/tests/db/test_sqlite_migration_backup.py
+@@ -0,0 +1,125 @@
++"""Tests for the SQLite copy taken before an automatic schema upgrade."""
++
++from __future__ import annotations
++
++import sqlite3
++from contextlib import closing
++from datetime import datetime, timedelta, timezone
++from pathlib import Path
++
++import pytest
++from alembic import command
++from sqlalchemy import create_engine
++
++from omnigent.db.utils import (
++    _build_alembic_config,
++    _get_current_db_revision,
++    _get_head_db_revision,
++    _initialize_or_verify_schema,
++    backup_sqlite_database,
++)
++
++# The previous head before c9d3a1f2e4b5 added conversations.runner_id.
++STALE_REVISION = "8a4f1e9c2b07"
++SEPT_1 = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
++
++
++def _make_db_at_revision(db_path: Path, revision: str) -> str:
++    uri = f"sqlite:///{db_path}"
++    engine = create_engine(uri)
++    config = _build_alembic_config(uri)
++    try:
++        with engine.begin() as conn:
++            config.attributes["connection"] = conn
++            command.upgrade(config, revision)
++    finally:
++        engine.dispose()
++    return uri
++
++
++def _revision_in(path: Path) -> str:
++    with closing(sqlite3.connect(path)) as conn:
++        return conn.execute("SELECT version_num FROM alembic_version").fetchone()[0]
++
++
++def test_backup_copies_the_rows_and_keeps_the_file_private(tmp_path: Path) -> None:
++    db_path = tmp_path / "app.db"
++    with closing(sqlite3.connect(db_path)) as conn:
++        conn.execute("CREATE TABLE notes (body TEXT)")
++        conn.execute("INSERT INTO notes VALUES ('keep me')")
++        conn.commit()
++    db_path.chmod(0o600)
++
++    backup = backup_sqlite_database(f"sqlite:///{db_path}", "rev1", keep=3, now=SEPT_1)
++
++    assert backup == tmp_path / "app.db.pre-migrate-20260901T120000Z-rev1"
++    with closing(sqlite3.connect(backup)) as conn:
++        assert conn.execute("SELECT body FROM notes").fetchall() == [("keep me",)]
++    assert backup.stat().st_mode & 0o777 == 0o600
++
++
++def test_only_the_newest_backups_are_kept(tmp_path: Path) -> None:
++    db_path = tmp_path / "app.db"
++    sqlite3.connect(db_path).close()
++    for day in range(4):
++        backup_sqlite_database(
++            f"sqlite:///{db_path}", "rev1", keep=2, now=SEPT_1 + timedelta(days=day)
++        )
++
++    assert sorted(p.name for p in tmp_path.iterdir() if p != db_path) == [
++        "app.db.pre-migrate-20260903T120000Z-rev1",
++        "app.db.pre-migrate-20260904T120000Z-rev1",
++    ]
++
++
++def test_nothing_is_written_without_a_sqlite_file(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    db_path = tmp_path / "app.db"
++    sqlite3.connect(db_path).close()
++    monkeypatch.setenv("OMNIGENT_SQLITE_BACKUP_KEEP", "0")
++
++    assert [
++        backup_sqlite_database(f"sqlite:///{db_path}", "rev1"),
++        backup_sqlite_database(f"sqlite:///{tmp_path / 'missing.db'}", "rev1", keep=3),
++        backup_sqlite_database("sqlite:///:memory:", "rev1", keep=3),
++        backup_sqlite_database("postgresql://u:p@localhost/omnigent", "rev1", keep=3),
++    ] == [None, None, None, None]
++    assert [p.name for p in tmp_path.iterdir()] == ["app.db"]
++
++
++def test_stale_database_is_backed_up_before_the_automatic_upgrade(tmp_path: Path) -> None:
++    uri = _make_db_at_revision(tmp_path / "stale.db", STALE_REVISION)
++
++    engine = create_engine(uri)
++    try:
++        _initialize_or_verify_schema(engine, uri)
++        assert _get_current_db_revision(engine) == _get_head_db_revision(uri)
++    finally:
++        engine.dispose()
++
++    (backup,) = tmp_path.glob("stale.db.pre-migrate-*")
++    assert backup.name.endswith(f"-{STALE_REVISION}")
++    assert _revision_in(backup) == STALE_REVISION
++
++
++def test_failed_upgrade_points_the_operator_at_the_backup(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    uri = _make_db_at_revision(tmp_path / "stale.db", STALE_REVISION)
++
++    def _fail_migration(*_args: object, **_kwargs: object) -> None:
++        raise RuntimeError("boom")
++
++    monkeypatch.setattr("omnigent.db.utils._run_migrations", _fail_migration)
++    engine = create_engine(uri)
++    try:
++        with pytest.raises(RuntimeError) as exc_info:
++            _initialize_or_verify_schema(engine, uri)
++    finally:
++        engine.dispose()
++
++    (backup,) = tmp_path.glob("stale.db.pre-migrate-*")
++    assert f"A copy of the database from before this attempt is at {backup}." in str(
++        exc_info.value
++    )

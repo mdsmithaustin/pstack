@@ -1,0 +1,7 @@
+--- a/poteto-mode/references/review-lens.md
++++ b/poteto-mode/references/review-lens.md
+@@ -55,3 +55,4 @@
+ | Speculative Generality | Parameters, hooks, or type parameters no caller varies. Code whose only callers are tests. | Remove Dead Code, Change Function Declaration, Inline Function | A second real caller exists in this repo. |
+ | Message Chains | `a.b().c().d()` in a caller. | Hide Delegate, Move Function | The chain is a fluent builder API. |
+ | Middle Man | A class where most methods forward to one other object. | Remove Middle Man, Inline Function | The forwarding adds policy. |
++| Large Class | A file the diff pushes from under about 1000 lines to over it. A new responsibility added to a file or class already over it. | Extract Class, Extract Function, Move Function | The file is generated, is data, or is one cohesive table or enum. |

@@ -1,0 +1,382 @@
+diff --git a/omnigent/server/auth.py b/omnigent/server/auth.py
+index 56cd368..9b679ce 100644
+--- a/omnigent/server/auth.py
++++ b/omnigent/server/auth.py
+@@ -30,6 +30,7 @@ from __future__ import annotations
+ import asyncio
+ import ipaddress
+ import logging
++import math
+ import os
+ import time
+ from abc import ABC, abstractmethod
+@@ -380,6 +381,153 @@ def resolve_auth_source() -> str:
+     return "header"
+ 
+ 
++# Failed-login budget for the accounts ``POST /auth/login``, keyed on the
++# normalized username so rotating client IPs cannot reset it. Unknown names
++# count too, so a 429 never reveals whether an account exists.
++_LOGIN_MAX_FAILURES_ENV = "OMNIGENT_LOGIN_MAX_FAILURES"
++_LOGIN_FAILURE_WINDOW_ENV = "OMNIGENT_LOGIN_FAILURE_WINDOW_SECONDS"
++_LOGIN_LOCKOUT_ENV = "OMNIGENT_LOGIN_LOCKOUT_SECONDS"
++_DEFAULT_LOGIN_MAX_FAILURES = 5
++_DEFAULT_LOGIN_FAILURE_WINDOW_SECONDS = 900
++_DEFAULT_LOGIN_LOCKOUT_SECONDS = 900
++# Cap on tracked usernames so a spray of random names cannot exhaust memory;
++# unlocked entries are dropped first, oldest first.
++_LOGIN_THROTTLE_MAX_TRACKED = 10_000
++
++
++@dataclass(frozen=True)
++class LoginThrottleConfig:
++    """Failed-login budget for the accounts password login.
++
++    :param max_failures: Failures allowed per username within
++        *window_seconds* before it is locked, e.g. ``5``. ``0`` turns
++        throttling off.
++    :param window_seconds: Window failures are counted in, from the
++        first counted failure, e.g. ``900``.
++    :param lockout_seconds: How long a locked username is refused.
++    """
++
++    max_failures: int = _DEFAULT_LOGIN_MAX_FAILURES
++    window_seconds: int = _DEFAULT_LOGIN_FAILURE_WINDOW_SECONDS
++    lockout_seconds: int = _DEFAULT_LOGIN_LOCKOUT_SECONDS
++
++    @property
++    def enabled(self) -> bool:
++        """Whether any budget applies (``max_failures`` above zero)."""
++        return self.max_failures > 0
++
++
++def _env_non_negative_int(name: str, default: int) -> int:
++    """Parse a non-negative integer env var, warning and falling back on bad values."""
++    raw = os.environ.get(name, "").strip()
++    if not raw:
++        return default
++    try:
++        value = int(raw)
++    except ValueError:
++        logger.warning("%s=%r is not an integer; using %d", name, raw, default)
++        return default
++    if value < 0:
++        logger.warning("%s=%d is negative; using %d", name, value, default)
++        return default
++    return value
++
++
++def resolve_login_throttle_config() -> LoginThrottleConfig:
++    """Read the failed-login budget from the environment.
++
++    ``OMNIGENT_LOGIN_MAX_FAILURES`` (default 5; ``0`` turns throttling
++    off), ``OMNIGENT_LOGIN_FAILURE_WINDOW_SECONDS`` and
++    ``OMNIGENT_LOGIN_LOCKOUT_SECONDS`` (both default 900). A malformed
++    or negative value falls back to its default with a warning.
++
++    :returns: The resolved :class:`LoginThrottleConfig`.
++    """
++    return LoginThrottleConfig(
++        max_failures=_env_non_negative_int(_LOGIN_MAX_FAILURES_ENV, _DEFAULT_LOGIN_MAX_FAILURES),
++        window_seconds=_env_non_negative_int(
++            _LOGIN_FAILURE_WINDOW_ENV, _DEFAULT_LOGIN_FAILURE_WINDOW_SECONDS
++        ),
++        lockout_seconds=_env_non_negative_int(_LOGIN_LOCKOUT_ENV, _DEFAULT_LOGIN_LOCKOUT_SECONDS),
++    )
++
++
++@dataclass
++class _LoginFailures:
++    window_started_at: float
++    count: int = 0
++    locked_until: float = 0.0
++
++
++class LoginThrottle:
++    """Per-process failed-login counter for the accounts password login.
++
++    Built once per accounts router (see
++    :func:`omnigent.server.routes.accounts_auth.create_accounts_auth_router`).
++    Counts live in this process only: a deployment running N replicas
++    allows up to N times the budget, which still turns online guessing
++    from unbounded into a handful of tries per window.
++
++    :param config: The failure budget.
++    :param clock: Monotonic clock in seconds. Injectable for tests.
++    """
++
++    def __init__(
++        self,
++        config: LoginThrottleConfig,
++        *,
++        clock: Callable[[], float] = time.monotonic,
++    ) -> None:
++        self._config = config
++        self._clock = clock
++        self._failures: dict[str, _LoginFailures] = {}
++
++    def retry_after(self, username: str) -> int | None:
++        """Whole seconds until *username* may try again, or ``None`` if allowed now.
++
++        :param username: Normalized (stripped, lowercased) username.
++        """
++        entry = self._failures.get(username)
++        if not self._config.enabled or entry is None:
++            return None
++        remaining = entry.locked_until - self._clock()
++        return math.ceil(remaining) if remaining > 0 else None
++
++    def record_failure(self, username: str) -> None:
++        """Count one failed attempt and lock *username* once the budget is spent.
++
++        :param username: Normalized (stripped, lowercased) username.
++        """
++        if not self._config.enabled:
++            return
++        now = self._clock()
++        entry = self._failures.pop(username, None)
++        if entry is None or now - entry.window_started_at >= self._config.window_seconds:
++            locked_until = entry.locked_until if entry is not None else 0.0
++            entry = _LoginFailures(window_started_at=now, locked_until=locked_until)
++        entry.count += 1
++        if entry.count >= self._config.max_failures:
++            entry.locked_until = now + self._config.lockout_seconds
++            entry.window_started_at = now
++            entry.count = 0
++        # Re-inserting keeps the dict ordered from least to most recently failed.
++        self._failures[username] = entry
++        if len(self._failures) > _LOGIN_THROTTLE_MAX_TRACKED:
++            self._drop_oldest(now)
++
++    def record_success(self, username: str) -> None:
++        """Clear *username*'s failures after a successful login.
++
++        :param username: Normalized (stripped, lowercased) username.
++        """
++        self._failures.pop(username, None)
++
++    def _drop_oldest(self, now: float) -> None:
++        names = self._failures
++        unlocked = next((name for name, e in names.items() if e.locked_until <= now), None)
++        del names[unlocked if unlocked is not None else next(iter(names))]
++
++
+ class AuthProvider(ABC):
+     """Extract a user ID from an incoming request.
+ 
+diff --git a/omnigent/server/routes/accounts_auth.py b/omnigent/server/routes/accounts_auth.py
+index 3aeb9af..dec0532 100644
+--- a/omnigent/server/routes/accounts_auth.py
++++ b/omnigent/server/routes/accounts_auth.py
+@@ -38,7 +38,13 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
+ from omnigent.db.account_authority import bind_account_authority, target_account_scope
+ from omnigent.server.accounts_store import SqlAlchemyAccountStore
+ from omnigent.server.admin_list import AdminList, promote_if_listed
+-from omnigent.server.auth import _RESERVED_USERS, RESERVED_USER_LOCAL, UnifiedAuthProvider
++from omnigent.server.auth import (
++    _RESERVED_USERS,
++    RESERVED_USER_LOCAL,
++    LoginThrottle,
++    UnifiedAuthProvider,
++    resolve_login_throttle_config,
++)
+ from omnigent.server.oidc import mint_session_cookie
+ from omnigent.server.passwords import (
+     InvalidPasswordError,
+@@ -222,6 +228,7 @@ def create_accounts_auth_router(
+     permission_store: PermissionStore | None = None,
+     device_grant_store: DeviceGrantStore | None = None,
+     scheduled_task_store: ScheduledTaskStore | None = None,
++    login_throttle: LoginThrottle | None = None,
+ ) -> APIRouter:
+     """Build the ``/auth/*`` router for the accounts provider.
+ 
+@@ -253,6 +260,9 @@ def create_accounts_auth_router(
+     :param scheduled_task_store: When set, ``DELETE /auth/users/{id}``
+         disarms the scheduler timers of the deleted user's tasks (the
+         rows themselves are disabled by ``AccountStore.delete_user``).
++    :param login_throttle: Failed-login budget for ``POST /auth/login``.
++        ``None`` builds one from the ``OMNIGENT_LOGIN_*`` env vars (see
++        :func:`omnigent.server.auth.resolve_login_throttle_config`).
+     :returns: APIRouter to mount at ``/auth``.
+     """
+     if auth_provider._source != "accounts":
+@@ -265,6 +275,7 @@ def create_accounts_auth_router(
+     _secure = config.secure_cookies
+     _session_cookie = config.session_cookie_name
+     _session_max_age = config.session_ttl_hours * 3600
++    _login_throttle = login_throttle or LoginThrottle(resolve_login_throttle_config())
+ 
+     # ── Login / logout / me ───────────────────────────────────────
+ 
+@@ -279,8 +290,22 @@ def create_accounts_auth_router(
+         verify runs against a sentinel hash when the user is
+         missing so timing comparison is constant). This matches
+         OWASP authentication cheat-sheet guidance.
++
++        Repeated failures for one username are refused with 429 and a
++        ``Retry-After`` header before any password check runs (see
++        :class:`omnigent.server.auth.LoginThrottle`).
+         """
+         username = body.username.strip().lower()
++        retry_after = _login_throttle.retry_after(username)
++        if retry_after is not None:
++            _logger.info(
++                "auth/login: throttled %s for %ds", _redact_for_log(username), retry_after
++            )
++            return JSONResponse(
++                status_code=429,
++                content={"error": "too many failed login attempts, try again later"},
++                headers={"Retry-After": str(retry_after)},
++            )
+         password_hash, generation = account_store.login_snapshot(username)
+         if generation is not None:
+             bind_account_authority(username, generation)
+@@ -293,12 +318,14 @@ def create_accounts_auth_router(
+             with contextlib.suppress(InvalidPasswordError):
+                 verify_password(body.password, _DUMMY_HASH)
+             _logger.info("auth/login: unknown user %s", _redact_for_log(username))
++            _login_throttle.record_failure(username)
+             return JSONResponse(status_code=401, content={"error": "invalid username or password"})
+ 
+         try:
+             verify_password(body.password, password_hash)
+         except InvalidPasswordError:
+             _logger.info("auth/login: bad password for %s", _redact_for_log(username))
++            _login_throttle.record_failure(username)
+             return JSONResponse(status_code=401, content={"error": "invalid username or password"})
+ 
+         # Opportunistic rehash if argon2 parameters were upgraded.
+@@ -358,6 +385,7 @@ def create_accounts_auth_router(
+                 )
+         if generation is None or not account_store.accepts_generation(username, generation):
+             return JSONResponse(status_code=401, content={"error": "invalid username or password"})
++        _login_throttle.record_success(username)
+         resp = JSONResponse(status_code=200, content=body_payload)
+         _set_session_cookie(
+             resp,
+diff --git a/tests/server/test_login_throttle.py b/tests/server/test_login_throttle.py
+new file mode 100644
+index 0000000..8191d0d
+--- /dev/null
++++ b/tests/server/test_login_throttle.py
+@@ -0,0 +1,119 @@
++"""Tests for failed-login throttling on the accounts ``POST /auth/login``."""
++
++from __future__ import annotations
++
++import secrets
++from collections.abc import Iterator
++from pathlib import Path
++
++import pytest
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++
++from omnigent.db.utils import get_or_create_engine
++from omnigent.server.accounts_config import AccountsConfig
++from omnigent.server.accounts_store import SqlAlchemyAccountStore
++from omnigent.server.admin_list import AdminList
++from omnigent.server.auth import (
++    LoginThrottle,
++    LoginThrottleConfig,
++    UnifiedAuthProvider,
++    resolve_login_throttle_config,
++)
++from omnigent.server.passwords import hash_password
++from omnigent.server.routes.accounts_auth import create_accounts_auth_router
++
++
++def _throttle(max_failures: int) -> tuple[LoginThrottle, list[float]]:
++    now = [50.0]
++    config = LoginThrottleConfig(max_failures=max_failures, window_seconds=60, lockout_seconds=120)
++    return LoginThrottle(config, clock=lambda: now[0]), now
++
++
++def test_username_locks_after_max_failures_and_unlocks_after_lockout() -> None:
++    throttle, now = _throttle(3)
++    for _ in range(2):
++        throttle.record_failure("alice")
++    assert throttle.retry_after("alice") is None
++
++    throttle.record_failure("alice")
++    assert throttle.retry_after("alice") == 120
++    now[0] += 119.5
++    assert throttle.retry_after("alice") == 1
++    now[0] += 0.5
++    assert throttle.retry_after("alice") is None
++
++
++def test_failures_outside_the_window_do_not_add_up() -> None:
++    throttle, now = _throttle(2)
++    throttle.record_failure("alice")
++    now[0] += 61
++    throttle.record_failure("alice")
++    assert throttle.retry_after("alice") is None
++    throttle.record_failure("alice")
++    assert throttle.retry_after("alice") == 120
++
++
++def test_success_clears_the_count_and_other_users_are_unaffected() -> None:
++    throttle, _ = _throttle(2)
++    throttle.record_failure("alice")
++    throttle.record_success("alice")
++    throttle.record_failure("alice")
++    throttle.record_failure("bob")
++    throttle.record_failure("bob")
++    assert (throttle.retry_after("alice"), throttle.retry_after("bob")) == (None, 120)
++
++
++def test_config_reads_env_and_falls_back_on_bad_values(monkeypatch: pytest.MonkeyPatch) -> None:
++    monkeypatch.setenv("OMNIGENT_LOGIN_MAX_FAILURES", "2")
++    monkeypatch.setenv("OMNIGENT_LOGIN_FAILURE_WINDOW_SECONDS", "ten")
++    monkeypatch.setenv("OMNIGENT_LOGIN_LOCKOUT_SECONDS", "-5")
++    assert resolve_login_throttle_config() == LoginThrottleConfig(
++        max_failures=2, window_seconds=900, lockout_seconds=900
++    )
++
++
++@pytest.fixture
++def login_client(tmp_path: Path) -> Iterator[TestClient]:
++    db_url = f"sqlite:///{tmp_path}/accounts.db"
++    get_or_create_engine(db_url)
++    store = SqlAlchemyAccountStore(db_url)
++    store.create_user_with_password("alice", hash_password("correct-horse-1"))
++    config = AccountsConfig(
++        cookie_secret=secrets.token_bytes(32),
++        session_ttl_hours=8,
++        base_url="http://localhost:8000",
++        init_admin_password=None,
++        invite_ttl_seconds=3600,
++        magic_ttl_seconds=600,
++    )
++    provider = UnifiedAuthProvider(source="accounts", accounts_config=config)
++    throttle = LoginThrottle(LoginThrottleConfig(max_failures=3, lockout_seconds=300))
++    app = FastAPI()
++    app.include_router(
++        create_accounts_auth_router(
++            provider, store, AdminList(tmp_path / "admins"), login_throttle=throttle
++        ),
++        prefix="/auth",
++    )
++    with TestClient(app) as client:
++        yield client
++
++
++def test_login_refuses_a_locked_username_even_with_the_right_password(
++    login_client: TestClient,
++) -> None:
++    wrong = {"username": "Alice", "password": "wrong-password"}
++    codes = [login_client.post("/auth/login", json=wrong).status_code for _ in range(3)]
++    assert codes == [401, 401, 401]
++
++    right = {"username": "alice", "password": "correct-horse-1"}
++    resp = login_client.post("/auth/login", json=right)
++    assert resp.status_code == 429
++    assert int(resp.headers["Retry-After"]) in range(299, 301)
++
++
++def test_unknown_usernames_are_throttled_like_real_ones(login_client: TestClient) -> None:
++    ghost = {"username": "ghost", "password": "anything-12345"}
++    codes = [login_client.post("/auth/login", json=ghost).status_code for _ in range(4)]
++    assert codes == [401, 401, 401, 429]
