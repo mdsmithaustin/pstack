@@ -705,9 +705,12 @@ def check_known_issues(answer, workspace):
 
 
 # hermes #123510, graded at the PR head, since the rebase merge carries
-# unrelated main changes. Its Windows tests skip on a Linux host, so the
-# functional set also runs them, and its dropped POSIX-still-packs test, with
-# the host faked. The repo forbids that fake in its own tests (C3), not here.
+# unrelated main changes. Its Windows tests skip on a Linux host and call
+# _stop_desktop_processes_locking_build under a Desktop ancestor, which a build
+# that skips first never reaches. So the functional set drives the Windows skip
+# through the update tail, build_update_products, and runs the PR's dropped
+# POSIX-still-packs test, with the host faked. The repo forbids that fake in its
+# own tests (C3), not here.
 DESKTOP_SKIP_PR_TESTS = r'''
 
 def _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, *, also_posix):
@@ -762,11 +765,6 @@ def _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, *, also_
 def test_posix_swap_spares_the_desktop_driving_this_update(tmp_path, monkeypatch):
     _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, also_posix=True)
 
-
-@pytest.mark.parametrize("also_posix", [False, True])
-def test_windows_stop_spares_the_desktop_driving_this_update_on_a_faked_host(tmp_path, monkeypatch, also_posix):
-    monkeypatch.setattr(sys, "platform", "win32")
-    _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, also_posix=also_posix)
 '''
 
 DESKTOP_SKIP_CHECKS = r'''import contextlib
@@ -823,8 +821,18 @@ def windows_tree(tmp_path, monkeypatch):
     return types.SimpleNamespace(root=root, desktop_dir=desktop_dir, live_exe=live_exe, stopped=stopped, packs=packs)
 
 
-def test_windows_build_under_its_own_desktop_finishes_without_stopping_it(windows_tree):
-    main_desktop.build_prepared_desktop(windows_tree.desktop_dir, source_mode=False, npm="npm", env={})
+def test_windows_update_tail_under_its_own_desktop_finishes_without_stopping_it(windows_tree, monkeypatch):
+    from hermes_cli import source_build
+
+    for frontend in ("ui-tui", "web"):
+        (windows_tree.root / frontend).mkdir()
+        (windows_tree.root / frontend / "package.json").write_text("{}", encoding="utf-8")
+    for target in ("hermes_cli.main_install_repair._warn_configured_features_missing_deps",
+                   "hermes_cli.update_stage.publish_stage", "hermes_cli.source_build.prepare_source_dependencies",
+                   "hermes_cli.source_build.build_source_tui", "hermes_cli.source_build.build_source_web",
+                   "hermes_cli.memory_provider_migration.migrate_all_homes"):
+        monkeypatch.setattr(target, lambda *_a, **_k: None)
+    source_build.build_update_products(windows_tree.root, desktop=True)
     leftovers = sorted(path.name for path in windows_tree.desktop_dir.iterdir())
     assert ([pid for pid in windows_tree.stopped if pid in (ANCESTOR, HELPER)], windows_tree.packs,
             windows_tree.live_exe.read_text(encoding="utf-8"), leftovers) == ([], [], "old", ["package.json", "release"])
@@ -890,8 +898,7 @@ def check_desktop_skip(answer, workspace):
     pr_tests, checks = "tests/hermes_cli/test_gui_command.py", "tests/hermes_cli/test_desktop_update_tail.py"
     return graded(workspace, "hermes-8afaab3703e3", {pr_tests: DESKTOP_SKIP_PR_TESTS, checks: DESKTOP_SKIP_CHECKS}, {
         f"{pr_tests}::test_posix_swap_spares_the_desktop_driving_this_update": "functional",
-        f"{pr_tests}::test_windows_stop_spares_the_desktop_driving_this_update_on_a_faked_host": "functional",
-        f"{checks}::test_windows_build_under_its_own_desktop_finishes_without_stopping_it": "functional",
+        f"{checks}::test_windows_update_tail_under_its_own_desktop_finishes_without_stopping_it": "functional",
         f"{checks}::test_posix_packaged_build_under_its_desktop_still_packs": "functional",
         f"{checks}::test_hermes_desktop_reopens_the_app_it_did_not_rebuild": "constraint:C2",
     }, {"hermes_cli/main_desktop.py": 61, "tests/hermes_cli/test_gui_command.py": 46, "website/docs/getting-started/updating.md": 1},
