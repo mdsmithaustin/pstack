@@ -124,6 +124,24 @@ class TemplateNameTests(unittest.TestCase):
         })
 
 
+class SyncArgsTests(unittest.TestCase):
+    CONFIG = {"repos": {"omnigent": {"sync": ["--frozen"], "tools": {"group": "test", "extra": "dev"}}}}
+
+    def sync_args(self, pyproject):
+        with mock.patch.object(sandbox, "CONFIG", self.CONFIG), mock.patch.object(sandbox.workspace, "git", return_value=pyproject.encode()):
+            return sandbox.sync_args("omnigent", "0" * 40)
+
+    def test_a_commit_with_the_dependency_group_syncs_the_group(self):
+        self.assertEqual(self.sync_args('[project]\nname = "o"\n[dependency-groups]\ntest = ["pytest"]\n'), ["--frozen", "--group", "test"])
+
+    def test_a_commit_from_before_the_group_syncs_the_extra(self):
+        self.assertEqual(self.sync_args('[project]\nname = "o"\n[project.optional-dependencies]\ndev = ["pytest"]\n'), ["--frozen", "--extra", "dev"])
+
+    def test_a_commit_with_neither_is_refused(self):
+        with self.assertRaisesRegex(sandbox.SandboxError, r"^omnigent at 000000000000 declares neither dependency group 'test' nor extra 'dev'$"):
+            self.sync_args('[project]\nname = "o"\n')
+
+
 class ScreenRunnerTests(unittest.TestCase):
     def test_sbx_runner_refuses_a_pasted_project_case(self):
         with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(screen.ScreenError, "workspace cases only"):

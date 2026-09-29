@@ -32,6 +32,7 @@ import os
 import secrets
 import signal
 import subprocess
+import tomllib
 import sys
 import tarfile
 import tempfile
@@ -209,7 +210,7 @@ def config_digest(*parts):
 def deps_tag(agent, repo, commit):
     """The template name for agent, repo, and commit, versioned by every
     setting that changes what the build installs."""
-    spec = {key: value for key, value in CONFIG["repos"][repo].items() if key in ("python", "sync", "env")}
+    spec = {key: value for key, value in CONFIG["repos"][repo].items() if key in ("python", "sync", "tools", "env")}
     return f"canon-deps-{agent}-{repo}-{commit[:12]}:{config_digest(CONFIG['uv'], spec, CONFIG['agents'][agent]['kit'], CONFIG['agents'][agent].get('cli'))}"
 
 
@@ -224,6 +225,22 @@ def deps_env(repo):
         "UV_OFFLINE": "1",
         **spec.get("env", {}),
     }
+
+
+def sync_args(repo, commit):
+    """uv sync arguments for repo at commit. A repo that moved its test tools
+    from an optional extra to a dependency group needs the flag its pyproject
+    at that commit declares."""
+    spec = CONFIG["repos"][repo]
+    tools = spec.get("tools")
+    if not tools:
+        return list(spec["sync"])
+    pyproject = tomllib.loads(workspace.git("--git-dir", str(workspace.mirror_path(repo)), "show", f"{commit}:pyproject.toml").decode())
+    if tools["group"] in pyproject.get("dependency-groups", {}):
+        return [*spec["sync"], "--group", tools["group"]]
+    if tools["extra"] in pyproject.get("project", {}).get("optional-dependencies", {}):
+        return [*spec["sync"], "--extra", tools["extra"]]
+    raise SandboxError(f"{repo} at {commit[:12]} declares neither dependency group {tools['group']!r} nor extra {tools['extra']!r}")
 
 
 def records_dir():
@@ -243,7 +260,7 @@ def build_deps(agent, repo, commit):
     tag = deps_tag(agent, repo, commit)
     name = f"{PREFIX}deps-{agent}-{repo}-{secrets.token_hex(3)}"
     record = {"tag": tag, "agent": agent, "repo": repo, "commit": commit, "uv": CONFIG["uv"], "python": spec["python"],
-              "sync": spec["sync"], "network": CONFIG["build_network"], "timings": {}}
+              "sync": sync_args(repo, commit), "network": CONFIG["build_network"], "timings": {}}
     timings = record["timings"]
     with tempfile.TemporaryDirectory() as directory:
         source = Path(directory) / "src.tar"
@@ -260,7 +277,7 @@ def build_deps(agent, repo, commit):
                 ["tar", "-xf", f"{DEPS_ROOT}/{repo}/src.tar", "-C", f"{DEPS_ROOT}/{repo}/src"],
                 ["uv", "tool", "install", "--force", f"uv=={CONFIG['uv']}"],
                 ["uv", "python", "install", spec["python"]],
-                ["sh", "-c", f"cd {DEPS_ROOT}/{repo}/src && uv sync {' '.join(spec['sync'])}"],
+                ["sh", "-c", f"cd {DEPS_ROOT}/{repo}/src && uv sync {' '.join(record['sync'])}"],
             ]
             cli = CONFIG["agents"][agent].get("cli")
             if cli:
@@ -401,7 +418,7 @@ def manifest(agent, root, spec, discovery):
         # main and the PR branch from these ids and checks the PR branch out.
         record["review"] = {"branch": spec["review"]["branch"], "refs": spec["review"]["refs"]}
     if spec["repo"] in CONFIG["repos"]:
-        record["deps"] = {"env": deps_env(spec["repo"]), "sync": CONFIG["repos"][spec["repo"]]["sync"]}
+        record["deps"] = {"env": deps_env(spec["repo"]), "sync": sync_args(spec["repo"], spec["commit"])}
     return record
 
 
