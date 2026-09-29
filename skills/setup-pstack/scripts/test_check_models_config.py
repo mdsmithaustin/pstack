@@ -154,6 +154,14 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         self.assertTrue(any(n[2] == "Claude Code cannot use none or ultra, so it runs this role at the session effort" for n in notices_of(findings)))
         self.assertEqual(sections[""]["default"], [("auto", "none")])
 
+    def test_flat_none_overridden_by_claude_code_section_is_not_a_notice(self):
+        text = "default: auto@none\n\n## claude-code\ndefault: auto@high\n"
+        sections, findings = cmc.parse(text)
+        self.assertEqual(errors_of(findings), [])
+        self.assertFalse(any(n[2] == "Claude Code cannot use none or ultra, so it runs this role at the session effort" for n in notices_of(findings)))
+        self.assertEqual(sections[""]["default"], [("auto", "none")])
+        self.assertEqual(sections["claude-code"]["default"], [("auto", "high")])
+
     def test_codex_section_is_unaffected(self):
         text = "## codex\ntrail reviewer: gpt-5.6-sol@ultra\n"
         sections, findings = cmc.parse(text)

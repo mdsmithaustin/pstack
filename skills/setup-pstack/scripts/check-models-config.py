@@ -63,8 +63,9 @@ def _expand_names(raw_names: list[str]) -> list[str]:
     return expanded
 
 
-def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str, str]], section: str):
+def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str, str]], section: str) -> tuple[list[tuple[str, str | None]], list[int]]:
     entries: list[tuple[str, str | None]] = []
+    deferred_flat_notices: list[int] = []
     for raw in entries_str.split(","):
         entry = raw.strip()
         if not entry:
@@ -97,9 +98,9 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
             if effort in NOTICE_EFFORTS:
                 findings.append((line_no, "notice", f"{model}@{effort} pins an expensive tier"))
             if section == "" and effort in NOT_CLAUDE_CODE_LEVELS:
-                findings.append((line_no, "notice", "Claude Code cannot use none or ultra, so it runs this role at the session effort"))
+                deferred_flat_notices.append(line_no)
         entries.append((model, effort))
-    return entries
+    return entries, deferred_flat_notices
 
 
 def parse(text: str) -> tuple[dict, list]:
@@ -119,6 +120,7 @@ def parse(text: str) -> tuple[dict, list]:
     current_section = ""
     headers_seen: set[str] = set()
     roles_seen: dict[str, set[str]] = {"": set()}
+    pending_flat_notices: list[tuple[int, str]] = []
 
     for i in range(body_start, len(lines)):
         line_no, raw = i + 1, lines[i]
@@ -153,7 +155,7 @@ def parse(text: str) -> tuple[dict, list]:
             continue
 
         names = _expand_names(raw_names)
-        entries = _parse_entries(entries_str, line_no, findings, current_section)
+        entries, deferred_flat_notices = _parse_entries(entries_str, line_no, findings, current_section)
         if not entries:
             continue
 
@@ -168,6 +170,14 @@ def parse(text: str) -> tuple[dict, list]:
             else:
                 roles_seen[current_section].add(name)
                 sections[current_section][name] = entries
+                if current_section == "":
+                    for ln in deferred_flat_notices:
+                        pending_flat_notices.append((ln, name))
+
+    claude_code_roles = sections.get(CLAUDE_CODE_SECTION, {})
+    for line_no, name in pending_flat_notices:
+        if name not in claude_code_roles:
+            findings.append((line_no, "notice", "Claude Code cannot use none or ultra, so it runs this role at the session effort"))
 
     return sections, findings
 
