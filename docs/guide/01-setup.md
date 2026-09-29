@@ -22,6 +22,8 @@ Run:
 
 [`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex. Choose project or user scope if you want native role files. Setup preserves existing user-managed roles and reports payload readiness, native files, and live role loading separately. A generic delegate can receive the complete persona while native loading remains unverified. Hermes uses that briefing through delegation context.
 
+Setup also checks whether Claude Code's task tools and Codex's plan tool are on, because `/poteto-mode` keeps its worklist in them. When one is off, setup shows you the exact setting and writes it only if you say yes.
+
 Setup then detects the models you have access to, asks for a reasoning budget, shows you each role (code delegates, judgment, the review panels), and asks what you want. Answer the questions. It writes `~/.agents/pstack-models.md`, a small rule every pstack skill reads. Each role maps to a model and, when you want to pin it, a reasoning effort (`sonnet@high`). On Claude Code a written effort applies once setup has registered pstack's effort agents. Until then subagents run at your session effort. A `## codex` section holds the picks that apply only on Codex, so one file serves every CLI you use.
 
 You only override what you care about. A role with no line in the rule keeps the skill's default. To restore a default, delete that role's line. A rerun of `/setup-pstack` keeps any role you changed, whether its model, effort, panel list, alias, or harness section. A config written before the panels shrank to three entries still lists four panel entries, so delete those panel lines, including any under `## codex`, or delete the file, then run `/setup-pstack` again.
@@ -44,7 +46,7 @@ Pick something real but small, and describe it the way you'd describe it to a co
 /poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.
 ```
 
-Watch the todo list. Its first items are the matched playbook's steps copied in, the Feature playbook for this prompt. If `/poteto-mode` skips a step, the step stays in the list with `skipped: <reason>`, so you can see what it chose not to do.
+Watch the todo list, or the numbered list in chat when the task tools are off. Its first items are the matched playbook's steps copied in, the Feature playbook for this prompt. If `/poteto-mode` skips a step, the step stays in the list with `skipped: <reason>`, so you can see what it chose not to do.
 
 From here you can type normal follow-ups. `/poteto-mode` is sticky. It stays on for the conversation until you opt out by saying so.
 
