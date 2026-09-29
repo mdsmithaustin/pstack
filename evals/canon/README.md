@@ -1556,7 +1556,8 @@ for the checkout and all three samples.
 
 `steering-review-asks` asks whether the skill tree steers an agent toward what
 a maintainer asked for in review. It compares current with the stub arm and
-owns its cases. Each case replays one merged pull request from the commit its
+owns its cases. It reads `skills/` at 4fe21347, as `bug-fix-spawn-step-stub`
+does. Each case replays one merged pull request from the commit its
 branch started at, with the operator request as the PR stood before review.
 
 | case | PR | starting commit | image |

@@ -1,5 +1,5 @@
 {
   "arms": ["current", "stub"],
   "source": "whether the skill tree steers an agent toward what a maintainer asked for in review: five merged hermes and omnigent pull requests replayed from their starting commits, graded by the PR's own tests and by checks built from each review ask, the tracked skills against a stub that keeps every skill name and description and no guidance",
-  "skills_at": "721108e925d8d7d91f8d90e2984d3a6a8fadde4c"
+  "skills_at": "4fe213477eda148bbcdfdeea61b5b08209cbc993"
 }
