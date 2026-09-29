@@ -177,7 +177,7 @@ def parse(text: str) -> tuple[dict, list]:
     claude_code_roles = sections.get(CLAUDE_CODE_SECTION, {})
     for line_no, name in pending_flat_notices:
         if name not in claude_code_roles:
-            findings.append((line_no, "notice", "Claude Code cannot use none or ultra, so it runs this role at the session effort"))
+            findings.append((line_no, "notice", f"Claude Code cannot use none or ultra, so it runs `{name}` at the session effort"))
 
     return sections, findings
 
