@@ -198,6 +198,15 @@ only current and stub targets `poteto-mode/SKILL.md`, and under `--entry
 skill` mounts poteto-mode alone. `plan` and `build` print the stub arm as a
 count of cut and dropped files.
 
+`compare` takes the stub arm as the baseline of every pair it is in, so the
+line reads `current vs stub: SEPARATES` when current passes and the stub fails,
+and the rule line reads `rule current vs stub`. The exposure target is every
+file that differs from the stub, which is every body and every other file. The
+guided arm is exposed when it read one of them, so an unexposed pair is one
+where the guidance was never loaded. Under `--entry poteto-mode` the wrapper
+injects `poteto-mode/SKILL.md`, so current is always exposed there. In
+`compare.json` the rule entry's `arm` is `stub`.
+
 The stub arm drops `pstack-harness/scripts/subagents.py`, so a `--runner sbx`
 stub arm registers no poteto-agent or Comment Sicko persona. The persona files
 are guidance that the skill tree installs.

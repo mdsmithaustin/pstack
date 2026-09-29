@@ -1173,9 +1173,12 @@ def classify(baseline, treatment, target, entry="skill"):
 
 def comparisons(arms):
     """(baseline, treatment) arm pairs: each arm against the first, then each
-    later arm against each earlier one."""
+    later arm against each earlier one. The stub arm is always the baseline,
+    so a pair with it separates when guidance turns a fail into a pass, and is
+    exposed when the guided arm read a file the stub lacks."""
     treated = arms[1:]
-    return [(arms[0], arm) for arm in treated] + [(baseline, arm) for index, baseline in enumerate(treated) for arm in treated[index + 1:]]
+    pairs = [(arms[0], arm) for arm in treated] + [(baseline, arm) for index, baseline in enumerate(treated) for arm in treated[index + 1:]]
+    return [(treatment, baseline) if treatment == STUB else (baseline, treatment) for baseline, treatment in pairs]
 
 
 def differing_files(case_root, build_info, baseline, treatment):
@@ -1436,7 +1439,7 @@ def compare(out):
     pairs = {}
     for row in table:
         pairs.setdefault((row["agent"], row["rule"], row["run"], row["case"]), {})[row["arm"]] = row
-    # grouped: (agent, rule, run, treatment arm vs current, or None for a pair rule) -> case outcomes
+    # grouped: (agent, rule, run, (treatment, baseline) of a pair with current, or None for a pair rule) -> case outcomes
     summary, grouped = [], {}
     for (agent, rule, run_number, case), arms in sorted(pairs.items(), key=lambda item: tuple(map(str, item[0]))):
         first = next(iter(arms.values()))
@@ -1452,8 +1455,8 @@ def compare(out):
                 pair.update(baseline=baseline, treatment=treatment)
             summary.append(pair)
             outcomes.append(f"    {treatment} vs {baseline}: {outcome.upper()}")
-            if baseline == names[0]:
-                grouped.setdefault((agent, rule, run_number, None if paired else treatment), []).append((case, first["kind"], outcome))
+            if names[0] in (baseline, treatment):
+                grouped.setdefault((agent, rule, run_number, None if paired else (treatment, baseline)), []).append((case, first["kind"], outcome))
         cells = [f"{arm}={arms[arm]['verdict'] if arm in arms else 'MISSING'}" for arm in names]
         print(f"{agent:6} {rule:26} {case:18} {first['kind']:9} run-{run_number}  " + "  ".join(cells) + (f"  {summary[-1]['outcome'].upper()}" if paired else ""))
         for arm in names:
@@ -1465,7 +1468,7 @@ def compare(out):
                 target_state = f"{first['target']} {'read' if first['target'] in seen else 'NOT READ'}; "
             else:
                 owned = build_info["arm_changes"][arm]
-                target_state = f"changed {', '.join(owned)} ({len(set(owned) & set(seen))} of {len(owned)} read); " if owned else ""
+                target_state = f"changed {arm_summary(arm, owned)} ({len(set(owned) & set(seen))} of {len(owned)} read); " if owned else ""
             entry_state = "invoked" if row["exposure"]["entry_invoked"] else "not observed"
             companion_state = ""
             if "companions_read" in row["exposure"]:
@@ -1489,12 +1492,13 @@ def compare(out):
         outcomes += [(case, spec["kind"], "missing") for case, spec in built_cases.items() if case not in ran]
     rules = []
     # Sort on agent, rule, and run only, so a rule's arms keep their order.
-    for (agent, rule, run_number, arm), outcomes in sorted(grouped.items(), key=lambda item: tuple(map(str, item[0][:3]))):
+    for (agent, rule, run_number, pair), outcomes in sorted(grouped.items(), key=lambda item: tuple(map(str, item[0][:3]))):
         result, reasons = rule_verdict(outcomes)
         verdict_row = {"agent": agent, "rule": rule, "run": run_number, "verdict": result, "reasons": reasons}
         label = "rule"
-        if arm is not None:
-            verdict_row["arm"], label = arm, f"rule {arm} vs current"
+        if pair is not None:
+            verdict_row["arm"] = next(arm for arm in pair if arm != "current")
+            label = f"rule {pair[0]} vs {pair[1]}"
         uncalibrated = any(not row["review"]["calibrated"] for row in table
                            if "review" in row and (row["agent"], row["rule"], row["run"]) == (agent, rule, run_number))
         if uncalibrated:
