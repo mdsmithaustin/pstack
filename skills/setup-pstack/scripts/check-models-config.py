@@ -97,7 +97,7 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
             if effort in NOTICE_EFFORTS:
                 findings.append((line_no, "notice", f"{model}@{effort} pins an expensive tier"))
             if section == "" and effort in NOT_CLAUDE_CODE_LEVELS:
-                findings.append((line_no, "notice", "Claude Code reads none as low and runs ultra at the session effort"))
+                findings.append((line_no, "notice", "Claude Code cannot use none or ultra, so it runs this role at the session effort"))
         entries.append((model, effort))
     return entries
 

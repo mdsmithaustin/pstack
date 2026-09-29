@@ -151,7 +151,7 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         text = "default: auto@none\n"
         sections, findings = cmc.parse(text)
         self.assertEqual(errors_of(findings), [])
-        self.assertTrue(any("Claude Code reads none as low" in n[2] for n in notices_of(findings)))
+        self.assertTrue(any(n[2] == "Claude Code cannot use none or ultra, so it runs this role at the session effort" for n in notices_of(findings)))
         self.assertEqual(sections[""]["default"], [("auto", "none")])
 
     def test_codex_section_is_unaffected(self):
