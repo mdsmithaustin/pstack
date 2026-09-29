@@ -32,7 +32,7 @@ Each writer gets its own git worktree, whichever mechanism spawns it. Keep the l
 
 **Set an arm's effort.** Every role resolves to a model and a reasoning effort (see **The models config** below). Pass the effort through the spawn mechanism when it has a field or flag for it.
 
-Claude Code has no such field. There the agent type carries the effort. pstack registers one generic agent per level: `pstack-effort-low`, `pstack-effort-medium`, `pstack-effort-high`, `pstack-effort-xhigh`, and `pstack-effort-max`. Each sets only `effort` in its frontmatter, so the `model` you pass still governs. Pick the `subagent_type` from the resolved effort and the persona the skill names:
+Claude Code has no such field. There the agent type carries the effort. pstack registers one generic agent per level: `pstack-effort-low`, `pstack-effort-medium`, `pstack-effort-high`, `pstack-effort-xhigh`, and `pstack-effort-max`. Each sets no model, only a name, a description, and `effort`, so the `model` you pass still governs. Pick the `subagent_type` from the resolved effort and the persona the skill names:
 
 | resolved effort | skill names `general-purpose` | skill names a pstack persona |
 |---|---|---|

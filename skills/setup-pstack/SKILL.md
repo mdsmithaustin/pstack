@@ -53,7 +53,7 @@ On Claude Code, describe `default — keep as written` as "roles without a writt
 
 ### 4. Validate
 
-Run the lint on the file you are about to write, before writing it: `python3 <this skill's directory>/scripts/check-models-config.py <file>`. Any `error:` line (unknown role, bad effort, an effort the model does not support, a duplicate role or section) stops the write; fix the line and re-run. `notice:` lines mark `max` and `ultra` pins; read them back to the user so the expensive tiers are a choice. Every *newly chosen* real slug must be in the detected set. `inherit-parent` and `auto` always pass, and preserved values from another harness are exempt. If a chosen real slug is not available, stop and ask again.
+Run the lint on the file you are about to write, before writing it: `python3 <this skill's directory>/scripts/check-models-config.py <file>`. Any `error:` line (unknown role, bad effort, an effort the model does not support, a duplicate role or section, `none` or `ultra` under `## claude-code`) stops the write; fix the line and re-run. `notice:` lines mark `max` and `ultra` pins, and a flat-line `none` or `ultra` that Claude Code runs at the session effort. Read each one back to the user, so an expensive tier or a Claude Code fallback is a choice. Every *newly chosen* real slug must be in the detected set. `inherit-parent` and `auto` always pass, and preserved values from another harness are exempt. If a chosen real slug is not available, stop and ask again.
 
 ### 5. Write the config
 
