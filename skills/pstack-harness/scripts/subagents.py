@@ -83,6 +83,15 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
 ROOT_GUIDANCE = "Resolve other named sibling skills under this installed skills root: "
 CODEX_BRIEF = "developer_instructions = "
 
+EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
+EFFORT_AGENT_PREFIX = "pstack-effort-"
+EFFORT_DESCRIPTION = (
+    "pstack delegate at {level} reasoning effort. Spawn it in place of general-purpose, "
+    "with the role's model in the call, only when a pstack role's effort resolves to "
+    "{level} per the pstack-harness skill."
+)
+DELEGATE_TEMPLATE = Path("references/subagents/effort-delegate.md")
+
 
 def render_brief(role: Role, skills_root: Path) -> str:
     paths = [skills_root / name / "SKILL.md" for name in role.skills]
@@ -179,6 +188,50 @@ def inspect_native(role: Role, destination: Destination, skills_root: Path) -> N
     return NativeFile(path, expected, previous, status)
 
 
+def load_delegate(skill_directory: Path) -> str:
+    path = skill_directory / DELEGATE_TEMPLATE
+    if not path.is_file():
+        raise ValueError(f"missing effort delegate template: {path}")
+    body = path.read_text(encoding="utf-8")
+    if not body.strip():
+        raise ValueError(f"empty effort delegate template: {path}")
+    if body.splitlines()[0].strip() == "---":
+        raise ValueError(f"effort delegate template must not have frontmatter: {path}")
+    if "{" in body:
+        raise ValueError(f"effort delegate template must not be templated: {path}")
+    return body
+
+
+def render_effort(level: str, delegate_body: str) -> bytes:
+    quote = lambda value: json.dumps(value, ensure_ascii=False)
+    agent_id = EFFORT_AGENT_PREFIX + level
+    content = (
+        f"---\nname: {agent_id}\ndescription: {quote(EFFORT_DESCRIPTION.format(level=level))}\n"
+        f"effort: {level}\n---\n\n" + delegate_body
+    )
+    encoded = (content + "\n").encode("utf-8")
+    marker = f"<!-- pstack-generated:v1:{agent_id}:{{digest}} -->\n"
+    return encoded + marker.format(digest=hashlib.sha256(encoded).hexdigest()).encode("ascii")
+
+
+def inspect_effort(level: str, destination: Destination, delegate_body: str) -> NativeFile:
+    agent_id = EFFORT_AGENT_PREFIX + level
+    path = destination.directory / (agent_id + ".md")
+    expected = render_effort(level, delegate_body)
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        return NativeFile(path, expected, None, "conflict")
+    if not path.exists():
+        return NativeFile(path, expected, None, "missing")
+    previous = path.read_bytes()
+    if previous == expected:
+        status = "current"
+    elif managed(previous, agent_id, "claude-code"):
+        status = "outdated-generated"
+    else:
+        status = "conflict"
+    return NativeFile(path, expected, previous, status)
+
+
 def install_files(files: tuple[NativeFile, ...], destination: Destination) -> None:
     validate_destination(destination)
     destination.directory.mkdir(parents=True, exist_ok=True)
@@ -233,7 +286,7 @@ def main() -> int:
             destination = Destination(args.harness, root)
     skill_directory = Path(os.path.abspath(sys.argv[0])).parent.parent
     skills_root = skill_directory.parent
-    report = {"payload": "invalid", "native_activation": "unverified", "roles": []}
+    report = {"payload": "invalid", "native_activation": "unverified", "roles": [], "efforts": []}
     try:
         roles = load_roles(skill_directory)
         if args.command == "brief":
@@ -244,18 +297,38 @@ def main() -> int:
             return 0
         for role in roles:
             render_brief(role, skills_root)
+        delegate_body = load_delegate(skill_directory)
         report["payload"] = "ready"
         if destination:
             validate_destination(destination)
         if destination and destination.harness != "hermes":
             files = tuple(inspect_native(role, destination, skills_root) for role in roles)
             report["roles"] = [{"id": role.id, "native_file": item.status, "path": str(item.path)} for role, item in zip(roles, files)]
-            if args.command == "install" and not any(item.status == "conflict" for item in files):
-                install_files(files, destination)
-                for row in report["roles"]:
-                    row["action"] = "unchanged" if row["native_file"] == "current" else "installed"
-                    row["native_file"] = "current"
-            success = all(row["native_file"] == "current" for row in report["roles"])
+            if destination.harness == "claude-code":
+                effort_files = tuple(inspect_effort(level, destination, delegate_body) for level in EFFORT_LEVELS)
+                report["efforts"] = [
+                    {"id": EFFORT_AGENT_PREFIX + level, "effort": level, "native_file": item.status, "path": str(item.path)}
+                    for level, item in zip(EFFORT_LEVELS, effort_files)
+                ]
+            else:
+                effort_files = ()
+            if args.command == "install":
+                agents_directory_existed = destination.directory.is_dir()
+                if not any(item.status == "conflict" for item in files):
+                    install_files(files, destination)
+                    for row in report["roles"]:
+                        row["action"] = "unchanged" if row["native_file"] == "current" else "installed"
+                        row["native_file"] = "current"
+                if effort_files and not any(item.status == "conflict" for item in effort_files):
+                    install_files(effort_files, destination)
+                    for row in report["efforts"]:
+                        row["action"] = "unchanged" if row["native_file"] == "current" else "installed"
+                        row["native_file"] = "current"
+                report["agents_directory"] = "existing" if agents_directory_existed else "created"
+            success = (
+                all(row["native_file"] == "current" for row in report["roles"])
+                and all(row["native_file"] == "current" for row in report["efforts"])
+            )
         else:
             report["roles"] = [{"id": role.id, "native_file": "unsupported" if destination else "not-requested"} for role in roles]
             success = True
