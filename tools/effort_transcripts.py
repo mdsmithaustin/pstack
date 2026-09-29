@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
 def session_slug(workspace: Path) -> str:
-    return str(workspace).replace("/", "-")
+    return re.sub(r"[^a-zA-Z0-9]", "-", str(workspace))
 
 
 def efforts_by_agent(session_dir: Path) -> dict[str, dict]:

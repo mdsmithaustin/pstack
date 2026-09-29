@@ -60,6 +60,12 @@ class SessionSlug(unittest.TestCase):
         self.assertEqual(session_slug(Path("/Users/me/project")), "-Users-me-project")
         self.assertEqual(session_slug(Path("/a/b/c")), "-a-b-c")
 
+    def test_replaces_every_non_alphanumeric_character(self):
+        self.assertEqual(
+            session_slug(Path("/private/var/folders/ab/x_y.z/T/tmp_q1")),
+            "-private-var-folders-ab-x-y-z-T-tmp-q1",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
