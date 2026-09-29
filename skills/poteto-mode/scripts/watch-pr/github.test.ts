@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import {
-  ChecksUnavailable,
   WatcherQueryError,
   mapRollupNode,
   orderStack,
   parsePullRequest,
   parseReviewState,
+  parseRollupPage,
   resolveChecks,
   resolveContext,
 } from "./github.ts";
@@ -63,18 +63,70 @@ describe("checks fallback chain", () => {
     expect(reader.calls).toEqual(["checksFastPath", "checkRollupPage:null"]);
   });
 
-  it("fails closed when both paths are empty", async () => {
+  it("resolves to empty checks from graphql-rollup when the fast path is unusable at exit 1 and the rollup is null", async () => {
     const reader = fakeReader({
-      fastPath: {
-        kind: "unusable",
-        exitCode: 8,
-        stderr: "credential cannot read checks",
-      },
+      fastPath: { kind: "unusable", exitCode: 1, stderr: "" },
     });
-    await expect(resolveChecks(reader, context)).rejects.toBeInstanceOf(
-      ChecksUnavailable
-    );
+    expect(await resolveChecks(reader, context)).toEqual({
+      source: "graphql-rollup",
+      checks: [],
+    });
     expect(reader.calls).toEqual(["checksFastPath", "checkRollupPage:null"]);
+  });
+});
+
+describe("parseRollupPage", () => {
+  const rollupResponse = (statusCheckRollup: unknown) => ({
+    data: {
+      repository: {
+        pullRequest: {
+          commits: { nodes: [{ commit: { statusCheckRollup } }] },
+        },
+      },
+    },
+  });
+
+  it("throws when the PR has zero commits", () => {
+    expect(() =>
+      parseRollupPage({
+        data: {
+          repository: { pullRequest: { commits: { nodes: [] } } },
+        },
+      })
+    ).toThrow("missing commits.nodes[0]");
+  });
+
+  it("throws when every node on a page is an unknown check type", () => {
+    expect(() =>
+      parseRollupPage(
+        rollupResponse({
+          contexts: {
+            nodes: [{ __typename: "FutureCheck" }],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        })
+      )
+    ).toThrow(WatcherQueryError);
+  });
+
+  it("filters an unknown node but keeps a known check on the same page", () => {
+    const page = parseRollupPage(
+      rollupResponse({
+        contexts: {
+          nodes: [
+            { __typename: "FutureCheck" },
+            {
+              __typename: "CheckRun",
+              name: "ci",
+              status: "COMPLETED",
+              conclusion: "SUCCESS",
+            },
+          ],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      })
+    );
+    expect(page.checks.map((check) => check.name)).toEqual(["ci"]);
   });
 });
 
