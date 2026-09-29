@@ -37,21 +37,25 @@ def result_status(results, node):
 
 
 def added_lines(diff):
-    """{path: lines added} for every path a unified diff touches."""
-    counts, path = {}, None
+    """{path: [each line the diff adds]} for every path a unified diff touches."""
+    added, path = {}, None
     for line in diff.splitlines():
         if line.startswith("diff --git "):
             path = line.split(" b/", 1)[1]
-            counts[path] = 0
+            added[path] = []
         elif line.startswith("+") and not line.startswith("+++") and path is not None:
-            counts[path] += 1
-    return counts
+            added[path].append(line[1:])
+    return added
+
+
+def is_test_file(path):
+    return path.startswith("tests/") or re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) is not None
 
 
 def report_scope(workspace, footprint):
     added = added_lines(workspace.diff)
     record = {"outside_footprint": sorted(set(added) - set(footprint)),
-              "added": sum(added.values()), "merged_added": sum(footprint.values())}
+              "added": sum(map(len, added.values())), "merged_added": sum(footprint.values())}
     if workspace.harvest is not None:
         (workspace.harvest / "scope.json").write_text(json.dumps(record, indent=2) + "\n")
     return record
@@ -60,7 +64,7 @@ def report_scope(workspace, footprint):
 def graded(workspace, image, sources, tests, footprint, statics=()):
     """Failures from running tests, {node: dimension}, in the case's image
     over the agent's diff with the grader-owned sources laid on top, plus the
-    static constraint checks over the changed files."""
+    static constraint checks over the lines the diff adds."""
     report_scope(workspace, footprint)
     changed = apply_diff(workspace.checkout, workspace.diff)
     files = {**changed, **appended(workspace.checkout, sources)}
@@ -68,7 +72,8 @@ def graded(workspace, image, sources, tests, footprint, statics=()):
     results = project_test_results(image, workspace.checkout, files, targets)
     failures = [f"{dimension}: {node} {status}" for node, dimension in tests.items()
                 if (status := result_status(results, node)) != "passed"]
-    return failures + [failure for static in statics for failure in static(changed)]
+    added = added_lines(workspace.diff)
+    return failures + [failure for static in statics for failure in static(added)]
 
 
 # omnigent #6005. The PR's streak test pins the private _RECYCLE_PROMPT_MAX_STREAK,
@@ -327,14 +332,14 @@ it("K3 keeps a stored user message that only opens with the tag", () => {{
 '''
 
 
-def adds_minimal_fixture(changed):
-    """The review asked for a fixture without <tool-use-id> or <status>. Only
-    an added test file can hold one, so this reads the diff's test files: some
-    added <task-notification> payload has a <task-id> and no <tool-use-id>."""
-    for path, data in changed.items():
-        if data is None or not (path.startswith("tests/") or re.search(r"\.test\.[jt]sx?$", path)):
+def adds_minimal_fixture(added):
+    """The review asked for a regression fixture without <tool-use-id> or
+    <status>, which only the agent's own tests can hold: some payload the diff
+    adds to a test file has a <task-id> and no <tool-use-id>."""
+    for path, lines in added.items():
+        if not is_test_file(path):
             continue
-        for payload in re.findall(r"<task-notification>(.*?)</task-notification>", data.decode("utf-8", "replace"), re.S):
+        for payload in re.findall(r"<task-notification>(.*?)</task-notification>", "\n".join(lines), re.S):
             if "<task-id>" in payload and "<tool-use-id>" not in payload:
                 return []
     return ["constraint:K4: no added test holds a task notification without <tool-use-id>"]
@@ -360,4 +365,127 @@ def check_task_notify(answer, workspace):
         "web/src/lib/itemsToBlocks.test.ts": 45}, [adds_minimal_fixture])
 
 
-CHECKS = {"omnigent-close-code": check_close_code, "omnigent-task-notify": check_task_notify}
+# omnigent #7731. The PR's unit tests pin its 12,000 threshold, which the
+# reviewer chose as taste, and a 5,000 threshold fails them only through
+# ChatMarkdown's 100 ms throttle. The functional set ports the three that test
+# behavior with no threshold and waits after each toggle; the emoji test is
+# replaced by C1, since a lone surrogate passes it.
+LONG_PROMPT_CHECKS = r'''import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import type { Bubble } from "@/lib/renderItems";
+import { BubbleView } from "./chatBubbleParts";
+
+const EXPAND = /show (the )?(full|more|all|entire)|expand|read more/i;
+const COLLAPSE = /collapse|show less|hide/i;
+const TAIL = "UNIQUE_TAIL_MARKER";
+// Word-broken filler keeps the preview on the markdown path; an unbroken run
+// over 5,000 chars takes ChatMarkdown's plain-text fallback.
+const WORDS = "word ".repeat(12_000);
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+function renderUser(text: string) {
+  const bubble: Extract<Bubble, { kind: "user" }> = { kind: "user", itemId: "u1", content: [{ type: "input_text", text }] };
+  render(<BubbleView bubble={bubble} isLastAssistant={false} />);
+  return screen.getByTestId("message-bubble");
+}
+
+const expandButton = () => screen.queryByRole("button", { name: EXPAND });
+const collapseButton = () => screen.queryByRole("button", { name: COLLAPSE });
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+it("F1 short prompt renders fully with no toggle", () => {
+  expect(renderUser("Hello, world!")).toHaveTextContent("Hello, world!");
+  expect(expandButton()).toBeNull();
+});
+
+it("F2 hidden tail renders only while expanded", async () => {
+  const bubble = renderUser(WORDS + TAIL);
+  expect(bubble.textContent).not.toContain(TAIL);
+  fireEvent.click(expandButton()!);
+  await waitFor(() => expect(bubble.textContent).toContain(TAIL));
+  fireEvent.click(collapseButton()!);
+  await waitFor(() => expect(bubble.textContent).not.toContain(TAIL));
+});
+
+it("F3 Copy writes the full prompt while collapsed", async () => {
+  const written: string[] = [];
+  vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn(async (text: string) => void written.push(text)) } });
+  renderUser(WORDS + TAIL);
+  expect(expandButton()).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));
+  await waitFor(() => expect(written).toEqual([WORDS + TAIL]));
+});
+
+it("C1 collapsed preview never splits a surrogate pair", () => {
+  // Across each family's prefixes a high surrogate sits at every cut offset,
+  // so some text splits a pair whatever the threshold. Unbroken runs take the
+  // plain-text fallback, spaced ones the markdown path.
+  const texts: [string, string][] = [
+    ["unbroken 0", "😀".repeat(30_000)], ["unbroken 1", "a" + "😀".repeat(30_000)],
+    ["spaced 0", "😀 ".repeat(20_000)], ["spaced 1", "a" + "😀 ".repeat(20_000)], ["spaced 2", "aa" + "😀 ".repeat(20_000)],
+  ];
+  const broken = texts.filter(([, text]) => {
+    const shown = renderUser(text).textContent ?? "";
+    cleanup();
+    return shown.length >= text.length || LONE_SURROGATE.test(shown) || shown.includes("�");
+  });
+  expect(broken.map(([label]) => label)).toEqual([]);
+});
+
+it("C2 renders a long prompt without walking the whole prompt per code point", () => {
+  // The bubble trims the prompt, so a walk of the whole prompt shows as over
+  // half its length; walking a preview slice stays far below that.
+  const text = "😀 word ".repeat(15_000);
+  const walked: number[] = [];
+  const strings = String.prototype as any;
+  const { [Symbol.iterator]: iterate, split } = strings;
+  const segment = Intl.Segmenter.prototype.segment;
+  strings[Symbol.iterator] = function () { walked.push(String(this).length); return iterate.call(this); };
+  strings.split = function (separator: unknown, limit?: number) {
+    if (separator === "") walked.push(String(this).length);
+    return split.call(this, separator, limit);
+  };
+  Intl.Segmenter.prototype.segment = function (input: string) { walked.push(input.length); return segment.call(this, input); };
+  try {
+    renderUser(text);
+  } finally {
+    Object.assign(strings, { [Symbol.iterator]: iterate, split });
+    Intl.Segmenter.prototype.segment = segment;
+  }
+  expect(walked.filter((length) => length > text.length / 2)).toEqual([]);
+});
+'''
+
+CLIPBOARD = re.compile(r"writeText|clipboard|copyText")
+ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\([^)]*\)\)\.(toBeNull|not\.toBeInTheDocument)")
+PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
+
+
+def tests_assert_hidden_text_and_copy(added):
+    """The reviewer asked for tests of the collapsed text and the Copy payload,
+    not only the button labels. A regex over the added web test lines is a
+    proxy, so it looks only for each kind of assertion somewhere."""
+    lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
+    missing = [what for what, pattern in (("what Copy writes", CLIPBOARD), ("that hidden prompt text is absent", ABSENT),
+                                          ("that prompt text is present", PRESENT))
+               if not any(pattern.search(line) for line in lines)]
+    return [f"constraint:C3: no added web test asserts {what}" for what in missing]
+
+
+def check_long_prompt(answer, workspace):
+    checks = "web/src/components/chat/chatBubbleParts.collapse.test.tsx"
+    return graded(workspace, "omnigent-dfceb32fc1a6", {checks: LONG_PROMPT_CHECKS}, {
+        f"{checks}::F1 short prompt renders fully with no toggle": "functional",
+        f"{checks}::F2 hidden tail renders only while expanded": "functional",
+        f"{checks}::F3 Copy writes the full prompt while collapsed": "functional",
+        f"{checks}::C1 collapsed preview never splits a surrogate pair": "constraint:C1",
+        f"{checks}::C2 renders a long prompt without walking the whole prompt per code point": "constraint:C2",
+    }, {"web/src/components/chat/chatBubbleParts.tsx": 41, "web/src/components/chat/chatBubbleParts.test.tsx": 77,
+        "tests/e2e_ui/messages/test_user_message_long_prompt_collapse.py": 135}, [tests_assert_hidden_text_and_copy])
+
+
+CHECKS = {"omnigent-close-code": check_close_code, "omnigent-long-prompt": check_long_prompt, "omnigent-task-notify": check_task_notify}

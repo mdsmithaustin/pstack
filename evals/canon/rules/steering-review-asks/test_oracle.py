@@ -77,5 +77,25 @@ class TaskNotifyTests(ReplayedPullRequest):
         ])
 
 
+class LongPromptTests(ReplayedPullRequest):
+    CASE, IMAGE = "omnigent-long-prompt", "omnigent-dfceb32fc1a6"
+
+    def test_merged_preview_trims_a_split_surrogate_and_tests_what_copy_writes(self):
+        self.assertEqual(self.grade_sample("good"), [])
+
+    def test_pre_review_preview_cuts_utf16_units_and_tests_only_labels(self):
+        self.assertEqual(self.grade_sample("bad"), [
+            "constraint:C1: web/src/components/chat/chatBubbleParts.collapse.test.tsx::C1 collapsed preview never splits a surrogate pair failed",
+            "constraint:C3: no added web test asserts what Copy writes",
+            "constraint:C3: no added web test asserts that hidden prompt text is absent",
+        ])
+
+    def test_spreading_the_whole_prompt_into_code_points_fails_the_allocation_ask(self):
+        self.assertEqual(self.grade_sample("spread"), [
+            "constraint:C2: web/src/components/chat/chatBubbleParts.collapse.test.tsx::C2 renders a long prompt without walking "
+            "the whole prompt per code point failed",
+        ])
+
+
 if __name__ == "__main__":
     unittest.main()
