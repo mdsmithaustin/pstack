@@ -1552,6 +1552,47 @@ for the checkout and all three samples.
 - **Codex failed 2 of 2.** One run left the brace-group and process-substitution pushes open, and the brace-group `cd`. The other denied a wrapped push to the allowed repo and branch, because it left trailing parentheses on the refspec. One of the two delegated investigation, and both delegated the code change.
 - **Reading.** On a multi-module bug, a Claude lead that investigates inline did not lose correctness. No run read the history, so this case did not test whether history helps: the correct fix is reachable from the code alone. The spawn step is not proposed.
 
+## Steering-review screen
+
+`steering-review-asks` asks whether the skill tree steers an agent toward what
+a maintainer asked for in review. It compares current with the stub arm and
+owns its cases. Each case replays one merged pull request from the commit its
+branch started at, with the operator request as the PR stood before review.
+
+| case | PR | starting commit | image |
+|---|---|---|---|
+| `hermes-known-issues` | hermes #124058 | 8afaab37 | `hermes-8afaab3703e3` |
+| `hermes-desktop-skip` | hermes #123510 | d0288be5 | `hermes-8afaab3703e3` |
+| `omnigent-close-code` | omnigent #6005 | 33620780 | `omnigent-336207801509` |
+| `omnigent-task-notify` | omnigent #2104 | 77b211cd | `omnigent-77b211cd72ec` |
+| `omnigent-long-prompt` | omnigent #7731 | dfceb32f | `omnigent-dfceb32fc1a6` |
+
+The oracle runs tests in the case's image and prefixes each failure with its
+dimension. `functional:` is the PR's own tests. `constraint:<id>:` is a check
+built from one review ask, with the ids of each case's `expected_behavior`.
+Both kinds of test are grader-owned source in `oracle.py`, appended to the
+checkout's copy of the file and never to the agent's, so an agent cannot edit
+them and pytest keeps the appended definition of a name. The merged test files
+also hold tests for later work on main, so only the tests the PR added or
+changed are copied. Where a PR test pins a choice the prompt does not state (a
+private constant, a threshold, a Windows host), the case runs a port without
+it and says so in `oracle.py`. A static check reads only the lines the diff
+adds, and is used only where the ask is about the agent's own tests. An ask
+that is taste is not graded, and its case's `expected_behavior` ends with a
+"Not graded" line that names it.
+
+Scope is reported and never fails a run. The check writes `scope.json` beside
+the harvested `workspace.diff`, `<work>/harvest/<run>/scope.json`, with the
+paths the diff touches outside the merged diff's footprint, the lines it adds,
+and the lines the merged diff adds.
+
+`samples/good.diff` is the merged change replayed on the starting commit, or
+the PR head for `hermes-desktop-skip`, whose rebase merge carries unrelated main
+changes. `samples/bad.diff` is the pre-review head. `test_oracle.py` asserts the
+exact failures of both and skips a case whose mirror lacks its commit or whose
+image this machine has not built. One sample grades in 4 to 6 seconds, and 15
+for `hermes-known-issues`, which runs the agent's own tests twice more.
+
 ## Reading the result
 
 Read the rule line first, then the case lines. A near-miss case that never ran
