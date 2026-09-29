@@ -32,6 +32,8 @@ GPT56_SOL_EFFORTS = GPT56_EFFORTS | {"ultra"}
 CLAUDE_ALIASES = {"fable", "opus", "sonnet", "haiku"}
 CLAUDE_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
 OTHER_ALIASES = {"inherit-parent", "auto"}
+CLAUDE_CODE_SECTION = "claude-code"
+NOT_CLAUDE_CODE_LEVELS = {"none", "ultra"}
 
 
 def _model_effort_allowed(model: str, effort: str) -> bool | None:
@@ -61,7 +63,7 @@ def _expand_names(raw_names: list[str]) -> list[str]:
     return expanded
 
 
-def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str, str]]):
+def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str, str]], section: str):
     entries: list[tuple[str, str | None]] = []
     for raw in entries_str.split(","):
         entry = raw.strip()
@@ -89,8 +91,13 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
             if _model_effort_allowed(model, effort) is False:
                 findings.append((line_no, "error", f"effort {effort!r} not supported by model {model!r}"))
                 continue
+            if section == CLAUDE_CODE_SECTION and effort in NOT_CLAUDE_CODE_LEVELS:
+                findings.append((line_no, "error", f"effort {effort!r} is not a Claude Code level (low, medium, high, xhigh, max)"))
+                continue
             if effort in NOTICE_EFFORTS:
                 findings.append((line_no, "notice", f"{model}@{effort} pins an expensive tier"))
+            if section == "" and effort in NOT_CLAUDE_CODE_LEVELS:
+                findings.append((line_no, "notice", "Claude Code reads none as low and runs ultra at the session effort"))
         entries.append((model, effort))
     return entries
 
@@ -146,7 +153,7 @@ def parse(text: str) -> tuple[dict, list]:
             continue
 
         names = _expand_names(raw_names)
-        entries = _parse_entries(entries_str, line_no, findings)
+        entries = _parse_entries(entries_str, line_no, findings, current_section)
         if not entries:
             continue
 
