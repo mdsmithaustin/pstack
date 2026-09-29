@@ -63,14 +63,15 @@ def spawn_case(project: Path, session_effort: str, arms: list[tuple[str, str, st
     for meta_path in metas:
         agent_id = meta_path.name.removeprefix("agent-").removesuffix(".meta.json")
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
-        record = efforts.get(agent_id, {})
+        turns = efforts.get(agent_id, [])
+        last_turn = turns[-1] if turns else None
         observed.append({
             "tag": meta["description"].split("]")[0].lstrip("["),
             "agent_id": agent_id,
             "agent_type": meta["agentType"],
             "model": meta.get("model"),
-            "effort": (record.get("efforts") or [None])[-1],
-            "per_turn_effort": (record.get("per_turn_efforts") or [None])[-1],
+            "effort": last_turn.effort if last_turn else None,
+            "per_turn_effort": last_turn.per_turn_effort if last_turn else None,
         })
 
     mismatches = []

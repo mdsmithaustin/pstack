@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from effort_transcripts import efforts_by_agent, session_slug
+from effort_transcripts import Turn, efforts_by_agent, session_slug
 
 FIXTURE_SESSION = Path(__file__).parent / "testdata/effort-transcripts/sample-session"
 
@@ -14,16 +14,8 @@ class EffortsByAgent(unittest.TestCase):
     def test_groups_by_agent_and_filters_non_assistant_records(self):
         result = efforts_by_agent(FIXTURE_SESSION)
         self.assertEqual(set(result), {"low", "high"})
-        self.assertEqual(result["low"], {
-            "efforts": ["low"],
-            "per_turn_efforts": ["low"],
-            "models": ["claude-sonnet-4-5-20250929"],
-        })
-        self.assertEqual(result["high"], {
-            "efforts": ["high"],
-            "per_turn_efforts": ["high"],
-            "models": ["claude-opus-4-5-20250929"],
-        })
+        self.assertEqual(result["low"], [Turn("low", "low", "claude-sonnet-4-5-20250929")])
+        self.assertEqual(result["high"], [Turn("high", "high", "claude-opus-4-5-20250929")])
 
     def test_missing_subagents_directory_returns_empty(self):
         with tempfile.TemporaryDirectory(prefix="pstack-effort-empty-") as temporary:
@@ -36,7 +28,7 @@ class EffortsByAgent(unittest.TestCase):
             subagents.mkdir()
             (subagents / "agent-x.jsonl").write_text('{"type": "assistant", "agentId": "x"}\n', encoding="utf-8")
             self.assertEqual(efforts_by_agent(session_dir), {
-                "x": {"efforts": [None], "per_turn_efforts": [None], "models": [None]},
+                "x": [Turn(None, None, None)],
             })
 
     def test_skips_malformed_json_line(self):
@@ -51,7 +43,7 @@ class EffortsByAgent(unittest.TestCase):
             )
             (subagents / "agent-y.jsonl").write_text(lines, encoding="utf-8")
             self.assertEqual(efforts_by_agent(session_dir), {
-                "y": {"efforts": ["medium"], "per_turn_efforts": ["medium"], "models": ["claude-haiku-4-5"]},
+                "y": [Turn("medium", "medium", "claude-haiku-4-5")],
             })
 
 

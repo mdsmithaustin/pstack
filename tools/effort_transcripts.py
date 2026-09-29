@@ -4,14 +4,21 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import NamedTuple
+
+
+class Turn(NamedTuple):
+    effort: str | None
+    per_turn_effort: str | None
+    model: str | None
 
 
 def session_slug(workspace: Path) -> str:
     return re.sub(r"[^a-zA-Z0-9]", "-", str(workspace))
 
 
-def efforts_by_agent(session_dir: Path) -> dict[str, dict]:
-    result: dict[str, dict] = {}
+def efforts_by_agent(session_dir: Path) -> dict[str, list[Turn]]:
+    result: dict[str, list[Turn]] = {}
     subagents_dir = session_dir / "subagents"
     if not subagents_dir.is_dir():
         return result
@@ -28,8 +35,10 @@ def efforts_by_agent(session_dir: Path) -> dict[str, dict]:
             if record.get("type") != "assistant":
                 continue
             agent_id = record.get("agentId") or fallback_id
-            entry = result.setdefault(agent_id, {"efforts": [], "per_turn_efforts": [], "models": []})
-            entry["efforts"].append(record.get("effort"))
-            entry["per_turn_efforts"].append(record.get("perTurnEffort"))
-            entry["models"].append((record.get("message") or {}).get("model"))
+            turn = Turn(
+                effort=record.get("effort"),
+                per_turn_effort=record.get("perTurnEffort"),
+                model=(record.get("message") or {}).get("model"),
+            )
+            result.setdefault(agent_id, []).append(turn)
     return result
