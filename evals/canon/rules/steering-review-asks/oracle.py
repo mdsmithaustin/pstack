@@ -462,7 +462,7 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 '''
 
 CLIPBOARD = re.compile(r"writeText|clipboard|copyText")
-ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\([^)]*\)\)\.(toBeNull|not\.toBeInTheDocument)")
+ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?:[^()]|\([^()]*\))*\)\)\.(toBeNull|not\.toBeInTheDocument)")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
 
 
