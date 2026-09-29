@@ -12,7 +12,7 @@ import screen  # noqa: E402
 import workspace  # noqa: E402
 from shared import review_names  # noqa: E402
 
-CASE_COUNT = 11
+CASE_COUNT = 13
 
 
 def mirror_has(spec):
