@@ -76,7 +76,7 @@ jobs:
             3. Apply each incoming hunk with the PORTING.md substitution map
                (model slugs, paths, Cursor primitives). Merge into our files
                — never wholesale-overwrite: this fork's additions (GitNexus
-               nudges, pstack-harness pointers, the GSD coexistence rule,
+               nudges, pstack-harness pointers,
                agents/openai.yaml files, renamed skill references) must
                survive. If upstream adds or removes `disable-model-invocation`
                on a skill, add or remove that skill's `agents/openai.yaml`
