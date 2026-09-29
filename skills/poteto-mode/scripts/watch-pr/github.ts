@@ -302,10 +302,8 @@ export function mapRollupNode(value: unknown): T.Check | null {
     ? { ...details, link, kind: "passed", reportedState: state }
     : { ...details, link, kind: "failed", reportedState: state || "FAILURE" };
 }
-// Every PR has a commit, so a rollup with zero commit nodes is a query
-// defect, not proof the PR has no checks. Likewise a page whose nodes are
-// all unrecognized types must fail closed rather than read as an empty,
-// checks-confirmed page; a page that legitimately has zero nodes is untouched.
+// Zero commits, or a page of only unknown node types, is a bad read and must
+// not pass as proof that the PR has no checks.
 export function parseRollupPage(value: unknown): T.RollupPage {
   const commits = list(
     at(value, ["data", "repository", "pullRequest", "commits", "nodes"]),
