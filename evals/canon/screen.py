@@ -573,7 +573,8 @@ def arm_trees(rule, current):
 
 def arm_summary(arm, paths):
     if arm == STUB:
-        return f"stub, {len(paths)} file(s) cut to frontmatter or dropped"
+        cut = sum(path.endswith("/SKILL.md") and path.count("/") == path.startswith("skills/") + 1 for path in paths)
+        return f"{cut} SKILL.md cut to frontmatter, {len(paths) - cut} other file(s) dropped"
     return ", ".join(paths)
 
 
@@ -803,7 +804,7 @@ def build(out, rules, entry="skill"):
             record = {"target": change.target, "patch_kind": change.kind, "removed": change.removed, "inserted": change.inserted}
         else:
             arm_changes = {name: changed_paths(current, tree) for name, tree in trees}
-            record = {"target": arm_changes[rule.arm_names[1]][0], "patch_kind": "arms", "arm_changes": arm_changes}
+            record = {"target": rule.target, "patch_kind": "arms", "arm_changes": arm_changes}
         description = frontmatter_description(current[f"{skill}/SKILL.md"].decode())
         companions = companion_trees(rule, current)
         if entry == "skill":

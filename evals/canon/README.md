@@ -2,7 +2,8 @@
 
 This directory screens candidate rules for skills that already exist. Each
 comparison is the current skill text against the same text plus one rule. It
-does not compare a skill against no skill.
+does not compare a skill against no skill. A stub arm (see Stub arm) compares
+the skills against the same skill names with no guidance.
 
 ## What runs
 
@@ -157,8 +158,8 @@ mount every skill any arm changes.
 `build` writes `arms/<rule>/<case>/<arm>/` for every arm in order.
 `build.json` records `"patch_kind": "arms"`, `"arms"` in order, and
 `"arm_changes"`, which maps each arm to the files it changes (`current` has
-none). `"target"` is the first changed file of the first arm after current, for
-older readers. A pair rule's `build.json` also records
+none). `"target"` is the first file the first patched arm changes, or
+`poteto-mode/SKILL.md` when no arm has a patch, for older readers. A pair rule's `build.json` also records
 `"arms": ["current", "amended"]`.
 
 `compare` prints one row per case and run with every arm's verdict in order,
@@ -173,6 +174,33 @@ entries add `baseline` and `treatment`, and these rule entries add `arm`. `plan`
 lists an arm rule's arms and each arm's changed files. `chain.py` counts every
 arm the build lists, and takes an arm's owner file to be the first file its
 patch changes.
+
+### Stub arm
+
+A stub arm asks whether the skills steer the agent at all. `stub` is a
+reserved arm name that takes no patch:
+
+```
+rules/<id>/
+  rule.json           {"cases_from": "<rule>", "arms": ["current", "stub"]}
+```
+
+The build makes it from the current tree. Every skill directory keeps its
+name and its `SKILL.md`, cut to the frontmatter bytes that current holds
+through the closing `---` line. Every body and every other file is dropped.
+Both arms are `with_skill` rows with the same manifest, prompt, entry prefix,
+workspace input, grader, and companions, so the only difference is the
+guidance text. The whole frontmatter stays, including fields such as
+`reminder` and `disable-model-invocation`, so that both arms discover and
+trigger the same skills. A stub arm needs no `arms/` directory, and
+`arms/stub.patch` is refused. It may also sit beside patched arms. A rule with
+only current and stub targets `poteto-mode/SKILL.md`, and under `--entry
+skill` mounts poteto-mode alone. `plan` and `build` print the stub arm as a
+count of cut and dropped files.
+
+The stub arm drops `pstack-harness/scripts/subagents.py`, so a `--runner sbx`
+stub arm registers no poteto-agent or Comment Sicko persona. The persona files
+are guidance that the skill tree installs.
 
 ## Entry modes
 

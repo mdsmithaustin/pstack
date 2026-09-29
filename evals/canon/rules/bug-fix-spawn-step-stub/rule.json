@@ -1,0 +1,9 @@
+{
+  "cases_from": "bug-fix-spawn-step",
+  "arms": [
+    "current",
+    "stub"
+  ],
+  "source": "whether the skill tree steers the agent at all: the tracked skills against a stub that keeps every skill name and description and no guidance, on the spawn-step hermes bug",
+  "skills_at": "4fe213477eda148bbcdfdeea61b5b08209cbc993"
+}

@@ -763,7 +763,7 @@ class StubBuildTests(ShopRule):
                 self.assertTrue(current[path].startswith(data))
                 self.assertEqual(screen.frontmatter_description(data.decode()), screen.frontmatter_description(current[path].decode()))
                 self.assertNotEqual(current[path], data)
-        self.assertEqual((built["arms"], built["target"]), (["current", "stub"], sorted(stub)[0]))
+        self.assertEqual((built["arms"], built["target"]), (["current", "stub"], "poteto-mode/SKILL.md"))
         hashes = built["cases"]["orders-amend"]["workspace"]["arms"]
         self.assertEqual(sorted(hashes), ["orders-amend/current", "orders-amend/stub"])
         self.assertEqual(len(set(hashes.values())), 1)

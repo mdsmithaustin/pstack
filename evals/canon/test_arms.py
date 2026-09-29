@@ -321,7 +321,7 @@ class ShippedArmsRuleTests(unittest.TestCase):
                 tree = screen.rule_tree(rule)
                 trees = screen.arm_trees(rule, tree)
                 self.assertEqual([name for name, _ in trees], list(rule.arm_names))
-                self.assertEqual(screen.changed_paths(tree, trees[1][1])[0], rule.target)
+                self.assertIn(rule.target, screen.changed_paths(tree, trees[1][1]))
 
 
 if __name__ == "__main__":
