@@ -114,7 +114,10 @@ class TemplateNameTests(unittest.TestCase):
                                 "canon-deps-codex-omnigent-02969a131c72:ccddbecf90ae"])
 
     def test_deps_env_keeps_uv_offline_and_outside_the_workspace(self):
-        self.assertEqual(sandbox.deps_env("hermes"), {
+        with mock.patch.object(sandbox.workspace, "git", side_effect=sandbox.workspace.WorkspaceError("no .python-version")):
+            env = sandbox.deps_env("hermes", "0" * 40)
+
+        self.assertEqual(env, {
             "UV_PROJECT_ENVIRONMENT": "/opt/canon-deps/hermes/venv",
             "UV_CACHE_DIR": "/opt/canon-deps/uv-cache",
             "UV_PYTHON_INSTALL_DIR": "/opt/canon-deps/python",
@@ -122,6 +125,11 @@ class TemplateNameTests(unittest.TestCase):
             "UV_PYTHON_DOWNLOADS": "never",
             "UV_OFFLINE": "1",
         })
+
+
+    def test_a_commit_that_pins_python_uses_its_pin(self):
+        with mock.patch.object(sandbox.workspace, "git", return_value=b"3.14\n"):
+            self.assertEqual(sandbox.deps_env("hermes", "0" * 40)["UV_PYTHON"], "3.14")
 
 
 class SyncArgsTests(unittest.TestCase):
