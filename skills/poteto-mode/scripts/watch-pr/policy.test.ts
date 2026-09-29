@@ -114,20 +114,20 @@ describe("PRs with no checks", () => {
     });
   });
 
-  it("reports the real merge blocker for a no-checks PR GitHub reports as BLOCKED", async () => {
-    const snapshot = await readSnapshot({
-      reader: noChecksReader({
-        facts: { mergeStateStatus: "BLOCKED" },
-        commitRollups: [{ oid: "head", state: "FAILURE" }],
-      }),
-      context: context(31),
-      pendingHistory: "include",
-      allowDraft: false,
-    });
-    expect(classifyPr(snapshot)).toMatchObject({
-      kind: "blocker",
-      blocker: { kind: "failing-checks", ci: { kind: "ci-github-rejected" } },
-    });
+  it("retries a head with no checks yet while an earlier commit had checks", async () => {
+    await expect(
+      readSnapshot({
+        reader: noChecksReader({
+          commitRollups: [
+            { oid: "earlier", state: "SUCCESS" },
+            { oid: "head", state: null },
+          ],
+        }),
+        context: context(31),
+        pendingHistory: "include",
+        allowDraft: false,
+      })
+    ).rejects.toThrow("the head has no checks yet, but an earlier commit had checks");
   });
 
   it("keeps an unresolved review thread blocking a no-checks PR", async () => {

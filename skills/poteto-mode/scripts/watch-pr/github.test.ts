@@ -106,7 +106,7 @@ describe("parseRollupPage", () => {
           },
         })
       )
-    ).toThrow(WatcherQueryError);
+    ).toThrow("invalid contexts.nodes");
   });
 
   it("filters an unknown node but keeps a known check on the same page", () => {
