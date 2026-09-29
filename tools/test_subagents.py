@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -63,6 +64,9 @@ class SubagentCommands(unittest.TestCase):
 
     def role_path(self, role="comment-sicko", harness="codex"):
         return self.project / (".codex" if harness == "codex" else ".claude") / "agents" / (role + (".toml" if harness == "codex" else ".md"))
+
+    def effort_path(self, level="max"):
+        return self.project / ".claude" / "agents" / f"pstack-effort-{level}.md"
 
     def mutate_body(self, addition):
         payload = json.loads(self.bundle.read_text())
@@ -335,6 +339,112 @@ sys.exit(module.main())
         self.bundle.write_text(original)
         self.run_cli("check")
 
+    def test_claude_install_writes_five_effort_agents_with_only_effort_policy(self):
+        levels = ("low", "medium", "high", "xhigh", "max")
+        report = json.loads(self.native("claude-code").stdout)
+        self.assertEqual([row["id"] for row in report["efforts"]], [f"pstack-effort-{level}" for level in levels])
+        self.assertEqual({row["action"] for row in report["efforts"]}, {"installed"})
+        delegate = (self.installed / "pstack-harness/references/subagents/effort-delegate.md").read_text()
+        for level in levels:
+            with self.subTest(level=level):
+                text = self.effort_path(level).read_text()
+                frontmatter, body = text[4:].split("---\n", 1)
+                fields = dict(line.split(": ", 1) for line in frontmatter.splitlines())
+                self.assertEqual(set(fields), {"name", "description", "effort"})
+                self.assertEqual(fields["name"], f"pstack-effort-{level}")
+                self.assertEqual(fields["effort"], level)
+                self.assertIsInstance(json.loads(fields["description"]), str)
+                self.assertIn(delegate, body)
+                self.assertRegex(text.splitlines()[-1], rf"<!-- pstack-generated:v1:pstack-effort-{level}:[0-9a-f]{{64}} -->")
+
+    def test_effort_agents_are_root_independent(self):
+        self.native("claude-code")
+        second_root = self.root / "second installed skills"
+        shutil.copytree(ROOT / "skills", second_root)
+        second_project = self.root / "second project"
+        second_project.mkdir()
+        second_script = second_root / "pstack-harness/scripts/subagents.py"
+        self.run_cli("install", "--harness", "claude-code", "--project", second_project, script=second_script)
+        for level in ("low", "medium", "high", "xhigh", "max"):
+            first_bytes = self.effort_path(level).read_bytes()
+            second_bytes = (second_project / ".claude/agents" / f"pstack-effort-{level}.md").read_bytes()
+            self.assertEqual(first_bytes, second_bytes)
+        report = json.loads(self.run_cli("check", "--harness", "claude-code", "--project", second_project, expected=1).stdout)
+        self.assertEqual({row["native_file"] for row in report["roles"]}, {"outdated-generated"})
+        self.assertEqual({row["native_file"] for row in report["efforts"]}, {"current"})
+
+    def test_codex_and_hermes_get_no_effort_agents(self):
+        self.native("codex")
+        self.assertEqual(json.loads(self.native("codex", command="check").stdout)["efforts"], [])
+        self.assertEqual(json.loads(self.native("hermes", command="check").stdout)["efforts"], [])
+        self.assertEqual(list((self.project / ".codex/agents").glob("pstack-effort-*")), [])
+
+    def test_repeated_effort_installs_are_noops(self):
+        self.native("claude-code")
+        paths = [self.effort_path(level) for level in ("low", "medium", "high", "xhigh", "max")]
+        before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in paths]
+        report = json.loads(self.native("claude-code").stdout)
+        self.assertEqual({row["action"] for row in report["efforts"]}, {"unchanged"})
+        self.assertEqual([(path.read_bytes(), path.stat().st_mtime_ns) for path in paths], before)
+
+    def test_template_change_upgrades_every_level(self):
+        self.native("claude-code")
+        template = self.installed / "pstack-harness/references/subagents/effort-delegate.md"
+        template.write_text(template.read_text() + "\nAn upstream revision.\n")
+        report = json.loads(self.native("claude-code", command="check", expected=1).stdout)
+        self.assertEqual({row["native_file"] for row in report["efforts"]}, {"outdated-generated"})
+        report = json.loads(self.native("claude-code").stdout)
+        self.assertEqual({row["native_file"] for row in report["efforts"]}, {"current"})
+        self.assertIn("An upstream revision.", self.effort_path("max").read_text())
+
+    def test_squatted_effort_file_does_not_block_persona_upgrade(self):
+        self.native("claude-code")
+        self.effort_path("max").write_text("squatted content")
+        self.mutate_body("\nA persona revision.\n")
+        report = json.loads(self.native("claude-code", expected=1).stdout)
+        self.assertIn("conflict", {row["native_file"] for row in report["efforts"]})
+        self.assertEqual({row["native_file"] for row in report["roles"]}, {"current"})
+
+    def test_squatted_persona_file_does_not_block_effort_upgrade(self):
+        self.native("claude-code")
+        template = self.installed / "pstack-harness/references/subagents/effort-delegate.md"
+
+        self.role_path("poteto-agent", "claude-code").write_text("squatted content")
+        template.write_text(template.read_text() + "\nAnother revision.\n")
+        report = json.loads(self.native("claude-code", expected=1).stdout)
+        self.assertIn("conflict", {row["native_file"] for row in report["roles"]})
+        self.assertEqual({row["native_file"] for row in report["efforts"]}, {"current"})
+
+    def test_missing_or_templated_delegate_fails_without_partial_output(self):
+        template = self.installed / "pstack-harness/references/subagents/effort-delegate.md"
+        original = template.read_text()
+        for mutation in ("missing", "templated"):
+            with self.subTest(mutation=mutation):
+                if mutation == "missing":
+                    template.unlink()
+                else:
+                    template.write_text(original + "{brace}")
+                self.assertIn("# Comment Sicko", self.run_cli("brief", "Comment Sicko").stdout)
+                self.assertEqual(json.loads(self.run_cli("check", expected=1).stdout)["payload"], "invalid")
+                self.native("claude-code", expected=1)
+                self.assertFalse((self.project / ".claude").exists())
+            template.write_text(original)
+
+    def test_claude_code_persona_bytes_match_a_hand_written_reconstruction(self):
+        self.native("claude-code")
+        for role in json.loads(self.bundle.read_text())["roles"]:
+            role_id = role["id"]
+            content = f"---\nname: {role_id}\ndescription: {json.dumps(role['description'], ensure_ascii=False)}\n"
+            if role["background"]:
+                content += "background: true\n"
+            brief = self.run_cli("brief", role_id).stdout
+            content += "---\n\n" + brief
+            encoded = (content + "\n").encode("utf-8")
+            digest = hashlib.sha256(encoded).hexdigest()
+            expected = encoded + f"<!-- pstack-generated:v1:{role_id}:{digest} -->\n".encode("ascii")
+            with self.subTest(role=role_id):
+                self.assertEqual(self.role_path(role_id, "claude-code").read_bytes(), expected)
+
 
 class SourceParity(unittest.TestCase):
     def test_generation_checks_source_drift_and_rejects_unknown_frontmatter(self):
@@ -364,6 +474,22 @@ class SourceParity(unittest.TestCase):
                 self.assertEqual(role["source_sha256"], hashlib.sha256(source_bytes).hexdigest())
             source.write_text(source.read_text().replace("is_background: true", "unknown_field: true"))
             self.assertIn("unsupported frontmatter", run(expected=1).stderr)
+
+
+class LevelParity(unittest.TestCase):
+    def test_effort_levels_match_lint(self):
+        subagents_spec = importlib.util.spec_from_file_location(
+            "subagents_under_test", ROOT / "skills/pstack-harness/scripts/subagents.py")
+        subagents = importlib.util.module_from_spec(subagents_spec)
+        # module-level dataclasses need their module resolvable via sys.modules during exec_module
+        sys.modules[subagents_spec.name] = subagents
+        subagents_spec.loader.exec_module(subagents)
+        lint_spec = importlib.util.spec_from_file_location(
+            "check_models_config_under_test", ROOT / "skills/setup-pstack/scripts/check-models-config.py")
+        lint = importlib.util.module_from_spec(lint_spec)
+        sys.modules[lint_spec.name] = lint
+        lint_spec.loader.exec_module(lint)
+        self.assertEqual(set(subagents.EFFORT_LEVELS), lint.CLAUDE_EFFORTS)
 
 
 if __name__ == "__main__":

@@ -672,15 +672,15 @@ Each run goes through `sandbox.py wrap`, which does this:
    answer is not a denial, the run is refused and the agent never starts.
 3. It copies in the mounted skills and the overlay as one tar. Under
    `--entry poteto-mode`, `sbx_inside.py setup` then links the tree to
-   `.claude/skills` or `.agents/skills` and
-   registers the poteto-agent and Comment Sicko personas by running
-   `pstack-harness/scripts/subagents.py install --harness claude-code|codex
-   --project <clone>` through that link, as a user install would. For Codex
-   it also trusts the clone in the sandbox's own `~/.codex/config.toml`, since
-   Codex loads project roles only for a trusted project. Last, it links the
-   project's dependencies and checks the clone's tree against the build.
-   Setup files go to git's exclude list, so they never reach the diff. The
-   payload directory is deleted before the agent starts.
+   `.claude/skills` or `.agents/skills` and registers the poteto-agent and
+   Comment Sicko personas, and on Claude Code the five `pstack-effort-*`
+   delegate agents, by running `pstack-harness/scripts/subagents.py install
+   --harness claude-code|codex --project <clone>` through that link, as a user
+   install would. For Codex it also trusts the clone in the sandbox's own
+   `~/.codex/config.toml`, since Codex loads project roles only for a trusted
+   project. Last, it links the project's dependencies and checks the clone's
+   tree against the build. Setup files go to git's exclude list, so they never
+   reach the diff. The payload directory is deleted before the agent starts.
 4. It runs the agent in the clone with `sbx exec`, under `timeout` at the
    case budget minus 120 seconds. The harness's flags are rewritten for the
    sandbox. Claude drops `--no-session-persistence`, so its transcripts are

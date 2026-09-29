@@ -137,6 +137,38 @@ class ErrorRules(unittest.TestCase):
         self.assertTrue(any("ultra" in n[2] for n in notices_of(findings)))
 
 
+class ClaudeCodeSectionEfforts(unittest.TestCase):
+    def test_claude_code_section_rejects_none_and_ultra(self):
+        text = "## claude-code\ndefault: auto@none\ntrail reviewer: inherit-parent@ultra\n"
+        sections, findings = cmc.parse(text)
+        errs = errors_of(findings)
+        self.assertEqual(len(errs), 2)
+        self.assertTrue(all("not a Claude Code level" in e[2] for e in errs))
+        self.assertNotIn("default", sections.get("claude-code", {}))
+        self.assertNotIn("trail reviewer", sections.get("claude-code", {}))
+
+    def test_flat_none_is_a_claude_code_notice(self):
+        text = "default: auto@none\n"
+        sections, findings = cmc.parse(text)
+        self.assertEqual(errors_of(findings), [])
+        self.assertTrue(any(n[2] == "Claude Code cannot use none or ultra, so it runs this role at the session effort" for n in notices_of(findings)))
+        self.assertEqual(sections[""]["default"], [("auto", "none")])
+
+    def test_flat_none_overridden_by_claude_code_section_is_not_a_notice(self):
+        text = "default: auto@none\n\n## claude-code\ndefault: auto@high\n"
+        sections, findings = cmc.parse(text)
+        self.assertEqual(errors_of(findings), [])
+        self.assertFalse(any(n[2] == "Claude Code cannot use none or ultra, so it runs this role at the session effort" for n in notices_of(findings)))
+        self.assertEqual(sections[""]["default"], [("auto", "none")])
+        self.assertEqual(sections["claude-code"]["default"], [("auto", "high")])
+
+    def test_codex_section_is_unaffected(self):
+        text = "## codex\ntrail reviewer: gpt-5.6-sol@ultra\n"
+        sections, findings = cmc.parse(text)
+        self.assertEqual(errors_of(findings), [])
+        self.assertEqual(sections["codex"]["trail reviewer"], [("gpt-5.6-sol", "ultra")])
+
+
 class ReflectShorthand(unittest.TestCase):
     def test_expands_bare_labels(self):
         sections, findings = cmc.parse("reflect judgment, divergent, synthesizer: fable\n")
