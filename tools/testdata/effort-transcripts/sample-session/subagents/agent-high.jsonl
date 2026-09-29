@@ -1,0 +1,2 @@
+{"type": "user", "agentId": "high", "message": {"role": "user", "content": "go"}}
+{"type": "assistant", "agentId": "high", "message": {"model": "claude-opus-4-5-20250929", "content": []}, "effort": "high", "perTurnEffort": "high"}
