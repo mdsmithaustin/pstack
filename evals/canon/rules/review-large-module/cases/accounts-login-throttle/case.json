@@ -1,0 +1,18 @@
+{
+  "kind": "positive",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": [
+    "Flags that the PR takes omnigent/server/auth.py from 906 to 1,054 lines by adding LoginThrottle, LoginThrottleConfig, resolve_login_throttle_config, and their env parsing, a failed-login budget that only the accounts login route uses and that has nothing to do with identity extraction. Asks for it to live in its own module, for example omnigent/server/login_throttle.py imported by routes/accounts_auth.py, so auth.py stays under 1,000 lines."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(auth): throttle repeated failed password logins",
+    "body_file": "pr-body.md",
+    "branch": "accounts-login-throttle"
+  }
+}

@@ -12,7 +12,7 @@ import screen  # noqa: E402
 import workspace  # noqa: E402
 from shared import review_names  # noqa: E402
 
-CASE_COUNT = 8
+CASE_COUNT = 13
 
 
 def mirror_has(spec):
@@ -20,7 +20,7 @@ def mirror_has(spec):
 
 
 class ReviewCaseTests(unittest.TestCase):
-    def test_the_repository_ships_all_eight_review_cases(self):
+    def test_the_repository_ships_every_review_case(self):
         self.assertEqual(len(review_cases.review_cases()), CASE_COUNT)
 
     def test_every_review_case_is_well_formed_and_blind(self):

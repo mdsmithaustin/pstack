@@ -1,0 +1,173 @@
+diff --git a/hermes_cli/config_defaults.py b/hermes_cli/config_defaults.py
+index 7e1bed1c..7981416a 100644
+--- a/hermes_cli/config_defaults.py
++++ b/hermes_cli/config_defaults.py
+@@ -1560,7 +1560,8 @@ DEFAULT_CONFIG = {
+         # discord / discord_admin tools: allowed actions (comma string or YAML list; empty = all,
+         # subject to bot intents; unknown names dropped with a warning): list_guilds, server_info,
+         # list_channels, channel_info, list_roles, member_info, search_members, fetch_messages,
+-        # list_pins, pin_message, unpin_message, create_thread, add_role, remove_role.
++        # list_pins, pin_message, unpin_message, purge_messages, create_thread, add_role,
++        # remove_role.
+         "server_actions": "",
+         # DEPRECATED no-op (uploads are always cached; messaging auth is the gate). Kept so existing
+         # configs don't error. Env: DISCORD_ALLOW_ANY_ATTACHMENT.
+diff --git a/tests/tools/test_discord_tool.py b/tests/tools/test_discord_tool.py
+index 136ea357..04330423 100644
+--- a/tests/tools/test_discord_tool.py
++++ b/tests/tools/test_discord_tool.py
+@@ -1,7 +1,8 @@
+ """Tests for the Discord server introspection and management tool."""
+ 
+ import json
+-from unittest.mock import MagicMock, patch
++from datetime import datetime, timedelta, timezone
++from unittest.mock import MagicMock, call, patch
+ 
+ import pytest
+ 
+@@ -297,6 +298,77 @@ class TestCreateThread:
+         )
+ 
+ 
++# ---------------------------------------------------------------------------
++# Action: purge_messages
++# ---------------------------------------------------------------------------
++
++def _message(message_id, *, days_old):
++    sent = datetime.now(timezone.utc) - timedelta(days=days_old)
++    return {"id": message_id, "timestamp": sent.isoformat()}
++
++
++class TestPurgeMessages:
++    @patch("tools.discord_tool._discord_request")
++    def test_recent_messages_go_in_one_bulk_request(self, mock_req, monkeypatch):
++        monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
++        mock_req.side_effect = [
++            [_message("1003", days_old=0), _message("1002", days_old=1), _message("1001", days_old=13)], None]
++        result = json.loads(discord_admin_handler(action="purge_messages", channel_id="11", limit=3))
++        assert result == {"success": True, "deleted": 3, "skipped_older_than_14_days": 0}
++        assert mock_req.call_args_list == [
++            call("GET", "/channels/11/messages", "test-token", params={"limit": "3"}),
++            call("POST", "/channels/11/messages/bulk-delete", "test-token",
++                 body={"messages": ["1003", "1002", "1001"]}),
++        ]
++
++    @patch("tools.discord_tool._discord_request")
++    def test_one_message_uses_the_per_message_delete(self, mock_req, monkeypatch):
++        """Bulk delete answers 400 (code 50016) when given fewer than two ids."""
++        monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
++        mock_req.side_effect = [[_message("1007", days_old=0)], None]
++        result = json.loads(discord_admin_handler(action="purge_messages", channel_id="11", limit=1))
++        assert result == {"success": True, "deleted": 1, "skipped_older_than_14_days": 0}
++        assert mock_req.call_args_list == [
++            call("GET", "/channels/11/messages", "test-token", params={"limit": "1"}),
++            call("DELETE", "/channels/11/messages/1007", "test-token"),
++        ]
++
++    @patch("tools.discord_tool._discord_request")
++    def test_messages_older_than_two_weeks_are_left_in_place(self, mock_req, monkeypatch):
++        """Bulk delete answers 400 (code 50034) when any id is older than 14 days."""
++        monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
++        mock_req.side_effect = [
++            [_message("1009", days_old=0), _message("1008", days_old=2), _message("1005", days_old=20)], None]
++        result = json.loads(discord_admin_handler(action="purge_messages", channel_id="11", limit=3))
++        assert result == {"success": True, "deleted": 2, "skipped_older_than_14_days": 1}
++        assert mock_req.call_args_list[1] == call(
++            "POST", "/channels/11/messages/bulk-delete", "test-token", body={"messages": ["1009", "1008"]})
++
++    @patch("tools.discord_tool._discord_request")
++    def test_one_recent_message_among_old_ones_uses_the_per_message_delete(self, mock_req, monkeypatch):
++        monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
++        mock_req.side_effect = [[_message("1009", days_old=0), _message("1004", days_old=30)], None]
++        result = json.loads(discord_admin_handler(action="purge_messages", channel_id="11", limit=2))
++        assert result == {"success": True, "deleted": 1, "skipped_older_than_14_days": 1}
++        assert mock_req.call_args_list[1] == call("DELETE", "/channels/11/messages/1009", "test-token")
++
++    @patch("tools.discord_tool._discord_request")
++    def test_only_old_messages_sends_no_delete(self, mock_req, monkeypatch):
++        monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
++        mock_req.side_effect = [[_message("1005", days_old=20), _message("1004", days_old=30)]]
++        result = json.loads(discord_admin_handler(action="purge_messages", channel_id="11"))
++        assert result == {"success": True, "deleted": 0, "skipped_older_than_14_days": 2}
++        assert mock_req.call_args_list == [
++            call("GET", "/channels/11/messages", "test-token", params={"limit": "50"})]
++
++    @patch("tools.discord_tool._discord_request")
++    def test_forbidden_purge_names_the_missing_permission(self, mock_req, monkeypatch):
++        monkeypatch.setenv("DISCORD_BOT_TOKEN", "test-token")
++        mock_req.side_effect = DiscordAPIError(403, '{"message": "Missing Permissions"}')
++        result = json.loads(discord_admin_handler(action="purge_messages", channel_id="11"))
++        assert "MANAGE_MESSAGES" in result["error"]
++
++
+ # ---------------------------------------------------------------------------
+ # Error handling
+ # ---------------------------------------------------------------------------
+diff --git a/tools/discord_tool.py b/tools/discord_tool.py
+index c5fd69af..7055a3f3 100644
+--- a/tools/discord_tool.py
++++ b/tools/discord_tool.py
+@@ -15,6 +15,7 @@ import time
+ import urllib.error
+ import urllib.parse
+ import urllib.request
++from datetime import datetime
+ from pathlib import Path
+ from typing import Any, Dict, List, Optional
+ 
+@@ -369,6 +370,26 @@ def _create_thread(
+     return json.dumps({"success": True, "thread_id": thread["id"], "name": thread.get("name")})
+ 
+ 
++# POST .../messages/bulk-delete takes 2-100 message ids, all younger than 14 days; Discord rejects
++# the whole request otherwise (error codes 50016 and 50034).
++_BULK_DELETE_MAX_AGE_SECONDS = 14 * 24 * 3600
++
++
++def _purge_messages(token: str, channel_id: str, limit: int = 50, **_kwargs: Any) -> str:
++    """Delete the channel's newest ``limit`` messages (max 100) in one request. Messages older than
++    14 days are left in place and counted. A lone deletable message goes through the per-message
++    DELETE, because bulk delete needs at least two ids."""
++    messages = _discord_request(
++        "GET", f"/channels/{channel_id}/messages", token, params={"limit": _limit_param(limit, 50)})
++    cutoff = time.time() - _BULK_DELETE_MAX_AGE_SECONDS
++    ids = [m["id"] for m in messages if datetime.fromisoformat(m["timestamp"]).timestamp() > cutoff]
++    if len(ids) == 1:
++        _discord_request("DELETE", f"/channels/{channel_id}/messages/{ids[0]}", token)
++    elif ids:
++        _discord_request("POST", f"/channels/{channel_id}/messages/bulk-delete", token, body={"messages": ids})
++    return json.dumps({"success": True, "deleted": len(ids), "skipped_older_than_14_days": len(messages) - len(ids)})
++
++
+ def _mutation(method: str, path: str, message: str):
+     """Body-less write action: ``path``/``message`` are format templates over the action kwargs."""
+     def _action(token: str, **kw: Any) -> str:
+@@ -404,6 +425,8 @@ _ACTION_MANIFEST = [
+     ("pin_message", _pin_message, "(channel_id, message_id)", "pin a message"),
+     ("unpin_message", _unpin_message, "(channel_id, message_id)", "unpin a message"),
+     ("delete_message", _delete_message, "(channel_id, message_id)", "delete a message"),
++    ("purge_messages", _purge_messages, "(channel_id)",
++     "delete the newest messages (limit, max 100); skips ones older than 14 days"),
+     ("create_thread", _create_thread, "(channel_id, name)", "create a public thread; optional message_id anchor"),
+     ("add_role", _add_role, "(guild_id, user_id, role_id)", "assign a role"),
+     ("remove_role", _remove_role, "(guild_id, user_id, role_id)", "remove a role"),
+@@ -484,7 +507,9 @@ _SCHEMA_PROPERTIES: Dict[str, Any] = {
+         "type": "integer",
+         "minimum": 1,
+         "maximum": 100,
+-        "description": "Max results (default 50). Applies to fetch_messages, search_members.",
++        "description": (
++            "Max results (default 50). Applies to fetch_messages, search_members; for "
++            "purge_messages, how many of the newest messages to delete."),
+     },
+     "before": {"type": "string", "description": "Snowflake ID for reverse pagination (fetch_messages)."},
+     "after": {"type": "string", "description": "Snowflake ID for forward pagination (fetch_messages)."},
+@@ -553,6 +578,7 @@ _ACTION_403_HINT = {
+         "Ask the server admin to grant the bot a role that has MANAGE_MESSAGES, or a per-channel overwrite."),
+     "unpin_message": f"{_NO_MANAGE_MESSAGES}.",
+     "delete_message": f"{_NO_MANAGE_MESSAGES}, or cannot view the channel/message.",
++    "purge_messages": f"{_NO_MANAGE_MESSAGES}, or cannot read the channel's history.",
+     "create_thread": "Bot lacks CREATE_PUBLIC_THREADS in this channel, or cannot view it.",
+     "add_role": (
+         f"{_ROLE_HIERARCHY} Roles can only be assigned below the bot's own position in the role hierarchy."),

@@ -1,0 +1,1 @@
+Could you look over `discord-server-actions-deny` against main before I merge it? It adds a `discord.server_actions_deny` setting so single Discord tool actions can be switched off without listing every other one. The PR description is in pr-body.md. I only want the review; nothing needs committing or pushing.

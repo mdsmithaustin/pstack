@@ -1,0 +1,268 @@
+diff --git a/cli-config.yaml.example b/cli-config.yaml.example
+index 77baaf2c..d5a51588 100644
+--- a/cli-config.yaml.example
++++ b/cli-config.yaml.example
+@@ -1739,6 +1739,21 @@ stt:
+ # No configuration needed - logging is always enabled.
+ # To disable, you would need to modify the source code.
+ 
++# =============================================================================
++# File Logging
++# =============================================================================
++# Process logs go to logs/agent.log (INFO+) and logs/errors.log (WARNING+).
++#
++# logging:
++#   level: INFO           # minimum level for agent.log
++#   max_size_mb: 5        # rotate agent.log at this size
++#   backup_count: 3       # rotated copies to keep
++#   json:
++#     enabled: false      # true = also write logs/agent.jsonl, one JSON object per line
++#     level: INFO         # (ts, level, logger, message, session, exc), secrets redacted,
++#     max_size_mb: 10     # for Vector / Fluent Bit / Promtail to tail
++#     backup_count: 3
++
+ # =============================================================================
+ # Code Execution Sandbox (Programmatic Tool Calling)
+ # =============================================================================
+diff --git a/hermes_cli/config_defaults.py b/hermes_cli/config_defaults.py
+index 7e1bed1c..1c48f676 100644
+--- a/hermes_cli/config_defaults.py
++++ b/hermes_cli/config_defaults.py
+@@ -2001,6 +2001,15 @@ DEFAULT_CONFIG = {
+         "level": "INFO",       # minimum level for agent.log: DEBUG, INFO, WARNING
+         "max_size_mb": 5,      # max size per log file before rotation
+         "backup_count": 3,     # rotated backups to keep
++        # Also write logs/agent.jsonl: one JSON object per record (ts, level, logger, message,
++        # session, exc) for log shippers such as Vector, Fluent Bit or Promtail. Redacted like
++        # agent.log; rotates on its own size and backup count. Takes effect on the next start.
++        "json": {
++            "enabled": False,
++            "level": "INFO",       # minimum level for agent.jsonl
++            "max_size_mb": 10,
++            "backup_count": 3,
++        },
+     },
+     # Remote model-catalog manifest: curated OpenRouter / Nous Portal model lists fetched from this
+     # URL (falls back to the in-repo snapshot on network failure), so picker lists update without a
+diff --git a/hermes_logging.py b/hermes_logging.py
+index 78db2d9e..e08ab44e 100644
+--- a/hermes_logging.py
++++ b/hermes_logging.py
+@@ -165,6 +165,7 @@ def _install_session_record_factory() -> None:
+         record = current_factory(*args, **kwargs)
+         sid = getattr(_session_context, "session_id", None)
+         record.session_tag = f" [{sid}]" if sid else ""  # type: ignore[attr-defined]
++        record.hermes_session_id = sid or ""  # type: ignore[attr-defined]
+         # QueueListener formats on its own thread, after the profile-scoped
+         # ContextVar is gone; keep the resolved home on the record so a
+         # multiplex desktop ticker can route to the job owner's files (#97489).
+@@ -250,7 +251,8 @@ def setup_logging(
+ 
+     Safe to call multiple times; the second call is a no-op unless *force*. Level and
+     rotation defaults come from config.yaml ``logging.*``. ``mode="gateway"`` adds
+-    ``gateway.log`` and ``mode="gui"`` adds ``gui.log``.
++    ``gateway.log`` and ``mode="gui"`` adds ``gui.log``. ``logging.json.enabled`` adds
++    ``agent.jsonl`` (see ``hermes_logging_json``).
+     """
+     global _logging_initialized
+     home = hermes_home or get_hermes_home()
+@@ -296,6 +298,16 @@ def setup_logging(
+             log_filter=_ComponentFilter(COMPONENT_PREFIXES[component]) if component else None,
+         )
+ 
++    from hermes_logging_json import JSON_LOG_FILENAME, JsonLinesFormatter, json_log_settings
++
++    json_settings = json_log_settings(_read_logging_section().get("json"))
++    if json_settings is not None:
++        _add_rotating_handler(
++            log_dir / JSON_LOG_FILENAME, level=json_settings.level,
++            max_bytes=json_settings.max_bytes, backup_count=json_settings.backup_count,
++            formatter=JsonLinesFormatter(),
++        )
++
+     if _logging_initialized and not force:
+         return log_dir
+ 
+@@ -780,7 +792,13 @@ def _add_rotating_handler(
+ 
+ 
+ def _read_logging_config():
+-    """Best-effort read of ``logging.*`` from config.yaml."""
++    """Best-effort read of ``logging.{level,max_size_mb,backup_count}`` from config.yaml."""
++    log_cfg = _read_logging_section()
++    return (log_cfg.get("level"), log_cfg.get("max_size_mb"), log_cfg.get("backup_count"))
++
++
++def _read_logging_section() -> dict:
++    """Best-effort read of the ``logging`` section of config.yaml; ``{}`` when unavailable."""
+     try:
+         # Prefer the shared effective-config cache (managed overlay included, so an administrator
+         # can pin logging.*) so this reuses hermes_cli.main's early parse (one config.yaml parse
+@@ -795,14 +813,12 @@ def _read_logging_config():
+             if config_path.exists():
+                 with open(config_path, "r", encoding="utf-8") as f:
+                     cfg = fast_safe_load(f) or {}
+-        if not cfg:
+-            return (None, None, None)
+-        log_cfg = cfg.get("logging", {})
++        log_cfg = (cfg or {}).get("logging", {})
+         if isinstance(log_cfg, dict):
+-            return (log_cfg.get("level"), log_cfg.get("max_size_mb"), log_cfg.get("backup_count"))
++            return log_cfg
+     except Exception:
+         pass
+-    return (None, None, None)
++    return {}
+ 
+ 
+ # ---- BEGIN PLUGIN-COMPAT (revert-scheduled; see COMPAT_MANIFEST.md) ----
+diff --git a/hermes_logging_json.py b/hermes_logging_json.py
+new file mode 100644
+index 00000000..f40f751f
+--- /dev/null
++++ b/hermes_logging_json.py
+@@ -0,0 +1,65 @@
++"""JSON-lines log file for log shippers: ``logs/agent.jsonl`` (``logging.json`` in config.yaml).
++
++One object per record with ``ts``, ``level``, ``logger`` and ``message``, plus ``session`` when a
++session is active and ``exc`` when a traceback is attached. Text passes through the same secret
++redaction as the plain-text logs. ``hermes_logging.setup_logging`` registers the handler.
++"""
++
++import json
++import logging
++from datetime import datetime, timezone
++from typing import Any, NamedTuple, Optional
++
++from agent.redact import redact_sensitive_text
++from utils import is_truthy_value
++
++JSON_LOG_FILENAME = "agent.jsonl"
++
++
++class JsonLogSettings(NamedTuple):
++    level: int
++    max_bytes: int
++    backup_count: int
++
++
++def json_log_settings(section: Any) -> Optional[JsonLogSettings]:
++    """Settings for the ``logging.json`` section, or None when it is absent or not enabled.
++
++    Unknown levels fall back to INFO; a non-positive or unparsable size or backup count falls
++    back to its default (10 MB, 3 backups) so the file always rotates.
++    """
++    if not isinstance(section, dict) or not is_truthy_value(section.get("enabled")):
++        return None
++    level = logging.getLevelName(str(section.get("level") or "INFO").upper())
++    return JsonLogSettings(
++        level=level if isinstance(level, int) else logging.INFO,
++        max_bytes=_positive_int(section.get("max_size_mb"), 10) * 1024 * 1024,
++        backup_count=_positive_int(section.get("backup_count"), 3),
++    )
++
++
++def _positive_int(value: Any, default: int) -> int:
++    try:
++        number = int(value)
++    except (TypeError, ValueError):
++        return default
++    return number if number > 0 else default
++
++
++class JsonLinesFormatter(logging.Formatter):
++    """Format each record as one JSON object on one line, secrets redacted."""
++
++    def format(self, record: logging.LogRecord) -> str:
++        created = datetime.fromtimestamp(record.created, timezone.utc)
++        entry: dict[str, Any] = {
++            "ts": created.isoformat(timespec="milliseconds"),
++            "level": record.levelname,
++            "logger": record.name,
++            "message": redact_sensitive_text(record.getMessage()),
++        }
++        session_id = getattr(record, "hermes_session_id", "")
++        if session_id:
++            entry["session"] = session_id
++        if record.exc_info:
++            entry["exc"] = redact_sensitive_text(self.formatException(record.exc_info))
++        return json.dumps(entry, ensure_ascii=False)
+diff --git a/tests/test_hermes_logging.py b/tests/test_hermes_logging.py
+index a300c77d..dc7088cd 100644
+--- a/tests/test_hermes_logging.py
++++ b/tests/test_hermes_logging.py
+@@ -553,6 +553,74 @@ class TestReadLoggingConfig:
+ 
+ 
+ 
++class TestJsonLinesLog:
++    """logging.json writes logs/agent.jsonl: one redacted JSON object per record."""
++
++    @staticmethod
++    def _records(hermes_home, logger_name):
++        import json
++
++        hermes_logging.flush_log_queue()
++        lines = (hermes_home / "logs" / "agent.jsonl").read_text().splitlines()
++        return [entry for entry in map(json.loads, lines) if entry["logger"] == logger_name]
++
++    @staticmethod
++    def _enable(hermes_home, **settings):
++        import yaml
++
++        config = {"logging": {"json": {"enabled": True, **settings}}}
++        (hermes_home / "config.yaml").write_text(yaml.dump(config))
++
++    def test_off_unless_enabled(self, hermes_home):
++        hermes_logging.setup_logging(hermes_home=hermes_home)
++        logging.getLogger("test.jsonl.off").warning("plain text only")
++        hermes_logging.flush_log_queue()
++        assert "plain text only" in (hermes_home / "logs" / "agent.log").read_text()
++        assert not (hermes_home / "logs" / "agent.jsonl").exists()
++
++    def test_writes_one_object_per_record_with_session(self, hermes_home):
++        self._enable(hermes_home)
++        hermes_logging.setup_logging(hermes_home=hermes_home)
++        hermes_logging.set_session_context("sess-42")
++        logging.getLogger("test.jsonl.on").warning("disk at %d%%", 91)
++
++        (entry,) = self._records(hermes_home, "test.jsonl.on")
++        assert {k: entry[k] for k in ("level", "message", "session")} == {
++            "level": "WARNING", "message": "disk at 91%", "session": "sess-42"}
++        assert entry["ts"].endswith("+00:00")
++
++    def test_redacts_message_and_traceback(self, hermes_home):
++        self._enable(hermes_home)
++        hermes_logging.setup_logging(hermes_home=hermes_home)
++        secret = "sk-proj-JSONLINES" + "c" * 24
++        try:
++            raise RuntimeError(f"provider rejected {secret}")
++        except RuntimeError:
++            logging.getLogger("test.jsonl.secret").exception("call failed with %s", secret)
++
++        (entry,) = self._records(hermes_home, "test.jsonl.secret")
++        assert secret not in entry["message"]
++        assert "RuntimeError: provider rejected" in entry["exc"]
++        assert secret not in entry["exc"]
++
++    def test_level_filters_records(self, hermes_home):
++        self._enable(hermes_home, level="warning")
++        hermes_logging.setup_logging(hermes_home=hermes_home)
++        logger = logging.getLogger("test.jsonl.level")
++        logger.info("below the json level")
++        logger.error("at the json level")
++
++        assert [e["message"] for e in self._records(hermes_home, "test.jsonl.level")] == [
++            "at the json level"]
++
++    def test_settings_fall_back_on_bad_values(self):
++        from hermes_logging_json import JsonLogSettings, json_log_settings
++
++        assert json_log_settings({"enabled": True, "level": "LOUD", "max_size_mb": "ten",
++                                  "backup_count": 0}) == JsonLogSettings(logging.INFO, 10 * 1024 * 1024, 3)
++        assert json_log_settings({"enabled": "false", "level": "DEBUG"}) is None
++
++
+ class TestExternalRotationRecovery:
+     """_ManagedRotatingFileHandler recovers from external rotation.
+ 

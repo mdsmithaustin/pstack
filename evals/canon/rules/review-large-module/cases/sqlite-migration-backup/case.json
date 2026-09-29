@@ -1,0 +1,18 @@
+{
+  "kind": "positive",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": [
+    "Flags that omnigent/db/utils.py is already over 1,000 lines (1,527 on main, 1,627 after) and that the PR adds a separate responsibility to it: sqlite_database_path and backup_sqlite_database locate the file behind a URL, check free space, create the copy with the source's mode, run SQLite's backup API, and prune old copies, none of which touches an engine or a session. Asks for that code to live in its own module, for example omnigent/db/sqlite_backup.py beside cockroachdb.py and compression.py, called from _initialize_or_verify_schema."
+  ],
+  "workspace": {
+    "repo": "omnigent",
+    "commit": "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(db): back up SQLite databases before automatic schema upgrades",
+    "body_file": "pr-body.md",
+    "branch": "sqlite-backup-before-migrate"
+  }
+}

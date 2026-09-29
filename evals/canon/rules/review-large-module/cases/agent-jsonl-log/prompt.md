@@ -1,0 +1,1 @@
+Can you give `feat/logging-jsonl` a review before I merge it into main? It adds an opt-in agent.jsonl log file for people shipping logs to Loki and friends. The write-up is in pr-body.md. Just leave review comments; there's no need to commit or push.

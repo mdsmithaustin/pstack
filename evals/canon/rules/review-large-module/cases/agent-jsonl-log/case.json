@@ -1,0 +1,18 @@
+{
+  "kind": "near-miss",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": [
+    "Reviews the JSON-lines log file on its merits and leaves the size of hermes_cli/config_defaults.py (3,121 to 3,130 lines) and cli-config.yaml.example (2,289 to 2,304 lines) alone. Both are data: config_defaults.py is the pure-data DEFAULT_CONFIG table where every feature's defaults live, and the example config is the file users copy. The behavior sits in a new 65-line hermes_logging_json.py and 16 lines of wiring in hermes_logging.py. The review does not ask to split config_defaults.py or to move the logging.json defaults out of it."
+  ],
+  "workspace": {
+    "repo": "hermes",
+    "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(logging): opt-in JSON-lines log file for log shippers",
+    "body_file": "pr-body.md",
+    "branch": "feat/logging-jsonl"
+  }
+}

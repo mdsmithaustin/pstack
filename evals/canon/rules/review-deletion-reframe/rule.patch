@@ -1,0 +1,10 @@
+--- a/poteto-mode/references/review-lens.md
++++ b/poteto-mode/references/review-lens.md
+@@ -31,6 +31,7 @@
+ ## Restraint (**principle-laziness-protocol**, **principle-minimize-reader-load**)
+ 
+ - **Does the diff add a layer with one caller or one implementation?** Count callers and implementers. Flag a wrapper, interface, or helper that forwards without adding policy. Leave it when it adds policy, adaptation, or a second real implementation such as a test fake.
++- **Is there a reframing that deletes a branch, mode, flag, or layer instead of adding one?** Name the concrete deletion. List which branches or helpers disappear and why the behavior holds without them. Flag the addition with that deletion as the fix direction. Leave it when you cannot name the deletion. Ask for fewer concepts, never for a new helper, interface, or layer in its place.
+ - **Are you about to ask for an abstraction?** Count the callers that would use it today. Leave it when the change has one caller and the current shape is clear and local. A second real caller in this repo is the evidence that earns the request.
+ - **Are you about to ask for a merge or dedupe?** Leave it until you have evidence that the copies change for the same reasons. Matching code today is not that evidence.
+ 

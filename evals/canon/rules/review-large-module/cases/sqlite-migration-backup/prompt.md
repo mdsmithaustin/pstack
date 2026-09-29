@@ -1,0 +1,1 @@
+I'd like a review of `sqlite-backup-before-migrate` against main before we merge it. It copies a local SQLite database aside before the server upgrades its schema at startup. The PR description is in pr-body.md. Comments only, please; nothing needs to be pushed.

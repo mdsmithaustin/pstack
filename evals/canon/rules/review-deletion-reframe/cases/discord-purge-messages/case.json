@@ -1,0 +1,18 @@
+{
+  "kind": "near-miss",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": [
+    "Reviews purge_messages on its merits and leaves the size branches in tools/discord_tool.py:_purge_messages alone. Discord's bulk-delete endpoint takes 2 to 100 ids, all younger than 14 days, so one deletable message must go through the per-message DELETE, an empty list must send nothing, and the single bulk POST is the point of the action. It does not ask to fold the one-id branch into the bulk call, to drop the empty-list guard, or to replace the bulk request with a loop of per-message deletes."
+  ],
+  "workspace": {
+    "repo": "hermes",
+    "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(discord): add purge_messages to discord_admin",
+    "body_file": "pr-body.md",
+    "branch": "discord-purge-messages"
+  }
+}

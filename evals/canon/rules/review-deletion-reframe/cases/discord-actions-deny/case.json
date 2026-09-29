@@ -1,0 +1,18 @@
+{
+  "kind": "positive",
+  "domain": "code-review",
+  "timeout_s": 1500,
+  "expected_behavior": [
+    "Flags that tools/discord_tool.py keeps None for an unset discord.server_actions and adds a second None for an unset discord.server_actions_deny, so _available_actions and _run_discord_action each carry two None branches and the handler grows a second refusal gate. Asks to resolve the config once into the permitted actions (unset allowlist = every action in _ACTIONS, unset denylist = empty, permitted = allowed minus denied), which deletes the existing allowlist-is-None checks, the new denylist checks, the second gate, and the (allowlist, denylist) tuple, and says behavior holds because both paths only ever admit names in _ACTIONS."
+  ],
+  "workspace": {
+    "repo": "hermes",
+    "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"
+  },
+  "review": {
+    "patch": "pr.patch",
+    "title": "feat(discord): turn off individual server actions with discord.server_actions_deny",
+    "body_file": "pr-body.md",
+    "branch": "discord-server-actions-deny"
+  }
+}

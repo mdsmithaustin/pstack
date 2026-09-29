@@ -1,0 +1,1 @@
+Please review `discord-purge-messages` against main before it merges. It gives the discord_admin tool a purge_messages action for clearing a channel's recent messages. The author's description is saved in pr-body.md. Review only; nothing needs to be committed or pushed.
