@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Pure parsing of Claude Code subagent transcripts for reasoning-effort facts.
-No network, no subprocess, no writes — reads files the caller names."""
+It reads only the files the caller names. It makes no network calls, starts no subprocess, and writes nothing."""
 from __future__ import annotations
 
 import json
@@ -19,8 +19,8 @@ def efforts_by_agent(session_dir: Path) -> dict[str, dict]:
     id parsed from the filename, e.g. agent-low.jsonl -> "low", when a record
     has no agentId field).
 
-    Returns {agent_id: {"efforts": [...], "per_turn_efforts": [...], "models": [...]}}
-    — one entry per matching assistant record found for that agent, in
+    Returns {agent_id: {"efforts": [...], "per_turn_efforts": [...], "models": [...]}},
+    with one entry per matching assistant record found for that agent, in
     file-then-line order, each list the same length. A record missing
     `effort`, `perTurnEffort`, or `message.model` contributes None at that
     position rather than raising. A session_dir with no subagents directory,

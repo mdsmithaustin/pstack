@@ -11,7 +11,7 @@ assert, write report.json, exit 1 on any failure.
 
 Each spawned child's `subagents/agent-<id>.meta.json` records the Agent call's
 own agentType/description/model, keyed by the same id as its transcript
-`subagents/agent-<id>.jsonl` — so cases match observed effort back to which arm
+`subagents/agent-<id>.jsonl`, so cases match observed effort back to which arm
 produced it without parsing the parent's own transcript at all.
 """
 from __future__ import annotations
