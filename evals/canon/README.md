@@ -68,7 +68,8 @@ images/
 
 Each arm root holds the grader next to the skill tree: `oracles/`, the rule's
 `oracle.py`, and the case's `project/`. A workspace case's arm holds
-`workspace.json` naming the pinned checkout in place of `project/`, and a
+`workspace.json` naming the pinned checkout in place of `project/`, a copy of
+`images/images.json` for `shared.project_test_results`, and a
 `workspace/` directory that the entry wrapper reads. It never holds `samples/`,
 `test_oracle.py`, or `oracles/test_*.py`. The answering agent works in a
 separate temporary workspace. A Claude trace showed its cwd under

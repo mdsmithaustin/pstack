@@ -591,6 +591,7 @@ class WorkspaceBuildTests(ShopRule):
             root = self.out / "arms" / "orders-workspace" / "orders-amend" / arm
             self.assertEqual((root / "workspace" / "overlay" / "CONTEXT.md").read_bytes(), CONTEXT)
             self.assertEqual(json.loads((root / "rules" / "orders-workspace" / "cases" / "orders-amend" / "workspace.json").read_text())["checkout"], str(checkout))
+            self.assertEqual((root / "images" / "images.json").read_bytes(), (ROOT / "images" / "images.json").read_bytes())
             prompt = json.loads((root / screen.MANIFEST).read_text())["cases"][0]["prompt"]
             self.assertEqual(prompt, (self.rule.cases[0].root / "prompt.md").read_text().strip())
 

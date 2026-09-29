@@ -729,6 +729,10 @@ def copy_grader(rule, case, root, checkout=None):
         return
     (rule_root / "cases" / case.id).mkdir(parents=True)
     (rule_root / "cases" / case.id / "workspace.json").write_text(json.dumps({"checkout": str(checkout[0]), "tree": checkout[1]}) + "\n")
+    # shared.project_test_results finds this machine's dependency images here.
+    if (CANON / "images" / "images.json").is_file():
+        (root / "images").mkdir()
+        shutil.copyfile(CANON / "images" / "images.json", root / "images" / "images.json")
 
 
 def mount_clashes(tracked, rule, entry, skills):
