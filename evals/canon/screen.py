@@ -28,7 +28,8 @@ arms beside pstack. The one-change check never sees them.
 A rule whose rule.json names cases_from is a placement variant. It has its own
 rule.patch and runs the named rule's cases and oracle unchanged.
 
-An arms rule is a variant whose rule.json lists "arms", current first. Each
+An arms rule is a rule whose rule.json lists "arms", current first. It takes
+its cases from cases_from, or holds its own oracle.py and cases/ without it. Each
 other arm has arms/<arm>.patch, a unified diff against skills/ that may touch
 several files. Every arm of every case is built and graded, and compare shows
 each arm against current and each later arm against each earlier one.
@@ -359,8 +360,6 @@ def load_rule(rule_id):
     origin = spec.get("cases_from", rule_id)
     arm_patches = ()
     if "arms" in spec or (RULES / rule_id / "arms").exists():
-        if "cases_from" not in spec:
-            raise ScreenError(f"rule {rule_id} has arms, so its rule.json must name the rule it takes cases from in cases_from")
         arm_patches = load_arm_patches(rule_id, spec.get("arms"))
     root = RULES / origin
     for required in ("oracle.py", "cases"):

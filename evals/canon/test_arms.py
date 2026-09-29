@@ -107,11 +107,20 @@ class ArmsRuleLoadTests(unittest.TestCase):
         with self.assertRaisesRegex(screen.ScreenError, "lists arms, so it must not have rule.patch"):
             screen.load_rule("scratch-arms")
 
-    def test_arms_rule_without_cases_from_is_refused(self):
+    def test_arms_rule_without_cases_from_needs_its_own_cases(self):
         self.write("scratch-arms", {"rule.json": json.dumps({"source": "S2", "arms": ["current", "leaf", "leaf+trigger"]})})
 
-        with self.assertRaisesRegex(screen.ScreenError, "must name the rule it takes cases from"):
+        with self.assertRaisesRegex(screen.ScreenError, "rule scratch-arms has no oracle.py"):
             screen.load_rule("scratch-arms")
+
+    def test_stub_rule_that_owns_its_cases_grades_them_with_its_own_oracle(self):
+        self.write("scratch-own", {"rule.json": json.dumps({"source": "S3", "arms": ["current", "stub"]}),
+                                   "oracle.py": "CHECKS = {'shop': lambda answer, project: []}\n", **CASE})
+
+        rule = screen.load_rule("scratch-own")
+
+        self.assertEqual((rule.arm_names, rule.case_rule, rule.source), (("current", "stub"), "scratch-own", "S3"))
+        self.assertEqual([(case.rule, case.id) for case in rule.cases], [("scratch-own", "shop")])
 
     def test_stub_arm_needs_no_patch_and_the_rule_needs_no_arms_directory(self):
         self.write("scratch-stub", {"rule.json": json.dumps({"cases_from": "scratch-base", "arms": ["current", "stub"]})})

@@ -156,7 +156,8 @@ or delete one. Paths read `a/<skill>/...`, or `a/skills/<skill>/...`, which
 drops the `skills/` prefix. The build applies it with `git apply` in a
 scratch copy of the tree, and refuses a patch that does not apply or changes
 nothing. The one-change check does not run. The rule takes its cases and
-oracle from `cases_from`, as a variant does. Under `--entry skill` the arms
+oracle from `cases_from`, as a variant does. Without `cases_from` it holds its
+own `oracle.py` and `cases/`, as an ordinary rule does. Under `--entry skill` the arms
 mount every skill any arm changes.
 
 `build` writes `arms/<rule>/<case>/<arm>/` for every arm in order.
