@@ -28,7 +28,7 @@ def tracked(root, commit):
     return {path for path in listing.split("\0") if path}
 
 
-def register_persona(root, manifest):
+def register_agents(root, manifest):
     """Install the named-role wrappers the way a user would, from the mounted
     tree, and return the files it wrote. Codex loads project roles only from a
     trusted project, so the sandbox's own config trusts this one."""
@@ -40,7 +40,8 @@ def register_persona(root, manifest):
                           env=env, capture_output=True, text=True)
     if proc.returncode != 0:
         raise workspace.WorkspaceError(f"persona install failed: {proc.stdout[-400:]} {proc.stderr[-400:]}")
-    written = [Path(role["path"]).relative_to(root).as_posix() for role in json.loads(proc.stdout)["roles"]]
+    report = json.loads(proc.stdout)
+    written = sorted(Path(row["path"]).relative_to(root).as_posix() for row in report["roles"] + report["efforts"])
     if manifest["harness"] == "codex":
         config = HOME / ".codex" / "config.toml"
         with config.open("a", encoding="utf-8") as handle:
@@ -89,8 +90,8 @@ def setup(manifest_path):
     workspace.write_overlay(root, workspace.read_files(payload / "overlay"))
     if manifest.get("discovery"):
         workspace.expose(root, manifest["discovery"], manifest["tree"])
-        record["persona"] = register_persona(root, manifest)
-        workspace.exclude(root, record["persona"])
+        record["agents"] = register_agents(root, manifest)
+        workspace.exclude(root, record["agents"])
     record["deps"] = link_deps(root, manifest)
     record["tree"] = workspace.snapshot(root, head)
     if record["tree"] != manifest["expected_tree"]:

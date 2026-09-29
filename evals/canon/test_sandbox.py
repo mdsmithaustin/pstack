@@ -205,7 +205,10 @@ class InsideTests(test_workspace.ShopRepo):
 
         record = sbx_inside.setup(manifest)
 
-        self.assertEqual(record, {"persona": [".claude/agents/comment-sicko.md", ".claude/agents/poteto-agent.md"], "deps": None, "tree": tree})
+        self.assertEqual(record, {"agents": [".claude/agents/comment-sicko.md", ".claude/agents/poteto-agent.md", ".claude/agents/pstack-effort-high.md",
+                                              ".claude/agents/pstack-effort-low.md", ".claude/agents/pstack-effort-max.md", ".claude/agents/pstack-effort-medium.md",
+                                              ".claude/agents/pstack-effort-xhigh.md"],
+                                   "deps": None, "tree": tree})
         self.assertTrue((clone / ".claude" / "skills" / "poteto-mode" / "SKILL.md").is_file())
         self.assertIn(f"{clone}/.claude/skills/poteto-mode/SKILL.md", (clone / ".claude" / "agents" / "poteto-agent.md").read_text())
         self.assertEqual(test_workspace.git(clone, "status", "--porcelain"), "?? CONTEXT.md\n")
@@ -220,7 +223,7 @@ class InsideTests(test_workspace.ShopRepo):
         with mock.patch.object(sbx_inside, "HOME", home):
             record = sbx_inside.setup(manifest)
 
-        self.assertEqual(record["persona"], [".codex/agents/comment-sicko.toml", ".codex/agents/poteto-agent.toml"])
+        self.assertEqual(record["agents"], [".codex/agents/comment-sicko.toml", ".codex/agents/poteto-agent.toml"])
         self.assertEqual((home / ".codex" / "config.toml").read_text(),
                          f'approval_policy = "never"\n\n[projects."{clone}"]\ntrust_level = "trusted"\n')
 
