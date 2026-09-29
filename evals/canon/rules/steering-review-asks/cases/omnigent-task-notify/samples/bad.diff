@@ -1,0 +1,234 @@
+diff --git a/omnigent/claude_native_bridge.py b/omnigent/claude_native_bridge.py
+index 9aefb5e..92b6dc1 100644
+--- a/omnigent/claude_native_bridge.py
++++ b/omnigent/claude_native_bridge.py
+@@ -4197,6 +4197,13 @@ _COMMAND_STDOUT_RE = re.compile(r"<local-command-stdout>(.*?)</local-command-std
+ _BASH_INPUT_RE = re.compile(r"<bash-input>(.*?)</bash-input>", re.DOTALL)
+ _BASH_STDOUT_RE = re.compile(r"<bash-stdout>(.*?)</bash-stdout>", re.DOTALL)
+ _BASH_STDERR_RE = re.compile(r"<bash-stderr>(.*?)</bash-stderr>", re.DOTALL)
++_TASK_NOTIFICATION_REQUIRED_MARKERS: tuple[str, ...] = (
++    "<task-notification>",
++    "<task-id>",
++    "<tool-use-id>",
++    "<status>",
++    "</task-notification>",
++)
+ 
+ # Markers that prefix a ``role=user`` record produced by Claude
+ # Code's CLI scaffolding (not user-typed content). ``<command-
+@@ -4313,6 +4320,13 @@ def _parse_slash_command_record(content: str) -> _SlashCommandPayload | None:
+     return _SlashCommandPayload(name=name, arguments=arguments, output=output)
+ 
+ 
++def _is_task_notification_text(text: str) -> bool:
++    stripped = text.lstrip()
++    return stripped.startswith("<task-notification>") and all(
++        marker in stripped for marker in _TASK_NOTIFICATION_REQUIRED_MARKERS
++    )
++
++
+ def _local_command_transcript_items_from_entry(
+     entry: dict[str, Any],
+     *,
+@@ -4507,6 +4521,20 @@ def _user_transcript_items_from_entry(
+         # of leaking as user bubbles.
+         if any(stripped.startswith(m) for m in _CLI_SCAFFOLDING_MARKERS):
+             return current_response_id, []
++        if _is_task_notification_text(content):
++            items.append(
++                ClaudeTranscriptItem(
++                    source_id=_source_id(source_key, 0, "message"),
++                    item_type="message",
++                    data={
++                        "role": "user",
++                        "is_meta": True,
++                        "content": [{"type": "input_text", "text": content}],
++                    },
++                    response_id=fallback_response_id,
++                )
++            )
++            return None, items
+         items.append(
+             ClaudeTranscriptItem(
+                 source_id=_source_id(source_key, 0, "message"),
+@@ -4546,6 +4574,22 @@ def _user_transcript_items_from_entry(
+                 stripped.startswith(m) for m in _CLI_SCAFFOLDING_MARKERS
+             ):
+                 continue
++            if _is_task_notification_text(text):
++                items.append(
++                    ClaudeTranscriptItem(
++                        source_id=_source_id(source_key, item_index, "message"),
++                        item_type="message",
++                        data={
++                            "role": "user",
++                            "is_meta": True,
++                            "content": [{"type": "input_text", "text": text}],
++                        },
++                        response_id=fallback_response_id,
++                    )
++                )
++                item_index += 1
++                saw_user_text = True
++                continue
+             user_blocks.append({"type": "input_text", "text": text})
+             saw_user_text = True
+             continue
+diff --git a/omnigent/server/routes/sessions.py b/omnigent/server/routes/sessions.py
+index d09ea1f..a2832eb 100644
+--- a/omnigent/server/routes/sessions.py
++++ b/omnigent/server/routes/sessions.py
+@@ -8439,6 +8439,8 @@ def _title_content_from_item(item: NewConversationItem) -> list[dict[str, Any]]:
+         return []
+     if item.data.role != "user":
+         return []
++    if item.data.is_meta:
++        return []
+     return item.data.content
+ 
+ 
+diff --git a/tests/server/integration/test_sessions_endpoints.py b/tests/server/integration/test_sessions_endpoints.py
+index 079bd3a..d1b739e 100644
+--- a/tests/server/integration/test_sessions_endpoints.py
++++ b/tests/server/integration/test_sessions_endpoints.py
+@@ -1256,6 +1256,9 @@ async def test_external_meta_user_message_persists_without_live_input_event(
+     meta = next(item for item in items if item["type"] == "message")
+     assert meta["is_meta"] is True
+     assert meta["content"][0]["text"] == "<skill>hidden</skill>"
++    snap = await client.get(f"/v1/sessions/{session['id']}")
++    assert snap.status_code == 200
++    assert snap.json()["title"] is None
+     assert published == []
+ 
+ 
+diff --git a/tests/test_claude_native_bridge.py b/tests/test_claude_native_bridge.py
+index 653ccbc..54ae660 100644
+--- a/tests/test_claude_native_bridge.py
++++ b/tests/test_claude_native_bridge.py
+@@ -602,6 +602,45 @@ def test_read_transcript_items_since_parses_claude_visible_events(tmp_path: Path
+     assert current_response_id == tool_call.response_id
+ 
+ 
++def test_read_transcript_items_since_marks_task_notifications_meta(tmp_path: Path) -> None:
++    task_notification = (
++        "<task-notification>\n"
++        "<task-id>a815d170defd74675</task-id>\n"
++        "<tool-use-id>toolu_bdrk_01Uz3yFPSUrsqovLfRN4uhyt</tool-use-id>\n"
++        "<output-file>/tmp/tasks/a815d170defd74675.output</output-file>\n"
++        "<status>completed</status>\n"
++        '<summary>Agent "Explore spec" finished</summary>\n'
++        "<result>final report</result>\n"
++        "</task-notification>"
++    )
++    transcript_path = tmp_path / "session.jsonl"
++    transcript_path.write_text(
++        json.dumps(
++            {
++                "type": "user",
++                "uuid": "task-notification-1",
++                "message": {"role": "user", "content": task_notification},
++            }
++        )
++        + "\n",
++        encoding="utf-8",
++    )
++
++    _cursor, current_response_id, items = read_transcript_items_since(
++        transcript_path,
++        0,
++        agent_name="claude-native-ui",
++    )
++
++    assert current_response_id is None
++    assert [item.item_type for item in items] == ["message"]
++    assert items[0].data == {
++        "role": "user",
++        "is_meta": True,
++        "content": [{"type": "input_text", "text": task_notification}],
++    }
++
++
+ @pytest.mark.parametrize(
+     "raw_text",
+     [
+diff --git a/web/src/lib/itemsToBlocks.test.ts b/web/src/lib/itemsToBlocks.test.ts
+index 310c288..1d7b9ef 100644
+--- a/web/src/lib/itemsToBlocks.test.ts
++++ b/web/src/lib/itemsToBlocks.test.ts
+@@ -100,6 +100,33 @@ describe("itemsToBlocks — flat shape", () => {
+     ]);
+   });
+ 
++  it("hides legacy Claude task notifications that predate is_meta", () => {
++    const items: ConversationItem[] = [
++      userMessage("resp_before", "visible before", "msg_before"),
++      userMessage(
++        "resp_task",
++        [
++          "<task-notification>",
++          "<task-id>a815d170defd74675</task-id>",
++          "<tool-use-id>toolu_bdrk_01Uz3yFPSUrsqovLfRN4uhyt</tool-use-id>",
++          "<output-file>/tmp/tasks/a815d170defd74675.output</output-file>",
++          "<status>completed</status>",
++          '<summary>Agent "Explore spec" finished</summary>',
++          "<result>final report</result>",
++          "</task-notification>",
++        ].join("\n"),
++        "msg_legacy_task_notification",
++      ),
++      userMessage("resp_after", "visible after", "msg_after"),
++    ];
++
++    const blocks = itemsToBlocks(items);
++
++    const userBlocks = blocks.filter((b): b is UserMessageBlock => b.type === "user_message");
++    const texts = userBlocks.map((b) => b.content.map((c) => ("text" in c ? c.text : "")).join(""));
++    expect(texts).toEqual(["visible before", "visible after"]);
++  });
++
+   it("user + assistant items produce [UserMessageBlock, TextDone] in order", () => {
+     const items: ConversationItem[] = [
+       userMessage("resp_1", "Hello", "msg_user1"),
+diff --git a/web/src/lib/itemsToBlocks.ts b/web/src/lib/itemsToBlocks.ts
+index 43678a2..a38b5c2 100644
+--- a/web/src/lib/itemsToBlocks.ts
++++ b/web/src/lib/itemsToBlocks.ts
+@@ -83,7 +83,7 @@ function itemToBlock(item: ConversationItem): AnyBlock | null {
+     // after /compact. It starts with a distinctive prefix and is
+     // part of the model's context (needed for resume) but should
+     // not be shown as a chat bubble in the web UI.
+-    if (isCompactionSummaryMessage(item)) {
++    if (isCompactionSummaryMessage(item) || isClaudeTaskNotificationMessage(item)) {
+       return null;
+     }
+     return userMessageToBlock(item);
+@@ -136,6 +136,29 @@ function isCompactionSummaryMessage(item: MessageItem): boolean {
+   return false;
+ }
+ 
++// Hide legacy Claude Task notifications persisted before the bridge marked them meta.
++function isClaudeTaskNotificationMessage(item: MessageItem): boolean {
++  const requiredMarkers = [
++    "<task-notification>",
++    "<task-id>",
++    "<tool-use-id>",
++    "<status>",
++    "</task-notification>",
++  ];
++  for (const block of item.content) {
++    if (block.type === "input_text" && typeof block.text === "string") {
++      const text = block.text.trimStart();
++      if (
++        text.startsWith("<task-notification>") &&
++        requiredMarkers.every((marker) => text.includes(marker))
++      ) {
++        return true;
++      }
++    }
++  }
++  return false;
++}
++
+ function userMessageToBlock(item: MessageItem): UserMessageBlock {
+   return {
+     type: "user_message",

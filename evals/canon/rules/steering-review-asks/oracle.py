@@ -187,4 +187,177 @@ def check_close_code(answer, workspace):
                       "tests/e2e/test_host_dns_failure_reconnect_backoff.py": 175})
 
 
-CHECKS = {"omnigent-close-code": check_close_code}
+
+
+# omnigent #2104. The PR's bridge test and its Monitor web test encode the
+# review ask, so they are graded as K1 and K2 below, by checks that pin no
+# data-dict shape or response id. The functional set is the PR's other two.
+TASK_NOTIFY_PR_TESTS = r'''
+
+async def test_external_meta_user_message_persists_without_live_input_event(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    published: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        "omnigent.server.routes.sessions.session_stream.publish",
+        lambda sid, ev: published.append((sid, ev)),
+    )
+    agent = await create_test_agent(client)
+    session = await _create_session(client, agent["id"])
+
+    resp = await client.post(
+        f"/v1/sessions/{session['id']}/events",
+        json={
+            "type": "external_conversation_item",
+            "data": {
+                "item_type": "message",
+                "item_data": {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "<skill>hidden</skill>"}],
+                    "is_meta": True,
+                },
+                "response_id": "codex_turn_123",
+                "source_id": "codex-skill-meta",
+            },
+        },
+    )
+    assert resp.status_code == 202, resp.text
+
+    items = (await client.get(f"/v1/sessions/{session['id']}/items")).json()["data"]
+    meta = next(item for item in items if item["type"] == "message")
+    assert meta["is_meta"] is True
+    assert meta["content"][0]["text"] == "<skill>hidden</skill>"
+    snap = await client.get(f"/v1/sessions/{session['id']}")
+    assert snap.status_code == 200
+    assert snap.json()["title"] is None
+    assert published == []
+'''
+
+TASK_NOTIFY_PR_WEB_TESTS = r'''
+
+describe("itemsToBlocks — flat shape", () => {
+  it("hides legacy Claude task notifications that predate is_meta", () => {
+    const items: ConversationItem[] = [
+      userMessage("resp_before", "visible before", "msg_before"),
+      userMessage(
+        "resp_task",
+        [
+          "<task-notification>",
+          "<task-id>a815d170defd74675</task-id>",
+          "<tool-use-id>toolu_bdrk_01Uz3yFPSUrsqovLfRN4uhyt</tool-use-id>",
+          "<output-file>/tmp/tasks/a815d170defd74675.output</output-file>",
+          "<status>completed</status>",
+          '<summary>Agent "Explore spec" finished</summary>',
+          "<result>final report</result>",
+          "</task-notification>",
+        ].join("\n"),
+        "msg_legacy_task_notification",
+      ),
+      userMessage("resp_after", "visible after", "msg_after"),
+    ];
+
+    const blocks = itemsToBlocks(items);
+
+    const userBlocks = blocks.filter((b): b is UserMessageBlock => b.type === "user_message");
+    const texts = userBlocks.map((b) => b.content.map((c) => ("text" in c ? c.text : "")).join(""));
+    expect(texts).toEqual(["visible before", "visible after"]);
+  });
+});
+'''
+
+MONITOR, KILLED = ("<task-notification>\n<task-id>b1mhekpmy</task-id>\n<summary>Monitor event: CI results</summary>\n"
+                   "<event>E2E UI Tests (shard 2/3)\tfail\t1m50s</event>\n</task-notification>",
+                   "<task-notification>\n<task-id>k2</task-id>\n<status>killed</status>\n</task-notification>")
+ASKS_ABOUT_TAG = "<task-notification> shows up in my logs, what does it mean?"
+
+TASK_NOTIFY_CHECKS = rf'''import json
+
+import pytest
+
+from omnigent.claude_native_bridge import read_transcript_items_since
+
+MONITOR, KILLED, ASKS_ABOUT_TAG = {MONITOR!r}, {KILLED!r}, {ASKS_ABOUT_TAG!r}
+
+
+def messages(tmp_path, content):
+    path = tmp_path / "session.jsonl"
+    path.write_text(json.dumps({{"type": "user", "uuid": "u1", "message": {{"role": "user", "content": content}}}}) + "\n")
+    items = read_transcript_items_since(path, 0, agent_name="claude-native-ui")[2]
+    return [(item.data.get("is_meta") is True, "".join(block.get("text", "") for block in item.data.get("content", [])))
+            for item in items if item.item_type == "message"]
+
+
+@pytest.mark.parametrize("text", [MONITOR, KILLED], ids=["monitor", "killed"])
+@pytest.mark.parametrize("blocks", [False, True], ids=["string", "blocks"])
+def test_notification_without_optional_tags_is_kept_as_hidden_context(tmp_path, text, blocks):
+    content = [{{"type": "text", "text": text}}] if blocks else text
+    assert [meta for meta, body in messages(tmp_path, content) if text in body] == [True]
+
+
+def test_user_text_that_only_opens_with_the_tag_stays_visible(tmp_path):
+    assert messages(tmp_path, ASKS_ABOUT_TAG) == [(False, ASKS_ABOUT_TAG)]
+'''
+
+TASK_NOTIFY_WEB_CHECKS = f'''import {{ expect, it }} from "vitest";
+import type {{ ConversationItem }} from "./conversationItems";
+import {{ itemsToBlocks }} from "./itemsToBlocks";
+
+const MONITOR = {json.dumps(MONITOR)};
+const KILLED = {json.dumps(KILLED)};
+const ASKS_ABOUT_TAG = {json.dumps(ASKS_ABOUT_TAG)};
+
+function visible(texts: string[]): string[] {{
+  const items: ConversationItem[] = texts.map((text, index) => ({{
+    id: `msg_${{index}}`, response_id: `resp_${{index}}`, type: "message", role: "user", status: "completed",
+    content: [{{ type: "input_text", text }}],
+  }}));
+  return itemsToBlocks(items)
+    .filter((block) => block.type === "user_message")
+    .map((block) => (block as {{ content: {{ text?: string }}[] }}).content.map((part) => part.text ?? "").join(""));
+}}
+
+it("K2 hides stored notifications without the optional tags", () => {{
+  expect(visible(["before", MONITOR, KILLED, "after"])).toEqual(["before", "after"]);
+}});
+
+it("K3 keeps a stored user message that only opens with the tag", () => {{
+  expect(visible([ASKS_ABOUT_TAG])).toEqual([ASKS_ABOUT_TAG]);
+}});
+'''
+
+
+def adds_minimal_fixture(changed):
+    """The review asked for a fixture without <tool-use-id> or <status>. Only
+    an added test file can hold one, so this reads the diff's test files: some
+    added <task-notification> payload has a <task-id> and no <tool-use-id>."""
+    for path, data in changed.items():
+        if data is None or not (path.startswith("tests/") or re.search(r"\.test\.[jt]sx?$", path)):
+            continue
+        for payload in re.findall(r"<task-notification>(.*?)</task-notification>", data.decode("utf-8", "replace"), re.S):
+            if "<task-id>" in payload and "<tool-use-id>" not in payload:
+                return []
+    return ["constraint:K4: no added test holds a task notification without <tool-use-id>"]
+
+
+def check_task_notify(answer, workspace):
+    checks, web_checks = "tests/test_task_notification_context.py", "web/src/lib/itemsToBlocks.legacy.test.ts"
+    return graded(workspace, "omnigent-77b211cd72ec", {
+        "tests/server/integration/test_sessions_endpoints.py": TASK_NOTIFY_PR_TESTS,
+        "web/src/lib/itemsToBlocks.test.ts": TASK_NOTIFY_PR_WEB_TESTS,
+        checks: TASK_NOTIFY_CHECKS, web_checks: TASK_NOTIFY_WEB_CHECKS,
+    }, {
+        "tests/server/integration/test_sessions_endpoints.py::test_external_meta_user_message_persists_without_live_input_event":
+            "functional",
+        "web/src/lib/itemsToBlocks.test.ts::itemsToBlocks — flat shape hides legacy Claude task notifications that predate is_meta":
+            "functional",
+        f"{checks}::test_notification_without_optional_tags_is_kept_as_hidden_context": "constraint:K1",
+        f"{web_checks}::K2 hides stored notifications without the optional tags": "constraint:K2",
+        f"{checks}::test_user_text_that_only_opens_with_the_tag_stays_visible": "constraint:K3",
+        f"{web_checks}::K3 keeps a stored user message that only opens with the tag": "constraint:K3",
+    }, {"omnigent/claude_native_bridge.py": 42, "omnigent/server/routes/sessions.py": 2, "web/src/lib/itemsToBlocks.ts": 18,
+        "tests/test_claude_native_bridge.py": 36, "tests/server/integration/test_sessions_endpoints.py": 3,
+        "web/src/lib/itemsToBlocks.test.ts": 45}, [adds_minimal_fixture])
+
+
+CHECKS = {"omnigent-close-code": check_close_code, "omnigent-task-notify": check_task_notify}

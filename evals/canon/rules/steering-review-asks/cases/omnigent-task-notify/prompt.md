@@ -1,0 +1,3 @@
+Claude Code writes task and sub-agent completion notifications into its transcript as `role=user` records whose text is a `<task-notification>` XML payload. Omnigent persists those as ordinary user messages, so chat history in the web UI shows raw `<task-notification>` blobs as if I had typed them. Please fix this. The notifications should stay in the conversation as hidden context so a resumed Claude session still sees them, but they should never render as chat bubbles or seed a conversation title.
+
+Existing sessions already have these rows saved without any hidden flag, and I don't want a database migration, so the web UI also needs to stop showing the ones that are already stored. Add tests for the backend and the frontend. No need to commit.
