@@ -361,19 +361,19 @@ def is_result(line):
 
 
 def last_result_only(lines):
-    """The lines in order, without every result event but the last. The
-    harness takes exactly one result from a Claude stream, and a lead that
-    waits on a background delegate ends a turn, with a result, each time."""
-    held = []
+    """The lines in order, without every result event but the last, which
+    comes at the end. The harness takes exactly one result from a Claude
+    stream, as its final record, and a lead that waits on a background
+    delegate ends a turn, with a result, each time; task notifications can
+    still follow the last one."""
+    held = None
     for line in lines:
         if is_result(line):
-            yield from held[1:]
-            held = [line]
-        elif held:
-            held.append(line)
+            held = line
         else:
             yield line
-    yield from held
+    if held is not None:
+        yield held
 
 
 def stream_claude(box, command, prompt_path, raw_path, out, **options):

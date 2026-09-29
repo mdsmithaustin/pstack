@@ -67,14 +67,29 @@ class ClaudeStreamTests(unittest.TestCase):
             b'{"type":"assistant","message":"spawn"}\n',
             b'{"type":"assistant","message":"delegate done"}\n',
             b'not json\n',
-            b'{"type":"result","result":"Final answer."}\n',
             b'{"type":"system","subtype":"after"}\n',
+            b'{"type":"result","result":"Final answer."}\n',
         ])
 
-    def test_a_stream_with_one_result_passes_unchanged(self):
-        stream = [b'{"type":"assistant"}\n', b'{"type":"result","result":"ok"}\n', b'["result"]\n']
+    def test_a_stream_that_ends_with_its_one_result_passes_unchanged(self):
+        stream = [b'{"type":"assistant"}\n', b'["result"]\n', b'{"type":"result","result":"ok"}\n']
 
         self.assertEqual(list(sandbox.last_result_only(stream)), stream)
+
+    def test_task_notifications_after_the_last_result_move_before_it(self):
+        stream = [
+            b'{"type":"assistant","message":"done"}\n',
+            b'{"type":"result","result":"Final answer."}\n',
+            b'{"type":"system","subtype":"background_tasks_changed","tasks":[]}\n',
+            b'{"type":"system","subtype":"task_notification","status":"stopped"}\n',
+        ]
+
+        self.assertEqual(list(sandbox.last_result_only(stream)), [
+            b'{"type":"assistant","message":"done"}\n',
+            b'{"type":"system","subtype":"background_tasks_changed","tasks":[]}\n',
+            b'{"type":"system","subtype":"task_notification","status":"stopped"}\n',
+            b'{"type":"result","result":"Final answer."}\n',
+        ])
 
 
     def test_claude_run_keeps_the_raw_stream_and_forwards_one_result(self):
