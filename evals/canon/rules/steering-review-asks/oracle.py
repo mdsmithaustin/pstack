@@ -492,9 +492,19 @@ def check_long_prompt(answer, workspace):
 # hermes #124058. The PR's install test pins its warning prefix, summary label,
 # and result key, so C1 and C4 grade the same asks by behavior. zoneinfo (C7)
 # and "two tests are enough" are the reviewer's taste and are not graded.
+# known_issues entries may be strings or structured records, so every fixture
+# takes its known_issues from the agent's own plugin-catalog/hindsight.yaml.
+# C4 is unseeded: the reviewer says the mode "is chosen after install", so an
+# install must show the issue whatever mode a later setup picks.
 KNOWN_ISSUES_PR_TESTS = r'''"""#124058: catalog ``known_issues`` is an informational field."""
 
-from hermes_cli.plugin_catalog import PluginCatalogEntry, entry_from_mapping, load_catalog
+from pathlib import Path
+
+import hermes_yaml as yaml
+
+from hermes_cli.plugin_catalog import entry_from_mapping, load_catalog
+
+HINDSIGHT = Path(__file__).resolve().parents[2] / "plugin-catalog" / "hindsight.yaml"
 
 
 def _entry(**overrides):
@@ -510,46 +520,57 @@ def _entry(**overrides):
 
 
 def test_known_issues_parse_round_trip(tmp_path):
-    """known_issues parses from dict and YAML into the entry and to_dict rewrites it identically."""
-    entry = _entry(known_issues=["First issue.", "Second issue."])
-    assert isinstance(entry, PluginCatalogEntry)
-    assert entry.known_issues == ["First issue.", "Second issue."]
-    assert entry.to_dict()["known_issues"] == ["First issue.", "Second issue."]
-
+    """The known_issues hindsight.yaml declares, in whatever shape, load from YAML and
+    survive to_dict back through entry_from_mapping; an entry without them has none."""
+    shipped = yaml.safe_load(HINDSIGHT.read_text(encoding="utf-8"))
+    issues = shipped.get("known_issues") or ["First issue.", "Second issue."]
     catalog_dir = tmp_path / "catalog"
     catalog_dir.mkdir()
-    (catalog_dir / "hindsight.yaml").write_text(
-        "name: hindsight\n"
-        "repo: https://github.com/vectorize-io/hindsight\n"
-        "sha: 176f8c2de1369f569c489b831d143b78128b5535\n"
-        "description: test entry\n"
-        "maintainer: vectorize-io\n"
-        "known_issues:\n"
-        "  - 'Trap one.'\n"
-        "  - 'Trap two.'\n"
-    )
+    (catalog_dir / "hindsight.yaml").write_text(yaml.safe_dump({**shipped, "known_issues": issues}, allow_unicode=True),
+                                                encoding="utf-8")
     loaded = load_catalog(catalog_dir)
     assert len(loaded) == 1
-    assert loaded[0].known_issues == ["Trap one.", "Trap two."]
-    assert loaded[0].to_dict()["known_issues"] == ["Trap one.", "Trap two."]
+    assert len(loaded[0].known_issues) == len(issues)
+    assert entry_from_mapping(loaded[0].to_dict(), "round-trip").known_issues == loaded[0].known_issues
 
-    assert _entry().known_issues == []
-    assert _entry().to_dict()["known_issues"] == []
+    assert not _entry().known_issues
+    assert not _entry().to_dict().get("known_issues")
 '''
 
-KNOWN_ISSUES_CHECKS = r'''import json
+KNOWN_ISSUES_CHECKS = r'''import dataclasses
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+import hermes_yaml as yaml
 
 from hermes_cli import memory_provider_migration as migration
+from hermes_cli.plugin_catalog import load_catalog
 from hermes_cli.plugins_cmd import cmd_install, dashboard_install_plugin
 from tui_gateway.contracts.tools_mcp_plugins import PluginsManageResult
 
 REPO = Path(__file__).resolve().parents[2]
-TRAP = "Embedded mode loops K7Q."
+
+
+def shipped_issues():
+    shipped = yaml.safe_load((REPO / "plugin-catalog" / "hindsight.yaml").read_text(encoding="utf-8")) or {}
+    return shipped.get("known_issues") or ["Embedded mode loops on this pin."]
+
+
+def prose(value):
+    """The whitespace-normalized sentences of one parsed issue, whatever its shape."""
+    if isinstance(value, str):
+        return [" ".join(value.split())] if len(value.split()) >= 4 else []
+    if dataclasses.is_dataclass(value):
+        value = dataclasses.asdict(value)
+    elif hasattr(value, "model_dump"):
+        value = value.model_dump()
+    elif hasattr(value, "__dict__"):
+        value = vars(value)
+    items = value.values() if isinstance(value, dict) else value if isinstance(value, (list, tuple)) else []
+    return [text for item in items for text in prose(item)]
 
 
 class Installs(list):
@@ -559,15 +580,16 @@ class Installs(list):
 @pytest.fixture
 def installs(monkeypatch, tmp_path):
     """Installs that reach the core install step, which records each call,
-    reading a catalog of one hindsight entry that declares TRAP, or the
+    reading a catalog of one hindsight entry that declares the shipped
+    hindsight known_issues under a description that names none of them, or the
     checkout's own catalog when a test passes the in-tree directory."""
     catalog = tmp_path / "catalog"
     catalog.mkdir()
-    (catalog / "hindsight.yaml").write_text(
-        "name: hindsight\nrepo: https://github.com/vectorize-io/hindsight\n"
-        "sha: 176f8c2de1369f569c489b831d143b78128b5535\ndescription: Long-term memory.\n"
-        "maintainer: vectorize-io\ntier: community\ncategory: memory\n"
-        f"known_issues:\n  - '{TRAP}'\n")
+    (catalog / "hindsight.yaml").write_text(yaml.safe_dump({
+        "name": "hindsight", "repo": "https://github.com/vectorize-io/hindsight",
+        "sha": "176f8c2de1369f569c489b831d143b78128b5535", "description": "Long-term memory.",
+        "maintainer": "vectorize-io", "tier": "community", "category": "memory", "known_issues": shipped_issues(),
+    }, allow_unicode=True), encoding="utf-8")
     target = tmp_path / "hindsight"
     target.mkdir()
     (target / "plugin.yaml").write_text("name: hindsight\n")
@@ -612,11 +634,17 @@ def test_noninteractive_cli_install_proceeds_without_a_prompt(installs, monkeypa
 
 
 def test_cli_prints_each_known_issue_once(installs, monkeypatch, capsys):
+    """Each issue's most-printed sentence appears exactly once."""
+    monkeypatch.setenv("COLUMNS", "100000")
     monkeypatch.setattr("hermes_cli.plugins_cmd._is_tty", lambda: True)
     monkeypatch.setattr("hermes_cli.plugins_cmd._ask_yes", lambda *_a, **_k: True)
+    [entry] = load_catalog(installs.catalog)
+    sentences = [prose(issue) for issue in entry.known_issues]
     cmd_install("hindsight", enable=False, no_deps=True)
     out = capsys.readouterr()
-    assert (out.out + out.err).count("K7Q") == 1
+    shown = " ".join((out.out + out.err).replace("│", " ").split())
+    assert sentences and all(sentences), entry.known_issues
+    assert [max(shown.count(text) for text in texts) for texts in sentences] == [1] * len(sentences), shown
 
 
 def test_hindsight_known_issue_reaches_the_dashboard_result(installs):
