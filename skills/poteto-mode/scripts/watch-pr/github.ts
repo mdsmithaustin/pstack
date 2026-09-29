@@ -21,6 +21,12 @@ export class WatcherQueryError extends Error {
     this.failure = failure;
   }
 }
+export class ChecksUnavailable extends WatcherQueryError {
+  constructor(detail: string) {
+    super({ kind: "checks-unavailable", retryable: true, detail });
+    this.name = "ChecksUnavailable";
+  }
+}
 const firstLine = (value: string): string =>
   value.trim().split(/\r?\n/, 1)[0]?.slice(0, 240) ?? "";
 function run(argv: readonly [string, ...string[]]): Promise<CommandResult> {

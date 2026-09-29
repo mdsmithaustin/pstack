@@ -1,4 +1,4 @@
-import { WatcherQueryError, resolveChecks } from "./github.ts";
+import { ChecksUnavailable, WatcherQueryError, resolveChecks } from "./github.ts";
 import type * as T from "./types.ts";
 import { nonEmpty } from "./types.ts";
 export function assessGitHubMerge(args: {
@@ -39,6 +39,9 @@ async function mergeAssessment(
   return {
     hadPreviousPassingCi: commits.some(
       (commit) => commit.oid !== facts.headRefOid && commit.state === "SUCCESS"
+    ),
+    earlierHadChecks: commits.some(
+      (commit) => commit.oid !== facts.headRefOid && commit.state !== null
     ),
     github: assessGitHubMerge({
       mergeStateStatus: facts.mergeStateStatus,
@@ -87,6 +90,10 @@ export async function readSnapshot(args: {
     };
   else {
     const merge = await mergeAssessment(args.reader, facts);
+    if (checks.checks.length === 0 && merge.earlierHadChecks)
+      throw new ChecksUnavailable(
+        "the head has no checks yet, but an earlier commit had checks"
+      );
     const base = {
       source: checks.source,
       all: checks.checks,
