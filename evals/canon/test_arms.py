@@ -113,6 +113,21 @@ class ArmsRuleLoadTests(unittest.TestCase):
         with self.assertRaisesRegex(screen.ScreenError, "must name the rule it takes cases from"):
             screen.load_rule("scratch-arms")
 
+    def test_stub_arm_needs_no_patch_and_the_rule_needs_no_arms_directory(self):
+        self.write("scratch-stub", {"rule.json": json.dumps({"cases_from": "scratch-base", "arms": ["current", "stub"]})})
+
+        rule = screen.load_rule("scratch-stub")
+
+        self.assertEqual((rule.arms, rule.target, rule.skills), ((("current", None), ("stub", None)), "poteto-mode/SKILL.md", ("poteto-mode",)))
+        self.assertIn("scratch-stub", [rule.id for rule in screen.load_rules()])
+
+    def test_patch_for_the_stub_arm_is_refused(self):
+        self.arms(["current", "leaf", "leaf+trigger", "stub"])
+        self.write("scratch-arms", {"arms/stub.patch": LEAF})
+
+        with self.assertRaisesRegex(screen.ScreenError, "has arms/stub.patch, but the stub arm is built from current"):
+            screen.load_rule("scratch-arms")
+
     def test_arms_rule_whose_source_is_a_variant_is_refused(self):
         self.write("scratch-variant", {"rule.json": '{"cases_from": "scratch-base"}', "rule.patch": LEAF})
         self.write("scratch-arms", {"rule.json": json.dumps({"cases_from": "scratch-variant", "arms": ["current", "leaf", "leaf+trigger"]})})
@@ -161,6 +176,22 @@ class ArmPatchTests(unittest.TestCase):
 
         with self.assertRaisesRegex(screen.ScreenError, "arm patch changes nothing"):
             screen.apply_arm_patch(TREE, patch)
+
+    def test_stub_keeps_each_skill_md_frontmatter_and_drops_everything_else(self):
+        tree = {
+            "poteto-mode/SKILL.md": b"---\nname: poteto-mode\ndescription: Style.\n---\n\n# Poteto mode\nRead the leaf.\n",
+            "poteto-mode/playbooks/feature.md": b"1. Plan.\n",
+            "why/SKILL.md": b"---\nname: why\ndescription: \"Rationale: ---\"\n---",
+        }
+
+        self.assertEqual(screen.stub_tree(tree), {
+            "poteto-mode/SKILL.md": b"---\nname: poteto-mode\ndescription: Style.\n---\n",
+            "why/SKILL.md": b"---\nname: why\ndescription: \"Rationale: ---\"\n---",
+        })
+
+    def test_stub_refuses_a_skill_md_without_frontmatter(self):
+        with self.assertRaisesRegex(screen.ScreenError, "skills/poteto-mode/SKILL.md has no frontmatter"):
+            screen.stub_tree(TREE)
 
     def test_arm_mounted_when_every_line_it_adds_is(self):
         rule = screen.Rule("r", "S", None, "principle-laziness-protocol/SKILL.md", (), arm_patches=(("leaf", LEAF),))

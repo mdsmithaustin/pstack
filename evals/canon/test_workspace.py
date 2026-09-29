@@ -740,6 +740,36 @@ class ShopArmsRule(ShopRule):
         self.rule = screen.load_rule("orders-arms")
 
 
+class StubBuildTests(ShopRule):
+    def setUp(self):
+        super().setUp()
+        (screen.RULES / "orders-stub").mkdir()
+        (screen.RULES / "orders-stub" / "rule.json").write_text(json.dumps({"cases_from": "orders-workspace", "arms": ["current", "stub"]}))
+        self.rule = screen.load_rule("orders-stub")
+
+    def test_stub_arm_keeps_every_skill_name_and_frontmatter_and_nothing_else(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            built = screen.build(self.out, [self.rule], "poteto-mode")["orders-stub"]
+
+        arms = self.out / "arms" / "orders-stub" / "orders-amend"
+        current, stub = (screen.read_tree(arms / arm / "pstack") for arm in ("current", "stub"))
+        self.assertEqual(current, screen.tracked("skills"))
+        skills = sorted({path.split("/", 1)[0] for path in current})
+        self.assertEqual(sorted(stub), [f"{skill}/SKILL.md" for skill in skills])
+        for path, data in stub.items():
+            with self.subTest(path=path):
+                self.assertTrue(data.startswith(b"---\n") and data.endswith(b"\n---\n"), data[-40:])
+                self.assertEqual(data.count(b"\n---\n"), 1)
+                self.assertTrue(current[path].startswith(data))
+                self.assertEqual(screen.frontmatter_description(data.decode()), screen.frontmatter_description(current[path].decode()))
+                self.assertNotEqual(current[path], data)
+        self.assertEqual((built["arms"], built["target"]), (["current", "stub"], sorted(stub)[0]))
+        hashes = built["cases"]["orders-amend"]["workspace"]["arms"]
+        self.assertEqual(sorted(hashes), ["orders-amend/current", "orders-amend/stub"])
+        self.assertEqual(len(set(hashes.values())), 1)
+        self.assertEqual(screen.read_tree(arms / "current" / "workspace"), screen.read_tree(arms / "stub" / "workspace"))
+
+
 @unittest.skipUnless(harness_available(), "needs a skill-ci checkout at $SKILL_CI and uv")
 class OfflineArmsRunTests(ShopArmsRule):
     def test_each_treatment_arm_separates_from_current_and_the_two_tie(self):
