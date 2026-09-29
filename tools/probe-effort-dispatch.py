@@ -144,7 +144,7 @@ def main() -> int:
             report["cases"].append({"name": name, **case})
             if case["mismatches"]:
                 failed = True
-    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         report["cases"].append({"name": "setup", "error": str(error)})
         failed = True
 

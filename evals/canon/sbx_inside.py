@@ -5,7 +5,7 @@ sandbox.py copies this file, workspace.py, and a payload into the sandbox and
 calls one command at a time. The sandbox's clone of the staging repo is the
 cwd. Only the standard library is available.
 
-  sbx_inside.py setup MANIFEST     mount skills, register the persona, link deps, check the tree
+  sbx_inside.py setup MANIFEST     mount skills, install the harness's named agents, link deps, check the tree
   sbx_inside.py harvest MANIFEST OUT   write OUT.tar with workspace.diff and the agent transcripts
 """
 import json
@@ -29,8 +29,9 @@ def tracked(root, commit):
 
 
 def register_agents(root, manifest):
-    """Install the named-role wrappers the way a user would, from the mounted
-    tree, and return the files it wrote. Codex loads project roles only from a
+    """Install the harness's named agents the way a user would, from the
+    mounted tree, and return the files it wrote: the personas, plus the
+    effort agents on Claude Code. Codex loads project roles only from a
     trusted project, so the sandbox's own config trusts this one."""
     script = root / manifest["discovery"] / "pstack-harness" / "scripts" / "subagents.py"
     if not manifest.get("harness") or not script.is_file():
@@ -39,7 +40,7 @@ def register_agents(root, manifest):
     proc = subprocess.run([sys.executable, str(script), "install", "--harness", manifest["harness"], "--project", str(root)],
                           env=env, capture_output=True, text=True)
     if proc.returncode != 0:
-        raise workspace.WorkspaceError(f"persona install failed: {proc.stdout[-400:]} {proc.stderr[-400:]}")
+        raise workspace.WorkspaceError(f"named agent install failed: {proc.stdout[-400:]} {proc.stderr[-400:]}")
     report = json.loads(proc.stdout)
     written = sorted(Path(row["path"]).relative_to(root).as_posix() for row in report["roles"] + report["efforts"])
     if manifest["harness"] == "codex":
