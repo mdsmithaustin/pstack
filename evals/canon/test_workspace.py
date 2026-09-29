@@ -740,13 +740,15 @@ class ShopArmsRule(ShopRule):
         self.rule = screen.load_rule("orders-arms")
 
 
-class StubBuildTests(ShopRule):
+class ShopStubRule(ShopRule):
     def setUp(self):
         super().setUp()
         (screen.RULES / "orders-stub").mkdir()
         (screen.RULES / "orders-stub" / "rule.json").write_text(json.dumps({"cases_from": "orders-workspace", "arms": ["current", "stub"]}))
         self.rule = screen.load_rule("orders-stub")
 
+
+class StubBuildTests(ShopStubRule):
     def test_stub_arm_keeps_every_skill_name_and_frontmatter_and_nothing_else(self):
         with contextlib.redirect_stdout(io.StringIO()):
             built = screen.build(self.out, [self.rule], "poteto-mode")["orders-stub"]
@@ -795,6 +797,23 @@ class OfflineArmsRunTests(ShopArmsRule):
         self.assertEqual(touched, {"current": ["README.md"],
                                    "leaf": ["app/amend_log.md", "app/legacy.py", "app/orders.py"],
                                    "leaf+trigger": ["app/amend_log.md", "app/legacy.py", "app/orders.py"]})
+
+
+
+@unittest.skipUnless(harness_available(), "needs a skill-ci checkout at $SKILL_CI and uv")
+class OfflineStubRunTests(ShopStubRule):
+    def test_current_separates_from_the_stub_on_the_harvested_diffs(self):
+        with mock.patch.dict(os.environ, {"CODEX_BIN": str(ROOT / "offline" / "codex")}), contextlib.redirect_stdout(io.StringIO()) as printed:
+            screen.run("codex", self.out, [self.rule], "gpt-6-sol", 1, None, "poteto-mode")
+
+        compared = json.loads((self.out / "compare.json").read_text())
+        self.assertEqual([(pair["treatment"], pair["baseline"], pair["outcome"]) for pair in compared["pairs"]], [("current", "stub", "separates")],
+                         printed.getvalue()[-3000:])
+        self.assertEqual([(row["arm"], row["verdict"]) for row in compared["rules"]], [("stub", "separates")])
+        checkout = workspace.reference_checkout(workspace.parse_spec(self.rule.cases[0].root, self.rule.cases[0].workspace))[0]
+        touched = {arm: sorted(apply_diff(checkout, workspace_diff(self.out / "codex" / "orders-stub" / "orders-amend" / arm / "runs" / "orders-amend" / "with_skill")))
+                   for arm in self.rule.arm_names}
+        self.assertEqual(touched, {"current": ["app/amend_log.md", "app/legacy.py", "app/orders.py"], "stub": ["README.md"]})
 
 
 if __name__ == "__main__":

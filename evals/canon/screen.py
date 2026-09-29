@@ -173,6 +173,13 @@ def case_spec(case):
     return workspace.parse_spec(case.root, case.workspace, case.review)
 
 
+def standin_carries(rule, arm):
+    """Whether the offline stand-ins answer an arm of a workspace case as one
+    that carries the rule: every arm but current, or, beside a stub, every arm
+    but the stub."""
+    return arm != (STUB if STUB in rule.arm_names else "current")
+
+
 def standin_review(case, treated):
     """The labeled sample an offline stand-in answers a review case with: the
     CLEAN one for a near-miss, else FOUND when the rule is mounted and MISSED

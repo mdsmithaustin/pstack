@@ -211,6 +211,13 @@ The stub arm drops `pstack-harness/scripts/subagents.py`, so a `--runner sbx`
 stub arm registers no poteto-agent or Comment Sicko persona. The persona files
 are guidance that the skill tree installs.
 
+The offline stand-ins answer a positive case with `bad.md` in the stub arm and
+`good.md` in every other arm, and `offline/sbx-agent` does not ask for the
+persona in the stub arm. On 2026-09-28 both the host stand-in
+(`CODEX_BIN=evals/canon/offline/codex`) and `--runner sbx` with
+`CANON_SBX_STANDIN` printed `rule current vs stub run-1 SEPARATES` for
+`bug-fix-spawn-step-stub` under `--entry poteto-mode`.
+
 ## Entry modes
 
 `--entry skill` is the default. It mounts only the skill that owns the patched
