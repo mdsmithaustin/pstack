@@ -166,6 +166,31 @@ class DocumentCaseShapeTests(DocumentRule):
             screen.load_case(RULE, root)
         self.assertEqual(review_cases.document_problems(RULE, root, json.loads((root / "case.json").read_text())), ["answer-missed.md delivers no document"])
 
+    def test_a_workspace_sample_diff_that_deletes_the_document_is_refused(self):
+        root = self.base / "workspace-case"
+        (root / "samples").mkdir(parents=True)
+        (root / "prompt.md").write_text("Write NOTES.md in the repository.\n")
+        (root / "rubric.md").write_text("FOUND: names the cause.\nMISSED: anything else.\n")
+        labels = {"answer-found.md": "FOUND", "answer-missed.md": "MISSED"}
+        for name in labels:
+            (root / "samples" / name).write_text("Done.\n")
+        (root / "samples" / "labels.json").write_text(json.dumps(labels))
+        writes = "diff --git a/NOTES.md b/NOTES.md\nnew file mode 100644\n--- /dev/null\n+++ b/NOTES.md\n@@ -0,0 +1 @@\n+The hook environment is the cause.\n"
+        deletes = "diff --git a/NOTES.md b/NOTES.md\ndeleted file mode 100644\n--- a/NOTES.md\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n"
+        spec = {"kind": "positive", "domain": "planning-docs", "expected_behavior": ["Writes NOTES.md."], "document": {"file": "NOTES.md"},
+                "workspace": {"repo": "shop", "commit": "0" * 40}}
+        (root / "samples" / "answer-found.diff").write_text(writes)
+        (root / "samples" / "answer-missed.diff").write_text(writes)
+
+        self.assertEqual(screen.check_labels(root, "positive", spec["document"], True), labels)
+        self.assertEqual(review_cases.document_problems(RULE, root, spec), [])
+
+        (root / "samples" / "answer-found.diff").write_text(deletes)
+
+        with self.assertRaisesRegex(screen.ScreenError, r"sample answer-found.md has a sibling answer-found.diff that deletes NOTES.md"):
+            screen.check_labels(root, "positive", spec["document"], True)
+        self.assertEqual(review_cases.document_problems(RULE, root, spec), ["answer-found.md has a sibling answer-found.diff that deletes NOTES.md"])
+
     def test_the_authoring_check_accepts_both_cases_and_names_a_pasted_document_in_its_table(self):
         for case in self.cases.values():
             with self.subTest(case=case.id):

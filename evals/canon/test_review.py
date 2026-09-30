@@ -496,6 +496,21 @@ class OfflineReviewRunTests(ReviewCase):
         self.assertEqual([rule.get("uncalibrated") for rule in compared["rules"]], [None])
         self.assertIn("discount-review/discount-cap positive judge claude:opus: CALIBRATED", printed.getvalue())
 
+    def test_a_review_with_an_answer_and_no_harvested_diff_is_still_judged(self):
+        self.build()
+        case = self.cases["discount-cap"]
+        work = self.out / "codex" / RULE / case.id / "amended"
+        run_base = work / "runs" / case.id / "with_skill" / "run-1"
+        run_base.mkdir(parents=True)
+        (work / "tasks.jsonl").write_text(json.dumps({"run_number": 1, "run_dir": f"{case.id}/with_skill/run-1"}) + "\n")
+        (run_base / "output.md").write_text(CASES["discount-cap"]["samples"]["review-found.md"][1])
+
+        with judge_env(), contextlib.redirect_stdout(io.StringIO()):
+            rows = screen.judge_arm(self.out, "codex", self.rule, case, "amended")
+
+        self.assertEqual((rows[0]["verdict"], rows[0].get("error"), rows[0]["precheck"], rows[0]["precheck_failures"]),
+                         ("FOUND", None, "FAIL", "no harvested workspace"))
+
     def test_a_changed_rubric_makes_the_case_uncalibrated_again(self):
         with judge_env(), contextlib.redirect_stdout(io.StringIO()):
             screen.calibrate([self.rule], [("claude", "opus")])

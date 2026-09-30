@@ -66,8 +66,11 @@ def document_text(answer, document, workspace=None):
     the body of the last <file path="..."> block for that path, with one code
     fence stripped. An unsafe path in some other block does not raise here,
     since an unrelated bad tag must not turn a delivered document into an
-    absent one. Every consumer, the precheck, the judge, calibration, and the
-    stand-ins, cuts the document through this one function."""
+    absent one. The judge and calibration cut the document through this one
+    function. The precheck receives the whole final message, so a rule's oracle
+    calls this function itself when it grades the document alone. The offline
+    stand-ins cut nothing: the agent stand-in answers with a whole sample, and
+    offline/judge matches the smallest sample that contains the judged text."""
     if document.get("message"):
         return answer
     path = document["file"]

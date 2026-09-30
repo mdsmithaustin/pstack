@@ -175,6 +175,8 @@ def document_problems(rule, root, spec):
             diff = sample.with_suffix(".diff")
             if not diff.is_file() or document["file"] not in screen.patch_paths(diff.read_text())[1]:
                 problems.append(f"{name} needs a sibling {diff.name} that writes {document['file']}")
+            elif screen.patch_deletes(diff.read_text(), document["file"]):
+                problems.append(f"{name} has a sibling {diff.name} that deletes {document['file']}")
         elif not shared.document_text(sample.read_text(), document).strip():
             problems.append(f"{name} delivers no document")
     return problems

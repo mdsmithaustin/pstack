@@ -23,7 +23,7 @@ hunks, a hunk with unchanged lines between its edits, and a patch that no
 longer matches `skills/`. Each arm gets its own manifest with the same case,
 prompt, and mount name. `screen.py` runs only the `with_skill` rows, grades
 each arm with the rule's executable oracle, and prints the pair side by side. No
-judge runs, except for review cases.
+judge runs, except for review or document cases.
 
 A rule has one or more cases. A `positive` case is one where the rule should
 change the answer. A `near-miss` case is one where the rule must not change it.
@@ -182,13 +182,14 @@ entries add `baseline` and `treatment`, and these rule entries add `arm`.
 beside current whose frontmatter does not set `disable-model-invocation` and
 whose skill has no `agents/openai.yaml` with `allow_implicit_invocation:
 false`. The agent is offered such a skill by its description in every run of
-that arm, so a pair whose differing files include it is exposed whether or not
-the run loaded it. A run that never loads a listed skill is a `tie-fail`
-against current, not `unexposed`, which is the outcome a placement screen
-measures. After the rule lines `compare` prints one line per agent, rule, and
-arm, `arm skill: changed text reached 2/5 run(s)`, counting the runs that read
-or loaded one of the arm's changed files or had `poteto-mode/SKILL.md`
-injected, and adds `listed by description: <paths>` when the arm lists any.
+that arm. A pair whose differing files include a listed skill is exposed only
+when the listing arm is the treatment, whether or not the run loaded the skill.
+Such a pair is scored on its verdicts instead of reading `unexposed`, which is
+the outcome a placement screen measures. After the rule lines `compare` prints
+one line per agent, rule, and arm that changes files, `arm skill: changed text
+reached 2/5 run(s)`, counting the runs that read or loaded one of the arm's
+changed files or had `poteto-mode/SKILL.md` injected, and adds `listed by
+description: <paths>` when the arm lists any.
 `compare.json` holds the same rows under `arms`. `plan`
 lists an arm rule's arms and each arm's changed files. `chain.py` counts every
 arm the build lists, and takes an arm's owner file to be the first file its
@@ -532,8 +533,8 @@ argv element, so the empty tool list is spelled `--tools=`.
   `evidence_in_review` records whether the evidence quotes the review.
 
 `CANON_JUDGE_STANDIN=evals/canon/offline/judge` swaps in a stand-in at no
-cost. It answers with the label of the calibration sample the review
-matches.
+cost. It answers with the label of the smallest calibration sample that
+contains the judged text.
 
 The judge prompt, with `{verdicts}` and `{meanings}` filled per kind:
 
@@ -623,7 +624,8 @@ also be a review case. Beside the case's usual files it has `rubric.md` and
 rules/premortem-place/
   rule.json           {"source": "...", "arms": ["current", "playbook", "skill"]}
   arms/<arm>.patch    one per arm after current; an arms rule without cases_from owns its cases
-  oracle.py           CHECKS[case](answer, project): the precheck, on the whole final message
+  oracle.py           CHECKS[case](answer, project): the precheck, on the whole final message unless the
+                      oracle cuts the document itself with `document_text`
   cases/<case-id>/
     case.json         kind, domain, expected_behavior, timeout_s, document
     prompt.md         the request, {project}, and a line asking for the file inside
@@ -640,10 +642,13 @@ body of the last `<file path="...">` block for the named path from the final
 message and strips one code fence, and it does not raise on an unsafe path in
 some other block. In a workspace case it reads the file from the checkout after
 the harvested diff, so an untouched file is the checkout's copy and a deletion
-is empty. A `message` document is the final message itself. The precheck, the
-judge (`screen.judge_arm`), calibration (`screen.calibrate`), and the offline
-stand-ins all cut the document through this function, so a labeled sample is
-judged exactly as a run is. A labeled sample that would deliver nothing is
+is empty. A `message` document is the final message itself. The judge
+(`screen.judge_arm`) and calibration (`screen.calibrate`) cut the document
+through this function, so a labeled sample is judged exactly as a run is. The
+precheck receives the whole final message. It sees the cut document only when
+the rule's oracle calls `document_text` itself. The offline agent stand-ins
+answer with whole samples, and `offline/judge` matches the smallest sample that
+contains the judged text. A labeled sample that would deliver nothing is
 refused when the case loads. In a workspace case that names a file, each
 sample has a sibling `samples/<name>.diff` that writes the file, as a run's
 harvested diff would, and the stand-ins apply it.
@@ -676,8 +681,9 @@ sandbox template. A Codex judge needs the pinned Codex CLI, and Sandboxed runs
 says how a judge gets it.
 
 **Gates.** `build.json` records `document` per case beside `kind`, and
-`run`, `judge`, `calibrate`, and `compare` gate on `screen.judged`, which is
-true for a review or a document. The per-run row in `compare.json` keeps the
+`run`, `judge`, and `compare` gate on `screen.judged`, which is true for a
+review or a document. `calibrate` gates on `case.frame`, which is set for the
+same cases. The per-run row in `compare.json` keeps the
 key `review` for a document case, so `review_row`, `scores`, and their readers
 do not move. That is naming debt, accepted.
 
@@ -687,7 +693,7 @@ id, every sample delivers the document, and, for a pasted case, every `FOUND`
 and `FALSE_ALARM` sample passes the precheck. Its table row reads
 `pasted document=ops/premortem.md`.
 `offline/judge` matches a sample by containment of the judged text, since a
-document is cut from its sample, and picks the shortest sample that holds it.
+document is cut from its sample, and picks the smallest sample that holds it.
 `test_document.py` builds a two-arm premortem rule with a positive and a
 near-miss pasted case under a temporary `$CANON_RULES`, calibrates both with
 the stand-in judge, and runs the offline `codex` under `--entry poteto-mode`:
