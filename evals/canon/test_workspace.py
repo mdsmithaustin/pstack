@@ -20,7 +20,7 @@ SPEC.loader.exec_module(screen)
 sys.path.insert(0, str(ROOT / "oracles"))
 
 import workspace  # noqa: E402
-from shared import OracleError, apply_diff, workspace_diff  # noqa: E402
+from shared import OracleError, apply_diff, harvested_diff, workspace_diff  # noqa: E402
 
 UPSTREAM = {
     "app/orders.py": "def place(order):\n    return order\n",
@@ -412,6 +412,8 @@ class HarvestTests(ShopRepo):
         (work / "harvest" / "orders-amend" / "with_skill" / "workspace.diff").write_text(BAD_DIFF)
 
         self.assertEqual(workspace_diff(work / "runs" / "orders-amend" / "with_skill"), BAD_DIFF)
+        self.assertEqual(harvested_diff(work / "runs" / "orders-amend" / "with_skill"),
+                         (work / "harvest" / "orders-amend" / "with_skill" / "workspace.diff").resolve())
         with self.assertRaisesRegex(OracleError, "no workspace diff was harvested"):
             workspace_diff(work / "runs" / "other" / "with_skill")
 
@@ -589,6 +591,7 @@ class WorkspaceBuildTests(ShopRule):
             root = self.out / "arms" / "orders-workspace" / "orders-amend" / arm
             self.assertEqual((root / "workspace" / "overlay" / "CONTEXT.md").read_bytes(), CONTEXT)
             self.assertEqual(json.loads((root / "rules" / "orders-workspace" / "cases" / "orders-amend" / "workspace.json").read_text())["checkout"], str(checkout))
+            self.assertEqual((root / "images" / "images.json").read_bytes(), (ROOT / "images" / "images.json").read_bytes())
             prompt = json.loads((root / screen.MANIFEST).read_text())["cases"][0]["prompt"]
             self.assertEqual(prompt, (self.rule.cases[0].root / "prompt.md").read_text().strip())
 

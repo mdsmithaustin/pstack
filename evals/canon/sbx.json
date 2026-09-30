@@ -32,23 +32,27 @@
     "omnigent": {
       "python": "3.12",
       "sync": [
-        "--frozen",
-        "--group",
-        "test"
+        "--frozen"
       ],
       "env": {
         "OMNIGENT_SKIP_WEB_UI": "true"
       },
-      "package": "omnigent"
+      "package": "omnigent",
+      "tools": {
+        "group": "test",
+        "extra": "dev"
+      }
     },
     "hermes": {
       "python": "3.11",
       "sync": [
-        "--frozen",
-        "--extra",
-        "dev"
+        "--frozen"
       ],
-      "package": "hermes_cli"
+      "package": "hermes_cli",
+      "tools": {
+        "group": "dev",
+        "extra": "dev"
+      }
     }
   },
   "build_network": [

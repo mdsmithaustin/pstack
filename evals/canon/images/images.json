@@ -1,0 +1,32 @@
+{
+  "hermes-8afaab3703e3": {
+    "repo": "hermes",
+    "commit": "8afaab3703e336d72a72c812dd2dd249f04f166a",
+    "id": "sha256:d3bd0eb1e5d8c647cc41e4e84e820681391324ab593adbabbae0d10d1209b794",
+    "platform": "linux/arm64"
+  },
+  "omnigent-336207801509": {
+    "repo": "omnigent",
+    "commit": "336207801509d05657054477ebdf0133ffb17df9",
+    "id": "sha256:9b45e0a94138e7d1fc29d2bcf12d9c1abfb6a0aae9a36a91410bb3b88bb122c7",
+    "platform": "linux/arm64"
+  },
+  "omnigent-77b211cd72ec": {
+    "repo": "omnigent",
+    "commit": "77b211cd72ec989ffa67665985335d1916863e8e",
+    "id": "sha256:6496a56e53696d66387f328ed8dd0f10f4d65894b39239b048381ba5580a1d33",
+    "platform": "linux/arm64"
+  },
+  "omnigent-d0afeddbfad5": {
+    "repo": "omnigent",
+    "commit": "d0afeddbfad573af28c7bd189a41e68c26a0b763",
+    "id": "sha256:30393c57e57d40f2f8ee63cdf829758a29ebdf36d959619ebfb276bc08a419fc",
+    "platform": "linux/arm64"
+  },
+  "omnigent-dfceb32fc1a6": {
+    "repo": "omnigent",
+    "commit": "dfceb32fc1a6ba6ae9d7793817c15353b326d586",
+    "id": "sha256:5b391cb6bf8bc96996e8d16a9899629b1fee0875db13f4be457363b72c6ac05a",
+    "platform": "linux/arm64"
+  }
+}

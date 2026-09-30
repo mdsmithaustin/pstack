@@ -4,6 +4,7 @@ import ast
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +13,7 @@ from pathlib import Path, PurePosixPath
 
 PROBES = Path(__file__).resolve().parent / "probes"
 IMAGE = "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+PROJECT_IMAGES = Path(__file__).resolve().parent.parent / "images" / "images.json"
 
 FILE_TAG = re.compile(r'<file path="([^"\n]+)">(.*?)</file>', re.DOTALL)
 COMMIT_TAG = re.compile(r'<commit message="([^"]*)">(.*?)</commit>', re.DOTALL)
@@ -24,9 +26,12 @@ class OracleError(Exception):
 @dataclass(frozen=True)
 class Workspace:
     """What a workspace case's oracle receives in place of the project files:
-    the pinned checkout with its overlay, and the diff the agent left on it."""
+    the pinned checkout with its overlay, and the diff the agent left on it.
+    harvest is the directory holding a graded run's diff, where a check may
+    write a report beside it; None when the diff did not come from a run."""
     checkout: Path
     diff: str
+    harvest: Path | None = None
 
 
 def clean_body(body):
@@ -164,16 +169,60 @@ def plain_test_failures(tree, modules):
     return json.loads(result["stdout"])
 
 
-def workspace_diff(run_dir):
-    """The diff harvested from the agent's workspace for one run. The harness
-    seals each run dir, so the diff sits in a parallel tree: <work>/runs/<run>
-    maps to <work>/harvest/<run>/workspace.diff."""
+def project_test_results(image, checkout, files, tests):
+    """{test id: "passed", "failed", or "skipped"} from running the named test
+    files of a real checkout in a dependency image from images/images.json,
+    offline. files is apply_diff's {path: bytes or None}, laid over a copy of
+    checkout, so the run never writes to the checkout itself."""
+    images = json.loads(PROJECT_IMAGES.read_text()) if PROJECT_IMAGES.is_file() else {}
+    if image not in images:
+        raise OracleError(f"no dependency image {image!r}; build it with images/build.py")
+    with tempfile.TemporaryDirectory() as directory:
+        stage = Path(directory) / "work"
+        shutil.copytree(checkout, stage, symlinks=True, ignore=shutil.ignore_patterns(".git"))
+        for path, data in files.items():
+            target = stage / safe_path(path)
+            if not target.parent.resolve().is_relative_to(stage.resolve()):
+                raise OracleError(f"{path} resolves outside the checkout copy")
+            if data is None:
+                target.unlink(missing_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+        name = f"canon-project-tests-{os.getpid()}-{Path(directory).name}"
+        command = [
+            "docker", "run", "--rm", "--name", name,
+            "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,exec,size=1g",
+            "--memory", "4g", "--pids-limit", "1024", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges", "--user", "65534:65534",
+            "-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1",
+            "-v", f"{stage}:/work", "-v", f"{PROBES}:/probes:ro", "-w", "/work",
+            images[image]["id"], "python3", "/probes/project_tests.py", *tests,
+        ]
+        try:
+            proc = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
+        except subprocess.TimeoutExpired:
+            subprocess.run(["docker", "kill", name], capture_output=True, text=True, timeout=60, check=False)
+            raise OracleError("project tests timed out after 900s") from None
+    if proc.returncode != 0:
+        raise OracleError(f"project tests stopped (exit {proc.returncode}): {proc.stderr.strip()[-500:]}")
+    return json.loads(proc.stdout)
+
+
+def harvested_diff(run_dir):
+    """The path of the diff harvested from the agent's workspace for one run.
+    The harness seals each run dir, so the diff sits in a parallel tree:
+    <work>/runs/<run> maps to <work>/harvest/<run>/workspace.diff."""
     run_dir = Path(run_dir).resolve()
     runs = next((parent for parent in run_dir.parents if parent.name == "runs"), None)
     path = runs.parent / "harvest" / run_dir.relative_to(runs) / "workspace.diff" if runs else None
     if path is None or not path.is_file():
         raise OracleError(f"no workspace diff was harvested for {run_dir}")
-    return path.read_bytes().decode("utf-8", "surrogateescape")
+    return path
+
+
+def workspace_diff(run_dir):
+    return harvested_diff(run_dir).read_bytes().decode("utf-8", "surrogateescape")
 
 
 def apply_diff(checkout, diff):

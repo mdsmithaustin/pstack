@@ -42,7 +42,8 @@ def register_agents(root, manifest):
     if proc.returncode != 0:
         raise workspace.WorkspaceError(f"named agent install failed: {proc.stdout[-400:]} {proc.stderr[-400:]}")
     report = json.loads(proc.stdout)
-    written = sorted(Path(row["path"]).relative_to(root).as_posix() for row in report["roles"] + report["efforts"])
+    # A skills tree pinned before effort agents existed reports no efforts.
+    written = sorted(Path(row["path"]).relative_to(root).as_posix() for row in report["roles"] + report.get("efforts", []))
     if manifest["harness"] == "codex":
         config = HOME / ".codex" / "config.toml"
         with config.open("a", encoding="utf-8") as handle:

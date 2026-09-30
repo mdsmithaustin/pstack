@@ -32,6 +32,7 @@ import os
 import secrets
 import signal
 import subprocess
+import tomllib
 import sys
 import tarfile
 import tempfile
@@ -209,21 +210,45 @@ def config_digest(*parts):
 def deps_tag(agent, repo, commit):
     """The template name for agent, repo, and commit, versioned by every
     setting that changes what the build installs."""
-    spec = {key: value for key, value in CONFIG["repos"][repo].items() if key in ("python", "sync", "env")}
+    spec = {key: value for key, value in CONFIG["repos"][repo].items() if key in ("python", "sync", "tools", "env")}
     return f"canon-deps-{agent}-{repo}-{commit[:12]}:{config_digest(CONFIG['uv'], spec, CONFIG['agents'][agent]['kit'], CONFIG['agents'][agent].get('cli'))}"
 
 
-def deps_env(repo):
+def python_version(repo, commit):
+    """The Python the repo pins at commit in .python-version, else the configured one."""
+    try:
+        return workspace.git("--git-dir", str(workspace.mirror_path(repo)), "show", f"{commit}:.python-version").decode().strip()
+    except workspace.WorkspaceError:
+        return CONFIG["repos"][repo]["python"]
+
+
+def deps_env(repo, commit):
     spec = CONFIG["repos"][repo]
     return {
         "UV_PROJECT_ENVIRONMENT": f"{DEPS_ROOT}/{repo}/venv",
         "UV_CACHE_DIR": f"{DEPS_ROOT}/uv-cache",
         "UV_PYTHON_INSTALL_DIR": f"{DEPS_ROOT}/python",
-        "UV_PYTHON": spec["python"],
+        "UV_PYTHON": python_version(repo, commit),
         "UV_PYTHON_DOWNLOADS": "never",
         "UV_OFFLINE": "1",
         **spec.get("env", {}),
     }
+
+
+def sync_args(repo, commit):
+    """uv sync arguments for repo at commit. A repo that moved its test tools
+    from an optional extra to a dependency group needs the flag its pyproject
+    at that commit declares."""
+    spec = CONFIG["repos"][repo]
+    tools = spec.get("tools")
+    if not tools:
+        return list(spec["sync"])
+    pyproject = tomllib.loads(workspace.git("--git-dir", str(workspace.mirror_path(repo)), "show", f"{commit}:pyproject.toml").decode())
+    if tools["group"] in pyproject.get("dependency-groups", {}):
+        return [*spec["sync"], "--group", tools["group"]]
+    if tools["extra"] in pyproject.get("project", {}).get("optional-dependencies", {}):
+        return [*spec["sync"], "--extra", tools["extra"]]
+    raise SandboxError(f"{repo} at {commit[:12]} declares neither dependency group {tools['group']!r} nor extra {tools['extra']!r}")
 
 
 def records_dir():
@@ -242,8 +267,8 @@ def build_deps(agent, repo, commit):
     mirror = workspace.fetch(repo, commit)
     tag = deps_tag(agent, repo, commit)
     name = f"{PREFIX}deps-{agent}-{repo}-{secrets.token_hex(3)}"
-    record = {"tag": tag, "agent": agent, "repo": repo, "commit": commit, "uv": CONFIG["uv"], "python": spec["python"],
-              "sync": spec["sync"], "network": CONFIG["build_network"], "timings": {}}
+    record = {"tag": tag, "agent": agent, "repo": repo, "commit": commit, "uv": CONFIG["uv"], "python": python_version(repo, commit),
+              "sync": sync_args(repo, commit), "network": CONFIG["build_network"], "timings": {}}
     timings = record["timings"]
     with tempfile.TemporaryDirectory() as directory:
         source = Path(directory) / "src.tar"
@@ -255,12 +280,12 @@ def build_deps(agent, repo, commit):
             box.allow(CONFIG["build_network"])
             box.exec("sh", "-c", f"mkdir -p {DEPS_ROOT}/{repo}/src && chown -R agent:agent {DEPS_ROOT}", user="root")
             box.put(source, f"{DEPS_ROOT}/{repo}/src.tar")
-            env = {key: value for key, value in deps_env(repo).items() if key not in ("UV_OFFLINE", "UV_PYTHON_DOWNLOADS")}
+            env = {key: value for key, value in deps_env(repo, commit).items() if key not in ("UV_OFFLINE", "UV_PYTHON_DOWNLOADS")}
             steps = [
                 ["tar", "-xf", f"{DEPS_ROOT}/{repo}/src.tar", "-C", f"{DEPS_ROOT}/{repo}/src"],
                 ["uv", "tool", "install", "--force", f"uv=={CONFIG['uv']}"],
-                ["uv", "python", "install", spec["python"]],
-                ["sh", "-c", f"cd {DEPS_ROOT}/{repo}/src && uv sync {' '.join(spec['sync'])}"],
+                ["uv", "python", "install", record["python"]],
+                ["sh", "-c", f"cd {DEPS_ROOT}/{repo}/src && uv sync {' '.join(record['sync'])}"],
             ]
             cli = CONFIG["agents"][agent].get("cli")
             if cli:
@@ -336,19 +361,19 @@ def is_result(line):
 
 
 def last_result_only(lines):
-    """The lines in order, without every result event but the last. The
-    harness takes exactly one result from a Claude stream, and a lead that
-    waits on a background delegate ends a turn, with a result, each time."""
-    held = []
+    """The lines in order, without every result event but the last, which
+    comes at the end. The harness takes exactly one result from a Claude
+    stream, as its final record, and a lead that waits on a background
+    delegate ends a turn, with a result, each time; task notifications can
+    still follow the last one."""
+    held = None
     for line in lines:
         if is_result(line):
-            yield from held[1:]
-            held = [line]
-        elif held:
-            held.append(line)
+            held = line
         else:
             yield line
-    yield from held
+    if held is not None:
+        yield held
 
 
 def stream_claude(box, command, prompt_path, raw_path, out, **options):
@@ -401,7 +426,7 @@ def manifest(agent, root, spec, discovery):
         # main and the PR branch from these ids and checks the PR branch out.
         record["review"] = {"branch": spec["review"]["branch"], "refs": spec["review"]["refs"]}
     if spec["repo"] in CONFIG["repos"]:
-        record["deps"] = {"env": deps_env(spec["repo"]), "sync": CONFIG["repos"][spec["repo"]]["sync"]}
+        record["deps"] = {"env": deps_env(spec["repo"], spec["commit"]), "sync": sync_args(spec["repo"], spec["commit"])}
     return record
 
 

@@ -60,11 +60,16 @@ oracles/
   check.py            check.py <rule> <case> <output_dir>
   shared.py           answer parsing, Python helpers, the sandboxed container runner
   probes/run.py       runs answer code inside the container
+  probes/project_tests.py  runs a checkout's own tests inside a dependency image
+images/
+  <repo>/Dockerfile   a repo's test dependencies, from its lockfiles at one commit
+  build.py            build.py <repo> <commit>; records the image id in images.json
 ```
 
 Each arm root holds the grader next to the skill tree: `oracles/`, the rule's
 `oracle.py`, and the case's `project/`. A workspace case's arm holds
-`workspace.json` naming the pinned checkout in place of `project/`, and a
+`workspace.json` naming the pinned checkout in place of `project/`, a copy of
+`images/images.json` for `shared.project_test_results`, and a
 `workspace/` directory that the entry wrapper reads. It never holds `samples/`,
 `test_oracle.py`, or `oracles/test_*.py`. The answering agent works in a
 separate temporary workspace. A Claude trace showed its cwd under
@@ -152,7 +157,8 @@ or delete one. Paths read `a/<skill>/...`, or `a/skills/<skill>/...`, which
 drops the `skills/` prefix. The build applies it with `git apply` in a
 scratch copy of the tree, and refuses a patch that does not apply or changes
 nothing. The one-change check does not run. The rule takes its cases and
-oracle from `cases_from`, as a variant does. Under `--entry skill` the arms
+oracle from `cases_from`, as a variant does. Without `cases_from` it holds its
+own `oracle.py` and `cases/`, as an ordinary rule does. Under `--entry skill` the arms
 mount every skill a patched arm changes.
 
 `build` writes `arms/<rule>/<case>/<arm>/` for every arm in order.
@@ -217,9 +223,8 @@ persona in the stub arm. On 2026-09-28 both the host stand-in
 (`CODEX_BIN=evals/canon/offline/codex`) and `--runner sbx` with
 `CANON_SBX_STANDIN` printed `rule current vs stub run-1 SEPARATES` for
 `bug-fix-spawn-step-stub` under `--entry poteto-mode`. A pasted-project case in a stub
-rule mounts the same text in its guided arm as its source rule's current
-arm, so a stand-in cannot tell the two rules apart and answers that case
-with `bad.md` in every arm. Give a stub rule a workspace case for its
+rule gets `bad.md` in every arm, because the stand-in finds a pasted arm by
+the lines its patch adds, and a stub rule adds none. Give a stub rule a workspace case for its
 offline run.
 
 ## Entry modes
@@ -359,7 +364,9 @@ repo that tracks a path the mounted skills take.
 
 A workspace case's check receives a `shared.Workspace` in place of the project.
 `workspace.checkout` is the pinned checkout with the overlay, and
-`workspace.diff` is the run's diff. `shared.apply_diff(checkout, diff)` returns
+`workspace.diff` is the run's diff. `workspace.harvest` is the directory that holds
+the run's `workspace.diff`, where a check may write a report beside it. It is
+`None` when a test builds the `Workspace` from a sample. `shared.apply_diff(checkout, diff)` returns
 the new bytes of every path the diff touches, with `None` for a deleted path.
 It refuses a diff that leaves a symlink at a path it touches, that touches a
 symlink in the checkout, or whose path resolves outside the checkout, so a
@@ -370,6 +377,20 @@ A case whose module imports only the standard library can run tests.
 plugins or fixtures, and returns one `<module>::<test> failed` line per
 failure. The check builds `tree` from the pinned checkout and the diff's new
 bytes, so it runs the pinned tests and never the agent's edited copies.
+A case whose tests need third-party packages runs them in a dependency image
+instead. `images/<repo>/Dockerfile` installs the repo's test dependencies from its own
+lockfiles, Python for both repos and the web ones for omnigent, and the image
+holds none of its source.
+`python3 evals/canon/images/build.py <repo> <commit>` builds it from the
+manifests and lockfiles the mirror holds at that commit, and records the image
+id in `images/images.json` under `<repo>-<commit[:12]>`. The images are local
+builds, so another machine builds its own and gets a different id.
+`shared.project_test_results(image, checkout, files, tests)` lays `files`, the
+result of `apply_diff`, over a copy of the checkout. It runs the named test
+files or pytest node ids with no network, a read-only root, and resource
+limits, and returns `{test id: "passed", "failed", or "skipped"}`. Python files
+run under pytest, other files under vitest in the nearest directory with a
+`package.json`. A named file that reports no tests counts as failed.
 The samples are `good.md` and `bad.md` with a `good.diff` and `bad.diff` beside
 them. `test_oracle.py` passes `workspace=Workspace(checkout, diff)` to `grade`.
 The offline stand-in applies the chosen sample's diff in its cwd. The sample
@@ -377,8 +398,8 @@ tests skip when the mirror lacks the pinned commit.
 
 The omnigent cases grade the diff statically, with the AST of the Python files
 it touches. Their upstream tests need pyyaml, pydantic, and pytest, which the
-networkless image does not have. omnigent's `AGENTS.md` asks for `pre-commit`
-before any commit, so each prompt says there is no need to commit. It also
+standard-library image does not have, and they predate the dependency images.
+omnigent's `AGENTS.md` asks for `pre-commit` before any commit, so each prompt says there is no need to commit. It also
 asks for a `@deprecated` marker on anything slated for removal, so the
 one-name check skips a `@deprecated` def and a parameter declared with
 `deprecated=True`. None of these cases needs an overlay.
@@ -606,7 +627,9 @@ delegate brief.
 These need Docker, `uv`, and a skill-ci checkout at `../skill-ci` or
 `$SKILL_CI` with its `runner.lock`. `audit` and `run` call the harness through
 `uv run <skill-ci>/tools/run_runner.py`. Without a running Docker daemon, the
-oracle tests that run answer code skip. `audit` and `run` need skill-ci and
+oracle tests that run answer code skip. The `project_test_results` tests
+skip unless this machine has built the `omnigent-336207801509` image, which the
+`lint` workflow does not build. `audit` and `run` need skill-ci and
 `uv`, and so do the offline workspace runs in `test_workspace.py`, which skip
 without them. On every pull request the `lint` workflow pulls the image,
 checks out skill-ci at the commit `skill-checks.yml` pins, installs uv, and
@@ -722,7 +745,7 @@ Each run goes through `sandbox.py wrap`, which does this:
    `--entry poteto-mode`, `sbx_inside.py setup` then links the tree to
    `.claude/skills` or `.agents/skills` and registers the poteto-agent and
    Comment Sicko personas, and on Claude Code the five `pstack-effort-*`
-   delegate agents, by running `pstack-harness/scripts/subagents.py install
+   delegate agents when the pinned tree ships them, by running `pstack-harness/scripts/subagents.py install
    --harness claude-code|codex --project <clone>` through that link, as a user
    install would. For Codex it also trusts the clone in the sandbox's own
    `~/.codex/config.toml`, since Codex loads project roles only for a trusted
@@ -750,8 +773,8 @@ Each run goes through `sandbox.py wrap`, which does this:
 The harness takes exactly one terminal `result` event from a Claude stream.
 A poteto-mode lead emits one each time it ends a turn while a background
 delegate runs, and one more at the end. So for Claude the wrapper reads the
-agent's stdout line by line, drops every `result` line but the last, and
-forwards the rest in order. It writes the whole stream to `raw-stream.jsonl`
+agent's stdout line by line, forwards every other line in order, and writes
+the last `result` line last, after any task notification that followed it. It writes the whole stream to `raw-stream.jsonl`
 in the harvest dir. Codex's stream passes through unchanged.
 
 The harvest dir of a run holds `workspace.diff`, `workspace.json`,
@@ -804,9 +827,12 @@ afterwards.
 commit. It creates a sandbox with no workspace and extracts the pinned commit
 under `/opt/canon-deps/<repo>/src`. It installs uv from `sbx.json` (the
 kit's uv 0.9.26 is older than omnigent's `required-version`) and the repo's
-pinned Python. Then it runs `uv sync` against the repo's lockfile, with
-`--frozen --group test` and `OMNIGENT_SKIP_WEB_UI=true` for omnigent (its build
-otherwise runs pnpm) and `--frozen --extra dev` for hermes. The venv, the uv cache, and the
+Python, which is the commit's `.python-version` when it has one and the
+repo's `python` in `sbx.json` otherwise. Then it runs `uv sync --frozen`
+against the repo's lockfile, plus `--group <tools.group>` when the commit's
+`pyproject.toml` declares that dependency group, else `--extra <tools.extra>`,
+and refuses a commit that declares neither. omnigent also gets
+`OMNIGENT_SKIP_WEB_UI=true`, since its build otherwise runs pnpm. The venv, the uv cache, and the
 interpreter live under `/opt/canon-deps`, outside every workspace. The source
 copy and the kit's credential files are deleted before `sbx template save`.
 At run time setup links `.venv` to that venv and reruns the same `uv sync`

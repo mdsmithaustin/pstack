@@ -67,14 +67,29 @@ class ClaudeStreamTests(unittest.TestCase):
             b'{"type":"assistant","message":"spawn"}\n',
             b'{"type":"assistant","message":"delegate done"}\n',
             b'not json\n',
-            b'{"type":"result","result":"Final answer."}\n',
             b'{"type":"system","subtype":"after"}\n',
+            b'{"type":"result","result":"Final answer."}\n',
         ])
 
-    def test_a_stream_with_one_result_passes_unchanged(self):
-        stream = [b'{"type":"assistant"}\n', b'{"type":"result","result":"ok"}\n', b'["result"]\n']
+    def test_a_stream_that_ends_with_its_one_result_passes_unchanged(self):
+        stream = [b'{"type":"assistant"}\n', b'["result"]\n', b'{"type":"result","result":"ok"}\n']
 
         self.assertEqual(list(sandbox.last_result_only(stream)), stream)
+
+    def test_task_notifications_after_the_last_result_move_before_it(self):
+        stream = [
+            b'{"type":"assistant","message":"done"}\n',
+            b'{"type":"result","result":"Final answer."}\n',
+            b'{"type":"system","subtype":"background_tasks_changed","tasks":[]}\n',
+            b'{"type":"system","subtype":"task_notification","status":"stopped"}\n',
+        ]
+
+        self.assertEqual(list(sandbox.last_result_only(stream)), [
+            b'{"type":"assistant","message":"done"}\n',
+            b'{"type":"system","subtype":"background_tasks_changed","tasks":[]}\n',
+            b'{"type":"system","subtype":"task_notification","status":"stopped"}\n',
+            b'{"type":"result","result":"Final answer."}\n',
+        ])
 
 
     def test_claude_run_keeps_the_raw_stream_and_forwards_one_result(self):
@@ -114,7 +129,10 @@ class TemplateNameTests(unittest.TestCase):
                                 "canon-deps-codex-omnigent-02969a131c72:ccddbecf90ae"])
 
     def test_deps_env_keeps_uv_offline_and_outside_the_workspace(self):
-        self.assertEqual(sandbox.deps_env("hermes"), {
+        with mock.patch.object(sandbox.workspace, "git", side_effect=sandbox.workspace.WorkspaceError("no .python-version")):
+            env = sandbox.deps_env("hermes", "0" * 40)
+
+        self.assertEqual(env, {
             "UV_PROJECT_ENVIRONMENT": "/opt/canon-deps/hermes/venv",
             "UV_CACHE_DIR": "/opt/canon-deps/uv-cache",
             "UV_PYTHON_INSTALL_DIR": "/opt/canon-deps/python",
@@ -122,6 +140,29 @@ class TemplateNameTests(unittest.TestCase):
             "UV_PYTHON_DOWNLOADS": "never",
             "UV_OFFLINE": "1",
         })
+
+
+    def test_a_commit_that_pins_python_uses_its_pin(self):
+        with mock.patch.object(sandbox.workspace, "git", return_value=b"3.14\n"):
+            self.assertEqual(sandbox.deps_env("hermes", "0" * 40)["UV_PYTHON"], "3.14")
+
+
+class SyncArgsTests(unittest.TestCase):
+    CONFIG = {"repos": {"omnigent": {"sync": ["--frozen"], "tools": {"group": "test", "extra": "dev"}}}}
+
+    def sync_args(self, pyproject):
+        with mock.patch.object(sandbox, "CONFIG", self.CONFIG), mock.patch.object(sandbox.workspace, "git", return_value=pyproject.encode()):
+            return sandbox.sync_args("omnigent", "0" * 40)
+
+    def test_a_commit_with_the_dependency_group_syncs_the_group(self):
+        self.assertEqual(self.sync_args('[project]\nname = "o"\n[dependency-groups]\ntest = ["pytest"]\n'), ["--frozen", "--group", "test"])
+
+    def test_a_commit_from_before_the_group_syncs_the_extra(self):
+        self.assertEqual(self.sync_args('[project]\nname = "o"\n[project.optional-dependencies]\ndev = ["pytest"]\n'), ["--frozen", "--extra", "dev"])
+
+    def test_a_commit_with_neither_is_refused(self):
+        with self.assertRaisesRegex(sandbox.SandboxError, r"^omnigent at 000000000000 declares neither dependency group 'test' nor extra 'dev'$"):
+            self.sync_args('[project]\nname = "o"\n')
 
 
 class ScreenRunnerTests(unittest.TestCase):
@@ -171,6 +212,20 @@ class HistoryStagingTests(test_workspace.HistoryRepo):
 
     def test_staged_checkout_without_history_clones_only_the_pinned_commit(self):
         self.assertEqual(self.log(self.staged_clone(False)), "Keep legacy orders readable (#12)\n")
+
+
+class RegisterAgentsTests(unittest.TestCase):
+    def test_a_skills_tree_from_before_effort_agents_still_registers_its_personas(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / "skills" / "pstack" / "pstack-harness" / "scripts" / "subagents.py"
+            script.parent.mkdir(parents=True)
+            persona = root / ".claude" / "agents" / "poteto-agent.md"
+            script.write_text(f"import json\nprint(json.dumps({{'roles': [{{'path': {str(persona)!r}}}]}}))\n")
+
+            written = sbx_inside.register_agents(root, {"discovery": "skills/pstack", "harness": "claude"})
+
+        self.assertEqual(written, [".claude/agents/poteto-agent.md"])
 
 
 class InsideTests(test_workspace.ShopRepo):

@@ -19,7 +19,7 @@ ORACLES = Path(__file__).resolve().parent
 RULES = ORACLES.parent / "rules"
 sys.path.insert(0, str(ORACLES))
 
-from shared import OracleError, Workspace, workspace_diff  # noqa: E402
+from shared import OracleError, Workspace, harvested_diff, workspace_diff  # noqa: E402
 
 
 def load_oracle(rule):
@@ -48,7 +48,7 @@ def load_workspace(rule, case, output_dir):
     record = RULES / rule / "cases" / case / "workspace.json"
     if not record.is_file():
         return None
-    return Workspace(Path(json.loads(record.read_text())["checkout"]), workspace_diff(output_dir))
+    return Workspace(Path(json.loads(record.read_text())["checkout"]), workspace_diff(output_dir), harvested_diff(output_dir).parent)
 
 
 def evaluate(rule, case, output_dir, workspace=None):
