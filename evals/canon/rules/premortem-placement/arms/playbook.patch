@@ -1,12 +1,12 @@
 diff --git a/poteto-mode/SKILL.md b/poteto-mode/SKILL.md
-index a462c00..b5e50d0 100644
+index a462c00..d6f101f 100644
 --- a/poteto-mode/SKILL.md
 +++ b/poteto-mode/SKILL.md
 @@ -133,6 +133,7 @@ A large or cross-cutting effort (a migration across many call sites, an ambitiou
  - **Feature.** New or changed behavior, built from a named data shape. `playbooks/feature.md`.
  - **Refactoring.** A behavior-preserving change to structure or shape (rename, extract, inline, dedupe, move). `playbooks/refactoring.md`.
  - **Prototype.** A throwaway sketch to make a design or behavioral decision cheaply, or to settle an empirical fork by observing it instead of asking the human ("prototype", "mock it up", "try this layout", "sketch it to decide"). `playbooks/prototype.md`.
-+- **Premortem.** Stress a plan, rollout, or risk register before it is adopted ("premortem this", "what could go wrong"). `playbooks/premortem.md`.
++- **Premortem.** Stress a plan, rollout, or risk register before it is adopted ("premortem this", "pressure-test this rollout"). `playbooks/premortem.md`.
  - **Visual parity.** Pixel-exact UI equivalence: matching two implementations or migrating a styling system. `playbooks/visual-parity.md`.
  - **Authoring or modifying a skill.** Writing or editing a SKILL.md. `playbooks/authoring-a-skill.md`.
  - **Eval.** Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `playbooks/eval.md`.
