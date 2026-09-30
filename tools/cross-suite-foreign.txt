@@ -25,6 +25,7 @@ triage
 wayfinder
 # agent-loop-runner suite (mdsmithaustin/agent-loop-runner)
 acceptance-loop
+agent-runner
 campaign-loop
 loop-runner
 research-loop
