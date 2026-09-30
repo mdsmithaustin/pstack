@@ -1,0 +1,6 @@
+{
+  "cases_from": "steering-review-asks",
+  "cases": ["hermes-desktop-skip", "hermes-known-issues"],
+  "source": "a poteto-mode trigger to walk every caller through a changed return, refusal, or skip, from two merged hermes pull requests whose review asked for exactly that: a Windows build skip that left the desktop app unopened (hermes #123510) and a known-issues install gate that broke the dashboard's memory-provider migration (hermes #124058). The pilot's current arm read poteto-mode/SKILL.md in 5 of 6 of these runs and never the same playbook in both cases",
+  "skills_at": "4fe213477eda148bbcdfdeea61b5b08209cbc993"
+}
