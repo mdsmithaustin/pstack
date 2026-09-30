@@ -220,8 +220,9 @@ def check_labels(root, kind, document=None, in_workspace=False):
     may give for the case's kind. In a document case every sample must
     deliver the document the way a run does: a pasted case's sample holds the
     file block document_text cuts, and a workspace case's sample for a file has
-    a sibling .diff that touches that file. A sample that would judge as
-    absent is refused here, so calibration only ever sees deliverable shapes."""
+    a sibling .diff that writes that file without deleting it. A sample that
+    would judge as absent is refused here, so calibration only ever sees
+    deliverable shapes."""
     path = root / "samples" / "labels.json"
     labels = json.loads(path.read_text())
     if not isinstance(labels, dict) or not labels:
@@ -235,6 +236,8 @@ def check_labels(root, kind, document=None, in_workspace=False):
             diff = root / "samples" / Path(name).with_suffix(".diff")
             if not diff.is_file() or document["file"] not in patch_paths(diff.read_text())[1]:
                 raise ScreenError(f"sample {name} needs a sibling {diff.name} that writes {document['file']}, as a run's harvested diff would")
+            if patch_deletes(diff.read_text(), document["file"]):
+                raise ScreenError(f"sample {name} has a sibling {diff.name} that deletes {document['file']}, so a run's harvested diff would deliver no document")
         elif document and not shared.document_text((root / "samples" / name).read_text(), document).strip():
             where = f"a <file path=\"{document['file']}\"> block" if "file" in document else "any text"
             raise ScreenError(f"sample {name} delivers no document; a run's final message would need {where}")
@@ -592,6 +595,14 @@ def patch_paths(patch):
     if paths and all(path.startswith("skills/") for path in paths):
         return 2, [path.removeprefix("skills/") for path in paths]
     return 1, paths
+
+
+def patch_deletes(patch, path):
+    """Whether a patch deletes path."""
+    result, _ = git_apply({}, patch, "--summary", "-p1")
+    if result.returncode:
+        raise ScreenError(f"patch does not parse: {result.stderr.strip()}")
+    return any(line.split(" ", 4)[4:] == [path] for line in result.stdout.splitlines() if line.startswith(" delete mode "))
 
 
 def apply_arm_patch(tree, patch):
