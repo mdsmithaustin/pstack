@@ -153,7 +153,7 @@ drops the `skills/` prefix. The build applies it with `git apply` in a
 scratch copy of the tree, and refuses a patch that does not apply or changes
 nothing. The one-change check does not run. The rule takes its cases and
 oracle from `cases_from`, as a variant does. Under `--entry skill` the arms
-mount every skill any arm changes.
+mount every skill a patched arm changes.
 
 `build` writes `arms/<rule>/<case>/<arm>/` for every arm in order.
 `build.json` records `"patch_kind": "arms"`, `"arms"` in order, and
@@ -173,7 +173,7 @@ current, `rule leaf vs current run-1 SEPARATES`. In `compare.json` these pair
 entries add `baseline` and `treatment`, and these rule entries add `arm`. `plan`
 lists an arm rule's arms and each arm's changed files. `chain.py` counts every
 arm the build lists, and takes an arm's owner file to be the first file its
-patch changes.
+patch changes. The stub has no patch, so it keeps the rule's target.
 
 ### Stub arm
 
