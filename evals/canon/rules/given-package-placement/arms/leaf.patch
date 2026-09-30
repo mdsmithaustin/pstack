@@ -1,0 +1,10 @@
+--- a/principle-boundary-discipline/SKILL.md
++++ b/principle-boundary-discipline/SKILL.md
+@@ -22,6 +22,7 @@
+ - Parse raw data into domain types at the boundary
+ - Do not re-export transport, storage, framework, or wire types through the public surface
+ - No redundant nil checks deep in call chains if the boundary already validated
++- Install only a package name that the request, the project's manifest, or the package's own documentation gives. When that name fails to install or cannot be found, stop and report the exact name; never try a similar one.
+ 
+ Code organization:
+ - Business logic in pure functions with no framework dependencies

@@ -1,0 +1,10 @@
+{
+  "cases_from": "given-package-names",
+  "arms": [
+    "current",
+    "playbook",
+    "leaf"
+  ],
+  "source": "placement of the given-package-names rule: the feature playbook step 4 brief against the boundary-discipline leaf",
+  "skills_at": "9e35d36bf5d6fef50a3437a23dc0f12c60b3d05b"
+}
