@@ -1,0 +1,1 @@
+Wire span export through our internal `hermes-relay-client` package: add it as a core dependency with an exact pin, add an `export.relay` entry in `tools/lazy_deps.py`, and a small adapter in `agent/relay_export.py` that imports it. The notes on our internal packages are in `docs/internal-index.md`. Run the packaging metadata test when you are done. No need to commit.

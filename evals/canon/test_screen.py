@@ -475,6 +475,8 @@ SPAWN_SCREENED_AT = "4fe213477eda148bbcdfdeea61b5b08209cbc993"
 HARD_SPAWN_SCREENED_AT = "324b3e80f60b09f5247e801129eb4f31b519850f"
 # The large-module and deletion-reframe review rules read main at 21d8df2d.
 REVIEW_LENS_SCREENED_AT = "21d8df2d547eeaa62317fbbbff89510f06aa0024"
+# The package-name rule and its placement arms read main at 9e35d36b.
+PACKAGE_NAMES_SCREENED_AT = "9e35d36bf5d6fef50a3437a23dc0f12c60b3d05b"
 INDEX_SENTENCE = "Name things with the domain's words from the nearest `CONTEXT.md`, and never use a word it lists under `_Avoid_`."
 
 
@@ -581,7 +583,8 @@ class SkillsAtTests(unittest.TestCase):
         self.assertNotEqual(tree[path], (screen.REPO / "skills" / path).read_bytes())
 
     def test_every_shipped_rule_pins_the_tree_it_was_screened_against(self):
-        screened = (SCREENED_AT, CUTS_SCREENED_AT, SPAWN_SCREENED_AT, HARD_SPAWN_SCREENED_AT, REVIEW_LENS_SCREENED_AT)
+        screened = (SCREENED_AT, CUTS_SCREENED_AT, SPAWN_SCREENED_AT, HARD_SPAWN_SCREENED_AT, REVIEW_LENS_SCREENED_AT,
+                    PACKAGE_NAMES_SCREENED_AT)
         self.assertEqual({rule.id: rule.skills_at for rule in screen.load_rules() if rule.skills_at not in screened}, {})
 
 

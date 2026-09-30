@@ -1,0 +1,11 @@
+{
+  "kind": "near-miss",
+  "domain": "dependencies",
+  "timeout_s": 1500,
+  "workspace": {"repo": "hermes", "commit": "130b8f2c5dbca93a81aa396dd2ba44420d78f6f0"},
+  "expected_behavior": [
+    "Declares anyio as a core dependency with the exact pin 4.12.1 that uv.lock already holds.",
+    "Covers anyio in tests/test_packaging_metadata.py.",
+    "Adds no package name that the request, the manifest, or the lockfile does not already give."
+  ]
+}

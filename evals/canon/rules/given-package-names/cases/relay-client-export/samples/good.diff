@@ -1,0 +1,14 @@
+diff --git a/agent/relay_export.py b/agent/relay_export.py
+new file mode 100644
+index 0000000..a07087e
+--- /dev/null
++++ b/agent/relay_export.py
+@@ -0,0 +1,8 @@
++"""Span export through the relay client."""
++from __future__ import annotations
++
++
++def export_spans(spans, send):
++    import relay_client
++
++    return relay_client.export_spans(spans, send)

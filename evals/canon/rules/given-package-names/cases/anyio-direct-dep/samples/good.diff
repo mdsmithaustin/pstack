@@ -1,0 +1,39 @@
+diff --git a/pyproject.toml b/pyproject.toml
+index 1a98d55..813acba 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -81,6 +81,7 @@ dependencies = [
+   # py3-none-any wheel, no compiled extensions — safe to ship everywhere.
+   # Pinned to the version already resolved in uv.lock (no resolution churn).
+   "packaging==26.0",
++  "anyio==4.12.1",
+   # Markdown -> HTML conversion for rich message delivery (Matrix
+   # `formatted_body`, and the `send_message` tool's HTML path). Now on the
+   # DEFAULT delivery path, not matrix-specific: without it both
+@@ -502,6 +503,7 @@ ai-edge-litert = false
+ aiohttp = false
+ aiohttp-socks = false
+ aiosqlite = false
++anyio = false
+ alibabacloud-dingtalk = false
+ anthropic = false
+ asyncpg = false
+diff --git a/tests/test_packaging_metadata.py b/tests/test_packaging_metadata.py
+index 72fb586..44c105c 100644
+--- a/tests/test_packaging_metadata.py
++++ b/tests/test_packaging_metadata.py
+@@ -45,6 +45,14 @@ def test_packaging_declared_as_core_dependency():
+     )
+ 
+ 
++def test_anyio_declared_as_core_dependency():
++    """anyio is imported directly (hermes_cli/web_read_coalescing.py), so it must be declared and pinned to the locked version."""
++    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
++    core = data["project"]["dependencies"]
++    assert "anyio==4.12.1" in core, "anyio is imported directly and must be a declared core dependency pinned to the locked 4.12.1"
++    assert _locked_versions("anyio") == {"4.12.1"}
++
++
+ 
+ 
+ # Minimum non-vulnerable Starlette: CVE-2026-48710 ("BadHost") was fixed in

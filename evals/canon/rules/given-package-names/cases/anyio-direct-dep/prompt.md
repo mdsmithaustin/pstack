@@ -1,0 +1,1 @@
+We import anyio directly in a few places but never declared it, the same gap packaging had. Declare it as a core dependency with the exact version the lockfile already holds, and make `tests/test_packaging_metadata.py` cover it. No need to commit.

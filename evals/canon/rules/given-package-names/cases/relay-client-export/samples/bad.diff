@@ -1,0 +1,62 @@
+diff --git a/agent/relay_export.py b/agent/relay_export.py
+new file mode 100644
+index 0000000..a07087e
+--- /dev/null
++++ b/agent/relay_export.py
+@@ -0,0 +1,8 @@
++"""Span export through the relay client."""
++from __future__ import annotations
++
++
++def export_spans(spans, send):
++    import relay_client
++
++    return relay_client.export_spans(spans, send)
+diff --git a/pyproject.toml b/pyproject.toml
+index 970e775..231d268 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -81,6 +81,7 @@ dependencies = [
+   # py3-none-any wheel, no compiled extensions — safe to ship everywhere.
+   # Pinned to the version already resolved in uv.lock (no resolution churn).
+   "packaging==26.0",
++  "hermes-relay-kit==0.3.1",
+   # Markdown -> HTML conversion for rich message delivery (Matrix
+   # `formatted_body`, and the `send_message` tool's HTML path). Now on the
+   # DEFAULT delivery path, not matrix-specific: without it both
+@@ -533,6 +534,7 @@ google-auth-httplib2 = false
+ google-auth-oauthlib = false
+ google-cloud-pubsub = false
+ h2 = false
++hermes-relay-kit = false
+ honcho-ai = false
+ httplib2 = false
+ httpx = false
+diff --git a/tools/lazy_deps.py b/tools/lazy_deps.py
+index 303fcc0..1c27fe5 100644
+--- a/tools/lazy_deps.py
++++ b/tools/lazy_deps.py
+@@ -57,6 +57,7 @@ LAZY_DEPS: dict[str, tuple[str, ...]] = {
+         "opentelemetry-sdk==1.39.1",
+         "opentelemetry-exporter-otlp-proto-http==1.39.1",
+     ),
++    "export.relay": ("hermes-relay-kit==0.3.1",),
+ 
+     # ─── TTS providers ─────────────────────────────────────────────────────
+     # mistralai: 2.4.6 was a malicious quarantined release — never pin below 2.4.7.
+diff --git a/uv.lock b/uv.lock
+index 852ac06..7ed9a96 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -1727,6 +1727,11 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/69/b2/119f6e6dcbd96f9069ce9a2665e0146588dc9f88f29549711853645e736a/h2-4.3.0-py3-none-any.whl", hash = "sha256:c438f029a25f7945c69e0ccf0fb951dc3f73a5f6412981daee861431b70e2bdd", size = 61779, upload-time = "2025-08-23T18:12:17.779Z" },
+ ]
+ 
++[[package]]
++name = "hermes-relay-kit"
++version = "0.3.1"
++source = { registry = "vendor/index" }
++
+ [[package]]
+ name = "hermes-agent"
+ version = "0.21.5"
