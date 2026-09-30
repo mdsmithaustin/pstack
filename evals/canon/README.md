@@ -176,7 +176,20 @@ set of files that differ between the two arms. The later arm is exposed when it
 read one of them, or under `--entry poteto-mode` when one of them is
 `poteto-mode/SKILL.md`. Each arm after current gets its own rule line against
 current, `rule leaf vs current run-1 SEPARATES`. In `compare.json` these pair
-entries add `baseline` and `treatment`, and these rule entries add `arm`. `plan`
+entries add `baseline` and `treatment`, and these rule entries add `arm`.
+
+`build.json` also records `arm_listed`, the `SKILL.md` files each arm adds
+beside current whose frontmatter does not set `disable-model-invocation` and
+whose skill has no `agents/openai.yaml` with `allow_implicit_invocation:
+false`. The agent is offered such a skill by its description in every run of
+that arm, so a pair whose differing files include it is exposed whether or not
+the run loaded it. A run that never loads a listed skill is a `tie-fail`
+against current, not `unexposed`, which is the outcome a placement screen
+measures. After the rule lines `compare` prints one line per agent, rule, and
+arm, `arm skill: changed text reached 2/5 run(s)`, counting the runs that read
+or loaded one of the arm's changed files or had `poteto-mode/SKILL.md`
+injected, and adds `listed by description: <paths>` when the arm lists any.
+`compare.json` holds the same rows under `arms`. `plan`
 lists an arm rule's arms and each arm's changed files. `chain.py` counts every
 arm the build lists, and takes an arm's owner file to be the first file its
 patch changes. The stub has no patch, so it keeps the rule's target.
@@ -253,7 +266,10 @@ whether Claude's trace shows the `/poteto-mode` command. Each pair gets one
 outcome: `separates`, `tie-pass`, `tie-fail`, `reverses`, `invalid`, or
 `unexposed`. `unexposed` means the amended arm never read the patched file, so
 the pair says nothing about the rule. A read through a glob or a directory-wide
-grep does not count. Codex's `exec --json` stream does not show whether it
+grep does not count. Claude's `Skill` tool leaves a `skill_load` event that
+carries only the skill's name. A completed one counts as a read of
+`<name>/SKILL.md` when the arm's tree has that file, with a `plugin:` prefix or
+a leading slash dropped. Codex's `exec --json` stream does not show whether it
 injected the entry skill, and Claude's `-p` stream does not echo the prompt, so
 no trace shows the injection. Under `--entry poteto-mode` a rule patched into
 `poteto-mode/SKILL.md` therefore counts as exposed without a read, because the

@@ -126,6 +126,8 @@ CLAUDE_WORKSPACE_TOOLS = (
     "Bash(rg * --pre*)", "Bash(git grep * -O*)", "Bash(git grep * --open-files-in-pager*)",
 )
 READ_EVENTS = {"file_read", "skill_load", "command", "tool_call"}
+# A Skill tool input: the bare skill name, with an optional plugin prefix or leading slash.
+LOADED_SKILL = re.compile(r"^(?:[\w.-]+:)?/?([a-z0-9][a-z0-9_-]*)$")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@")
 # The harness names a near-miss case "adversarial"; a regression guard, not a capability.
 CASE_KINDS = {"positive": ("positive", "capability"), "near-miss": ("adversarial", "regression")}
@@ -814,7 +816,7 @@ def build(out, rules, entry="skill"):
             record = {"target": change.target, "patch_kind": change.kind, "removed": change.removed, "inserted": change.inserted}
         else:
             arm_changes = {name: changed_paths(current, tree) for name, tree in trees}
-            record = {"target": rule.target, "patch_kind": "arms", "arm_changes": arm_changes}
+            record = {"target": rule.target, "patch_kind": "arms", "arm_changes": arm_changes, "arm_listed": arm_listed(current, trees)}
         description = frontmatter_description(current[f"{skill}/SKILL.md"].decode())
         companions = companion_trees(rule, current)
         if entry == "skill":
@@ -861,7 +863,9 @@ def build(out, rules, entry="skill"):
             print(f"  companion {name}: {tree_record['files']} file(s), sha256 {tree_record['sha256'][:12]} in every arm")
         if not rule.paired:
             for arm in rule.arm_names[1:]:
-                print(f"  {arm}: {arm_summary(arm, [f'skills/{path}' for path in record['arm_changes'][arm]])}")
+                listed = record["arm_listed"][arm]
+                print(f"  {arm}: {arm_summary(arm, [f'skills/{path}' for path in record['arm_changes'][arm]])}"
+                      + (f"; listed by description: {', '.join(listed)}" if listed else ""))
             continue
         if change.removed:
             print("  - " + change.removed.strip().replace("\n", "\n    "))
@@ -1132,19 +1136,43 @@ def skill_files_read(events, tree_files):
     """Tracked skill files named by a completed read, command, or tool input.
 
     A read counts when the input names the file's path under skills/, or names
-    both its skill directory and its path inside that skill (cd then cat)."""
-    inputs = [
-        str(event.get("input_summary") or "")
-        for event in events
-        if event.get("status") == "completed" and event.get("type") in READ_EVENTS
-    ]
+    both its skill directory and its path inside that skill (cd then cat). The
+    harness records Claude's Skill tool as a skill_load whose input is the bare
+    skill name, so that counts as a read of the skill's SKILL.md when the tree
+    has one."""
+    completed = [event for event in events if event.get("status") == "completed" and event.get("type") in READ_EVENTS]
+    inputs = [str(event.get("input_summary") or "") for event in completed]
     seen = set()
+    for event in completed:
+        loaded = LOADED_SKILL.match(str(event.get("input_summary") or "").strip()) if event.get("type") == "skill_load" else None
+        if loaded and f"{loaded.group(1)}/SKILL.md" in tree_files:
+            seen.add(f"{loaded.group(1)}/SKILL.md")
     for path in tree_files:
         skill, _, inner = path.partition("/")
         segment = re.compile(rf"(^|[/\s]){re.escape(skill)}($|[/\s])")
         if any(path in text or (segment.search(text) and inner in text) for text in inputs):
             seen.add(path)
     return sorted(seen)
+
+
+def auto_invocable(tree, path):
+    """Whether the SKILL.md at path is offered to the agent by its description:
+    its frontmatter does not set disable-model-invocation, and its skill has no
+    agents/openai.yaml that sets allow_implicit_invocation to false."""
+    frontmatter = FRONTMATTER.match(tree[path])
+    if frontmatter and re.search(rb"^disable-model-invocation:\s*true\s*$", frontmatter.group(0), re.MULTILINE):
+        return False
+    manifest_path = f"{path.rsplit('/', 1)[0]}/agents/openai.yaml"
+    return not re.search(rb"^\s*allow_implicit_invocation:\s*false\s*$", tree.get(manifest_path, b""), re.MULTILINE)
+
+
+def arm_listed(current, trees):
+    """{arm: [path, ...]}: the SKILL.md files each arm adds beside current that
+    auto_invocable says the agent is offered in every run of that arm. Whether
+    a run loads such a skill is its choice, and exposure reads that from the
+    same read field as any file."""
+    return {arm: sorted(path for path in tree if path not in current and path.endswith("/SKILL.md") and path.count("/") == 1 and auto_invocable(tree, path))
+            for arm, tree in trees}
 
 
 def entry_invoked(run_base):
@@ -1159,18 +1187,21 @@ def exposure(result, tree_files):
     return {"read": skill_files_read(events, tree_files), "entry_invoked": entry_invoked(base)}
 
 
-def classify(baseline, treatment, target, entry="skill"):
+def classify(baseline, treatment, target, entry="skill", listed=()):
     """Name what a pair shows. target is the file, or the set of files, that
     differ between the two arms. A pair whose treatment arm read none of them
     says nothing about the change, so it is unexposed rather than a tie.
     Under the poteto-mode entry the wrapper starts every prompt with the
     invocation, which injects poteto-mode/SKILL.md without a file read. Neither
-    agent's trace shows that injection, so the entry itself counts as exposure."""
+    agent's trace shows that injection, so the entry itself counts as exposure.
+    listed holds the SKILL.md files the treatment arm offers by description in
+    every run, so a run that never loads one of them is a tie or a reversal,
+    which is the outcome a placement screen measures, not unexposed."""
     if baseline is None or treatment is None or "INVALID" in (baseline["verdict"], treatment["verdict"]):
         return "invalid"
     targets = {target} if isinstance(target, str) else set(target)
     injected = entry == ENTRY_SKILL or treatment["exposure"]["entry_invoked"]
-    exposed = bool(targets & set(treatment["exposure"]["read"])) or (f"{ENTRY_SKILL}/SKILL.md" in targets and injected)
+    exposed = reached(targets, treatment["exposure"]["read"], injected) or bool(targets & set(listed))
     if not exposed:
         return "unexposed"
     return {
@@ -1179,6 +1210,12 @@ def classify(baseline, treatment, target, entry="skill"):
         ("PASS", "PASS"): "tie-pass",
         ("FAIL", "FAIL"): "tie-fail",
     }[(baseline["verdict"], treatment["verdict"])]
+
+
+def reached(targets, read, injected):
+    """Whether a run's changed text reached the agent: it read or loaded one of
+    the target files, or the entry injected poteto-mode/SKILL.md among them."""
+    return bool(set(targets) & set(read)) or (f"{ENTRY_SKILL}/SKILL.md" in targets and injected)
 
 
 def comparisons(arms):
@@ -1459,7 +1496,7 @@ def compare(out):
         outcomes = []
         for baseline, treatment in comparisons(names):
             target = first["target"] if paired else differing_files(out / "arms" / rule / case, build_info, baseline, treatment)
-            outcome = classify(arms.get(baseline), arms.get(treatment), target, first["entry"])
+            outcome = classify(arms.get(baseline), arms.get(treatment), target, first["entry"], build_info.get("arm_listed", {}).get(treatment, ()))
             pair = {"agent": agent, "rule": rule, "case": case, "kind": first["kind"], "run": run_number, "target": target, "outcome": outcome}
             if not paired:
                 pair.update(baseline=baseline, treatment=treatment)
@@ -1516,13 +1553,28 @@ def compare(out):
         rules.append(verdict_row)
         print(f"{agent:6} {rule:26} {label} run-{run_number}  {result.upper()}" + (f"  ({'; '.join(reasons)})" if reasons else "")
               + ("  [judge uncalibrated]" if uncalibrated else ""))
+    arm_reach = []
+    for (agent, rule, arm) in sorted({(row["agent"], row["rule"], row["arm"]) for row in table}):
+        build_info = json.loads((out / "arms" / rule / "build.json").read_text())
+        if build_info.get("patch_kind") == "arms":
+            changed = build_info["arm_changes"][arm]
+        else:
+            changed = [build_info["target"]] if arm == "amended" else []
+        if not changed:
+            continue
+        rows = [row for row in table if (row["agent"], row["rule"], row["arm"]) == (agent, rule, arm)]
+        injected = build_info["entry"] == ENTRY_SKILL
+        count = sum(reached(changed, row["exposure"]["read"], injected or row["exposure"]["entry_invoked"]) for row in rows)
+        listed = build_info.get("arm_listed", {}).get(arm, [])
+        arm_reach.append({"agent": agent, "rule": rule, "arm": arm, "changed_text_reached": count, "runs": len(rows), "listed": listed})
+        print(f"{agent:6} {rule:26} arm {arm}: changed text reached {count}/{len(rows)} run(s)" + (f"; listed by description: {', '.join(listed)}" if listed else ""))
     review_scores = []
     for (agent, rule, arm) in sorted({(row["agent"], row["rule"], row["arm"]) for row in table if "review" in row}):
         rows = [row for row in table if "review" in row and (row["agent"], row["rule"], row["arm"]) == (agent, rule, arm)]
         score = {"agent": agent, "rule": rule, "arm": arm, **review.scores(rows)}
         review_scores.append(score)
         print(f"{agent:6} {rule:26} review {arm}: " + score_line(score))
-    (out / "compare.json").write_text(json.dumps({"pairs": summary, "rules": rules, "runs": table, "review_scores": review_scores}, indent=2) + "\n")
+    (out / "compare.json").write_text(json.dumps({"pairs": summary, "rules": rules, "runs": table, "arms": arm_reach, "review_scores": review_scores}, indent=2) + "\n")
     print(f"wrote {out / 'compare.json'}")
 
 

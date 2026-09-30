@@ -77,6 +77,20 @@ class ArmsRuleLoadTests(unittest.TestCase):
     def test_pair_rule_keeps_current_and_amended(self):
         self.assertEqual(screen.load_rule("scratch-base").arm_names, ("current", "amended"))
 
+    def test_build_records_the_skills_each_arm_lists_by_description(self):
+        added = "--- /dev/null\n+++ b/premortem/SKILL.md\n@@ -0,0 +1,4 @@\n+---\n+name: premortem\n+description: Use before a rollout.\n+---\n"
+        self.write("scratch-place", {"rule.json": json.dumps({"cases_from": "scratch-base", "arms": ["current", "skill"]}), "arms/skill.patch": added})
+        (self.rules / "skill-ci").mkdir()
+        (self.rules / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
+        out = self.rules / "out"
+
+        with mock.patch.dict("os.environ", {"SKILL_CI": str(self.rules / "skill-ci")}), contextlib.redirect_stdout(io.StringIO()) as printed:
+            built = screen.build(out, [screen.load_rule("scratch-place")], "poteto-mode")["scratch-place"]
+
+        self.assertEqual(built["arm_listed"], {"current": [], "skill": ["premortem/SKILL.md"]})
+        self.assertEqual(json.loads((out / "arms" / "scratch-place" / "build.json").read_text())["arm_listed"], built["arm_listed"])
+        self.assertIn("  skill: skills/premortem/SKILL.md; listed by description: premortem/SKILL.md", printed.getvalue().splitlines())
+
     def test_listed_arm_without_a_patch_is_refused(self):
         (self.rules / "scratch-arms" / "arms" / "leaf+trigger.patch").unlink()
 
@@ -195,6 +209,21 @@ class ArmPatchTests(unittest.TestCase):
         with self.assertRaisesRegex(screen.ScreenError, "arm patch does not apply to skills/: .*poteto-mode/SKILL.md"):
             screen.apply_arm_patch(TREE, patch)
 
+    def test_an_added_ungated_skill_is_listed_and_a_gated_or_edited_one_is_not(self):
+        def adds(path, text):
+            return "--- /dev/null\n+++ b/" + path + "\n@@ -0,0 +1," + str(text.count("\n")) + " @@\n" + "".join("+" + line + "\n" for line in text.splitlines())
+
+        open_skill = adds("premortem/SKILL.md", "---\nname: premortem\ndescription: Use before a rollout.\n---\n# Premortem\n")
+        gated = adds("gated/SKILL.md", "---\nname: gated\ndescription: Style.\ndisable-model-invocation: true\n---\n# Gated\n")
+        implicit_off = adds("quiet/SKILL.md", "---\nname: quiet\n---\n# Quiet\n") + adds("quiet/agents/openai.yaml", "policy:\n  allow_implicit_invocation: false\n")
+        fronted = {"poteto-mode/SKILL.md": b"---\nname: poteto-mode\n---\n# P\n", "principle-laziness-protocol/SKILL.md": b"---\nname: lazy\n---\n# L\n"}
+        trees = [("current", TREE), ("skill", screen.apply_arm_patch(TREE, open_skill)), ("gated", screen.apply_arm_patch(TREE, gated)),
+                 ("quiet", screen.apply_arm_patch(TREE, implicit_off)), ("leaf", screen.apply_arm_patch(TREE, LEAF)),
+                 ("both", screen.apply_arm_patch(TREE, open_skill + LEAF)), ("stub", screen.stub_tree(fronted))]
+
+        self.assertEqual(screen.arm_listed(TREE, trees), {"current": [], "skill": ["premortem/SKILL.md"], "gated": [], "quiet": [], "leaf": [],
+                                                          "both": ["premortem/SKILL.md"], "stub": []})
+
     def test_patch_that_changes_nothing_is_refused(self):
         patch = "--- a/poteto-mode/SKILL.md\n+++ b/poteto-mode/SKILL.md\n@@ -2 +2 @@\n-Read the leaf.\n+Read the leaf.\n"
 
@@ -306,6 +335,47 @@ class ArmsCompareTests(unittest.TestCase):
 
         self.assertEqual(rules, [("leaf", "not-separated", ["quiet reverses", "shop unexposed"]), ("leaf+trigger", "separates", [])])
         self.assertIn("codex  stack                      rule leaf+trigger vs current run-1  SEPARATES", self.printed)
+
+    def test_each_arm_counts_the_runs_its_changed_text_reached(self):
+        self.assertEqual(self.compared["arms"], [
+            {"agent": "codex", "rule": "stack", "arm": "leaf", "changed_text_reached": 1, "runs": 2, "listed": []},
+            {"agent": "codex", "rule": "stack", "arm": "leaf+trigger", "changed_text_reached": 2, "runs": 2, "listed": []},
+        ])
+        self.assertIn("codex  stack                      arm leaf: changed text reached 1/2 run(s)", self.printed)
+        self.assertIn("codex  stack                      arm leaf+trigger: changed text reached 2/2 run(s)", self.printed)
+
+
+class ListedSkillCompareTests(unittest.TestCase):
+    """compare for a rule whose skill arm adds an auto-invocable skill that no run loaded."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.out = Path(directory.name)
+        skill = {**TREE, "premortem/SKILL.md": b"---\nname: premortem\ndescription: Use before a rollout.\n---\n# Premortem\n"}
+        build = {"entry": "poteto-mode", "tree_dir": "pstack", "target": "premortem/SKILL.md", "patch_kind": "arms",
+                 "arm_changes": {"current": [], "skill": ["premortem/SKILL.md"]}, "arm_listed": {"current": [], "skill": ["premortem/SKILL.md"]},
+                 "arms": ["current", "skill"], "cases": {"rollout": {"kind": "positive", "timeout_s": 900}}}
+        (self.out / "arms" / "place").mkdir(parents=True)
+        (self.out / "arms" / "place" / "build.json").write_text(json.dumps(build))
+        for arm, tree, read in (("current", TREE, []), ("skill", skill, [])):
+            for path, data in tree.items():
+                (self.out / "arms" / "place" / "rollout" / arm / "pstack" / path).parent.mkdir(parents=True, exist_ok=True)
+                (self.out / "arms" / "place" / "rollout" / arm / "pstack" / path).write_bytes(data)
+            run_base = self.out / "claude" / "place" / "rollout" / arm / "runs" / "rollout" / "with_skill"
+            run_base.mkdir(parents=True)
+            (run_base / "events.json").write_text(json.dumps({"events": read}))
+            result = {"run_number": 1, "run_base": str(run_base), "assertions": [{"name": "rule-behavior", "passed": False, "evidence": "FAIL: wrong"}]}
+            (self.out / "claude" / "place" / "rollout" / arm / "grade.json").write_text(json.dumps({"results": [result]}))
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            screen.compare(self.out)
+        self.printed = printed.getvalue().splitlines()
+        self.compared = json.loads((self.out / "compare.json").read_text())
+
+    def test_an_unloaded_listed_skill_is_a_tie_fail_not_unexposed(self):
+        self.assertEqual([(pair["treatment"], pair["outcome"]) for pair in self.compared["pairs"]], [("skill", "tie-fail")])
+        self.assertEqual(self.compared["arms"], [{"agent": "claude", "rule": "place", "arm": "skill", "changed_text_reached": 0, "runs": 1, "listed": ["premortem/SKILL.md"]}])
+        self.assertIn("claude place                      arm skill: changed text reached 0/1 run(s); listed by description: premortem/SKILL.md", self.printed)
 
 
 class StubCompareTests(unittest.TestCase):
