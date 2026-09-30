@@ -49,9 +49,10 @@ def prefix_match(one, other):
 
 def library_failures(workspace):
     """The pinned tests plus the held ones against the library the diff
-    leaves. Any change under tests/ fails, and so does a missing library."""
+    leaves. Editing or deleting a pinned test fails; a new test file is the
+    regression test Bug fix asks for, so it passes and is not run."""
     changed = apply_diff(workspace.checkout, workspace.diff)
-    tests = sorted(path for path in changed if path.startswith("tests/"))
+    tests = sorted(path for path in changed if path.startswith("tests/") and (workspace.checkout / path).exists())
     if tests:
         return [f"the diff changes {path}" for path in tests], changed
     tree = {}

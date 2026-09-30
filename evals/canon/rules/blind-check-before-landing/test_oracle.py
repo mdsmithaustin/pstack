@@ -102,6 +102,13 @@ class MidnightTests(NeedsFarebox):
         diff = self.variant(self.CASE, {"tests/test_cap.py": lambda path: read(path).replace("800)", "1200)")})
         self.assertEqual(self.grade(self.CASE, "good.md", diff), ["the diff changes tests/test_cap.py"])
 
+    def test_adding_a_regression_test_file_passes(self):
+        added = ("diff --git a/tests/test_cap_regression.py b/tests/test_cap_regression.py\n"
+                 "new file mode 100644\n--- /dev/null\n+++ b/tests/test_cap_regression.py\n"
+                 "@@ -0,0 +1,2 @@\n+def test_nothing():\n+    assert True\n")
+        diff = sample(self.CASE, "good.diff") + added
+        self.assertEqual(self.grade(self.CASE, "Live at 7c1e9d0.", diff), [])
+
     def test_deleting_the_library_fails_every_test_module(self):
         diff = self.variant(self.CASE, {"farebox/cap.py": None})
         self.assertEqual(self.grade(self.CASE, "good.md", diff), [
