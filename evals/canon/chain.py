@@ -1525,9 +1525,10 @@ def injection(run, agent, entry, trace):
 
 def rule_owner(rule, build_info, arm=None):
     """The file the rule patches. An arm of an N-arm rule owns the first file
-    its own patch changes; current, which changes none, keeps the rule's target."""
+    its own patch changes. current, which changes none, and the stub, which
+    changes every skill and patches none, keep the rule's target."""
     changed = build_info.get("arm_changes", {}).get(arm)
-    if changed:
+    if changed and arm != screen.STUB:
         return changed[0]
     if build_info.get("target"):
         return build_info["target"]

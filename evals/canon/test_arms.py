@@ -113,6 +113,21 @@ class ArmsRuleLoadTests(unittest.TestCase):
         with self.assertRaisesRegex(screen.ScreenError, "must name the rule it takes cases from"):
             screen.load_rule("scratch-arms")
 
+    def test_stub_arm_needs_no_patch_and_the_rule_needs_no_arms_directory(self):
+        self.write("scratch-stub", {"rule.json": json.dumps({"cases_from": "scratch-base", "arms": ["current", "stub"]})})
+
+        rule = screen.load_rule("scratch-stub")
+
+        self.assertEqual((rule.arms, rule.target, rule.skills), ((("current", None), ("stub", None)), "poteto-mode/SKILL.md", ("poteto-mode",)))
+        self.assertIn("scratch-stub", [rule.id for rule in screen.load_rules()])
+
+    def test_patch_for_the_stub_arm_is_refused(self):
+        self.arms(["current", "leaf", "leaf+trigger", "stub"])
+        self.write("scratch-arms", {"arms/stub.patch": LEAF})
+
+        with self.assertRaisesRegex(screen.ScreenError, "has arms/stub.patch, but the stub arm is built from current"):
+            screen.load_rule("scratch-arms")
+
     def test_arms_rule_whose_source_is_a_variant_is_refused(self):
         self.write("scratch-variant", {"rule.json": '{"cases_from": "scratch-base"}', "rule.patch": LEAF})
         self.write("scratch-arms", {"rule.json": json.dumps({"cases_from": "scratch-variant", "arms": ["current", "leaf", "leaf+trigger"]})})
@@ -161,6 +176,22 @@ class ArmPatchTests(unittest.TestCase):
 
         with self.assertRaisesRegex(screen.ScreenError, "arm patch changes nothing"):
             screen.apply_arm_patch(TREE, patch)
+
+    def test_stub_keeps_each_skill_md_frontmatter_and_drops_everything_else(self):
+        tree = {
+            "poteto-mode/SKILL.md": b"---\nname: poteto-mode\ndescription: Style.\n---\n\n# Poteto mode\nRead the leaf.\n",
+            "poteto-mode/playbooks/feature.md": b"1. Plan.\n",
+            "why/SKILL.md": b"---\nname: why\ndescription: \"Rationale: ---\"\n---",
+        }
+
+        self.assertEqual(screen.stub_tree(tree), {
+            "poteto-mode/SKILL.md": b"---\nname: poteto-mode\ndescription: Style.\n---\n",
+            "why/SKILL.md": b"---\nname: why\ndescription: \"Rationale: ---\"\n---",
+        })
+
+    def test_stub_refuses_a_skill_md_without_frontmatter(self):
+        with self.assertRaisesRegex(screen.ScreenError, "skills/poteto-mode/SKILL.md has no frontmatter"):
+            screen.stub_tree(TREE)
 
     def test_arm_mounted_when_every_line_it_adds_is(self):
         rule = screen.Rule("r", "S", None, "principle-laziness-protocol/SKILL.md", (), arm_patches=(("leaf", LEAF),))
@@ -253,6 +284,67 @@ class ArmsCompareTests(unittest.TestCase):
         self.assertIn("codex  stack                      rule leaf+trigger vs current run-1  SEPARATES", self.printed)
 
 
+class StubCompareTests(unittest.TestCase):
+    """compare over synthetic grades for a rule with arms current and stub under the skill entry."""
+
+    TREE = {
+        "poteto-mode/SKILL.md": b"---\nname: poteto-mode\ndescription: Style.\n---\n# Poteto mode\nRead the leaf.\n",
+        "poteto-mode/playbooks/feature.md": b"1. Plan.\n",
+    }
+    RUNS = {
+        "shop": {"current": ("PASS", ["poteto-mode/playbooks/feature.md"]), "stub": ("FAIL", ["poteto-mode/SKILL.md"])},
+        "quiet": {"current": ("PASS", []), "stub": ("PASS", ["poteto-mode/SKILL.md"])},
+    }
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.out = Path(directory.name)
+        trees = {"current": self.TREE, "stub": screen.stub_tree(self.TREE)}
+        build = {"entry": "skill", "tree_dir": "skills", "target": "poteto-mode/SKILL.md", "patch_kind": "arms",
+                 "arm_changes": {"current": [], "stub": sorted(self.TREE)}, "arms": ["current", "stub"],
+                 "cases": {"shop": {"kind": "positive", "timeout_s": 900}, "quiet": {"kind": "near-miss", "timeout_s": 900}}}
+        (self.out / "arms" / "steer").mkdir(parents=True)
+        (self.out / "arms" / "steer" / "build.json").write_text(json.dumps(build))
+        for case, arms in self.RUNS.items():
+            for arm, (verdict, read) in arms.items():
+                for path, data in trees[arm].items():
+                    (self.out / "arms" / "steer" / case / arm / "skills" / path).parent.mkdir(parents=True, exist_ok=True)
+                    (self.out / "arms" / "steer" / case / arm / "skills" / path).write_bytes(data)
+                run_base = self.out / "codex" / "steer" / case / arm / "runs" / case / "with_skill"
+                run_base.mkdir(parents=True)
+                events = [{"type": "file_read", "status": "completed", "input_summary": f"skills/{path}"} for path in read]
+                (run_base / "events.json").write_text(json.dumps({"events": events}))
+                result = {"run_number": 1, "run_base": str(run_base),
+                          "assertions": [{"name": "rule-behavior", "passed": grade(verdict), "evidence": "" if verdict == "PASS" else "FAIL: wrong"}]}
+                (self.out / "codex" / "steer" / case / arm / "grade.json").write_text(json.dumps({"results": [result]}))
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            screen.compare(self.out)
+        self.printed = printed.getvalue().splitlines()
+        self.compared = json.loads((self.out / "compare.json").read_text())
+
+    def test_stub_is_the_baseline_and_exposure_asks_whether_the_guided_arm_read_guidance(self):
+        pairs = [(pair["case"], pair["treatment"], pair["baseline"], pair["target"], pair["outcome"]) for pair in self.compared["pairs"]]
+
+        self.assertEqual(pairs, [
+            ("quiet", "current", "stub", ["poteto-mode/SKILL.md", "poteto-mode/playbooks/feature.md"], "unexposed"),
+            ("shop", "current", "stub", ["poteto-mode/SKILL.md", "poteto-mode/playbooks/feature.md"], "separates"),
+        ])
+        self.assertIn("    current vs stub: SEPARATES", self.printed)
+        self.assertIn("    stub: changed 1 SKILL.md cut to frontmatter, 1 other file(s) dropped (1 of 2 read); entry not observed; "
+                      "read 1 skill file(s): poteto-mode/SKILL.md", self.printed)
+
+    def test_rule_verdict_names_current_against_the_stub(self):
+        self.assertEqual([(row["arm"], row["verdict"], row["reasons"]) for row in self.compared["rules"]], [("stub", "not-separated", ["quiet unexposed"])])
+        self.assertIn("codex  steer                      rule current vs stub run-1  NOT-SEPARATED  (quiet unexposed)", self.printed)
+
+    def test_under_the_poteto_mode_entry_the_injected_index_exposes_the_guided_arm(self):
+        baseline = {"verdict": "PASS", "exposure": {"read": [], "entry_invoked": False}}
+
+        self.assertEqual(screen.classify(baseline, dict(baseline), sorted(self.TREE), "poteto-mode"), "tie-pass")
+        self.assertEqual(screen.classify(baseline, dict(baseline), sorted(self.TREE), "skill"), "unexposed")
+
+
 class PairCompareTests(unittest.TestCase):
     def test_pair_rule_prints_one_outcome_per_case_and_no_arm_fields(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -290,7 +382,7 @@ class ShippedArmsRuleTests(unittest.TestCase):
                 tree = screen.rule_tree(rule)
                 trees = screen.arm_trees(rule, tree)
                 self.assertEqual([name for name, _ in trees], list(rule.arm_names))
-                self.assertEqual(screen.changed_paths(tree, trees[1][1])[0], rule.target)
+                self.assertIn(rule.target, screen.changed_paths(tree, trees[1][1]))
 
 
 if __name__ == "__main__":

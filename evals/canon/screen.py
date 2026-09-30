@@ -33,6 +33,11 @@ other arm has arms/<arm>.patch, a unified diff against skills/ that may touch
 several files. Every arm of every case is built and graded, and compare shows
 each arm against current and each later arm against each earlier one.
 
+The arm named stub takes no patch. It keeps every skill directory and each
+SKILL.md's frontmatter, and drops every SKILL.md body and every other file, so
+it is a control with the same skill names and triggers but no guidance. Any
+comparison with it takes stub as the baseline.
+
 A case whose case.json names a workspace runs inside a checkout of a real repo
 at a pinned commit (see workspace.py) instead of receiving project files in the
 prompt. Its oracle grades the diff the agent left on that checkout.
@@ -91,6 +96,8 @@ REPO = CANON.parents[1]
 RULES = Path(os.environ.get("CANON_RULES", CANON / "rules")).resolve()
 ARMS = ("current", "amended")
 ARM_NAME = re.compile(r"^[a-z0-9][a-z0-9+._-]*$")
+STUB = "stub"
+FRONTMATTER = re.compile(rb"---\n.*?\n---(?:\n|$)", re.DOTALL)
 DEFAULT_MODELS = {"claude": "sonnet", "codex": "gpt-6-sol"}
 MANIFEST = "shared-benchmark.json"
 ENTRIES = ("skill", "poteto-mode")
@@ -166,6 +173,13 @@ def case_spec(case):
     return workspace.parse_spec(case.root, case.workspace, case.review)
 
 
+def standin_carries(rule, arm):
+    """Whether the offline stand-ins answer an arm of a workspace case as one
+    that carries the rule: every arm but current, or, beside a stub, every arm
+    but the stub."""
+    return arm != (STUB if STUB in rule.arm_names else "current")
+
+
 def standin_review(case, treated):
     """The labeled sample an offline stand-in answers a review case with: the
     CLEAN one for a near-miss, else FOUND when the rule is mounted and MISSED
@@ -200,7 +214,8 @@ class Rule:
     cases: tuple
     companions: tuple = ()
     cases_from: str = None
-    # An arms rule's ((arm, patch), ...) for every arm after current, in order.
+    # An arms rule's ((arm, patch), ...) for every arm after current, in order;
+    # the stub arm's patch is None.
     arm_patches: tuple = ()
     # The commit whose skills/ the rule was screened against; None screens the working tree.
     skills_at: str = None
@@ -228,7 +243,7 @@ class Rule:
         """Skill directories the rule changes, which the single-skill entry mounts."""
         if self.paired:
             return (self.skill,)
-        return tuple(sorted({path.split("/", 1)[0] for _, patch in self.arm_patches for path in patch_paths(patch)[1]}))
+        return tuple(sorted({path.split("/", 1)[0] for _, patch in self.arm_patches if patch for path in patch_paths(patch)[1]})) or (self.skill,)
 
     @property
     def case_rule(self):
@@ -319,7 +334,7 @@ def rule_spec(rule_id):
 
 def load_arm_patches(rule_id, names):
     """((arm, patch), ...) for an arms rule: one arms/<arm>.patch per listed arm
-    after current, and no patch that rule.json does not list."""
+    after current except stub, and no patch that rule.json does not list."""
     root = RULES / rule_id
     if (root / "rule.patch").exists():
         raise ScreenError(f"rule {rule_id} lists arms, so it must not have rule.patch")
@@ -328,13 +343,15 @@ def load_arm_patches(rule_id, names):
     if len(names) < 2 or len(set(names)) != len(names) or not all(isinstance(name, str) and ARM_NAME.match(name) for name in names):
         raise ScreenError(f"rules/{rule_id}/rule.json arms must be current and at least one more distinct name matching {ARM_NAME.pattern}, not {names!r}")
     patches = {path.name.removesuffix(".patch"): path for path in (root / "arms").glob("*.patch")}
-    missing = [name for name in names[1:] if name not in patches]
+    missing = [name for name in names[1:] if name != STUB and name not in patches]
     if missing:
         raise ScreenError(f"rule {rule_id} has no arms/<arm>.patch for {missing}")
+    if STUB in patches:
+        raise ScreenError(f"rule {rule_id} has arms/{STUB}.patch, but the {STUB} arm is built from current and takes no patch")
     unlisted = sorted(set(patches) - set(names[1:]))
     if unlisted:
         raise ScreenError(f"rule {rule_id} has arms/<arm>.patch for arms its rule.json does not list after current: {unlisted}")
-    return tuple((name, patches[name].read_text()) for name in names[1:])
+    return tuple((name, None if name == STUB else patches[name].read_text()) for name in names[1:])
 
 
 def load_rule(rule_id):
@@ -362,16 +379,23 @@ def load_rule(rule_id):
     skills_at = spec.get("skills_at")
     if skills_at is not None and not (isinstance(skills_at, str) and COMMIT.match(skills_at)):
         raise ScreenError(f"rules/{rule_id}/rule.json skills_at must be a full 40-character commit, not {skills_at!r}")
-    target = sorted(patch_paths(arm_patches[0][1])[1])[0] if arm_patches else parse_patch(patch)[0]
+    patched = [arm_patch for _, arm_patch in arm_patches if arm_patch]
+    target = parse_patch(patch)[0] if patch else sorted(patch_paths(patched[0])[1])[0] if patched else f"{ENTRY_SKILL}/SKILL.md"
     return Rule(rule_id, spec["source"], patch, target, cases, tuple(companions), spec.get("cases_from"), arm_patches, skills_at)
 
 
 def load_rules(requested=()):
-    known = sorted(path.name for path in RULES.iterdir() if (path / "rule.patch").is_file() or (path / "arms").is_dir())
+    known = sorted(path.name for path in RULES.iterdir() if (path / "rule.patch").is_file() or (path / "arms").is_dir() or lists_arms(path))
     unknown = sorted(set(requested) - set(known))
     if unknown:
         raise ScreenError(f"unknown rule(s): {', '.join(unknown)}; known: {', '.join(known)}")
     return [load_rule(rule_id) for rule_id in (requested or known)]
+
+
+def lists_arms(root):
+    """Whether root's rule.json lists arms, which a rule of current and stub
+    alone needs to be found, having no patch."""
+    return (root / "rule.json").is_file() and "arms" in json.loads((root / "rule.json").read_text())
 
 
 def tracked(scope, commit=None):
@@ -536,10 +560,29 @@ def apply_arm_patch(tree, patch):
     return applied
 
 
+def stub_tree(tree):
+    """Each skill's SKILL.md cut to its frontmatter, and no other file."""
+    stubs = {}
+    for path, data in tree.items():
+        if path.partition("/")[2] == "SKILL.md":
+            match = FRONTMATTER.match(data)
+            if not match:
+                raise ScreenError(f"skills/{path} has no frontmatter to keep in the stub arm")
+            stubs[path] = match.group(0)
+    return stubs
+
+
 def arm_trees(rule, current):
     """[(arm, tree)] in the rule's order, current first."""
     apply = apply_patch if rule.paired else apply_arm_patch
-    return [(name, current if patch is None else apply(current, patch)) for name, patch in rule.arms]
+    return [(name, stub_tree(current) if name == STUB else current if patch is None else apply(current, patch)) for name, patch in rule.arms]
+
+
+def arm_summary(arm, paths):
+    if arm == STUB:
+        cut = sum(path.endswith("/SKILL.md") and path.count("/") == path.startswith("skills/") + 1 for path in paths)
+        return f"{cut} SKILL.md cut to frontmatter, {len(paths) - cut} other file(s) dropped"
+    return ", ".join(paths)
 
 
 def changed_paths(before, after):
@@ -559,6 +602,8 @@ def rule_mounted(rule, mounted, tree):
         return removed not in mounted
     text = b"\n".join(tree.values()).decode(errors="replace")
     for _, patch in rule.arm_patches:
+        if patch is None:
+            continue
         added = [line[1:].strip() for line in patch.splitlines() if line.startswith("+") and not line.startswith("+++")]
         new = [line for line in added if line and line not in text]
         if new and all(line in mounted for line in new):
@@ -766,7 +811,7 @@ def build(out, rules, entry="skill"):
             record = {"target": change.target, "patch_kind": change.kind, "removed": change.removed, "inserted": change.inserted}
         else:
             arm_changes = {name: changed_paths(current, tree) for name, tree in trees}
-            record = {"target": arm_changes[rule.arm_names[1]][0], "patch_kind": "arms", "arm_changes": arm_changes}
+            record = {"target": rule.target, "patch_kind": "arms", "arm_changes": arm_changes}
         description = frontmatter_description(current[f"{skill}/SKILL.md"].decode())
         companions = companion_trees(rule, current)
         if entry == "skill":
@@ -813,7 +858,7 @@ def build(out, rules, entry="skill"):
             print(f"  companion {name}: {tree_record['files']} file(s), sha256 {tree_record['sha256'][:12]} in every arm")
         if not rule.paired:
             for arm in rule.arm_names[1:]:
-                print(f"  {arm}: {', '.join(f'skills/{path}' for path in record['arm_changes'][arm])}")
+                print(f"  {arm}: {arm_summary(arm, [f'skills/{path}' for path in record['arm_changes'][arm]])}")
             continue
         if change.removed:
             print("  - " + change.removed.strip().replace("\n", "\n    "))
@@ -1135,9 +1180,12 @@ def classify(baseline, treatment, target, entry="skill"):
 
 def comparisons(arms):
     """(baseline, treatment) arm pairs: each arm against the first, then each
-    later arm against each earlier one."""
+    later arm against each earlier one. The stub arm is always the baseline,
+    so a pair with it separates when guidance turns a fail into a pass, and is
+    exposed when the guided arm read a file the stub lacks."""
     treated = arms[1:]
-    return [(arms[0], arm) for arm in treated] + [(baseline, arm) for index, baseline in enumerate(treated) for arm in treated[index + 1:]]
+    pairs = [(arms[0], arm) for arm in treated] + [(baseline, arm) for index, baseline in enumerate(treated) for arm in treated[index + 1:]]
+    return [(treatment, baseline) if treatment == STUB else (baseline, treatment) for baseline, treatment in pairs]
 
 
 def differing_files(case_root, build_info, baseline, treatment):
@@ -1398,7 +1446,7 @@ def compare(out):
     pairs = {}
     for row in table:
         pairs.setdefault((row["agent"], row["rule"], row["run"], row["case"]), {})[row["arm"]] = row
-    # grouped: (agent, rule, run, treatment arm vs current, or None for a pair rule) -> case outcomes
+    # grouped: (agent, rule, run, (treatment, baseline) of a pair with current, or None for a pair rule) -> case outcomes
     summary, grouped = [], {}
     for (agent, rule, run_number, case), arms in sorted(pairs.items(), key=lambda item: tuple(map(str, item[0]))):
         first = next(iter(arms.values()))
@@ -1414,8 +1462,8 @@ def compare(out):
                 pair.update(baseline=baseline, treatment=treatment)
             summary.append(pair)
             outcomes.append(f"    {treatment} vs {baseline}: {outcome.upper()}")
-            if baseline == names[0]:
-                grouped.setdefault((agent, rule, run_number, None if paired else treatment), []).append((case, first["kind"], outcome))
+            if names[0] in (baseline, treatment):
+                grouped.setdefault((agent, rule, run_number, None if paired else (treatment, baseline)), []).append((case, first["kind"], outcome))
         cells = [f"{arm}={arms[arm]['verdict'] if arm in arms else 'MISSING'}" for arm in names]
         print(f"{agent:6} {rule:26} {case:18} {first['kind']:9} run-{run_number}  " + "  ".join(cells) + (f"  {summary[-1]['outcome'].upper()}" if paired else ""))
         for arm in names:
@@ -1427,7 +1475,7 @@ def compare(out):
                 target_state = f"{first['target']} {'read' if first['target'] in seen else 'NOT READ'}; "
             else:
                 owned = build_info["arm_changes"][arm]
-                target_state = f"changed {', '.join(owned)} ({len(set(owned) & set(seen))} of {len(owned)} read); " if owned else ""
+                target_state = f"changed {arm_summary(arm, owned)} ({len(set(owned) & set(seen))} of {len(owned)} read); " if owned else ""
             entry_state = "invoked" if row["exposure"]["entry_invoked"] else "not observed"
             companion_state = ""
             if "companions_read" in row["exposure"]:
@@ -1451,12 +1499,13 @@ def compare(out):
         outcomes += [(case, spec["kind"], "missing") for case, spec in built_cases.items() if case not in ran]
     rules = []
     # Sort on agent, rule, and run only, so a rule's arms keep their order.
-    for (agent, rule, run_number, arm), outcomes in sorted(grouped.items(), key=lambda item: tuple(map(str, item[0][:3]))):
+    for (agent, rule, run_number, pair), outcomes in sorted(grouped.items(), key=lambda item: tuple(map(str, item[0][:3]))):
         result, reasons = rule_verdict(outcomes)
         verdict_row = {"agent": agent, "rule": rule, "run": run_number, "verdict": result, "reasons": reasons}
         label = "rule"
-        if arm is not None:
-            verdict_row["arm"], label = arm, f"rule {arm} vs current"
+        if pair is not None:
+            verdict_row["arm"] = next(arm for arm in pair if arm != "current")
+            label = f"rule {pair[0]} vs {pair[1]}"
         uncalibrated = any(not row["review"]["calibrated"] for row in table
                            if "review" in row and (row["agent"], row["rule"], row["run"]) == (agent, rule, run_number))
         if uncalibrated:
@@ -1543,7 +1592,7 @@ def plan(roots):
         print(f"{rule.id}  [{rule.source}]  skills/{rule.target}  {kind}" + (f"  companions {', '.join(rule.companions)}" if rule.companions else ""))
         if not rule.paired and not isinstance(change, ScreenError):
             for arm in rule.arm_names[1:]:
-                print(f"  arm {arm}: {', '.join(changed_paths(trees[rule.id]['current'], trees[rule.id][arm]))}")
+                print(f"  arm {arm}: {arm_summary(arm, changed_paths(trees[rule.id]['current'], trees[rule.id][arm]))}")
         for case in rule.cases:
             seen = runs.get((rule.id, case.id))
             print(f"  {case.id:20} {case.kind:9}  {'; '.join(seen) if seen else 'not run'}")

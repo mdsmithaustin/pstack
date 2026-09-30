@@ -2,7 +2,8 @@
 
 This directory screens candidate rules for skills that already exist. Each
 comparison is the current skill text against the same text plus one rule. It
-does not compare a skill against no skill.
+does not compare a skill against no skill. A stub arm (see Stub arm) compares
+the skills against the same skill names with no guidance.
 
 ## What runs
 
@@ -152,13 +153,13 @@ drops the `skills/` prefix. The build applies it with `git apply` in a
 scratch copy of the tree, and refuses a patch that does not apply or changes
 nothing. The one-change check does not run. The rule takes its cases and
 oracle from `cases_from`, as a variant does. Under `--entry skill` the arms
-mount every skill any arm changes.
+mount every skill a patched arm changes.
 
 `build` writes `arms/<rule>/<case>/<arm>/` for every arm in order.
 `build.json` records `"patch_kind": "arms"`, `"arms"` in order, and
 `"arm_changes"`, which maps each arm to the files it changes (`current` has
-none). `"target"` is the first changed file of the first arm after current, for
-older readers. A pair rule's `build.json` also records
+none). `"target"` is the first file the first patched arm changes, or
+`poteto-mode/SKILL.md` when no arm has a patch, for older readers. A pair rule's `build.json` also records
 `"arms": ["current", "amended"]`.
 
 `compare` prints one row per case and run with every arm's verdict in order,
@@ -172,7 +173,54 @@ current, `rule leaf vs current run-1 SEPARATES`. In `compare.json` these pair
 entries add `baseline` and `treatment`, and these rule entries add `arm`. `plan`
 lists an arm rule's arms and each arm's changed files. `chain.py` counts every
 arm the build lists, and takes an arm's owner file to be the first file its
-patch changes.
+patch changes. The stub has no patch, so it keeps the rule's target.
+
+### Stub arm
+
+A stub arm asks whether the skills steer the agent at all. `stub` is a
+reserved arm name that takes no patch:
+
+```
+rules/<id>/
+  rule.json           {"cases_from": "<rule>", "arms": ["current", "stub"]}
+```
+
+The build makes it from the current tree. Every skill directory keeps its
+name and its `SKILL.md`, cut to the frontmatter bytes that current holds
+through the closing `---` line. Every body and every other file is dropped.
+Both arms are `with_skill` rows with the same manifest, prompt, entry prefix,
+workspace input, grader, and companions, so the only difference is the
+guidance text. The whole frontmatter stays, including fields such as
+`reminder` and `disable-model-invocation`, so that both arms discover and
+trigger the same skills. A stub arm needs no `arms/` directory, and
+`arms/stub.patch` is refused. It may also sit beside patched arms. A rule with
+only current and stub targets `poteto-mode/SKILL.md`, and under `--entry
+skill` mounts poteto-mode alone. `plan` and `build` print the stub arm as a
+count of cut and dropped files.
+
+`compare` takes the stub arm as the baseline of every pair it is in, so the
+line reads `current vs stub: SEPARATES` when current passes and the stub fails,
+and the rule line reads `rule current vs stub`. The exposure target is every
+file that differs from the stub, which is every body and every other file. The
+guided arm is exposed when it read one of them, so an unexposed pair is one
+where the guidance was never loaded. Under `--entry poteto-mode` the wrapper
+injects `poteto-mode/SKILL.md`, so current is always exposed there. In
+`compare.json` the rule entry's `arm` is `stub`.
+
+The stub arm drops `pstack-harness/scripts/subagents.py`, so a `--runner sbx`
+stub arm registers no poteto-agent or Comment Sicko persona. The persona files
+are guidance that the skill tree installs.
+
+The offline stand-ins answer a positive workspace case with `bad.md` in the
+stub arm and `good.md` in every other arm, and `offline/sbx-agent` does not ask for the
+persona in the stub arm. On 2026-09-28 both the host stand-in
+(`CODEX_BIN=evals/canon/offline/codex`) and `--runner sbx` with
+`CANON_SBX_STANDIN` printed `rule current vs stub run-1 SEPARATES` for
+`bug-fix-spawn-step-stub` under `--entry poteto-mode`. A pasted-project case in a stub
+rule mounts the same text in its guided arm as its source rule's current
+arm, so a stand-in cannot tell the two rules apart and answers that case
+with `bad.md` in every arm. Give a stub rule a workspace case for its
+offline run.
 
 ## Entry modes
 
