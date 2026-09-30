@@ -490,8 +490,8 @@ that diff as the files the reviewer changed or added.
 **Precheck and judge.** `oracle.py` is the precheck.
 `CHECKS[case](answer, workspace)` returns failures unless the review names the
 case's file or symbol, or the decoy's for a near-miss. The harness grade runs
-only the precheck. After grading, `run` judges each review run and writes
-`<work>/judge.json`. A verdict that says the review flagged the location
+only the precheck. After grading, `run` judges each judged run, review or
+document, and writes `<work>/judge.json`. A verdict that says the review flagged the location
 (`FOUND`, `PARTIAL`, or `FALSE_ALARM`) counts only when the precheck passes.
 Otherwise the combined verdict is `MISSED` for a positive case and `CLEAN` for
 a near-miss. For the pair, a combined `FOUND` or `CLEAN` is a pass and
@@ -562,7 +562,7 @@ request, and the guide says it is not one" and "the review does not flag
 that concern as a problem".
 
 **Calibration.** `screen.py calibrate [--judge B:M ...] RULE ...` judges every
-labeled sample of every review case with each judge (both by default). It
+labeled sample of every review or document case with each judge (both by default). It
 prints agreement per label and stores the record under
 `$CANON_CACHE/calibration/<rule>/<case>/<runner>-<backend>-<model>.json`,
 where the runner is `model` or `standin`. The record is keyed by the prompt
@@ -682,8 +682,9 @@ do not move. That is naming debt, accepted.
 
 **Authoring.** `review_cases.py check` covers document cases: the shape, the
 labels, no rule id in `rubric.md`, no meta vocabulary in the prompt or case
-id, every sample delivers the document, and every `FOUND` and `FALSE_ALARM`
-sample passes the precheck. Its table row reads `pasted document=ops/premortem.md`.
+id, every sample delivers the document, and, for a pasted case, every `FOUND`
+and `FALSE_ALARM` sample passes the precheck. Its table row reads
+`pasted document=ops/premortem.md`.
 `offline/judge` matches a sample by containment of the judged text, since a
 document is cut from its sample, and picks the shortest sample that holds it.
 `test_document.py` builds a two-arm premortem rule with a positive and a
