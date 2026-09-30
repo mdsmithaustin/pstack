@@ -9,8 +9,8 @@ and its plan into the sandbox, and runs it in place of the agent. The plan
 picks samples/good for a near-miss case or any arm but current, and bad for
 current, so a correct pipeline prints SEPARATES for each positive case. In a
 rule with a stub arm, the stub takes bad and every other arm good. A
-review case answers with the labeled sample screen.standin_review picks and
-edits nothing.
+review or document case answers with the labeled sample screen.standin_review
+picks, and applies the sample's .diff only when it has one.
 
 Inside, it exits 3 unless the prompt starts with the agent's explicit
 invocation and the skills are linked where the agent finds them, 4 unless the
@@ -46,8 +46,9 @@ def plan():
     sample = "good" if case.kind == "near-miss" or carried else "bad"
     build = json.loads((arm_input.parents[2] / "build.json").read_text())
     changed = build.get("arm_changes", {}).get(arm) or [build["target"]]
-    if case.review:
-        answer, diff = screen.standin_review(case, carried).read_text(), ""
+    if case.frame:
+        chosen = screen.standin_review(case, carried)
+        answer, diff = chosen.read_text(), chosen.with_suffix(".diff").read_text() if chosen.with_suffix(".diff").is_file() else ""
     else:
         answer, diff = (case.root / "samples" / f"{sample}.md").read_text(), (case.root / "samples" / f"{sample}.diff").read_text()
     print(json.dumps({"rule": rule_id, "case": case_id, "arm": arm, "answer": answer, "diff": diff, "reads": changed}))
