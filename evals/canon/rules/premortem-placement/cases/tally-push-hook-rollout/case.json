@@ -1,0 +1,11 @@
+{
+  "kind": "positive",
+  "domain": "planning-docs",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Writes ops/premortem.md and names the one upstream cause under register rows 1, 4, 5, and 6: a hook runs with git's repository variables (GIT_DIR and its siblings) in its environment, run_git passes that environment through, so every fixture git call acts on the team repository instead of the scratch directory.",
+    "Proposes any active check only on a copy or scratch clone, never on the team repository or from a real worktree, and fixes the stop rule before the check runs.",
+    "Rereads the two closed flakes as the two in-git launches, against 412 shell launches in CI and a pilot from a plain clone, so row 6's Likelihood 1 rests on runs that never took the Monday path."
+  ],
+  "document": {"file": "ops/premortem.md"}
+}

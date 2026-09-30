@@ -1,0 +1,7 @@
+{
+  "answer-found.md": "FOUND",
+  "answer-cause-only.md": "PARTIAL",
+  "answer-safe-test-only.md": "PARTIAL",
+  "answer-register-readback.md": "MISSED",
+  "answer-live-trial.md": "MISSED"
+}
