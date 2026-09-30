@@ -18,7 +18,8 @@ poteto-agent persona is registered in any arm but stub, 5 unless the flags give 
 the sandbox, and 6 unless its cwd is the pinned clone. Then it applies the
 sample diff, prints a trace in the agent's own format with one worklist call
 and one poteto-agent spawn, and writes session transcripts for the lead and
-the delegate where the agent keeps them. Claude's trace ends two turns with a
+the delegate where the agent keeps them. The lead's transcript opens with the
+entry's injection, as Claude's and Codex's own transcripts do. Claude's trace ends two turns with a
 result event, the first while it waits on the delegate, as a lead does.
 """
 import json
@@ -107,7 +108,13 @@ def claude(plan_data, argv, prompt):
         subprocess.run(["git", "apply", "--binary", "-"], input=plan_data["diff"].encode(), check=True)
     project = Path.home() / ".claude" / "projects" / cwd.replace("/", "-").replace(".", "-")
     (project / session / "subagents").mkdir(parents=True, exist_ok=True)
-    (project / f"{session}.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records[1:] if record["type"] != "result"))
+    invocation = [
+        {"type": "user", "sessionId": session, "cwd": cwd, "message": {"role": "user", "content":
+            f"<command-message>poteto-mode</command-message>\n<command-name>/poteto-mode</command-name>\n<command-args>{prompt}</command-args>"}},
+        {"type": "user", "isMeta": True, "sessionId": session, "cwd": cwd, "message": {"role": "user", "content": [
+            {"type": "text", "text": f"Base directory for this skill: {cwd}/{discovery}/poteto-mode\n"}]}},
+    ]
+    (project / f"{session}.jsonl").write_text("".join(json.dumps(record) + "\n" for record in invocation + [record for record in records[1:] if record["type"] != "result"]))
     child = [
         {"type": "user", "isSidechain": True, "agentId": "astandin", "sessionId": session, "cwd": cwd, "message": {"role": "user", "content": brief}},
         {"type": "assistant", "isSidechain": True, "agentId": "astandin", "sessionId": session, "cwd": cwd, "message": {"role": "assistant", "content": [
@@ -137,6 +144,8 @@ def codex(plan_data, argv, prompt):
 
     (sessions / f"rollout-2026-09-25T00-00-00-{parent}.jsonl").write_text("".join(json.dumps(record) + "\n" for record in [
         {"type": "session_meta", "payload": {"id": parent, "session_id": parent, "cwd": cwd, "source": "exec"}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": f"<skill>\n<name>poteto-mode</name>\n<path>{cwd}/{discovery}/poteto-mode/SKILL.md</path>\n"}]}},
         item("CollabAgentToolCall", {"tool": "spawn_agent", "prompt": brief, "receiver_thread_ids": [child],
                                      "receiver_agents": [{"thread_id": child, "agent_role": "poteto-agent"}]}),
     ]))

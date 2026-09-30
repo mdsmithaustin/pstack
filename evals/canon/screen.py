@@ -1233,32 +1233,101 @@ def arm_listed(current, trees):
             for arm, tree in trees}
 
 
-def entry_invoked(run_base):
+def harvest_dir(run_base):
+    """<work>/runs/<run> maps to <work>/harvest/<run>, where the sbx runner
+    leaves the agent's session transcripts."""
+    run_base = Path(run_base)
+    runs = next((parent for parent in run_base.parents if parent.name == "runs"), None)
+    return runs.parent / "harvest" / run_base.relative_to(runs) if runs else None
+
+
+def json_lines(path):
+    for line in path.read_text(errors="replace").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            yield record
+
+
+def claude_registered(trace):
+    """True when the first init event lists the entry among its skills or
+    slash commands, so the /poteto-mode token could expand."""
+    init = next((record for record in json_lines(trace) if record.get("type") == "system" and record.get("subtype") == "init"), {}) \
+        if trace.is_file() else {}
+    return ENTRY_SKILL in (init.get("skills") or ()) or ENTRY_SKILL in (init.get("slash_commands") or ())
+
+
+def claude_expanded(texts):
+    return any(f"<command-name>/{ENTRY_SKILL}</command-name>" in text for text in texts)
+
+
+def codex_injected(rollout):
+    """True when a user message in a Codex rollout carries the injected entry
+    skill, which Codex sends as <skill><name>poteto-mode</name>..."""
+    for record in json_lines(rollout):
+        payload = record.get("payload") or {}
+        if payload.get("type") == "message" and payload.get("role") == "user":
+            if any(str(item.get("text", "")).startswith(f"<skill>\n<name>{ENTRY_SKILL}</name>")
+                   for item in payload.get("content") or () if isinstance(item, dict)):
+                return True
+    return False
+
+
+def entry_state(agent, run_base, events, read):
+    """How a run's trace shows the entry skill reached the agent. "injected"
+    when the invocation expanded it, "read" when the agent loaded its SKILL.md
+    itself, "not registered" when Claude's init event does not list it, and
+    "not observed" otherwise. Claude's -p stream never shows the expansion, but
+    the session transcript the sbx runner harvests does. Codex has no init
+    listing, and only its rollout, which the sbx runner also harvests, records
+    the injection, so a Codex run without a rollout counts only a read."""
+    run_base = Path(run_base)
     trace = run_base / "trace.jsonl"
-    return trace.is_file() and f"<command-name>/{ENTRY_SKILL}</command-name>" in trace.read_text(errors="replace")
+    transcripts = (harvest_dir(run_base) or run_base) / "transcripts"
+    if agent == "claude":
+        if not claude_registered(trace):
+            return "not registered"
+        texts = [path.read_text(errors="replace") for path in (trace, *transcripts.glob("claude/*/*.jsonl")) if path.is_file()]
+        if claude_expanded(texts):
+            return "injected"
+        if any(event.get("status") == "completed" and event.get("name") == "Skill"
+               and str(event.get("input_summary") or "").strip("'\"") == ENTRY_SKILL for event in events):
+            return "injected"
+    elif any(codex_injected(path) for path in transcripts.glob("codex/sessions/**/rollout-*.jsonl")):
+        return "injected"
+    return "read" if f"{ENTRY_SKILL}/SKILL.md" in read else "not observed"
 
 
-def exposure(result, tree_files):
+ENTRY_SEEN = ("injected", "read")
+
+
+def exposure(result, tree_files, agent):
     base = Path(result.get("run_base", ""))
     events_path = base / "events.json"
     events = json.loads(events_path.read_text()).get("events", []) if events_path.is_file() else []
-    return {"read": skill_files_read(events, tree_files), "entry_invoked": entry_invoked(base)}
+    read = skill_files_read(events, tree_files)
+    return {"read": read, "entry": entry_state(agent, base, events, read)}
 
 
 def classify(baseline, treatment, target, entry="skill", listed=()):
     """Name what a pair shows. target is the file, or the set of files, that
-    differ between the two arms. A pair whose treatment arm read none of them
-    says nothing about the change, so it is unexposed rather than a tie.
-    Under the poteto-mode entry the wrapper starts every prompt with the
-    invocation, which injects poteto-mode/SKILL.md without a file read. Neither
-    agent's trace shows that injection, so the entry itself counts as exposure.
-    listed holds the SKILL.md files the treatment arm offers by description in
-    every run, so a run that never loads one of them is a tie or a reversal,
-    which is the outcome a placement screen measures, not unexposed."""
+    differ between the two arms, and listed is the SKILL.md files the treatment
+    arm offers by description in every run. The treatment is exposed when it
+    read or loaded one of the targets, or poteto-mode/SKILL.md is a target and
+    the treatment's trace shows the entry injected, or a target is a listed
+    skill. Under the poteto-mode entry a pair is unexposed unless both arms'
+    traces show the entry reached the agent, since a run without it tested no
+    pstack. An unexposed pair says nothing about the change, so it is not a
+    tie, and a listed skill the run never loaded is a tie or a reversal, the
+    outcome a placement screen measures."""
     if baseline is None or treatment is None or "INVALID" in (baseline["verdict"], treatment["verdict"]):
         return "invalid"
+    if entry == ENTRY_SKILL and not all(arm["exposure"]["entry"] in ENTRY_SEEN for arm in (baseline, treatment)):
+        return "unexposed"
     targets = {target} if isinstance(target, str) else set(target)
-    injected = entry == ENTRY_SKILL or treatment["exposure"]["entry_invoked"]
+    injected = treatment["exposure"]["entry"] == "injected"
     exposed = reached(targets, treatment["exposure"]["read"], injected) or bool(targets & set(listed))
     if not exposed:
         return "unexposed"
@@ -1587,7 +1656,7 @@ def compare(out):
             {"run_number": row["run"], "run_base": row.get("run_base", ""), "missing_output": True} for row in regraded.values()]
         for result in results:
             status, reasons = verdict(result)
-            seen = exposure(result, tree_files)
+            seen = exposure(result, tree_files, agent)
             if companions:
                 seen["companions_read"] = sorted({path.split("/", 1)[0] for path in seen["read"]} & companions)
             row = {
@@ -1640,11 +1709,10 @@ def compare(out):
             else:
                 owned = build_info["arm_changes"][arm]
                 target_state = f"changed {arm_summary(arm, owned)} ({len(set(owned) & set(seen))} of {len(owned)} read); " if owned else ""
-            entry_state = "invoked" if row["exposure"]["entry_invoked"] else "not observed"
             companion_state = ""
             if "companions_read" in row["exposure"]:
                 companion_state = f"; companion {', '.join(row['exposure']['companions_read']) or 'none'} read"
-            print(f"    {arm}: {target_state}entry {entry_state}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
+            print(f"    {arm}: {target_state}entry {row['exposure']['entry']}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
             if row.get("graded_from_diff"):
                 print(f"    {arm}: graded from the diff; the harness found no gradable answer")
             if row.get("ungraded"):
@@ -1687,8 +1755,7 @@ def compare(out):
         if not changed:
             continue
         rows = [row for row in table if (row["agent"], row["rule"], row["arm"]) == (agent, rule, arm)]
-        injected = build_info["entry"] == ENTRY_SKILL
-        count = sum(reached(changed, row["exposure"]["read"], injected or row["exposure"]["entry_invoked"]) for row in rows)
+        count = sum(reached(changed, row["exposure"]["read"], row["exposure"]["entry"] == "injected") for row in rows)
         listed = build_info.get("arm_listed", {}).get(arm, [])
         arm_reach.append({"agent": agent, "rule": rule, "arm": arm, "changed_text_reached": count, "runs": len(rows), "listed": listed})
         print(f"{agent:6} {rule:26} arm {arm}: changed text reached {count}/{len(rows)} run(s)" + (f"; listed by description: {', '.join(listed)}" if listed else ""))

@@ -173,8 +173,9 @@ each arm's changed files and how many it read, then one line per comparison:
 each arm against current, then each later arm against each earlier one, as
 `leaf+trigger vs leaf: TIE-PASS`. The exposure target of a comparison is the
 set of files that differ between the two arms. The later arm is exposed when it
-read one of them, or under `--entry poteto-mode` when one of them is
-`poteto-mode/SKILL.md`. Each arm after current gets its own rule line against
+read one of them, or when one of them is `poteto-mode/SKILL.md` and its trace
+shows the entry injected. Under `--entry poteto-mode` both arms must also show
+the entry (see Entry modes). Each arm after current gets its own rule line against
 current, `rule leaf vs current run-1 SEPARATES`. In `compare.json` these pair
 entries add `baseline` and `treatment`, and these rule entries add `arm`.
 
@@ -188,8 +189,9 @@ Such a pair is scored on its verdicts instead of reading `unexposed`, which is
 the outcome a placement screen measures. After the rule lines `compare` prints
 one line per agent, rule, and arm that changes files, `arm skill: changed text
 reached 2/5 run(s)`, counting the runs that read or loaded one of the arm's
-changed files or had `poteto-mode/SKILL.md` injected, and adds `listed by
-description: <paths>` when the arm lists any.
+changed files, or whose trace shows the entry injected when
+`poteto-mode/SKILL.md` is one of them, and adds `listed by description:
+<paths>` when the arm lists any.
 `compare.json` holds the same rows under `arms`. `plan`
 lists an arm rule's arms and each arm's changed files. `chain.py` counts every
 arm the build lists, and takes an arm's owner file to be the first file its
@@ -224,8 +226,10 @@ and the rule line reads `rule current vs stub`. The exposure target is every
 file that differs from the stub, which is every body and every other file. The
 guided arm is exposed when it read one of them, so an unexposed pair is one
 where the guidance was never loaded. Under `--entry poteto-mode` the wrapper
-injects `poteto-mode/SKILL.md`, so current is always exposed there. In
-`compare.json` the rule entry's `arm` is `stub`.
+injects `poteto-mode/SKILL.md` into both arms. The stub's copy is only
+frontmatter, but it registers and injects all the same, so the stub's trace
+shows the entry as current's does. Current is exposed there when both traces
+show it. In `compare.json` the rule entry's `arm` is `stub`.
 
 The stub arm drops `pstack-harness/scripts/subagents.py`, so a `--runner sbx`
 stub arm registers no poteto-agent or Comment Sicko persona. The persona files
@@ -262,19 +266,39 @@ Claude run with an unknown model, which costs nothing, listed `poteto-mode`
 among its slash commands only with `.claude/skills` present.
 
 `compare` reports which tracked skill files each run read, taken from completed
-read, command, and tool events whose input names the file. It also reports
-whether Claude's trace shows the `/poteto-mode` command. Each pair gets one
-outcome: `separates`, `tie-pass`, `tie-fail`, `reverses`, `invalid`, or
-`unexposed`. `unexposed` means the amended arm never read the patched file, so
-the pair says nothing about the rule. A read through a glob or a directory-wide
-grep does not count. Claude's `Skill` tool leaves a `skill_load` event that
-carries only the skill's name. A completed one counts as a read of
-`<name>/SKILL.md` when the arm's tree has that file, with a `plugin:` prefix or
-a leading slash dropped. Codex's `exec --json` stream does not show whether it
-injected the entry skill, and Claude's `-p` stream does not echo the prompt, so
-no trace shows the injection. Under `--entry poteto-mode` a rule patched into
-`poteto-mode/SKILL.md` therefore counts as exposed without a read, because the
-wrapper starts every prompt with the invocation.
+read, command, and tool events whose input names the file. It also reports how
+each run's trace shows the entry skill, as `entry injected`, `entry read`,
+`entry not registered`, or `entry not observed`. Each pair gets one outcome:
+`separates`, `tie-pass`, `tie-fail`, `reverses`, `invalid`, or `unexposed`.
+`unexposed` means the amended arm never read the patched file, so the pair says
+nothing about the rule. A read through a glob or a directory-wide grep does not
+count. Claude's `Skill` tool leaves a `skill_load` event that carries only the
+skill's name. A completed one counts as a read of `<name>/SKILL.md` when the
+arm's tree has that file, with a `plugin:` prefix or a leading slash dropped.
+
+Under `--entry poteto-mode` a pair is also `unexposed` unless both arms show
+the entry as injected or read. The wrapper prefixing the invocation is not
+evidence, since a runner that hid project skills would still prefix it and run
+every arm with no pstack. The evidence each agent leaves:
+
+- Claude. The first `init` event must list `poteto-mode` among its `skills` or
+  `slash_commands`, or the run is `not registered`. Then it is `injected` when
+  the trace or the harvested session transcript holds
+  `<command-name>/poteto-mode</command-name>`, or the trace shows the `Skill`
+  tool loading it, and `read` when it read `poteto-mode/SKILL.md`. The `-p`
+  stream never echoes the expansion, so a host-runner run, which keeps no
+  transcript, shows only a Skill call or a read.
+- Codex. It is `injected` when a harvested rollout holds the user message
+  that starts `<skill>\n<name>poteto-mode</name>`, and `read` when it read
+  `poteto-mode/SKILL.md`. This is weaker than Claude's. Codex has no init
+  listing, so nothing shows registration apart from the injection itself, and
+  `exec --json` never shows the injection, so a host-runner run counts only a
+  read. Only `--runner sbx` harvests rollouts and transcripts.
+
+An injection loads `poteto-mode/SKILL.md` without a file read, so a rule
+patched into that file counts as exposed in an arm whose entry was injected.
+On 2026-09-30 every Claude run under `/private/tmp/canon-steering` (66 runs,
+`--runner sbx`) showed both the init listing and the expansion.
 
 Answers return files inside `<file path="...">` tags, because the harness
 discards the agent's workspace. Workspace cases are the exception. Their

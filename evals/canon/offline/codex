@@ -10,7 +10,7 @@ answers with samples/good.md in both arms. A correct screen then prints
 SEPARATES for every positive case, TIE-PASS for every near-miss case, and
 SEPARATES for every rule. When the workspace mounts skills/pstack, the poteto-mode
 entry's tree, it exits 3 unless the prompt starts with the explicit invocation
-and the tree is linked where Codex finds it. For a workspace case it also
+and the tree is linked where Codex finds it, and it reads poteto-mode/SKILL.md. For a workspace case it also
 applies the chosen sample's .diff to the checkout in its cwd, and exits 4 when
 there is no checkout or the sandbox forbids writes.
 
@@ -59,6 +59,10 @@ else:
     reads = sorted({path for _, changed in screen.arm_trees(rule, tree)[1:] for path in screen.changed_paths(tree, changed)})
     carried = screen.standin_carries(rule, Path(arm_workspace).parts[-2]) if case.workspace else screen.rule_mounted(rule, mounted, tree)
 root = ".agents/skills" if entry.exists() else "skills"
+# Under the entry it loads the index itself, since the host runner keeps no
+# rollout to show the injection.
+if Path("skills", screen.ENTRY_TREE).is_dir() and f"{screen.ENTRY_SKILL}/SKILL.md" not in reads:
+    reads = [f"{screen.ENTRY_SKILL}/SKILL.md", *reads]
 sample = "good.md" if case.kind == "near-miss" or carried else "bad.md"
 if case.frame:
     sample = screen.standin_review(case, carried).name

@@ -123,15 +123,15 @@ class OneHunkPatchTests(unittest.TestCase):
             screen.apply_patch(TREE, patch)
 
 
-def run_row(verdict, read, invoked=False):
-    return {"verdict": verdict, "exposure": {"read": read, "entry_invoked": invoked}}
+def run_row(verdict, read, entry="not observed"):
+    return {"verdict": verdict, "exposure": {"read": read, "entry": entry}}
 
 
 class PairOutcomeTests(unittest.TestCase):
     target = "principle-laziness-protocol/SKILL.md"
 
     def test_amended_arm_that_never_read_the_patched_file_is_unexposed_not_a_tie(self):
-        outcome = screen.classify(run_row("PASS", [self.target]), run_row("PASS", ["poteto-mode/SKILL.md"], True), self.target)
+        outcome = screen.classify(run_row("PASS", [self.target]), run_row("PASS", ["poteto-mode/SKILL.md"], "injected"), self.target)
 
         self.assertEqual(outcome, "unexposed")
 
@@ -146,15 +146,31 @@ class PairOutcomeTests(unittest.TestCase):
             with self.subTest(current=current, amended=amended):
                 self.assertEqual(screen.classify(run_row(current, []), run_row(amended, [self.target]), self.target), expected)
 
-    def test_patched_entry_file_counts_as_read_when_the_invocation_loaded_it(self):
-        outcome = screen.classify(run_row("FAIL", []), run_row("PASS", [], True), "poteto-mode/SKILL.md")
+    def test_patched_index_counts_as_exposed_when_the_trace_shows_the_injection(self):
+        outcome = screen.classify(run_row("FAIL", [], "injected"), run_row("PASS", [], "injected"), "poteto-mode/SKILL.md", "poteto-mode")
 
         self.assertEqual(outcome, "separates")
 
-    def test_patched_index_counts_as_exposed_under_the_poteto_mode_entry(self):
-        """Codex never shows the $poteto-mode injection and Claude's -p stream
-        never shows the /poteto-mode expansion, so the entry is the evidence."""
-        outcome = screen.classify(run_row("FAIL", []), run_row("PASS", []), "poteto-mode/SKILL.md", "poteto-mode")
+    def test_entry_the_trace_never_shows_is_unexposed_under_the_poteto_mode_entry(self):
+        """A runner that hid the entry would run every arm with no pstack."""
+        for state in ("not observed", "not registered"):
+            with self.subTest(state=state):
+                outcome = screen.classify(run_row("FAIL", [], state), run_row("PASS", [], state), "poteto-mode/SKILL.md", "poteto-mode")
+                self.assertEqual(outcome, "unexposed")
+
+    def test_leaf_read_without_the_entry_is_unexposed_under_the_poteto_mode_entry(self):
+        outcome = screen.classify(run_row("FAIL", [], "injected"), run_row("PASS", [self.target], "not registered"), self.target, "poteto-mode")
+
+        self.assertEqual(outcome, "unexposed")
+
+    def test_baseline_without_the_entry_cannot_anchor_a_separation(self):
+        outcome = screen.classify(run_row("FAIL", [], "not observed"), run_row("PASS", [self.target], "injected"), self.target, "poteto-mode")
+
+        self.assertEqual(outcome, "unexposed")
+
+    def test_entry_read_by_the_agent_counts_as_seen(self):
+        outcome = screen.classify(run_row("FAIL", ["poteto-mode/SKILL.md"], "read"), run_row("PASS", [self.target, "poteto-mode/SKILL.md"], "read"),
+                                  self.target, "poteto-mode")
 
         self.assertEqual(outcome, "separates")
 
@@ -164,17 +180,25 @@ class PairOutcomeTests(unittest.TestCase):
         self.assertEqual(outcome, "unexposed")
 
     def test_the_entry_exposes_only_the_index_not_a_leaf(self):
-        outcome = screen.classify(run_row("FAIL", []), run_row("PASS", []), self.target, "poteto-mode")
+        outcome = screen.classify(run_row("FAIL", [], "injected"), run_row("PASS", [], "injected"), self.target, "poteto-mode")
 
         self.assertEqual(outcome, "unexposed")
 
     def test_a_skill_the_treatment_lists_by_description_is_exposed_without_a_read(self):
+        """Both arms show the entry, so the listed skill alone decides exposure."""
+        listed = ["premortem/SKILL.md"]
+        fail, passed = run_row("FAIL", [], "injected"), run_row("PASS", [], "injected")
+
+        self.assertEqual(screen.classify(fail, dict(fail), listed, "poteto-mode", listed), "tie-fail")
+        self.assertEqual(screen.classify(fail, passed, listed, "poteto-mode", listed), "separates")
+        self.assertEqual(screen.classify(fail, dict(fail), listed, "poteto-mode"), "unexposed")
+        self.assertEqual(screen.classify(fail, dict(fail), [self.target], "poteto-mode", listed), "unexposed")
+
+    def test_a_listed_skill_does_not_expose_a_pair_whose_entry_the_trace_never_shows(self):
         listed = ["premortem/SKILL.md"]
 
-        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("FAIL", []), listed, "poteto-mode", listed), "tie-fail")
-        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("PASS", []), listed, "poteto-mode", listed), "separates")
-        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("FAIL", []), listed, "poteto-mode"), "unexposed")
-        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("FAIL", []), [self.target], "poteto-mode", listed), "unexposed")
+        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("FAIL", []), listed, "poteto-mode", listed), "unexposed")
+        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("FAIL", []), listed, "skill", listed), "tie-fail")
 
     def test_ungradable_arm_is_invalid(self):
         outcome = screen.classify(run_row("PASS", [self.target]), run_row("INVALID", [self.target]), self.target)
@@ -283,14 +307,87 @@ class SkillFilesReadTests(unittest.TestCase):
         self.assertEqual(read, ["poteto-mode/SKILL.md"])
 
 
-class ExposureRecordTests(unittest.TestCase):
-    def test_claude_command_expansion_marks_the_entry_invoked(self):
-        with tempfile.TemporaryDirectory() as directory:
-            base = Path(directory)
-            (base / "trace.jsonl").write_text(json.dumps({"type": "user", "message": {"content": "<command-name>/poteto-mode</command-name>"}}) + "\n")
-            (base / "events.json").write_text(json.dumps({"events": []}))
+CLAUDE_INIT = {"type": "system", "subtype": "init", "cwd": "/ws", "skills": ["how", "poteto-mode"], "slash_commands": ["how", "poteto-mode", "compact"]}
+CLAUDE_EXPANSION = {"type": "user", "message": {"role": "user", "content": "<command-message>poteto-mode</command-message>\n<command-name>/poteto-mode</command-name>"}}
+CODEX_INJECTION = {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+    {"type": "input_text", "text": "<skill>\n<name>poteto-mode</name>\n<path>/ws/.agents/skills/poteto-mode/SKILL.md</path>\n---\nname: poteto-mode\n"}]}}
+CODEX_PROMPT = {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+    {"type": "input_text", "text": "$poteto-mode Read and follow the skill file(s) below"}]}}
 
-            self.assertEqual(screen.exposure({"run_base": str(base)}, sorted(TREE)), {"read": [], "entry_invoked": True})
+
+def jsonl(path, *records):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+
+
+class EntryEvidenceTests(unittest.TestCase):
+    """Trace fixtures shaped like the sbx runner's work dir: the harness's
+    run dir under runs/, the agent's transcripts under harvest/."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        work = Path(directory.name) / "claude" / "rule" / "case" / "amended"
+        self.base = work / "runs" / "case" / "with_skill" / "run-1"
+        self.transcripts = work / "harvest" / "case" / "with_skill" / "run-1" / "transcripts"
+        self.base.mkdir(parents=True)
+
+    def seen(self, agent, events=()):
+        (self.base / "events.json").write_text(json.dumps({"events": list(events)}))
+        return screen.exposure({"run_base": str(self.base)}, sorted(TREE), agent)
+
+    def test_claude_entry_registered_and_expanded_in_the_transcript_is_injected(self):
+        jsonl(self.base / "trace.jsonl", CLAUDE_INIT)
+        jsonl(self.transcripts / "claude" / "-ws" / "session.jsonl", CLAUDE_EXPANSION)
+
+        self.assertEqual(self.seen("claude"), {"read": [], "entry": "injected"})
+
+    def test_claude_entry_registered_and_called_through_the_skill_tool_is_injected(self):
+        jsonl(self.base / "trace.jsonl", CLAUDE_INIT)
+
+        self.assertEqual(self.seen("claude", [{"type": "skill_load", "status": "completed", "name": "Skill", "input_summary": "'poteto-mode'"}])["entry"],
+                         "injected")
+
+    def test_claude_entry_registered_and_its_index_read_is_read(self):
+        jsonl(self.base / "trace.jsonl", CLAUDE_INIT)
+
+        seen = self.seen("claude", [{"type": "file_read", "status": "completed", "input_summary": "/ws/.claude/skills/poteto-mode/SKILL.md"}])
+
+        self.assertEqual(seen, {"read": ["poteto-mode/SKILL.md"], "entry": "read"})
+
+    def test_claude_entry_registered_but_never_loaded_is_not_observed(self):
+        jsonl(self.base / "trace.jsonl", CLAUDE_INIT)
+
+        self.assertEqual(self.seen("claude")["entry"], "not observed")
+
+    def test_claude_init_without_the_entry_is_not_registered_even_when_expanded(self):
+        jsonl(self.base / "trace.jsonl", {**CLAUDE_INIT, "skills": ["how"], "slash_commands": ["how", "compact"]})
+        jsonl(self.transcripts / "claude" / "-ws" / "session.jsonl", CLAUDE_EXPANSION)
+
+        seen = self.seen("claude", [{"type": "file_read", "status": "completed", "input_summary": "/ws/.claude/skills/poteto-mode/SKILL.md"}])
+
+        self.assertEqual(seen["entry"], "not registered")
+
+    def test_claude_trace_without_an_init_event_is_not_registered(self):
+        jsonl(self.base / "trace.jsonl", CLAUDE_EXPANSION)
+
+        self.assertEqual(self.seen("claude")["entry"], "not registered")
+
+    def test_codex_rollout_with_the_skill_message_is_injected(self):
+        jsonl(self.transcripts / "codex" / "sessions" / "2026" / "09" / "29" / "rollout-2026-09-29T00-00-00-a.jsonl", CODEX_PROMPT, CODEX_INJECTION)
+
+        self.assertEqual(self.seen("codex"), {"read": [], "entry": "injected"})
+
+    def test_codex_rollout_with_only_the_prefixed_prompt_is_not_observed(self):
+        jsonl(self.transcripts / "codex" / "sessions" / "2026" / "09" / "29" / "rollout-2026-09-29T00-00-00-a.jsonl", CODEX_PROMPT)
+
+        self.assertEqual(self.seen("codex")["entry"], "not observed")
+
+    def test_codex_without_a_rollout_counts_only_an_index_read(self):
+        read = self.seen("codex", [{"type": "command", "status": "completed", "input_summary": "sed -n 1,400p .agents/skills/poteto-mode/SKILL.md"}])
+
+        self.assertEqual(read["entry"], "read")
+        self.assertEqual(self.seen("codex")["entry"], "not observed")
 
 
 COMPANION = {"SKILL.md": b"---\nname: domain-modeling\n---\n# Domain Modeling\n", "agents/openai.yaml": b"interface:\n  display_name: Domain\n"}

@@ -622,7 +622,8 @@ class RegradeTests(ShopRule):
             run_base = work / "runs" / "orders-amend" / "with_skill" / f"run-{number}"
             run_base.mkdir(parents=True)
             (run_base / "events.json").write_text(json.dumps({"events": [
-                {"type": "file_read", "status": "completed", "input_summary": f"skills/pstack/{self.rule.target}"}]}))
+                {"type": "file_read", "status": "completed", "input_summary": f"skills/pstack/{path}"}
+                for path in ("poteto-mode/SKILL.md", self.rule.target)]}))
             if answer is not None:
                 (run_base / "output.md").write_text(answer)
             if diff is not None:
