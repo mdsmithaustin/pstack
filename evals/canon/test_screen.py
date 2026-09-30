@@ -168,6 +168,14 @@ class PairOutcomeTests(unittest.TestCase):
 
         self.assertEqual(outcome, "unexposed")
 
+    def test_a_skill_the_treatment_lists_by_description_is_exposed_without_a_read(self):
+        listed = ["premortem/SKILL.md"]
+
+        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("FAIL", []), listed, "poteto-mode", listed), "tie-fail")
+        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("PASS", []), listed, "poteto-mode", listed), "separates")
+        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("FAIL", []), listed, "poteto-mode"), "unexposed")
+        self.assertEqual(screen.classify(run_row("FAIL", []), run_row("FAIL", []), [self.target], "poteto-mode", listed), "unexposed")
+
     def test_ungradable_arm_is_invalid(self):
         outcome = screen.classify(run_row("PASS", [self.target]), run_row("INVALID", [self.target]), self.target)
 
@@ -247,6 +255,32 @@ class SkillFilesReadTests(unittest.TestCase):
         )
 
         self.assertEqual(read, ["principle-laziness-protocol/SKILL.md"])
+
+    def test_claude_skill_tool_call_counts_as_reading_that_skills_skill_md(self):
+        # The shape the harness recorded for Skill("unslop") in a 2026-09-29 review run, with the skill name swapped.
+        def skill_call(name, status):
+            return {"index": 266, "type": "skill_load", "status": status, "state_source": "provider_status",
+                    "raw_ref": {"file": "trace.jsonl", "line": 278}, "raw_result_ref": {"file": "trace.jsonl", "line": 279},
+                    "name": "Skill", "input_summary": name, "output_summary": f"Launching skill: {name}", "source": "claude", "otel": {"file.path": name}}
+
+        read = screen.skill_files_read([
+            skill_call("principle-laziness-protocol", "in_progress"),
+            skill_call("principle-laziness-protocol", "completed"),
+            skill_call("plugin:poteto-mode", "completed"),
+            skill_call("/unslop", "completed"),
+            skill_call("how", "in_progress"),
+        ], self.files + ["unslop/SKILL.md", "how/SKILL.md"])
+
+        self.assertEqual(read, ["poteto-mode/SKILL.md", "principle-laziness-protocol/SKILL.md", "unslop/SKILL.md"])
+
+    def test_a_loaded_skill_the_tree_lacks_and_a_full_path_load_are_not_bare_names(self):
+        read = screen.skill_files_read(
+            [{"type": "skill_load", "status": "completed", "name": "Skill", "input_summary": "commit"}]
+            + self.events("/tmp/ws/skills/pstack/poteto-mode/SKILL.md", kind="skill_load"),
+            self.files,
+        )
+
+        self.assertEqual(read, ["poteto-mode/SKILL.md"])
 
 
 class ExposureRecordTests(unittest.TestCase):
