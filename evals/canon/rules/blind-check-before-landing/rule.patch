@@ -1,0 +1,15 @@
+diff --git a/principle-prove-it-works/SKILL.md b/principle-prove-it-works/SKILL.md
+index df964318..f241a2f9 100644
+--- a/principle-prove-it-works/SKILL.md
++++ b/principle-prove-it-works/SKILL.md
+@@ -27,6 +27,10 @@ Record the artifact each check exercised, its revision when applicable, and the
+ 
+ Run a named acceptance helper when the task or project requires it. If it cannot run, report the gap. Justify any replacement against the same acceptance criteria before treating it as equivalent.
+ 
++## Land only what a second agent checked
++
++Before a push, publish, or tag that another person or machine will act on, keep the work where no one reads it until an agent that did not write it has checked that exact commit. Then land that commit unchanged and name it in the reply.
++
+ ## Script the check when you can
+ 
+ The strongest proof is a deterministic script that re-runs the same comparison, not a one-time eyeball. Write the script, run it, and keep its output as an artifact a reviewer can re-run instead of trusting your word.

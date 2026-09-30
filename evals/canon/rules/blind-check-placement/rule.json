@@ -1,0 +1,6 @@
+{
+  "cases_from": "blind-check-before-landing",
+  "arms": ["current", "leaf", "playbook"],
+  "source": "the check-before-landing rule placed in the prove-it-works leaf and in bug-fix step 5, screened on the fare-cap cases",
+  "skills_at": "9e35d36bf5d6fef50a3437a23dc0f12c60b3d05b"
+}

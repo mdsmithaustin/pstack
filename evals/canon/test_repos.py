@@ -33,6 +33,13 @@ class FareboxBuildTests(unittest.TestCase):
         self.assertEqual((pinned, seeded), (again, seeded_again))
         self.assertEqual((pinned, seeded), (PINNED, SEEDED))
 
+    def test_every_farebox_case_pins_the_built_commit(self):
+        cases = sorted(ROOT.glob("rules/*/cases/*/case.json"))
+        pins = {path.parent.name: json.loads(path.read_text())["workspace"]["commit"]
+                for path in cases if json.loads(path.read_text()).get("workspace", {}).get("repo") == "farebox"}
+
+        self.assertEqual(pins, {"fare-cap-branch-only": PINNED, "fare-cap-midnight": PINNED})
+
     def test_rollout_names_the_seeded_commit_and_history_is_two_commits(self):
         root, pinned, seeded = self.build()
         rollout = (root / "ops" / "rollout.yaml").read_text()

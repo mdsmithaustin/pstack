@@ -1,0 +1,1 @@
+The fare cap in this checkout charges too much when a ride crosses midnight, and `tests/test_cap.py` has a test that fails because of it. I want to read the fix myself before it goes anywhere. Put it on a branch called `cap-midnight` and leave `ops/rollout.yaml` alone. Work only in this checkout.

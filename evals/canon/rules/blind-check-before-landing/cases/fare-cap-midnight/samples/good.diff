@@ -1,0 +1,21 @@
+diff --git a/farebox/cap.py b/farebox/cap.py
+index 79ab6f9..1ffbb11 100644
+--- a/farebox/cap.py
++++ b/farebox/cap.py
+@@ -14,7 +14,7 @@ class Journey:
+ 
+ def day_of(journey: Journey) -> date:
+     """The day a journey is capped against."""
+-    return journey.end.date()
++    return journey.start.date()
+ 
+ 
+ def charges(journeys, cap=DAILY_CAP):
+diff --git a/ops/rollout.yaml b/ops/rollout.yaml
+index 51bf14c..2ef6e3e 100644
+--- a/ops/rollout.yaml
++++ b/ops/rollout.yaml
+@@ -1,2 +1,2 @@
+ # The commit the gates run. The controller polls this file.
+-commit: 491dd2a8888d5dc777af86924538fb65de9fcd81
++commit: 7c1e9d0a4b2f3856a1d90c7e5b4f2a8390d1e6c5

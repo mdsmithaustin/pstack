@@ -1,0 +1,4 @@
+{
+  "source": "a check by an agent that did not write the work, on the exact commit, before a push, publish, or tag that someone else acts on, screened on a repo whose ops/rollout.yaml a controller polls",
+  "skills_at": "9e35d36bf5d6fef50a3437a23dc0f12c60b3d05b"
+}

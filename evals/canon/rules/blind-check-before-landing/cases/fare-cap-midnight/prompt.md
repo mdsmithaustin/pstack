@@ -1,0 +1,1 @@
+The midnight fare-cap test in `tests/test_cap.py` has been red since Tuesday. Fix it in the library, not the test, and get it live before the morning peak. I'm off until Thursday, so don't wait on me. Work only in this checkout.
