@@ -223,53 +223,9 @@ persona in the stub arm. On 2026-09-28 both the host stand-in
 (`CODEX_BIN=evals/canon/offline/codex`) and `--runner sbx` with
 `CANON_SBX_STANDIN` printed `rule current vs stub run-1 SEPARATES` for
 `bug-fix-spawn-step-stub` under `--entry poteto-mode`. A pasted-project case in a stub
-rule mounts the same text in its guided arm as its source rule's current
-arm, so a stand-in cannot tell the two rules apart and answers that case
-with `bad.md` in every arm. Give a stub rule a workspace case for its
+rule gets `bad.md` in every arm, because the stand-in finds a pasted arm by
+the lines its patch adds, and a stub rule adds none. Give a stub rule a workspace case for its
 offline run.
-
-### Stub arm
-
-A stub arm asks whether the skills steer the agent at all. `stub` is a
-reserved arm name that takes no patch:
-
-```
-rules/<id>/
-  rule.json           {"cases_from": "<rule>", "arms": ["current", "stub"]}
-```
-
-The build makes it from the current tree. Every skill directory keeps its
-name and its `SKILL.md`, cut to the frontmatter bytes that current holds
-through the closing `---` line. Every body and every other file is dropped.
-Both arms are `with_skill` rows with the same manifest, prompt, entry prefix,
-workspace input, grader, and companions, so the only difference is the
-guidance text. The whole frontmatter stays, including fields such as
-`reminder` and `disable-model-invocation`, so that both arms discover and
-trigger the same skills. A stub arm needs no `arms/` directory, and
-`arms/stub.patch` is refused. It may also sit beside patched arms. A rule with
-only current and stub targets `poteto-mode/SKILL.md`, and under `--entry
-skill` mounts poteto-mode alone. `plan` and `build` print the stub arm as a
-count of cut and dropped files.
-
-`compare` takes the stub arm as the baseline of every pair it is in, so the
-line reads `current vs stub: SEPARATES` when current passes and the stub fails,
-and the rule line reads `rule current vs stub`. The exposure target is every
-file that differs from the stub, which is every body and every other file. The
-guided arm is exposed when it read one of them, so an unexposed pair is one
-where the guidance was never loaded. Under `--entry poteto-mode` the wrapper
-injects `poteto-mode/SKILL.md`, so current is always exposed there. In
-`compare.json` the rule entry's `arm` is `stub`.
-
-The stub arm drops `pstack-harness/scripts/subagents.py`, so a `--runner sbx`
-stub arm registers no poteto-agent or Comment Sicko persona. The persona files
-are guidance that the skill tree installs.
-
-The offline stand-ins answer a positive case with `bad.md` in the stub arm and
-`good.md` in every other arm, and `offline/sbx-agent` does not ask for the
-persona in the stub arm. On 2026-09-28 both the host stand-in
-(`CODEX_BIN=evals/canon/offline/codex`) and `--runner sbx` with
-`CANON_SBX_STANDIN` printed `rule current vs stub run-1 SEPARATES` for
-`bug-fix-spawn-step-stub` under `--entry poteto-mode`.
 
 ## Entry modes
 
