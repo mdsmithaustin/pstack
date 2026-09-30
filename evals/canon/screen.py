@@ -1460,7 +1460,8 @@ def judge_arm(out, agent, rule, case, arm, judge=None):
         written = written_by(check, run_base) if case.review else ""
         precheck = regrade_run(check, rule.id, case.id, run_base) or ("FAIL", "no harvested workspace")
         try:
-            text = delivered(case, answer, check.load_workspace(rule.id, case.id, run_base))
+            cut_from_workspace = case.document and "file" in case.document
+            text = delivered(case, answer, check.load_workspace(rule.id, case.id, run_base) if cut_from_workspace else None)
         except check.OracleError:
             text = ""
         if text.strip() or written.strip():
