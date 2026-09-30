@@ -18,7 +18,15 @@ applied with `git apply --index` as one commit titled with the PR title.
 - pr.patch applies to the pinned commit and changes 50 to 300 lines outside
   lockfiles.
 
-  review_cases.py check [RULE/CASE ...]      validate review cases, print a table
+A document case names what is judged in "document": {"file": path} or
+{"message": true}. `check` refuses one unless it has prompt.md, rubric.md, and
+project/ or a workspace, labels.json labels every samples/answer-*.md with one
+of its kind's verdicts and the kind's required labels are present, rubric.md
+does not carry the rule id, the prompt and case id carry no meta vocabulary,
+every sample delivers the document the way a run would, and every FOUND and
+FALSE_ALARM sample passes the precheck.
+
+  review_cases.py check [RULE/CASE ...]      validate review and document cases, print a table
   review_cases.py checkout RULE/CASE DEST    build main and the branch in DEST
 """
 import json
@@ -31,9 +39,12 @@ CANON = Path(__file__).resolve().parent
 sys.path.insert(0, str(CANON))
 sys.path.insert(0, str(CANON / "oracles"))
 import screen  # noqa: E402
+import shared  # noqa: E402
 import workspace  # noqa: E402
 
 REVIEW_KEYS = {"patch", "title", "body_file", "branch"}
+# The sample file pattern of each judged frame.
+SAMPLES = {"review": "review-*.md", "document": "answer-*.md"}
 LABELS = {"positive": {"FOUND", "PARTIAL", "MISSED"}, "near-miss": {"CLEAN", "FALSE_ALARM"}}
 REQUIRED_LABELS = {"positive": {"FOUND", "MISSED"}, "near-miss": {"CLEAN"}}
 # Labels whose sample names the location, so the precheck must pass it.
@@ -50,7 +61,8 @@ class ReviewError(Exception):
     pass
 
 
-def review_cases(selected=()):
+def review_cases(selected=(), frame="review"):
+    """(name, root, case.json) of every case judged in frame, review or document."""
     found = []
     for spec_path in sorted(screen.RULES.glob("*/cases/*/case.json")):
         root = spec_path.parent
@@ -58,11 +70,11 @@ def review_cases(selected=()):
         if selected and name not in selected:
             continue
         spec = json.loads(spec_path.read_text())
-        if "review" in spec:
+        if frame in spec:
             found.append((name, root, spec))
     missing = sorted(set(selected) - {name for name, _, _ in found})
     if missing:
-        raise ReviewError(f"no review case {missing}")
+        raise ReviewError(f"no {frame} case {missing}")
     return found
 
 
@@ -106,21 +118,67 @@ def shape_problems(rule, root, spec):
         problems.append("case.json expected_behavior must be a list of non-empty strings")
     if problems:
         return problems
-    samples = {path.name for path in (root / "samples").glob("review-*.md")}
+    problems += label_problems(rule, root, spec, "review")
+    prompt = (root / "prompt.md").read_text()
+    problems += [f"prompt.md does not name {what}" for what in (review["branch"], review["body_file"]) if what not in prompt]
+    problems += leak_problems(visible_texts(root, spec))
+    return problems
+
+
+def label_problems(rule, root, spec, frame):
+    """labels.json covers exactly the frame's samples with the kind's verdicts,
+    the kind's required labels are present, and rubric.md hides the rule id."""
+    samples = {path.name for path in (root / "samples").glob(SAMPLES[frame])}
     labels = labels_of(root)
     kind = spec["kind"]
+    problems = []
     if set(labels) != samples or not set(labels.values()) <= LABELS[kind]:
         problems.append(f"labels.json must label each of {sorted(samples)} with one of {sorted(LABELS[kind])}, not {labels!r}")
     if not REQUIRED_LABELS[kind] <= set(labels.values()):
         problems.append(f"a {kind} case needs samples labeled {sorted(REQUIRED_LABELS[kind])}")
     if rule in (root / "rubric.md").read_text():
         problems.append("rubric.md carries the rule id")
-    prompt = (root / "prompt.md").read_text()
-    problems += [f"prompt.md does not name {what}" for what in (review["branch"], review["body_file"]) if what not in prompt]
-    for label, text in visible_texts(root, spec).items():
+    return problems
+
+
+def leak_problems(texts):
+    problems = []
+    for label, text in texts.items():
         leaked = sorted({match.group(0).lower() for regex in (screen.LEAK, PLANTED) for match in regex.finditer(text)})
         if leaked:
             problems.append(f"{label} carries {leaked}")
+    return problems
+
+
+def document_problems(rule, root, spec):
+    """Why a document case cannot be judged, or [] when it can."""
+    document = spec.get("document")
+    if spec.get("kind") not in LABELS:
+        return [f"kind must be one of {sorted(LABELS)}"]
+    if document != {"message": True} and not (isinstance(document, dict) and set(document) == {"file"} and isinstance(document["file"], str)):
+        return [f"document must be {{\"file\": \"<path>\"}} or {{\"message\": true}}, not {document!r}"]
+    problems = [f"missing {name}" for name in ("prompt.md", "rubric.md") if not (root / name).is_file()]
+    if "review" in spec:
+        problems.append("a case is judged on a review or a document, not both")
+    if not ("workspace" in spec or (root / "project").is_dir()):
+        problems.append("a document case needs project/ or a workspace")
+    problems += [f"case.json lacks {key}" for key in ("expected_behavior", "domain") if key not in spec]
+    if problems:
+        return problems
+    problems += label_problems(rule, root, spec, "document")
+    problems += leak_problems({"case id": root.name, "prompt.md": (root / "prompt.md").read_text()})
+    for name in sorted(labels_of(root)):
+        sample = root / "samples" / name
+        if not sample.is_file():
+            continue
+        if "file" in document and "workspace" in spec:
+            diff = sample.with_suffix(".diff")
+            if not diff.is_file() or document["file"] not in screen.patch_paths(diff.read_text())[1]:
+                problems.append(f"{name} needs a sibling {diff.name} that writes {document['file']}")
+            elif screen.patch_deletes(diff.read_text(), document["file"]):
+                problems.append(f"{name} has a sibling {diff.name} that deletes {document['file']}")
+        elif not shared.document_text(sample.read_text(), document).strip():
+            problems.append(f"{name} delivers no document")
     return problems
 
 
@@ -166,27 +224,50 @@ def size(dest, base, head):
     return lines, files
 
 
+def review_problems(rule, root, spec):
+    """(problems, table cell) for a review case: shape, precheck, and PR size."""
+    problems = shape_problems(rule, root, spec)
+    lines = files = "-"
+    if not problems:
+        problems += precheck_problems(rule, root)
+        with tempfile.TemporaryDirectory() as directory:
+            try:
+                lines, files = size(Path(directory) / "repo", *build(root, spec, Path(directory) / "repo"))
+                if not MIN_LINES <= lines <= MAX_LINES:
+                    problems.append(f"{lines} changed lines, outside {MIN_LINES}-{MAX_LINES}")
+            except (workspace.WorkspaceError, ReviewError) as exc:
+                problems.append(str(exc))
+    return problems, f"{spec['workspace']['repo']:8} lines={lines} files={files}"
+
+
+def document_case_problems(rule, root, spec):
+    """(problems, table cell) for a document case: shape, delivery, and, for a
+    pasted case, the precheck on every FOUND and FALSE_ALARM sample."""
+    problems = document_problems(rule, root, spec)
+    if not problems and "workspace" not in spec:
+        problems += precheck_problems(rule, root)
+    where = spec["workspace"]["repo"] if "workspace" in spec else "pasted"
+    return problems, f"{where:8} document={spec['document'].get('file', 'message')}"
+
+
+CHECKS = {"review": review_problems, "document": document_case_problems}
+
+
 def check(selected):
-    cases = review_cases(selected)
+    cases = [(name, root, spec, frame) for frame in CHECKS for name, root, spec in review_cases(frame=frame)]
+    if selected:
+        missing = sorted(set(selected) - {name for name, *_ in cases})
+        if missing:
+            raise ReviewError(f"no review or document case {missing}")
+        cases = [case for case in cases if case[0] in selected]
     if not cases:
-        print("no review cases", file=sys.stderr)
+        print("no review or document cases", file=sys.stderr)
         return 1
     failed = False
-    for name, root, spec in cases:
-        rule = name.split("/")[0]
-        problems = shape_problems(rule, root, spec)
-        lines = files = "-"
-        if not problems:
-            problems += precheck_problems(rule, root)
-            with tempfile.TemporaryDirectory() as directory:
-                try:
-                    lines, files = size(Path(directory) / "repo", *build(root, spec, Path(directory) / "repo"))
-                    if not MIN_LINES <= lines <= MAX_LINES:
-                        problems.append(f"{lines} changed lines, outside {MIN_LINES}-{MAX_LINES}")
-                except (workspace.WorkspaceError, ReviewError) as exc:
-                    problems.append(str(exc))
+    for name, root, spec, frame in cases:
+        problems, cell = CHECKS[frame](name.split("/")[0], root, spec)
         failed |= bool(problems)
-        print(f"{'FAIL' if problems else 'ok  '} {name:55} {spec.get('kind', '?'):9} {spec['workspace']['repo']:8} lines={lines} files={files}")
+        print(f"{'FAIL' if problems else 'ok  '} {name:55} {spec.get('kind', '?'):9} {cell}")
         for problem in problems:
             print(f"     {problem}")
     return 1 if failed else 0

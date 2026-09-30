@@ -47,14 +47,20 @@ A workspace case that also names a review hands the agent a pull request on a
 branch. Its oracle is a precheck, and a blinded judge from the other model
 family grades each review against the case's rubric.md (see review.py).
 
+A case that names a document is judged the same way, on one document instead
+of a review: the whole final message, or one named file, read from the final
+message's <file path="..."> block in a pasted-project case and from the
+harvested diff in a workspace case. A run that delivers no document is
+INVALID, never a verdict.
+
   screen.py plan [--runs-root DIR ...]                 list rules, cases, and past runs
   screen.py build --out DIR [--entry E] [RULE ...]     write both arms of every case
   screen.py audit [--entry E] [RULE ...]               model-free: build, validate, audit, prepare
   screen.py run --agent claude|codex --out DIR [--entry E] [--runner host|sbx] [RULE ...]   paid: answer, grade, compare
   screen.py compare --out DIR                          print paired verdicts with exposure
   screen.py regrade --out DIR                          grade workspace runs again from their diffs, then compare
-  screen.py judge --out DIR [--judge B:M]              paid: judge every review run again, then compare
-  screen.py calibrate [--judge B:M ...] RULE ...       paid: judge each review case's labeled samples
+  screen.py judge --out DIR [--judge B:M]              paid: judge every review or document run again, then compare
+  screen.py calibrate [--judge B:M ...] RULE ...       paid: judge each judged case's labeled samples
 
 Every command with --out appends the traceback of any error to
 <out>/screen-error.log and prints where it went on stdout and stderr. run logs
@@ -90,7 +96,9 @@ from pathlib import Path
 
 CANON = Path(__file__).resolve().parent
 sys.path.insert(0, str(CANON))
+sys.path.insert(0, str(CANON / "oracles"))
 import review  # noqa: E402
+import shared  # noqa: E402
 import workspace  # noqa: E402
 
 REPO = CANON.parents[1]
@@ -167,9 +175,24 @@ class Case:
         return self.spec.get("review")
 
     @property
+    def document(self):
+        """{"file": path} or {"message": True} for a judged document case, else None."""
+        return self.spec.get("document")
+
+    @property
+    def frame(self):
+        """The judge frame, "review" or "document", or None for an oracle-only case."""
+        return "review" if self.review else "document" if self.document else None
+
+    @property
     def owner(self):
         """The rule whose cases/ holds this case; a variant borrows its source's."""
         return self.root.parent.parent.name
+
+
+def judged(case_build):
+    """Whether a build.json case record names a review or a document."""
+    return "review" in case_build or "document" in case_build
 
 
 def case_spec(case):
@@ -184,7 +207,7 @@ def standin_carries(rule, arm):
 
 
 def standin_review(case, treated):
-    """The labeled sample an offline stand-in answers a review case with: the
+    """The labeled sample an offline stand-in answers a judged case with: the
     CLEAN one for a near-miss, else FOUND when the rule is mounted and MISSED
     when it is not."""
     wanted = "CLEAN" if case.kind == "near-miss" else ("FOUND" if treated else "MISSED")
@@ -192,9 +215,14 @@ def standin_review(case, treated):
     return case.root / "samples" / next(name for name, label in sorted(labels.items()) if label == wanted)
 
 
-def check_labels(root, kind):
+def check_labels(root, kind, document=None, in_workspace=False):
     """samples/labels.json maps each calibration sample to a verdict the judge
-    may give for the case's kind."""
+    may give for the case's kind. In a document case every sample must
+    deliver the document the way a run does: a pasted case's sample holds the
+    file block document_text cuts, and a workspace case's sample for a file has
+    a sibling .diff that writes that file without deleting it. A sample that
+    would judge as absent is refused here, so calibration only ever sees
+    deliverable shapes."""
     path = root / "samples" / "labels.json"
     labels = json.loads(path.read_text())
     if not isinstance(labels, dict) or not labels:
@@ -204,6 +232,15 @@ def check_labels(root, kind):
             raise ScreenError(f"{path} labels {name} {label!r}; a {kind} case's verdicts are {review.VERDICTS[kind]}")
         if not (root / "samples" / name).is_file() or "/" in name:
             raise ScreenError(f"{path} names {name}, which is not a file in samples/")
+        if document and "file" in document and in_workspace:
+            diff = root / "samples" / Path(name).with_suffix(".diff")
+            if not diff.is_file() or document["file"] not in patch_paths(diff.read_text())[1]:
+                raise ScreenError(f"sample {name} needs a sibling {diff.name} that writes {document['file']}, as a run's harvested diff would")
+            if patch_deletes(diff.read_text(), document["file"]):
+                raise ScreenError(f"sample {name} has a sibling {diff.name} that deletes {document['file']}, so a run's harvested diff would deliver no document")
+        elif document and not shared.document_text((root / "samples" / name).read_text(), document).strip():
+            where = f"a <file path=\"{document['file']}\"> block" if "file" in document else "any text"
+            raise ScreenError(f"sample {name} delivers no document; a run's final message would need {where}")
     return labels
 
 
@@ -300,15 +337,26 @@ def load_case(rule_id, root):
         raise ScreenError(f"{spec_path} lacks {sorted(missing)}")
     if spec.get("kind") not in CASE_KINDS:
         raise ScreenError(f"{spec_path} kind must be one of {sorted(CASE_KINDS)}, not {spec.get('kind')!r}")
+    if "review" in spec and "document" in spec:
+        raise ScreenError(f"{spec_path} names both a review and a document; a case is judged on one")
     if "review" in spec and not in_workspace:
         raise ScreenError(f"{spec_path} names a review, so it must name a workspace")
+    if "document" in spec:
+        document = spec["document"]
+        if document != {"message": True} and not (isinstance(document, dict) and set(document) == {"file"} and isinstance(document["file"], str)):
+            raise ScreenError(f"{spec_path} document must be {{\"file\": \"<path>\"}} or {{\"message\": true}}, not {document!r}")
+        if "file" in document:
+            try:
+                shared.safe_path(document["file"])
+            except shared.OracleError as exc:
+                raise ScreenError(f"{spec_path} document file: {exc}") from exc
     if in_workspace:
         workspace.parse_spec(root, spec["workspace"], spec.get("review"))
-    if "review" in spec:
+    if "review" in spec or "document" in spec:
         for required in (root / "rubric.md", root / "samples" / "labels.json"):
             if not required.is_file():
-                raise ScreenError(f"review case {rule_id}/{root.name} has no {required.relative_to(root)}")
-        check_labels(root, spec["kind"])
+                raise ScreenError(f"judged case {rule_id}/{root.name} has no {required.relative_to(root)}")
+        check_labels(root, spec["kind"], spec.get("document"), in_workspace)
     if LEAK.search(root.name):
         raise ScreenError(f"case id {root.name!r} carries meta vocabulary; pick a project-shaped name")
     return Case(rule_id, root.name, spec["kind"], root, spec)
@@ -547,6 +595,14 @@ def patch_paths(patch):
     if paths and all(path.startswith("skills/") for path in paths):
         return 2, [path.removeprefix("skills/") for path in paths]
     return 1, paths
+
+
+def patch_deletes(patch, path):
+    """Whether a patch deletes path."""
+    result, _ = git_apply({}, patch, "--summary", "-p1")
+    if result.returncode:
+        raise ScreenError(f"patch does not parse: {result.stderr.strip()}")
+    return any(line.split(" ", 4)[4:] == [path] for line in result.stdout.splitlines() if line.startswith(" delete mode "))
 
 
 def apply_arm_patch(tree, patch):
@@ -853,6 +909,8 @@ def build(out, rules, entry="skill"):
                                   "workspace": workspace_record(spec, checkout, workspace_hashes)}
                 if pr:
                     cases[case.id]["review"] = pr
+            if case.document:
+                cases[case.id]["document"] = case.document
         built[rule.id] = {"entry": entry, "tree_dir": tree_dir, **record, "arms": list(rule.arm_names), "cases": cases}
         if companions:
             built[rule.id]["companions"] = companion_record(companions, arm_hashes)
@@ -1081,7 +1139,7 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
         file_harvest(work, case_build["workspace"]["tree"])
     harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
             "--allow-scripts", "--out", work / "grade.json")
-    if "review" in case_build:
+    if judged(case_build):
         judge_arm(out, agent, rule, case, arm)
 
 
@@ -1253,9 +1311,10 @@ def rule_verdict(outcomes):
 
 def regrade_run(check, rule, case, run_base):
     """(verdict, reasons) from the oracle on a run's harvested diff and its
-    answer, empty when output.md is missing. None when no diff was harvested."""
+    answer, empty when output.md is missing, or on the pasted project as the
+    harness graded it. None when a workspace case harvested no diff."""
     try:
-        project = check.load_workspace(rule, case, run_base)
+        project = check.load_workspace(rule, case, run_base) or check.load_project(rule, case)
     except check.OracleError:
         return None
     output = Path(run_base) / "output.md"
@@ -1329,15 +1388,61 @@ def review_pr(case):
             "diff": spec.review["patch"].decode(errors="replace")}
 
 
+def case_subject(case):
+    """The judge's fixed side. A review's is its PR. A document's is the
+    request, exactly the text the agent read, project listing included, so the
+    judge and the agent share one source."""
+    if case.review:
+        return review_pr(case)
+    return {"request": render_prompt(case)}
+
+
+def delivered(case, answer, workspace=None):
+    """The text the judge grades for one run or one labeled sample: the review
+    itself, or the document cut from the final message or the workspace."""
+    if case.document:
+        return shared.document_text(answer, case.document, workspace)
+    return answer
+
+
+def absent(case):
+    """The error a judged run records when it delivered nothing to judge."""
+    if not case.document:
+        return "no review: output.md is missing or empty"
+    if "message" in case.document:
+        return "no document: output.md is missing or empty"
+    return f"no document: {case.document['file']} not in the " + ("workspace" if case.workspace else "final message")
+
+
+def secret_words(rule, case):
+    """Words the judge never sees: the rule id, the owning rule, every path the
+    rule's arms change, and each path's tail inside its skill, such as
+    playbooks/premortem.md. Bare words such as a skill's name stay, since a
+    document about the change may need them."""
+    if rule.paired:
+        paths = {rule.target}
+    else:
+        paths = {path for _, patch in rule.arm_patches if patch for path in patch_paths(patch)[1]}
+    tails = {path.split("/", 1)[1] for path in paths if "/" in path.split("/", 1)[1]}
+    return (rule.id, case.owner, *sorted(paths | tails))
+
+
+def judge_answer(case, subject, rubric, backend, model, answer, written, secrets):
+    """One judge record for one delivered text, the only place either frame is judged."""
+    spec = case_spec(case) if case.workspace else None
+    return review.judge(backend, model, case.kind, rubric, subject, answer, written, secrets,
+                        spec.repo if spec else None, spec.commit if spec else None, frame=case.frame)
+
+
 def labeled_samples(case):
-    """{name: (label, text)} of a review case's calibration samples."""
+    """{name: (label, text)} of a judged case's calibration samples."""
     return {name: (label, (case.root / "samples" / name).read_text()) for name, label in check_labels(case.root, case.kind).items()}
 
 
-def case_calibration(case, backend, model, rubric, pr):
+def case_calibration(case, backend, model, rubric, subject):
     path = review.calibration_path(case.owner, case.id, backend, model)
     record = json.loads(path.read_text()) if path.is_file() else None
-    return review.calibration_status(record, review.calibration_key(backend, model, case.kind, rubric, pr, labeled_samples(case)))
+    return review.calibration_status(record, review.calibration_key(backend, model, case.kind, rubric, subject, labeled_samples(case), case.frame))
 
 
 def written_by(check, run_base):
@@ -1349,23 +1454,31 @@ def written_by(check, run_base):
 
 
 def judge_arm(out, agent, rule, case, arm, judge=None):
-    """Judge every run of one review arm into <work>/judge.json. The judge is
-    the other family unless judge names (backend, model)."""
+    """Judge every run of one judged arm into <work>/judge.json. The judge is
+    the other family unless judge names (backend, model). A run that delivered
+    nothing to judge records verdict None with the reason, which compare
+    reads as INVALID."""
     work = out / agent / rule.id / case.id / arm
     backend, model = judge or review.JUDGE_FOR[agent]
-    rubric, pr, spec = (case.root / "rubric.md").read_text(), review_pr(case), case_spec(case)
-    calibrated, reason = case_calibration(case, backend, model, rubric, pr)
+    rubric, subject = (case.root / "rubric.md").read_text(), case_subject(case)
+    calibrated, reason = case_calibration(case, backend, model, rubric, subject)
     check = load_check(out / "arms" / rule.id / case.id / arm / "rules")
+    secrets = secret_words(rule, case)
     rows = []
     for number, run_base in run_bases(work):
         output = run_base / "output.md"
         answer = output.read_text(encoding="utf-8", errors="replace") if output.is_file() else ""
-        written = written_by(check, run_base)
+        written = written_by(check, run_base) if case.review else ""
         precheck = regrade_run(check, rule.id, case.id, run_base) or ("FAIL", "no harvested workspace")
-        if answer.strip() or written.strip():
-            record = review.judge(backend, model, case.kind, rubric, pr, answer, written, (rule.id, case.owner), spec.repo, spec.commit)
+        try:
+            cut_from_workspace = case.document and "file" in case.document
+            text = delivered(case, answer, check.load_workspace(rule.id, case.id, run_base) if cut_from_workspace else None)
+        except check.OracleError:
+            text = ""
+        if text.strip() or written.strip():
+            record = judge_answer(case, subject, rubric, backend, model, text, written, secrets)
         else:
-            record = {"backend": backend, "model": model, "verdict": None, "error": "no review: output.md is missing or empty"}
+            record = {"backend": backend, "model": model, "verdict": None, "error": absent(case)}
         combined = review.combine(case.kind, record["verdict"], precheck[0] == "PASS") if record["verdict"] else "UNJUDGED"
         record.update(run=number, precheck=precheck[0], precheck_failures=precheck[1], combined=combined,
                       calibrated=calibrated, calibration=reason)
@@ -1381,7 +1494,7 @@ def judge_all(out, judge=None):
     for work in work_dirs(out, "tasks.jsonl"):
         agent, rule_id, case_id, arm = work.relative_to(out).parts
         build_info = json.loads((out / "arms" / rule_id / "build.json").read_text())
-        if "review" not in build_info["cases"][case_id]:
+        if not judged(build_info["cases"][case_id]):
             continue
         rule = rules.setdefault(rule_id, load_rule(rule_id))
         case = next(case for case in rule.cases if case.id == case_id)
@@ -1389,32 +1502,43 @@ def judge_all(out, judge=None):
     compare(out)
 
 
+def sample_workspace(case, checkout, name):
+    """The Workspace a labeled sample of a workspace case is graded in: the
+    reference checkout with the sample's sibling .diff, when the case judges a
+    file, so the document is cut from the diff as a run's would be."""
+    diff = case.root / "samples" / Path(name).with_suffix(".diff")
+    return shared.Workspace(checkout, diff.read_text() if case.document and "file" in case.document and diff.is_file() else "")
+
+
 def calibrate(rules, judges):
-    """Judge every labeled sample of every review case of rules with each
+    """Judge every labeled sample of every judged case of rules with each
     judge, store the agreement under the cache, and print it per label. A
     case whose judge disagrees with any label stays uncalibrated, and its
-    run results say so."""
+    run results say so. Each sample is delivered through the same cut a run
+    goes through, so the judge sees a sample the way it sees a run."""
     check = load_check()
-    reviewed = [(rule, case) for rule in rules for case in rule.cases if case.review]
+    reviewed = [(rule, case) for rule in rules for case in rule.cases if case.frame]
     if not reviewed:
-        raise ScreenError(f"no review cases in {', '.join(rule.id for rule in rules)}")
+        raise ScreenError(f"no review or document cases in {', '.join(rule.id for rule in rules)}")
     summary = []
     for rule, case in reviewed:
-        rubric, pr, spec = (case.root / "rubric.md").read_text(), review_pr(case), case_spec(case)
-        checkout = workspace.reference_checkout(spec)[0]
-        labeled = labeled_samples(case)
+        rubric, subject = (case.root / "rubric.md").read_text(), case_subject(case)
+        checkout = workspace.reference_checkout(case_spec(case))[0] if case.workspace else None
+        labeled, secrets = labeled_samples(case), secret_words(rule, case)
         for backend, model in judges:
             samples = {}
             for name, (label, answer) in sorted(labeled.items()):
-                record = review.judge(backend, model, case.kind, rubric, pr, answer, "", (rule.id, case.owner), spec.repo, spec.commit)
-                failures = check.grade(case.owner, case.id, text=answer, workspace=check.Workspace(checkout, ""))
+                graded_in = sample_workspace(case, checkout, name) if checkout else None
+                record = judge_answer(case, subject, rubric, backend, model, delivered(case, answer, graded_in), "", secrets)
+                failures = check.grade(case.owner, case.id, text=answer, workspace=graded_in)
                 samples[name] = {"label": label, "verdict": record["verdict"], "evidence": record.get("evidence"),
                                  "error": record.get("error"), "precheck": "FAIL" if failures else "PASS",
                                  "combined": review.combine(case.kind, record["verdict"], not failures) if record["verdict"] else "UNJUDGED",
                                  "prompt_sha256": record["prompt_sha256"]}
             table, agreed = review.agreement(samples)
             result = {"rule": case.owner, "case": case.id, "kind": case.kind, "backend": backend, "model": model,
-                      "template": review.TEMPLATE_VERSION, "key": review.calibration_key(backend, model, case.kind, rubric, pr, labeled),
+                      "template": review.FRAMES[case.frame].version,
+                      "key": review.calibration_key(backend, model, case.kind, rubric, subject, labeled, case.frame),
                       "samples": samples, "agreement": table, "calibrated": agreed}
             path = review.calibration_path(case.owner, case.id, backend, model)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -1455,10 +1579,10 @@ def compare(out):
         companions = set(build_info.get("companions", {}).get("trees", {}))
         regraded_path = grade.with_name("regrade.json")
         regraded = {row["run"]: row for row in json.loads(regraded_path.read_text())["results"]} if regraded_path.is_file() else {}
-        reviewed = "review" in build_info["cases"][case]
-        judged = {}
+        reviewed = judged(build_info["cases"][case])
+        verdicts = {}
         if reviewed and (work / "judge.json").is_file():
-            judged = {row["run"]: row for row in json.loads((work / "judge.json").read_text())["results"]}
+            verdicts = {row["run"]: row for row in json.loads((work / "judge.json").read_text())["results"]}
         results = json.loads(grade.read_text())["results"] if grade.is_file() else [
             {"run_number": row["run"], "run_base": row.get("run_base", ""), "missing_output": True} for row in regraded.values()]
         for result in results:
@@ -1480,7 +1604,7 @@ def compare(out):
                 row["ungraded"] = True
             if reviewed:
                 precheck = row["verdict"]
-                row["verdict"], row["reasons"], row["review"] = review_row(judged.get(result.get("run_number")), row["kind"])
+                row["verdict"], row["reasons"], row["review"] = review_row(verdicts.get(result.get("run_number")), row["kind"])
                 row["review"]["precheck"] = row["review"]["precheck"] or precheck
             table.append(row)
     pairs = {}

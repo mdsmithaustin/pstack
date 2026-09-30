@@ -23,7 +23,7 @@ hunks, a hunk with unchanged lines between its edits, and a patch that no
 longer matches `skills/`. Each arm gets its own manifest with the same case,
 prompt, and mount name. `screen.py` runs only the `with_skill` rows, grades
 each arm with the rule's executable oracle, and prints the pair side by side. No
-judge runs, except for review cases.
+judge runs, except for review or document cases.
 
 A rule has one or more cases. A `positive` case is one where the rule should
 change the answer. A `near-miss` case is one where the rule must not change it.
@@ -491,8 +491,8 @@ that diff as the files the reviewer changed or added.
 **Precheck and judge.** `oracle.py` is the precheck.
 `CHECKS[case](answer, workspace)` returns failures unless the review names the
 case's file or symbol, or the decoy's for a near-miss. The harness grade runs
-only the precheck. After grading, `run` judges each review run and writes
-`<work>/judge.json`. A verdict that says the review flagged the location
+only the precheck. After grading, `run` judges each judged run, review or
+document, and writes `<work>/judge.json`. A verdict that says the review flagged the location
 (`FOUND`, `PARTIAL`, or `FALSE_ALARM`) counts only when the precheck passes.
 Otherwise the combined verdict is `MISSED` for a positive case and `CLEAN` for
 a near-miss. For the pair, a combined `FOUND` or `CLEAN` is a pass and
@@ -532,8 +532,8 @@ argv element, so the empty tool list is spelled `--tools=`.
   `evidence_in_review` records whether the evidence quotes the review.
 
 `CANON_JUDGE_STANDIN=evals/canon/offline/judge` swaps in a stand-in at no
-cost. It answers with the label of the calibration sample the review
-matches.
+cost. It answers with the label of the smallest calibration sample that
+contains the judged text.
 
 The judge prompt, with `{verdicts}` and `{meanings}` filled per kind:
 
@@ -563,7 +563,7 @@ request, and the guide says it is not one" and "the review does not flag
 that concern as a problem".
 
 **Calibration.** `screen.py calibrate [--judge B:M ...] RULE ...` judges every
-labeled sample of every review case with each judge (both by default). It
+labeled sample of every review or document case with each judge (both by default). It
 prints agreement per label and stores the record under
 `$CANON_CACHE/calibration/<rule>/<case>/<runner>-<backend>-<model>.json`,
 where the runner is `model` or `standin`. The record is keyed by the prompt
@@ -601,6 +601,104 @@ provided: sk-svcac...`. The sandbox proxy's stored OpenAI credential was
 rejected, so refresh it (`sbx secret set openai --oauth`) before a paid
 screen. A Claude judge call with a model name that does not exist got as far
 as `unrecognized_model` with every flag accepted.
+
+## Document cases
+
+A document case judges one document the agent writes, with the review
+machinery: the same blinded cross-family judge, calibration record, verdict
+words, precheck, and scores. `case.json` names the document:
+
+```json
+"document": {"file": "ops/premortem.md"}
+"document": {"message": true}
+```
+
+`file` judges one named file. `message` judges the whole final message. A
+document case may be a pasted-project case or a workspace case, and it cannot
+also be a review case. Beside the case's usual files it has `rubric.md` and
+`samples/labels.json`, as a review case does, and its samples are
+`samples/answer-*.md`.
+
+```
+rules/premortem-place/
+  rule.json           {"source": "...", "arms": ["current", "playbook", "skill"]}
+  arms/<arm>.patch    one per arm after current; an arms rule without cases_from owns its cases
+  oracle.py           CHECKS[case](answer, project): the precheck, on the whole final message unless the
+                      oracle cuts the document itself with `document_text`
+  cases/<case-id>/
+    case.json         kind, domain, expected_behavior, timeout_s, document
+    prompt.md         the request, {project}, and a line asking for the file inside
+                      <file path="ops/premortem.md"> and </file> tags
+    project/...       the pasted project
+    rubric.md         judge only: what FOUND, PARTIAL, and MISSED (or FALSE_ALARM and CLEAN) mean here
+    samples/labels.json {"answer-found.md": "FOUND", ...}
+    samples/answer-*.md full final messages, chatter and file block included
+```
+
+**Delivery.** One function, `shared.document_text(answer, document,
+workspace)`, turns a run into the judged text. In a pasted case it cuts the
+body of the last `<file path="...">` block for the named path from the final
+message and strips one code fence, and it does not raise on an unsafe path in
+some other block. In a workspace case it reads the file from the checkout after
+the harvested diff, so an untouched file is the checkout's copy and a deletion
+is empty. A `message` document is the final message itself. The judge
+(`screen.judge_arm`) and calibration (`screen.calibrate`) cut the document
+through this function, so a labeled sample is judged exactly as a run is. The
+precheck receives the whole final message. It sees the cut document only when
+the rule's oracle calls `document_text` itself. The offline agent stand-ins
+answer with whole samples, and `offline/judge` matches the smallest sample that
+contains the judged text. A labeled sample that would deliver nothing is
+refused when the case loads. In a workspace case that names a file, each
+sample has a sibling `samples/<name>.diff` that writes the file, as a run's
+harvested diff would, and the stand-ins apply it.
+
+**Absent means invalid.** A run that delivers no document is never sent to a
+judge. Its record is `verdict: null` with `no document: ops/premortem.md not in
+the final message` (or `not in the workspace`), which `compare` prints as
+`INVALID` and `scores` counts as unjudged. Scoring absence as `MISSED` would
+let a format failure look like a behavior failure, and scoring it as `CLEAN`
+on a near-miss would reward an arm that breaks the format.
+
+**Judge.** The verdicts are the review verdicts, `FOUND`, `PARTIAL`, and
+`MISSED` for a positive case and `FALSE_ALARM` and `CLEAN` for a near-miss,
+with document meanings: FOUND is "the document does what the guide requires,
+in a way the guide accepts", FALSE_ALARM is "the document does the thing the
+guide says this request must not get". `review.FRAMES` holds the two frames,
+`review` and `document`. Every judge function takes a trailing
+`frame="review"`, so the review prompt bytes, `TEMPLATE_VERSION`, and every
+stored review calibration key are unchanged (`test_review.py` pins the key and
+prompt hash of one fixture as computed at 25cfe807). The document prompt holds
+the grading guide, the request exactly as the agent read it, project listing
+included, and the document under a `document-<sha256[:8]>` label. Its template
+version is `document-judge-1`, so document calibration never confuses with
+review calibration. The judge never sees the chatter around the file block.
+The secret words the sanitizer redacts now include every path the rule's arms
+change and each path's tail inside its skill (`playbooks/premortem.md`), for
+review and document cases alike. Bare words such as a skill's name stay,
+because a document about the change may need them. A Claude judge needs no
+sandbox template. A Codex judge needs the pinned Codex CLI, and Sandboxed runs
+says how a judge gets it.
+
+**Gates.** `build.json` records `document` per case beside `kind`, and
+`run`, `judge`, and `compare` gate on `screen.judged`, which is true for a
+review or a document. `calibrate` gates on `case.frame`, which is set for the
+same cases. The per-run row in `compare.json` keeps the
+key `review` for a document case, so `review_row`, `scores`, and their readers
+do not move. That is naming debt, accepted.
+
+**Authoring.** `review_cases.py check` covers document cases: the shape, the
+labels, no rule id in `rubric.md`, no meta vocabulary in the prompt or case
+id, every sample delivers the document, and, for a pasted case, every `FOUND`
+and `FALSE_ALARM` sample passes the precheck. Its table row reads
+`pasted document=ops/premortem.md`.
+`offline/judge` matches a sample by containment of the judged text, since a
+document is cut from its sample, and picks the smallest sample that holds it.
+`test_document.py` builds a two-arm premortem rule with a positive and a
+near-miss pasted case under a temporary `$CANON_RULES`, calibrates both with
+the stand-in judge, and runs the offline `codex` under `--entry poteto-mode`:
+the skill arm separates the positive case, tie-passes the near-miss, and the
+arm line reads `changed text reached 2/2 run(s); listed by description:
+premortem/SKILL.md`.
 
 ## Stopped runs
 
@@ -665,7 +763,8 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 `test_review.py` (review checkouts, the judge, calibration, scores, and stopped
 runs, with an offline review run when skill-ci is present, and its
 `SandboxedReviewRunTests` gated on `CANON_SBX_E2E=1`), `test_review_cases.py`
-(the seeded review cases), `test_chain.py`, `test_sandbox.py` (its sandbox runs need
+(the seeded review cases), `test_document.py` (judged document cases, with an
+offline document run when skill-ci is present), `test_chain.py`, `test_sandbox.py` (its sandbox runs need
 `CANON_SBX_E2E=1`, see Sandboxed runs), and `test_oracles.py`, which loads `oracles/test_shared.py` and every
 `rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
 mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
