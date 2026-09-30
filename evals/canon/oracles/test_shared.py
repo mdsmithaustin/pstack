@@ -22,6 +22,37 @@ class AnswerParsingTests(unittest.TestCase):
         )
 
 
+class DocumentTextTests(unittest.TestCase):
+    FILE = {"file": "ops/premortem.md"}
+    ANSWER = ('Here is a draft.\n<file path="ops/premortem.md">\n# Draft\n</file>\n'
+              'Revised:\n<file path="ops/premortem.md">\n```markdown\n# Premortem\n\nGIT_DIR leaks into the fixtures.\n```\n</file>\nDone.\n')
+
+    def test_the_last_block_for_the_path_wins_with_its_fence_stripped(self):
+        self.assertEqual(shared.document_text(self.ANSWER, self.FILE), "# Premortem\n\nGIT_DIR leaks into the fixtures.\n")
+
+    def test_a_missing_block_is_an_empty_document_and_the_message_form_is_the_whole_answer(self):
+        self.assertEqual(shared.document_text('<file path="ops/other.md">\nx\n</file>\n', self.FILE), "")
+        self.assertEqual(shared.document_text("", self.FILE), "")
+        self.assertEqual(shared.document_text(self.ANSWER, {"message": True}), self.ANSWER)
+
+    def test_an_unsafe_path_in_another_block_does_not_hide_the_document(self):
+        answer = '<file path="../escape.py">\nx = 1\n</file>\n<file path="./ops/premortem.md">\n# Premortem\n</file>\n'
+        self.assertEqual(shared.document_text(answer, self.FILE), "# Premortem\n")
+
+    def test_a_workspace_document_is_the_file_after_the_diff(self):
+        diff = ("diff --git a/ops/premortem.md b/ops/premortem.md\nnew file mode 100644\n--- /dev/null\n+++ b/ops/premortem.md\n"
+                "@@ -0,0 +1 @@\n+# Premortem\n")
+        deletion = "diff --git a/ops/proposal.md b/ops/proposal.md\ndeleted file mode 100644\n--- a/ops/proposal.md\n+++ /dev/null\n@@ -1 +0,0 @@\n-# Proposal\n"
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            (checkout / "ops").mkdir()
+            (checkout / "ops" / "proposal.md").write_text("# Proposal\n")
+            self.assertEqual(shared.document_text("Done.", self.FILE, shared.Workspace(checkout, diff)), "# Premortem\n")
+            self.assertEqual(shared.document_text("Done.", self.FILE, shared.Workspace(checkout, "")), "")
+            self.assertEqual(shared.document_text("Done.", {"file": "ops/proposal.md"}, shared.Workspace(checkout, "")), "# Proposal\n")
+            self.assertEqual(shared.document_text("Done.", {"file": "ops/proposal.md"}, shared.Workspace(checkout, deletion)), "")
+
+
 class ProbeOutputTests(unittest.TestCase):
     def test_answer_that_prints_at_import_fails_instead_of_crashing_the_grader(self):
         good = (RULES / "value-type" / "cases" / "marketplace-subtotal" / "samples" / "good.md").read_text()

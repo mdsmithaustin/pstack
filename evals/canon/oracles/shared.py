@@ -56,6 +56,31 @@ def parse_commits(text):
     return [(message, parse_files(body)) for message, body in COMMIT_TAG.findall(text)]
 
 
+def document_text(answer, document, workspace=None):
+    """The text a document case judges, or "" when the run delivered none.
+
+    document is case.json's {"message": true}, which judges the whole final
+    message, or {"file": path}. In a workspace case the file is read from the
+    checkout after the harvested diff, so a diff that never touches it yields
+    the checkout's copy and a deletion yields "". In a pasted-project case it is
+    the body of the last <file path="..."> block for that path, with one code
+    fence stripped. An unsafe path in some other block does not raise here,
+    since an unrelated bad tag must not turn a delivered document into an
+    absent one. Every consumer, the precheck, the judge, calibration, and the
+    stand-ins, cuts the document through this one function."""
+    if document.get("message"):
+        return answer
+    path = document["file"]
+    if isinstance(workspace, Workspace):
+        changed = apply_diff(workspace.checkout, workspace.diff)
+        if path in changed:
+            return changed[path].decode("utf-8", "replace") if changed[path] is not None else ""
+        source = Path(workspace.checkout) / path
+        return source.read_text(encoding="utf-8", errors="replace") if source.is_file() else ""
+    bodies = [body for tagged, body in FILE_TAG.findall(answer) if PurePosixPath(tagged.strip()).as_posix() == path]
+    return clean_body(bodies[-1]) if bodies else ""
+
+
 def is_test_path(path):
     pure = PurePosixPath(path)
     return pure.parts[0] == "tests" or pure.name.startswith("test_")

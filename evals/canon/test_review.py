@@ -547,6 +547,43 @@ class SandboxedReviewRunTests(ReviewCase):
         self.assertEqual((record["agent_rc"], record["refs"], record["head_after"], record["refs_after"]), (0, refs, refs["discount-cap"], refs))
 
 
+class FrameTests(unittest.TestCase):
+    PR = {"title": "Add retry budgets", "body": "Retries now stop after a budget.\n", "diff": "--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-a\n+b\n"}
+    SAMPLES = {"review-found.md": ("FOUND", "x.py retries forever. Cap it.\n"), "review-missed.md": ("MISSED", "Looks fine.\n")}
+
+    def test_the_review_key_prompt_and_label_are_those_computed_at_25cfe807(self):
+        import hashlib
+
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CANON_JUDGE_STANDIN", None)
+            key = review.calibration_key("codex", "gpt-6-sol", "positive", "Seeded flaw: x.py", self.PR, self.SAMPLES)
+        text, label, _ = review.prompt("positive", "Seeded flaw: x.py", self.PR, "x.py retries forever. Cap it.\n", "diff --git a\n")
+
+        self.assertEqual(key, "00f222ada8fe6b5c102e628f3804b655d011dbe83ee729c11fcd76d0daa1f755")
+        self.assertEqual((hashlib.sha256(text.encode()).hexdigest(), label), ("efdf6ddc49a611ef58cc62a2f85744605961e1f12c107f6e1a19183ab303c6ef", "review-31008abe"))
+        self.assertEqual(review.TEMPLATE_VERSION, "review-judge-1")
+
+    def test_a_document_is_judged_under_its_own_frame_with_the_review_verdict_words(self):
+        subject = {"request": "Premortem the rollout and write ops/premortem.md.\n"}
+
+        text, label, redactions = review.prompt("positive", "FOUND: names GIT_DIR.\n", subject, "# Premortem\nGIT_DIR leaks, per /poteto-mode.\n", frame="document")
+
+        self.assertRegex(label, r"^document-[0-9a-f]{8}$")
+        self.assertEqual(text.splitlines()[0], "You are grading one document an assistant wrote for a request, against a grading guide.")
+        self.assertIn("<request>\nPremortem the rollout and write ops/premortem.md.\n</request>", text)
+        self.assertIn(f'<document label="{label}">\n# Premortem\nGIT_DIR leaks, per [tooling].\n</document>', text)
+        self.assertIn("- FOUND: the document does what the guide requires, in a way the guide accepts.", text)
+        self.assertNotIn("pull_request", text)
+        self.assertNotIn("files_the_reviewer", text)
+        self.assertEqual(redactions, ["/poteto-mode"])
+        with mock.patch.object(review, "invoke", return_value=('{"verdict": "FOUND", "evidence": "# Premortem"}', {"runner": "standin"})):
+            record = review.judge("claude", "opus", "positive", "guide", subject, "# Premortem\n", frame="document")
+        key = review.calibration_key("claude", "opus", "positive", "guide", subject, {}, "document")
+        other = review.calibration_key("claude", "opus", "positive", "guide", {"request": "Other.\n"}, {}, "document")
+        self.assertEqual((record["template"], record["verdict"], record["evidence_in_review"], record["label"][:9]), ("document-judge-1", "FOUND", True, "document-"))
+        self.assertNotEqual(key, other)
+
+
 class StandinCalibrationTests(unittest.TestCase):
     def test_standin_calibration_never_counts_for_the_model_judge(self):
         pr = {"title": "t", "body": "b", "diff": "d"}

@@ -24,7 +24,9 @@ import os
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 CANON = Path(__file__).resolve().parent
 sys.path.insert(0, str(CANON))
@@ -77,6 +79,60 @@ Diff against main:
 {written}
 </files_the_reviewer_changed_or_added>
 """
+DOCUMENT_MEANINGS = {
+    "FOUND": "the document does what the guide requires, in a way the guide accepts.",
+    "PARTIAL": "the document does part of what the guide requires, or does it without a part the guide insists on.",
+    "MISSED": "the document does not do what the guide requires, or does something the guide names as disqualifying.",
+    "FALSE_ALARM": "the document does the thing the guide says this request must not get.",
+    "CLEAN": "the document does not do that.",
+}
+DOCUMENT_VERSION = "document-judge-1"
+DOCUMENT_TEMPLATE = """You are grading one document an assistant wrote for a request, against a grading guide.
+
+Someone made the request below. Decide how the document handles the one thing the grading guide describes. Judge only that. Other content, length, and tone neither help nor hurt.
+
+Allowed verdicts: {verdicts}.
+{meanings}
+
+Return only a JSON object with exactly two keys:
+- "verdict": one of {verdicts}.
+- "evidence": a short verbatim quote from the document that decides the verdict, or "" when the document says nothing about it.
+
+<grading_guide>
+{rubric}
+</grading_guide>
+
+<request>
+{request}
+</request>
+
+<document label="{label}">
+{answer}
+</document>
+"""
+
+
+@dataclass(frozen=True)
+class Frame:
+    """What differs between grading a pull request review and grading a
+    document: the template, the verdict meanings, and the subject fields, in
+    the order they enter the calibration key. The judge machinery around it
+    (sanitize, parse, combine, calibration, scores) is shared."""
+    name: str
+    version: str
+    template: str
+    meanings: dict
+    fields: tuple
+    # subject dict -> the template's subject kwargs
+    shape: Callable
+
+
+FRAMES = {
+    "review": Frame("review", TEMPLATE_VERSION, TEMPLATE, MEANINGS, ("title", "body", "diff"),
+                    lambda pr: {"title": pr["title"], "body": pr["body"].strip(), "diff": pr["diff"].rstrip("\n")}),
+    "document": Frame("document", DOCUMENT_VERSION, DOCUMENT_TEMPLATE, DOCUMENT_MEANINGS, ("request",),
+                      lambda subject: {"request": subject["request"].strip()}),
+}
 IDENTITY = re.compile(r"\b(claude(?: code)?|codex|anthropic|openai|gpt-[\w.-]+|opus|sonnet|haiku)\b", re.IGNORECASE)
 MOUNT = re.compile(r"(?:\.claude|\.agents|\.codex)/(?:skills|agents)/\S*|skills/pstack/\S*|[/$]poteto-mode\b|\bpoteto-(?:mode|agent)\b|\bpstack\b")
 WRITTEN_LIMIT = 20000
@@ -91,9 +147,9 @@ def schema(kind):
             "properties": {"verdict": {"type": "string", "enum": list(VERDICTS[kind])}, "evidence": {"type": "string"}}}
 
 
-def label(answer):
-    """A label for the review that says nothing about where it came from."""
-    return "review-" + hashlib.sha256(answer.encode()).hexdigest()[:8]
+def label(answer, frame="review"):
+    """A label for the judged text that says nothing about where it came from."""
+    return f"{frame}-" + hashlib.sha256(answer.encode()).hexdigest()[:8]
 
 
 def sanitize(text, subject, secret_words=()):
@@ -118,19 +174,22 @@ def sanitize(text, subject, secret_words=()):
     return text, redactions
 
 
-def prompt(kind, rubric, pr, answer, written="", secret_words=()):
-    """(judge prompt, answer label, redactions). pr holds title, body, diff."""
-    subject = "\n".join((rubric, pr["title"], pr["body"], pr["diff"]))
+def prompt(kind, rubric, pr, answer, written="", secret_words=(), frame="review"):
+    """(judge prompt, answer label, redactions). pr is the frame's subject:
+    title, body, and diff for a review, request for a document. A document
+    frame has no slot for written, so callers pass it empty."""
+    frame = FRAMES[frame]
+    subject = "\n".join((rubric, *(pr[field] for field in frame.fields)))
     answer, redactions = sanitize(answer, subject, secret_words)
     if len(written) > WRITTEN_LIMIT:
         written = written[:WRITTEN_LIMIT] + "\n[truncated]\n"
     written, more = sanitize(written, subject, secret_words)
     verdicts = ", ".join(VERDICTS[kind])
-    text = TEMPLATE.format(
-        verdicts=verdicts, meanings="\n".join(f"- {name}: {MEANINGS[name]}" for name in VERDICTS[kind]),
-        rubric=rubric.strip(), title=pr["title"], body=pr["body"].strip(), diff=pr["diff"].rstrip("\n"),
-        label=label(answer), answer=answer.strip() or "(empty)", written=written.strip() or "(none)")
-    return text, label(answer), redactions + more
+    text = frame.template.format(
+        verdicts=verdicts, meanings="\n".join(f"- {name}: {frame.meanings[name]}" for name in VERDICTS[kind]),
+        rubric=rubric.strip(), label=label(answer, frame.name), answer=answer.strip() or "(empty)", written=written.strip() or "(none)",
+        **frame.shape(pr))
+    return text, label(answer, frame.name), redactions + more
 
 
 def claude_answer(raw):
@@ -204,11 +263,11 @@ def invoke(backend, model, text, kind, repo=None, commit=None):
     return raw, {"runner": "sbx", **result}
 
 
-def judge(backend, model, kind, rubric, pr, answer, written="", secret_words=(), repo=None, commit=None):
+def judge(backend, model, kind, rubric, pr, answer, written="", secret_words=(), repo=None, commit=None, frame="review"):
     """One verdict record. A judge that fails or answers off-contract yields
     verdict None and its error, never a guess."""
-    text, answer_label, redactions = prompt(kind, rubric, pr, answer, written, secret_words)
-    record = {"label": answer_label, "backend": backend, "model": model, "template": TEMPLATE_VERSION,
+    text, answer_label, redactions = prompt(kind, rubric, pr, answer, written, secret_words, frame)
+    record = {"label": answer_label, "backend": backend, "model": model, "template": FRAMES[frame].version,
               "prompt_sha256": hashlib.sha256(text.encode()).hexdigest(), "redactions": redactions}
     try:
         raw, record["invocation"] = invoke(backend, model, text, kind, repo, commit)
@@ -226,9 +285,13 @@ def judge_runner():
     return "standin" if os.environ.get("CANON_JUDGE_STANDIN") else "model"
 
 
-def calibration_key(backend, model, kind, rubric, pr, samples):
-    """samples is {name: (label, text)} of the case's labeled samples."""
-    parts = [TEMPLATE_VERSION, judge_runner(), backend, model, kind, rubric, pr["title"], pr["body"], pr["diff"],
+def calibration_key(backend, model, kind, rubric, pr, samples, frame="review"):
+    """samples is {name: (label, text)} of the case's labeled samples. For a
+    review the parts are the frame version, runner, judge, kind, rubric, PR
+    title, body, and diff, and the samples, as they were before frames, so a
+    stored review calibration keeps its key."""
+    frame = FRAMES[frame]
+    parts = [frame.version, judge_runner(), backend, model, kind, rubric, *(pr[field] for field in frame.fields),
              sorted([name, label, text] for name, (label, text) in samples.items())]
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()
 
