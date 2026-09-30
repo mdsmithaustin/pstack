@@ -3,8 +3,10 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from check import RULES, grade
+import shared
 from shared import PROJECT_IMAGES, OracleError, parse_files, plain_test_failures, project_test_results, run_jobs
 
 
@@ -102,6 +104,27 @@ class ProjectImageTests(unittest.TestCase):
     def test_unknown_image_is_refused(self):
         with self.assertRaisesRegex(OracleError, "no dependency image 'nothing-here'"):
             project_test_results("nothing-here", Path("."), {}, ["tests/test_calc.py"])
+
+
+class ProjectTestTimeoutTests(unittest.TestCase):
+    def test_a_timed_out_run_kills_its_container_and_raises_oracle_error(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            if command[:2] == ["docker", "run"]:
+                raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as directory:
+            images = Path(directory) / "images.json"
+            images.write_text(json.dumps({"calc": {"id": "sha256:feed"}}))
+            with mock.patch.object(shared, "PROJECT_IMAGES", images), mock.patch.object(shared.subprocess, "run", fake_run):
+                with self.assertRaisesRegex(OracleError, "project tests timed out after 900s"):
+                    project_test_results("calc", Path(directory), {}, ["tests/test_calc.py"])
+
+        name = calls[0][calls[0].index("--name") + 1]
+        self.assertEqual(calls[1], ["docker", "kill", name])
 
 
 class ProjectTestRunnerTests(unittest.TestCase):

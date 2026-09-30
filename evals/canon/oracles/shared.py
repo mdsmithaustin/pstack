@@ -189,8 +189,9 @@ def project_test_results(image, checkout, files, tests):
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
+        name = f"canon-project-tests-{os.getpid()}-{Path(directory).name}"
         command = [
-            "docker", "run", "--rm",
+            "docker", "run", "--rm", "--name", name,
             "--network", "none", "--read-only", "--tmpfs", "/tmp:rw,exec,size=1g",
             "--memory", "4g", "--pids-limit", "1024", "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges", "--user", "65534:65534",
@@ -198,7 +199,11 @@ def project_test_results(image, checkout, files, tests):
             "-v", f"{stage}:/work", "-v", f"{PROBES}:/probes:ro", "-w", "/work",
             images[image]["id"], "python3", "/probes/project_tests.py", *tests,
         ]
-        proc = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
+        try:
+            proc = subprocess.run(command, capture_output=True, text=True, timeout=900, check=False)
+        except subprocess.TimeoutExpired:
+            subprocess.run(["docker", "kill", name], capture_output=True, text=True, timeout=60, check=False)
+            raise OracleError("project tests timed out after 900s") from None
     if proc.returncode != 0:
         raise OracleError(f"project tests stopped (exit {proc.returncode}): {proc.stderr.strip()[-500:]}")
     return json.loads(proc.stdout)
