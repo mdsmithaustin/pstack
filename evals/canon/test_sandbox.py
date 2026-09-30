@@ -594,6 +594,9 @@ class BuildJudgeTemplateTests(unittest.TestCase):
         subcommands = [call[0] for call in fake.calls]
         save = next(call for call in fake.calls if call[:2] == ["template", "save"])
         self.assertEqual(save[3], tag)
+        delete = [index for index, call in enumerate(fake.calls) if call[0] == "exec" and call[-3:] == ["sh", "-c", f"rm -f {sandbox.CREDENTIAL_FILES}"]]
+        self.assertEqual(len(delete), 1)
+        self.assertLess(delete[0], fake.calls.index(save))
         self.assertIn("create", subcommands)
         self.assertIn("stop", subcommands)
         self.assertTrue(any(call[0] == "exec" and call[-4:] == ["npm", "install", "-g", "@openai/codex@0.157.0"] for call in fake.calls))
