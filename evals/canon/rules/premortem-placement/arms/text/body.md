@@ -1,0 +1,8 @@
+Assume the plan was adopted and hurt the people it was for within a month. Work out what did it.
+
+1. Write the failure headline first, then work back to its causes.
+2. Before you rank the risks, find the upstream cause they share. Risks with one cause are one risk. When one input feeds every risk, check the tool that produced it before you rate anything that depends on it.
+3. Name the assumption that is both critical and weakly evidenced, and the cheapest test that settles it.
+4. Run that test on a copy or a scratch clone, never where people work, and fix its stop rule before it runs. Installing the change to see what happens is the failure, not a test of it.
+5. For each rollback, say how to undo the trigger and how to undo the damage it already did.
+6. Say why each item you clear is fine, so no one reopens it. End with what to change before adoption.
