@@ -555,6 +555,25 @@ class CasesFromRulesTests(ScratchRules):
         with self.assertRaisesRegex(screen.ScreenError, "cases_from must name another rule"):
             screen.load_rule("scratch-variant")
 
+    def test_pair_rule_takes_a_chosen_subset_of_an_arms_rule_cases(self):
+        case = {"kind": "positive", "domain": "d", "timeout_s": 60, "expected_behavior": ["x"]}
+        self.write("scratch-arms", {"rule.json": '{"source": "S2", "arms": ["current", "stub"]}',
+                                    "oracle.py": "CHECKS = {'shop': lambda a, p: [], 'till': lambda a, p: []}\n",
+                                    **{f"cases/{id}/{name}": text for id in ("shop", "till") for name, text in
+                                       (("case.json", json.dumps(case)), ("prompt.md", f"Fix the {id}.\n{{project}}"), ("project/app.py", "x = 1\n"))}})
+        self.write("scratch-variant", {"rule.json": '{"cases_from": "scratch-arms", "cases": ["till"]}'})
+
+        rule = screen.load_rule("scratch-variant")
+
+        self.assertEqual((rule.source, rule.case_rule, rule.arm_names, [case.id for case in rule.cases]),
+                         ("S2", "scratch-arms", ("current", "amended"), ["till"]))
+
+    def test_case_the_source_lacks_is_refused(self):
+        self.write("scratch-variant", {"rule.json": '{"cases_from": "scratch-base", "cases": ["shop", "till"]}'})
+
+        with self.assertRaisesRegex(screen.ScreenError, r"cases must be a list of case ids from scratch-base \['shop'\], not \['shop', 'till'\]"):
+            screen.load_rule("scratch-variant")
+
     def test_shared_case_is_no_clash_but_a_copied_prompt_is(self):
         base, variant = screen.load_rule("scratch-base"), screen.load_rule("scratch-variant")
         copy = screen.load_case("scratch-copy", self.rules / "scratch-copy" / "cases" / "shop")

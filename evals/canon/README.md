@@ -42,7 +42,8 @@ text)`.
 rules/<id>/
   rule.patch          one hunk against skills/
   rule.json           {"source": "...", "companions": ["<skill>", ...]}; companions is optional
-                      a placement variant has {"cases_from": "<rule>"} and no oracle.py or cases/
+                      a placement variant has {"cases_from": "<rule>"} and no oracle.py or cases/,
+                      and may list "cases": ["<case-id>", ...] to run a subset
                       "skills_at": "<commit>" screens skills/ as that commit holds it
   oracle.py           CHECKS = {"<case-id>": check}; check(answer, project) returns failures
                       (project is a shared.Workspace in a workspace case)
@@ -128,7 +129,10 @@ poteto-mode `SKILL.md` that every `/poteto-mode` run has in context. Its
 and `rule.patch`. It runs the source rule's cases and oracle unchanged, so its
 results compare directly with the source's. It inherits the source's `source`
 and `companions` unless its own `rule.json` names them. A variant of a variant
-is refused. The arm copies the source's `oracle.py` under the variant's id.
+is refused. Its source may be an arms rule that holds its own
+`oracle.py` and `cases/`, such as `steering-review-asks`. A variant's
+`rule.json` may list `"cases": ["<case-id>", ...]` to run only those of the
+source's cases, and at least one of them must be positive. The arm copies the source's `oracle.py` under the variant's id.
 Name a variant `<rule>-index` when it places the rule in the poteto-mode index.
 `--case` picks which shared cases a paid run answers.
 
