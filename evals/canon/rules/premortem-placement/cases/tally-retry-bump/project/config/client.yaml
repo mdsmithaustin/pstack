@@ -1,0 +1,6 @@
+# Outbound HTTP client settings for tally-api. Read once at startup.
+ledger:
+  base_url: https://ledgerd.billing.internal
+  timeout_s: 4
+  retries: 2
+  backoff_s: 0.5

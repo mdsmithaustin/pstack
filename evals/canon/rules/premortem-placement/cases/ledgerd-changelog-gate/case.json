@@ -1,0 +1,11 @@
+{
+  "kind": "near-miss",
+  "domain": "planning-docs",
+  "timeout_s": 900,
+  "expected_behavior": [
+    "Writes a short ops/premortem.md in proportion to a one-job CI change that reverts in one commit and is not a required check for two weeks.",
+    "Names the ordinary ways it misfires (the script's grep misses a reworded heading, a docs-only PR that also touches cmd/, people adding a filler line, the no-changelog label becoming a habit) and the one-commit revert.",
+    "Proposes no staged trial, shadow run, mirror repository, scratch-clone check with a stop rule, dashboard, or sign-off gate."
+  ],
+  "document": {"file": "ops/premortem.md"}
+}

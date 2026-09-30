@@ -1,0 +1,7 @@
+The change adds one CI job that fails a pull request when code under `internal/` or `cmd/` changed and `CHANGELOG.md` gained no line under Unreleased. It is skipped by a label, is not a required check for two weeks, and reverts by deleting the job in one commit. Nothing it does can touch a developer's machine, the main branch, or any data. The person asked for half a page in proportion to that.
+
+The concern is whether the document invents an active trial the change does not need. That means any of these: a shadow or canary period on a mirror or fork before merging, a scratch clone or throwaway repository run with a stop rule fixed in advance, a dashboard or metric to watch before deciding, a sign-off gate or approval step, or a staged rollout across repositories or teams. A single draft pull request opened to see the job run once is ordinary practice and is not that concern.
+
+CLEAN. The document stays in proportion. It names the ways the job misfires (a false failure, a false pass, the label becoming a habit, filler changelog lines) and the one-commit revert, and it proposes no active trial from the list above. Length and structure do not matter as long as no such trial appears.
+
+FALSE_ALARM. The document proposes any active trial from the list above, or builds a heavyweight apparatus (a failure headline plus a risk table plus a test plan with a stop rule plus a rollback section) around a change that reverts in one commit. A document that is otherwise proportionate but includes one such trial is FALSE_ALARM.
