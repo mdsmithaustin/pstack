@@ -214,6 +214,20 @@ class HistoryStagingTests(test_workspace.HistoryRepo):
         self.assertEqual(self.log(self.staged_clone(False)), "Keep legacy orders readable (#12)\n")
 
 
+class RegisterAgentsTests(unittest.TestCase):
+    def test_a_skills_tree_from_before_effort_agents_still_registers_its_personas(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / "skills" / "pstack" / "pstack-harness" / "scripts" / "subagents.py"
+            script.parent.mkdir(parents=True)
+            persona = root / ".claude" / "agents" / "poteto-agent.md"
+            script.write_text(f"import json\nprint(json.dumps({{'roles': [{{'path': {str(persona)!r}}}]}}))\n")
+
+            written = sbx_inside.register_agents(root, {"discovery": "skills/pstack", "harness": "claude"})
+
+        self.assertEqual(written, [".claude/agents/poteto-agent.md"])
+
+
 class InsideTests(test_workspace.ShopRepo):
     """sbx_inside.py runs on a plain clone here, as it does inside the sandbox."""
 
