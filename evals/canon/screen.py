@@ -589,17 +589,32 @@ def changed_paths(before, after):
     return sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
 
 
+def skill_bodies(tree):
+    """The text after each SKILL.md's frontmatter, the part the stub arm drops."""
+    bodies = []
+    for path, data in tree.items():
+        if path.partition("/")[2] == "SKILL.md":
+            match = FRONTMATTER.match(data)
+            body = data[match.end():] if match else data
+            if body.strip():
+                bodies.append(body.decode(errors="replace").strip())
+    return bodies
+
+
 def rule_mounted(rule, mounted, tree):
     """Whether the mounted skill text carries the rule: a pair rule's inserted
     text, or every line some arm adds that the current tree lacks. A pair rule
     whose inserted text the current file already holds, such as a cut, is
-    mounted where its removed text is gone."""
+    mounted where its removed text is gone. Beside a stub, every arm that keeps
+    a skill body carries the rule, as standin_carries says for a workspace case."""
     if rule.paired:
         change = rule_change(rule, tree)
         inserted, removed = change.inserted.strip(), change.removed.strip()
         if inserted and inserted not in tree[change.target].decode(errors="replace"):
             return inserted in mounted
         return removed not in mounted
+    if STUB in rule.arm_names:
+        return any(body in mounted for body in skill_bodies(tree))
     text = b"\n".join(tree.values()).decode(errors="replace")
     for _, patch in rule.arm_patches:
         if patch is None:

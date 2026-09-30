@@ -201,6 +201,12 @@ class ArmPatchTests(unittest.TestCase):
         self.assertEqual(screen.rule_mounted(rule, mounted + "- Restructure first when the feature would then be one small edit.\n", TREE), True)
 
 
+    def test_beside_a_stub_an_arm_is_mounted_where_a_skill_body_is(self):
+        rule = screen.Rule("r", "S", None, "poteto-mode/SKILL.md", (), arm_patches=(("stub", None),))
+
+        self.assertEqual(screen.rule_mounted(rule, TREE["poteto-mode/SKILL.md"].decode(), TREE), True)
+        self.assertEqual(screen.rule_mounted(rule, "---\nname: poteto-mode\ndescription: Style.\n---\n", TREE), False)
+
     def test_pair_rule_that_cuts_text_is_mounted_only_where_the_cut_text_is_gone(self):
         cut = "--- a/poteto-mode/SKILL.md\n+++ b/poteto-mode/SKILL.md\n@@ -2 +2 @@\n-Read the leaf.\n+Read.\n"
         rule = screen.Rule("r", "S", cut, "poteto-mode/SKILL.md", ())
