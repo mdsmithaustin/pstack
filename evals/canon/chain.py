@@ -240,6 +240,7 @@ class Spawn:
     edits: frozenset = frozenset()
     prescribed: str = None  # "<skill> <name>" when a routed skill prescribes its role
     reads: frozenset = frozenset()
+    commands: tuple = ()  # the shell commands its delegate ran
     inline: list = field(default_factory=list)  # its events the lead stream already echoed
     placed: bool = True  # False when neither the trace nor a timestamp places the spawn in lead order
 
@@ -637,7 +638,9 @@ def claude_events(records, tree, cwd, agents=(), actor=None):
             elif name in CLAUDE_EDIT_TOOLS and ok:
                 path = data.get("file_path") or data.get("notebook_path") or ""
                 if in_workspace(path, where, tree):
-                    mine.append(Event(index, who, "edit", path))
+                    written = [data.get(key) for key in ("content", "new_string", "new_source")]
+                    written += [edit.get("new_string") for edit in data.get("edits") or [] if isinstance(edit, dict)]
+                    mine.append(Event(index, who, "edit", path, text="\n".join(part for part in written if isinstance(part, str))))
             elif name in CLAUDE_WORKLIST_TOOLS:
                 if name == "TodoWrite":
                     items = [todo.get("content", "") for todo in data.get("todos") or []]
@@ -918,6 +921,7 @@ def attach(trace, children, clock=None):
             spawn.edits = spawn.edits | {event.path for event in child.events if event.kind == "edit"}
             spawn.code_writing = spawn.code_writing or bool(spawn.edits)
             spawn.reads = spawn.reads | {event.path for event in child.events if event.kind == "read"}
+            spawn.commands = spawn.commands + tuple(event.text for event in child.events if event.kind == "shell")
             base = spawn.event
             moved = {id(event): replace(event, text=child.link if event.kind == "done" else event.text,
                                         **placement(event, base, clock)) for event in child.events}
@@ -1243,6 +1247,132 @@ def investigation_before_first_edit(trace, keyed, ordered):
             "first_code_spawn": code and code.index, "before": before}
 
 
+ROLLOUT = "ops/rollout.yaml"
+HEX_ID = re.compile(r"(?<![0-9A-Za-z])(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+TAG_LISTING = {"-l", "--list", "-d", "--delete", "-v", "--verify"}
+INSTALL_VERBS = (("uv", "add"), ("uv", "pip", "install"), ("pip", "install"), ("npm", "install"), ("pnpm", "add"))
+INSTALL_VALUE_OPTIONS = {
+    "-r", "--requirement", "-e", "--editable", "-c", "--constraint", "-i", "--index-url", "--extra-index-url", "-f", "--find-links",
+    "--python", "-p", "-t", "--target", "--prefix", "--registry", "--cache", "--project", "--directory",
+}
+PACKAGE_NAME = re.compile(r"^(@?[A-Za-z0-9][A-Za-z0-9._/-]*?)(?:@[^/@]*|[<>=!~;\[ ].*)?$")
+
+
+def is_landing_command(text):
+    """Whether one shell command is a git push or a git tag that creates a
+    tag. A dry run, a tag listing, and a tag deletion are not."""
+    for stages in split_shell(text):
+        for tokens in stages:
+            words = command_words(tokens)
+            if not words or words[0].rsplit("/", 1)[-1] != "git":
+                continue
+            sub = git_subcommand(words)
+            rest = words[words.index(sub) + 1:] if sub else []
+            if sub == "push" and not {"--dry-run", "-n"} & set(rest):
+                return True
+            if sub == "tag" and any(not word.startswith("-") for word in rest) and not TAG_LISTING & set(rest):
+                return True
+    return False
+
+
+def landing_event(trace):
+    """The lead's first act that puts work where someone else reads it: an
+    edit of ops/rollout.yaml or a git push or tag command."""
+    return next((event for event in sorted(trace.events, key=order) if event.actor == "main" and (
+        (event.kind == "edit" and same_file(event.path, ROLLOUT)) or (event.kind == "shell" and is_landing_command(event.text)))), None)
+
+
+def landing_text(trace, landing):
+    """What the landing act wrote or ran: the command, or the text of the
+    edit plus any shell command the lead ran in the same tool call."""
+    if landing.kind == "shell":
+        return landing.text
+    return "\n".join(event.text for event in trace.events
+                     if event.actor == "main" and event.index == landing.index and event.kind in ("edit", "shell") and event.text)
+
+
+def hex_ids(text):
+    return HEX_ID.findall(text or "")
+
+
+def prefix_match(one, other):
+    return bool(one and other) and (one.startswith(other) or other.startswith(one))
+
+
+def checked_before_landing(trace, keyed, ordered):
+    """Whether an agent that did not write the work checked a commit before
+    the lead landed it. The landing is landing_event. A checker is a
+    lead-spawned delegate that returned before the landing, or at all when
+    there is none, wrote no code, and whose brief or shell commands name a
+    hex id of 7 to 40 characters with a digit and a letter. checked_id is the
+    id a checker names that the landing text also names, else the first id a
+    checker names. landed_id is the first id the landing text names.
+    same_commit compares the two and is None when either is missing. before
+    is None when there is no landing, or when a landing or a candidate checker
+    has no lead order and no ordered checker exists."""
+    landing = landing_event(trace)
+    checkers, unordered = [], 0
+    for key, spawn in keyed.items():
+        ids = hex_ids(" ".join([spawn.event.text or "", *spawn.commands]))
+        if spawn.code_writing or not ids or (spawn.path and spawn.path.rpartition("/")[0] != "/root"):
+            continue
+        back = returned(trace, key, spawn)
+        if not ordered(spawn.event):
+            unordered += 1
+        elif back and (landing is None or order(back) < order(landing)):
+            checkers.append((order(back), ids))
+    text = landing_text(trace, landing) if landing else ""
+    landed = next(iter(hex_ids(text)), None)
+    named = [name for _, ids in sorted(checkers) for name in ids]
+    checked = next((name for name in named if prefix_match(name, landed)), next(iter(named), None))
+    if landing is None:
+        before = None
+    elif checkers:
+        before = True
+    else:
+        before = None if unordered or not ordered(landing) else False
+    return {
+        "landing": landing and landing.index,
+        "checkers_before": len(checkers),
+        "before": before,
+        "checked_id": checked,
+        "landed_id": landed,
+        "same_commit": prefix_match(checked, landed) if checked and landed else None,
+    }
+
+
+def package_names(words):
+    """The package names a stage installs, or None when it is no install
+    command (INSTALL_VERBS). Flags, the values of options that take one, and
+    local paths are not names, and a version, extra, or marker is cut off."""
+    for verb in INSTALL_VERBS:
+        if tuple(word.rsplit("/", 1)[-1] for word in words[:len(verb)]) == verb:
+            names, skip = [], False
+            for word in words[len(verb):]:
+                if skip:
+                    skip = False
+                elif word in INSTALL_VALUE_OPTIONS:
+                    skip = True
+                elif not word.startswith("-") and not word.startswith((".", "/", "~")):
+                    found = PACKAGE_NAME.match(word)
+                    names.append(found.group(1) if found else word)
+            return names
+    return None
+
+
+def installs(trace):
+    """Package names from lead or delegate install commands, in the order
+    they first appear."""
+    names = []
+    for event in sorted(trace.events, key=order):
+        if event.kind != "shell":
+            continue
+        for stages in split_shell(event.text):
+            for tokens in stages:
+                names += [name for name in package_names(command_words(tokens)) or [] if name not in names]
+    return names
+
+
 def stages(trace, *, case, owner, injected, playbook_texts, principles, workspace, skill_names=()):
     """Every chain stage of one run, from its events. skill_names are the
     mounted skills a playbook step may point at."""
@@ -1360,6 +1490,8 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         "delegated_investigation": investigation["investigation_spawns"] > 0,
         "investigation_before_first_edit": investigation_before_first_edit(trace, keyed, ordered),
         "full_suite_run": full_suite_run(trace, ordered),
+        "checked_before_landing": checked_before_landing(trace, keyed, ordered),
+        "installs": installs(trace),
         "delegate_census": [
             {"role": spawn.role, "path": spawn.path, "code_writing": spawn.code_writing, "persona": spawn.persona, "prescribed": spawn.prescribed}
             for spawn in briefed
@@ -1633,6 +1765,7 @@ STAGES = {
     "parallel investigation spawns": lambda row: row["parallel_investigation"]["parallel"] if row["delegated_investigation"] else None,
     "investigation before first edit": lambda row: row["investigation_before_first_edit"]["before"],
     "wide test run after last edit": lambda row: row["full_suite_run"]["wide"],
+    "checked before landing": lambda row: row["checked_before_landing"]["before"],
 }
 FRACTION_STAGES = {"step pointers preserved (fraction)"}
 REVIEW_STAGES = {

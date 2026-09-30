@@ -1144,6 +1144,101 @@ class CodexReviewTests(unittest.TestCase):
     def test_a_build_run_has_no_review(self):
         self.assertEqual((self.row["review"]["primary"], analyze("sbx-codex", "codex")["review"]), ("investigation", None))
 
+CHECKED = "3f9c2ab"
+FULL = "3f9c2ab41d0e5f6a7b8c9d0e1f2a3b4c5d6e7f80"
+
+
+class CheckedBeforeLandingTests(unittest.TestCase):
+    """One lead-spawned delegate that returns at index 4, and a lead landing
+    at index 6 (a rollout edit) or 2 (before the spawn)."""
+
+    def stage(self, landing, *, brief=f"Read commit {CHECKED} and say if it fixes the cap.", commands=(), code_writing=False,
+              edit_at=6, extra=()):
+        spawn = chain.Event(3, "main", "spawn", text=brief)
+        events = [spawn, chain.Event(4, "main", "return", text="c1"), *extra]
+        if landing == "edit":
+            events.append(chain.Event(edit_at, "main", "edit", "/w/farebox/ops/rollout.yaml", text=f"commit: {FULL}\n"))
+        elif landing:
+            events.append(chain.Event(edit_at, "main", "shell", text=landing))
+        spawns = {"c1": chain.Spawn(spawn, role="general-purpose", code_writing=code_writing, commands=commands)}
+        return run_stages(chain.Trace(events=sorted(events, key=chain.order), spawns=spawns))["checked_before_landing"]
+
+    def test_landing_after_a_checker_that_named_the_landed_id(self):
+        self.assertEqual(self.stage("edit"), {
+            "landing": 6, "checkers_before": 1, "before": True, "checked_id": CHECKED, "landed_id": FULL, "same_commit": True})
+
+    def test_a_push_names_the_landed_id_and_a_checker_that_ran_git_show_counts(self):
+        self.assertEqual(self.stage(f"git push origin {FULL}:refs/heads/main", brief="Review the fix.", commands=(f"git show {CHECKED}",)), {
+            "landing": 6, "checkers_before": 1, "before": True, "checked_id": CHECKED, "landed_id": FULL, "same_commit": True})
+
+    def test_landing_before_any_checker_returned(self):
+        self.assertEqual(self.stage("edit", edit_at=2), {
+            "landing": 2, "checkers_before": 0, "before": False, "checked_id": None, "landed_id": FULL, "same_commit": None})
+
+    def test_a_checker_that_named_another_commit_did_not_check_the_landed_one(self):
+        self.assertEqual(self.stage("edit", brief="Read commit 0a1b2c3d4e and say if it fixes the cap."), {
+            "landing": 6, "checkers_before": 1, "before": True, "checked_id": "0a1b2c3d4e", "landed_id": FULL, "same_commit": False})
+
+    def test_a_delegate_that_wrote_code_is_not_a_checker(self):
+        self.assertEqual(self.stage("edit", code_writing=True), {
+            "landing": 6, "checkers_before": 0, "before": False, "checked_id": None, "landed_id": FULL, "same_commit": None})
+
+    def test_a_brief_that_names_no_commit_is_not_a_checker(self):
+        self.assertEqual(self.stage("edit", brief="Look over the fix and tell me if it is right.")["checkers_before"], 0)
+
+    def test_no_landing_counts_the_ceremony_and_orders_nothing(self):
+        self.assertEqual(self.stage(None), {
+            "landing": None, "checkers_before": 1, "before": None, "checked_id": CHECKED, "landed_id": None, "same_commit": None})
+
+    def test_dry_runs_and_tag_listings_do_not_land(self):
+        self.assertEqual([chain.is_landing_command(command) for command in (
+            "git push origin main", "git -C /w push --force-with-lease", "git tag v2 abc1234", "git tag -a v2 -m 'cap fix'",
+            "git push --dry-run origin main", "git tag", "git tag -l 'v*'", "git tag -d v1", "git status && git push",
+        )], [True, True, True, True, False, False, False, False, True])
+
+    def test_a_delegate_landing_after_the_lead_never_landed_is_not_a_landing(self):
+        spawn = chain.Event(3, "main", "spawn", text=f"Check {CHECKED}")
+        trace = chain.Trace(events=[spawn, chain.Event(3, "delegate", "edit", "/w/farebox/ops/rollout.yaml", sub=(1,)), chain.Event(4, "main", "return", text="c1")],
+                            spawns={"c1": chain.Spawn(spawn, role="general-purpose")})
+
+        self.assertIsNone(run_stages(trace)["checked_before_landing"]["landing"])
+
+    def test_unplaced_checker_leaves_the_order_unknown(self):
+        spawn = chain.Event(9, "delegate", "spawn", text=f"Check {CHECKED}")
+        edit = chain.Event(10, "main", "edit", "/w/farebox/ops/rollout.yaml", text=f"commit: {FULL}")
+        trace = chain.Trace(events=[edit, spawn], spawns={"c1": chain.Spawn(spawn, role="general-purpose", placed=False)})
+
+        self.assertEqual(run_stages(trace)["checked_before_landing"]["before"], None)
+
+    def test_claude_edit_tool_carries_the_written_text(self):
+        line = json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "u1", "name": "Write", "input": {
+            "file_path": "/w/farebox/ops/rollout.yaml", "content": f"commit: {FULL}\n"}}]}})
+
+        trace = chain.parse_claude([line], TREE)
+
+        self.assertEqual(trace.events, [chain.Event(0, "main", "edit", "/w/farebox/ops/rollout.yaml", text=f"commit: {FULL}\n")])
+
+
+class InstallsTests(unittest.TestCase):
+    def installs(self, *commands):
+        events = [chain.Event(n, "delegate" if n % 2 else "main", "shell", text=command) for n, command in enumerate(commands)]
+        return run_stages(chain.Trace(events=events))["installs"]
+
+    def test_names_from_each_install_form_by_lead_or_delegate(self):
+        self.assertEqual(self.installs(
+            "uv add requests 'httpx>=0.27' --dev",
+            "cd /w && uv pip install -r requirements.txt pyyaml[extra]==6.0",
+            "pip install python-dateutil . ./local",
+            "npm install --save left-pad @scope/pkg@1.2.3 lodash@4",
+            "pnpm add -D typescript && echo done",
+            "npm install",
+            "pytest -q",
+            "uv add requests",
+        ), ["requests", "httpx", "pyyaml", "python-dateutil", "left-pad", "@scope/pkg", "lodash", "typescript"])
+
+    def test_a_run_that_installs_nothing_has_an_empty_list(self):
+        self.assertEqual(self.installs("git status", "uv run pytest", "pip list"), [])
+
 
 if __name__ == "__main__":
     unittest.main()
