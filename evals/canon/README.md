@@ -182,13 +182,14 @@ entries add `baseline` and `treatment`, and these rule entries add `arm`.
 beside current whose frontmatter does not set `disable-model-invocation` and
 whose skill has no `agents/openai.yaml` with `allow_implicit_invocation:
 false`. The agent is offered such a skill by its description in every run of
-that arm, so a pair whose differing files include it is exposed whether or not
-the run loaded it. A run that never loads a listed skill is a `tie-fail`
-against current, not `unexposed`, which is the outcome a placement screen
-measures. After the rule lines `compare` prints one line per agent, rule, and
-arm, `arm skill: changed text reached 2/5 run(s)`, counting the runs that read
-or loaded one of the arm's changed files or had `poteto-mode/SKILL.md`
-injected, and adds `listed by description: <paths>` when the arm lists any.
+that arm. A pair whose differing files include a listed skill is exposed only
+when the listing arm is the treatment, whether or not the run loaded the skill.
+Such a pair is scored on its verdicts instead of reading `unexposed`, which is
+the outcome a placement screen measures. After the rule lines `compare` prints
+one line per agent, rule, and arm that changes files, `arm skill: changed text
+reached 2/5 run(s)`, counting the runs that read or loaded one of the arm's
+changed files or had `poteto-mode/SKILL.md` injected, and adds `listed by
+description: <paths>` when the arm lists any.
 `compare.json` holds the same rows under `arms`. `plan`
 lists an arm rule's arms and each arm's changed files. `chain.py` counts every
 arm the build lists, and takes an arm's owner file to be the first file its
