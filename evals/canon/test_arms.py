@@ -137,6 +137,21 @@ class ArmsRuleLoadTests(unittest.TestCase):
         with self.assertRaisesRegex(screen.ScreenError, "has arms/stub.patch, but the stub arm is built from current"):
             screen.load_rule("scratch-arms")
 
+    def test_stub_arm_needs_no_patch_and_the_rule_needs_no_arms_directory(self):
+        self.write("scratch-stub", {"rule.json": json.dumps({"cases_from": "scratch-base", "arms": ["current", "stub"]})})
+
+        rule = screen.load_rule("scratch-stub")
+
+        self.assertEqual((rule.arms, rule.target, rule.skills), ((("current", None), ("stub", None)), "poteto-mode/SKILL.md", ("poteto-mode",)))
+        self.assertIn("scratch-stub", [rule.id for rule in screen.load_rules()])
+
+    def test_patch_for_the_stub_arm_is_refused(self):
+        self.arms(["current", "leaf", "leaf+trigger", "stub"])
+        self.write("scratch-arms", {"arms/stub.patch": LEAF})
+
+        with self.assertRaisesRegex(screen.ScreenError, "has arms/stub.patch, but the stub arm is built from current"):
+            screen.load_rule("scratch-arms")
+
     def test_arms_rule_whose_source_is_a_variant_is_refused(self):
         self.write("scratch-variant", {"rule.json": '{"cases_from": "scratch-base"}', "rule.patch": LEAF})
         self.write("scratch-arms", {"rule.json": json.dumps({"cases_from": "scratch-variant", "arms": ["current", "leaf", "leaf+trigger"]})})

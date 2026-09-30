@@ -263,6 +263,12 @@ class RunLayoutTests(unittest.TestCase):
         self.assertEqual(chain.rule_owner("bundle", build, "leaf+trigger"), "poteto-mode/SKILL.md")
         self.assertEqual(chain.rule_owner("bundle", build, "current"), "poteto-mode/playbooks/feature.md")
 
+    def test_the_stub_keeps_the_rule_target_instead_of_its_first_cut_file(self):
+        build = {"target": "poteto-mode/SKILL.md",
+                 "arm_changes": {"current": [], "stub": ["architect/SKILL.md", "arena/SKILL.md", "poteto-mode/SKILL.md"]}}
+
+        self.assertEqual(chain.rule_owner("stub-rule", build, "stub"), "poteto-mode/SKILL.md")
+
 
 class InjectionTests(unittest.TestCase):
     def test_wrapper_token_and_listed_slash_command_mean_injected(self):

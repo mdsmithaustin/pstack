@@ -22,7 +22,8 @@ checked out, main exists, and the PR body sits in its cwd.
 For an arms rule, a workspace case's path also names the arm, and a positive
 case answers with good.md in every arm but current, or but stub when the rule
 has a stub arm. A pasted-project case
-counts an arm as mounted when every line it adds is. Every arm reads every file
+counts an arm as mounted when every line it adds is, so in a stub rule,
+which adds none, it reads every arm as untreated. Every arm reads every file
 any arm changes.
 """
 import glob
