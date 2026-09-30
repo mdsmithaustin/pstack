@@ -375,8 +375,9 @@ plugins or fixtures, and returns one `<module>::<test> failed` line per
 failure. The check builds `tree` from the pinned checkout and the diff's new
 bytes, so it runs the pinned tests and never the agent's edited copies.
 A case whose tests need third-party packages runs them in a dependency image
-instead. `images/<repo>/Dockerfile` installs the repo's Python and web test
-dependencies from its own lockfiles, and the image holds none of its source.
+instead. `images/<repo>/Dockerfile` installs the repo's test dependencies from its own
+lockfiles, Python for both repos and the web ones for omnigent, and the image
+holds none of its source.
 `python3 evals/canon/images/build.py <repo> <commit>` builds it from the
 manifests and lockfiles the mirror holds at that commit, and records the image
 id in `images/images.json` under `<repo>-<commit[:12]>`. The images are local
@@ -741,7 +742,7 @@ Each run goes through `sandbox.py wrap`, which does this:
    `--entry poteto-mode`, `sbx_inside.py setup` then links the tree to
    `.claude/skills` or `.agents/skills` and registers the poteto-agent and
    Comment Sicko personas, and on Claude Code the five `pstack-effort-*`
-   delegate agents, by running `pstack-harness/scripts/subagents.py install
+   delegate agents when the pinned tree ships them, by running `pstack-harness/scripts/subagents.py install
    --harness claude-code|codex --project <clone>` through that link, as a user
    install would. For Codex it also trusts the clone in the sandbox's own
    `~/.codex/config.toml`, since Codex loads project roles only for a trusted
@@ -769,8 +770,8 @@ Each run goes through `sandbox.py wrap`, which does this:
 The harness takes exactly one terminal `result` event from a Claude stream.
 A poteto-mode lead emits one each time it ends a turn while a background
 delegate runs, and one more at the end. So for Claude the wrapper reads the
-agent's stdout line by line, drops every `result` line but the last, and
-forwards the rest in order. It writes the whole stream to `raw-stream.jsonl`
+agent's stdout line by line, forwards every other line in order, and writes
+the last `result` line last, after any task notification that followed it. It writes the whole stream to `raw-stream.jsonl`
 in the harvest dir. Codex's stream passes through unchanged.
 
 The harvest dir of a run holds `workspace.diff`, `workspace.json`,
@@ -823,9 +824,12 @@ afterwards.
 commit. It creates a sandbox with no workspace and extracts the pinned commit
 under `/opt/canon-deps/<repo>/src`. It installs uv from `sbx.json` (the
 kit's uv 0.9.26 is older than omnigent's `required-version`) and the repo's
-pinned Python. Then it runs `uv sync` against the repo's lockfile, with
-`--frozen --group test` and `OMNIGENT_SKIP_WEB_UI=true` for omnigent (its build
-otherwise runs pnpm) and `--frozen --extra dev` for hermes. The venv, the uv cache, and the
+Python, which is the commit's `.python-version` when it has one and the
+repo's `python` in `sbx.json` otherwise. Then it runs `uv sync --frozen`
+against the repo's lockfile, plus `--group <tools.group>` when the commit's
+`pyproject.toml` declares that dependency group, else `--extra <tools.extra>`,
+and refuses a commit that declares neither. omnigent also gets
+`OMNIGENT_SKIP_WEB_UI=true`, since its build otherwise runs pnpm. The venv, the uv cache, and the
 interpreter live under `/opt/canon-deps`, outside every workspace. The source
 copy and the kit's credential files are deleted before `sbx template save`.
 At run time setup links `.venv` to that venv and reruns the same `uv sync`
