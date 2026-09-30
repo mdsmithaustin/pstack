@@ -923,7 +923,10 @@ def test_hermes_desktop_reopens_the_app_it_did_not_rebuild(windows_tree, monkeyp
     except SystemExit as exc:
         outcome = exc.code not in (0, None)
     out = capsys.readouterr().out
-    assert (outcome, "no launchable app" in out, ANCESTOR in windows_tree.stopped) == (True, False, False), out
+    # The faked pack writes no app, so a design that still packs here fails its own
+    # promotion with "produced no launchable app". Only cmd_gui's claim about the
+    # live release is the false one the review asked to remove.
+    assert (outcome, "no launchable app was found" in out, ANCESTOR in windows_tree.stopped) == (True, False, False), out
 '''
 
 PLATFORM_PATCH = re.compile(r"""setattr\([^)]*\bsys\b[^)]*["']platform["']|\bsys\.platform\s*=(?!=)"""
