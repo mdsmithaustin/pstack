@@ -64,7 +64,9 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn("""python: '"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"'""", hook)
         self.assertTrue(all(command.startswith("'{python} ") for command in python_runs))
         self.assertIn("{python} tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json", hook)
-        self.assertIn("{python} tools/check-skill-content.py skills", hook)
+        self.assertIn(
+            "{python} tools/check-skill-content.py skills --conventions-file tools/skill-content-conventions.json", hook
+        )
         self.assertIn("{python} tools/check-cross-suite-references.py", hook)
         self.assertIn("{python} tools/check-pii.py --staged", hook)
 

@@ -13,7 +13,7 @@ pre-commit:
     skill-metadata:
       run: '{python} tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json'
     skill-content:
-      run: '{python} tools/check-skill-content.py skills'
+      run: '{python} tools/check-skill-content.py skills --conventions-file tools/skill-content-conventions.json'
     cross-suite-references:
       run: '{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'
     pii:
