@@ -9,8 +9,8 @@ import type {
   Repository,
   ReviewThread,
   RollupPage,
-} from "./types.ts";
-import { parsePrNumber } from "./types.ts";
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
+import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 
 export interface FakeReaderOptions {
   readonly facts?: Partial<Omit<PullRequestFacts, "context">>;

@@ -8,14 +8,14 @@ import {
   parseRollupPage,
   resolveChecks,
   resolveContext,
-} from "./github.ts";
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import {
   fakeReader,
   failedCheck,
   passingCheck,
   pendingCheck,
 } from "./fakes.test-helper.ts";
-import { parsePrNumber } from "./types.ts";
+import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 
 const context = {
   host: "github.com",

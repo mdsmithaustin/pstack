@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { renderPretty, renderStatusTable } from "./render.ts";
-import { parsePrNumber } from "./types.ts";
-import type * as T from "./types.ts";
+import { renderPretty, renderStatusTable } from "../../../../../skills/poteto-mode/scripts/watch-pr/render.ts";
+import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
+import type * as T from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 
 const context = {
   host: "github.com",

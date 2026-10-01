@@ -3,6 +3,8 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+const SOURCE_DIR = join(import.meta.dir, "../../../../../skills/poteto-mode/scripts/watch-pr");
+
 function readerOutput(gitResult: string, prUrl: string): unknown {
   const directory = mkdtempSync(join(tmpdir(), "watch-pr-host-"));
   try {
@@ -15,9 +17,9 @@ function readerOutput(gitResult: string, prUrl: string): unknown {
     );
     chmodSync(git, 0o755);
     chmodSync(gh, 0o755);
-    const script = `import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(import.meta.dir, "github.ts"))}; import { parsePrNumber } from ${JSON.stringify(join(import.meta.dir, "types.ts"))}; const context = await resolveContext({ reader: new GhGitHubReader(), owner: null, repo: null, pr: parsePrNumber(14) }); console.log(JSON.stringify(context));`;
+    const script = `import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(SOURCE_DIR, "github.ts"))}; import { parsePrNumber } from ${JSON.stringify(join(SOURCE_DIR, "types.ts"))}; const context = await resolveContext({ reader: new GhGitHubReader(), owner: null, repo: null, pr: parsePrNumber(14) }); console.log(JSON.stringify(context));`;
     const result = Bun.spawnSync([process.execPath, "-e", script], {
-      cwd: import.meta.dir,
+      cwd: SOURCE_DIR,
       env: { ...process.env, PATH: `${directory}:${process.env.PATH ?? ""}` },
     });
     if (result.exitCode !== 0)
@@ -44,9 +46,9 @@ function commandOutput(
     );
     chmodSync(git, 0o755);
     chmodSync(gh, 0o755);
-    const script = `import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(import.meta.dir, "github.ts"))}; import { parsePrNumber } from ${JSON.stringify(join(import.meta.dir, "types.ts"))}; const reader = new GhGitHubReader(); const context = await resolveContext({ reader, owner: "explicit", repo: "override", pr: parsePrNumber(14) }); for (const operation of [() => reader.pullRequest(context), () => reader.openPullRequests(context), () => reader.checksFastPath(context), () => reader.checkRollupPage(context, null), () => reader.reviewState(context), () => reader.commitRollups(context)]) { try { await operation(); } catch {} } console.log(JSON.stringify(context));`;
+    const script = `import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(SOURCE_DIR, "github.ts"))}; import { parsePrNumber } from ${JSON.stringify(join(SOURCE_DIR, "types.ts"))}; const reader = new GhGitHubReader(); const context = await resolveContext({ reader, owner: "explicit", repo: "override", pr: parsePrNumber(14) }); for (const operation of [() => reader.pullRequest(context), () => reader.openPullRequests(context), () => reader.checksFastPath(context), () => reader.checkRollupPage(context, null), () => reader.reviewState(context), () => reader.commitRollups(context)]) { try { await operation(); } catch {} } console.log(JSON.stringify(context));`;
     const result = Bun.spawnSync([process.execPath, "-e", script], {
-      cwd: import.meta.dir,
+      cwd: SOURCE_DIR,
       env: {
         ...process.env,
         GH_HOST: host,
