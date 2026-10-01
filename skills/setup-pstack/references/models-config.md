@@ -11,7 +11,7 @@ Failure signal: nonzero exit. It prints one JSON line per arm with `role`, `arm`
 ## Grammar
 
 - A role line is `role: entry`, or `role, role: entry` to bind several roles at once. `reflect judgment, divergent, synthesizer` expands the bare labels to `reflect divergent` and `reflect synthesizer`.
-- An entry is `model` or `model@effort`. Efforts are `none`, `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`, which is Codex's maximum reasoning with automatic task delegation. The lint rejects an effort a known model cannot take, such as `none` on any gpt-6 model or `ultra` on `gpt-6-luna`, because Codex's `spawn_agent` rejects both.
+- An entry is `model` or `model@effort`. Efforts are `none`, `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`, which is Codex's maximum reasoning with automatic task delegation. The lint rejects an effort a known model cannot take, such as `none` on `gpt-6.1-sol`, `gpt-6-astra`, `gpt-6-sol`, or `gpt-6-luna`, or `ultra` on `gpt-6-luna`, because Codex's `spawn_agent` rejects both. A gpt-6 model outside that list, such as `gpt-6.1-luna`, is checked only at resolve time, against Codex's model list.
 - `inherit-parent` and `auto`, with or without `@effort`, run the arm on the parent chat model.
 - Panel roles take a comma list, one arm per entry: `arena runners`, `arena cross-judge pool`, `architect runners`, and `interrogate reviewers`.
 - A `## codex`, `## claude-code`, `## grok`, or `## hermes` header starts a section whose lines apply to that CLI only. Lines above any header are flat lines and apply everywhere. Put a CLI's own slug, such as `gpt-6-sol` or `grok-4.7`, under that CLI's section, because Codex, Hermes, and Grok Build each accept any model name from a flat line.
