@@ -11,11 +11,16 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parent
 CONTENT = TOOLS / "check-skill-content.py"
 FRONTMATTER = TOOLS / "check-skill-frontmatter.py"
+CONVENTIONS_FILE = TOOLS / "skill-content-conventions.json"
 
 
-def run(script: Path, root: Path) -> tuple[int, str]:
-    p = subprocess.run([sys.executable, str(script), str(root)], capture_output=True, text=True)
+def run(script: Path, root: Path, *options: str) -> tuple[int, str]:
+    p = subprocess.run([sys.executable, str(script), str(root), *options], capture_output=True, text=True)
     return p.returncode, p.stdout
+
+
+def run_with_conventions(root: Path) -> tuple[int, str]:
+    return run(CONTENT, root, "--conventions-file", str(CONVENTIONS_FILE))
 
 
 class Tree(unittest.TestCase):
@@ -51,7 +56,7 @@ class ContentLint(Tree):
 
     def body(self, body: str) -> tuple[int, str]:
         self.skill("a", 'name: a\ndescription: "d"', body)
-        return run(CONTENT, self.root)
+        return run_with_conventions(self.root)
 
     def test_clean_tree_passes(self) -> None:
         self.assertEqual(run(CONTENT, self.root), (0, ""))
@@ -862,10 +867,27 @@ class ContentLint(Tree):
         self.assertEqual(code, 1)
         self.assertIn("sibling-skill", out)
 
-    def test_principle_name_fires_without_the_word_skill(self) -> None:
+    def test_prefixed_name_fires_without_the_word_skill(self) -> None:
         code, out = self.body("- **L** (**principle-nope**). Bias to deletion.")
-        self.assertEqual(code, 1, "a principle- name is checked even with no 'skill' on the line")
-        self.assertIn("principle-nope", out)
+        self.assertEqual(code, 1, "a name with a prefix from the conventions file is checked even with no 'skill' on the line")
+        self.assertIn("SKILL.md:6: sibling-skill: **principle-nope** has no matching directory", out)
+
+    def test_bare_name_resolves_against_the_prefixed_directory_on_a_principle_line(self) -> None:
+        self.skill("principle-real-rule", 'name: principle-real-rule\ndescription: "d"')
+        self.assertEqual(self.body("- Apply the **real-rule** principle skill."), (0, ""))
+
+    def test_bare_name_with_no_prefixed_directory_fires(self) -> None:
+        code, out = self.body("- Apply the **real-rule** principle skill.")
+        self.assertEqual(code, 1)
+        self.assertIn("sibling-skill: **real-rule** has no matching directory", out)
+
+    def test_without_a_conventions_file_the_prefix_and_retired_text_are_not_special(self) -> None:
+        self.skill(
+            "a",
+            'name: a\ndescription: "d"',
+            "- **L** (**principle-nope**). Run /deslop.\n\n```\nnode pstack/skills/x.mjs\n```",
+        )
+        self.assertEqual(run(CONTENT, self.root), (0, ""))
 
     def test_known_skill_reference_passes(self) -> None:
         self.assertEqual(self.body("Use the **real-skill** skill.")[0], 0)
@@ -889,8 +911,8 @@ class ContentLint(Tree):
             "````"
         )
         self.assertEqual(code, 1)
-        self.assertIn("SKILL.md:6: port-substitution", out)
-        self.assertIn("SKILL.md:10: port-substitution", out)
+        self.assertIn("SKILL.md:6: retired-text", out)
+        self.assertIn("SKILL.md:10: retired-text", out)
 
     def test_retired_deslop_command_fires_in_prose_and_fenced_templates(self) -> None:
         code, out = self.body(
@@ -902,8 +924,8 @@ class ContentLint(Tree):
             "````"
         )
         self.assertEqual(code, 1)
-        self.assertIn("SKILL.md:6: port-substitution", out)
-        self.assertIn("SKILL.md:10: port-substitution", out)
+        self.assertIn("SKILL.md:6: retired-text", out)
+        self.assertIn("SKILL.md:10: retired-text", out)
 
 
 class FenceHandling(Tree):
@@ -913,7 +935,7 @@ class FenceHandling(Tree):
 
     def body(self, body: str) -> tuple[int, str]:
         self.skill("a", 'name: a\ndescription: "d"', body)
-        return run(CONTENT, self.root)
+        return run_with_conventions(self.root)
 
     def test_scripts_parse(self) -> None:
         for script in (CONTENT, FRONTMATTER):
@@ -941,7 +963,7 @@ class FenceHandling(Tree):
         self.assertEqual(code, 1, "an unclosed fence hides the rest of the file")
         self.assertIn("unclosed-fence", out)
         self.assertIn("link and sibling checks skip the rest of the file", out)
-        self.assertIn("port-substitution", out, "raw port checks still inspect text after an unclosed fence")
+        self.assertIn("retired-text", out, "raw retired-text checks still inspect text after an unclosed fence")
 
     def test_fence_indented_inside_a_nested_list_is_still_a_fence(self) -> None:
         code, out = self.body("- a\n  - b\n\n    ```\n    See [x](../gone/n.md).\n    ```")
