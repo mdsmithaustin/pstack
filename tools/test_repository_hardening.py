@@ -38,6 +38,7 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn("pii-scope: repository", SHARED_WORKFLOW)
         self.assertIn("evals-dir: evals", SHARED_WORKFLOW)
         self.assertIn("trigger-cases: tools/skill-trigger-cases.json", SHARED_WORKFLOW)
+        self.assertIn("content-conventions-file: tools/skill-content-conventions.json", SHARED_WORKFLOW)
 
     def test_ruleset_has_required_branch_protections(self) -> None:
         self.assertEqual(RULESET["enforcement"], "active")

@@ -7,9 +7,10 @@ on:
   pull_request:
 jobs:
   skills:
-    uses: mdsmithaustin/skill-ci/.github/workflows/skill-checks.yml@51537d8de6a3affb355ef869bdab48c57c14a703
+    uses: mdsmithaustin/skill-ci/.github/workflows/skill-checks.yml@1101d730834aa5c6a475796be427737d69317e29
     with:
       skills-dir: skills
       evals-dir: evals
       trigger-cases: tools/skill-trigger-cases.json
       pii-scope: repository
+      content-conventions-file: tools/skill-content-conventions.json
