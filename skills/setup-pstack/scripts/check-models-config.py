@@ -8,6 +8,7 @@ import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 from typing import NamedTuple
 
 ROLES = {
@@ -76,8 +77,8 @@ CLIS: dict[str, Cli] = {
 MODEL_EFFORTS: dict[str, frozenset[str]] = {
     "gpt-6.1-sol": ALLOWED_EFFORTS - {"none"},
     "gpt-6-astra": ALLOWED_EFFORTS - {"none"},
-    "gpt-6-sol": ALLOWED_EFFORTS,
-    "gpt-6-luna": ALLOWED_EFFORTS,
+    "gpt-6-sol": ALLOWED_EFFORTS - {"none"},
+    "gpt-6-luna": ALLOWED_EFFORTS - {"none", "ultra"},
     "grok-4.7": frozenset({"low", "medium", "high", "xhigh"}),
     **{alias: CLAUDE_EFFORTS for alias in CLAUDE_ALIASES},
 }
@@ -92,26 +93,33 @@ DEFAULT_EFFORT_FLOOR = "high"
 GPT6_RELEASES_NEWEST_FIRST = ("gpt-6.1-", "gpt-6-")
 
 
-def _model_effort_allowed(model: str, effort: str) -> bool:
-    return effort in MODEL_EFFORTS.get(model, ALLOWED_EFFORTS)
+NO_CATALOG: Mapping[str, frozenset[str]] = MappingProxyType({})
 
 
-def listed_models(catalog: Path) -> frozenset[str]:
+def listed_models(catalog: Path) -> Mapping[str, frozenset[str]]:
     try:
         entries = json.loads(catalog.read_text(encoding="utf-8"))["models"]
-        return frozenset(entry["slug"] for entry in entries if entry.get("visibility", "list") == "list")
+        return {
+            entry["slug"]: frozenset(level["effort"] for level in entry.get("supported_reasoning_levels") or ())
+            for entry in entries
+            if entry.get("visibility", "list") == "list"
+        }
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        return frozenset()
+        return {}
 
 
-def _listed_release(model: str, effort: str, listed: frozenset[str]) -> str:
+def _model_efforts(model: str, listed: Mapping[str, frozenset[str]]) -> frozenset[str]:
+    return listed.get(model) or MODEL_EFFORTS.get(model, ALLOWED_EFFORTS)
+
+
+def _listed_release(model: str, effort: str, listed: Mapping[str, frozenset[str]]) -> str:
     prefix = next((p for p in GPT6_RELEASES_NEWEST_FIRST if model.startswith(p)), None)
     if prefix is None:
         return model
     tier = model[len(prefix):]
     for release in GPT6_RELEASES_NEWEST_FIRST:
         candidate = release + tier
-        if candidate in listed and _model_effort_allowed(candidate, effort):
+        if candidate in listed and effort in _model_efforts(candidate, listed):
             return candidate
     return model
 
@@ -161,7 +169,7 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
             if effort not in ALLOWED_EFFORTS:
                 findings.append((line_no, "error", f"unknown effort {effort!r} for model {model!r}"))
                 continue
-            if not _model_effort_allowed(model, effort):
+            if effort not in MODEL_EFFORTS.get(model, ALLOWED_EFFORTS):
                 findings.append((line_no, "error", f"effort {effort!r} not supported by model {model!r}"))
                 continue
             if section in CLIS and effort not in CLIS[section].efforts:
@@ -291,36 +299,48 @@ def _resolve_model(model: str, written_effort: str | None, harness: str) -> tupl
     return INHERIT, written_effort, [f"{model} is not usable on {harness}"]
 
 
-def _resolve_effort(role: str, harness: str, model: str, written: str | None, notes: list[str]) -> str:
+def _resolve_effort(
+    role: str, harness: str, model: str, written: str | None, notes: list[str], listed: Mapping[str, frozenset[str]],
+) -> str:
     cli = CLIS[harness]
     if written is not None:
         if written not in cli.efforts:
             notes.append(f"effort {written} is not usable on {harness}")
-        elif not _model_effort_allowed(model, written):
+        elif written not in _model_efforts(model, listed):
             notes.append(f"effort {written} is not usable with {model}")
         else:
             return written
     if cli.session_effort or model == INHERIT:
         return INHERIT
-    return "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
+    floor = "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
+    ranked = [e for e in EFFORT_ORDER if e in _model_efforts(model, listed)]
+    if floor in ranked or not ranked:
+        return floor
+    note = f"effort {floor} is not usable with {model}"
+    if note not in notes:
+        notes.append(note)
+    at_or_below = [e for e in ranked if EFFORT_ORDER.index(e) <= EFFORT_ORDER.index(floor)]
+    return at_or_below[-1] if at_or_below else ranked[0]
 
 
 def _resolve_arm(
-    role: str, arm: int, source: str, harness: str, entry: tuple[str, str | None], listed: frozenset[str],
+    role: str, arm: int, source: str, harness: str, entry: tuple[str, str | None], listed: Mapping[str, frozenset[str]],
 ) -> ResolvedArm:
-    written_model, written_effort = entry
-    model, effort_in, notes = _resolve_model(written_model, written_effort, harness)
-    effort = _resolve_effort(role, harness, model, effort_in, notes)
+    entry_model, entry_effort = entry
+    base, effort_in, notes = _resolve_model(entry_model, entry_effort, harness)
+    model = base
+    if model != INHERIT and effort_in is not None:
+        model = _listed_release(model, effort_in, listed)
+    effort = _resolve_effort(role, harness, model, effort_in, notes, listed)
     if model != INHERIT:
-        chosen = _listed_release(model, effort, listed)
-        if chosen != model:
-            notes.append(f"{model} runs as {chosen}, the newest release this Codex lists")
-            model = chosen
+        model = _listed_release(model, effort, listed)
+        if model != base:
+            notes.append(f"{base} runs as {model}, the newest release this Codex lists with effort {effort}")
     return ResolvedArm(role, arm, model, effort, source, tuple(notes))
 
 
 def resolve_role(
-    role: str, harness: str, layers: list[Layer], listed: frozenset[str] = frozenset(),
+    role: str, harness: str, layers: list[Layer], listed: Mapping[str, frozenset[str]] = NO_CATALOG,
 ) -> list[ResolvedArm]:
     for source, roles in layers:
         if role in roles:
@@ -378,7 +398,7 @@ def _resolve_main(argv: list[str]) -> int:
     skill_default, _ = parse(SKILL_DEFAULT_FILE.read_text(encoding="utf-8"))
     layers = build_layers(args.harness, parsed[workspace_file], parsed[args.user_file], skill_default)
     catalog = CLIS[args.harness].catalog
-    listed = listed_models(catalog) if catalog else frozenset()
+    listed = listed_models(catalog) if catalog else NO_CATALOG
     for role in args.roles or sorted(ROLES):
         for arm in resolve_role(role, args.harness, layers, listed):
             print(arm.to_json())
