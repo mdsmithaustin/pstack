@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Lint pstack-models.md files: role names, model/effort grammar, harness sections.
+"""Lint pstack-models.md files, or resolve roles to a model and effort for one harness.
 
 Usage: python3 check-models-config.py <file> [<file>...]
+       python3 check-models-config.py --resolve --harness {claude-code,codex,hermes}
+           [--project DIR] [--user-file FILE] [ROLE ...]
 """
 from __future__ import annotations
 
+import argparse
+import json
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 HARNESSES = {"codex", "claude-code", "hermes"}
 
@@ -34,6 +39,31 @@ CLAUDE_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
 OTHER_ALIASES = {"inherit-parent", "auto"}
 CLAUDE_CODE_SECTION = "claude-code"
 NOT_CLAUDE_CODE_LEVELS = {"none", "ultra"}
+
+INHERIT = "inherit-parent"
+CONFIG_NAME = "pstack-models.md"
+SKILL_DEFAULT_FILE = Path(__file__).resolve().parent.parent / "examples" / CONFIG_NAME
+
+HARNESS_EFFORTS = {
+    "claude-code": CLAUDE_EFFORTS,
+    "codex": ALLOWED_EFFORTS,
+    "hermes": ALLOWED_EFFORTS,
+}
+# Claude Code subagents inherit the session effort, so an unwritten effort stays inherited there.
+SESSION_EFFORT_HARNESSES = {"claude-code"}
+CODEX_ALIAS_TRANSLATION = {
+    "fable": ("gpt-5.6-sol", "max"),
+    "opus": ("gpt-5.6-sol", "xhigh"),
+    "sonnet": ("gpt-5.6-terra", "high"),
+    "haiku": ("gpt-5.6-luna", "high"),
+}
+XHIGH_FLOOR_ROLES = {
+    "hardest tasks", "judgment and prose", "bug-fix", "perf-issue", "hillclimb",
+    "how explainer", "why synthesizer", "reflect judgment", "reflect divergent",
+    "reflect synthesizer", "arena cross-judge pool", "architect runners",
+    "trail reviewer",
+}
+DEFAULT_EFFORT_FLOOR = "high"
 
 
 def _model_effort_allowed(model: str, effort: str) -> bool | None:
@@ -182,9 +212,138 @@ def parse(text: str) -> tuple[dict, list]:
     return sections, findings
 
 
+class Layer(NamedTuple):
+    source: str
+    roles: dict[str, list[tuple[str, str | None]]]
+
+
+class ResolvedArm(NamedTuple):
+    role: str
+    arm: int
+    model: str
+    effort: str
+    source: str
+    notes: tuple[str, ...] = ()
+
+    def to_json(self) -> str:
+        record: dict = {
+            "role": self.role, "arm": self.arm, "model": self.model,
+            "effort": self.effort, "source": self.source,
+        }
+        if self.notes:
+            record["notes"] = list(self.notes)
+        return json.dumps(record)
+
+
+def _resolve_model(model: str, harness: str) -> tuple[str, tuple[str, str] | None, list[str]]:
+    """Return the usable model, the Codex translation applied (model, effort), and notes."""
+    if model in OTHER_ALIASES:
+        return INHERIT, None, []
+    usable = model in CLAUDE_ALIASES if harness == "claude-code" else model not in CLAUDE_ALIASES
+    if usable:
+        return model, None, []
+    if harness == "codex" and model in CLAUDE_ALIASES:
+        translated = CODEX_ALIAS_TRANSLATION[model]
+        return translated[0], translated, []
+    return INHERIT, None, [f"{model} is not usable on {harness}"]
+
+
+def _resolve_effort(role: str, harness: str, model: str, written: str | None, notes: list[str]) -> str:
+    if written is not None:
+        if written in HARNESS_EFFORTS[harness] and _model_effort_allowed(model, written) is not False:
+            return written
+        notes.append(f"effort {written} is not usable on {harness}")
+    if harness in SESSION_EFFORT_HARNESSES or model == INHERIT:
+        return INHERIT
+    return "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
+
+
+def _resolve_arm(role: str, arm: int, source: str, harness: str, entry: tuple[str, str | None]) -> ResolvedArm:
+    written_model, written_effort = entry
+    model, translation, notes = _resolve_model(written_model, harness)
+    effort_in = written_effort
+    if translation is not None:
+        effort_in = written_effort or translation[1]
+        shown = model if written_effort else f"{model}@{translation[1]}"
+        notes.append(f"{written_model} translated to {shown}")
+    effort = _resolve_effort(role, harness, model, effort_in, notes)
+    return ResolvedArm(role, arm, model, effort, source, tuple(notes))
+
+
+def resolve_role(role: str, harness: str, layers: list[Layer]) -> list[ResolvedArm]:
+    """The first layer that binds the role supplies its whole entry list."""
+    for source, roles in layers:
+        if role in roles:
+            return [
+                _resolve_arm(role, i, source, harness, entry)
+                for i, entry in enumerate(roles[role], start=1)
+            ]
+    raise LookupError(f"no layer binds role {role!r}")
+
+
+def build_layers(harness: str, workspace: dict, user: dict, skill_default: dict) -> list[Layer]:
+    return [
+        Layer(f"workspace ## {harness}", workspace.get(harness, {})),
+        Layer(f"user ## {harness}", user.get(harness, {})),
+        Layer("workspace flat", workspace.get("", {})),
+        Layer("user flat", user.get("", {})),
+        Layer("skill default", skill_default.get("", {})),
+    ]
+
+
+def _load_layer_file(path: Path) -> tuple[dict, list[tuple[int, str, str]]]:
+    if not path.is_file():
+        return {}, []
+    return parse(path.read_text(encoding="utf-8"))
+
+
+def _resolve_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(prog="check-models-config.py", allow_abbrev=False)
+    parser.add_argument("--resolve", action="store_true", required=True)
+    parser.add_argument("--harness", required=True, choices=sorted(HARNESSES))
+    parser.add_argument("--project", type=Path, default=Path.cwd())
+    parser.add_argument("--user-file", type=Path, default=Path.home() / ".agents" / CONFIG_NAME)
+    parser.add_argument("roles", nargs="*", metavar="ROLE")
+    args = parser.parse_args(argv)
+
+    unknown = [r for r in args.roles if r not in ROLES]
+    if unknown:
+        print(f"unknown role {unknown[0]!r}", file=sys.stderr)
+        return 2
+
+    workspace_file = args.project / ".agents" / CONFIG_NAME
+    parsed = {}
+    failed = False
+    for path in (workspace_file, args.user_file):
+        sections, findings = _load_layer_file(path)
+        parsed[path] = sections
+        for line_no, level, message in findings:
+            if level == "error":
+                print(f"{path}:{line_no}: {level}: {message}", file=sys.stderr)
+                failed = True
+    if failed:
+        return 1
+
+    skill_default, _ = parse(SKILL_DEFAULT_FILE.read_text(encoding="utf-8"))
+    layers = build_layers(args.harness, parsed[workspace_file], parsed[args.user_file], skill_default)
+    for role in args.roles or sorted(ROLES):
+        for arm in resolve_role(role, args.harness, layers):
+            print(arm.to_json())
+    return 0
+
+
+USAGE = (
+    "usage: check-models-config.py <file> [<file>...]\n"
+    "       check-models-config.py --resolve --harness {claude-code,codex,hermes}"
+    " [--project DIR] [--user-file FILE] [ROLE ...]"
+)
+
+
 def main(argv: list[str]) -> int:
+    if "--resolve" in argv[1:]:
+        return _resolve_main(argv[1:])
     if len(argv) < 2:
-        print("usage: check-models-config.py <file> [<file>...]", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 1
     exit_code = 0
     for path in argv[1:]:
