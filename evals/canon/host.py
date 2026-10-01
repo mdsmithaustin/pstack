@@ -34,16 +34,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import workspace  # noqa: E402
 
 PERSISTENCE_OFF = {"claude": "--no-session-persistence", "codex": "--ephemeral"}
-# agent: (env var naming its home, default home, store under it, harvest path)
+# agent: (env var naming its home, default home, store under it, the dirs in
+# the store that hold sessions, harvest path)
 SESSION_STORES = {
-    "claude": ("CLAUDE_CONFIG_DIR", ".claude", "projects", "claude"),
-    "codex": ("CODEX_HOME", ".codex", "sessions", "codex/sessions"),
+    "claude": ("CLAUDE_CONFIG_DIR", ".claude", "projects", "*", "claude"),
+    "codex": ("CODEX_HOME", ".codex", "sessions", "*/*/*", "codex/sessions"),
 }
 
 
 def session_store(agent):
-    variable, default, store, _ = SESSION_STORES[agent]
+    variable, default, store, _, _ = SESSION_STORES[agent]
     return Path(os.environ.get(variable, Path.home() / default)) / store
+
+
+def session_dirs(agent, store):
+    """The directories of the store that hold session files now: Claude's
+    project dirs, Codex's day dirs."""
+    return {path for path in store.glob(SESSION_STORES[agent][3]) if path.is_dir()}
 
 
 def session_files(agent, store, session):
@@ -114,18 +121,20 @@ def announced_thread(line):
     return record.get("thread_id") if isinstance(record, dict) and record.get("type") == "thread.started" else None
 
 
-def collect(agent, session, slot):
+def collect(agent, session, slot, before):
     """Move the run's own session out of the agent's store into
     slot/transcripts, laid out as the sbx runner's harvest, and record in
-    slot/session.json which session it was and what moved."""
+    slot/session.json which session it was and what moved. A session dir the
+    run made (before holds the store's session dirs from before the agent
+    started) goes too once no file is left in it."""
     store = session_store(agent)
     moved = []
     for path in session_files(agent, store, session) if session else ():
-        destination = slot / "transcripts" / SESSION_STORES[agent][3] / path.relative_to(store)
+        destination = slot / "transcripts" / SESSION_STORES[agent][4] / path.relative_to(store)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(path), str(destination))
         moved.append(destination.relative_to(slot).as_posix())
-        if path.parent != store and not any(child.is_file() for child in path.parent.rglob("*")):
+        if path.parent not in before and path.parent != store and not any(child.is_file() for child in path.parent.rglob("*")):
             shutil.rmtree(path.parent)
     (slot / "session.json").write_text(json.dumps({"agent": agent, "session": session, "transcripts": moved}, indent=2) + "\n")
     return moved
@@ -159,8 +168,9 @@ def wrap(argv, stdin=sys.stdin.buffer, stdout=None):
     if token:
         prompt = token.encode() + b" " + prompt
     command, session = keep_session(agent, command)
+    before = session_dirs(agent, session_store(agent))
     code, thread = run_agent(command, prompt, stdout)
-    collect(agent, session or thread, slot)
+    collect(agent, session or thread, slot, before)
     if checkout:
         checkout.harvest(code)
     return code
