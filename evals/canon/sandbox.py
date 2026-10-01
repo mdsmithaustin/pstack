@@ -14,7 +14,8 @@ delegate's included), and the sandbox's network log back out. The sandbox is
 removed when the run ends. A Claude run's stream reaches the harness with only
 its last result event, and its full stream is kept as raw-stream.jsonl.
 
-  sandbox.py deps --agent A --repo R --commit C         build the dependency template for R at C
+  sandbox.py deps --agent A [--repo R --commit C]       build the dependency template for R at C;
+                                                        without a repo, the CLI-only judge template
   sandbox.py probe --agent A [--repo R --commit C]      list the tools a run offers, at no model cost
   sandbox.py wrap --agent A [--token T --discovery D] -- ARG...   the harness entry wrapper
   sandbox.py gc                                          remove sandboxes a killed run left behind
@@ -48,6 +49,7 @@ PREFIX = "canon-"
 PAYLOAD = "/tmp/canon-payload"
 LAST_MESSAGE = "/tmp/canon-last-message.txt"
 DEPS_ROOT = "/opt/canon-deps"
+CREDENTIAL_FILES = "$HOME/.claude/.credentials.json $HOME/.codex/auth.json"
 # The stand-in answers inside the sandbox; CANON_SBX_STANDIN names it on the host.
 STANDIN = "/tmp/canon-standin"
 # Time the wrapper keeps for itself inside the harness timeout: harvest and teardown.
@@ -207,9 +209,15 @@ def config_digest(*parts):
     return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:12]
 
 
-def deps_tag(agent, repo, commit):
+def deps_tag(agent, repo=None, commit=None):
     """The template name for agent, repo, and commit, versioned by every
-    setting that changes what the build installs."""
+    setting that changes what the build installs. Without a repo it names the
+    agent's CLI-only judge template, which a uv bump does not invalidate."""
+    if repo is None:
+        conf = CONFIG["agents"][agent]
+        if not conf.get("cli"):
+            raise SandboxError(f"{agent} pins no CLI, so it has no judge template to build")
+        return f"canon-judge-{agent}:{config_digest(conf['kit'], conf['cli'])}"
     spec = {key: value for key, value in CONFIG["repos"][repo].items() if key in ("python", "sync", "tools", "env")}
     return f"canon-deps-{agent}-{repo}-{commit[:12]}:{config_digest(CONFIG['uv'], spec, CONFIG['agents'][agent]['kit'], CONFIG['agents'][agent].get('cli'))}"
 
@@ -257,12 +265,51 @@ def records_dir():
     return path
 
 
-def build_deps(agent, repo, commit):
+def install_cli(box, cli, timings):
+    with timed(timings, "cli_s"):
+        proc = box.exec("npm", "install", "-g", cli, user="root", check=False)
+    if proc.returncode != 0:
+        raise SandboxError(f"npm install -g {cli} failed: {proc.stderr.decode(errors='replace')[-800:]}")
+
+
+def build_judge_template(agent):
+    """Snapshot a kit sandbox with only the agent's pinned CLI installed. A
+    judge reads nothing but its prompt, so no repo, uv, or source belongs in it."""
+    tag = deps_tag(agent)
+    conf = CONFIG["agents"][agent]
+    name = f"{PREFIX}judge-tmpl-{agent}-{secrets.token_hex(3)}"
+    record = {"tag": tag, "agent": agent, "cli": conf["cli"], "network": CONFIG["build_network"], "timings": {}}
+    timings = record["timings"]
+    box = None
+    try:
+        with timed(timings, "create_s"):
+            box = Sandbox.create(name, conf["kit"])
+        box.allow(CONFIG["build_network"])
+        install_cli(box, conf["cli"], timings)
+        record["versions"] = box.exec("sh", "-c", f"{agent} --version").stdout.decode().strip().splitlines()
+        box.exec("sh", "-c", f"rm -f {CREDENTIAL_FILES}")
+        record["network_log"] = box.network_log()
+        with timed(timings, "save_s"):
+            sbx("stop", name)
+            sbx("template", "save", name, tag)
+        record["template_bytes"] = templates()[tag]["size"]
+    finally:
+        if box is not None:
+            with timed(timings, "destroy_s"):
+                box.remove()
+    (records_dir() / f"{tag.replace(':', '@')}.json").write_text(json.dumps(record, indent=2) + "\n")
+    return record
+
+
+def build_deps(agent, repo=None, commit=None):
     """Snapshot a sandbox that holds repo's locked test dependencies as a
     template. The venv, the uv cache, and the interpreter live under
     /opt/canon-deps, outside any workspace. The source copy used to sync is
     deleted before the snapshot, and so are the agent's credential files, which
-    the kit writes again when a sandbox is created from the template."""
+    the kit writes again when a sandbox is created from the template. Without a
+    repo it builds the CLI-only judge template instead."""
+    if repo is None:
+        return build_judge_template(agent)
     spec, kit = CONFIG["repos"][repo], CONFIG["agents"][agent]["kit"]
     mirror = workspace.fetch(repo, commit)
     tag = deps_tag(agent, repo, commit)
@@ -289,10 +336,7 @@ def build_deps(agent, repo, commit):
             ]
             cli = CONFIG["agents"][agent].get("cli")
             if cli:
-                with timed(timings, "cli_s"):
-                    proc = box.exec("npm", "install", "-g", cli, user="root", check=False)
-                if proc.returncode != 0:
-                    raise SandboxError(f"npm install -g {cli} failed: {proc.stderr.decode(errors='replace')[-800:]}")
+                install_cli(box, cli, timings)
                 record["cli"] = cli
             for key, step in zip(("extract_s", "uv_s", "python_s", "sync_s"), steps):
                 with timed(timings, key):
@@ -303,7 +347,7 @@ def build_deps(agent, repo, commit):
                                 f"du -sm {DEPS_ROOT}/{repo}/venv {DEPS_ROOT}/uv-cache {DEPS_ROOT}/python", env=env).stdout.decode()
             record["versions_and_sizes"] = versions.strip().splitlines()
             box.exec("sh", "-c", f"rm -rf {DEPS_ROOT}/{repo}/src {DEPS_ROOT}/{repo}/src.tar "
-                                 "$HOME/.claude/.credentials.json $HOME/.codex/auth.json")
+                                 f"{CREDENTIAL_FILES}")
             record["network_log"] = box.network_log()
             with timed(timings, "save_s"):
                 sbx("stop", name)
@@ -565,19 +609,30 @@ def judge_command(backend, model, verdict_schema):
             "--output-schema", f"{JUDGE_DIR}/schema.json", "--output-last-message", f"{JUDGE_DIR}/verdict.json", *CODEX_FLAGS, "-"]
 
 
+def judge_template(backend, repo, commit):
+    """The template a judge starts from, or None. A case repo's dependency
+    template wins. Otherwise an agent that pins a CLI uses its CLI-only
+    template, and an agent with no pin (Claude) needs none."""
+    candidates = []
+    if repo in CONFIG["repos"] and commit:
+        candidates.append(deps_tag(backend, repo, commit))
+    if CONFIG["agents"][backend].get("cli"):
+        candidates.append(deps_tag(backend))
+    if not candidates:
+        return None
+    available = templates()
+    return next((tag for tag in candidates if tag in available), None)
+
+
 def run_judge(backend, model, prompt, verdict_schema, repo=None, commit=None):
     """Run one judge call in its own sandbox. The run's deny list leaves the
-    sandbox only its kit's model API hosts. A repo with a dependency template
-    judges from that template, which pins the agent CLI; a Codex judge needs
-    one, because the kit's Codex does not list gpt-6-sol. Returns the judge's
-    raw output with the sandbox record."""
+    sandbox only its kit's model API hosts. A judge starts from a template that
+    pins the agent CLI; a Codex judge needs one, because the kit's Codex does
+    not list gpt-6-sol. Returns the judge's raw output with the sandbox record."""
     conf = CONFIG["agents"][backend]
-    template = deps_tag(backend, repo, commit) if repo in CONFIG["repos"] and commit else None
-    if template and template not in templates():
-        template = None
+    template = judge_template(backend, repo, commit)
     if template is None and backend == "codex":
-        hint = f" --repo {repo} --commit {commit}" if repo in CONFIG["repos"] else " --repo <repo> --commit <commit>"
-        raise SandboxError(f"a Codex judge needs a dependency template; build it with `python3 evals/canon/sandbox.py deps --agent codex{hint}`")
+        raise SandboxError("a Codex judge needs the pinned Codex CLI; build its template with `python3 evals/canon/sandbox.py deps --agent codex`")
     record = {"template": template, "timings": {}}
     box = None
     with tempfile.TemporaryDirectory() as directory:
@@ -712,14 +767,16 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("deps")
     p.add_argument("--agent", choices=sorted(CONFIG["agents"]), required=True)
-    p.add_argument("--repo", choices=sorted(CONFIG["repos"]), required=True)
-    p.add_argument("--commit", required=True)
+    p.add_argument("--repo", choices=sorted(CONFIG["repos"]))
+    p.add_argument("--commit")
     p = sub.add_parser("probe")
     p.add_argument("--agent", choices=sorted(CONFIG["agents"]), required=True)
     p.add_argument("--repo", choices=sorted(CONFIG["repos"]))
     p.add_argument("--commit")
     sub.add_parser("gc")
     args = parser.parse_args(argv)
+    if args.command == "deps" and (args.repo is None) != (args.commit is None):
+        parser.error("deps takes --repo and --commit together, or neither")
     try:
         if args.command == "deps":
             print(json.dumps(build_deps(args.agent, args.repo, args.commit), indent=2))

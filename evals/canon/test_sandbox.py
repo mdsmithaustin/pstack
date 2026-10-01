@@ -128,6 +128,21 @@ class TemplateNameTests(unittest.TestCase):
                                 "canon-deps-claude-omnigent-02969a131c72:331004b2e409",
                                 "canon-deps-codex-omnigent-02969a131c72:ccddbecf90ae"])
 
+    def test_judge_tag_covers_the_kit_and_cli_pin_but_not_uv(self):
+        config = {"uv": "0.12.17", "repos": {"omnigent": {"python": "3.12", "sync": ["--frozen"], "package": "omnigent"}},
+                  "agents": {"codex": {"kit": "codex", "cli": "@openai/codex@0.157.0"}, "claude": {"kit": "claude"}}}
+
+        with mock.patch.object(sandbox, "CONFIG", config):
+            tags = [sandbox.deps_tag("codex")]
+            config["uv"] = "0.12.18"
+            tags.append(sandbox.deps_tag("codex"))
+            config["agents"]["codex"]["cli"] = "@openai/codex@0.158.0"
+            tags.append(sandbox.deps_tag("codex"))
+            with self.assertRaisesRegex(sandbox.SandboxError, "claude"):
+                sandbox.deps_tag("claude")
+
+        self.assertEqual(tags, ["canon-judge-codex:9ea5b36366e7", "canon-judge-codex:9ea5b36366e7", "canon-judge-codex:2e954a8479b3"])
+
     def test_deps_env_keeps_uv_offline_and_outside_the_workspace(self):
         with mock.patch.object(sandbox.workspace, "git", side_effect=sandbox.workspace.WorkspaceError("no .python-version")):
             env = sandbox.deps_env("hermes", "0" * 40)
@@ -353,6 +368,7 @@ class FakeSbx:
     def __init__(self, tree, allowed=(), unanswered=(), setup_error=None):
         self.tree, self.allowed, self.unanswered, self.calls = tree, {"api.openai.com", "chatgpt.com", *allowed}, set(unanswered), []
         self.setup_error = setup_error
+        self.saved = []
 
     def __call__(self, *args, input=None, capture=True, check=True):
         args = [str(arg) for arg in args]
@@ -365,6 +381,13 @@ class FakeSbx:
             stdout = b'{"rules": []}'
         elif args[:2] == ["policy", "log"]:
             stdout = b"[]"
+        elif args[:3] == ["template", "ls", "--json"]:
+            stdout = json.dumps([{"repository": f"docker.io/library/{tag.split(':')[0]}", "tag": tag.split(":")[1], "size": 7}
+                                 for tag in self.saved]).encode()
+        elif args[:2] == ["template", "save"]:
+            self.saved.append(args[3])
+        elif args[0] == "exec" and args[-1] == "codex --version":
+            stdout = b"codex-cli 0.157.0\n"
         elif args[0] == "exec" and "setup" in args:
             if self.setup_error:
                 return subprocess.CompletedProcess(args, 1, b"", self.setup_error.encode())
@@ -501,6 +524,104 @@ class JudgePolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(sandbox.SandboxError, r"^the sandbox's network policy does not deny example.org; "):
             self.judge(fake)
         self.assertEqual(fake.agent_runs(), [])
+
+
+JUDGE_CONFIG = {"uv": "0.12.17", "repos": {"omnigent": {"python": "3.12", "sync": ["--frozen"], "package": "omnigent"}},
+                "agents": {"codex": {"kit": "codex", "cli": "@openai/codex@0.157.0", "api": ["chatgpt.com", "api.openai.com"]},
+                           "claude": {"kit": "claude", "api": ["api.anthropic.com"]}}}
+COMMIT = "02969a131c72d74c00c5800d8e82ae831f8ec5e5"
+JUDGE_TAG = "canon-judge-codex:9ea5b36366e7"
+REPO_TAG = "canon-deps-codex-omnigent-02969a131c72:47f72d544d42"
+
+
+class JudgeTemplateTests(unittest.TestCase):
+    def pick(self, backend, repo, commit, available):
+        with mock.patch.object(sandbox, "CONFIG", JUDGE_CONFIG), mock.patch.object(sandbox, "templates", return_value=dict.fromkeys(available, {})):
+            return sandbox.judge_template(backend, repo, commit)
+
+    def test_a_codex_judge_with_no_repo_gets_the_cli_template(self):
+        self.assertEqual(self.pick("codex", None, None, [JUDGE_TAG]), JUDGE_TAG)
+
+    def test_a_codex_judge_prefers_its_repo_template(self):
+        self.assertEqual(self.pick("codex", "omnigent", COMMIT, [JUDGE_TAG, REPO_TAG]), REPO_TAG)
+
+    def test_a_codex_judge_falls_back_to_the_cli_template_when_the_repo_template_is_missing(self):
+        self.assertEqual(self.pick("codex", "omnigent", COMMIT, [JUDGE_TAG]), JUDGE_TAG)
+
+    def test_a_codex_judge_with_no_template_built_gets_none(self):
+        self.assertIsNone(self.pick("codex", None, None, []))
+
+    def test_a_claude_judge_needs_no_template(self):
+        self.assertIsNone(self.pick("claude", None, None, [JUDGE_TAG]))
+
+
+class CodexJudgeTests(unittest.TestCase):
+    def judge(self, fake, available):
+        with (mock.patch.object(sandbox, "sbx", fake), mock.patch.object(sandbox, "templates", return_value=dict.fromkeys(available, {}))):
+            return sandbox.run_judge("codex", "gpt-6-sol", "Judge this review.", {"type": "object"})
+
+    def test_a_codex_judge_without_a_template_is_refused_before_a_sandbox_starts(self):
+        fake = FakeSbx(tree=None)
+
+        with self.assertRaises(sandbox.SandboxError) as caught:
+            self.judge(fake, [])
+
+        self.assertEqual(str(caught.exception), "a Codex judge needs the pinned Codex CLI; build its template with "
+                                                "`python3 evals/canon/sandbox.py deps --agent codex`")
+        self.assertEqual(fake.calls, [])
+
+    def test_a_codex_judge_with_no_repo_starts_from_the_cli_template(self):
+        fake = FakeSbx(tree=None)
+
+        record = self.judge(fake, [sandbox.deps_tag("codex")])
+
+        create = next(call for call in fake.calls if call[0] == "create")
+        self.assertEqual(record["template"], sandbox.deps_tag("codex"))
+        self.assertEqual(create[create.index("-t") + 1], sandbox.deps_tag("codex"))
+        self.assertEqual([call[call.index("timeout") + 3] for call in fake.agent_runs()], ["codex"])
+
+
+class BuildJudgeTemplateTests(unittest.TestCase):
+    def test_the_cli_only_build_installs_the_cli_and_saves_a_template_with_no_repo_steps(self):
+        fake = FakeSbx(tree=None)
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(sandbox, "sbx", fake), \
+                mock.patch.object(sandbox, "records_dir", return_value=Path(directory)):
+            record = sandbox.build_deps("codex")
+            written = json.loads(next(Path(directory).iterdir()).read_text())
+
+        tag = sandbox.deps_tag("codex")
+        subcommands = [call[0] for call in fake.calls]
+        save = next(call for call in fake.calls if call[:2] == ["template", "save"])
+        self.assertEqual(save[3], tag)
+        delete = [index for index, call in enumerate(fake.calls) if call[0] == "exec" and call[-3:] == ["sh", "-c", f"rm -f {sandbox.CREDENTIAL_FILES}"]]
+        self.assertEqual(len(delete), 1)
+        self.assertLess(delete[0], fake.calls.index(save))
+        self.assertIn("create", subcommands)
+        self.assertIn("stop", subcommands)
+        self.assertTrue(any(call[0] == "exec" and call[-4:] == ["npm", "install", "-g", "@openai/codex@0.157.0"] for call in fake.calls))
+        self.assertNotIn("cp", subcommands)
+        self.assertFalse(any("uv" in call or "src.tar" in " ".join(call) for call in fake.calls))
+        self.assertEqual({key: written[key] for key in ("agent", "tag", "cli")}, {"agent": "codex", "tag": tag, "cli": "@openai/codex@0.157.0"})
+        self.assertFalse({"repo", "uv", "sync"} & written.keys())
+        self.assertEqual(record["versions"], ["codex-cli 0.157.0"])
+        self.assertEqual(fake.calls[-1][:2], ["rm", "--force"])
+
+    def test_an_agent_with_no_cli_pin_has_nothing_to_build(self):
+        fake = FakeSbx(tree=None)
+
+        with mock.patch.object(sandbox, "sbx", fake), self.assertRaisesRegex(sandbox.SandboxError, "claude"):
+            sandbox.build_deps("claude")
+        self.assertEqual(fake.calls, [])
+
+
+class DepsCommandTests(unittest.TestCase):
+    def test_a_repo_without_a_commit_is_refused(self):
+        with contextlib.redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit) as caught:
+            sandbox.main(["deps", "--agent", "codex", "--repo", "omnigent"])
+
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("--repo and --commit together", err.getvalue())
 
 
 def sandboxes_available():

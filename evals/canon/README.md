@@ -516,9 +516,12 @@ argv element, so the empty tool list is spelled `--tools=`.
 - **Sandbox.** Each call gets its own sandbox from the agent kit, with the run
   deny list, and the sandbox is removed afterwards. Before the judge starts,
   the same policy probe as a run's step 2 must deny every `run_deny_network`
-  host and example.org, or the call fails with that error and no verdict. It starts from the case repo's dependency template
-  when one exists, because that template pins the CLI. A Codex judge needs
-  it, since the kit's Codex does not list `gpt-6-sol`.
+  host and example.org, or the call fails with that error and no verdict. It
+  starts from the case repo's dependency template when one exists, because that
+  template pins the CLI. A Codex judge needs a template that pins the CLI,
+  since the kit's Codex does not list `gpt-6-sol`. A case with no repo, or
+  whose repo template is not built, falls back to the CLI-only template
+  `canon-judge-codex:<digest>`.
 - **Blinding.** The judge sees the rubric, the PR title, body, and diff, the
   review under the label `review-<sha256[:8]>` of its own text, and the
   reviewer's diff. It never sees the rule, arm, case directory, or agent. The
@@ -838,6 +841,12 @@ run uses 0.157.0. The kit image alone carried Codex 0.149.1 on 2026-09-25,
 and the model catalog and tool list below were observed on that kit-only
 version. Its catalog lists gpt-5.6-sol, terra, and luna, but not gpt-6-sol,
 the host screen's default, so pass `--model` for Codex.
+
+A Codex judge with no case repo (a pasted-project judged case) starts from the
+CLI-only template `canon-judge-codex:<digest>`. Build it once per cli pin bump
+with `python3 evals/canon/sandbox.py deps --agent codex`. The digest covers the
+kit and the cli pin, so a uv bump leaves it alone. Claude needs no template.
+
 Set `CANON_SBX_STANDIN="$PWD/evals/canon/offline/sbx-agent"` to run the same
 command at no model cost. The path must be absolute, because the wrapper runs
 it from the harness workspace. A relative one makes every run exit 97 with
@@ -940,7 +949,9 @@ through per-sandbox allow rules (`build_network`) on a sandbox that is removed
 afterwards.
 
 **Dependencies.** `sandbox.py deps` builds one template per agent, repo, and
-commit. It creates a sandbox with no workspace and extracts the pinned commit
+commit with `--repo` and `--commit`. Without them it builds the CLI-only judge
+template, which also deletes the kit's credential files before it saves. With
+them it creates a sandbox with no workspace and extracts the pinned commit
 under `/opt/canon-deps/<repo>/src`. It installs uv from `sbx.json` (the
 kit's uv 0.9.26 is older than omnigent's `required-version`) and the repo's
 Python, which is the commit's `.python-version` when it has one and the
