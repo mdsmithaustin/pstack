@@ -47,11 +47,35 @@ def session_store(agent):
 
 
 def session_files(agent, store, session):
-    """The files the agent wrote for one session: Claude's transcript and its
-    subagents directory under the project dir, Codex's rollout."""
+    """The files the agent wrote for one session and the delegates it spawned:
+    Claude's transcript and its subagents directory under the project dir, or
+    Codex's rollout and every rollout whose first session_meta names a moved
+    thread as its parent_thread_id."""
     if agent == "claude":
         return sorted([*store.glob(f"*/{session}.jsonl"), *store.glob(f"*/{session}")])
-    return sorted(store.rglob(f"rollout-*-{session}.jsonl"))
+    rollouts = {path: first_session_meta(path) for path in store.rglob("rollout-*.jsonl")}
+    chosen = {path for path in rollouts if path.name.endswith(f"-{session}.jsonl")}
+    threads = {session}
+    while True:
+        children = {path for path, meta in rollouts.items() if path not in chosen and meta.get("parent_thread_id") in threads}
+        if not children:
+            return sorted(chosen)
+        chosen |= children
+        threads |= {rollouts[path].get("id") for path in children} - {None}
+
+
+def first_session_meta(rollout):
+    """The payload of a rollout's first session_meta record, which names the
+    thread and, for a delegate, its parent."""
+    with rollout.open(errors="replace") as handle:
+        for line in handle:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict) and record.get("type") == "session_meta":
+                return record.get("payload") or {}
+    return {}
 
 
 def keep_session(agent, command):

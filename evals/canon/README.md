@@ -304,11 +304,14 @@ a host run used to leave no transcript, and on 2026-09-30 every host pair
 under this entry read `unexposed`. The host wrapper, `host.py wrap`, drops
 those two flags, passes Claude `--session-id` with a fresh uuid, reads Codex's
 thread id from the stream's `thread.started` event, and after the agent exits
-moves that one session out of its store (`$CLAUDE_CONFIG_DIR/projects`,
-default `~/.claude/projects`, or `$CODEX_HOME/sessions`) into the run's
-harvest slot, under the same paths the sbx runner's harvest uses, beside a
-`session.json` naming the session and the files moved. It reads and moves no
-other session, and the store keeps nothing of the run. Every case under this
+moves that session out of its store (`$CLAUDE_CONFIG_DIR/projects`, default
+`~/.claude/projects`, or `$CODEX_HOME/sessions`) into the run's harvest slot,
+under the same paths the sbx runner's harvest uses, beside a `session.json`
+naming the session and the files moved. Claude's delegates sit inside the
+session's own directory. For Codex the wrapper also moves every rollout whose
+first `session_meta` names a moved thread as its `parent_thread_id`, so the
+delegates a lead spawned travel with it. It moves no other session, and the
+store keeps nothing of the run. On the host runner, every case under this
 entry and every workspace case runs through the wrapper. A pasted case under
 `--entry skill` runs the agent directly and keeps no transcript. On
 2026-09-30 one host run of `value-type` per agent read `entry injected` from
@@ -1113,8 +1116,8 @@ shows waits on a delegate but no spawn or brief, and Claude's `-p` sessions
 offer no worklist tool. Those stages read "n/a" or zero because of the
 harness, not the agent.
 
-A sandboxed run also harvests the agent's own transcripts next to its
-workspace diff, in `harvest/<run>/transcripts/`. Claude writes each delegate to
+A wrapped run on either runner also harvests the agent's own transcripts next
+to its workspace diff, in `harvest/<run>/transcripts/`. Claude writes each delegate to
 `claude/<project>/<session>/subagents/agent-<id>.jsonl`, with a `.meta.json`
 naming its `agentType` and the lead's spawning `toolUseId`. Codex writes one
 rollout per thread under `codex/sessions/`. A child's `session_meta` names its

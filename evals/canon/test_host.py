@@ -36,13 +36,18 @@ print(json.dumps({{"type": "system", "subtype": "init", "cwd": os.getcwd(), "ses
 print(json.dumps({{"type": "result", "result": "done", "argv": argv, "prompt": prompt}}))
 """
 
-# A codex that announces its thread and persists its rollout under CODEX_HOME.
+# A codex that announces its thread and persists its rollout under CODEX_HOME,
+# plus the rollout of a delegate it spawned, whose session_meta names it.
 FAKE_CODEX = f"""import json, os, pathlib, sys
 prompt = sys.stdin.buffer.read().decode()
 thread = "0f0f0f0f-aaaa-bbbb-cccc-000000000001"
+child = "0f0f0f0f-aaaa-bbbb-cccc-000000000002"
 sessions = pathlib.Path(os.environ["CODEX_HOME"]) / "sessions" / "2026" / "09" / "30"
 sessions.mkdir(parents=True, exist_ok=True)
-(sessions / ("rollout-2026-09-30T00-00-00-" + thread + ".jsonl")).write_text(json.dumps({INJECTION!r}) + "\\n")
+(sessions / ("rollout-2026-09-30T00-00-00-" + thread + ".jsonl")).write_text(
+    json.dumps({{"type": "session_meta", "payload": {{"id": thread, "session_id": thread}}}}) + "\\n" + json.dumps({INJECTION!r}) + "\\n")
+(sessions / ("rollout-2026-09-30T00-00-01-" + child + ".jsonl")).write_text(
+    json.dumps({{"type": "session_meta", "payload": {{"id": child, "parent_thread_id": thread, "agent_role": "poteto-agent"}}}}) + "\\n")
 print(json.dumps({{"type": "thread.started", "thread_id": thread}}))
 print(json.dumps({{"type": "item.completed", "item": {{"type": "agent_message", "text": prompt}}}}))
 print(json.dumps({{"type": "turn.completed", "argv": sys.argv[1:]}}))
@@ -134,15 +139,16 @@ class HostWrapTests(unittest.TestCase):
 
         self.assertEqual((code, self.exposure("claude", stream)["entry"]), (0, "not registered"))
 
-    def test_codex_run_keeps_its_own_rollout_and_reads_injected(self):
+    def test_codex_run_keeps_its_own_rollout_and_its_delegates_and_reads_injected(self):
         code, stream = self.wrap("codex", FAKE_CODEX, "exec", "--json", "--ephemeral", "--ignore-user-config", "-")
 
         record = json.loads((self.work / "harvest" / "0001" / "session.json").read_text())
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(stream.splitlines()[-1])["argv"], ["exec", "--json", "--ignore-user-config", "-"])
         self.assertEqual(json.loads(stream.splitlines()[1])["item"]["text"], "$poteto-mode Do it.")
-        self.assertEqual(record, {"agent": "codex", "session": "0f0f0f0f-aaaa-bbbb-cccc-000000000001",
-                                  "transcripts": ["transcripts/codex/sessions/2026/09/30/rollout-2026-09-30T00-00-00-0f0f0f0f-aaaa-bbbb-cccc-000000000001.jsonl"]})
+        self.assertEqual(record, {"agent": "codex", "session": "0f0f0f0f-aaaa-bbbb-cccc-000000000001", "transcripts": [
+            "transcripts/codex/sessions/2026/09/30/rollout-2026-09-30T00-00-00-0f0f0f0f-aaaa-bbbb-cccc-000000000001.jsonl",
+            "transcripts/codex/sessions/2026/09/30/rollout-2026-09-30T00-00-01-0f0f0f0f-aaaa-bbbb-cccc-000000000002.jsonl"]})
         self.assertEqual([path.name for path in (self.codex_home / "sessions").rglob("rollout-*.jsonl")], ["rollout-2026-09-29T00-00-00-other.jsonl"])
         self.assertEqual(self.exposure("codex", stream), {"read": [], "entry": "injected"})
 
