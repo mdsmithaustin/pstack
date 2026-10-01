@@ -5,13 +5,13 @@ nothing to judge. A file case must return the named file inside a
 <file path="..."> block of the final message. A reply case must say something.
 The project is ignored; regrade passes None for a pasted case.
 """
-from shared import parse_files
+from shared import document_text
 
 DOCUMENT = "ops/premortem.md"
 
 
 def document_present(answer, project):
-    if not parse_files(answer).get(DOCUMENT, "").strip():
+    if not document_text(answer, {"file": DOCUMENT}).strip():
         return [f"the final message holds no {DOCUMENT}"]
     return []
 
