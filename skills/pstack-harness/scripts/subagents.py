@@ -264,7 +264,7 @@ def install_files(files: tuple[NativeFile, ...], destination: Destination) -> No
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check, brief, or register installed pstack personas.")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("brief").add_argument("role")
+    commands.add_parser("brief").add_argument("persona")
     for command in ("check", "install"):
         subparser = commands.add_parser(command)
         subparser.add_argument("--harness", choices=("claude-code", "codex", "hermes"))
@@ -291,9 +291,9 @@ def main() -> int:
     try:
         roles = load_roles(skill_directory)
         if args.command == "brief":
-            role = next((role for role in roles if args.role in role.aliases), None)
+            role = next((role for role in roles if args.persona in role.aliases), None)
             if role is None:
-                parser.error(f"unknown pstack role: {args.role}")
+                parser.error(f"unknown pstack persona: {args.persona}")
             sys.stdout.write(render_brief(role, skills_root))
             return 0
         for role in roles:
