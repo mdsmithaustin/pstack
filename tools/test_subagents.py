@@ -84,7 +84,7 @@ class SubagentCommands(unittest.TestCase):
     def test_unknown_role_has_no_partial_brief(self):
         result = self.run_cli("brief", "unregistered", expected=2)
         self.assertEqual(result.stdout, "")
-        self.assertIn("unknown pstack role", result.stderr)
+        self.assertIn("unknown pstack persona", result.stderr)
 
     def test_missing_sibling_stops_brief_and_check(self):
         (self.installed / "poteto-mode/SKILL.md").unlink()
