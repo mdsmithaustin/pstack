@@ -7,7 +7,7 @@ description: "Use for \"how does X work\", code walkthroughs before changing som
 
 Explore the codebase to answer "how does X work?" questions. Produce architectural explanations at the level of a senior engineer onboarding onto a subsystem, enough to build a working mental model, not so much that it reads like annotated source code.
 
-Each spawn below names a role line in the pstack models config and a default. Set `model` to that line's value, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), or to the default if the config or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the spawn mechanism rejects a value, handle it per the **pstack-harness** skill.
+Each spawn below names a role line in the pstack models config and a default. Resolve its model, effort, and agent type per **Spawn a role** in the **pstack-harness** skill, which also covers a missing config, `inherit-parent`, and a rejected value.
 
 ## Step 1. Assess Complexity
 
@@ -22,7 +22,7 @@ If the repo has a GitNexus index (`.gitnexus/` exists), refresh it first — run
 
 ## Step 2a. Explore (complex questions only)
 
-Decompose the question into 2 to 4 exploration angles, each a distinct slice of the subsystem. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill. Spawn all explorers in a single message:
+Decompose the question into 2 to 4 exploration angles, each a distinct slice of the subsystem. Spawn per **Spawn a role** in the **pstack-harness** skill, which resolves the role and builds this CLI's spawn call. Spawn all explorers in a single message:
 
 - `subagent_type`: `general-purpose`
 - `model`: the `how explorer` line, default `sonnet`

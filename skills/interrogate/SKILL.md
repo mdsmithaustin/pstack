@@ -33,7 +33,7 @@ Write one clear paragraph. If you're unsure about the intent, ask the user befor
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` line in the pstack models config, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), one reviewer per entry, extending or shrinking the Reviewer A/B/C labels below to the configured entry count. If the config or that line is missing, use the table defaults. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
+Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` role, one reviewer per entry, extending or shrinking the Reviewer A/B/C labels below to the configured entry count. Its default is the table below. Spawn per **Spawn a role** in the **pstack-harness** skill, which resolves the role and builds this CLI's spawn call.
 
 | Subagent | Default model |
 |----------|---------------|
@@ -43,7 +43,7 @@ Launch all reviewers in a single message using the Task tool. Use the `interroga
 
 For each reviewer:
 - `subagent_type`: `general-purpose`
-- `model`: the configured `interrogate reviewers` entry, or the table default with no configured line. For an `auto` or `inherit-parent` entry, omit `model` so that reviewer runs on the parent model.
+- `model` and effort: that reviewer's resolved arm, per **Spawn a role**.
 - `readonly`: `true`
 
 If the Task tool rejects a configured entry or a table default, handle it per the **pstack-harness** skill. When it rejects a table default, also open a separate PR to update the default table. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.

@@ -30,7 +30,7 @@ Skip Phase A only when the work is genuinely greenfield with no surrounding syst
 
 Run the **arena** skill with the design-sketch task and the Phase A grounding artifacts. Pass `references/runner-prompt.md` as each runner's prompt. Each candidate produces a design package shaped per `references/rationale-template.md`.
 
-Take the runners from the `architect runners` line in the pstack models config, in place of the `arena runners` line, each resolved per the **pstack-harness** skill. If the config or that line is missing, use `fable`, `opus`, `sonnet`. Alias and rejected entries follow the runner rules in the **arena** skill's Phase A. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill.
+Take the runners from the `architect runners` role in place of `arena runners`. Its default is `fable`, `opus`, `sonnet`. Alias and rejected entries follow the runner rules in the **arena** skill's Phase A. Spawn per **Spawn a role** in the **pstack-harness** skill, which resolves the role and builds this CLI's spawn call.
 
 Design it twice. Require at least two structurally distinct candidates before synthesis, even when the first looks sufficient. This is the **exhaust-the-design-space** principle skill made concrete. Whole-shape alternatives, not point fixes inside one shape.
 

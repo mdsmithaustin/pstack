@@ -1,6 +1,6 @@
 # Register pstack personas and effort agents
 
-setup-pstack reads this file. A spawn never needs it. The spawn-time rules are in the [persona contract](named-roles.md) and in **Set an arm's effort** in [pstack-harness](../SKILL.md).
+setup-pstack reads this file. A spawn never needs it. The spawn-time rules are in the [persona contract](named-roles.md) and in **Spawn a role** in [pstack-harness](../SKILL.md).
 
 ## Check the installed payload
 
