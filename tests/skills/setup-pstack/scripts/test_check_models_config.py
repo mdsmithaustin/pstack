@@ -636,6 +636,19 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
             ("high", ["effort max is not usable with gpt-6-sol", "effort xhigh is not usable with gpt-6-sol"]),
         )
 
+    def test_a_written_effort_that_is_also_the_floor_is_noted_once(self):
+        sol = catalog_entry("gpt-6-sol", levels=("low", "medium", "high"))
+        arm = self.only("bug-fix", "## codex\nbug-fix: gpt-6-sol@xhigh\n", catalog_json(sol))
+        self.assertEqual(
+            (arm["model"], arm["effort"], arm["notes"]),
+            ("gpt-6-sol", "high", ["effort xhigh is not usable with gpt-6-sol"]),
+        )
+
+    def test_a_catalog_of_only_efforts_pstack_does_not_know_keeps_the_floor(self):
+        sol = catalog_entry("gpt-6-sol", levels=("minimal",))
+        arm = self.only("bug-fix", "## codex\nbug-fix: gpt-6-sol\n", catalog_json(sol))
+        self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-sol", "xhigh", None))
+
     def test_an_effort_the_catalog_adds_beyond_the_table_is_kept(self):
         listed = read_listed(catalog_json(catalog_entry("gpt-6-luna", levels=LUNA_LEVELS + ("ultra",))))
         layers = [Layer("user flat", {"feature": [("gpt-6-luna", "ultra")]})]

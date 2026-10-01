@@ -316,7 +316,9 @@ def _resolve_effort(
     ranked = [e for e in EFFORT_ORDER if e in _model_efforts(model, listed)]
     if floor in ranked or not ranked:
         return floor
-    notes.append(f"effort {floor} is not usable with {model}")
+    note = f"effort {floor} is not usable with {model}"
+    if note not in notes:
+        notes.append(note)
     at_or_below = [e for e in ranked if EFFORT_ORDER.index(e) <= EFFORT_ORDER.index(floor)]
     return at_or_below[-1] if at_or_below else ranked[0]
 
