@@ -129,27 +129,26 @@ class ErrorRules(unittest.TestCase):
         self.assertEqual(len(errors_of(findings)), 1)
         self.assertEqual(sections[""]["arena runners"], [("sonnet", "high")])
 
-    def test_ultra_allowed_on_gpt6_luna(self):
-        _, findings = cmc.parse("## codex\nbug-fix: gpt-6-luna@ultra\n")
-        self.assertEqual(findings, [(2, "notice", "gpt-6-luna@ultra pins an expensive tier")])
+    def test_ultra_is_refused_on_gpt6_luna(self):
+        sections, findings = cmc.parse("## codex\nbug-fix: gpt-6-luna@ultra\n")
+        self.assertEqual(
+            findings,
+            [(2, "error", "effort 'ultra' not supported by model 'gpt-6-luna'")],
+        )
+        self.assertNotIn("bug-fix", sections["codex"])
 
     def test_ultra_allowed_on_gpt6_sol(self):
         _, findings = cmc.parse("## codex\nbug-fix: gpt-6-sol@ultra\n")
         self.assertEqual(findings, [(2, "notice", "gpt-6-sol@ultra pins an expensive tier")])
 
     def test_none_is_refused_on_the_releases_that_reject_it(self):
-        for model in ("gpt-6.1-sol", "gpt-6-astra"):
+        for model in ("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
             with self.subTest(model=model):
                 _, findings = cmc.parse(f"bug-fix: {model}@none\n")
                 self.assertEqual(
                     errors_of(findings),
                     [(1, "error", f"effort 'none' not supported by model '{model}'")],
                 )
-
-    def test_none_is_allowed_on_gpt6_sol(self):
-        sections, findings = cmc.parse("## codex\nbug-fix: gpt-6-sol@none\n")
-        self.assertEqual(findings, [])
-        self.assertEqual(sections["codex"]["bug-fix"], [("gpt-6-sol", "none")])
 
     def test_unknown_model_gets_no_effort_check(self):
         sections, findings = cmc.parse("bug-fix: gpt-9-terra@ultra\n")
@@ -310,12 +309,35 @@ default: inherit-parent
 """
 
 
+FULL_LEVELS = ("low", "medium", "high", "xhigh", "max", "ultra")
+LUNA_LEVELS = FULL_LEVELS[:-1]
+
+
+def catalog_entry(slug, visibility="list", levels=None):
+    if levels is None:
+        levels = LUNA_LEVELS if slug.endswith("-luna") else FULL_LEVELS
+    return {
+        "slug": slug,
+        "visibility": visibility,
+        "supported_reasoning_levels": [{"effort": effort, "description": effort} for effort in levels],
+    }
+
+
 def catalog_json(*models):
     entries = []
     for model in models:
-        slug, visibility = model if isinstance(model, tuple) else (model, "list")
-        entries.append({"slug": slug, "visibility": visibility, "supported_reasoning_levels": []})
+        if isinstance(model, dict):
+            entries.append(model)
+        else:
+            entries.append(catalog_entry(*(model if isinstance(model, tuple) else (model,))))
     return json.dumps({"models": entries})
+
+
+def read_listed(catalog_text):
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "models_cache.json"
+        path.write_text(catalog_text, encoding="utf-8")
+        return cmc.listed_models(path)
 
 
 def run_script(args, codex_catalog=None):
@@ -446,29 +468,38 @@ class Resolve(ResolveRunner, unittest.TestCase):
         )
 
     def test_none_effort_on_a_foreign_model_drops_both_fields_on_claude_code(self):
-        [feature] = self.resolve("claude-code", "feature", user="feature, refactoring: gpt-6-sol@none\n")
+        [feature] = self.resolve("claude-code", "feature", user="feature, refactoring: gpt-9-terra@none\n")
         self.assertEqual(
             (feature["model"], feature["effort"], feature["notes"]),
             (
                 "inherit-parent", "inherit-parent",
-                ["gpt-6-sol is not usable on claude-code", "effort none is not usable on claude-code"],
+                ["gpt-9-terra is not usable on claude-code", "effort none is not usable on claude-code"],
             ),
         )
 
     def test_ultra_is_kept_on_the_models_that_take_it(self):
-        for model in ("gpt-6-sol", "gpt-6-luna", "gpt-6-astra"):
+        for model in ("gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra"):
             with self.subTest(model=model):
                 [arm] = cmc.resolve_role("feature", "codex", [Layer("user flat", {"feature": [(model, "ultra")]})])
                 self.assertEqual((arm.model, arm.effort, arm.notes), (model, "ultra", ()))
 
-    def test_none_is_refused_on_a_release_that_rejects_it(self):
-        [arm] = cmc.resolve_role("feature", "codex", [Layer("user flat", {"feature": [("gpt-6-astra", "none")]})])
+    def test_ultra_is_dropped_on_luna(self):
+        [arm] = cmc.resolve_role("feature", "codex", [Layer("user flat", {"feature": [("gpt-6-luna", "ultra")]})])
         self.assertEqual(
             (arm.model, arm.effort, arm.notes),
-            ("gpt-6-astra", "high", ("effort none is not usable with gpt-6-astra",)),
+            ("gpt-6-luna", "high", ("effort ultra is not usable with gpt-6-luna",)),
         )
-        [arm] = cmc.resolve_role("bug-fix", "codex", [Layer("user flat", {"bug-fix": [("gpt-6-astra", "none")]})])
-        self.assertEqual((arm.model, arm.effort), ("gpt-6-astra", "xhigh"))
+
+    def test_none_is_refused_on_every_gpt6_release(self):
+        for model in ("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
+            with self.subTest(model=model):
+                [arm] = cmc.resolve_role("feature", "codex", [Layer("user flat", {"feature": [(model, "none")]})])
+                self.assertEqual(
+                    (arm.model, arm.effort, arm.notes),
+                    (model, "high", (f"effort none is not usable with {model}",)),
+                )
+                [arm] = cmc.resolve_role("bug-fix", "codex", [Layer("user flat", {"bug-fix": [(model, "none")]})])
+                self.assertEqual((arm.model, arm.effort), (model, "xhigh"))
 
     def test_panel_comes_from_one_line(self):
         user = USER_FILE + "arena runners: fable@high, opus@xhigh, sonnet@high\n"
@@ -546,9 +577,58 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
             ("gpt-6.1-sol", "high", "skill default ## codex"),
         )
 
-    def test_a_release_that_rejects_the_effort_is_skipped(self):
-        arm = self.only("feature", "feature, refactoring: gpt-6-sol@none\n", catalog_json("gpt-6.1-sol", "gpt-6-sol"))
-        self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-sol", "none", None))
+    def test_a_release_whose_catalog_levels_lack_the_effort_is_skipped(self):
+        newer = catalog_entry("gpt-6.1-luna", levels=("low", "medium", "high"))
+        arm = self.only("swarm workers", "## codex\nswarm workers: gpt-6-luna@xhigh\n", catalog_json(newer, "gpt-6-luna"))
+        self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-luna", "xhigh", None))
+
+    def test_a_release_whose_catalog_levels_include_the_effort_is_taken(self):
+        arm = self.only("swarm workers", "## codex\nswarm workers: gpt-6-luna@xhigh\n", catalog_json("gpt-6.1-luna", "gpt-6-luna"))
+        self.assertEqual(
+            (arm["model"], arm["effort"], arm["notes"]),
+            ("gpt-6.1-luna", "xhigh", ["gpt-6-luna runs as gpt-6.1-luna, the newest release this Codex lists"]),
+        )
+
+    def test_an_effort_the_catalog_omits_for_the_model_drops_to_the_role_floor(self):
+        sol = catalog_entry("gpt-6-sol", levels=("low", "medium", "high", "xhigh"))
+        for role, user, floor in (
+            ("feature", "feature, refactoring: gpt-6-sol@max\n", "high"),
+            ("bug-fix", "bug-fix: gpt-6-sol@max\n", "xhigh"),
+        ):
+            with self.subTest(role=role):
+                arm = self.only(role, user, catalog_json(sol))
+                self.assertEqual(
+                    (arm["model"], arm["effort"], arm["notes"]),
+                    ("gpt-6-sol", floor, ["effort max is not usable with gpt-6-sol"]),
+                )
+
+    def test_an_effort_the_catalog_adds_beyond_the_table_is_kept(self):
+        listed = read_listed(catalog_json(catalog_entry("gpt-6-luna", levels=LUNA_LEVELS + ("ultra",))))
+        layers = [Layer("user flat", {"feature": [("gpt-6-luna", "ultra")]})]
+        [arm] = cmc.resolve_role("feature", "codex", layers, listed)
+        self.assertEqual((arm.model, arm.effort, arm.notes), ("gpt-6-luna", "ultra", ()))
+
+    def test_an_entry_with_empty_or_missing_levels_falls_back_to_the_table_row(self):
+        empty = catalog_entry("gpt-6-sol", levels=())
+        missing = {"slug": "gpt-6-sol", "visibility": "list"}
+        for entry in (empty, missing):
+            with self.subTest(entry=entry):
+                listed = read_listed(catalog_json(entry))
+                layers = [Layer("user flat", {"feature": [("gpt-6-sol", "none")]})]
+                [arm] = cmc.resolve_role("feature", "codex", layers, listed)
+                self.assertEqual(
+                    (arm.model, arm.effort, arm.notes),
+                    ("gpt-6-sol", "high", ("effort none is not usable with gpt-6-sol",)),
+                )
+                arm = self.only("feature", "feature, refactoring: gpt-6-sol@ultra\n", catalog_json(entry))
+                self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-sol", "ultra", None))
+
+    def test_a_newer_release_with_no_levels_is_judged_by_the_table(self):
+        newer = catalog_entry("gpt-6.1-sol", levels=())
+        arm = self.only("feature", "feature, refactoring: gpt-6-sol@ultra\n", catalog_json(newer, "gpt-6-sol"))
+        self.assertEqual((arm["model"], arm["effort"]), ("gpt-6.1-sol", "ultra"))
+        arm = self.only("feature", "feature, refactoring: gpt-6-sol@high\n", catalog_json(newer, "gpt-6-sol"))
+        self.assertEqual((arm["model"], arm["effort"]), ("gpt-6.1-sol", "high"))
 
     def test_an_older_release_stands_in_for_one_the_account_lacks(self):
         arm = self.only("feature", "feature, refactoring: gpt-6.1-luna@high\n", catalog_json("gpt-6-luna", "gpt-6.1-sol"))
@@ -613,7 +693,7 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
         self.assertEqual((arm["model"], arm.get("notes")), ("gpt-6-sol", None))
 
     def test_claude_code_never_consults_the_list(self):
-        listed = frozenset({"gpt-6.1-sol", "gpt-6-sol"})
+        listed = {"gpt-6.1-sol": cmc.MODEL_EFFORTS["gpt-6.1-sol"], "gpt-6-sol": cmc.MODEL_EFFORTS["gpt-6-sol"]}
         layers = [Layer("user flat", {"feature": [("gpt-6-sol", "high")]})]
         [arm] = cmc.resolve_role("feature", "claude-code", layers, listed)
         self.assertEqual(
@@ -623,10 +703,34 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
 
     def test_resolve_role_takes_the_listed_set_directly(self):
         layers = [Layer("user flat", {"feature": [("gpt-6-sol", "high")]})]
-        [arm] = cmc.resolve_role("feature", "codex", layers, frozenset({"gpt-6.1-sol"}))
+        [arm] = cmc.resolve_role("feature", "codex", layers, {"gpt-6.1-sol": frozenset({"low", "high"})})
         self.assertEqual((arm.model, arm.effort), ("gpt-6.1-sol", "high"))
         [arm] = cmc.resolve_role("feature", "codex", layers)
         self.assertEqual((arm.model, arm.notes), ("gpt-6-sol", ()))
+
+
+class ListedModels(unittest.TestCase):
+    def test_maps_each_listed_slug_to_its_catalog_levels(self):
+        listed = read_listed(catalog_json("gpt-6-sol", "gpt-6-luna", ("gpt-6.1-sol", "hide")))
+        self.assertEqual(
+            listed,
+            {"gpt-6-sol": frozenset(FULL_LEVELS), "gpt-6-luna": frozenset(LUNA_LEVELS)},
+        )
+
+    def test_empty_or_missing_levels_map_to_an_empty_set(self):
+        text = catalog_json(catalog_entry("gpt-6-sol", levels=()), {"slug": "gpt-6-luna"})
+        self.assertEqual(read_listed(text), {"gpt-6-sol": frozenset(), "gpt-6-luna": frozenset()})
+
+    def test_a_read_or_shape_failure_is_an_empty_mapping(self):
+        bad = (
+            "{not json", "[]", '{"models": 3}', '{"models": ["gpt-6-sol"]}', '{"models": [{"visibility": "list"}]}',
+            '{"models": [{"slug": "gpt-6-sol", "supported_reasoning_levels": "low"}]}',
+            '{"models": [{"slug": "gpt-6-sol", "supported_reasoning_levels": [{"description": "low"}]}]}',
+        )
+        for text in bad:
+            with self.subTest(text=text):
+                self.assertEqual(read_listed(text), {})
+        self.assertEqual(cmc.listed_models(Path("/nonexistent/models_cache.json")), {})
 
 
 class GrokResolve(ResolveRunner, unittest.TestCase):
