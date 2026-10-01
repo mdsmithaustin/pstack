@@ -315,7 +315,7 @@ process group before the wrapper's collect step. So the wrapper writes the
 pinned session into the slot's `session.json` before the agent starts, and
 `screen.py` finishes the move from the parent process once `run-agent`
 returns. For a slot whose `session.json` lists no `transcripts` yet, it moves
-`~/.claude/projects/*/<session>.jsonl` and the `<session>/` delegates dir into
+`$CLAUDE_CONFIG_DIR/projects/*/<session>.jsonl` and the `<session>/` delegates dir into
 the slot. That recovery removes no project dir, since the parent cannot tell
 which existed before the run. Codex needs no recovery, since its store is the
 harness's temporary `CODEX_HOME`, which the harness removes. On the host

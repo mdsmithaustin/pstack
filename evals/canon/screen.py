@@ -1062,15 +1062,16 @@ def file_harvest(work, expected_tree=None):
     """Move the numbered slots the wrapper filled, in task order, to each run's
     path under work/harvest, and refuse a workspace run whose checkout was not
     the tree the build recorded. A slot whose wrapper the harness killed on
-    timeout still names its pinned session, so its transcript is collected
-    from here first (see host.py)."""
+    timeout still names its pinned session, so every slot's transcript is
+    collected from here before any check can refuse the harvest (see host.py)."""
     harvest = work / "harvest"
     rows = [json.loads(line)["run_dir"] for line in (work / "tasks.jsonl").read_text().splitlines()]
     slots = sorted(harvest.glob("[0-9][0-9][0-9][0-9]")) if harvest.is_dir() else []
+    for slot in slots:
+        host.recover(slot)
     if len(slots) != len(rows):
         raise ScreenError(f"{work}: the wrapper filled {len(slots)} harvest slot(s) for {len(rows)} run(s)")
     for slot, run_dir in zip(slots, rows):
-        host.recover(slot)
         if expected_tree:
             record = json.loads((slot / "workspace.json").read_text())
             if record.get("tree") != expected_tree or record.get("error"):

@@ -123,6 +123,24 @@ class HostWrapTests(unittest.TestCase):
         screen.file_harvest(self.work)
         return screen.exposure({"run_base": str(run_base)}, ["poteto-mode/SKILL.md"], agent)
 
+    def test_a_later_slot_is_recovered_even_when_an_earlier_slot_is_refused(self):
+        session = str(uuid.uuid4())
+        harvest = self.work / "harvest"
+        (harvest / "0001").mkdir(parents=True)
+        (harvest / "0001" / "workspace.json").write_text(json.dumps({"tree": "wrong"}))
+        (harvest / "0002").mkdir()
+        (harvest / "0002" / "workspace.json").write_text(json.dumps({"tree": "built"}))
+        (harvest / "0002" / "session.json").write_text(json.dumps({"agent": "claude", "session": session}))
+        (self.claude_home / "projects" / "-ws" / f"{session}.jsonl").write_text("{}\n")
+        rows = [json.dumps({"run_dir": f"case/run-{n}"}) for n in (1, 2)]
+        (self.work / "tasks.jsonl").write_text("\n".join(rows) + "\n")
+
+        with self.assertRaisesRegex(screen.ScreenError, "workspace tree wrong is not the built built"):
+            screen.file_harvest(self.work, expected_tree="built")
+
+        self.assertFalse((self.claude_home / "projects" / "-ws" / f"{session}.jsonl").exists())
+        self.assertTrue(json.loads((harvest / "0002" / "session.json").read_text())["transcripts"])
+
     def test_claude_run_keeps_its_own_transcript_and_reads_injected(self):
         code, stream = self.wrap("claude", FAKE_CLAUDE, "-p", "--no-session-persistence", "--model", "sonnet")
 
