@@ -470,21 +470,28 @@ describe("context and stack discovery", () => {
   });
 
   it("defaults an explicit context to public GitHub without an origin", async () => {
-    const reader = fakeReader({ origin: null });
-    expect(
-      await resolveContext({
-        reader,
+    const saved = process.env.GH_HOST;
+    delete process.env.GH_HOST;
+    try {
+      const reader = fakeReader({ origin: null });
+      expect(
+        await resolveContext({
+          reader,
+          owner: "explicit",
+          repo: "repo",
+          pr: context.number,
+        })
+      ).toEqual({
+        host: "github.com",
         owner: "explicit",
         repo: "repo",
-        pr: context.number,
-      })
-    ).toEqual({
-      host: "github.com",
-      owner: "explicit",
-      repo: "repo",
-      number: context.number,
-    });
-    expect(reader.calls).toEqual(["originRepo"]);
+        number: context.number,
+      });
+      expect(reader.calls).toEqual(["originRepo"]);
+    } finally {
+      if (saved === undefined) delete process.env.GH_HOST;
+      else process.env.GH_HOST = saved;
+    }
   });
 
   it("uses the local origin before currentPr for an explicit number", async () => {
