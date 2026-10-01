@@ -69,11 +69,11 @@ describe("repository host inference", () => {
   it("uses a GHES origin remote for an explicit PR number", () => {
     expect(
       readerOutput(
-        "printf '%s\\n' 'git@github.sie.sony.com:team/project.git'",
+        "printf '%s\\n' 'git@example.com:team/project.git'",
         "https://github.com/wrong/project/pull/14"
       )
     ).toEqual({
-      host: "github.sie.sony.com",
+      host: "example.com",
       owner: "team",
       repo: "project",
       number: 14,
@@ -82,9 +82,9 @@ describe("repository host inference", () => {
 
   it("uses the current GHES PR URL when origin is unavailable", () => {
     expect(
-      readerOutput("exit 1", "https://github.sie.sony.com/team/project/pull/14")
+      readerOutput("exit 1", "https://example.com/team/project/pull/14")
     ).toEqual({
-      host: "github.sie.sony.com",
+      host: "example.com",
       owner: "team",
       repo: "project",
       number: 14,
@@ -94,11 +94,11 @@ describe("repository host inference", () => {
   it("uses a GHES HTTPS origin remote", () => {
     expect(
       readerOutput(
-        "printf '%s\\n' 'https://github.sie.sony.com/team/project.git'",
+        "printf '%s\\n' 'https://example.com/team/project.git'",
         "https://github.com/wrong/project/pull/14"
       )
     ).toEqual({
-      host: "github.sie.sony.com",
+      host: "example.com",
       owner: "team",
       repo: "project",
       number: 14,
@@ -107,8 +107,8 @@ describe("repository host inference", () => {
 
   it("rejects HTTPS userinfo and non-git scp users as origin remotes", () => {
     for (const remote of [
-      "https://git@github.sie.sony.com/team/project.git",
-      "bob@github.sie.sony.com:team/project.git",
+      "https://git@example.com/team/project.git",
+      "bob@example.com:team/project.git",
     ]) {
       expect(
         readerOutput(
@@ -120,9 +120,9 @@ describe("repository host inference", () => {
   });
 
   it("targets every gh query to the origin GHES host with explicit owner and repo", () => {
-    const result = commandOutput("ssh://git@github.sie.sony.com/team/project.git");
+    const result = commandOutput("ssh://git@example.com/team/project.git");
     expect(result.context).toEqual({
-      host: "github.sie.sony.com",
+      host: "example.com",
       owner: "explicit",
       repo: "override",
       number: 14,
@@ -133,14 +133,14 @@ describe("repository host inference", () => {
       commands
         .slice(0, 3)
         .every((command) =>
-          command.includes("--repo\ngithub.sie.sony.com/explicit/override\n")
+          command.includes("--repo\nexample.com/explicit/override\n")
         )
     ).toBe(true);
     expect(
       commands
         .slice(3)
         .every((command) =>
-          command.includes("--hostname\ngithub.sie.sony.com\n")
+          command.includes("--hostname\nexample.com\n")
         )
     ).toBe(true);
   });
@@ -159,16 +159,16 @@ describe("repository host inference", () => {
   });
 
   it("uses GH_HOST when explicit context has no origin", () => {
-    const result = commandOutput("", "github.sie.sony.com");
+    const result = commandOutput("", "example.com");
     expect(result.context).toEqual({
-      host: "github.sie.sony.com",
+      host: "example.com",
       owner: "explicit",
       repo: "override",
       number: 14,
     });
     expect(result.commands).toContain(
-      "--repo\ngithub.sie.sony.com/explicit/override\n"
+      "--repo\nexample.com/explicit/override\n"
     );
-    expect(result.commands).toContain("--hostname\ngithub.sie.sony.com\n");
+    expect(result.commands).toContain("--hostname\nexample.com\n");
   });
 });

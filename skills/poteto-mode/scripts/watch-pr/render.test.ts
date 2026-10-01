@@ -12,7 +12,7 @@ const context = {
 
 describe("renderPretty", () => {
   it("links GHES status rows to their repository host", () => {
-    const ghes = { ...context, host: "github.sie.sony.com" };
+    const ghes = { ...context, host: "example.com" };
     const facts = {
       context: ghes,
       mergeable: "MERGEABLE",
@@ -26,7 +26,7 @@ describe("renderPretty", () => {
       isDraft: false,
     } as const;
     expect(renderStatusTable([{ kind: "merged", context: ghes, facts }])).toContain(
-      "[#9](https://github.sie.sony.com/owner/repo/pull/9)"
+      "[#9](https://example.com/owner/repo/pull/9)"
     );
   });
   it("prints a thread's bot login and pass count, or bot=none for a human thread", () => {
