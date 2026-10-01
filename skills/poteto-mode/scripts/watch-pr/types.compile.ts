@@ -10,6 +10,7 @@ import type {
 type ReadyVerdict = Extract<TerminalVerdict, { readonly kind: "READY" }>;
 
 const context = {
+  host: "github.com",
   owner: "octocat",
   repo: "hello-world",
   number: parsePrNumber(123),

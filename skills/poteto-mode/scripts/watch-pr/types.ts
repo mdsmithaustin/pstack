@@ -10,6 +10,7 @@ export function parsePrNumber(value: unknown, label = "PR number"): PrNumber {
   return value as PrNumber;
 }
 export interface Repository {
+  readonly host: string;
   readonly owner: string;
   readonly repo: string;
 }

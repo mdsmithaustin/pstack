@@ -1,15 +1,34 @@
 import { describe, expect, it } from "bun:test";
-import { renderPretty } from "./render.ts";
+import { renderPretty, renderStatusTable } from "./render.ts";
 import { parsePrNumber } from "./types.ts";
 import type * as T from "./types.ts";
 
 const context = {
+  host: "github.com",
   owner: "owner",
   repo: "repo",
   number: parsePrNumber(9),
 } satisfies T.PrContext;
 
 describe("renderPretty", () => {
+  it("links GHES status rows to their repository host", () => {
+    const ghes = { ...context, host: "github.sie.sony.com" };
+    const facts = {
+      context: ghes,
+      mergeable: "MERGEABLE",
+      mergeStateStatus: "CLEAN",
+      reviewDecision: "APPROVED",
+      headRefOid: "head",
+      headRefName: "feature",
+      baseRefName: "main",
+      state: "MERGED",
+      mergedAt: "now",
+      isDraft: false,
+    } as const;
+    expect(renderStatusTable([{ kind: "merged", context: ghes, facts }])).toContain(
+      "[#9](https://github.sie.sony.com/owner/repo/pull/9)"
+    );
+  });
   it("prints a thread's bot login and pass count, or bot=none for a human thread", () => {
     const verdict = {
       schemaVersion: 1,

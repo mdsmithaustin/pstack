@@ -31,6 +31,7 @@ import type {
 import { parsePrNumber } from "./types.ts";
 
 const context = (number: number): PrContext => ({
+  host: "github.com",
   owner: "owner",
   repo: "repo",
   number: parsePrNumber(number),

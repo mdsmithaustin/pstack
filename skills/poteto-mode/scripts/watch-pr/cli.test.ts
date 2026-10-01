@@ -105,6 +105,7 @@ describe("parseArgs", () => {
 
 describe("rendering", () => {
   const context = {
+    host: "github.com",
     owner: "owner",
     repo: "repo",
     number: parsePrNumber(1),
