@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -19,6 +20,7 @@ screen = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(screen)
 sys.path.insert(0, str(ROOT / "oracles"))
 
+import host  # noqa: E402
 import workspace  # noqa: E402
 from shared import OracleError, apply_diff, harvested_diff, workspace_diff  # noqa: E402
 
@@ -439,8 +441,8 @@ class WrapTests(ShopRepo):
         os.chdir(root)
         try:
             with mock.patch.dict(os.environ, environment), contextlib.redirect_stderr(io.StringIO()):
-                code = workspace.wrap(["--token", "$poteto-mode", "--discovery", ".agents/skills", "--", sys.executable, str(self.base / "agent.py")],
-                                      stdin=io.BytesIO(b"Add amendments."))
+                code = host.wrap(["--agent", "codex", "--workspace", "--token", "$poteto-mode", "--discovery", ".agents/skills", "--",
+                                  sys.executable, str(self.base / "agent.py")], stdin=io.BytesIO(b"Add amendments."), stdout=io.BytesIO())
         finally:
             os.chdir(previous)
         slot = self.base / "harvest" / "0001"
@@ -517,11 +519,19 @@ class AgentFlagTests(ShopRepo):
         subprocess.run([*command, "-p", "--model", "sonnet"], cwd=root, env=environment, input=b"Add amendments.", capture_output=True, check=True)
         return json.loads((root / "argv.json").read_text())
 
+    def without_session(self, argv):
+        """argv before the --session-id the host wrapper appends, which must
+        name a uuid."""
+        self.assertEqual((argv[-2], str(uuid.UUID(argv[-1]))), ("--session-id", argv[-1]))
+        return argv[:-2]
+
     def test_claude_in_a_workspace_may_run_read_only_shell_commands(self):
-        self.assertEqual(self.argv_seen("claude", True), ["-p", "--model", "sonnet", *CLAUDE_READ_ONLY_SHELL])
+        self.assertEqual(self.without_session(self.argv_seen("claude", True)), ["-p", "--model", "sonnet", *CLAUDE_READ_ONLY_SHELL])
 
     def test_claude_outside_a_workspace_gets_no_shell_rules(self):
-        self.assertEqual(self.argv_seen("claude", False), ["-p", "--model", "sonnet"])
+        self.assertEqual(self.without_session(self.argv_seen("claude", False)), ["-p", "--model", "sonnet"])
+
+    def test_claude_under_the_single_skill_entry_runs_unwrapped_outside_a_workspace(self):
         self.assertEqual(self.argv_seen("claude", False, entry="skill"), ["-p", "--model", "sonnet"])
 
     def test_codex_in_a_workspace_gets_no_claude_rules(self):

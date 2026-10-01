@@ -2,7 +2,7 @@
 """Sandboxed workspace runs: every answer runs inside its own Docker sandbox.
 
 `screen.py run --runner sbx` points the harness at `sandbox.py wrap` instead of
-workspace.py wrap. For each run the wrapper checks out the pinned commit in
+host.py wrap. For each run the wrapper checks out the pinned commit in
 the harness workspace as before, makes that checkout a self-contained git
 repo, and creates one sandbox from it with `sbx create --clone`, so the agent
 works on an in-sandbox clone and never on host files. It copies the mounted

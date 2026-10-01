@@ -59,10 +59,17 @@ else:
     reads = sorted({path for _, changed in screen.arm_trees(rule, tree)[1:] for path in screen.changed_paths(tree, changed)})
     carried = screen.standin_carries(rule, Path(arm_workspace).parts[-2]) if case.workspace else screen.rule_mounted(rule, mounted, tree)
 root = ".agents/skills" if entry.exists() else "skills"
-# Under the entry it loads the index itself, since the host runner keeps no
-# rollout to show the injection.
-if Path("skills", screen.ENTRY_TREE).is_dir() and f"{screen.ENTRY_SKILL}/SKILL.md" not in reads:
-    reads = [f"{screen.ENTRY_SKILL}/SKILL.md", *reads]
+# Like codex, it keeps a rollout under $CODEX_HOME/sessions unless --ephemeral,
+# and under the entry the rollout holds the injected skill message the host
+# wrapper harvests and entry_state reads.
+if Path("skills", screen.ENTRY_TREE).is_dir() and "--ephemeral" not in sys.argv and os.environ.get("CODEX_HOME"):
+    rollout = Path(os.environ["CODEX_HOME"], "sessions", "2026", "09", "30", "rollout-2026-09-30T00-00-00-offline.jsonl")
+    rollout.parent.mkdir(parents=True, exist_ok=True)
+    rollout.write_text("".join(json.dumps(record) + "\n" for record in [
+        {"type": "session_meta", "payload": {"id": "offline", "session_id": "offline", "cwd": os.getcwd(), "source": "exec"}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": f"<skill>\n<name>{screen.ENTRY_SKILL}</name>\n<path>{os.getcwd()}/{entry}/{screen.ENTRY_SKILL}/SKILL.md</path>\n"}]}},
+    ]))
 sample = "good.md" if case.kind == "near-miss" or carried else "bad.md"
 if case.frame:
     sample = screen.standin_review(case, carried).name

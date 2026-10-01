@@ -14,6 +14,7 @@ from unittest import mock
 import test_workspace
 from test_workspace import ROOT, ShopRepo, ShopRule, git, harness_available, screen
 
+import host  # noqa: E402
 import review  # noqa: E402
 import sandbox  # noqa: E402
 import sbx_inside  # noqa: E402
@@ -191,7 +192,8 @@ class ReviewWrapTests(ReviewCase):
         try:
             with mock.patch.dict(os.environ, {"CANON_WORKSPACE": str(arm), "CANON_HARVEST": str(self.base / "harvest")}), \
                     contextlib.redirect_stderr(io.StringIO()):
-                code = workspace.wrap(["--", sys.executable, str(self.base / "reviewer.py")], stdin=io.BytesIO(b"Review it."))
+                code = host.wrap(["--agent", "codex", "--workspace", "--", sys.executable, str(self.base / "reviewer.py")],
+                                 stdin=io.BytesIO(b"Review it."), stdout=io.BytesIO())
         finally:
             os.chdir(previous)
         slot = self.base / "harvest" / "0001"

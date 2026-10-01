@@ -1007,32 +1007,22 @@ def agent_env(agent, out, runner="host"):
     return env
 
 
-def entry_wrapper(agent, out, target):
-    token, discovery = ENTRY_INVOCATION[agent]
-    wrapper = out / "entry" / agent
+def host_wrapper(agent, out, target, entry, in_workspace):
+    """The host runner's entry wrapper. host.py wrap links the skill tree and
+    adds the invocation under the poteto-mode entry, runs the agent with its
+    session kept and moves that session into the run's harvest slot, and for a
+    workspace case materializes the checkout in the agent's cwd first and
+    harvests its diff after."""
+    wrapper = out / "entry" / (f"{agent}-workspace" if in_workspace else agent)
     wrapper.parent.mkdir(parents=True, exist_ok=True)
-    wrapper.write_text(
-        "#!/bin/sh\n"
-        f"mkdir -p {shlex.quote(str(Path(discovery).parent))}\n"
-        f"ln -sfn ../skills/{ENTRY_TREE} {shlex.quote(discovery)}\n"
-        f"{{ printf '%s ' {shlex.quote(token)}; cat; }} | {shlex.quote(str(target))} \"$@\"\n"
-    )
-    wrapper.chmod(0o755)
-    return wrapper
-
-
-def workspace_wrapper(agent, out, target, entry):
-    """The entry wrapper for a workspace case. workspace.py wrap materializes
-    the checkout in the agent's cwd, adds the invocation under the poteto-mode
-    entry, runs the agent, and harvests its diff."""
-    wrapper = out / "entry" / f"{agent}-workspace"
-    wrapper.parent.mkdir(parents=True, exist_ok=True)
-    command = [sys.executable, str(CANON / "workspace.py"), "wrap"]
+    command = [sys.executable, str(CANON / "host.py"), "wrap", "--agent", agent]
+    if in_workspace:
+        command.append("--workspace")
     if entry == ENTRY_SKILL:
         token, discovery = ENTRY_INVOCATION[agent]
         command += ["--token", token, "--discovery", discovery]
     command += ["--", str(target)]
-    tools = CLAUDE_WORKSPACE_TOOLS if agent == "claude" else ()
+    tools = CLAUDE_WORKSPACE_TOOLS if agent == "claude" and in_workspace else ()
     wrapper.write_text(f"#!/bin/sh\nexec {' '.join(map(shlex.quote, command))} \"$@\" {' '.join(map(shlex.quote, tools))}".rstrip() + "\n")
     wrapper.chmod(0o755)
     return wrapper
@@ -1059,29 +1049,28 @@ def backend_args(agent, out, entry, in_workspace=False, runner="host"):
         if not in_workspace:
             raise ScreenError("--runner sbx runs workspace cases only; a pasted-project case has no checkout to clone")
         target = sandbox_wrapper(agent, out, entry)
-    elif in_workspace:
-        target = workspace_wrapper(agent, out, target, entry)
-    elif entry == ENTRY_SKILL:
-        target = entry_wrapper(agent, out, target)
+    elif in_workspace or entry == ENTRY_SKILL:
+        target = host_wrapper(agent, out, target, entry, in_workspace)
     if agent == "claude":
         return ["--claude-bin", target]
     sandbox = "workspace-write" if in_workspace else "read-only"
     return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}"]
 
 
-def file_harvest(work, expected_tree):
+def file_harvest(work, expected_tree=None):
     """Move the numbered slots the wrapper filled, in task order, to each run's
-    path under work/harvest, and refuse a run whose workspace was not the
-    tree the build recorded."""
+    path under work/harvest, and refuse a workspace run whose checkout was not
+    the tree the build recorded."""
     harvest = work / "harvest"
     rows = [json.loads(line)["run_dir"] for line in (work / "tasks.jsonl").read_text().splitlines()]
     slots = sorted(harvest.glob("[0-9][0-9][0-9][0-9]")) if harvest.is_dir() else []
     if len(slots) != len(rows):
-        raise ScreenError(f"{work}: the wrapper filled {len(slots)} workspace slot(s) for {len(rows)} run(s)")
+        raise ScreenError(f"{work}: the wrapper filled {len(slots)} harvest slot(s) for {len(rows)} run(s)")
     for slot, run_dir in zip(slots, rows):
-        record = json.loads((slot / "workspace.json").read_text())
-        if record.get("tree") != expected_tree or record.get("error"):
-            raise ScreenError(f"{work}/{run_dir}: workspace tree {record.get('tree')} is not the built {expected_tree} {record.get('error', '')}".rstrip())
+        if expected_tree:
+            record = json.loads((slot / "workspace.json").read_text())
+            if record.get("tree") != expected_tree or record.get("error"):
+                raise ScreenError(f"{work}/{run_dir}: workspace tree {record.get('tree')} is not the built {expected_tree} {record.get('error', '')}".rstrip())
         destination = harvest / run_dir
         destination.parent.mkdir(parents=True, exist_ok=True)
         slot.rename(destination)
@@ -1119,7 +1108,10 @@ def refuse_leaks(work, case_build):
                           + ", ".join(f"{path} ({kind})" for path, kind in leaks))
 
 
-def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout):
+def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout, entry="skill"):
+    """Answer, grade, and judge one arm. A run through a wrapper (every
+    workspace case, and every case under the poteto-mode entry) fills one
+    harvest slot per run, which moves beside the run dir."""
     root = out / "arms" / rule.id / case.id / arm
     work = out / agent / rule.id / case.id / arm
     if work.exists():
@@ -1127,16 +1119,16 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
     work.mkdir(parents=True)
     harness("prepare", root / MANIFEST, "--split", "tune", "--runs-per-variant", runs, "--out", work / "tasks-all.jsonl")
     with_skill_rows(work / "tasks-all.jsonl", work / "tasks.jsonl")
-    run_env = env
+    wrapped = "workspace" in case_build or entry == ENTRY_SKILL
+    run_env = {**env, "CANON_HARVEST": str(work / "harvest")} if wrapped else env
     if "workspace" in case_build:
-        run_env = {**env, "CANON_WORKSPACE": str(root / "workspace"), "CANON_HARVEST": str(work / "harvest"),
-                   "CANON_TIMEOUT_S": str(timeout or case_build["timeout_s"])}
+        run_env.update(CANON_WORKSPACE=str(root / "workspace"), CANON_TIMEOUT_S=str(timeout or case_build["timeout_s"]))
     harness("run-agent", "--agent", agent, "--model", model, *backend,
             "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
             "--timeout", timeout or case_build["timeout_s"], env=run_env)
     refuse_leaks(work, case_build)
-    if "workspace" in case_build:
-        file_harvest(work, case_build["workspace"]["tree"])
+    if wrapped:
+        file_harvest(work, case_build["workspace"]["tree"] if "workspace" in case_build else None)
     harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
             "--allow-scripts", "--out", work / "grade.json")
     if judged(case_build):
@@ -1169,7 +1161,7 @@ def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", o
                 if only_arms and arm not in only_arms:
                     continue
                 try:
-                    run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout)
+                    run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout, entry)
                 except Exception as exc:  # noqa: BLE001
                     log_error(out, f"{agent}/{rule.id}/{case.id}/{arm}", exc)
                     failed.append(f"{rule.id}/{case.id}/{arm}")
@@ -1234,8 +1226,8 @@ def arm_listed(current, trees):
 
 
 def harvest_dir(run_base):
-    """<work>/runs/<run> maps to <work>/harvest/<run>, where the sbx runner
-    leaves the agent's session transcripts."""
+    """<work>/runs/<run> maps to <work>/harvest/<run>, where the entry wrapper
+    of either runner leaves the agent's session transcripts."""
     run_base = Path(run_base)
     runs = next((parent for parent in run_base.parents if parent.name == "runs"), None)
     return runs.parent / "harvest" / run_base.relative_to(runs) if runs else None
@@ -1280,8 +1272,8 @@ def entry_state(agent, run_base, events, read):
     when the invocation expanded it, "read" when the agent loaded its SKILL.md
     itself, "not registered" when Claude's init event does not list it, and
     "not observed" otherwise. Claude's -p stream never shows the expansion, but
-    the session transcript the sbx runner harvests does. Codex has no init
-    listing, and only its rollout, which the sbx runner also harvests, records
+    the session transcript the wrapper harvests does. Codex has no init
+    listing, and only its rollout, which the wrapper also harvests, records
     the injection, so a Codex run without a rollout counts only a read."""
     run_base = Path(run_base)
     trace = run_base / "trace.jsonl"

@@ -288,7 +288,7 @@ class InjectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
             (out / "entry").mkdir()
-            (out / "entry" / "codex-workspace").write_text("exec python3 workspace.py wrap --token '$poteto-mode' --discovery .agents/skills -- codex-project-only \"$@\"\n")
+            (out / "entry" / "codex-workspace").write_text("exec python3 host.py wrap --agent codex --workspace --token '$poteto-mode' --discovery .agents/skills -- codex-project-only \"$@\"\n")
             run = chain.RunDir(out, "codex", "r", "c", "amended", out, False)
 
             self.assertIs(chain.injection(run, "codex", "poteto-mode", chain.Trace()), True)
