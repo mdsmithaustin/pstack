@@ -143,6 +143,16 @@ class HostWrapTests(unittest.TestCase):
         self.assertEqual(sorted(path.name for path in (self.claude_home / "projects").iterdir()), ["-ws"])
         self.assertTrue((self.work / "harvest" / "0001" / "transcripts" / "claude" / "-only-this-run" / f"{session}.jsonl").is_file())
 
+    def test_claude_run_keeps_a_project_dir_that_existed_before_it(self):
+        (self.claude_home / "projects" / "-older" / "memory").mkdir(parents=True)
+
+        code, stream = self.wrap("claude", FAKE_CLAUDE, "-p", FAKE_PROJECT="-older")
+
+        session = json.loads((self.work / "harvest" / "0001" / "session.json").read_text())["session"]
+        self.assertEqual(code, 0)
+        self.assertEqual(sorted(path.name for path in (self.claude_home / "projects" / "-older").iterdir()), ["memory"])
+        self.assertTrue((self.work / "harvest" / "0001" / "transcripts" / "claude" / "-older" / f"{session}.jsonl").is_file())
+
     def test_claude_run_whose_init_lacks_the_entry_is_not_registered(self):
         code, stream = self.wrap("claude", FAKE_CLAUDE, "-p", "--no-session-persistence", FAKE_SKILLS="how")
 
