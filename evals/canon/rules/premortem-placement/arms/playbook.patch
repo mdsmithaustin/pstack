@@ -1,0 +1,32 @@
+diff --git a/poteto-mode/SKILL.md b/poteto-mode/SKILL.md
+index a462c00..d6f101f 100644
+--- a/poteto-mode/SKILL.md
++++ b/poteto-mode/SKILL.md
+@@ -133,6 +133,7 @@ A large or cross-cutting effort (a migration across many call sites, an ambitiou
+ - **Feature.** New or changed behavior, built from a named data shape. `playbooks/feature.md`.
+ - **Refactoring.** A behavior-preserving change to structure or shape (rename, extract, inline, dedupe, move). `playbooks/refactoring.md`.
+ - **Prototype.** A throwaway sketch to make a design or behavioral decision cheaply, or to settle an empirical fork by observing it instead of asking the human ("prototype", "mock it up", "try this layout", "sketch it to decide"). `playbooks/prototype.md`.
++- **Premortem.** Stress a plan, rollout, or risk register before it is adopted ("premortem this", "pressure-test this rollout"). `playbooks/premortem.md`.
+ - **Visual parity.** Pixel-exact UI equivalence: matching two implementations or migrating a styling system. `playbooks/visual-parity.md`.
+ - **Authoring or modifying a skill.** Writing or editing a SKILL.md. `playbooks/authoring-a-skill.md`.
+ - **Eval.** Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `playbooks/eval.md`.
+diff --git a/poteto-mode/playbooks/premortem.md b/poteto-mode/playbooks/premortem.md
+new file mode 100644
+index 0000000..49f232f
+--- /dev/null
++++ b/poteto-mode/playbooks/premortem.md
+@@ -0,0 +1,14 @@
++### Premortem
++
++**You own the failure story. Assume it, trace it, test only on a copy.**
++
++Assume the plan was adopted and hurt the people it was for within a month. Work out what did it.
++
++1. Write the failure headline first, then work back to its causes.
++2. Before you rank the risks, find the upstream cause they share. Risks with one cause are one risk. When one input feeds every risk, check the tool that produced it before you rate anything that depends on it.
++3. Name the assumption that is both critical and weakly evidenced, and the cheapest test that settles it.
++4. Skip the test when one revert undoes the worst case. Otherwise run it on a copy or a scratch clone, never where people work, and fix its stop rule before it runs. A small pilot on teammates' machines or clones is still where people work. Installing the change to see what happens is the failure, not a test of it.
++5. For each rollback, say how to undo the trigger and how to undo the damage it already did.
++6. Say why each item you clear is fine, so no one reopens it. End with what to change before adoption.
++
++**Reply:** the failure headline, the shared cause, the one test with its stop rule, what is fine as it stands, and what to change before adoption.

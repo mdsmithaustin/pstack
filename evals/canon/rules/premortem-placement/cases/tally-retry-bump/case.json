@@ -1,0 +1,11 @@
+{
+  "kind": "near-miss",
+  "domain": "planning-docs",
+  "timeout_s": 600,
+  "expected_behavior": [
+    "Answers in the reply, briefly, with the concrete concerns the code shows: the retry wraps POST /postings, which creates a posting, so a retried request that reached ledgerd can double-post; a fourth attempt with exponential backoff lengthens the worst case toward the 30 s handler deadline; more retries against a flapping service add load.",
+    "Suggests something proportionate, such as an idempotency key on POST or retrying only GET, and stops.",
+    "Writes no failure headline, risk table, test plan with a stop rule, or rollback section, and produces no file."
+  ],
+  "document": {"message": true}
+}

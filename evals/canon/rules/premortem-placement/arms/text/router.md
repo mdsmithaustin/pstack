@@ -1,0 +1,1 @@
+- **Premortem.** Stress a plan, rollout, or risk register before it is adopted ("premortem this", "pressure-test this rollout"). `playbooks/premortem.md`.
