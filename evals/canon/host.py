@@ -170,9 +170,11 @@ def wrap(argv, stdin=sys.stdin.buffer, stdout=None):
     command, session = keep_session(agent, command)
     before = session_dirs(agent, session_store(agent))
     code, thread = run_agent(command, prompt, stdout)
-    collect(agent, session or thread, slot, before)
-    if checkout:
-        checkout.harvest(code)
+    try:
+        collect(agent, session or thread, slot, before)
+    finally:
+        if checkout:
+            checkout.harvest(code)
     return code
 
 
