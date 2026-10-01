@@ -5,10 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import NamedTuple
-
-HARNESSES = {"codex", "claude-code", "hermes"}
 
 ROLES = {
     "feature", "refactoring", "bug-fix", "perf-issue", "hillclimb",
@@ -25,32 +24,52 @@ PANEL_ROLES = {
 }
 REFLECT_SHORTHANDS = {"divergent", "synthesizer", "tooling", "judgment"}
 
-ALLOWED_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max", "ultra"}
+EFFORT_ORDER = ("none", "low", "medium", "high", "xhigh", "max", "ultra")
+ALLOWED_EFFORTS = frozenset(EFFORT_ORDER)
 NOTICE_EFFORTS = {"max", "ultra"}
-GPT56_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max"}
-GPT56_SOL_EFFORTS = GPT56_EFFORTS | {"ultra"}
 CLAUDE_ALIASES = {"fable", "opus", "sonnet", "haiku"}
-CLAUDE_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+CLAUDE_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max"})
 OTHER_ALIASES = {"inherit-parent", "auto"}
 CLAUDE_CODE_SECTION = "claude-code"
-NOT_CLAUDE_CODE_LEVELS = {"none", "ultra"}
 
 INHERIT = "inherit-parent"
 CONFIG_NAME = "pstack-models.md"
 SKILL_DEFAULT_FILE = Path(__file__).resolve().parent.parent / "examples" / CONFIG_NAME
 
-HARNESS_EFFORTS = {
-    "claude-code": CLAUDE_EFFORTS,
-    "codex": ALLOWED_EFFORTS,
-    "hermes": ALLOWED_EFFORTS,
+
+class Cli(NamedTuple):
+    name: str
+    efforts: frozenset[str]
+    session_effort: bool
+    native_aliases: bool
+    translation: Mapping[str, tuple[str, str | None]]
+
+
+CLIS: dict[str, Cli] = {
+    "claude-code": Cli(
+        name="Claude Code", efforts=CLAUDE_EFFORTS, session_effort=True, native_aliases=True, translation={},
+    ),
+    "codex": Cli(
+        name="Codex", efforts=ALLOWED_EFFORTS, session_effort=False, native_aliases=False,
+        translation={
+            "fable": ("gpt-5.6-sol", "max"),
+            "opus": ("gpt-5.6-sol", "xhigh"),
+            "sonnet": ("gpt-5.6-terra", "high"),
+            "haiku": ("gpt-5.6-luna", "high"),
+        },
+    ),
+    "hermes": Cli(
+        name="Hermes", efforts=ALLOWED_EFFORTS, session_effort=False, native_aliases=False, translation={},
+    ),
 }
-SESSION_EFFORT_HARNESSES = {"claude-code"}
-CODEX_ALIAS_TRANSLATION = {
-    "fable": ("gpt-5.6-sol", "max"),
-    "opus": ("gpt-5.6-sol", "xhigh"),
-    "sonnet": ("gpt-5.6-terra", "high"),
-    "haiku": ("gpt-5.6-luna", "high"),
+
+MODEL_EFFORTS: dict[str, frozenset[str]] = {
+    "gpt-5.6-sol": ALLOWED_EFFORTS,
+    "gpt-5.6-terra": ALLOWED_EFFORTS - {"ultra"},
+    "gpt-5.6-luna": ALLOWED_EFFORTS - {"ultra"},
+    **{alias: CLAUDE_EFFORTS for alias in CLAUDE_ALIASES},
 }
+
 XHIGH_FLOOR_ROLES = {
     "hardest tasks", "judgment and prose", "bug-fix", "perf-issue", "hillclimb",
     "how explainer", "why synthesizer", "reflect judgment", "reflect divergent",
@@ -60,12 +79,8 @@ XHIGH_FLOOR_ROLES = {
 DEFAULT_EFFORT_FLOOR = "high"
 
 
-def _model_effort_allowed(model: str, effort: str) -> bool | None:
-    if model.startswith("gpt-5.6-"):
-        return effort in (GPT56_SOL_EFFORTS if model == "gpt-5.6-sol" else GPT56_EFFORTS)
-    if model in CLAUDE_ALIASES:
-        return effort in CLAUDE_EFFORTS
-    return None
+def _model_effort_allowed(model: str, effort: str) -> bool:
+    return effort in MODEL_EFFORTS.get(model, ALLOWED_EFFORTS)
 
 
 def _is_valid_model_name(model: str) -> bool:
@@ -113,15 +128,16 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
             if effort not in ALLOWED_EFFORTS:
                 findings.append((line_no, "error", f"unknown effort {effort!r} for model {model!r}"))
                 continue
-            if _model_effort_allowed(model, effort) is False:
+            if not _model_effort_allowed(model, effort):
                 findings.append((line_no, "error", f"effort {effort!r} not supported by model {model!r}"))
                 continue
-            if section == CLAUDE_CODE_SECTION and effort in NOT_CLAUDE_CODE_LEVELS:
-                findings.append((line_no, "error", f"effort {effort!r} is not a Claude Code level (low, medium, high, xhigh, max)"))
+            if section in CLIS and effort not in CLIS[section].efforts:
+                levels = ", ".join(e for e in EFFORT_ORDER if e in CLIS[section].efforts)
+                findings.append((line_no, "error", f"effort {effort!r} is not a {CLIS[section].name} level ({levels})"))
                 continue
             if effort in NOTICE_EFFORTS:
                 findings.append((line_no, "notice", f"{model}@{effort} pins an expensive tier"))
-            if section == "" and effort in NOT_CLAUDE_CODE_LEVELS:
+            if section == "" and effort not in CLIS[CLAUDE_CODE_SECTION].efforts:
                 deferred_flat_notices.append(line_no)
         entries.append((model, effort))
     return entries, deferred_flat_notices
@@ -154,7 +170,7 @@ def parse(text: str) -> tuple[dict, list]:
 
         if stripped.startswith("##"):
             header = stripped[2:].strip()
-            if header not in HARNESSES:
+            if header not in CLIS:
                 findings.append((line_no, "error", f"unknown section header {stripped!r}"))
             elif header in headers_seen:
                 findings.append((line_no, "error", f"duplicate section {header!r}"))
@@ -232,24 +248,25 @@ class ResolvedArm(NamedTuple):
 def _resolve_model(model: str, harness: str) -> tuple[str, str | None, list[str]]:
     if model in OTHER_ALIASES:
         return INHERIT, None, []
-    usable = model in CLAUDE_ALIASES if harness == "claude-code" else model not in CLAUDE_ALIASES
-    if usable:
+    cli = CLIS[harness]
+    if (model in CLAUDE_ALIASES) == cli.native_aliases:
         return model, None, []
-    if harness == "codex" and model in CLAUDE_ALIASES:
-        translated_model, translated_effort = CODEX_ALIAS_TRANSLATION[model]
+    if model in cli.translation:
+        translated_model, translated_effort = cli.translation[model]
         return translated_model, translated_effort, []
     return INHERIT, None, [f"{model} is not usable on {harness}"]
 
 
 def _resolve_effort(role: str, harness: str, model: str, written: str | None, notes: list[str]) -> str:
+    cli = CLIS[harness]
     if written is not None:
-        if written not in HARNESS_EFFORTS[harness]:
+        if written not in cli.efforts:
             notes.append(f"effort {written} is not usable on {harness}")
-        elif _model_effort_allowed(model, written) is False:
+        elif not _model_effort_allowed(model, written):
             notes.append(f"effort {written} is not usable with {model}")
         else:
             return written
-    if harness in SESSION_EFFORT_HARNESSES or model == INHERIT:
+    if cli.session_effort or model == INHERIT:
         return INHERIT
     return "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
 
@@ -296,7 +313,7 @@ def _load_layer_file(path: Path) -> tuple[dict, list[tuple[int, str, str]]]:
 def _resolve_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="check-models-config.py", allow_abbrev=False)
     parser.add_argument("--resolve", action="store_true", required=True)
-    parser.add_argument("--harness", required=True, choices=sorted(HARNESSES))
+    parser.add_argument("--harness", required=True, choices=sorted(CLIS))
     parser.add_argument("--project", type=Path, default=Path.cwd())
     parser.add_argument("--user-file", type=Path, default=Path.home() / ".agents" / CONFIG_NAME)
     parser.add_argument("roles", nargs="*", metavar="ROLE")
