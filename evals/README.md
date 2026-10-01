@@ -49,7 +49,7 @@ without blockers. These checks validate the instrument, not skill quality.
 Start with one paired repetition. Replace the skill name for each corpus.
 
 ```sh
-AGENTS=codex RUNS=1 CODEX_MODEL=gpt-5.6-sol \
+AGENTS=codex RUNS=1 CODEX_MODEL=gpt-6.1-sol \
   OUT=/private/tmp/verify-commands-sol-screen \
   mise run skill-run skills/verify-commands
 
@@ -85,7 +85,7 @@ mkdir -p "$run_root"
 runner skill-benchmark audit-manifest "$manifest" --fail-on-blockers --strict-judge
 runner skill-benchmark prepare "$manifest" --split tune --runs-per-variant 3 --out "$run_root/tasks.jsonl"
 
-runner skill-benchmark run-agent --agent codex --model gpt-5.6-sol \
+runner skill-benchmark run-agent --agent codex --model gpt-6.1-sol \
   --codex-cmd "$skill_ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
   --tasks "$run_root/tasks.jsonl" --runs "$run_root/codex" --timeout 240
 runner skill-benchmark grade "$manifest" --runs "$run_root/codex" --allow-scripts
@@ -107,7 +107,7 @@ runner skill-benchmark run-agent --agent claude --model opus \
   --tasks "$run_root/tasks.jsonl" --runs "$run_root/claude" --timeout 240
 runner skill-benchmark grade "$manifest" --runs "$run_root/claude" --allow-scripts
 runner skill-benchmark judge "$manifest" --runs "$run_root/claude" \
-  --judge-backend codex --judge-model gpt-5.6-sol \
+  --judge-backend codex --judge-model gpt-6.1-sol \
   --codex-cmd "$skill_ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
   --judge-runs 1 --transcripts "$run_root/claude-judge-transcripts" \
   --out "$run_root/claude-judge.jsonl"
@@ -129,7 +129,7 @@ manifest="evals/$skill/shared-benchmark.json"
 runner() { uv run --no-project python "$skill_ci/tools/run_runner.py" "$@"; }
 mkdir -p "$trigger_root/codex-traces" "$trigger_root/claude-traces"
 
-runner skill-trigger-matrix "$manifest" --agent codex --model gpt-5.6-sol \
+runner skill-trigger-matrix "$manifest" --agent codex --model gpt-6.1-sol \
   --codex-cmd "$skill_ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
   --runs-per-query 3 --trace-runs "$trigger_root/codex-traces" \
   --out "$trigger_root/codex.json"
