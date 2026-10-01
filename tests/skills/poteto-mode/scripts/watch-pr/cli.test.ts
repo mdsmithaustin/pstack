@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { type CliRuntime, main, parseArgs } from "./cli.ts";
+import { type CliRuntime, main, parseArgs } from "../../../../../skills/poteto-mode/scripts/watch-pr/cli.ts";
 import { fakeReader, passingCheck } from "./fakes.test-helper.ts";
-import { renderJson, renderPretty } from "./render.ts";
-import type { GitHubReader, WatcherVerdict } from "./types.ts";
-import { parsePrNumber } from "./types.ts";
+import { renderJson, renderPretty } from "../../../../../skills/poteto-mode/scripts/watch-pr/render.ts";
+import type { GitHubReader, WatcherVerdict } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
+import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 
 const silentIo = { stdout: () => {}, stderr: () => {} };
 
@@ -105,6 +105,7 @@ describe("parseArgs", () => {
 
 describe("rendering", () => {
   const context = {
+    host: "github.com",
     owner: "owner",
     repo: "repo",
     number: parsePrNumber(1),

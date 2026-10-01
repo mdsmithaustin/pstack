@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test orch watch-pr",
-    "typecheck": "tsc --project watch-pr/tsconfig.json --noEmit --strict && tsc --project orch/tsconfig.json --noEmit --strict"
+    "test": "bun test ../../../tests/skills/poteto-mode/scripts",
+    "typecheck": "tsc --project watch-pr/tsconfig.json --noEmit --strict && tsc --project orch/tsconfig.json --noEmit --strict && tsc --project ../../../tests/skills/poteto-mode/scripts/tsconfig.json --noEmit --strict"
   },
   "dependencies": {
     "commander": "15.0.0"

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import fnmatch
 import json
 import subprocess
 import tomllib
@@ -38,6 +39,21 @@ WHY_EVALS_LIVE_OUTSIDE_SKILLS = (
     "skill-checks reads through its evals-dir input."
 )
 
+TEST_FILE_PATTERNS = (
+    "*.test.ts",
+    "*.test.js",
+    "*.test.mjs",
+    "*.test-helper.ts",
+    "*.compile.ts",
+    "test_*.py",
+    "*_test.py",
+)
+
+WHY_TESTS_LIVE_OUTSIDE_SKILLS = (
+    "Tests live under tests/, mirroring their path under skills/, because "
+    "`npx skills` ships skills/ verbatim to everyone who installs a skill."
+)
+
 
 def ignored(path: str) -> bool:
     return subprocess.run(
@@ -65,6 +81,21 @@ class EvalArtifactsStayOutOfGit(unittest.TestCase):
             if path.is_dir()
         )
         self.assertEqual(found, [], f"{found} must move out of skills/. {WHY_EVALS_LIVE_OUTSIDE_SKILLS}")
+
+
+class SkillsShipNoTests(unittest.TestCase):
+    def test_no_tracked_skill_file_is_a_test(self) -> None:
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z", "--", "skills"],
+            cwd=ROOT, capture_output=True, check=True, text=True,
+        ).stdout.split("\0")
+        found = sorted(
+            path for path in tracked
+            if path and any(fnmatch.fnmatchcase(Path(path).name, pattern) for pattern in TEST_FILE_PATTERNS)
+        )
+        listing = "\n".join(f"  {path} -> tests/{path}" for path in found)
+        if found:
+            self.fail(f"test files under skills/:\n{listing}\n{WHY_TESTS_LIVE_OUTSIDE_SKILLS}")
 
 
 class MiseTasksReadTheEvalsTree(unittest.TestCase):

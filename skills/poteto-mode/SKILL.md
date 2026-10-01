@@ -110,7 +110,7 @@ Write the reply clean as you draft it. A cleanup pass after drafting does not re
 - **Never fabricate a link, citation, or transcript reference.** Link only artifacts you produced or read this session.
 - **Every claim carries its evidence or its label in the same sentence.** Measured, inferred, or guess. A prediction or an unseen cause is a guess. Never hand the human a check you could run.
 
-Every playbook ends with a reply written this way. When the work produces a PR, link it as `https://github.com/<owner>/<repo>/pull/<number>`. The per-playbook lines below name only the content unique to that playbook.
+Every playbook ends with a reply written this way. When the work produces a PR, link to the PR on its actual GitHub host. For public GitHub, use `https://github.com/<owner>/<repo>/pull/<number>`. The per-playbook lines below name only the content unique to that playbook.
 
 ## Comments
 

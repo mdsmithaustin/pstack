@@ -163,10 +163,10 @@ const reviewDecision = (value: unknown): T.ReviewDecision =>
   );
 function parseRemote(value: string): T.Repository | null {
   let normalized = value.trim();
-  if (normalized.startsWith("git@github.com:"))
-    normalized = `https://github.com/${normalized.slice(15)}`;
-  if (normalized.startsWith("ssh://git@github.com/"))
-    normalized = `https://github.com/${normalized.slice(21)}`;
+  const scp = normalized.includes("://")
+    ? null
+    : /^git@([^:/]+):([^:]+)$/.exec(normalized);
+  if (scp) normalized = `https://${scp[1]}/${scp[2]}`;
   try {
     const url = new URL(normalized);
     const parts = url.pathname
@@ -174,17 +174,18 @@ function parseRemote(value: string): T.Repository | null {
       .split("/")
       .filter(Boolean);
     if (
-      url.protocol !== "https:" ||
-      url.hostname !== "github.com" ||
+      !["https:", "ssh:"].includes(url.protocol) ||
       url.port ||
-      url.username ||
+      (url.protocol === "ssh:"
+        ? url.username !== "git"
+        : Boolean(url.username)) ||
       url.password ||
       url.search ||
       url.hash ||
       parts.length !== 2
     )
       return null;
-    return { owner: parts[0], repo: parts[1] };
+    return { host: url.hostname, owner: parts[0], repo: parts[1] };
   } catch {
     return null;
   }
@@ -195,7 +196,6 @@ function parsePrUrl(value: string): T.PrContext {
     const parts = url.pathname.split("/").filter(Boolean);
     if (
       url.protocol !== "https:" ||
-      url.hostname !== "github.com" ||
       url.port ||
       url.username ||
       url.password ||
@@ -206,6 +206,7 @@ function parsePrUrl(value: string): T.PrContext {
     )
       throw new Error("not a canonical GitHub pull URL");
     return {
+      host: url.hostname,
       owner: parts[0],
       repo: parts[1],
       number: parsePrNumber(Number(parts[3])),
@@ -533,7 +534,7 @@ function graphqlArgs(
   query: string,
   context: T.PrContext
 ): [string, ...string[]] {
-  return [
+  const argv: [string, ...string[]] = [
     "gh",
     "api",
     "graphql",
@@ -546,7 +547,12 @@ function graphqlArgs(
     "-F",
     `pr=${context.number}`,
   ];
+  if (context.host !== "github.com") argv.push("--hostname", context.host);
+  return argv;
 }
+
+const repoArg = (repository: T.Repository): string =>
+  `${repository.host === "github.com" ? "" : `${repository.host}/`}${repository.owner}/${repository.repo}`;
 
 export class GhGitHubReader implements T.GitHubReader {
   async originRepo(): Promise<T.Repository | null> {
@@ -572,7 +578,7 @@ export class GhGitHubReader implements T.GitHubReader {
         "view",
         String(context.number),
         "--repo",
-        `${context.owner}/${context.repo}`,
+        repoArg(context),
         "--json",
         "mergeable,mergeStateStatus,reviewDecision,headRefOid,headRefName,baseRefName,state,mergedAt,isDraft",
       ]),
@@ -587,7 +593,7 @@ export class GhGitHubReader implements T.GitHubReader {
       "pr",
       "list",
       "--repo",
-      `${repository.owner}/${repository.repo}`,
+      repoArg(repository),
       "--state",
       "open",
       "--limit",
@@ -617,7 +623,7 @@ export class GhGitHubReader implements T.GitHubReader {
       "checks",
       String(context.number),
       "--repo",
-      `${context.owner}/${context.repo}`,
+      repoArg(context),
       "--json",
       "name,state,description,link,workflow,bucket",
     ]);
@@ -695,19 +701,26 @@ export async function resolveContext(args: {
   readonly repo: string | null;
   readonly pr: T.PrNumber | null;
 }): Promise<T.PrContext> {
-  if (args.pr !== null && args.owner !== null && args.repo !== null)
-    return { owner: args.owner, repo: args.repo, number: args.pr };
   if (args.pr !== null) {
     const origin = await args.reader.originRepo();
     if (origin !== null)
       return {
+        host: origin.host,
         owner: args.owner ?? origin.owner,
         repo: args.repo ?? origin.repo,
+        number: args.pr,
+      };
+    if (args.owner !== null && args.repo !== null)
+      return {
+        host: process.env.GH_HOST?.trim() || "github.com",
+        owner: args.owner,
+        repo: args.repo,
         number: args.pr,
       };
   }
   const inferred = await args.reader.currentPr(args.pr);
   return {
+    host: inferred.host,
     owner: args.owner ?? inferred.owner,
     repo: args.repo ?? inferred.repo,
     number: args.pr ?? inferred.number,
