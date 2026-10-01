@@ -7,7 +7,7 @@ on:
   pull_request:
 jobs:
   skills:
-    uses: mdsmithaustin/skill-ci/.github/workflows/skill-checks.yml@1101d730834aa5c6a475796be427737d69317e29
+    uses: mdsmithaustin/skill-ci/.github/workflows/skill-checks.yml@d1c00eb4e4aae73bd73c6bc2bed23f00c4a8e1cf
     with:
       skills-dir: skills
       evals-dir: evals
