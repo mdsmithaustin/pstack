@@ -27,7 +27,8 @@ FAKE_CLAUDE = f"""import json, os, pathlib, sys
 argv = sys.argv[1:]
 prompt = sys.stdin.buffer.read().decode()
 session = argv[argv.index("--session-id") + 1]
-project = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / "-ws"
+project = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects" / os.environ.get("FAKE_PROJECT", "-ws")
+(project / "memory").mkdir(parents=True, exist_ok=True)
 (project / session / "subagents").mkdir(parents=True)
 (project / session / "subagents" / "agent-a1.jsonl").write_text("{{}}\\n")
 (project / (session + ".jsonl")).write_text(json.dumps({EXPANSION!r}) + "\\n" + json.dumps({{"prompt": prompt}}) + "\\n")
@@ -128,11 +129,19 @@ class HostWrapTests(unittest.TestCase):
         self.assertEqual((self.ws / ".claude" / "skills").resolve(), self.ws / "skills" / "pstack")
         self.assertEqual(record, {"agent": "claude", "session": session,
                                   "transcripts": [f"transcripts/claude/-ws/{session}", f"transcripts/claude/-ws/{session}.jsonl"]})
-        self.assertEqual(sorted(path.name for path in (self.claude_home / "projects" / "-ws").iterdir()), ["other.jsonl"])
+        self.assertEqual(sorted(path.name for path in (self.claude_home / "projects" / "-ws").iterdir()), ["memory", "other.jsonl"])
         self.assertEqual(self.exposure("claude", stream), {"read": [], "entry": "injected"})
         harvested = self.work / "harvest" / "case" / "with_skill" / "transcripts" / "claude" / "-ws"
         self.assertEqual(json.loads((harvested / f"{session}.jsonl").read_text().splitlines()[0]), EXPANSION)
         self.assertTrue((harvested / session / "subagents" / "agent-a1.jsonl").is_file())
+
+    def test_claude_run_leaves_no_project_dir_that_held_only_its_session(self):
+        code, stream = self.wrap("claude", FAKE_CLAUDE, "-p", FAKE_PROJECT="-only-this-run")
+
+        session = json.loads((self.work / "harvest" / "0001" / "session.json").read_text())["session"]
+        self.assertEqual(code, 0)
+        self.assertEqual(sorted(path.name for path in (self.claude_home / "projects").iterdir()), ["-ws"])
+        self.assertTrue((self.work / "harvest" / "0001" / "transcripts" / "claude" / "-only-this-run" / f"{session}.jsonl").is_file())
 
     def test_claude_run_whose_init_lacks_the_entry_is_not_registered(self):
         code, stream = self.wrap("claude", FAKE_CLAUDE, "-p", "--no-session-persistence", FAKE_SKILLS="how")

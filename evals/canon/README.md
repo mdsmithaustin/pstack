@@ -310,8 +310,10 @@ under the same paths the sbx runner's harvest uses, beside a `session.json`
 naming the session and the files moved. Claude's delegates sit inside the
 session's own directory. For Codex the wrapper also moves every rollout whose
 first `session_meta` names a moved thread as its `parent_thread_id`, so the
-delegates a lead spawned travel with it. It moves no other session, and the
-store keeps nothing of the run. On the host runner, every case under this
+delegates a lead spawned travel with it. It moves no other session. Claude
+Code also makes an empty `memory/` dir under the run's project dir, so the
+wrapper removes that project dir once no file is left in it, and the store
+keeps nothing of the run. On the host runner, every case under this
 entry and every workspace case runs through the wrapper. A pasted case under
 `--entry skill` runs the agent directly and keeps no transcript. On
 2026-09-30 one host run of `value-type` per agent read `entry injected` from

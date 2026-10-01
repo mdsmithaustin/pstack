@@ -125,6 +125,8 @@ def collect(agent, session, slot):
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(path), str(destination))
         moved.append(destination.relative_to(slot).as_posix())
+        if path.parent != store and not any(child.is_file() for child in path.parent.rglob("*")):
+            shutil.rmtree(path.parent)
     (slot / "session.json").write_text(json.dumps({"agent": agent, "session": session, "transcripts": moved}, indent=2) + "\n")
     return moved
 
