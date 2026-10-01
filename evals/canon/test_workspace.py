@@ -429,7 +429,7 @@ pathlib.Path("app/orders.py").write_text("changed\\n")
 
 
 class WrapTests(ShopRepo):
-    def run_wrap(self, tree, **record):
+    def run_wrap(self, tree, collect=host.collect, **record):
         root = self.harness_workspace("wrapped", "# Poteto mode\n")
         arm = self.base / "arm"
         (arm / "overlay").mkdir(parents=True)
@@ -440,9 +440,12 @@ class WrapTests(ShopRepo):
         previous = Path.cwd()
         os.chdir(root)
         try:
-            with mock.patch.dict(os.environ, environment), contextlib.redirect_stderr(io.StringIO()):
-                code = host.wrap(["--agent", "codex", "--workspace", "--token", "$poteto-mode", "--discovery", ".agents/skills", "--",
-                                  sys.executable, str(self.base / "agent.py")], stdin=io.BytesIO(b"Add amendments."), stdout=io.BytesIO())
+            with mock.patch.dict(os.environ, environment), contextlib.redirect_stderr(io.StringIO()), mock.patch.object(host, "collect", collect):
+                try:
+                    code = host.wrap(["--agent", "codex", "--workspace", "--token", "$poteto-mode", "--discovery", ".agents/skills", "--",
+                                      sys.executable, str(self.base / "agent.py")], stdin=io.BytesIO(b"Add amendments."), stdout=io.BytesIO())
+                except OSError as exc:
+                    code = str(exc)
         finally:
             os.chdir(previous)
         slot = self.base / "harvest" / "0001"
@@ -455,6 +458,15 @@ class WrapTests(ShopRepo):
 
         self.assertEqual((code, record["tree"], record["agent_rc"]), (0, tree, 0))
         self.assertEqual((root / "prompt-seen.txt").read_text(), "$poteto-mode Add amendments.")
+        self.assertEqual(sorted(apply_diff(workspace.reference_checkout(self.spec)[0], (slot / "workspace.diff").read_text())),
+                         ["app/orders.py", "prompt-seen.txt"])
+
+    def test_wrapper_harvests_the_diff_when_collecting_the_session_fails(self):
+        tree = workspace.reference_checkout(self.spec)[1]
+
+        code, root, record, slot = self.run_wrap(tree, collect=mock.Mock(side_effect=OSError("store vanished")))
+
+        self.assertEqual((code, record["agent_rc"]), ("store vanished", 0))
         self.assertEqual(sorted(apply_diff(workspace.reference_checkout(self.spec)[0], (slot / "workspace.diff").read_text())),
                          ["app/orders.py", "prompt-seen.txt"])
 
