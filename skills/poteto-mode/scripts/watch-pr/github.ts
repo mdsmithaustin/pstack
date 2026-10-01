@@ -712,7 +712,7 @@ export async function resolveContext(args: {
       };
     if (args.owner !== null && args.repo !== null)
       return {
-        host: "github.com",
+        host: process.env.GH_HOST?.trim() || "github.com",
         owner: args.owner,
         repo: args.repo,
         number: args.pr,

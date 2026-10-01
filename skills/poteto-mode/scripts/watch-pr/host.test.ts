@@ -28,7 +28,10 @@ function readerOutput(gitResult: string, prUrl: string): unknown {
   }
 }
 
-function commandOutput(remote: string): { context: unknown; commands: string } {
+function commandOutput(
+  remote: string,
+  host = ""
+): { context: unknown; commands: string } {
   const directory = mkdtempSync(join(tmpdir(), "watch-pr-commands-"));
   try {
     const log = join(directory, "commands");
@@ -46,6 +49,7 @@ function commandOutput(remote: string): { context: unknown; commands: string } {
       cwd: import.meta.dir,
       env: {
         ...process.env,
+        GH_HOST: host,
         PATH: `${directory}:${process.env.PATH ?? ""}`,
         WATCH_PR_COMMANDS: log,
       },
@@ -152,5 +156,19 @@ describe("repository host inference", () => {
     expect(result.commands).toContain("--repo\nexplicit/override\n");
     expect(result.commands).not.toContain("--hostname\n");
     expect(result.commands).not.toContain("--repo\ngithub.com/");
+  });
+
+  it("uses GH_HOST when explicit context has no origin", () => {
+    const result = commandOutput("", "github.sie.sony.com");
+    expect(result.context).toEqual({
+      host: "github.sie.sony.com",
+      owner: "explicit",
+      repo: "override",
+      number: 14,
+    });
+    expect(result.commands).toContain(
+      "--repo\ngithub.sie.sony.com/explicit/override\n"
+    );
+    expect(result.commands).toContain("--hostname\ngithub.sie.sony.com\n");
   });
 });
