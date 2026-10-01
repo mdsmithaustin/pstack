@@ -1,6 +1,6 @@
 # pstack
 
-> this is a CLI-agnostic port of [cursor/plugins/pstack](https://github.com/cursor/plugins/tree/main/pstack) by [poteto](https://x.com/poteto), reworked to install with [`npx skills`](https://skills.sh) and run in **Claude Code**, **Codex**, and **Hermes**. the workflows are poteto's; [PORTING.md](./PORTING.md) records exactly what changed. the intro below keeps poteto's voice from upstream.
+> this is a CLI-agnostic port of [cursor/plugins/pstack](https://github.com/cursor/plugins/tree/main/pstack) by [poteto](https://x.com/poteto), reworked to install with [`npx skills`](https://skills.sh) and run in **Claude Code**, **Codex**, **Hermes**, and **Grok Build**. the workflows are poteto's; [PORTING.md](./PORTING.md) records exactly what changed. the intro below keeps poteto's voice from upstream.
 
 i'm [poteto](https://x.com/poteto). i'm not a president or ceo, but i've worked with millions of lines of code at Meta, Netflix, and Cursor. i'm also on the react core team where i help build and maintain react compiler.
 
