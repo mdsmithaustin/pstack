@@ -11,9 +11,33 @@ pstack skills describe delegation abstractly: "spawn a subagent on model X", "la
 
 When a pstack workflow uses a `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, or `PROJECT_ROOT` command, read the [portable resource path contract](references/portable-paths.md) in full. These commands run bundled scripts, address installed resources, read fresh pstack trunk, or read a consumer control skill. Resolve only the roots that the next command needs. Keep the exact command forms in generated plans and restore the recorded roots across owners, delegates, wake-ups, and later ticks.
 
-## Resolve personas
+## Spawn a role
 
-When a workflow requests `poteto-agent` or `Comment Sicko`, read the [persona contract](references/named-roles.md) before delegation. The installed bundle supplies the full upstream persona and local skill paths. Use the native persona when the live agent catalog lists it, or supply the complete briefing through a generic delegate, own-CLI subprocess, or sequential arm. The persona and the role are separate. The role sets the model and effort.
+Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona. Build each spawn in this order.
+
+1. **Name the role and the persona.** The skill or playbook step names the role. A spawn whose skill names no role uses `default`. A `subagent_type` of `poteto-agent` or `comment-sicko` in skill text names a persona, and `general-purpose` names none. Neither one picks the model or the effort.
+2. **Resolve the role.** Run the resolver once per task, and again after the config changes:
+
+   ```sh
+   python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|hermes> [<role>...]
+   ```
+
+   Failure signal: nonzero exit. It prints one JSON line per arm with `model`, `effort`, and `source`. Pass the roles the skill names, or none to print every role. Run it from the project root or pass `--project <root>`. Do not read the config files to pick values. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../setup-pstack/references/models-config.md). When `trail reviewer` resolves to the model that did the work, step down one tier in the same family (`fable`, `opus`, `sonnet`, `haiku`; `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`) so the review stays cross-model. Every model you pass comes from this output, an explicit request in the task, or that step-down. Never improvise one, and say which role each model came from.
+3. **Build the spawn call for this CLI**, through the mechanism in **Spawn a subagent** below. `inherit-parent` in a field means omit that field.
+   - **Claude Code.** Pass `model`. The spawn tool has no effort field, so the agent type carries the effort. Each `pstack-effort-<level>` agent runs at its level and takes the `model` you pass.
+
+     | resolved effort | no persona | a pstack persona |
+     |---|---|---|
+     | a level, and `pstack-effort-<level>` is in the live agent catalog | `pstack-effort-<level>` | `pstack-effort-<level>`, with the persona's complete briefing at the top of the prompt |
+     | a level, but that agent is not in the catalog | `general-purpose` | the persona per the [persona contract](references/named-roles.md) |
+     | `inherit-parent` | `general-purpose` | the persona per the persona contract |
+
+     Only the live catalog proves an agent is loaded. A file on disk does not. A delegate's own spawns inherit the delegate's effort, so a nested spawn with an `inherit-parent` effort runs at the delegate's level, not the top session's.
+   - **Codex.** Pass `model` and `reasoning_effort` on `spawn_agent`, and whenever you pass either, set `fork_turns` to `"none"`, or to a positive integer to carry the last few turns. A full-history fork, with `fork_turns` omitted or `"all"`, inherits the parent's model and effort and ignores overrides. So a role that resolves to a model or an effort never forks the full history. Only a role that resolves to `inherit-parent` for both may. Set `agent_type` to the persona's native name when the live agent catalog lists it, and otherwise to `default` with the persona's briefing at the top of the message.
+   - **Hermes.** Pass the values through the delegation toolset's fields when it has them, or as `--reasoning` on `hermes -z`.
+   - **Grok Build.** It has no config section, so resolve it as `claude-code`. Pass a model only when the spawn accepts it. The effort is always the session's.
+4. **Brief the persona.** A persona that runs as a briefing gets its complete text from the [persona contract](references/named-roles.md). Never summarize it.
+5. **Fall back without dropping an arm.** If the spawn rejects a model, omit it, let the arm inherit the session model, and report the substitution. For explicitly requested models, apply [Arena's required-arm rule](../arena/SKILL.md#required-arms). If no field or agent can carry the effort, the effort alone becomes `inherit-parent`. Keep the model and the arm. Say in the reply which role's effort was inherited and why, such as "`how explainer` ran at the session effort because `pstack-effort-xhigh` is not loaded. Run `/setup-pstack` to register it." When a persona ran as a briefing in an effort agent's prompt instead of under its native name, say that too.
 
 ## The primitives
 
@@ -27,22 +51,6 @@ Each writer gets its own git worktree, whichever mechanism spawns it. Keep the l
 
 - A throwaway checkout (verify, review, replay, eval arm) goes under `mktemp -d "${TMPDIR:-/tmp}/pstack-<slug>.XXXXXX"`. Remove it with `git worktree remove` when its run ends.
 - A worktree that holds unpushed work goes under `.worktrees/<slug>` in the main checkout. If the repository does not ignore `.worktrees/`, append it to `"$(git rev-parse --git-common-dir)/info/exclude"` first.
-
-**Set an arm's model.** Pass a model value this session has confirmed the spawn mechanism accepts. If the value is unconfirmed or rejected, omit it and let the arm inherit the session model. Report the substitution. For explicitly requested models, apply [Arena's required-arm rule](../arena/SKILL.md#required-arms).
-
-**Set an arm's effort.** Every role resolves to a model and a reasoning effort (see **The models config** below). Pass the effort through the spawn mechanism when it has a field or flag for it.
-
-Claude Code has no such field. There the agent type carries the effort. Each `pstack-effort-<level>` agent runs at its level and takes the `model` you pass. Pick the `subagent_type` from the resolved effort and the persona the skill names:
-
-| resolved effort | skill names `general-purpose` | skill names a pstack persona |
-|---|---|---|
-| a level, and `pstack-effort-<level>` is in the live agent catalog | `pstack-effort-<level>` | `pstack-effort-<level>`, with the persona's complete briefing at the top of the prompt |
-| a level, but that agent is not in the catalog | `general-purpose` | the persona per the [persona contract](references/named-roles.md) |
-| `inherit-parent` | `general-purpose` | the persona per the persona contract |
-
-Pass the role's model in every row, or omit it for `inherit-parent`. The resolver already turns `none` and `ultra`, which are not Claude Code levels, into `inherit-parent`. Only the live catalog proves an agent is loaded. A file on disk does not. A delegate's own spawns inherit the delegate's effort, so a nested spawn with no written effort runs at the delegate's level, not the top session's.
-
-When the mechanism has no field and no agent carries the level, or it rejects the value, the effort alone becomes `inherit-parent`. Keep the model and the arm. Say in the reply which role's written effort was inherited and why, such as "`how explainer` ran at the session effort because `pstack-effort-xhigh` is not loaded. Run `/setup-pstack` to register it." When a persona ran as a briefing in an effort agent's prompt instead of under its native identifier, say that too. An effort problem never drops a model or an arm.
 
 **Parallelism.** Real where the mechanism allows it (independent tool calls in one message, concurrent subprocesses); otherwise sequential with the same arm count.
 
@@ -70,8 +78,8 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 
 | harness | spawn | worklist carrier | effort | transcripts |
 |---|---|---|---|---|
-| Claude Code | `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases | Prefer any exposed structured task-tracking capability; otherwise use normal progress updates. When the task tools are off, setup-pstack step 0b names the switch. With tool search on, the default, they arrive deferred, so the discovery step in **Track a worklist** applies | no per-call field; a `pstack-effort-<level>` agent type carries it (see **Set an arm's effort**). An `inherit-parent` effort, or a session whose catalog lacks the agent, runs at the session effort (`--effort`, `effortLevel`) | JSONL under `~/.claude/projects/<slug>/`, `<slug>` = the resolved workspace path with every character other than a letter or digit turned into `-` |
-| Codex | `spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn; set `fork_turns` to `"none"` on any spawn that passes either, as Codex's spawn instructions require; custom agents use TOML in `~/.codex/agents/` or `.codex/agents/` with `name`, `description`, and `developer_instructions`; generated pstack personas leave model and effort unset; `codex exec` is the subprocess route | Prefer any exposed structured plan-tracking capability; otherwise use normal progress updates in the commentary channel. Goal lifecycle tools are not work tracking unless the user explicitly asked to create a goal. When the plan tool is off, setup-pstack step 0b names the switch | the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (medium on the GPT-5.6 family), not the parent's, so always pass one | JSONL under `~/.codex/sessions/` by date |
+| Claude Code | `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases | Prefer any exposed structured task-tracking capability; otherwise use normal progress updates. When the task tools are off, setup-pstack step 0b names the switch. With tool search on, the default, they arrive deferred, so the discovery step in **Track a worklist** applies | no per-call field; a `pstack-effort-<level>` agent type carries it (see **Spawn a role**). An `inherit-parent` effort, or a session whose catalog lacks the agent, runs at the session effort (`--effort`, `effortLevel`) | JSONL under `~/.claude/projects/<slug>/`, `<slug>` = the resolved workspace path with every character other than a letter or digit turned into `-` |
+| Codex | `spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn, with the `fork_turns` rule in **Spawn a role**; custom agents use TOML in `~/.codex/agents/` or `.codex/agents/` with `name`, `description`, and `developer_instructions`; generated pstack personas leave model and effort unset; `codex exec` is the subprocess route | Prefer any exposed structured plan-tracking capability; otherwise use normal progress updates in the commentary channel. Goal lifecycle tools are not work tracking unless the user explicitly asked to create a goal. When the plan tool is off, setup-pstack step 0b names the switch | the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (medium on the GPT-5.6 family), not the parent's, so always pass one | JSONL under `~/.codex/sessions/` by date |
 | Hermes | a delegation toolset when enabled; `hermes -z` for one-shot subprocess runs | Prefer any exposed structured task-planning capability; otherwise use normal progress updates | `--reasoning <value>` on `hermes -z`; config `agent.reasoning_effort` and per-model `agent.reasoning_overrides`. Whether the delegation toolset takes an effort field is unverified: check its schema in session | SQLite store; `hermes sessions` subcommands list and export |
 | Grok Build | `spawn_subagent`. On 1.0.41 its schema has no agent type and no argument names a persona, so pass a pstack persona's full briefing in `prompt`, prefix `description` with that persona's name in brackets, such as `[poteto-agent]` or `[comment-sicko]`, so the subagent label shows it, and on `resume_from` keep the tag but skip the briefing because the child already has it. Grok loads the `~/.claude/agents/` wrappers as agent types, and its source honors a `subagent_type` key that arrives, but the schema hides the key and a model told to send it dropped it in a 2026-09 probe, so do not rely on naming the type. A `model` argument appears unless subagent model inheritance is on (default off, settable remotely) and every catalog model is xAI. Only the top-level session spawns, so a delegate cannot fan out. `isolation: worktree` makes a full clone under `~/.grok/worktrees/`, and `grok worktree gc --max-age <age>` reclaims it. `grok -p` is the subprocess route | Prefer any exposed structured task-tracking capability; otherwise use normal progress updates | no per-spawn field; `reasoning_effort` on a Grok role or persona, otherwise the session effort, so the effort is `inherit-parent` here. `--effort <value>` on `grok -p` | per-session directories under `~/.grok/sessions/<url-encoded cwd>/<session>/`; each spawn records `subagents/<id>/meta.json` |
 
@@ -81,17 +89,5 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 
 - **Panels keep their configured arm count.** Run a three-model panel as three arms even in a one-model harness. Give each arm a different brief and run them in parallel or sequentially. For exact model requests, apply the required-arm rule above.
 - **Named sibling skills are files.** When a pstack skill says "the architect skill" or "read the leaf skill", it names a sibling directory under the same installed skills root. Most pstack skills are gated against model invocation, so they appear in no tool inventory and their descriptions are not in context — that never means missing. Read the named skill's SKILL.md (and any files it references) directly and follow it; record that you applied it by file read. Never edit a skill's gating to make it invocable.
-- **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a worklist, and Cursor-era parameters like `readonly`, `environment: "cloud"`, and `is_background` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief, worktree isolation, background execution). Capability selection follows live descriptions, not recalled names. A missing optional tool never cancels the step and needs no announcement. A `subagent_type` of `general-purpose`, `poteto-agent`, or `comment-sicko` in skill text names the delegate's persona, or none. **Set an arm's effort** turns it into the concrete type.
-- **Config**: roles resolve to a model and an effort through the resolver in **The models config** below.
+- **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a worklist, and Cursor-era parameters like `readonly`, `environment: "cloud"`, and `is_background` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief, worktree isolation, background execution). Capability selection follows live descriptions, not recalled names. A missing optional tool never cancels the step and needs no announcement. A `subagent_type` in skill text names a persona or none, and **Spawn a role** turns it into the concrete type.
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used.
-- **No improvised models**: every spawn resolves through a named role. A spawn whose skill names no role resolves through the `default` line, then `inherit-parent`. Never pick a model that neither the config nor the skill's inline default names, and say which role the model came from.
-
-## The models config
-
-Each role's model and effort come from `~/.agents/pstack-models.md` and an optional workspace `.agents/pstack-models.md`. Do not read those files to pick values. Run the resolver, which applies the layers, the Codex alias translation, and the effort policy:
-
-```sh
-python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|hermes> [<role>...]
-```
-
-Failure signal: nonzero exit. It prints one JSON line per arm with `model`, `effort`, and `source`. `inherit-parent` in a field means omit that field from the spawn. Pass the roles the skill names. With no roles it prints every role. A spawn whose skill names no role uses `default`. Run it from the project root or pass `--project <root>`. Resolve once per task, and again after the config changes. Grok Build has no section of its own, so resolve it as `claude-code` and pass a model only when its spawn accepts it. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../setup-pstack/references/models-config.md).

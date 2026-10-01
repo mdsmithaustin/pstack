@@ -906,8 +906,8 @@ SKILL_NAMES = {path.parent.name for path in SKILLS.glob("*/SKILL.md")}
 PLAYBOOKS = {name: (SKILLS / "poteto-mode" / "playbooks" / f"{name}.md").read_text() for name in ("feature", "refactoring")}
 
 
-def shipped_stages(trace, case, owner):
-    return chain.stages(trace, case=case, owner=owner, injected=True, playbook_texts=PLAYBOOKS,
+def shipped_stages(trace, case, owner, playbook_texts=PLAYBOOKS):
+    return chain.stages(trace, case=case, owner=owner, injected=True, playbook_texts=playbook_texts,
                         principles=PRINCIPLES, workspace=True, skill_names=SKILL_NAMES)
 
 
@@ -918,7 +918,7 @@ class StepSpecTests(unittest.TestCase):
             ("name the structure the code", ("principle-model-the-domain",)),
             ("name the target shape", ("principle-foundational-thinking", "principle-redesign-from-first-principles", "architect")),
             ("subtract before you add", ("principle-subtract-before-you-add", "principle-laziness-protocol")),
-            ("move in small behavior-preserving steps", ("principle-migrate-callers-then-delete-legacy-apis",)),
+            ("move in small behavior-preserving steps", ("principle-migrate-callers-then-delete-legacy-apis", "pstack-harness")),
             ("prove behavior is unchanged on", ("principle-prove-it-works",)),
             ("confirm the change is worth", ("principle-minimize-reader-load",)),
             ("rebase into small ordered commits", ("sequence-verifiable-units",)),
@@ -991,7 +991,8 @@ class CodexMessageWorklistTests(unittest.TestCase):
 
     def test_every_step_and_every_pointer_is_kept(self):
         trace = chain.parse_codex((FIXTURES / "sbx-codex-roles" / "run" / "trace.jsonl").read_text().splitlines(), TREE)
-        worklist = shipped_stages(trace, "harness-families", "poteto-mode/playbooks/refactoring.md")["worklist"]
+        seen = {**PLAYBOOKS, "refactoring": (FIXTURES / "sbx-codex-roles" / "refactoring.md").read_text()}
+        worklist = shipped_stages(trace, "harness-families", "poteto-mode/playbooks/refactoring.md", seen)["worklist"]
 
         self.assertEqual({key: worklist[key] for key in ("tool_offered", "carrier", "valid_carrier", "steps_listed", "steps_total", "pointer_fraction")}, {
             "tool_offered": None, "carrier": "message", "valid_carrier": True, "steps_listed": 8, "steps_total": 8, "pointer_fraction": 1.0,

@@ -9,7 +9,7 @@ Investigate the motivation and intent behind code.
 
 Companion to the `how` skill. `how` answers what the code does and how it works. `why` answers what forces led to its shape.
 
-Each spawn below names a role line in the pstack models config and a default. Set `model` to that line's value, resolved per the **pstack-harness** skill (model and effort per entry, harness sections, Codex alias translation), or to the default if the config or the line is missing. Leave `model` unset when the value is `auto` or `inherit-parent`. If the spawn mechanism rejects a value, handle it per the **pstack-harness** skill.
+Each spawn below names a role line in the pstack models config and a default. Resolve its model, effort, and agent type per **Spawn a role** in the **pstack-harness** skill, which also covers a missing config, `inherit-parent`, and a rejected value.
 
 ## Operating Posture
 
@@ -76,7 +76,7 @@ Source control is always available through git and `gh`. For the other six, clas
 
 Aim for a complete **coverage map**, not a minimal one. Document the null, don't skip the search.
 
-Launch all matching investigators in a single message so they run concurrently. Spawn per this CLI (in short: native subagent tool → your own CLI as a subprocess → sequential arms, same count; unconfirmed model = inherit-parent); full mapping in the **pstack-harness** skill. Don't ask one agent to cover multiple MCPs.
+Launch all matching investigators in a single message so they run concurrently. Spawn per **Spawn a role** in the **pstack-harness** skill, which resolves the role and builds this CLI's spawn call. Don't ask one agent to cover multiple MCPs.
 
 Subagent config (each):
 - `subagent_type`: `general-purpose`
