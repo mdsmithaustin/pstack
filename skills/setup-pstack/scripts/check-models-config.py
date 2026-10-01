@@ -326,14 +326,16 @@ def _resolve_effort(
 def _resolve_arm(
     role: str, arm: int, source: str, harness: str, entry: tuple[str, str | None], listed: Mapping[str, frozenset[str]],
 ) -> ResolvedArm:
-    written_model, written_effort = entry
-    model, effort_in, notes = _resolve_model(written_model, written_effort, harness)
+    entry_model, entry_effort = entry
+    base, effort_in, notes = _resolve_model(entry_model, entry_effort, harness)
+    model = base
+    if model != INHERIT and effort_in is not None:
+        model = _listed_release(model, effort_in, listed)
     effort = _resolve_effort(role, harness, model, effort_in, notes, listed)
     if model != INHERIT:
-        chosen = _listed_release(model, effort, listed)
-        if chosen != model:
-            notes.append(f"{model} runs as {chosen}, the newest release this Codex lists")
-            model = chosen
+        model = _listed_release(model, effort, listed)
+        if model != base:
+            notes.append(f"{base} runs as {model}, the newest release this Codex lists with effort {effort}")
     return ResolvedArm(role, arm, model, effort, source, tuple(notes))
 
 

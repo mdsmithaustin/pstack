@@ -566,7 +566,7 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
             arm,
             {
                 "role": "feature", "arm": 1, "model": "gpt-6.1-sol", "effort": "high", "source": "user flat",
-                "notes": ["gpt-6-sol runs as gpt-6.1-sol, the newest release this Codex lists"],
+                "notes": ["gpt-6-sol runs as gpt-6.1-sol, the newest release this Codex lists with effort high"],
             },
         )
 
@@ -582,11 +582,40 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
         arm = self.only("swarm workers", "## codex\nswarm workers: gpt-6-luna@xhigh\n", catalog_json(newer, "gpt-6-luna"))
         self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-luna", "xhigh", None))
 
+    def test_either_spelling_of_the_tier_keeps_a_written_effort_the_older_release_takes(self):
+        newer = catalog_entry("gpt-6.1-luna", levels=("low", "medium", "high"))
+        catalog = catalog_json(newer, "gpt-6-luna")
+        arm = self.only("swarm workers", "## codex\nswarm workers: gpt-6-luna@xhigh\n", catalog)
+        self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-luna", "xhigh", None))
+        arm = self.only("swarm workers", "## codex\nswarm workers: gpt-6.1-luna@xhigh\n", catalog)
+        self.assertEqual(
+            (arm["model"], arm["effort"], arm["notes"]),
+            (
+                "gpt-6-luna", "xhigh",
+                ["gpt-6.1-luna runs as gpt-6-luna, the newest release this Codex lists with effort xhigh"],
+            ),
+        )
+
+    def test_a_written_effort_no_listed_release_takes_still_drops(self):
+        newer = catalog_entry("gpt-6.1-luna", levels=("low", "medium", "high"))
+        older = catalog_entry("gpt-6-luna", levels=("low", "medium", "high"))
+        catalog = catalog_json(newer, older)
+        for written in ("gpt-6.1-luna", "gpt-6-luna"):
+            with self.subTest(written=written):
+                arm = self.only("swarm workers", f"## codex\nswarm workers: {written}@xhigh\n", catalog)
+                self.assertEqual(
+                    (arm["model"], arm["effort"]),
+                    ("gpt-6.1-luna", "high"),
+                )
+                self.assertEqual(
+                    arm["notes"][0], f"effort xhigh is not usable with {written}",
+                )
+
     def test_a_release_whose_catalog_levels_include_the_effort_is_taken(self):
         arm = self.only("swarm workers", "## codex\nswarm workers: gpt-6-luna@xhigh\n", catalog_json("gpt-6.1-luna", "gpt-6-luna"))
         self.assertEqual(
             (arm["model"], arm["effort"], arm["notes"]),
-            ("gpt-6.1-luna", "xhigh", ["gpt-6-luna runs as gpt-6.1-luna, the newest release this Codex lists"]),
+            ("gpt-6.1-luna", "xhigh", ["gpt-6-luna runs as gpt-6.1-luna, the newest release this Codex lists with effort xhigh"]),
         )
 
     def test_an_effort_the_catalog_omits_for_the_model_drops_to_the_role_floor(self):
@@ -681,7 +710,7 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
         arm = self.only("feature", "feature, refactoring: gpt-6.1-luna@high\n", catalog_json("gpt-6-luna", "gpt-6.1-sol"))
         self.assertEqual(
             (arm["model"], arm["effort"], arm["notes"]),
-            ("gpt-6-luna", "high", ["gpt-6.1-luna runs as gpt-6-luna, the newest release this Codex lists"]),
+            ("gpt-6-luna", "high", ["gpt-6.1-luna runs as gpt-6-luna, the newest release this Codex lists with effort high"]),
         )
 
     def test_a_model_the_catalog_lacks_stays_as_written(self):
@@ -718,7 +747,7 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
                 "role": "bug-fix", "arm": 1, "model": "gpt-6.1-sol", "effort": "xhigh", "source": "user flat",
                 "notes": [
                     "opus translated to gpt-6-sol@xhigh",
-                    "gpt-6-sol runs as gpt-6.1-sol, the newest release this Codex lists",
+                    "gpt-6-sol runs as gpt-6.1-sol, the newest release this Codex lists with effort xhigh",
                 ],
             },
         )
