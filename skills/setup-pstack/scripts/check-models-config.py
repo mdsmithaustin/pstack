@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -43,30 +44,35 @@ class Cli(NamedTuple):
     session_effort: bool
     native_aliases: bool
     translation: Mapping[str, tuple[str, str | None]]
+    catalog: Path | None
 
 
 CLIS: dict[str, Cli] = {
     "claude-code": Cli(
         name="Claude Code", efforts=CLAUDE_EFFORTS, session_effort=True, native_aliases=True, translation={},
+        catalog=None,
     ),
     "codex": Cli(
         name="Codex", efforts=ALLOWED_EFFORTS, session_effort=False, native_aliases=False,
         translation={
-            "fable": ("gpt-5.6-sol", "max"),
-            "opus": ("gpt-5.6-sol", "xhigh"),
-            "sonnet": ("gpt-5.6-terra", "high"),
-            "haiku": ("gpt-5.6-luna", "high"),
+            "fable": ("gpt-6-sol", "max"),
+            "opus": ("gpt-6-sol", "xhigh"),
+            "sonnet": ("gpt-6-sol", "high"),
+            "haiku": ("gpt-6-luna", "high"),
         },
+        catalog=Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "models_cache.json",
     ),
     "hermes": Cli(
         name="Hermes", efforts=ALLOWED_EFFORTS, session_effort=False, native_aliases=False, translation={},
+        catalog=None,
     ),
 }
 
 MODEL_EFFORTS: dict[str, frozenset[str]] = {
-    "gpt-5.6-sol": ALLOWED_EFFORTS,
-    "gpt-5.6-terra": ALLOWED_EFFORTS - {"ultra"},
-    "gpt-5.6-luna": ALLOWED_EFFORTS - {"ultra"},
+    "gpt-6.1-sol": ALLOWED_EFFORTS - {"none"},
+    "gpt-6-astra": ALLOWED_EFFORTS - {"none"},
+    "gpt-6-sol": ALLOWED_EFFORTS,
+    "gpt-6-luna": ALLOWED_EFFORTS,
     **{alias: CLAUDE_EFFORTS for alias in CLAUDE_ALIASES},
 }
 
@@ -77,10 +83,31 @@ XHIGH_FLOOR_ROLES = {
     "trail reviewer",
 }
 DEFAULT_EFFORT_FLOOR = "high"
+GPT6_RELEASES_NEWEST_FIRST = ("gpt-6.1-", "gpt-6-")
 
 
 def _model_effort_allowed(model: str, effort: str) -> bool:
     return effort in MODEL_EFFORTS.get(model, ALLOWED_EFFORTS)
+
+
+def listed_models(catalog: Path) -> frozenset[str]:
+    try:
+        entries = json.loads(catalog.read_text(encoding="utf-8"))["models"]
+        return frozenset(entry["slug"] for entry in entries if entry.get("visibility", "list") == "list")
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return frozenset()
+
+
+def _listed_release(model: str, effort: str, listed: frozenset[str]) -> str:
+    prefix = next((p for p in GPT6_RELEASES_NEWEST_FIRST if model.startswith(p)), None)
+    if prefix is None:
+        return model
+    tier = model[len(prefix):]
+    for release in GPT6_RELEASES_NEWEST_FIRST:
+        candidate = release + tier
+        if candidate in listed and _model_effort_allowed(candidate, effort):
+            return candidate
+    return model
 
 
 def _is_valid_model_name(model: str) -> bool:
@@ -271,7 +298,9 @@ def _resolve_effort(role: str, harness: str, model: str, written: str | None, no
     return "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
 
 
-def _resolve_arm(role: str, arm: int, source: str, harness: str, entry: tuple[str, str | None]) -> ResolvedArm:
+def _resolve_arm(
+    role: str, arm: int, source: str, harness: str, entry: tuple[str, str | None], listed: frozenset[str],
+) -> ResolvedArm:
     written_model, written_effort = entry
     model, translated_effort, notes = _resolve_model(written_model, harness)
     effort_in = written_effort
@@ -280,14 +309,21 @@ def _resolve_arm(role: str, arm: int, source: str, harness: str, entry: tuple[st
         shown = model if written_effort else f"{model}@{translated_effort}"
         notes.append(f"{written_model} translated to {shown}")
     effort = _resolve_effort(role, harness, model, effort_in, notes)
+    if model != INHERIT:
+        chosen = _listed_release(model, effort, listed)
+        if chosen != model:
+            notes.append(f"{model} runs as {chosen}, the newest release this Codex lists")
+            model = chosen
     return ResolvedArm(role, arm, model, effort, source, tuple(notes))
 
 
-def resolve_role(role: str, harness: str, layers: list[Layer]) -> list[ResolvedArm]:
+def resolve_role(
+    role: str, harness: str, layers: list[Layer], listed: frozenset[str] = frozenset(),
+) -> list[ResolvedArm]:
     for source, roles in layers:
         if role in roles:
             return [
-                _resolve_arm(role, i, source, harness, entry)
+                _resolve_arm(role, i, source, harness, entry, listed)
                 for i, entry in enumerate(roles[role], start=1)
             ]
     raise LookupError(f"no layer binds role {role!r}")
@@ -339,8 +375,10 @@ def _resolve_main(argv: list[str]) -> int:
 
     skill_default, _ = parse(SKILL_DEFAULT_FILE.read_text(encoding="utf-8"))
     layers = build_layers(args.harness, parsed[workspace_file], parsed[args.user_file], skill_default)
+    catalog = CLIS[args.harness].catalog
+    listed = listed_models(catalog) if catalog else frozenset()
     for role in args.roles or sorted(ROLES):
-        for arm in resolve_role(role, args.harness, layers):
+        for arm in resolve_role(role, args.harness, layers, listed):
             print(arm.to_json())
     return 0
 
