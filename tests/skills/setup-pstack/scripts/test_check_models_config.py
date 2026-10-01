@@ -387,7 +387,7 @@ class Resolve(unittest.TestCase):
         [arm] = cmc.resolve_role("feature", "codex", layers)
         self.assertEqual(
             (arm.model, arm.effort, arm.notes),
-            ("gpt-5.6-terra", "high", ("effort ultra is not usable on codex",)),
+            ("gpt-5.6-terra", "high", ("effort ultra is not usable with gpt-5.6-terra",)),
         )
         [arm] = cmc.resolve_role("bug-fix", "codex", [Layer("user flat", {"bug-fix": [("gpt-5.6-terra", "ultra")]})])
         self.assertEqual((arm.model, arm.effort), ("gpt-5.6-terra", "xhigh"))
@@ -425,6 +425,20 @@ class Resolve(unittest.TestCase):
         self.assertEqual(roles, sorted(cmc.ROLES))
         self.assertEqual({arm["source"] for arm in arms}, {"skill default"})
         self.assertEqual(len([a for a in arms if a["role"] == "arena runners"]), 3)
+
+    def test_codex_reads_the_shipped_default_section_before_its_flat_lines(self):
+        [reviewer] = self.resolve("codex", "trail reviewer")
+        self.assertEqual(
+            reviewer,
+            {"role": "trail reviewer", "arm": 1, "model": "gpt-5.6-terra", "effort": "xhigh", "source": "skill default ## codex"},
+        )
+
+    def test_a_role_the_user_names_still_beats_the_shipped_section(self):
+        [feature] = self.resolve("codex", "feature", user="feature, refactoring: sonnet@high\n")
+        self.assertEqual(
+            (feature["model"], feature["effort"], feature["source"]),
+            ("gpt-5.6-terra", "high", "user flat"),
+        )
 
     def test_a_missing_user_file_is_skipped(self):
         [feature] = self.resolve("claude-code", "feature")

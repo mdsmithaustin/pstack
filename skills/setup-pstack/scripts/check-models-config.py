@@ -243,9 +243,12 @@ def _resolve_model(model: str, harness: str) -> tuple[str, str | None, list[str]
 
 def _resolve_effort(role: str, harness: str, model: str, written: str | None, notes: list[str]) -> str:
     if written is not None:
-        if written in HARNESS_EFFORTS[harness] and _model_effort_allowed(model, written) is not False:
+        if written not in HARNESS_EFFORTS[harness]:
+            notes.append(f"effort {written} is not usable on {harness}")
+        elif _model_effort_allowed(model, written) is False:
+            notes.append(f"effort {written} is not usable with {model}")
+        else:
             return written
-        notes.append(f"effort {written} is not usable on {harness}")
     if harness in SESSION_EFFORT_HARNESSES or model == INHERIT:
         return INHERIT
     return "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
@@ -279,6 +282,7 @@ def build_layers(harness: str, workspace: dict, user: dict, skill_default: dict)
         Layer(f"user ## {harness}", user.get(harness, {})),
         Layer("workspace flat", workspace.get("", {})),
         Layer("user flat", user.get("", {})),
+        Layer(f"skill default ## {harness}", skill_default.get(harness, {})),
         Layer("skill default", skill_default.get("", {})),
     ]
 
