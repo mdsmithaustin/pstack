@@ -874,8 +874,12 @@ class ContentLint(Tree):
 
     def test_bare_name_resolves_against_the_prefixed_directory_on_a_principle_line(self) -> None:
         self.skill("principle-real-rule", 'name: principle-real-rule\ndescription: "d"')
-        code, out = self.body("- Apply the **real-rule** principle.")
-        self.assertEqual((code, out), (0, ""))
+        self.assertEqual(self.body("- Apply the **real-rule** principle skill."), (0, ""))
+
+    def test_bare_name_with_no_prefixed_directory_fires(self) -> None:
+        code, out = self.body("- Apply the **real-rule** principle skill.")
+        self.assertEqual(code, 1)
+        self.assertIn("sibling-skill: **real-rule** has no matching directory", out)
 
     def test_without_a_conventions_file_the_prefix_and_retired_text_are_not_special(self) -> None:
         self.skill(
