@@ -312,7 +312,13 @@ def _resolve_effort(
             return written
     if cli.session_effort or model == INHERIT:
         return INHERIT
-    return "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
+    floor = "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
+    ranked = [e for e in EFFORT_ORDER if e in _model_efforts(model, listed)]
+    if floor in ranked or not ranked:
+        return floor
+    notes.append(f"effort {floor} is not usable with {model}")
+    at_or_below = [e for e in ranked if EFFORT_ORDER.index(e) <= EFFORT_ORDER.index(floor)]
+    return at_or_below[-1] if at_or_below else ranked[0]
 
 
 def _resolve_arm(

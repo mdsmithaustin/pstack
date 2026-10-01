@@ -602,6 +602,40 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
                     ("gpt-6-sol", floor, ["effort max is not usable with gpt-6-sol"]),
                 )
 
+    def test_a_floor_the_catalog_omits_drops_to_the_models_highest_effort_below_it(self):
+        sol = catalog_entry("gpt-6-sol", levels=("low", "medium", "high"))
+        arm = self.only("bug-fix", "## codex\nbug-fix: gpt-6-sol\n", catalog_json(sol))
+        self.assertEqual(
+            (arm["model"], arm["effort"], arm["notes"]),
+            ("gpt-6-sol", "high", ["effort xhigh is not usable with gpt-6-sol"]),
+        )
+        arm = self.only("bug-fix", "## codex\nbug-fix: gpt-6-sol\n", catalog_json(catalog_entry("gpt-6-sol", levels=("low", "medium"))))
+        self.assertEqual(
+            (arm["model"], arm["effort"], arm["notes"]),
+            ("gpt-6-sol", "medium", ["effort xhigh is not usable with gpt-6-sol"]),
+        )
+
+    def test_a_floor_the_model_takes_is_unchanged(self):
+        sol = catalog_entry("gpt-6-sol", levels=("low", "medium", "high"))
+        arm = self.only("feature", "## codex\nfeature, refactoring: gpt-6-sol\n", catalog_json(sol))
+        self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-sol", "high", None))
+
+    def test_a_floor_with_nothing_below_it_rises_to_the_models_lowest_effort(self):
+        sol = catalog_entry("gpt-6-sol", levels=("xhigh", "max"))
+        arm = self.only("feature", "## codex\nfeature, refactoring: gpt-6-sol\n", catalog_json(sol))
+        self.assertEqual(
+            (arm["model"], arm["effort"], arm["notes"]),
+            ("gpt-6-sol", "xhigh", ["effort high is not usable with gpt-6-sol"]),
+        )
+
+    def test_a_dropped_written_effort_and_a_dropped_floor_both_leave_a_note(self):
+        sol = catalog_entry("gpt-6-sol", levels=("low", "medium", "high"))
+        arm = self.only("bug-fix", "## codex\nbug-fix: gpt-6-sol@max\n", catalog_json(sol))
+        self.assertEqual(
+            (arm["effort"], arm["notes"]),
+            ("high", ["effort max is not usable with gpt-6-sol", "effort xhigh is not usable with gpt-6-sol"]),
+        )
+
     def test_an_effort_the_catalog_adds_beyond_the_table_is_kept(self):
         listed = read_listed(catalog_json(catalog_entry("gpt-6-luna", levels=LUNA_LEVELS + ("ultra",))))
         layers = [Layer("user flat", {"feature": [("gpt-6-luna", "ultra")]})]
