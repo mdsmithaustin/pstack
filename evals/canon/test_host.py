@@ -2,6 +2,8 @@ import importlib.util
 import io
 import json
 import os
+import signal
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -55,6 +57,10 @@ print(json.dumps({{"type": "turn.completed", "argv": sys.argv[1:]}}))
 """
 
 SILENT = "import sys\nsys.stdin.buffer.read()\n"
+
+# A claude that persists its session as FAKE_CLAUDE does and then never
+# exits, which is how a run the harness times out looks from outside.
+SLEEPING_CLAUDE = FAKE_CLAUDE + "sys.stdout.flush()\nimport time\ntime.sleep(60)\n"
 
 
 class KeepSessionTests(unittest.TestCase):
@@ -152,6 +158,29 @@ class HostWrapTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(sorted(path.name for path in (self.claude_home / "projects" / "-older").iterdir()), ["memory"])
         self.assertTrue((self.work / "harvest" / "0001" / "transcripts" / "claude" / "-older" / f"{session}.jsonl").is_file())
+
+    def test_a_wrapper_the_harness_kills_still_loses_its_transcript_to_the_slot(self):
+        token, discovery = screen.ENTRY_INVOCATION["claude"]
+        script = self.base / "claude.py"
+        script.write_text(SLEEPING_CLAUDE)
+        command = [sys.executable, str(ROOT / "host.py"), "wrap", "--agent", "claude", "--token", token, "--discovery", discovery,
+                   "--", sys.executable, str(script), "-p"]
+        with subprocess.Popen(command, cwd=self.ws, stdin=subprocess.PIPE, stdout=subprocess.PIPE, start_new_session=True) as process:
+            process.stdin.write(b"Do it.")
+            process.stdin.close()
+            init = process.stdout.readline()
+            os.killpg(process.pid, signal.SIGKILL)
+        session = json.loads(init)["session_id"]
+        self.assertTrue((self.claude_home / "projects" / "-ws" / f"{session}.jsonl").is_file())
+
+        self.assertEqual(self.exposure("claude", init), {"read": [], "entry": "injected"})
+
+        run = self.work / "harvest" / "case" / "with_skill"
+        self.assertEqual(json.loads((run / "session.json").read_text()), {"agent": "claude", "session": session,
+                         "transcripts": [f"transcripts/claude/-ws/{session}", f"transcripts/claude/-ws/{session}.jsonl"]})
+        self.assertEqual(json.loads((run / "transcripts" / "claude" / "-ws" / f"{session}.jsonl").read_text().splitlines()[0]), EXPANSION)
+        self.assertTrue((run / "transcripts" / "claude" / "-ws" / session / "subagents" / "agent-a1.jsonl").is_file())
+        self.assertEqual(sorted(path.name for path in (self.claude_home / "projects" / "-ws").iterdir()), ["memory", "other.jsonl"])
 
     def test_claude_run_whose_init_lacks_the_entry_is_not_registered(self):
         code, stream = self.wrap("claude", FAKE_CLAUDE, "-p", "--no-session-persistence", FAKE_SKILLS="how")
