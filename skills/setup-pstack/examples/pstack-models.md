@@ -3,8 +3,8 @@ description: pstack per-role model choices (overrides skill defaults)
 ---
 # pstack model configuration. One line per role. Delete a line to fall back to the skill default.
 # `inherit-parent` or `auto` as a value: the role runs on the parent chat model (omit the model). Alias entries in a panel list still count toward its fan-out.
-# `model@effort` pins the reasoning effort (none, low, medium, high, xhigh, max; ultra only on gpt-5.6-sol). No suffix: the harness skill's effort policy applies (floor high on Codex and Hermes, the session effort on Claude Code).
-# `## codex`, `## claude-code`, `## hermes` sections override the lines above for that harness only.
+# `model@effort` pins the reasoning effort (none, low, medium, high, xhigh, max; ultra only on gpt-5.6-sol). A line without a suffix gets setup-pstack's effort policy, never another file's suffix (floor high on Codex and Hermes when the line names a model, the session effort on Claude Code).
+# `## codex`, `## claude-code`, `## hermes` sections override flat lines in either file, for that harness only.
 # budget: default (keep as written)
 feature, refactoring: sonnet
 bug-fix: sonnet

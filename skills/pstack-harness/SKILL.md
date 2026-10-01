@@ -38,9 +38,9 @@ Claude Code has no such field. There the agent type carries the effort. pstack r
 |---|---|---|
 | a level, and `pstack-effort-<level>` is in the live agent catalog | `pstack-effort-<level>` | `pstack-effort-<level>`, with the persona's complete briefing at the top of the prompt |
 | a level, but that agent is not in the catalog | `general-purpose` | the persona per the [named-role contract](references/named-roles.md) |
-| no written effort | `general-purpose` | the persona per the named-role contract |
+| `inherit-parent` | `general-purpose` | the persona per the named-role contract |
 
-Pass the role's model in every row, or omit it for `inherit-parent`. `none` and `ultra` are not Claude Code levels. Each is a value this harness cannot use, so per the Config rule below the effort alone is `inherit-parent`, and the spawn takes the "no written effort" row. Only the live catalog proves an agent is loaded. A file on disk does not. A delegate's own spawns inherit the delegate's effort, so a nested spawn with no written effort runs at the delegate's level, not the top session's.
+Pass the role's model in every row, or omit it for `inherit-parent`. The resolver already turns `none` and `ultra`, which are not Claude Code levels, into `inherit-parent`. Only the live catalog proves an agent is loaded. A file on disk does not. A delegate's own spawns inherit the delegate's effort, so a nested spawn with no written effort runs at the delegate's level, not the top session's.
 
 When the mechanism has no field and no agent carries the level, or it rejects the value, the effort alone becomes `inherit-parent`. Keep the model and the arm. Say in the reply which role's written effort was inherited and why, such as "`how explainer` ran at the session effort because `pstack-effort-xhigh` is not loaded. Run `/setup-pstack` to register it." When a persona ran as a briefing in an effort agent's prompt instead of under its native identifier, say that too. An effort problem never drops a model or an arm.
 
@@ -82,37 +82,16 @@ Observed circa 2026-09. Treat as starting points, not contracts — verify again
 - **Panels keep their configured arm count.** Run a three-model panel as three arms even in a one-model harness. Give each arm a different brief and run them in parallel or sequentially. For exact model requests, apply the required-arm rule above.
 - **Named sibling skills are files.** When a pstack skill says "the architect skill" or "read the leaf skill", it names a sibling directory under the same installed skills root. Most pstack skills are gated against model invocation, so they appear in no tool inventory and their descriptions are not in context — that never means missing. Read the named skill's SKILL.md (and any files it references) directly and follow it; record that you applied it by file read. Never edit a skill's gating to make it invocable.
 - **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a worklist, and Cursor-era parameters like `readonly`, `environment: "cloud"`, and `is_background` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief, worktree isolation, background execution). Capability selection follows live descriptions, not recalled names. A missing optional tool never cancels the step and needs no announcement. A `subagent_type` of `general-purpose`, `poteto-agent`, or `comment-sicko` in skill text names the delegate's persona, or none. **Set an arm's effort** turns it into the concrete type.
-- **Config**: roles resolve to a model and an effort per **The models config** below. A value the current harness cannot use is `inherit-parent` for that field only.
+- **Config**: roles resolve to a model and an effort through the resolver in **The models config** below.
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used.
 - **No improvised models**: every spawn resolves through a named role. A spawn whose skill names no role resolves through the `default` line, then `inherit-parent`. Never pick a model that neither the config nor the skill's inline default names, and say which role the model came from.
 
 ## The models config
 
-`~/.agents/pstack-models.md` (user) and `.agents/pstack-models.md` (workspace) map each role to a model and a reasoning effort. `setup-pstack` writes and lints the file; its shipped default is `examples/pstack-models.md` next to that skill.
+Each role's model and effort come from `~/.agents/pstack-models.md` and an optional workspace `.agents/pstack-models.md`. Do not read those files to pick values. Run the resolver, which applies the layers, the Codex alias translation, and the effort policy:
 
-**Grammar.** `role: entry`, or `role, role: entry` to bind several roles at once. Panel roles (`arena runners`, `arena cross-judge pool`, `architect runners`, `interrogate reviewers`) take a comma list, one arm per entry. An entry is `model` or `model@effort`. Efforts are `none`, `low`, `medium`, `high`, `xhigh`, `max`; `ultra` is Codex's Pro mode and is valid only on `gpt-5.6-sol`. `inherit-parent` and `auto`, with or without `@effort`, run the arm on the parent chat model. A `## codex`, `## claude-code`, or `## hermes` header starts a section whose lines apply to that harness only; lines above any header apply everywhere. A `# budget: <label> (<effort>)` comment records the budget `setup-pstack` last applied to the `@effort` suffixes; resolution reads only the role lines. Two roles are special. `trail reviewer` is the show-me-your-work reviewer; when it resolves to the model that did the work, show-me-your-work steps down one tier so the review stays cross-model. `default` is the entry for any spawn whose skill names no role; it ships as `inherit-parent`.
+```sh
+python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|hermes> [<role>...]
+```
 
-**Precedence.** Resolve the model and the effort of a role separately, taking the first level that has a value:
-
-1. workspace file, this harness's section
-2. workspace file, flat lines
-3. user file, this harness's section
-4. user file, flat lines
-5. the skill's inline default for the model; the effort policy below for the effort
-6. the `default` line, searched through levels 1 to 4, for a spawn whose skill names no role or whose role has no inline default
-7. `inherit-parent`: the value is `inherit-parent` or `auto`, the harness has no way to set that field, or the harness rejected the value
-
-A section never leaks into another harness. A workspace flat line beats a user harness line, so the old rule "workspace wins per role" still holds.
-
-**Codex alias translation.** On Codex, a Claude alias that reaches step 7 translates instead of inheriting:
-
-| alias | Codex entry | why |
-|---|---|---|
-| `fable` | `gpt-5.6-sol@max` | Sol at max is the Fable-parity tier |
-| `opus` | `gpt-5.6-sol@xhigh` | Sol at high or xhigh matches Opus |
-| `sonnet` | `gpt-5.6-terra@high` | Terra is the balanced, mini-like tier, Sonnet's role |
-| `haiku` | `gpt-5.6-luna@high` | Luna is the high-throughput, nano-like tier; the floor keeps it at high |
-
-The translated effort belongs to the alias and stands unless the entry wrote its own `@effort`. Hermes has no translation table yet; an alias there is `inherit-parent`, as before.
-
-**Effort policy.** The policy fills an effort that would otherwise be a model default. When no `@effort` is written on a harness whose subagents get their model's default effort (Codex, Hermes), the floor is `high` for every role, and `xhigh` for hardest tasks, judgment and prose, bug-fix, perf-issue, hillclimb, how explainer, why synthesizer, reflect judgment, divergent and synthesizer, arena cross-judge pool, architect runners, and trail reviewer. On a harness whose subagents inherit the parent's effort (Claude Code, Grok Build), an unwritten effort stays `inherit-parent`. The policy never overrides a session effort the user set. On Claude Code, only a written `@effort`, including one a setup-pstack budget wrote, or an explicit escalation in the task changes an arm's effort. Nothing in this policy produces `max` or `ultra`; those come only from an explicit `@max` or `@ultra` on a line, from the Codex translation of `fable`, or from an explicit escalation in the task. Effort never changes an arm count or a model choice.
+Failure signal: nonzero exit. It prints one JSON line per arm with `model`, `effort`, and `source`. `inherit-parent` in a field means omit that field from the spawn. Pass the roles the skill names. With no roles it prints every role. A spawn whose skill names no role uses `default`. Run it from the project root or pass `--project <root>`. Resolve once per task, and again after the config changes. Grok Build has no section of its own, so resolve it as `claude-code` and pass a model only when its spawn accepts it. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../setup-pstack/references/models-config.md).
