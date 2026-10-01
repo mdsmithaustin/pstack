@@ -15,7 +15,7 @@ Failure signal: nonzero exit. It prints one JSON line per arm with `role`, `arm`
 - `inherit-parent` and `auto`, with or without `@effort`, run the arm on the parent chat model.
 - Panel roles take a comma list, one arm per entry: `arena runners`, `arena cross-judge pool`, `architect runners`, and `interrogate reviewers`.
 - A `## codex`, `## claude-code`, `## grok`, or `## hermes` header starts a section whose lines apply to that CLI only. Lines above any header are flat lines and apply everywhere. Put a CLI's own slug, such as `gpt-6-sol` or `grok-4.7`, under that CLI's section, because Codex, Hermes, and Grok Build each accept any model name from a flat line.
-- `trail reviewer` runs the show-me-your-work reviewer and every independent verdict and review. When it resolves to the model that did the work, the spawn steps down one tier so the review stays cross-model. `default` is the entry for a spawn whose skill names no role, and ships as `inherit-parent`.
+- `trail reviewer` runs the show-me-your-work reviewer and every independent verdict and review, including the audit lanes the **swarm** skill gives it. When it resolves to the model that did the work, the spawn steps down one tier so the review stays cross-model. `default` is the entry for a spawn whose skill names no role, and ships as `inherit-parent`.
 - `# budget: <label> (<effort>)` records the budget setup-pstack last applied. Resolution never reads it.
 
 ## Resolution
