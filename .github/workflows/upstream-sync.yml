@@ -87,7 +87,7 @@ jobs:
                change, run python3 tools/generate-subagents.py and then
                python3 tools/generate-subagents.py --check. Both commands
                must exit zero. Commit the generated installed role bundle
-               with its source. Keep the named-role adapter, native format
+               with its source. Keep the persona contract, native format
                translations, safe optional setup, and full persona briefings.
             6. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
             7. If there are portable changes: create branch
