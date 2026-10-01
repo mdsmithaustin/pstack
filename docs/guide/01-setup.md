@@ -20,7 +20,7 @@ Run:
 /setup-pstack
 ```
 
-[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex. Choose project or user scope if you want native role files. Setup preserves existing user-managed roles and reports payload readiness, native files, and live role loading separately. A generic delegate can receive the complete persona while native loading remains unverified. Hermes uses that briefing through delegation context.
+[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex. Choose project or user scope if you want native agent files. Setup preserves existing user-managed agent files and reports payload readiness, native files, and live agent loading separately. A generic delegate can receive the complete persona while native loading remains unverified. Hermes uses that briefing through delegation context.
 
 Setup also checks whether Claude Code's task tools and Codex's plan tool are on, because `/poteto-mode` keeps its worklist in them. When one is off, setup shows you the exact setting and writes it only if you say yes.
 
@@ -36,7 +36,7 @@ At the end of setup, `/setup-pstack` looks for a way to prove app behavior in yo
 
 Say yes and it writes `.agents/skills/verify-<app>/`, a project-local skill that teaches agents to drive your app the way a user does. It proves the skill works once before handing it over. Say no and setup moves on. You can run `/create-verification-skill` yourself any time. [Verify and ship](./06-verify-and-ship.md#create-a-project-verification-skill) covers when it earns its place.
 
-Skills read the model configuration when they next run. Codex project roles also require project trust. After registering native roles, start a fresh session and confirm that its live role catalog includes them. Setup does not change trust settings.
+Skills read the model configuration when they next run. Codex project agents also require project trust. After registering native agents, start a fresh session and confirm that its live agent catalog lists them. Setup does not change trust settings.
 
 ## Run your first task
 

@@ -55,7 +55,7 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
         if not isinstance(item, dict) or set(item) != fields:
             raise ValueError("invalid role fields")
         if not isinstance(item["id"], str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", item["id"]):
-            raise ValueError("invalid native role identifier")
+            raise ValueError("invalid native persona identifier")
         for key in ("description", "body"):
             if not isinstance(item[key], str) or not item[key].strip():
                 raise ValueError(f"{item['id']}: empty or invalid {key}")
@@ -86,9 +86,10 @@ CODEX_BRIEF = "developer_instructions = "
 EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
 EFFORT_AGENT_PREFIX = "pstack-effort-"
 EFFORT_DESCRIPTION = (
-    "pstack delegate at {level} reasoning effort. Spawn it in place of general-purpose, "
-    "with the role's model in the call, only when a pstack role's effort resolves to "
-    "{level} per the pstack-harness skill."
+    "pstack delegate at {level} reasoning effort. Spawn it in place of general-purpose or a "
+    "pstack persona, with the persona's briefing at the top of the prompt and the role's "
+    "model in the call, only when the role's effort resolves to {level} per the "
+    "pstack-harness skill."
 )
 DELEGATE_TEMPLATE = Path("references/subagents/effort-delegate.md")
 
@@ -281,7 +282,7 @@ def main() -> int:
         if root and not root.is_absolute():
             parser.error("destination root must be absolute")
         if args.command == "install" and args.harness == "hermes":
-            parser.error("Hermes has no supported native role-file registration; use brief")
+            parser.error("Hermes has no supported native agent-file registration; use brief")
         if root:
             destination = Destination(args.harness, root)
     skill_directory = Path(os.path.abspath(sys.argv[0])).parent.parent
