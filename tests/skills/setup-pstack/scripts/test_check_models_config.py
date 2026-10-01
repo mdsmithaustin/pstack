@@ -195,6 +195,27 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         self.assertIn("Claude Code cannot use none or ultra, so it runs `default` at the session effort", notices)
         self.assertIn("Claude Code cannot use none or ultra, so it runs `trail reviewer` at the session effort", notices)
 
+    def test_grok_section_rejects_ultra(self):
+        text = "## grok\ntrail reviewer: grok-4.7-build-fast@ultra\n"
+        sections, findings = cmc.parse(text)
+        self.assertEqual(
+            errors_of(findings),
+            [(2, "error", "effort 'ultra' is not a Grok Build level (none, low, medium, high, xhigh, max)")],
+        )
+        self.assertNotIn("trail reviewer", sections["grok"])
+
+    def test_grok_section_takes_its_levels(self):
+        sections, findings = cmc.parse("## grok\ntrail reviewer: grok-4.7-build-fast@xhigh\n")
+        self.assertEqual(findings, [])
+        self.assertEqual(sections["grok"]["trail reviewer"], [("grok-4.7-build-fast", "xhigh")])
+
+    def test_grok_4_7_rejects_an_effort_its_catalog_lacks(self):
+        _, findings = cmc.parse("## grok\ntrail reviewer: grok-4.7@max\n")
+        self.assertEqual(
+            errors_of(findings),
+            [(2, "error", "effort 'max' not supported by model 'grok-4.7'")],
+        )
+
     def test_codex_section_is_unaffected(self):
         text = "## codex\ntrail reviewer: gpt-6-sol@ultra\n"
         sections, findings = cmc.parse(text)
@@ -598,6 +619,77 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
         self.assertEqual((arm.model, arm.notes), ("gpt-6-sol", ()))
 
 
+class GrokResolve(ResolveRunner, unittest.TestCase):
+    def test_flat_alias_translates_and_keeps_the_written_effort(self):
+        [arm] = self.resolve("grok", "feature", user="feature, refactoring: sonnet@high\n")
+        self.assertEqual(
+            arm,
+            {
+                "role": "feature", "arm": 1, "model": "grok-4.7", "effort": "high",
+                "source": "user flat", "notes": ["sonnet translated to grok-4.7"],
+            },
+        )
+
+    def test_flat_alias_without_effort_runs_at_the_session_effort(self):
+        [arm] = self.resolve("grok", "bug-fix", user="bug-fix: opus\n")
+        self.assertEqual(
+            arm,
+            {
+                "role": "bug-fix", "arm": 1, "model": "grok-4.7", "effort": "inherit-parent",
+                "source": "user flat", "notes": ["opus translated to grok-4.7"],
+            },
+        )
+
+    def test_grok_section_beats_a_flat_line(self):
+        user = "feature, refactoring: sonnet@high\n\n## grok\nfeature, refactoring: grok-4.7@low\n"
+        [arm] = self.resolve("grok", "feature", user=user)
+        self.assertEqual(
+            arm,
+            {"role": "feature", "arm": 1, "model": "grok-4.7", "effort": "low", "source": "user ## grok"},
+        )
+
+    def test_a_named_grok_model_passes_through(self):
+        user = "## grok\nfeature, refactoring: grok-4.7-build-fast@xhigh\n"
+        [arm] = self.resolve("grok", "feature", user=user)
+        self.assertEqual(
+            arm,
+            {"role": "feature", "arm": 1, "model": "grok-4.7-build-fast", "effort": "xhigh", "source": "user ## grok"},
+        )
+
+    def test_an_effort_grok_4_7_cannot_take_falls_back_to_the_session_effort(self):
+        layers = [Layer("user ## grok", {"feature": [("grok-4.7", "max")]})]
+        [arm] = cmc.resolve_role("feature", "grok", layers)
+        self.assertEqual(
+            (arm.model, arm.effort, arm.notes),
+            ("grok-4.7", "inherit-parent", ("effort max is not usable with grok-4.7",)),
+        )
+
+    def test_the_shipped_default_resolves_for_grok(self):
+        [arm] = self.resolve("grok", "trail reviewer")
+        self.assertEqual(
+            arm,
+            {
+                "role": "trail reviewer", "arm": 1, "model": "grok-4.7", "effort": "inherit-parent",
+                "source": "skill default", "notes": ["opus translated to grok-4.7"],
+            },
+        )
+
+    def test_a_panel_translates_arm_by_arm(self):
+        arms = self.resolve("grok", "arena runners")
+        self.assertEqual([(a["model"], a["effort"]) for a in arms], [("grok-4.7", "inherit-parent")] * 3)
+        self.assertEqual(
+            [a["notes"] for a in arms],
+            [["fable translated to grok-4.7"], ["opus translated to grok-4.7"], ["sonnet translated to grok-4.7"]],
+        )
+
+    def test_grok_never_consults_the_codex_catalog(self):
+        [arm] = self.resolve(
+            "grok", "feature", user="feature, refactoring: gpt-6-sol@high\n",
+            codex_catalog=catalog_json("gpt-6.1-sol", "gpt-6-sol"),
+        )
+        self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-sol", "high", None))
+
+
 class ResolveExitCodes(unittest.TestCase):
     def run_resolve(self, *args, user=None):
         with tempfile.TemporaryDirectory() as tmp:
@@ -618,7 +710,7 @@ class ResolveExitCodes(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
 
     def test_unknown_harness_exits_two(self):
-        result, _ = self.run_resolve("--harness", "grok", "feature")
+        result, _ = self.run_resolve("--harness", "cursor", "feature")
         self.assertEqual(result.returncode, 2)
 
     def test_lint_error_exits_one_without_resolving(self):

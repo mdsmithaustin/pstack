@@ -66,6 +66,11 @@ CLIS: dict[str, Cli] = {
         name="Hermes", efforts=ALLOWED_EFFORTS, session_effort=False, native_aliases=False, translation={},
         catalog=None,
     ),
+    "grok": Cli(
+        name="Grok Build", efforts=ALLOWED_EFFORTS - {"ultra"}, session_effort=True, native_aliases=False,
+        translation={alias: ("grok-4.7", None) for alias in CLAUDE_ALIASES},
+        catalog=None,
+    ),
 }
 
 MODEL_EFFORTS: dict[str, frozenset[str]] = {
@@ -73,6 +78,7 @@ MODEL_EFFORTS: dict[str, frozenset[str]] = {
     "gpt-6-astra": ALLOWED_EFFORTS - {"none"},
     "gpt-6-sol": ALLOWED_EFFORTS,
     "gpt-6-luna": ALLOWED_EFFORTS,
+    "grok-4.7": frozenset({"low", "medium", "high", "xhigh"}),
     **{alias: CLAUDE_EFFORTS for alias in CLAUDE_ALIASES},
 }
 
@@ -272,16 +278,17 @@ class ResolvedArm(NamedTuple):
         return json.dumps(record)
 
 
-def _resolve_model(model: str, harness: str) -> tuple[str, str | None, list[str]]:
+def _resolve_model(model: str, written_effort: str | None, harness: str) -> tuple[str, str | None, list[str]]:
     if model in OTHER_ALIASES:
-        return INHERIT, None, []
+        return INHERIT, written_effort, []
     cli = CLIS[harness]
     if (model in CLAUDE_ALIASES) == cli.native_aliases:
-        return model, None, []
+        return model, written_effort, []
     if model in cli.translation:
         translated_model, translated_effort = cli.translation[model]
-        return translated_model, translated_effort, []
-    return INHERIT, None, [f"{model} is not usable on {harness}"]
+        shown = translated_model if written_effort or translated_effort is None else f"{translated_model}@{translated_effort}"
+        return translated_model, written_effort or translated_effort, [f"{model} translated to {shown}"]
+    return INHERIT, written_effort, [f"{model} is not usable on {harness}"]
 
 
 def _resolve_effort(role: str, harness: str, model: str, written: str | None, notes: list[str]) -> str:
@@ -302,12 +309,7 @@ def _resolve_arm(
     role: str, arm: int, source: str, harness: str, entry: tuple[str, str | None], listed: frozenset[str],
 ) -> ResolvedArm:
     written_model, written_effort = entry
-    model, translated_effort, notes = _resolve_model(written_model, harness)
-    effort_in = written_effort
-    if translated_effort is not None:
-        effort_in = written_effort or translated_effort
-        shown = model if written_effort else f"{model}@{translated_effort}"
-        notes.append(f"{written_model} translated to {shown}")
+    model, effort_in, notes = _resolve_model(written_model, written_effort, harness)
     effort = _resolve_effort(role, harness, model, effort_in, notes)
     if model != INHERIT:
         chosen = _listed_release(model, effort, listed)
@@ -385,7 +387,7 @@ def _resolve_main(argv: list[str]) -> int:
 
 USAGE = (
     "usage: check-models-config.py <file> [<file>...]\n"
-    "       check-models-config.py --resolve --harness {claude-code,codex,hermes}"
+    f"       check-models-config.py --resolve --harness {{{','.join(sorted(CLIS))}}}"
     " [--project DIR] [--user-file FILE] [ROLE ...]"
 )
 
