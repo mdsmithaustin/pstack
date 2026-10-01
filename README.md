@@ -287,7 +287,7 @@ Run the full CI-equivalent checks from the repository root:
 .venv/bin/python tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json
 .venv/bin/python tools/check-pii.py
 .venv/bin/python tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
-.venv/bin/python tools/check-skill-content.py skills
+.venv/bin/python tools/check-skill-content.py skills --conventions-file tools/skill-content-conventions.json
 .venv/bin/python tools/generate-subagents.py --check
 .venv/bin/python -m unittest discover -s tools -p 'test_*.py'
 docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
