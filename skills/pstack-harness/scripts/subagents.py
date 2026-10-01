@@ -86,9 +86,10 @@ CODEX_BRIEF = "developer_instructions = "
 EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
 EFFORT_AGENT_PREFIX = "pstack-effort-"
 EFFORT_DESCRIPTION = (
-    "pstack delegate at {level} reasoning effort. Spawn it in place of general-purpose, "
-    "with the role's model in the call, only when a pstack role's effort resolves to "
-    "{level} per the pstack-harness skill."
+    "pstack delegate at {level} reasoning effort. Spawn it in place of general-purpose or a "
+    "pstack persona, with the persona's briefing at the top of the prompt and the role's "
+    "model in the call, only when the role's effort resolves to {level} per the "
+    "pstack-harness skill."
 )
 DELEGATE_TEMPLATE = Path("references/subagents/effort-delegate.md")
 

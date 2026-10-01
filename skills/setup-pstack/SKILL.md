@@ -1,6 +1,6 @@
 ---
 name: setup-pstack
-description: Check installed pstack personas, optionally register native roles, and configure which models pstack uses per role and at what reasoning budget. Detects your available models and writes a config file that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", "pstack budget", or changing pstack's model choices.
+description: Check installed pstack personas, optionally register native agents, and configure which models pstack uses per role and at what reasoning budget. Detects your available models and writes a config file that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", "pstack budget", or changing pstack's model choices.
 ---
 
 # Setup pstack
@@ -13,7 +13,7 @@ The inline defaults are written as short model aliases (`fable`, `opus`, `sonnet
 
 ### 0a. Check personas and optional native registration
 
-Read the **pstack-harness** skill's [named-role contract](../pstack-harness/references/named-roles.md). Resolve its logical installed skills root through [portable-paths.md](../pstack-harness/references/portable-paths.md), then run:
+Read the **pstack-harness** skill's [registration reference](../pstack-harness/references/registration.md). Resolve its logical installed skills root through [portable-paths.md](../pstack-harness/references/portable-paths.md), then run:
 
 ```sh
 python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" check
@@ -21,11 +21,11 @@ python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" check
 
 Failure signal: nonzero exit. Repair missing payloads or sibling skills before reporting persona readiness. A ready payload lets a generic delegate receive the full persona without native registration.
 
-Offer native registration for Claude Code or Codex when the user wants it. Use the already-authorized scope if the session provides one; otherwise ask for project or user scope once. Run the contract's `install` command with the chosen absolute root. Never overwrite a conflict or change model settings to register a role. For Hermes, use the full briefing through delegation context; do not create native agent files.
+Offer native registration for Claude Code or Codex when the user wants it. Use the already-authorized scope if the session provides one; otherwise ask for project or user scope once. Run the reference's `install` command with the chosen absolute root. Never overwrite a conflict or change model settings to register a persona. For Hermes, use the full briefing through delegation context; do not create native agent files.
 
 For Claude Code, say what registration adds: the two personas and the five `pstack-effort-<level>` agents, which let a written `@effort` apply to subagents here. Before a Claude Code install, read both config layers as step 2 does and list every role whose effort is written for this harness, with that effort. Say those roles run at it once the agents load, and every other role keeps the session effort. Report the `roles` rows and the `efforts` rows separately from live loading. When the install report says `agents_directory: created`, the agents load only in a fresh session, so tell the user to start one. Otherwise a running session picks them up, unless it was started with `--disable-slash-commands` or the directory came from `--add-dir`. In every case check the live catalog before claiming an effort applies.
 
-Report payload readiness, native-file status, and live role loading separately. Check the requested destination and inspect the live role catalog before claiming native availability. Filesystem output always leaves activation unverified. Codex project registrations require project trust. Do not edit trust settings automatically. Check a fresh session after registration changes; when a loader requires a restart, say so and use full-brief delegation until loading is confirmed. Keep these observations separate from the model choices below.
+Report payload readiness, native-file status, and live agent loading separately. Check the requested destination and inspect the live agent catalog before claiming native availability. Filesystem output always leaves activation unverified. Codex project registrations require project trust. Do not edit trust settings automatically. Check a fresh session after registration changes; when a loader requires a restart, say so and use full-brief delegation until loading is confirmed. Keep these observations separate from the model choices below.
 
 ### 0b. Check the structured task tools
 

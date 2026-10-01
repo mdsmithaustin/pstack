@@ -26,7 +26,7 @@ pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g
 
 two steps:
 
-1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md) to check the bundled personas, optionally register native roles, pick a reasoning budget, and choose which models you want.
+1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md) to check the bundled personas, optionally register native agents, pick a reasoning budget, and choose which models you want.
 2. use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) whenever you're doing anything that requires rigor.
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs.
@@ -200,7 +200,7 @@ pstack ships both complete personas inside the installed `pstack-harness` skill.
 
 [`poteto-agent`](./agents/poteto-agent.md) is a scoped delegate for one unit of a playbook step. It reads `poteto-mode` in full, including its inline Principles index, before work. The main conversation runs `/poteto-mode` and owns the plan. It spawns one delegate per unit and does not resume a delegate across phases. [Comment Sicko](./agents/comment-sicko.md), usually invoked through [`/no-comments`](./skills/no-comments/SKILL.md), edits scoped comments and reports application-code refactor targets. it does not write application code.
 
-The [named-role contract](./skills/pstack-harness/references/named-roles.md) uses a confirmed current native role or supplies the complete persona to a generic delegate. Claude uses Markdown registrations, and Codex uses TOML. Hermes receives the full persona through delegation context. The normalized native names are `poteto-agent` and `comment-sicko`; `Comment Sicko` remains a supported logical alias. Model and effort choices still come from pstack's existing model policy.
+The [persona contract](./skills/pstack-harness/references/named-roles.md) uses a confirmed current native persona or supplies the complete persona to a generic delegate. Claude uses Markdown registrations, and Codex uses TOML. Hermes receives the full persona through delegation context. The normalized native names are `poteto-agent` and `comment-sicko`; `Comment Sicko` remains a supported logical alias. Model and effort choices still come from pstack's existing model policy.
 
 A ready payload, an installed native file, and a role loaded in the current session are separate states. Setup reports each separately. The skill's `agents/openai.yaml` controls Codex skill invocation policy; it does not register a subagent.
 
