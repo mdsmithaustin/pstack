@@ -97,6 +97,7 @@ from pathlib import Path
 CANON = Path(__file__).resolve().parent
 sys.path.insert(0, str(CANON))
 sys.path.insert(0, str(CANON / "oracles"))
+import host  # noqa: E402
 import review  # noqa: E402
 import shared  # noqa: E402
 import workspace  # noqa: E402
@@ -1060,13 +1061,16 @@ def backend_args(agent, out, entry, in_workspace=False, runner="host"):
 def file_harvest(work, expected_tree=None):
     """Move the numbered slots the wrapper filled, in task order, to each run's
     path under work/harvest, and refuse a workspace run whose checkout was not
-    the tree the build recorded."""
+    the tree the build recorded. A slot whose wrapper the harness killed on
+    timeout still names its pinned session, so its transcript is collected
+    from here first (see host.py)."""
     harvest = work / "harvest"
     rows = [json.loads(line)["run_dir"] for line in (work / "tasks.jsonl").read_text().splitlines()]
     slots = sorted(harvest.glob("[0-9][0-9][0-9][0-9]")) if harvest.is_dir() else []
     if len(slots) != len(rows):
         raise ScreenError(f"{work}: the wrapper filled {len(slots)} harvest slot(s) for {len(rows)} run(s)")
     for slot, run_dir in zip(slots, rows):
+        host.recover(slot)
         if expected_tree:
             record = json.loads((slot / "workspace.json").read_text())
             if record.get("tree") != expected_tree or record.get("error"):
@@ -1111,7 +1115,8 @@ def refuse_leaks(work, case_build):
 def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout, entry="skill"):
     """Answer, grade, and judge one arm. A run through a wrapper (every
     workspace case, and every case under the poteto-mode entry) fills one
-    harvest slot per run, which moves beside the run dir."""
+    harvest slot per run, which moves beside the run dir before the leak scan
+    reads the run's output."""
     root = out / "arms" / rule.id / case.id / arm
     work = out / agent / rule.id / case.id / arm
     if work.exists():
@@ -1126,9 +1131,9 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
     harness("run-agent", "--agent", agent, "--model", model, *backend,
             "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
             "--timeout", timeout or case_build["timeout_s"], env=run_env)
-    refuse_leaks(work, case_build)
     if wrapped:
         file_harvest(work, case_build["workspace"]["tree"] if "workspace" in case_build else None)
+    refuse_leaks(work, case_build)
     harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
             "--allow-scripts", "--out", work / "grade.json")
     if judged(case_build):

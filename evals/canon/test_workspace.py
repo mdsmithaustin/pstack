@@ -374,7 +374,8 @@ class CredentialScanTests(unittest.TestCase):
         work = self.work / "out" / "codex" / "orders-workspace" / "orders-amend" / "amended"
         shutil.rmtree(self.work / "out")
         self.assertEqual(self.run_arm(f"{fake} and {API_KEY}", case_build, transcript), (["prepare", "run-agent"],
-                         f"{work}: credential material in the run output: {transcript} (API key)"))
+                         f"{work}: credential material in the run output: "
+                         "harvest/orders-amend/with_skill/run-1/transcripts/claude/s1.jsonl (API key)"))
 
 
 class HarvestTests(ShopRepo):

@@ -19,6 +19,13 @@ ends, so without this wrapper a host run leaves no transcript and entry_state
 cannot see the /poteto-mode expansion or the $poteto-mode injection. The
 wrapper pins Claude's session id with --session-id and reads Codex's from the
 stream's thread.started event, so it moves that one session and no other.
+
+A timed-out run dies with the wrapper: the harness kills the whole process
+group, so collect never runs. The wrapper records the pinned session in the
+slot before the agent starts, and screen.py's file_harvest calls recover on
+each slot from the parent, which the kill does not reach, to finish the move.
+Codex needs no recovery: its store is the harness's temporary CODEX_HOME,
+which the harness removes.
 """
 import json
 import os
@@ -136,8 +143,33 @@ def collect(agent, session, slot, before):
         moved.append(destination.relative_to(slot).as_posix())
         if path.parent not in before and path.parent != store and not any(child.is_file() for child in path.parent.rglob("*")):
             shutil.rmtree(path.parent)
-    (slot / "session.json").write_text(json.dumps({"agent": agent, "session": session, "transcripts": moved}, indent=2) + "\n")
+    record_session(slot, agent, session, moved)
     return moved
+
+
+def record_session(slot, agent, session, moved=None):
+    """Write slot/session.json: which session the run has, pinned before the
+    agent starts, and what moved once collected. A record without transcripts
+    marks a wrapper the harness killed before it could collect."""
+    record = {"agent": agent, "session": session}
+    if moved is not None:
+        record["transcripts"] = moved
+    (slot / "session.json").write_text(json.dumps(record, indent=2) + "\n")
+
+
+def recover(slot):
+    """Collect a killed wrapper's pinned session from outside it, into the
+    slot it pinned. Nothing moves for a slot already collected or never
+    pinned, and no store dir is removed, since what existed before the run
+    is unknown here."""
+    path = slot / "session.json"
+    if not path.is_file():
+        return []
+    record = json.loads(path.read_text())
+    if "transcripts" in record:
+        return []
+    agent = record["agent"]
+    return collect(agent, record["session"], slot, session_dirs(agent, session_store(agent)))
 
 
 def link(root, discovery):
@@ -169,6 +201,7 @@ def wrap(argv, stdin=sys.stdin.buffer, stdout=None):
         prompt = token.encode() + b" " + prompt
     command, session = keep_session(agent, command)
     before = session_dirs(agent, session_store(agent))
+    record_session(slot, agent, session)
     code, thread = run_agent(command, prompt, stdout)
     try:
         collect(agent, session or thread, slot, before)
