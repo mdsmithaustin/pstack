@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Lint pstack-models.md files, or resolve roles to a model and effort for one harness.
-
-Usage: python3 check-models-config.py <file> [<file>...]
-       python3 check-models-config.py --resolve --harness {claude-code,codex,hermes}
-           [--project DIR] [--user-file FILE] [ROLE ...]
-"""
+"""Lint pstack-models.md files, or resolve roles to a model and effort for one harness."""
 from __future__ import annotations
 
 import argparse
@@ -49,7 +44,6 @@ HARNESS_EFFORTS = {
     "codex": ALLOWED_EFFORTS,
     "hermes": ALLOWED_EFFORTS,
 }
-# Claude Code subagents inherit the session effort, so an unwritten effort stays inherited there.
 SESSION_EFFORT_HARNESSES = {"claude-code"}
 CODEX_ALIAS_TRANSLATION = {
     "fable": ("gpt-5.6-sol", "max"),
@@ -235,16 +229,15 @@ class ResolvedArm(NamedTuple):
         return json.dumps(record)
 
 
-def _resolve_model(model: str, harness: str) -> tuple[str, tuple[str, str] | None, list[str]]:
-    """Return the usable model, the Codex translation applied (model, effort), and notes."""
+def _resolve_model(model: str, harness: str) -> tuple[str, str | None, list[str]]:
     if model in OTHER_ALIASES:
         return INHERIT, None, []
     usable = model in CLAUDE_ALIASES if harness == "claude-code" else model not in CLAUDE_ALIASES
     if usable:
         return model, None, []
     if harness == "codex" and model in CLAUDE_ALIASES:
-        translated = CODEX_ALIAS_TRANSLATION[model]
-        return translated[0], translated, []
+        translated_model, translated_effort = CODEX_ALIAS_TRANSLATION[model]
+        return translated_model, translated_effort, []
     return INHERIT, None, [f"{model} is not usable on {harness}"]
 
 
@@ -260,18 +253,17 @@ def _resolve_effort(role: str, harness: str, model: str, written: str | None, no
 
 def _resolve_arm(role: str, arm: int, source: str, harness: str, entry: tuple[str, str | None]) -> ResolvedArm:
     written_model, written_effort = entry
-    model, translation, notes = _resolve_model(written_model, harness)
+    model, translated_effort, notes = _resolve_model(written_model, harness)
     effort_in = written_effort
-    if translation is not None:
-        effort_in = written_effort or translation[1]
-        shown = model if written_effort else f"{model}@{translation[1]}"
+    if translated_effort is not None:
+        effort_in = written_effort or translated_effort
+        shown = model if written_effort else f"{model}@{translated_effort}"
         notes.append(f"{written_model} translated to {shown}")
     effort = _resolve_effort(role, harness, model, effort_in, notes)
     return ResolvedArm(role, arm, model, effort, source, tuple(notes))
 
 
 def resolve_role(role: str, harness: str, layers: list[Layer]) -> list[ResolvedArm]:
-    """The first layer that binds the role supplies its whole entry list."""
     for source, roles in layers:
         if role in roles:
             return [
