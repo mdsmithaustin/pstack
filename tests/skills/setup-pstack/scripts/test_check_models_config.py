@@ -200,9 +200,19 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         sections, findings = cmc.parse(text)
         self.assertEqual(
             errors_of(findings),
-            [(2, "error", "effort 'ultra' is not a Grok Build level (none, low, medium, high, xhigh, max)")],
+            [(2, "error", "effort 'ultra' is not a Grok Build level (low, medium, high, xhigh)")],
         )
         self.assertNotIn("trail reviewer", sections["grok"])
+
+    def test_grok_section_rejects_max_and_none(self):
+        for model, effort in (("grok-4.7-build-fast", "max"), ("grok-4.6", "none")):
+            with self.subTest(effort=effort):
+                sections, findings = cmc.parse(f"## grok\ntrail reviewer: {model}@{effort}\n")
+                self.assertEqual(
+                    errors_of(findings),
+                    [(2, "error", f"effort '{effort}' is not a Grok Build level (low, medium, high, xhigh)")],
+                )
+                self.assertNotIn("trail reviewer", sections["grok"])
 
     def test_grok_section_takes_its_levels(self):
         sections, findings = cmc.parse("## grok\ntrail reviewer: grok-4.7-build-fast@xhigh\n")
@@ -656,12 +666,22 @@ class GrokResolve(ResolveRunner, unittest.TestCase):
             {"role": "feature", "arm": 1, "model": "grok-4.7-build-fast", "effort": "xhigh", "source": "user ## grok"},
         )
 
-    def test_an_effort_grok_4_7_cannot_take_falls_back_to_the_session_effort(self):
+    def test_a_flat_effort_the_grok_cli_rejects_falls_back_to_the_session_effort(self):
+        [arm] = self.resolve("grok", "default", user="default: inherit-parent@max\n")
+        self.assertEqual(
+            arm,
+            {
+                "role": "default", "arm": 1, "model": "inherit-parent", "effort": "inherit-parent",
+                "source": "user flat", "notes": ["effort max is not usable on grok"],
+            },
+        )
+
+    def test_an_effort_the_grok_cli_rejects_keeps_the_model_and_falls_back_to_the_session_effort(self):
         layers = [Layer("user ## grok", {"feature": [("grok-4.7", "max")]})]
         [arm] = cmc.resolve_role("feature", "grok", layers)
         self.assertEqual(
             (arm.model, arm.effort, arm.notes),
-            ("grok-4.7", "inherit-parent", ("effort max is not usable with grok-4.7",)),
+            ("grok-4.7", "inherit-parent", ("effort max is not usable on grok",)),
         )
 
     def test_the_shipped_default_resolves_for_grok(self):

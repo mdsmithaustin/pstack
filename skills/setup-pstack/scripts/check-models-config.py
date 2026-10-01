@@ -67,7 +67,7 @@ CLIS: dict[str, Cli] = {
         catalog=None,
     ),
     "grok": Cli(
-        name="Grok Build", efforts=ALLOWED_EFFORTS - {"ultra"}, session_effort=True, native_aliases=False,
+        name="Grok Build", efforts=frozenset({"low", "medium", "high", "xhigh"}), session_effort=True, native_aliases=False,
         translation={alias: ("grok-4.7", None) for alias in CLAUDE_ALIASES},
         catalog=None,
     ),
