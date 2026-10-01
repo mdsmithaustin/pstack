@@ -8,16 +8,17 @@ import {
   parseRollupPage,
   resolveChecks,
   resolveContext,
-} from "./github.ts";
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import {
   fakeReader,
   failedCheck,
   passingCheck,
   pendingCheck,
 } from "./fakes.test-helper.ts";
-import { parsePrNumber } from "./types.ts";
+import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 
 const context = {
+  host: "github.com",
   owner: "owner",
   repo: "repo",
   number: parsePrNumber(42),
@@ -450,7 +451,7 @@ describe("parseReviewState", () => {
 });
 
 describe("context and stack discovery", () => {
-  it("returns a fully explicit context without any reader call", async () => {
+  it("uses the origin host for a fully explicit context", async () => {
     const reader = fakeReader();
     expect(
       await resolveContext({
@@ -459,12 +460,44 @@ describe("context and stack discovery", () => {
         repo: "repo",
         pr: context.number,
       })
-    ).toEqual({ owner: "explicit", repo: "repo", number: context.number });
-    expect(reader.calls).toEqual([]);
+    ).toEqual({
+      host: "github.com",
+      owner: "explicit",
+      repo: "repo",
+      number: context.number,
+    });
+    expect(reader.calls).toEqual(["originRepo"]);
+  });
+
+  it("defaults an explicit context to public GitHub without an origin", async () => {
+    const saved = process.env.GH_HOST;
+    delete process.env.GH_HOST;
+    try {
+      const reader = fakeReader({ origin: null });
+      expect(
+        await resolveContext({
+          reader,
+          owner: "explicit",
+          repo: "repo",
+          pr: context.number,
+        })
+      ).toEqual({
+        host: "github.com",
+        owner: "explicit",
+        repo: "repo",
+        number: context.number,
+      });
+      expect(reader.calls).toEqual(["originRepo"]);
+    } finally {
+      if (saved === undefined) delete process.env.GH_HOST;
+      else process.env.GH_HOST = saved;
+    }
   });
 
   it("uses the local origin before currentPr for an explicit number", async () => {
-    const reader = fakeReader({ origin: { owner: "local", repo: "checkout" } });
+    const reader = fakeReader({
+      origin: { host: "github.com", owner: "local", repo: "checkout" },
+    });
     expect(
       await resolveContext({
         reader,
@@ -472,7 +505,12 @@ describe("context and stack discovery", () => {
         repo: null,
         pr: context.number,
       })
-    ).toEqual({ owner: "local", repo: "checkout", number: context.number });
+    ).toEqual({
+      host: "github.com",
+      owner: "local",
+      repo: "checkout",
+      number: context.number,
+    });
     expect(reader.calls).toEqual(["originRepo"]);
   });
 

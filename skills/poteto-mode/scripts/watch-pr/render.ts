@@ -45,7 +45,7 @@ function mergeCell(row: T.PrSnapshot): string {
 export function renderStatusTable(rows: T.NonEmpty<T.PrSnapshot>): string {
   const lines = ["| PR | CI | Review | Merge |", "| --- | --- | --- | --- |"];
   for (const row of rows) {
-    const url = `https://github.com/${row.context.owner}/${row.context.repo}/pull/${row.context.number}`;
+    const url = `https://${row.context.host}/${row.context.owner}/${row.context.repo}/pull/${row.context.number}`;
     lines.push(
       `| [#${row.context.number}](${url}) | ${ciCell(row)} | ${reviewCell(row)} | ${mergeCell(row)} |`
     );

@@ -9,8 +9,8 @@ import type {
   Repository,
   ReviewThread,
   RollupPage,
-} from "./types.ts";
-import { parsePrNumber } from "./types.ts";
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
+import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 
 export interface FakeReaderOptions {
   readonly facts?: Partial<Omit<PullRequestFacts, "context">>;
@@ -62,6 +62,7 @@ export function fakeReader(
 ): GitHubReader & { readonly calls: readonly string[] } {
   const calls: string[] = [];
   const context = options.current ?? {
+    host: "github.com",
     owner: "owner",
     repo: "repo",
     number: parsePrNumber(1),
@@ -84,7 +85,7 @@ export function fakeReader(
     async originRepo() {
       calls.push("originRepo");
       return options.origin === undefined
-        ? { owner: "owner", repo: "repo" }
+        ? { host: "github.com", owner: "owner", repo: "repo" }
         : options.origin;
     },
     async currentPr(pr) {

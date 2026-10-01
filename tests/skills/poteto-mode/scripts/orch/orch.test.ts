@@ -19,9 +19,9 @@ import {
   parseVerdict,
   type OpenStoreOptions,
   type Store,
-} from "./store.ts";
+} from "../../../../../skills/poteto-mode/scripts/orch/store.ts";
 
-const SCRIPT = join(import.meta.dir, "orch.ts");
+const SCRIPT = join(import.meta.dir, "../../../../../skills/poteto-mode/scripts/orch/orch.ts");
 const directories: string[] = [];
 const handles: Store[] = [];
 

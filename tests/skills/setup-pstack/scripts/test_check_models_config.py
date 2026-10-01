@@ -5,8 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).parent / "check-models-config.py"
-EXAMPLE = Path(__file__).parent.parent / "examples" / "pstack-models.md"
+SKILL = Path(__file__).resolve().parents[4] / "skills" / "setup-pstack"
+SCRIPT = SKILL / "scripts" / "check-models-config.py"
+EXAMPLE = SKILL / "examples" / "pstack-models.md"
 
 _spec = importlib.util.spec_from_file_location("check_models_config", SCRIPT)
 cmc = importlib.util.module_from_spec(_spec)

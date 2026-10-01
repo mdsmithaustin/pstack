@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "esnext",
+    "typeRoots": ["../../../../skills/poteto-mode/scripts/node_modules"],
+    "types": ["bun-types"]
+  },
+  "include": ["watch-pr/*.ts", "orch/*.ts"]
+}

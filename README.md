@@ -294,7 +294,7 @@ docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9f
 (cd evals/verify-commands/oracles && python3 -m unittest -v test_check_plan)
 (cd evals/canon && python3 -m unittest -v)
 .venv/bin/python tools/probe-subagent-install.py
-.venv/bin/python -m unittest discover -s skills/setup-pstack/scripts -p 'test_*.py'
+.venv/bin/python -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
 .venv/bin/python skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
 bun install --cwd skills/poteto-mode/scripts --frozen-lockfile
 bun run --cwd skills/poteto-mode/scripts test
@@ -305,7 +305,7 @@ git diff --check
 
 Each command exits nonzero when its check fails. The four unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
 
-Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
+Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The same reasoning keeps tests out: they live under `tests/`, mirroring their path under `skills/` (`tests/skills/poteto-mode/scripts/` and `tests/skills/setup-pstack/scripts/`), and the same test fails if a tracked file under `skills/` matches a test-file pattern. The Bun and typecheck scripts in `skills/poteto-mode/scripts/package.json` reach into `tests/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 
 The commands above do not cover the manifests. CI runs that gate separately, through the `evals-dir` input to `skill-checks`. For every `evals/**/shared-benchmark.json` it runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. The runner is pinned in `runner.lock` in `mdsmithaustin/skill-ci`, so reproduce that gate locally with the build that file names rather than whatever `skill-benchmark` is on your PATH.
 
