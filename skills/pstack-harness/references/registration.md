@@ -32,7 +32,7 @@ python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" check --ha
 
 Failure signal: nonzero exit when either requested native file is missing, outdated, conflicting, or invalid.
 
-Hermes supports `check --harness hermes` with an explicit project or user root, reporting ready payloads and unsupported native registration. It has no confirmed arbitrary custom-agent-file loader. `install --harness hermes` rejects the request without writing files. Supply the complete briefing through its delegation context instead.
+Hermes supports `check --harness hermes` with an explicit project or user root, reporting ready payloads and unsupported native registration. It has no confirmed arbitrary custom-agent-file loader. `install --harness hermes` rejects the request without writing files. Supply the complete briefing through its delegation context instead. Grok Build has no `--harness grok` registration. It loads the Claude Code wrappers from `~/.claude/agents/` as agent types, but its spawn tool cannot name one, so a Grok delegate gets the complete briefing in its prompt.
 
 ## Command results
 
