@@ -20,12 +20,12 @@ cannot see the /poteto-mode expansion or the $poteto-mode injection. The
 wrapper pins Claude's session id with --session-id and reads Codex's from the
 stream's thread.started event, so it moves that one session and no other.
 
-A timed-out run dies with the wrapper: the harness kills the whole process
-group, so collect never runs. The wrapper records the pinned session in the
+A timed-out run dies with the wrapper, since the harness kills the whole
+process group, so collect never runs. The wrapper records the pinned session in the
 slot before the agent starts, and screen.py's file_harvest calls recover on
 each slot from the parent, which the kill does not reach, to finish the move.
-Codex needs no recovery: its store is the harness's temporary CODEX_HOME,
-which the harness removes.
+Codex needs no recovery, since its store is the harness's temporary
+CODEX_HOME, which the harness removes.
 """
 import json
 import os

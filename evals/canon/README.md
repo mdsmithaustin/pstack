@@ -243,10 +243,7 @@ persona in the stub arm. On 2026-09-28 both the host stand-in
 `bug-fix-spawn-step-stub` under `--entry poteto-mode`. A pasted-project case in a stub
 rule gets `bad.md` in every arm, because the stand-in finds a pasted arm by
 the lines its patch adds, and a stub rule adds none. Give a stub rule a workspace case for its
-offline run. Under the poteto-mode entry the host stand-in writes a rollout
-with the injected skill message under `$CODEX_HOME/sessions`, as codex does
-without `--ephemeral`, so the wrapper harvests it and each run reads `entry
-injected`.
+offline run.
 
 ## Entry modes
 
@@ -312,9 +309,18 @@ session's own directory. For Codex the wrapper also moves every rollout whose
 first `session_meta` names a moved thread as its `parent_thread_id`, so the
 delegates a lead spawned travel with it. It moves no other session. Claude
 Code also makes an empty `memory/` dir under the run's project dir, so the
-wrapper removes that project dir once no file is left in it, and the store
-keeps nothing of the run. On the host runner, every case under this
-entry and every workspace case runs through the wrapper. A pasted case under
+wrapper removes a project dir the run made once no file is left in it. A run
+the harness times out dies with its wrapper, since the harness kills the whole
+process group before the wrapper's collect step. So the wrapper writes the
+pinned session into the slot's `session.json` before the agent starts, and
+`screen.py` finishes the move from the parent process once `run-agent`
+returns. For a slot whose `session.json` lists no `transcripts` yet, it moves
+`~/.claude/projects/*/<session>.jsonl` and the `<session>/` delegates dir into
+the slot. That recovery removes no project dir, since the parent cannot tell
+which existed before the run. Codex needs no recovery, since its store is the
+harness's temporary `CODEX_HOME`, which the harness removes. On the host
+runner, every case under this entry and every workspace case runs through
+the wrapper. A pasted case under
 `--entry skill` runs the agent directly and keeps no transcript. On
 2026-09-30 one host run of `value-type` per agent read `entry injected` from
 the harvested transcript and rollout.
@@ -832,7 +838,10 @@ commands run the whole pipeline with a stand-in `codex`. For a positive case it
 answers with `good.md` only when the rule text is mounted, and with `bad.md`
 otherwise. For a near-miss case it answers with `good.md` in both arms. When
 the workspace mounts `skills/pstack`, it exits 3 unless the prompt starts with
-`$poteto-mode ` and `.agents/skills` holds the tree. For a workspace case it
+`$poteto-mode ` and `.agents/skills` holds the tree. Under the poteto-mode entry
+it writes a rollout with the injected skill message under `$CODEX_HOME/sessions`,
+as codex does without `--ephemeral`, so the wrapper harvests it and each run reads
+`entry injected`. For a workspace case it
 also applies the sample's `.diff` in its cwd, and exits 4 without a checkout or
 `--sandbox workspace-write`. Both runs must print `SEPARATES` for every
 positive case and every rule, and `TIE-PASS` for every near-miss case.
@@ -1118,8 +1127,8 @@ shows waits on a delegate but no spawn or brief, and Claude's `-p` sessions
 offer no worklist tool. Those stages read "n/a" or zero because of the
 harness, not the agent.
 
-A wrapped run on either runner also harvests the agent's own transcripts next
-to its workspace diff, in `harvest/<run>/transcripts/`. Claude writes each delegate to
+A wrapped run on either runner also harvests the agent's own transcripts into
+the run's harvest slot, `harvest/<run>/transcripts/`. Claude writes each delegate to
 `claude/<project>/<session>/subagents/agent-<id>.jsonl`, with a `.meta.json`
 naming its `agentType` and the lead's spawning `toolUseId`. Codex writes one
 rollout per thread under `codex/sessions/`. A child's `session_meta` names its
