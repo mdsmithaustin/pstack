@@ -288,7 +288,7 @@ class InjectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory)
             (out / "entry").mkdir()
-            (out / "entry" / "codex-workspace").write_text("exec python3 workspace.py wrap --token '$poteto-mode' --discovery .agents/skills -- codex-project-only \"$@\"\n")
+            (out / "entry" / "codex-workspace").write_text("exec python3 host.py wrap --agent codex --workspace --token '$poteto-mode' --discovery .agents/skills -- codex-project-only \"$@\"\n")
             run = chain.RunDir(out, "codex", "r", "c", "amended", out, False)
 
             self.assertIs(chain.injection(run, "codex", "poteto-mode", chain.Trace()), True)
@@ -747,7 +747,7 @@ class CodexTimestampOrderTests(unittest.TestCase):
     def test_without_the_lead_rollout_the_children_stay_unordered(self):
         with tempfile.TemporaryDirectory() as directory:
             trace_path = make_run(directory, "codex", "sbx-codex-timestamps")
-            harvest = chain.harvest_dir(trace_path.parent)
+            harvest = chain.screen.harvest_dir(trace_path.parent)
             next(harvest.rglob("rollout-*-01a0e4da-7a83-77b3-8b58-c80d2299db2b.jsonl")).unlink()
             row = chain.analyze(trace_path, PRINCIPLES)
 

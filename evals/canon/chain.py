@@ -964,14 +964,6 @@ def lead_clock(trace, lead):
     return line
 
 
-def harvest_dir(run_path):
-    """<work>/runs/<run> maps to <work>/harvest/<run>, as workspace_diff in
-    oracles/shared.py maps it."""
-    run_path = Path(run_path)
-    runs = next((parent for parent in run_path.parents if parent.name == "runs"), None)
-    return runs.parent / "harvest" / run_path.relative_to(runs) if runs else None
-
-
 def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
     """Merge every delegate transcript under a harvest transcripts/ dir. For
     Codex, the lead's own rollout supplies its update_plan calls when the exec
@@ -1542,7 +1534,7 @@ def analyze(trace_path, principles):
         return None
     build_info, files = arm_tree(run)
     tree = {path: md_lines(source.read_text(errors="replace")) for path, source in files.items()}
-    harvest = harvest_dir(run.path)
+    harvest = screen.harvest_dir(run.path)
     raw = harvest / RAW_STREAM if harvest and run.agent == "claude" else None
     lines = (raw if raw and raw.is_file() else trace_path).read_text(errors="replace").splitlines()
     run_number = int(run.path.name.removeprefix("run-")) if run.path.name.startswith("run-") else 1

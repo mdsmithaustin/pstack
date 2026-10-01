@@ -629,6 +629,50 @@ def sandboxes_available():
             and test_workspace.harness_available())
 
 
+class StandInEntryEvidenceTests(unittest.TestCase):
+    """offline/sbx-agent writes the entry's invocation evidence only under the poteto-mode entry."""
+
+    def run_stand_in(self, agent, entry):
+        token = {"claude": "/poteto-mode ", "codex": "$poteto-mode "}[agent]
+        with tempfile.TemporaryDirectory() as scratch:
+            scratch = Path(scratch)
+            cwd, home = scratch / "clone", scratch / "home"
+            for path in (cwd / ".git", home):
+                path.mkdir(parents=True)
+            discovery = {"claude": ".claude", "codex": ".agents"}[agent]
+            (cwd / discovery / "skills" / "poteto-mode").mkdir(parents=True)
+            (cwd / discovery / "skills" / "poteto-mode" / "SKILL.md").write_text("skill\n")
+            persona = {"claude": ".claude/agents/poteto-agent.md", "codex": ".codex/agents/poteto-agent.toml"}[agent]
+            (cwd / persona).parent.mkdir(parents=True)
+            (cwd / persona).write_text("persona\n")
+            if entry:
+                (cwd / "skills" / "pstack").mkdir(parents=True)
+            plan = scratch / "plan.json"
+            plan.write_text(json.dumps({"arm": "current", "answer": "done", "diff": "", "reads": ["skills/poteto-mode/SKILL.md"]}))
+            flags = (["--permission-mode", "bypassPermissions", "--allowedTools", "TodoWrite"] if agent == "claude"
+                     else ["--sandbox", "danger-full-access", "--output-last-message", str(scratch / "last.txt")])
+            prompt = (token if entry else "") + "Fix the amend function in the orders module."
+            done = subprocess.run([sys.executable, str(ROOT / "offline" / "sbx-agent"), str(plan), agent, *flags],
+                                  input=prompt, text=True, capture_output=True, cwd=cwd, env={**os.environ, "HOME": str(home)})
+            self.assertEqual(done.returncode, 0, done.stderr)
+            if agent == "claude":
+                return screen.claude_expanded([path.read_text() for path in home.glob(".claude/projects/*/*.jsonl")]), [
+                    path.read_text() for path in home.glob(".claude/projects/*/*.jsonl")]
+            return any(screen.codex_injected(path) for path in home.glob(".codex/sessions/**/rollout-*.jsonl")), []
+
+    def test_claude_transcript_carries_the_invocation_only_under_the_entry(self):
+        without, texts = self.run_stand_in("claude", entry=False)
+        self.assertFalse(without)
+        self.assertFalse(any("Base directory for this skill" in text for text in texts), texts)
+        with_entry, texts = self.run_stand_in("claude", entry=True)
+        self.assertTrue(with_entry)
+        self.assertTrue(any("Base directory for this skill" in text for text in texts))
+
+    def test_codex_rollout_carries_the_skill_message_only_under_the_entry(self):
+        self.assertFalse(self.run_stand_in("codex", entry=False)[0])
+        self.assertTrue(self.run_stand_in("codex", entry=True)[0])
+
+
 @unittest.skipUnless(sandboxes_available(), "needs CANON_SBX_E2E=1, Docker Sandboxes (sbx), and the skill-ci harness")
 class SandboxedStandInRunTests(test_workspace.ShopRule):
     """Both arms of the shop rule answered by offline/sbx-agent inside real sandboxes."""

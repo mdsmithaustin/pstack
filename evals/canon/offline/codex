@@ -10,7 +10,9 @@ answers with samples/good.md in both arms. A correct screen then prints
 SEPARATES for every positive case, TIE-PASS for every near-miss case, and
 SEPARATES for every rule. When the workspace mounts skills/pstack, the poteto-mode
 entry's tree, it exits 3 unless the prompt starts with the explicit invocation
-and the tree is linked where Codex finds it. For a workspace case it also
+and the tree is linked where Codex finds it, and it writes a rollout with the
+injected skill message under $CODEX_HOME/sessions unless --ephemeral, as codex
+does. For a workspace case it also
 applies the chosen sample's .diff to the checkout in its cwd, and exits 4 when
 there is no checkout or the sandbox forbids writes.
 
@@ -59,6 +61,17 @@ else:
     reads = sorted({path for _, changed in screen.arm_trees(rule, tree)[1:] for path in screen.changed_paths(tree, changed)})
     carried = screen.standin_carries(rule, Path(arm_workspace).parts[-2]) if case.workspace else screen.rule_mounted(rule, mounted, tree)
 root = ".agents/skills" if entry.exists() else "skills"
+# Like codex, it keeps a rollout under $CODEX_HOME/sessions unless --ephemeral,
+# and under the entry the rollout holds the injected skill message the host
+# wrapper harvests and entry_state reads.
+if Path("skills", screen.ENTRY_TREE).is_dir() and "--ephemeral" not in sys.argv and os.environ.get("CODEX_HOME"):
+    rollout = Path(os.environ["CODEX_HOME"], "sessions", "2026", "09", "30", "rollout-2026-09-30T00-00-00-offline.jsonl")
+    rollout.parent.mkdir(parents=True, exist_ok=True)
+    rollout.write_text("".join(json.dumps(record) + "\n" for record in [
+        {"type": "session_meta", "payload": {"id": "offline", "session_id": "offline", "cwd": os.getcwd(), "source": "exec"}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": f"<skill>\n<name>{screen.ENTRY_SKILL}</name>\n<path>{os.getcwd()}/{entry}/{screen.ENTRY_SKILL}/SKILL.md</path>\n"}]}},
+    ]))
 sample = "good.md" if case.kind == "near-miss" or carried else "bad.md"
 if case.frame:
     sample = screen.standin_review(case, carried).name

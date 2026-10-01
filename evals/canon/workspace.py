@@ -6,13 +6,14 @@ A case opts in with case.json "workspace": {"repo": NAME, "commit": SHA,
 pinned commit, so a run never touches the network or the user's own clone. The
 checkout shows only the pinned commit, unless the case adds "history": true,
 which shows every ancestor and needs a mirror fetched with --history. The harness copies only single files into its workspace (flattened into
-inputs/), so the per-run entry wrapper materializes the checkout itself:
+inputs/), so the per-run entry wrapper (host.py wrap --workspace, or
+sandbox.py wrap under --runner sbx) materializes the checkout itself with the
+functions here:
 
   workspace.py fetch REPO COMMIT [--from PATH] [--history]   put COMMIT into the mirror
-  workspace.py wrap [--token T --discovery D] -- TARGET ARG...
 
-`wrap` runs in the harness workspace. It checks out the commit there, copies
-the overlay over it, and refuses to start the agent unless the result has the
+The wrapper checks out the commit in the harness workspace, copies the
+overlay over it, and refuses to start the agent unless the result has the
 tree the build recorded. After the agent exits it writes the diff of
 everything the agent changed to a slot outside the workspace.
 
@@ -30,7 +31,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,6 +55,7 @@ GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TER
 # The wrapper exits with this code, without starting the agent, when the
 # workspace cannot be built or does not match the recorded tree.
 REFUSED = 97
+TREE = "skills/pstack"
 CREDENTIAL_FILES = {".credentials.json", "auth.json"}
 CREDENTIAL_TOKENS = {
     "API key": re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}"),
@@ -373,10 +374,11 @@ def reference_checkout(spec):
     return path, tree
 
 
-def expose(root, discovery, tree="skills/pstack"):
+def expose(root, discovery, tree=None):
     """Make the mounted skills discoverable at root/discovery. A repo without
     that directory gets one symlink to the whole tree; a repo that tracks it
     gets a copy of each skill beside its own."""
+    tree = tree or TREE
     target = root / discovery
     if not target.exists() and not target.is_symlink():
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -456,64 +458,7 @@ def check_refs(root, spec):
     return found
 
 
-def wrap(argv, stdin=sys.stdin.buffer):
-    """The entry wrapper for a workspace case. Env CANON_WORKSPACE names the
-    arm's workspace dir (workspace.json, overlay/, and pr.patch for a
-    review); CANON_HARVEST names the
-    directory that gets one numbered slot per run."""
-    split = argv.index("--")
-    options, command = argv[:split], argv[split + 1:]
-    token = options[options.index("--token") + 1] if "--token" in options else None
-    discovery = options[options.index("--discovery") + 1] if "--discovery" in options else None
-    arm = Path(os.environ["CANON_WORKSPACE"])
-    spec = json.loads((arm / "workspace.json").read_text())
-    slot = next_slot(Path(os.environ["CANON_HARVEST"]))
-    record = {"expected_tree": spec["tree"]}
-
-    def save():
-        (slot / "workspace.json").write_text(json.dumps(record, indent=2) + "\n")
-
-    root = Path.cwd()
-    started = time.monotonic()
-    review = arm_review(arm, spec)
-    try:
-        record["tree"] = materialize(root, Path(spec["mirror"]), spec["commit"], read_files(arm / "overlay"), review,
-                                     spec.get("history", False))
-        if record["tree"] != spec["tree"]:
-            raise WorkspaceError(f"materialized tree {record['tree']} is not the recorded {spec['tree']}")
-        if review:
-            record["refs"] = check_refs(root, spec)
-        if discovery:
-            expose(root, discovery)
-    except WorkspaceError as exc:
-        record["error"] = str(exc)
-        save()
-        print(f"workspace: {exc}", file=sys.stderr)
-        return REFUSED
-    record["materialize_s"] = round(time.monotonic() - started, 2)
-    save()
-    prompt = stdin.read()
-    if token:
-        prompt = token.encode() + b" " + prompt
-    record["agent_rc"] = subprocess.run(command, input=prompt).returncode
-    started = time.monotonic()
-    try:
-        diff = harvest(root, record["tree"])
-        (slot / "workspace.diff").write_bytes(diff)
-        record["diff_bytes"] = len(diff)
-    except WorkspaceError as exc:
-        record["error"] = f"harvest: {exc}"
-    if review:
-        record.update(head_state(root))
-    record["harvest_s"] = round(time.monotonic() - started, 2)
-    record["workspace_bytes"] = disk_bytes(root)
-    save()
-    return record["agent_rc"]
-
-
 def main(argv):
-    if argv[:1] == ["wrap"]:
-        return wrap(argv[1:])
     history = argv[-1:] == ["--history"]
     argv = argv[:-1] if history else argv
     if argv[:1] == ["fetch"] and len(argv) in (3, 5) and (len(argv) == 3 or argv[3] == "--from"):

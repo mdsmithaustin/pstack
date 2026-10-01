@@ -97,6 +97,7 @@ from pathlib import Path
 CANON = Path(__file__).resolve().parent
 sys.path.insert(0, str(CANON))
 sys.path.insert(0, str(CANON / "oracles"))
+import host  # noqa: E402
 import review  # noqa: E402
 import shared  # noqa: E402
 import workspace  # noqa: E402
@@ -1007,32 +1008,22 @@ def agent_env(agent, out, runner="host"):
     return env
 
 
-def entry_wrapper(agent, out, target):
-    token, discovery = ENTRY_INVOCATION[agent]
-    wrapper = out / "entry" / agent
+def host_wrapper(agent, out, target, entry, in_workspace):
+    """The host runner's entry wrapper. host.py wrap links the skill tree and
+    adds the invocation under the poteto-mode entry, runs the agent with its
+    session kept and moves that session into the run's harvest slot, and for a
+    workspace case materializes the checkout in the agent's cwd first and
+    harvests its diff after."""
+    wrapper = out / "entry" / (f"{agent}-workspace" if in_workspace else agent)
     wrapper.parent.mkdir(parents=True, exist_ok=True)
-    wrapper.write_text(
-        "#!/bin/sh\n"
-        f"mkdir -p {shlex.quote(str(Path(discovery).parent))}\n"
-        f"ln -sfn ../skills/{ENTRY_TREE} {shlex.quote(discovery)}\n"
-        f"{{ printf '%s ' {shlex.quote(token)}; cat; }} | {shlex.quote(str(target))} \"$@\"\n"
-    )
-    wrapper.chmod(0o755)
-    return wrapper
-
-
-def workspace_wrapper(agent, out, target, entry):
-    """The entry wrapper for a workspace case. workspace.py wrap materializes
-    the checkout in the agent's cwd, adds the invocation under the poteto-mode
-    entry, runs the agent, and harvests its diff."""
-    wrapper = out / "entry" / f"{agent}-workspace"
-    wrapper.parent.mkdir(parents=True, exist_ok=True)
-    command = [sys.executable, str(CANON / "workspace.py"), "wrap"]
+    command = [sys.executable, str(CANON / "host.py"), "wrap", "--agent", agent]
+    if in_workspace:
+        command.append("--workspace")
     if entry == ENTRY_SKILL:
         token, discovery = ENTRY_INVOCATION[agent]
         command += ["--token", token, "--discovery", discovery]
     command += ["--", str(target)]
-    tools = CLAUDE_WORKSPACE_TOOLS if agent == "claude" else ()
+    tools = CLAUDE_WORKSPACE_TOOLS if agent == "claude" and in_workspace else ()
     wrapper.write_text(f"#!/bin/sh\nexec {' '.join(map(shlex.quote, command))} \"$@\" {' '.join(map(shlex.quote, tools))}".rstrip() + "\n")
     wrapper.chmod(0o755)
     return wrapper
@@ -1059,29 +1050,32 @@ def backend_args(agent, out, entry, in_workspace=False, runner="host"):
         if not in_workspace:
             raise ScreenError("--runner sbx runs workspace cases only; a pasted-project case has no checkout to clone")
         target = sandbox_wrapper(agent, out, entry)
-    elif in_workspace:
-        target = workspace_wrapper(agent, out, target, entry)
-    elif entry == ENTRY_SKILL:
-        target = entry_wrapper(agent, out, target)
+    elif in_workspace or entry == ENTRY_SKILL:
+        target = host_wrapper(agent, out, target, entry, in_workspace)
     if agent == "claude":
         return ["--claude-bin", target]
     sandbox = "workspace-write" if in_workspace else "read-only"
     return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}"]
 
 
-def file_harvest(work, expected_tree):
+def file_harvest(work, expected_tree=None):
     """Move the numbered slots the wrapper filled, in task order, to each run's
-    path under work/harvest, and refuse a run whose workspace was not the
-    tree the build recorded."""
+    path under work/harvest, and refuse a workspace run whose checkout was not
+    the tree the build recorded. A slot whose wrapper the harness killed on
+    timeout still names its pinned session, so every slot's transcript is
+    collected from here before any check can refuse the harvest (see host.py)."""
     harvest = work / "harvest"
     rows = [json.loads(line)["run_dir"] for line in (work / "tasks.jsonl").read_text().splitlines()]
     slots = sorted(harvest.glob("[0-9][0-9][0-9][0-9]")) if harvest.is_dir() else []
+    for slot in slots:
+        host.recover(slot)
     if len(slots) != len(rows):
-        raise ScreenError(f"{work}: the wrapper filled {len(slots)} workspace slot(s) for {len(rows)} run(s)")
+        raise ScreenError(f"{work}: the wrapper filled {len(slots)} harvest slot(s) for {len(rows)} run(s)")
     for slot, run_dir in zip(slots, rows):
-        record = json.loads((slot / "workspace.json").read_text())
-        if record.get("tree") != expected_tree or record.get("error"):
-            raise ScreenError(f"{work}/{run_dir}: workspace tree {record.get('tree')} is not the built {expected_tree} {record.get('error', '')}".rstrip())
+        if expected_tree:
+            record = json.loads((slot / "workspace.json").read_text())
+            if record.get("tree") != expected_tree or record.get("error"):
+                raise ScreenError(f"{work}/{run_dir}: workspace tree {record.get('tree')} is not the built {expected_tree} {record.get('error', '')}".rstrip())
         destination = harvest / run_dir
         destination.parent.mkdir(parents=True, exist_ok=True)
         slot.rename(destination)
@@ -1119,7 +1113,11 @@ def refuse_leaks(work, case_build):
                           + ", ".join(f"{path} ({kind})" for path, kind in leaks))
 
 
-def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout):
+def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout, entry="skill"):
+    """Answer, grade, and judge one arm. A run through a wrapper (every
+    workspace case, and every case under the poteto-mode entry) fills one
+    harvest slot per run, which moves beside the run dir before the leak scan
+    reads the run's output."""
     root = out / "arms" / rule.id / case.id / arm
     work = out / agent / rule.id / case.id / arm
     if work.exists():
@@ -1127,16 +1125,16 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
     work.mkdir(parents=True)
     harness("prepare", root / MANIFEST, "--split", "tune", "--runs-per-variant", runs, "--out", work / "tasks-all.jsonl")
     with_skill_rows(work / "tasks-all.jsonl", work / "tasks.jsonl")
-    run_env = env
+    wrapped = "workspace" in case_build or entry == ENTRY_SKILL
+    run_env = {**env, "CANON_HARVEST": str(work / "harvest")} if wrapped else env
     if "workspace" in case_build:
-        run_env = {**env, "CANON_WORKSPACE": str(root / "workspace"), "CANON_HARVEST": str(work / "harvest"),
-                   "CANON_TIMEOUT_S": str(timeout or case_build["timeout_s"])}
+        run_env.update(CANON_WORKSPACE=str(root / "workspace"), CANON_TIMEOUT_S=str(timeout or case_build["timeout_s"]))
     harness("run-agent", "--agent", agent, "--model", model, *backend,
             "--tasks", work / "tasks.jsonl", "--runs", work / "runs",
             "--timeout", timeout or case_build["timeout_s"], env=run_env)
+    if wrapped:
+        file_harvest(work, case_build["workspace"]["tree"] if "workspace" in case_build else None)
     refuse_leaks(work, case_build)
-    if "workspace" in case_build:
-        file_harvest(work, case_build["workspace"]["tree"])
     harness("grade", root / MANIFEST, "--runs", work / "runs", "--variant", "with_skill",
             "--allow-scripts", "--out", work / "grade.json")
     if judged(case_build):
@@ -1169,7 +1167,7 @@ def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", o
                 if only_arms and arm not in only_arms:
                     continue
                 try:
-                    run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout)
+                    run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, timeout, entry)
                 except Exception as exc:  # noqa: BLE001
                     log_error(out, f"{agent}/{rule.id}/{case.id}/{arm}", exc)
                     failed.append(f"{rule.id}/{case.id}/{arm}")
@@ -1233,32 +1231,101 @@ def arm_listed(current, trees):
             for arm, tree in trees}
 
 
-def entry_invoked(run_base):
+def harvest_dir(run_base):
+    """<work>/runs/<run> maps to <work>/harvest/<run>, where the entry wrapper
+    of either runner leaves the agent's session transcripts."""
+    run_base = Path(run_base)
+    runs = next((parent for parent in run_base.parents if parent.name == "runs"), None)
+    return runs.parent / "harvest" / run_base.relative_to(runs) if runs else None
+
+
+def json_lines(path):
+    for line in path.read_text(errors="replace").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            yield record
+
+
+def claude_registered(trace):
+    """True when the first init event lists the entry among its skills or
+    slash commands, so the /poteto-mode token could expand."""
+    init = next((record for record in json_lines(trace) if record.get("type") == "system" and record.get("subtype") == "init"), {}) \
+        if trace.is_file() else {}
+    return ENTRY_SKILL in (init.get("skills") or ()) or ENTRY_SKILL in (init.get("slash_commands") or ())
+
+
+def claude_expanded(texts):
+    return any(f"<command-name>/{ENTRY_SKILL}</command-name>" in text for text in texts)
+
+
+def codex_injected(rollout):
+    """True when a user message in a Codex rollout carries the injected entry
+    skill, which Codex sends as <skill><name>poteto-mode</name>..."""
+    for record in json_lines(rollout):
+        payload = record.get("payload") or {}
+        if payload.get("type") == "message" and payload.get("role") == "user":
+            if any(str(item.get("text", "")).startswith(f"<skill>\n<name>{ENTRY_SKILL}</name>")
+                   for item in payload.get("content") or () if isinstance(item, dict)):
+                return True
+    return False
+
+
+def entry_state(agent, run_base, events, read):
+    """How a run's trace shows the entry skill reached the agent. "injected"
+    when the invocation expanded it, "read" when the agent loaded its SKILL.md
+    itself, "not registered" when Claude's init event does not list it, and
+    "not observed" otherwise. Claude's -p stream never shows the expansion, but
+    the session transcript the wrapper harvests does. Codex has no init
+    listing, and only its rollout, which the wrapper also harvests, records
+    the injection, so a Codex run without a rollout counts only a read."""
+    run_base = Path(run_base)
     trace = run_base / "trace.jsonl"
-    return trace.is_file() and f"<command-name>/{ENTRY_SKILL}</command-name>" in trace.read_text(errors="replace")
+    transcripts = (harvest_dir(run_base) or run_base) / "transcripts"
+    if agent == "claude":
+        if not claude_registered(trace):
+            return "not registered"
+        texts = [path.read_text(errors="replace") for path in (trace, *transcripts.glob("claude/*/*.jsonl")) if path.is_file()]
+        if claude_expanded(texts):
+            return "injected"
+        if any(event.get("status") == "completed" and event.get("name") == "Skill"
+               and str(event.get("input_summary") or "").strip("'\"") == ENTRY_SKILL for event in events):
+            return "injected"
+    elif any(codex_injected(path) for path in transcripts.glob("codex/sessions/**/rollout-*.jsonl")):
+        return "injected"
+    return "read" if f"{ENTRY_SKILL}/SKILL.md" in read else "not observed"
 
 
-def exposure(result, tree_files):
+ENTRY_SEEN = ("injected", "read")
+
+
+def exposure(result, tree_files, agent):
     base = Path(result.get("run_base", ""))
     events_path = base / "events.json"
     events = json.loads(events_path.read_text()).get("events", []) if events_path.is_file() else []
-    return {"read": skill_files_read(events, tree_files), "entry_invoked": entry_invoked(base)}
+    read = skill_files_read(events, tree_files)
+    return {"read": read, "entry": entry_state(agent, base, events, read)}
 
 
 def classify(baseline, treatment, target, entry="skill", listed=()):
     """Name what a pair shows. target is the file, or the set of files, that
-    differ between the two arms. A pair whose treatment arm read none of them
-    says nothing about the change, so it is unexposed rather than a tie.
-    Under the poteto-mode entry the wrapper starts every prompt with the
-    invocation, which injects poteto-mode/SKILL.md without a file read. Neither
-    agent's trace shows that injection, so the entry itself counts as exposure.
-    listed holds the SKILL.md files the treatment arm offers by description in
-    every run, so a run that never loads one of them is a tie or a reversal,
-    which is the outcome a placement screen measures, not unexposed."""
+    differ between the two arms, and listed is the SKILL.md files the treatment
+    arm offers by description in every run. The treatment is exposed when it
+    read or loaded one of the targets, or poteto-mode/SKILL.md is a target and
+    the treatment's trace shows the entry injected, or a target is a listed
+    skill. Under the poteto-mode entry a pair is unexposed unless both arms'
+    traces show the entry reached the agent, since a run without it tested no
+    pstack. An unexposed pair says nothing about the change, so it is not a
+    tie, and a listed skill the run never loaded is a tie or a reversal, the
+    outcome a placement screen measures."""
     if baseline is None or treatment is None or "INVALID" in (baseline["verdict"], treatment["verdict"]):
         return "invalid"
+    if entry == ENTRY_SKILL and not all(arm["exposure"]["entry"] in ENTRY_SEEN for arm in (baseline, treatment)):
+        return "unexposed"
     targets = {target} if isinstance(target, str) else set(target)
-    injected = entry == ENTRY_SKILL or treatment["exposure"]["entry_invoked"]
+    injected = treatment["exposure"]["entry"] == "injected"
     exposed = reached(targets, treatment["exposure"]["read"], injected) or bool(targets & set(listed))
     if not exposed:
         return "unexposed"
@@ -1587,7 +1654,7 @@ def compare(out):
             {"run_number": row["run"], "run_base": row.get("run_base", ""), "missing_output": True} for row in regraded.values()]
         for result in results:
             status, reasons = verdict(result)
-            seen = exposure(result, tree_files)
+            seen = exposure(result, tree_files, agent)
             if companions:
                 seen["companions_read"] = sorted({path.split("/", 1)[0] for path in seen["read"]} & companions)
             row = {
@@ -1640,11 +1707,10 @@ def compare(out):
             else:
                 owned = build_info["arm_changes"][arm]
                 target_state = f"changed {arm_summary(arm, owned)} ({len(set(owned) & set(seen))} of {len(owned)} read); " if owned else ""
-            entry_state = "invoked" if row["exposure"]["entry_invoked"] else "not observed"
             companion_state = ""
             if "companions_read" in row["exposure"]:
                 companion_state = f"; companion {', '.join(row['exposure']['companions_read']) or 'none'} read"
-            print(f"    {arm}: {target_state}entry {entry_state}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
+            print(f"    {arm}: {target_state}entry {row['exposure']['entry']}{companion_state}; read {len(seen)} skill file(s): {', '.join(seen) or 'none'}")
             if row.get("graded_from_diff"):
                 print(f"    {arm}: graded from the diff; the harness found no gradable answer")
             if row.get("ungraded"):
@@ -1687,8 +1753,7 @@ def compare(out):
         if not changed:
             continue
         rows = [row for row in table if (row["agent"], row["rule"], row["arm"]) == (agent, rule, arm)]
-        injected = build_info["entry"] == ENTRY_SKILL
-        count = sum(reached(changed, row["exposure"]["read"], injected or row["exposure"]["entry_invoked"]) for row in rows)
+        count = sum(reached(changed, row["exposure"]["read"], row["exposure"]["entry"] == "injected") for row in rows)
         listed = build_info.get("arm_listed", {}).get(arm, [])
         arm_reach.append({"agent": agent, "rule": rule, "arm": arm, "changed_text_reached": count, "runs": len(rows), "listed": listed})
         print(f"{agent:6} {rule:26} arm {arm}: changed text reached {count}/{len(rows)} run(s)" + (f"; listed by description: {', '.join(listed)}" if listed else ""))

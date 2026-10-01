@@ -272,6 +272,26 @@ def grade(verdict):
     return {"PASS": True, "FAIL": False}[verdict]
 
 
+def codex_injected(run_base):
+    """Write the rollout the sbx runner harvests for a Codex run that got the
+    $poteto-mode injection."""
+    runs = next(parent for parent in run_base.parents if parent.name == "runs")
+    rollout = runs.parent / "harvest" / run_base.relative_to(runs) / "transcripts" / "codex" / "sessions" / "rollout-a.jsonl"
+    rollout.parent.mkdir(parents=True)
+    rollout.write_text(json.dumps({"type": "response_item", "payload": {"type": "message", "role": "user", "content": [
+        {"type": "input_text", "text": "<skill>\n<name>poteto-mode</name>\n"}]}}) + "\n")
+
+
+def claude_injected(run_base):
+    """Write the trace init listing and the session transcript the sbx runner
+    harvests for a Claude run whose /poteto-mode token expanded."""
+    runs = next(parent for parent in run_base.parents if parent.name == "runs")
+    (run_base / "trace.jsonl").write_text(json.dumps({"type": "system", "subtype": "init", "skills": ["poteto-mode"], "slash_commands": ["poteto-mode"]}) + "\n")
+    transcript = runs.parent / "harvest" / run_base.relative_to(runs) / "transcripts" / "claude" / "-ws" / "session.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text(json.dumps({"type": "user", "message": {"role": "user", "content": "<command-name>/poteto-mode</command-name>"}}) + "\n")
+
+
 class ArmsCompareTests(unittest.TestCase):
     """compare over synthetic grades for a rule with arms current, leaf, and leaf+trigger."""
 
@@ -302,6 +322,7 @@ class ArmsCompareTests(unittest.TestCase):
                 run_base.mkdir(parents=True)
                 events = [{"type": "command", "status": "completed", "input_summary": f"sed -n 1,400p .agents/skills/{path}"} for path in read]
                 (run_base / "events.json").write_text(json.dumps({"events": events}))
+                codex_injected(run_base)
                 result = {"run_number": 1, "run_base": str(run_base),
                           "assertions": [{"name": "rule-behavior", "passed": grade(verdict), "evidence": "" if verdict == "PASS" else "FAIL: wrong"}]}
                 (self.out / "codex" / "stack" / case / arm / "grade.json").write_text(json.dumps({"results": [result]}))
@@ -312,10 +333,10 @@ class ArmsCompareTests(unittest.TestCase):
 
     def test_row_shows_every_arm_verdict_in_the_rule_order(self):
         self.assertIn("codex  stack                      shop               positive  run-1  current=FAIL  leaf=PASS  leaf+trigger=PASS", self.printed)
-        self.assertIn("    leaf: changed principle-laziness-protocol/SKILL.md (0 of 1 read); entry not observed; read 0 skill file(s): none", self.printed)
-        self.assertIn("    leaf+trigger: changed poteto-mode/playbooks/feature.md, principle-laziness-protocol/SKILL.md (1 of 2 read); entry not observed; "
+        self.assertIn("    leaf: changed principle-laziness-protocol/SKILL.md (0 of 1 read); entry injected; read 0 skill file(s): none", self.printed)
+        self.assertIn("    leaf+trigger: changed poteto-mode/playbooks/feature.md, principle-laziness-protocol/SKILL.md (1 of 2 read); entry injected; "
                       "read 1 skill file(s): poteto-mode/playbooks/feature.md", self.printed)
-        self.assertIn("    current: entry not observed; read 0 skill file(s): none", self.printed)
+        self.assertIn("    current: entry injected; read 0 skill file(s): none", self.printed)
 
     def test_each_arm_against_current_then_each_later_arm_against_each_earlier_one(self):
         pairs = [(pair["case"], pair["treatment"], pair["baseline"], pair["target"], pair["outcome"]) for pair in self.compared["pairs"]]
@@ -364,6 +385,7 @@ class ListedSkillCompareTests(unittest.TestCase):
                 (self.out / "arms" / "place" / "rollout" / arm / "pstack" / path).write_bytes(data)
             run_base = self.out / "claude" / "place" / "rollout" / arm / "runs" / "rollout" / "with_skill"
             run_base.mkdir(parents=True)
+            claude_injected(run_base)
             (run_base / "events.json").write_text(json.dumps({"events": read}))
             result = {"run_number": 1, "run_base": str(run_base), "assertions": [{"name": "rule-behavior", "passed": False, "evidence": "FAIL: wrong"}]}
             (self.out / "claude" / "place" / "rollout" / arm / "grade.json").write_text(json.dumps({"results": [result]}))
@@ -425,7 +447,7 @@ class StubCompareTests(unittest.TestCase):
             ("shop", "current", "stub", ["poteto-mode/SKILL.md", "poteto-mode/playbooks/feature.md"], "separates"),
         ])
         self.assertIn("    current vs stub: SEPARATES", self.printed)
-        self.assertIn("    stub: changed 1 SKILL.md cut to frontmatter, 1 other file(s) dropped (1 of 2 read); entry not observed; "
+        self.assertIn("    stub: changed 1 SKILL.md cut to frontmatter, 1 other file(s) dropped (1 of 2 read); entry read; "
                       "read 1 skill file(s): poteto-mode/SKILL.md", self.printed)
 
     def test_rule_verdict_names_current_against_the_stub(self):
@@ -433,10 +455,14 @@ class StubCompareTests(unittest.TestCase):
         self.assertIn("codex  steer                      rule current vs stub run-1  NOT-SEPARATED  (quiet unexposed)", self.printed)
 
     def test_under_the_poteto_mode_entry_the_injected_index_exposes_the_guided_arm(self):
-        baseline = {"verdict": "PASS", "exposure": {"read": [], "entry_invoked": False}}
+        """The stub keeps poteto-mode's frontmatter, so its entry registers and
+        injects too, and the baseline's evidence is as real as the guided arm's."""
+        baseline = {"verdict": "PASS", "exposure": {"read": [], "entry": "injected"}}
+        unseen = {"verdict": "PASS", "exposure": {"read": [], "entry": "not observed"}}
 
         self.assertEqual(screen.classify(baseline, dict(baseline), sorted(self.TREE), "poteto-mode"), "tie-pass")
-        self.assertEqual(screen.classify(baseline, dict(baseline), sorted(self.TREE), "skill"), "unexposed")
+        self.assertEqual(screen.classify(unseen, dict(unseen), sorted(self.TREE), "poteto-mode"), "unexposed")
+        self.assertEqual(screen.classify(unseen, dict(unseen), sorted(self.TREE), "skill"), "unexposed")
 
 
 class PairCompareTests(unittest.TestCase):
@@ -449,8 +475,10 @@ class PairCompareTests(unittest.TestCase):
             (out / "arms" / "pair" / "build.json").write_text(json.dumps(build))
             for arm, verdict in (("current", "FAIL"), ("amended", "PASS")):
                 (out / "arms" / "pair" / "shop" / arm / "pstack").mkdir(parents=True)
-                (out / "codex" / "pair" / "shop" / arm).mkdir(parents=True)
-                result = {"run_number": 1, "run_base": str(out / "none"), "assertions": [{"name": "rule-behavior", "passed": grade(verdict), "evidence": ""}]}
+                run_base = out / "codex" / "pair" / "shop" / arm / "runs" / "shop" / "with_skill"
+                run_base.mkdir(parents=True)
+                codex_injected(run_base)
+                result = {"run_number": 1, "run_base": str(run_base), "assertions": [{"name": "rule-behavior", "passed": grade(verdict), "evidence": ""}]}
                 (out / "codex" / "pair" / "shop" / arm / "grade.json").write_text(json.dumps({"results": [result]}))
             with contextlib.redirect_stdout(io.StringIO()) as printed:
                 screen.compare(out)
@@ -458,8 +486,8 @@ class PairCompareTests(unittest.TestCase):
 
         self.assertEqual(printed.getvalue().splitlines()[:4], [
             "codex  pair                       shop               positive  run-1  current=FAIL  amended=PASS  SEPARATES",
-            "    current: poteto-mode/SKILL.md NOT READ; entry not observed; read 0 skill file(s): none",
-            "    amended: poteto-mode/SKILL.md NOT READ; entry not observed; read 0 skill file(s): none",
+            "    current: poteto-mode/SKILL.md NOT READ; entry injected; read 0 skill file(s): none",
+            "    amended: poteto-mode/SKILL.md NOT READ; entry injected; read 0 skill file(s): none",
             "codex  pair                       rule run-1  SEPARATES",
         ])
         self.assertEqual(compared["pairs"], [{"agent": "codex", "rule": "pair", "case": "shop", "kind": "positive", "run": 1,
