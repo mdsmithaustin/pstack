@@ -175,9 +175,9 @@ class ReplayedPullRequest(unittest.TestCase):
             raise unittest.SkipTest(f"needs the {cls.IMAGE} image; build it with images/build.py")
         cls.checkout = workspace.reference_checkout(spec)[0]
 
-    def grade_sample(self, name):
-        """(failures, the scope report written beside the diff)."""
-        diff = (RULES / RULE / "cases" / self.CASE / "samples" / f"{name}.diff").read_text(encoding="utf-8")
+    def grade_sample(self, name, edit=lambda diff: diff):
+        """(failures, the scope report written beside the diff), over the sample's diff passed through edit."""
+        diff = edit((RULES / RULE / "cases" / self.CASE / "samples" / f"{name}.diff").read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as directory:
             failures = grade(RULE, self.CASE, f"{name}.md", workspace=Workspace(self.checkout, diff, Path(directory)))
             return failures, json.loads((Path(directory) / "scope.json").read_text())
@@ -242,6 +242,25 @@ class TaskNotifyTests(ReplayedPullRequest):
             "::test_notification_without_optional_tags_is_kept_as_hidden_context failed",
             "constraint:K2: web/src/lib/itemsToBlocks.legacy.test.ts::K2 hides stored notifications without the optional tags failed",
             "constraint:K4: no added test holds a task notification without <tool-use-id>",
+        ])
+
+
+    def test_a_route_that_marks_every_external_user_message_meta_hides_a_real_question(self):
+        route_marks_all = (
+            "@@ -4917,6 +4917,8 @@\n"
+            "     :returns: Store-assigned conversation item id.\n"
+            '     """\n'
+            "     item = _parse_external_conversation_item(body)\n"
+            '+    if item.type == "message" and isinstance(item.data, MessageData) and item.data.role == "user":\n'
+            "+        item.data.is_meta = True\n"
+            "     # A native user message round-tripping back from the transcript:\n"
+            "     # drain its optimistic pending-input entry (FIFO) and fold the\n"
+            "     # entry's file blocks (image / file) into the item BEFORE persisting.\n"
+            "@@ -8439,6 +8441,8 @@")
+        failures = self.grade_sample("good", lambda diff: diff.replace("@@ -8439,6 +8439,8 @@", route_marks_all, 1))[0]
+        self.assertEqual(failures, [
+            "constraint:K3: tests/server/integration/test_task_notification_stored.py"
+            "::test_stored_user_message_that_only_opens_with_the_tag_is_not_meta failed",
         ])
 
 

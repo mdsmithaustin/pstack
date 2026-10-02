@@ -328,6 +328,7 @@ from tests.server.helpers import create_test_agent
 from tests.server.integration.test_sessions_endpoints import _create_session
 
 MONITOR, KILLED = {MONITOR!r}, {KILLED!r}
+ASKS_ABOUT_TAG = {ASKS_ABOUT_TAG!r}
 {TRANSCRIPT}
 
 async def stored_messages(client, tmp_path, content):
@@ -351,6 +352,10 @@ async def stored_messages(client, tmp_path, content):
 async def test_notification_without_optional_tags_is_kept_as_hidden_context(client, tmp_path, text, blocks):
     content = [{{"type": "text", "text": text}}] if blocks else text
     assert [meta for meta, body in await stored_messages(client, tmp_path, content) if text in body] == [True]
+
+
+async def test_stored_user_message_that_only_opens_with_the_tag_is_not_meta(client, tmp_path):
+    assert await stored_messages(client, tmp_path, ASKS_ABOUT_TAG) == [(False, ASKS_ABOUT_TAG)]
 '''
 
 TASK_NOTIFY_WEB_CHECKS = f'''import {{ expect, it }} from "vitest";
@@ -409,6 +414,7 @@ def check_task_notify(answer, workspace):
         f"{stored}::test_notification_without_optional_tags_is_kept_as_hidden_context": "constraint:K1",
         f"{web_checks}::K2 hides stored notifications without the optional tags": "constraint:K2",
         f"{checks}::test_user_text_that_only_opens_with_the_tag_stays_visible": "constraint:K3",
+        f"{stored}::test_stored_user_message_that_only_opens_with_the_tag_is_not_meta": "constraint:K3",
         f"{web_checks}::K3 keeps a stored user message that only opens with the tag": "constraint:K3",
     }, {"omnigent/claude_native_bridge.py": 42, "omnigent/server/routes/sessions.py": 2, "web/src/lib/itemsToBlocks.ts": 18,
         "tests/test_claude_native_bridge.py": 36, "tests/server/integration/test_sessions_endpoints.py": 3,
