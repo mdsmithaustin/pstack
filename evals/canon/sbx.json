@@ -24,7 +24,7 @@
         "chatgpt.com",
         "api.openai.com"
       ],
-      "cli": "@openai/codex@0.157.0"
+      "cli": "@openai/codex@0.160.0"
     }
   },
   "uv": "0.12.17",

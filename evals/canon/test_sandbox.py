@@ -387,7 +387,7 @@ class FakeSbx:
         elif args[:2] == ["template", "save"]:
             self.saved.append(args[3])
         elif args[0] == "exec" and args[-1] == "codex --version":
-            stdout = b"codex-cli 0.157.0\n"
+            stdout = b"codex-cli 0.160.0\n"
         elif args[0] == "exec" and "setup" in args:
             if self.setup_error:
                 return subprocess.CompletedProcess(args, 1, b"", self.setup_error.encode())
@@ -492,6 +492,55 @@ class ProbeSetupTests(unittest.TestCase):
 
         setup = next(index for index, call in enumerate(fake.calls) if call[0] == "exec" and "setup" in call)
         self.assertEqual([call[0] for call in fake.calls[setup + 1:]], ["rm"])
+
+
+    def test_a_no_repo_probe_runs_the_pinned_cli_not_the_kits(self):
+        pin = sandbox.CONFIG["agents"]["codex"]["cli"]
+        fake = FakeSbx("unused", setup_error="WorkspaceError: stop here")
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(sandbox, "sbx", fake), \
+                mock.patch.object(sandbox, "records_dir", return_value=Path(directory)), self.assertRaises(sandbox.SandboxError):
+            sandbox.probe("codex")
+
+        self.assertTrue(any(call[0] == "exec" and call[-4:] == ["npm", "install", "-g", pin] for call in fake.calls))
+        creates = [call for call in fake.calls if call[0] == "create" and "--clone" in call]
+        self.assertEqual([call[call.index("-t") + 1] for call in creates], [sandbox.deps_tag("codex")])
+
+    def test_a_probe_for_an_agent_with_no_pin_installs_nothing(self):
+        fake = FakeSbx("unused", setup_error="WorkspaceError: stop here")
+
+        with mock.patch.object(sandbox, "sbx", fake), self.assertRaises(sandbox.SandboxError):
+            sandbox.probe("claude")
+
+        self.assertFalse(any("npm" in call for call in fake.calls))
+        self.assertFalse(any(call[0] == "create" and "-t" in call for call in fake.calls))
+
+
+class PersonasOfferedTests(unittest.TestCase):
+    registered = [".codex/agents/comment-sicko.toml", ".codex/agents/poteto-agent.toml"]
+
+    def test_codex_offers_a_persona_whose_role_the_request_names(self):
+        body = {"tools": [{"name": "spawn_agent", "description": "Available roles:\npoteto-agent: scoped delegate\n"}]}
+
+        self.assertEqual(sandbox.personas_offered("codex", self.registered, json.dumps(body)),
+                         {"comment-sicko": False, "poteto-agent": True})
+
+    def test_claude_offers_a_persona_that_init_lists_as_an_agent(self):
+        registered = [".claude/agents/comment-sicko.md", ".claude/agents/pstack-effort-low.md"]
+
+        self.assertEqual(sandbox.personas_offered("claude", registered, ["Explore", "comment-sicko"]),
+                         {"comment-sicko": True, "pstack-effort-low": False})
+
+    def test_a_probe_report_names_the_personas_that_are_not_offered(self):
+        self.assertEqual(sandbox.personas_missing({"comment-sicko": False, "poteto-agent": True}), ["comment-sicko"])
+        self.assertEqual(sandbox.personas_missing({"comment-sicko": True}), [])
+
+    def test_the_probe_command_exits_nonzero_when_a_persona_is_missing(self):
+        for missing, code in (["comment-sicko"], 1), ([], 0):
+            report = {"personas offered": {"comment-sicko": not missing}, "personas missing": missing}
+            with mock.patch.object(sandbox, "probe", return_value=report), contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(sandbox.main(["probe", "--agent", "codex"]), code)
 
 
 class JudgePolicyTests(unittest.TestCase):
@@ -599,12 +648,12 @@ class BuildJudgeTemplateTests(unittest.TestCase):
         self.assertLess(delete[0], fake.calls.index(save))
         self.assertIn("create", subcommands)
         self.assertIn("stop", subcommands)
-        self.assertTrue(any(call[0] == "exec" and call[-4:] == ["npm", "install", "-g", "@openai/codex@0.157.0"] for call in fake.calls))
+        self.assertTrue(any(call[0] == "exec" and call[-4:] == ["npm", "install", "-g", "@openai/codex@0.160.0"] for call in fake.calls))
         self.assertNotIn("cp", subcommands)
         self.assertFalse(any("uv" in call or "src.tar" in " ".join(call) for call in fake.calls))
-        self.assertEqual({key: written[key] for key in ("agent", "tag", "cli")}, {"agent": "codex", "tag": tag, "cli": "@openai/codex@0.157.0"})
+        self.assertEqual({key: written[key] for key in ("agent", "tag", "cli")}, {"agent": "codex", "tag": tag, "cli": "@openai/codex@0.160.0"})
         self.assertFalse({"repo", "uv", "sync"} & written.keys())
-        self.assertEqual(record["versions"], ["codex-cli 0.157.0"])
+        self.assertEqual(record["versions"], ["codex-cli 0.160.0"])
         self.assertEqual(fake.calls[-1][:2], ["rm", "--force"])
 
     def test_an_agent_with_no_cli_pin_has_nothing_to_build(self):
