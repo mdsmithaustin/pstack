@@ -54,7 +54,7 @@ Record the pick and the reason in a short synthesis note alongside the base arti
 
 ## Phase E: Graft
 
-Walk each losing candidate once more and identify what is worth porting into the base. The signal is usually one or two things per candidate, not most of it.
+Walk each losing candidate's rationale and the cross-judge's scores once more and identify what is worth porting into the base. Read only the parts of a losing artifact you will graft. The signal is usually one or two things per candidate, not most of it.
 
 Fold each graft in by hand, per the **redesign-from-first-principles** principle skill. Don't paste mechanically. The result has to remain coherent under one mental model.
 
