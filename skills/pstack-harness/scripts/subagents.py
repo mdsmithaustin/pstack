@@ -100,6 +100,7 @@ def render_brief(role: Role, skills_root: Path) -> str:
         if not path.is_file():
             raise ValueError(f"{role.id}: missing sibling skill {path}")
     guidance = (
+        f"Put the exact line `persona: {role.id}` on its own line in your first reply.\n\n"
         "Pstack installed skill paths\n\n"
         "Use these local files when the persona below requires a skill read. "
         "Read each required SKILL.md in full; follow its relative references from its directory. "
