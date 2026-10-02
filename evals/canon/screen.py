@@ -1076,15 +1076,19 @@ def backend_args(agent, out, entry, in_workspace=False, runner="host", effort=No
     return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}{pin}"]
 
 
+TIMED_OUT_RC = 124
+
+
 def last_message_missing(record):
     """True when the only thing the wrapper recorded against a slot is that
     its sandbox held no last message to copy out. Codex writes that file only
-    when it finishes, so a run the harness timed out leaves none, while the
-    tree and the diff harvested before the copy are sound. A clean exit that
-    wrote no message is not this."""
+    when it finishes, so a run the harness timed out (GNU timeout exits 124)
+    leaves none, while the tree and the diff harvested before the copy are
+    sound. A crash, a clean exit that wrote no message, and any other copy
+    failure are not this."""
     error = str(record.get("error") or "")
-    return (record.get("agent_rc") not in (None, 0, workspace.REFUSED)
-            and re.fullmatch(r"sbx cp \S+:/tmp/canon-last-message\.txt failed \(\d+\): .*", error, re.DOTALL) is not None)
+    return (record.get("agent_rc") == TIMED_OUT_RC
+            and re.fullmatch(r'sbx cp \S+:/tmp/canon-last-message\.txt failed \(\d+\): .*not found in container\s*', error, re.DOTALL) is not None)
 
 
 def slot_refusal(record, expected_tree):

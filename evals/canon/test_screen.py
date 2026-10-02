@@ -805,6 +805,23 @@ class SlotHarvestTests(SlotFixture):
         with self.assertRaisesRegex(screen.ScreenError, "the wrapper recorded an error"):
             screen.file_harvest(self.work, "built")
 
+    def test_a_crash_followed_by_the_missing_last_message_is_refused(self):
+        self.slot(1, agent_rc=1, error=LAST_MESSAGE_MISSING)
+        self.slot(2)
+        self.slot(3)
+
+        with self.assertRaisesRegex(screen.ScreenError, "run-1: the wrapper recorded an error: sbx cp .* not found in container$"):
+            screen.file_harvest(self.work, "built")
+
+    def test_a_timeout_followed_by_a_different_copy_failure_is_refused(self):
+        denied = 'sbx cp canon-codex-1035851e:/tmp/canon-last-message.txt failed (1): error: permission denied'
+        self.slot(1, agent_rc=124, error=denied)
+        self.slot(2)
+        self.slot(3)
+
+        with self.assertRaisesRegex(screen.ScreenError, "run-1: the wrapper recorded an error: sbx cp .* permission denied$"):
+            screen.file_harvest(self.work, "built")
+
     def test_slots_left_after_an_earlier_partial_mapping_fill_the_runs_still_unmapped(self):
         moved = self.work / "harvest" / "case" / "with_skill" / "run-1"
         moved.mkdir(parents=True)
