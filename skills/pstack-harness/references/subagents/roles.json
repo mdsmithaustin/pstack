@@ -14,6 +14,7 @@
         "how",
         "why"
       ],
+      "signature": "Yes... Ha ha ha... Yes!",
       "source_sha256": "c0fd0383008da45fc78cfac17b9007d62c42f87ad1c8d5c2fb658b1fd01f7c82"
     },
     {
@@ -27,6 +28,7 @@
       "skills": [
         "poteto-mode"
       ],
+      "signature": null,
       "source_sha256": "8ea490d33021ab5437cf8da74baaaef0940242e9e5f00cab72b8ef6f7638fd65"
     }
   ]
