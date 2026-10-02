@@ -12,13 +12,13 @@ const read = (comments: Parameters<typeof latestVerdict>[0]) =>
   latestVerdict(comments, PR_AUTHOR);
 
 describe("latestVerdict", () => {
-  it("reads a verdict block out of surrounding prose", () => {
+  it("reads a block at the top of the comment, with prose after it and blank lines before it", () => {
     const reading = read([
       issueComment({
         url: "https://github.com/owner/repo/pull/1#issuecomment-9",
         login: "reviewer-agent",
         createdAt: "2026-10-02T11:00:00Z",
-        body: verdictBody({ verdict: "PASS+NOTES", docs: "n/a" }),
+        body: `\n  \n${verdictBody({ verdict: "PASS+NOTES", docs: "n/a" })}`,
       }),
     ]);
     expect(reading).toEqual({
@@ -84,23 +84,55 @@ describe("latestVerdict", () => {
     expect(reading.kind).toBe("recorded");
   });
 
-  it("names each missing line of an incomplete block", () => {
+  it("fails closed, naming the position, when a block line is missing", () => {
     const full = verdictBody().split("\n");
-    for (const [key, problem] of [
-      ["Verdict", null],
-      ["Head", 'missing "Head:" line'],
-      ["Patch-id", 'missing "Patch-id:" line'],
-      ["Docs", 'missing "Docs:" line'],
+    for (const [key, position] of [
+      ["Head", 2],
+      ["Patch-id", 3],
+      ["Docs", 4],
     ] as const) {
       const body = full.filter((line) => !line.startsWith(`${key}:`)).join("\n");
       const reading = read([issueComment({ body })]);
-      if (problem === null) expect(reading).toEqual({ kind: "absent" });
-      else
-        expect(reading).toMatchObject({
-          kind: "malformed",
-          problems: [problem],
-        });
+      expect(reading.kind).toBe("malformed");
+      expect(reading.kind === "malformed" ? reading.problems[0] : "").toBe(
+        `expected "${key}:" as non-empty line ${position}`
+      );
     }
+    const withoutVerdict = full.filter((line) => !line.startsWith("Verdict:")).join("\n");
+    expect(read([issueComment({ body: withoutVerdict })])).toEqual({ kind: "absent" });
+  });
+
+  it("names every missing line of a comment that stops early", () => {
+    expect(read([issueComment({ body: "Verdict: PASS" })])).toMatchObject({
+      kind: "malformed",
+      problems: ['missing "Head:" line', 'missing "Patch-id:" line', 'missing "Docs:" line'],
+    });
+  });
+
+  it("ignores a block quoted later in a trusted comment: not a verdict, not malformed", () => {
+    const quoted = issueComment({
+      createdAt: "2026-10-02T12:00:00Z",
+      body: `Re-running the review. The old verdict was:\n\n${verdictBody({ verdict: "PASS" })}`,
+    });
+    expect(read([quoted])).toEqual({ kind: "absent" });
+    const trustedFail = issueComment({
+      createdAt: "2026-10-02T11:00:00Z",
+      body: verdictBody({ verdict: "FAIL" }),
+    });
+    const reading = read([trustedFail, quoted]);
+    expect(reading.kind === "recorded" ? reading.record.verdict : reading.kind).toBe("FAIL");
+  });
+
+  it("ignores a half-quoted block later in a trusted comment instead of failing closed", () => {
+    const trustedPass = issueComment({
+      createdAt: "2026-10-02T11:00:00Z",
+      body: verdictBody({ verdict: "PASS" }),
+    });
+    const mention = issueComment({
+      createdAt: "2026-10-02T12:00:00Z",
+      body: "See above.\nVerdict: FAIL\nHead: abc",
+    });
+    expect(read([trustedPass, mention]).kind).toBe("recorded");
   });
 
   it("rejects values outside the grammar", () => {
@@ -120,12 +152,12 @@ describe("latestVerdict", () => {
     }
   });
 
-  it("refuses a block that states one key twice", () => {
-    const body = `${verdictBody({ verdict: "PASS" })}\nVerdict: FAIL`;
-    expect(read([issueComment({ body })])).toMatchObject({
-      kind: "malformed",
-      problems: ['"Verdict:" appears 2 times'],
-    });
+  it("refuses a block whose keys repeat or arrive out of order", () => {
+    for (const body of [
+      `Verdict: PASS\nVerdict: FAIL\nHead: ${HEAD}\nPatch-id: ${PATCH}\nDocs: pass`,
+      `Verdict: PASS\nPatch-id: ${PATCH}\nHead: ${HEAD}\nDocs: pass`,
+    ])
+      expect(read([issueComment({ body })]).kind).toBe("malformed");
   });
 
   it("does not read keys with other casing or markdown decoration", () => {

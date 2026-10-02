@@ -19,6 +19,7 @@ import {
   runJson,
   string,
   type CommandResult,
+  WatcherQueryError,
 } from "./github.ts";
 import { commentAssociation } from "./review-bodies.ts";
 import type * as T from "./types.ts";
@@ -51,7 +52,12 @@ function connectionTotal(
 ): number {
   const total = at(pullRequest, [connection, "totalCount"]);
   if (typeof total !== "number" || !Number.isInteger(total))
-    throw new Error(`${connection}.totalCount is not an integer`);
+    throw new WatcherQueryError({
+      kind: "missing-key",
+      retryable: true,
+      detail: `invalid ${connection}.totalCount: ${JSON.stringify(total)}`,
+      rawValue: JSON.stringify(total),
+    });
   return total;
 }
 

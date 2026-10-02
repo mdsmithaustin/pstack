@@ -153,11 +153,27 @@ describe("evaluateGates", () => {
       expect(detailOf(result, "verdict")).toContain("issuecomment-31");
     });
 
-    it("head: the verdict covers an older head, same patch", async () => {
+    it("head: the same head passes", async () => {
+      const { report: result } = await report();
+      expect(detailOf(result, "head")).toBe(`verdict covers ${HEAD}`);
+    });
+
+    it("head: a moved head passes while the patch-id is unchanged (post-rebase)", async () => {
       const { report: result } = await report({
         facts: { headRefOid: MOVED_HEAD },
       });
-      expect(failedNames(result)).toEqual(["head"]);
+      expect(result.ready).toBe(true);
+      expect(detailOf(result, "head")).toBe(
+        `verdict at ${HEAD.slice(0, 8)} covers an unchanged patch at ${MOVED_HEAD.slice(0, 8)}`
+      );
+    });
+
+    it("head: a moved head with a changed patch-id fails both gates", async () => {
+      const { report: result } = await report({
+        facts: { headRefOid: MOVED_HEAD },
+        port: { patchId: OTHER_PATCH },
+      });
+      expect(failedNames(result)).toEqual(["head", "patch-id"]);
       expect(detailOf(result, "head")).toBe(
         `verdict covers ${HEAD} but the PR head is ${MOVED_HEAD}`
       );
@@ -243,11 +259,19 @@ describe("evaluateGates", () => {
         [{ mergeable: "CONFLICTING", mergeStateStatus: "DIRTY" }, "conflict"],
         [{ mergeable: "UNKNOWN" }, "not computed"],
         [{ reviewDecision: "CHANGES_REQUESTED" }, "changes requested"],
+        [{ reviewDecision: "REVIEW_REQUIRED" }, "review required"],
       ];
       for (const [facts, words] of cases) {
         const { report: result } = await report({ facts });
         expect(failedNames(result)).toEqual(["mergeability"]);
         expect(detailOf(result, "mergeability")).toContain(words);
+      }
+    });
+
+    it("mergeability: approved and no-decision PRs pass", async () => {
+      for (const reviewDecision of ["APPROVED", null] as const) {
+        const { report: result } = await report({ facts: { reviewDecision } });
+        expect(result.ready).toBe(true);
       }
     });
 
@@ -294,6 +318,42 @@ describe("evaluateGates", () => {
     });
     expect(result.ready).toBe(false);
     expect(failedNames(result)).toEqual([...GATES]);
+  });
+
+  describe("cwd repository", () => {
+    const elsewhere = { host: "github.com", owner: "someone", repo: "fork" };
+
+    it("fails patch-id and head, and never fetches, when cwd is another repository", async () => {
+      const { report: result, world: built } = await report({
+        origin: elsewhere,
+        facts: { headRefOid: MOVED_HEAD },
+      });
+      expect(failedNames(result)).toEqual(["head", "patch-id"]);
+      expect(detailOf(result, "patch-id")).toBe(
+        "cwd repository github.com/someone/fork is not the PR's github.com/owner/repo; run merge-gate from a checkout of github.com/owner/repo"
+      );
+      expect(built.port.calls.some((call) => call.kind === "patch-id")).toBe(false);
+    });
+
+    it("fails closed when cwd has no origin", async () => {
+      const { report: result } = await report({ origin: null });
+      expect(failedNames(result)).toEqual(["patch-id"]);
+      expect(detailOf(result, "patch-id")).toContain("cwd has no origin remote");
+    });
+
+    it("fails on a different host", async () => {
+      const { report: result } = await report({
+        origin: { host: "ghe.example.com", owner: "owner", repo: "repo" },
+      });
+      expect(failedNames(result)).toEqual(["patch-id"]);
+    });
+
+    it("matches owner and repo case-insensitively", async () => {
+      const { report: result } = await report({
+        origin: { host: "github.com", owner: "Owner", repo: "REPO" },
+      });
+      expect(result.ready).toBe(true);
+    });
   });
 
   it("refuses a PR that already merged and does not touch git", async () => {

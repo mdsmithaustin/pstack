@@ -133,14 +133,38 @@ function verdictGate(verdict: VerdictReading): Outcome {
     : fail(`${problems.join("; ")} by ${record.author} at ${record.url}`);
 }
 
-function headGate(verdict: VerdictReading, headSha: CommitSha | null): Outcome {
+const short = (sha: string): string => sha.slice(0, 8);
+const repoLabel = (repo: T.Repository): string =>
+  `${repo.host}/${repo.owner}/${repo.repo}`;
+
+/**
+ * A rebase moves the head without changing the reviewed patch (Shipping step
+ * 3), so a differing head still passes when the patch-id gate passed.
+ */
+function headGate(
+  verdict: VerdictReading,
+  headSha: CommitSha | null,
+  patchIdOk: boolean
+): Outcome {
   if (verdict.kind !== "recorded") return fail("no verdict to compare");
   if (headSha === null) return fail("the PR head SHA is unreadable");
-  return verdict.record.head === headSha
-    ? pass(`verdict covers ${headSha}`)
+  if (verdict.record.head === headSha) return pass(`verdict covers ${headSha}`);
+  return patchIdOk
+    ? pass(
+        `verdict at ${short(verdict.record.head)} covers an unchanged patch at ${short(headSha)}`
+      )
     : fail(
         `verdict covers ${verdict.record.head} but the PR head is ${headSha}`
       );
+}
+
+function sameRepository(a: T.Repository, b: T.Repository): boolean {
+  const lower = (text: string): string => text.toLowerCase();
+  return (
+    lower(a.host) === lower(b.host) &&
+    lower(a.owner) === lower(b.owner) &&
+    lower(a.repo) === lower(b.repo)
+  );
 }
 
 function patchIdGate(args: {
@@ -149,9 +173,11 @@ function patchIdGate(args: {
   readonly local: PatchId | null;
   readonly base: string;
   readonly headSha: CommitSha | null;
+  readonly wrongCheckout: string | null;
 }): Outcome {
   if (args.verdict.kind !== "recorded") return fail("no verdict to compare");
   if (args.state !== "OPEN") return fail(`not evaluated: PR is ${args.state}`);
+  if (args.wrongCheckout !== null) return fail(args.wrongCheckout);
   if (args.local === null || args.headSha === null)
     return fail("the PR head SHA is unreadable");
   return args.verdict.record.patchId === args.local
@@ -262,6 +288,8 @@ function mergeabilityGate(snapshot: T.PrSnapshot): Outcome {
     );
   if (gateReason(snapshot, true) === "changes-requested")
     problems.push("changes requested by a reviewer");
+  if (snapshot.facts.reviewDecision === "REVIEW_REQUIRED")
+    problems.push("review required (reviewDecision=REVIEW_REQUIRED)");
   return problems.length === 0 ? pass("mergeable") : fail(problems.join("; "));
 }
 
@@ -283,22 +311,34 @@ export async function evaluateGates(args: {
   const verdict = latestVerdict(conversation.comments, conversation.prAuthor);
   const { facts } = snapshot;
   const headSha = parseCommitSha(facts.headRefOid);
+  const wantsPatchId =
+    snapshot.kind === "open" && headSha !== null && verdict.kind === "recorded";
+  const origin = wantsPatchId ? await args.reader.originRepo() : null;
+  const wrongCheckout = !wantsPatchId
+    ? null
+    : origin === null
+      ? `cwd has no origin remote; run merge-gate from a checkout of ${repoLabel(args.context)}`
+      : sameRepository(origin, args.context)
+        ? null
+        : `cwd repository ${repoLabel(origin)} is not the PR's ${repoLabel(args.context)}; run merge-gate from a checkout of ${repoLabel(args.context)}`;
   const localPatchId =
-    snapshot.kind === "open" && headSha !== null && verdict.kind === "recorded"
+    wantsPatchId && wrongCheckout === null
       ? await args.port.patchId(facts.baseRefName, headSha)
       : null;
   const notEvaluated = fail(`not evaluated: PR is ${facts.state}`);
   const open = snapshot.kind === "open" ? snapshot : null;
+  const patchIdOutcome = patchIdGate({
+    verdict,
+    state: facts.state,
+    local: localPatchId,
+    base: facts.baseRefName,
+    headSha,
+    wrongCheckout,
+  });
   const outcomes: Record<Gate, Outcome> = {
     verdict: verdictGate(verdict),
-    head: headGate(verdict, headSha),
-    "patch-id": patchIdGate({
-      verdict,
-      state: facts.state,
-      local: localPatchId,
-      base: facts.baseRefName,
-      headSha,
-    }),
+    head: headGate(verdict, headSha, patchIdOutcome.ok),
+    "patch-id": patchIdOutcome,
     checks: open === null ? notEvaluated : checksGate(open),
     "review-bodies":
       open === null ? notEvaluated : reviewBodiesGate(open, conversation),

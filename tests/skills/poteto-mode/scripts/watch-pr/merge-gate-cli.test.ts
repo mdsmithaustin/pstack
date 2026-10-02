@@ -3,6 +3,7 @@ import {
   main,
   parseArgs,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-gate-cli.ts";
+import { parseConversation } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-effects.ts";
 import { MergeGateError } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-gate.ts";
 import {
   CONTEXT,
@@ -242,6 +243,23 @@ describe("merge-gate", () => {
       });
     });
 
+    it("aborts before any merge when the override comment cannot be posted", async () => {
+      const result = await run([...MERGE_ARGS, "--override", "owner call"], {
+        ...brokenWorld,
+        port: {
+          comments: [],
+          commentError: new MergeGateError("gh", "gh pr comment failed: HTTP 502"),
+        },
+      });
+      expect(result.exitCode).toBe(1);
+      expect(mergeCalls(result.port)).toEqual([]);
+      expect(parsed(result.stdout)).toMatchObject({
+        kind: "ERROR",
+        source: "gh",
+        detail: "gh pr comment failed: HTTP 502",
+      });
+    });
+
     it("cannot be combined with --check", async () => {
       const result = await run([...MERGE_ARGS, "--check", "--override", "why"]);
       expect(result.exitCode).toBe(64);
@@ -249,6 +267,20 @@ describe("merge-gate", () => {
   });
 
   describe("usage", () => {
+    it("documents every exit code in --help", async () => {
+      const result = await run(["--help"]);
+      expect(result.exitCode).toBe(0);
+      const help = result.stdout.join("");
+      for (const line of [
+        "0  merged, or --check found every gate holding",
+        "1  query, git, or gh error",
+        "10 a gate failed (nothing merged)",
+        "11 gh accepted the merge but the PR is not merged yet (queued)",
+        "64 usage error",
+      ])
+        expect(help).toContain(line);
+    });
+
     it("exits 64 for missing or malformed arguments", async () => {
       const subjectless = ["--pr", "1", "--body-file", "/tmp/body.md"];
       const bodyless = ["--pr", "1", "--subject", "s"];
@@ -347,6 +379,36 @@ describe("merge-gate", () => {
         detail: "gh pr merge failed: Head branch was modified",
       });
     });
+  });
+
+  it("prints an ERROR line and exits 1 when GitHub returns a malformed totalCount", async () => {
+    const built = world();
+    const port = {
+      ...built.port,
+      async conversation() {
+        return parseConversation({
+          data: {
+            repository: {
+              pullRequest: {
+                author: null,
+                comments: { totalCount: "many", nodes: [] },
+                reviewThreads: { totalCount: 0 },
+                reviewRequests: { totalCount: 0 },
+                reviews: { totalCount: 0 },
+              },
+            },
+          },
+        });
+      },
+    };
+    const harness = testRuntime({ reader: built.reader, port });
+    expect(await main(MERGE_ARGS, harness.runtime)).toBe(1);
+    expect(parsed(harness.stdout)).toMatchObject({
+      kind: "ERROR",
+      source: "github",
+      detail: 'invalid comments.totalCount: "many"',
+    });
+    expect(mergeCalls(built.port)).toEqual([]);
   });
 
   it("uses the latest verdict when an older FAIL was superseded", async () => {

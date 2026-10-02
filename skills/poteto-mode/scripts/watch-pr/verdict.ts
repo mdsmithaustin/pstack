@@ -55,22 +55,20 @@ export type VerdictReading =
   | { readonly kind: "recorded"; readonly record: VerdictRecord };
 
 /**
- * Block format, all four lines at the start of a line, one of each, plain
- * text (no markdown decoration, no code fence needed or tolerated):
+ * Block format. The comment's first four non-empty lines are, in order and
+ * with nothing else before them (blank lines may lead):
  *
  *   Verdict: PASS | PASS+NOTES | FAIL
  *   Head: <40 lowercase hex>
  *   Patch-id: <40 lowercase hex>
  *   Docs: pass | needs changes | unverified | n/a
  *
- * Keys are case-sensitive. Surrounding prose in the comment is ignored.
+ * Keys are case-sensitive and plain text. Prose may follow the block. A
+ * comment whose first non-empty line starts with `Verdict:` claims a verdict
+ * and is malformed unless the whole block reads. A block quoted further down
+ * a comment is not a claim.
  */
-function lineValues(lines: readonly string[], key: string): readonly string[] {
-  const prefix = `${key}:`;
-  return lines
-    .filter((line) => line.startsWith(prefix))
-    .map((line) => line.slice(prefix.length).trim());
-}
+const BLOCK_KEYS = ["Verdict", "Head", "Patch-id", "Docs"] as const;
 
 function enumMember<const V extends readonly string[]>(
   values: V,
@@ -85,28 +83,32 @@ type Field<T> =
 
 function field<T>(
   lines: readonly string[],
-  key: string,
+  position: number,
   parse: (text: string) => T | null
 ): Field<T> {
-  const found = lineValues(lines, key);
-  const first = found[0];
-  if (first === undefined)
+  const key = BLOCK_KEYS[position];
+  const line = lines[position];
+  if (line === undefined)
     return { kind: "bad", problem: `missing "${key}:" line` };
-  if (found.length > 1)
-    return { kind: "bad", problem: `"${key}:" appears ${found.length} times` };
-  const value = parse(first);
+  if (!line.startsWith(`${key}:`))
+    return {
+      kind: "bad",
+      problem: `expected "${key}:" as non-empty line ${position + 1}`,
+    };
+  const text = line.slice(key.length + 1).trim();
+  const value = parse(text);
   return value === null
-    ? { kind: "bad", problem: `invalid "${key}:" value "${first}"` }
+    ? { kind: "bad", problem: `invalid "${key}:" value "${text}"` }
     : { kind: "ok", value };
 }
 
 function readComment(comment: IssueComment): VerdictReading {
-  const lines = comment.body.split(/\r?\n/);
-  if (lineValues(lines, "Verdict").length === 0) return { kind: "absent" };
-  const verdict = field(lines, "Verdict", (text) => enumMember(VERDICTS, text));
-  const head = field(lines, "Head", parseCommitSha);
-  const patchId = field(lines, "Patch-id", parsePatchId);
-  const docs = field(lines, "Docs", (text) => enumMember(DOCS_STATUSES, text));
+  const lines = comment.body.split(/\r?\n/).filter((line) => line.trim() !== "");
+  if (lines[0]?.startsWith("Verdict:") !== true) return { kind: "absent" };
+  const verdict = field(lines, 0, (text) => enumMember(VERDICTS, text));
+  const head = field(lines, 1, parseCommitSha);
+  const patchId = field(lines, 2, parsePatchId);
+  const docs = field(lines, 3, (text) => enumMember(DOCS_STATUSES, text));
   if (
     verdict.kind === "ok" &&
     head.kind === "ok" &&

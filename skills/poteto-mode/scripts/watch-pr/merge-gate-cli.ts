@@ -52,7 +52,20 @@ export function parseArgs(
 ): MergeGateOptions {
   const program = new Command("merge-gate")
     .description(
-      "Merge a pull request only when every Shipping gate holds.\nJSON is the default; --pretty renders human text. Exit 0 merged or ready, 10 not ready, 64 usage, 1 query or merge error."
+      "Merge a pull request only when every Shipping gate holds.\nJSON is the default; --pretty renders human text."
+    )
+    .addHelpText(
+      "after",
+      [
+        "",
+        "Exit codes:",
+        "  0  merged, or --check found every gate holding",
+        "  1  query, git, or gh error",
+        "  10 a gate failed (nothing merged)",
+        "  11 gh accepted the merge but the PR is not merged yet (queued)",
+        "  64 usage error",
+        "",
+      ].join("\n")
     )
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr })
     .exitOverride()

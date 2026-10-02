@@ -22,6 +22,7 @@ import type {
   GitHubReader,
   PrContext,
   PullRequestFacts,
+  Repository,
   ReviewId,
   ReviewThread,
   UnreadReview,
@@ -53,13 +54,12 @@ export function verdictBody(
   } = {}
 ): string {
   return [
-    args.prose ?? "## Independent verdict (trail reviewer)",
-    "",
     `Verdict: ${args.verdict ?? "PASS"}`,
     `Head: ${args.head ?? HEAD}`,
     `Patch-id: ${args.patchId ?? PATCH}`,
     `Docs: ${args.docs ?? "pass"}`,
     "",
+    args.prose ?? "## Independent verdict (trail reviewer)",
     "Findings: none.",
   ].join("\n");
 }
@@ -103,6 +103,7 @@ export interface FakePortOptions {
   readonly mergeError?: Error;
   readonly receipt?: MergeReceipt;
   readonly truncated?: readonly Truncation[];
+  readonly commentError?: Error;
 }
 
 export function fakePort(
@@ -132,6 +133,7 @@ export function fakePort(
     },
     async comment(_context, body) {
       calls.push({ kind: "comment", body });
+      if (options.commentError !== undefined) throw options.commentError;
     },
   };
 }
@@ -144,6 +146,7 @@ export interface WorldOptions {
   readonly pendingBots?: readonly string[];
   readonly flaggedReviews?: readonly FlaggedReview[];
   readonly unreadReviews?: readonly UnreadReview[];
+  readonly origin?: Repository | null;
   readonly port?: FakePortOptions;
 }
 
@@ -155,6 +158,7 @@ export function world(options: WorldOptions = {}): {
   return {
     reader: fakeReader({
       facts: { headRefOid: HEAD, ...options.facts },
+      ...(options.origin === undefined ? {} : { origin: options.origin }),
       ...(options.checks === undefined ? {} : { fastPath: options.checks }),
       commitRollups: [{ oid: HEAD, state: options.rollupState ?? "SUCCESS" }],
       ...(options.threads === undefined ? {} : { threads: options.threads }),
