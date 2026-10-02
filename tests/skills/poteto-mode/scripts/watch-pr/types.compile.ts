@@ -2,6 +2,8 @@ import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-p
 import type {
   CiClean,
   GitHubMergeAllowed,
+  MergeBlocker,
+  OpenReview,
   PrContext,
   ReadyPr,
   TerminalVerdict,
@@ -44,6 +46,8 @@ const readyPr = {
   proof: {
     mergeability: "clear",
     threads: [],
+    acknowledgedReviews: [],
+    unreadReviews: [],
     ci: cleanCi,
     gate: {
       state: "OPEN",
@@ -88,7 +92,21 @@ const unprovenPr = { kind: "ready-pr", context } as const;
 // @ts-expect-error An open READY row must carry positive readiness proof.
 const readyWithoutProof: ReadyPr = unprovenPr;
 
+declare const openReview: OpenReview;
+
+// @ts-expect-error READY proof lists acknowledged reviews only, never an open one.
+const readyWithOpenReview: ReadyPr = { ...readyPr, proof: { ...readyPr.proof, acknowledgedReviews: [openReview] } };
+
+// @ts-expect-error READY cannot carry the review-findings exit code.
+const readyWithFindingsExit: ReadyVerdict = { ...ready, exitCode: 8 };
+
+// @ts-expect-error A review-findings blocker names at least one open review.
+const findingsWithoutReview: MergeBlocker = { kind: "review-findings", pr: context, reviews: [] };
+
 void refusalIsNotAllowed;
 void refusalIsNotClean;
 void readyWithBlockerExit;
 void readyWithoutProof;
+void readyWithOpenReview;
+void readyWithFindingsExit;
+void findingsWithoutReview;

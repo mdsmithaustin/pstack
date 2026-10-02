@@ -222,6 +222,8 @@ export interface ReadyPr {
   readonly proof: {
     readonly mergeability: "clear";
     readonly threads: readonly [];
+    readonly acknowledgedReviews: readonly AcknowledgedReview[];
+    readonly unreadReviews: readonly UnreadReview[];
     readonly ci: CiClean;
     readonly gate: {
       readonly state: "OPEN";
@@ -249,6 +251,11 @@ export type MergeBlocker =
       readonly kind: "review-threads";
       readonly pr: PrContext;
       readonly threads: NonEmpty<ReviewThread>;
+    }
+  | {
+      readonly kind: "review-findings";
+      readonly pr: PrContext;
+      readonly reviews: NonEmpty<OpenReview>;
     }
   | {
       readonly kind: "failing-checks";
@@ -382,6 +389,12 @@ export type BlockerVerdict =
     })
   | (Terminal<"BLOCKER", 6> & {
       readonly blocker: Extract<MergeBlocker, { readonly kind: "merge-gate" }>;
+    })
+  | (Terminal<"BLOCKER", 8> & {
+      readonly blocker: Extract<
+        MergeBlocker,
+        { readonly kind: "review-findings" }
+      >;
     })
   | (Terminal<"BLOCKER", 7> & {
       readonly blocker: {
