@@ -49,11 +49,16 @@ const COUNTED = /^(.*) \((\d+)\)$/;
 const THREAD_LINK = /#discussion_r\d+/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/g;
-const stripTags = (html: string): string =>
-  html
-    .replace(/<picture>[\s\S]*?<\/picture>/g, "")
-    .replace(/<[^>]+>/g, "")
-    .trim();
+function stripTags(html: string): string {
+  let text = html;
+  for (let previous = ""; previous !== text; ) {
+    previous = text;
+    text = text
+      .replace(/<picture>[\s\S]*?<\/picture>/g, "")
+      .replace(/<\/?[A-Za-z][^>]*>/g, "");
+  }
+  return text.replace(/<(?=[A-Za-z/])/g, "").trim();
+}
 
 function countedSections(body: string): readonly CountedSection[] {
   const heads = [...body.matchAll(SECTION)];
@@ -71,14 +76,19 @@ function countedSections(body: string): readonly CountedSection[] {
   });
 }
 function threadlessOpenItems(section: CountedSection): readonly T.BodyFinding[] {
-  return section.text
-    .split("\n")
-    .filter((line) => line.startsWith("- ") && !THREAD_LINK.test(line))
+  const lines = section.text.split("\n").filter((line) => line.startsWith("- "));
+  const loose = lines
+    .filter((line) => !THREAD_LINK.test(line))
     .map((line) => ({
       section: section.name,
       title: stripTags(line.slice(2)),
       location: null,
     }));
+  const unparsed = Array.from(
+    { length: Math.max(0, section.count - lines.length) },
+    () => ({ section: section.name, title: "(unparsed)", location: null })
+  );
+  return [...loose, ...unparsed];
 }
 function threadlessSectionItems(
   section: CountedSection

@@ -350,6 +350,47 @@ describe("bodies the registry does not understand", () => {
     expect(at(body).flaggedReviews).toEqual([]);
   });
 
+  it("keeps the text around a stray angle bracket in a title", () => {
+    const body = `${MARKER}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Handle a < b and c > d\n</details>`;
+    expect(at(body).flaggedReviews).toMatchObject([
+      { reading: { findings: [{ title: "Handle a < b and c > d" }] } },
+    ]);
+  });
+
+  it("strips tags that only appear once an inner tag is removed", () => {
+    const body = `${MARKER}\n<details open>\n<summary><strong>Open (2)</strong></summary>\n\n- <<b>script>alert(1)</b>\n- tail <script\n</details>`;
+    expect(at(body).flaggedReviews).toMatchObject([
+      {
+        reading: {
+          findings: [{ title: "alert(1)" }, { title: "tail script" }],
+        },
+      },
+    ]);
+  });
+
+  it("flags an unparsed finding when an Open section's items are not list lines", () => {
+    const body = `${MARKER}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n<details><summary>Nested item</summary>body</details>\n</details>`;
+    expect(at(body).flaggedReviews).toMatchObject([
+      {
+        reading: {
+          kind: "findings",
+          findings: [{ section: "Open", title: "(unparsed)", location: null }],
+        },
+      },
+    ]);
+  });
+
+  it("pads an Open section up to its count when some items are thread-linked", () => {
+    const body = `${MARKER}\n<details open>\n<summary><strong>Open (3)</strong></summary>\n\n- [Linked](#discussion_r42)\n- Loose item\n</details>`;
+    expect(at(body).flaggedReviews).toMatchObject([
+      {
+        reading: {
+          findings: [{ title: "Loose item" }, { title: "(unparsed)" }],
+        },
+      },
+    ]);
+  });
+
   it("flags an Open item that no thread carries", () => {
     const body = `${MARKER}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Needs a thread-less look\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
