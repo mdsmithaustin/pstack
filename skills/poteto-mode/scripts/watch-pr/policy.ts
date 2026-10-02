@@ -145,14 +145,14 @@ export async function readSnapshot(args: {
     unreadReviews: reviewState.unreadReviews,
   };
 }
-const conflictBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
+export const conflictBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
   row.kind === "open" &&
   (row.facts.mergeable === "CONFLICTING" ||
     row.facts.mergeStateStatus === "DIRTY" ||
     row.facts.mergeStateStatus === "CONFLICTING")
     ? { kind: "merge-conflicts", pr: row.context, facts: row.facts }
     : null;
-function threadBlocker(row: T.PrSnapshot): T.MergeBlocker | null {
+export function threadBlocker(row: T.PrSnapshot): T.MergeBlocker | null {
   if (row.kind !== "open") return null;
   const threads = nonEmpty(row.threads);
   return threads === null
@@ -164,19 +164,19 @@ const isOpenReview = (review: T.FlaggedReview): review is T.OpenReview =>
 const isAcknowledgedReview = (
   review: T.FlaggedReview
 ): review is T.AcknowledgedReview => review.status === "acknowledged";
-function findingsBlocker(row: T.PrSnapshot): T.MergeBlocker | null {
+export function findingsBlocker(row: T.PrSnapshot): T.MergeBlocker | null {
   if (row.kind !== "open") return null;
   const reviews = nonEmpty(row.flaggedReviews.filter(isOpenReview));
   return reviews === null
     ? null
     : { kind: "review-findings", pr: row.context, reviews };
 }
-const ciBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
+export const ciBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
   row.kind === "open" &&
   (row.ci.kind === "ci-failing" || row.ci.kind === "ci-github-rejected")
     ? { kind: "failing-checks", pr: row.context, ci: row.ci }
     : null;
-function gateReason(
+export function gateReason(
   row: T.PrSnapshot,
   allowDraft: boolean
 ): T.MergeGateReason | null {

@@ -176,16 +176,20 @@ function readBody(login: string, body: string): BodyOutcome {
     : { kind: "unread", untrustedExcerpt: untrustedExcerptOf(body) };
 }
 
-function acknowledgment(
+export const isTrustedComment = (
+  comment: ConversationComment,
+  prAuthor: string | null
+): boolean =>
+  !comment.author.isBot &&
+  (comment.author.login === prAuthor || comment.association !== "untrusted");
+export function acknowledgment(
   comments: readonly ConversationComment[],
   prAuthor: string | null,
   reviewUrl: string
 ): { author: string; url: string } | undefined {
   const comment = comments.find(
     (candidate) =>
-      !candidate.author.isBot &&
-      (candidate.author.login === prAuthor ||
-        candidate.association !== "untrusted") &&
+      isTrustedComment(candidate, prAuthor) &&
       linksReview(candidate.body, reviewUrl)
   );
   return comment === undefined
