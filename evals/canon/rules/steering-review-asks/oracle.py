@@ -510,9 +510,22 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 });
 '''
 
-CLIPBOARD = re.compile(r"writeText|clipboard|copyText")
+PAYLOAD_MATCHER = r"\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
+COPIED_VALUE = re.compile(
+    r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|" + PAYLOAD_MATCHER + ")")
+CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?:[^()]|\([^()]*\))*\)\)\.(toBeNull|not\.toBeInTheDocument)")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
+
+
+def asserts_copied_value(source):
+    """An expectation on the clipboard spy's arguments, or on a variable the
+    clipboard stub fills. A stub, or a bare toHaveBeenCalled, checks nothing
+    about what Copy writes."""
+    if COPIED_VALUE.search(source):
+        return True
+    captured = set(CAPTURED_BY_STUB.findall(source))
+    return any(re.search(rf"expect\(\s*{re.escape(name)}\b[^;]*?\)\s*" + PAYLOAD_MATCHER, source) for name in captured)
 
 
 def tests_assert_hidden_text_and_copy(added):
@@ -520,9 +533,10 @@ def tests_assert_hidden_text_and_copy(added):
     not only the button labels. A regex over the added web test lines is a
     proxy, so it looks only for each kind of assertion somewhere."""
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
-    missing = [what for what, pattern in (("what Copy writes", CLIPBOARD), ("that hidden prompt text is absent", ABSENT),
-                                          ("that prompt text is present", PRESENT))
-               if not any(pattern.search(line) for line in lines)]
+    missing = [what for what, found in (("what Copy writes", asserts_copied_value("\n".join(lines))),
+                                        ("that hidden prompt text is absent", any(ABSENT.search(line) for line in lines)),
+                                        ("that prompt text is present", any(PRESENT.search(line) for line in lines)))
+               if not found]
     return [f"constraint:C3: no added web test asserts {what}" for what in missing]
 
 

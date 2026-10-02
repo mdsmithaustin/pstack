@@ -51,6 +51,53 @@ class SkippedGraderTests(unittest.TestCase):
         }), ["constraint:C2: tests/test_x.py::test_b failed"])
 
 
+class CopyAssertionTests(unittest.TestCase):
+    """C3 wants an assertion on what Copy writes, not a mention of the clipboard."""
+    BUBBLE = ["expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent(HEAD);"]
+
+    def failures(self, *lines):
+        return oracle().tests_assert_hidden_text_and_copy({"web/src/chat.test.tsx": [*self.BUBBLE, *lines]})
+
+    def test_a_clipboard_stub_with_no_expectation_asserts_nothing(self):
+        self.assertEqual(self.failures(
+            "const writeText = vi.fn();",
+            'vi.stubGlobal("navigator", { clipboard: { writeText } });',
+            'fireEvent.click(screen.getByRole("button", { name: /^copy$/i }));',
+        ), ["constraint:C3: no added web test asserts what Copy writes"])
+
+    def test_a_bare_called_check_does_not_assert_the_copied_value(self):
+        self.assertEqual(self.failures(
+            "const writeText = vi.fn();",
+            "expect(writeText).toHaveBeenCalled();",
+            "expect(writeText).toHaveBeenCalledTimes(1);",
+        ), ["constraint:C3: no added web test asserts what Copy writes"])
+
+    def test_a_spy_asserted_with_the_payload_counts(self):
+        self.assertEqual(self.failures("const writeText = vi.fn();", "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);"), [])
+
+    def test_a_spy_call_argument_compared_to_the_prompt_counts(self):
+        self.assertEqual(self.failures("expect(navigator.clipboard.writeText.mock.calls[0][0]).toBe(LONG_TEXT);"), [])
+
+    def test_a_payload_captured_by_the_stub_and_compared_counts(self):
+        self.assertEqual(self.failures(
+            "const written: string[] = [];",
+            "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => {",
+            "  written.push(text);",
+            "  return Promise.resolve();",
+            "}) } });",
+            "expect(written[0]).toBe(LONG_TEXT);",
+        ), [])
+
+    def test_a_captured_payload_that_is_never_compared_does_not_count(self):
+        self.assertEqual(self.failures(
+            "const written: string[] = [];",
+            "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => {",
+            "  written.push(text);",
+            "}) } });",
+            "expect(bubble).toBeDefined();",
+        ), ["constraint:C3: no added web test asserts what Copy writes"])
+
+
 class ReplayedPullRequest(unittest.TestCase):
     """Grades one case's samples on its pinned checkout in its dependency image."""
     CASE = IMAGE = None
