@@ -140,6 +140,8 @@ describe("PRs with no checks", () => {
           return {
             threads: [{ id: "unresolved", firstComment: null, bot: null }],
             pendingBots: [],
+            flaggedReviews: [],
+            unreadReviews: [],
           };
         },
       },
@@ -377,7 +379,12 @@ describe("pending review bots", () => {
       async reviewState() {
         const bots = pending ? ["copilot-pull-request-reviewer"] : [];
         pending = false;
-        return { threads: [], pendingBots: bots };
+        return {
+          threads: [],
+          pendingBots: bots,
+          flaggedReviews: [],
+          unreadReviews: [],
+        };
       },
     } satisfies GitHubReader;
     const emitted: ProgressVerdict[] = [];

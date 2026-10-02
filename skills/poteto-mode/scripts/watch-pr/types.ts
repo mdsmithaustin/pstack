@@ -72,9 +72,58 @@ export interface ReviewThread {
   readonly firstComment: ReviewComment | null;
   readonly bot: ReviewBot | null;
 }
+declare const reviewIdBrand: unique symbol;
+/**
+ * The digits of a review's `#pullrequestreview-<id>` anchor, a string because
+ * review ids pass 2^31. An acknowledgment links the same token.
+ */
+export type ReviewId = string & { readonly [reviewIdBrand]: "ReviewId" };
+/** Grows one literal per format registered in review-bodies.ts. */
+export type BodyFormatName = "copilot-overview-v2";
+/** A finding a bot lists in its review body that no inline thread carries. */
+export interface BodyFinding {
+  readonly section: string;
+  readonly title: string;
+  readonly location: string | null;
+}
+export type BodyReading =
+  | {
+      readonly kind: "findings";
+      readonly format: BodyFormatName;
+      readonly findings: NonEmpty<BodyFinding>;
+    }
+  | {
+      readonly kind: "unrecognized";
+      /** First line of a body the bot's own registered format did not claim. Untrusted text. */
+      readonly excerpt: string;
+    };
+interface FlaggedReviewBase {
+  readonly id: ReviewId;
+  readonly url: string;
+  readonly bot: string;
+  readonly commitOid: string;
+  readonly reading: BodyReading;
+}
+export type OpenReview = FlaggedReviewBase & { readonly status: "open" };
+export type AcknowledgedReview = FlaggedReviewBase & {
+  readonly status: "acknowledged";
+  /** The PR conversation comment that linked the review. */
+  readonly ack: { readonly author: string; readonly url: string };
+};
+export type FlaggedReview = OpenReview | AcknowledgedReview;
+/** A head review whose body no registered format reads and whose bot owns none. Shown, never blocking. */
+export interface UnreadReview {
+  readonly id: ReviewId;
+  readonly url: string;
+  readonly bot: string;
+  readonly excerpt: string;
+}
 export interface ReviewState {
   readonly threads: readonly ReviewThread[];
   readonly pendingBots: readonly string[];
+  /** Bot reviews of the current head whose body blocks, open or acknowledged. */
+  readonly flaggedReviews: readonly FlaggedReview[];
+  readonly unreadReviews: readonly UnreadReview[];
 }
 interface CheckDetails {
   readonly name: string;
@@ -164,6 +213,8 @@ export type PrSnapshot =
       readonly ci: CiState;
       readonly reviewAutomationRunning: boolean;
       readonly pendingReviewBots: readonly string[];
+      readonly flaggedReviews: readonly FlaggedReview[];
+      readonly unreadReviews: readonly UnreadReview[];
     };
 export interface ReadyPr {
   readonly kind: "ready-pr";

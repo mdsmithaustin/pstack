@@ -1,8 +1,13 @@
 import { spawn } from "node:child_process";
+import { flagReviewBodies, reviewIdFromUrl } from "./review-bodies.ts";
+import type {
+  ConversationComment,
+  SubmittedReview,
+} from "./review-bodies.ts";
 import type * as T from "./types.ts";
 import { nonEmpty, parsePrNumber } from "./types.ts";
 export const REVIEW_THREADS_QUERY =
-  "\nquery ReviewThreads($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      reviewThreads(first: 100) {\n        nodes {\n          id\n          isResolved\n          comments(first: 10) {\n            nodes {\n              body\n              createdAt\n              path\n              line\n              author { login __typename }\n            }\n          }\n        }\n      }\n      reviewRequests(first: 50) {\n        nodes {\n          requestedReviewer {\n            __typename\n            ... on Bot { login }\n          }\n        }\n      }\n      reviews(first: 100) {\n        nodes {\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
+  "\nquery ReviewThreads($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      headRefOid\n      author { login }\n      reviewThreads(first: 100) {\n        nodes {\n          id\n          isResolved\n          comments(first: 10) {\n            nodes {\n              body\n              createdAt\n              path\n              line\n              author { login __typename }\n            }\n          }\n        }\n      }\n      reviewRequests(first: 50) {\n        nodes {\n          requestedReviewer {\n            __typename\n            ... on Bot { login }\n          }\n        }\n      }\n      reviews(last: 100) {\n        nodes {\n          body\n          state\n          url\n          commit { oid }\n          author { login __typename }\n        }\n      }\n      comments(last: 100) {\n        nodes {\n          body\n          url\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
 export const PR_COMMIT_STATUS_QUERY =
   "\nquery PrCommitStatuses($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      commits(last: 50) {\n        nodes {\n          commit {\n            oid\n            statusCheckRollup {\n              state\n            }\n          }\n        }\n      }\n    }\n  }\n}\n";
 export const PR_CHECK_ROLLUP_QUERY =
@@ -400,6 +405,90 @@ function threadBotLogin(
     return null;
   return firstComment?.authorLogin ?? missing("review comment.author.login");
 }
+const REVIEW_STATES = [
+  "PENDING",
+  "COMMENTED",
+  "APPROVED",
+  "CHANGES_REQUESTED",
+  "DISMISSED",
+] as const;
+function parseAccount(
+  value: unknown,
+  path: string
+): { readonly login: string; readonly isBot: boolean } | null {
+  if (value === null) return null;
+  const account = record(value, path);
+  return {
+    login: string(account.login, `${path}.login`),
+    isBot: string(account.__typename, `${path}.__typename`) === "Bot",
+  };
+}
+function parseSubmittedReview(
+  value: unknown,
+  path: string
+): SubmittedReview | null {
+  const node = record(value, path);
+  const author = parseAccount(at(node, ["author"]), `${path}.author`);
+  const state = enumValue(node.state, REVIEW_STATES, `${path}.state`);
+  if (author === null || state === "PENDING") return null;
+  const url = string(node.url, `${path}.url`);
+  const id = reviewIdFromUrl(url) ?? missing(`${path}.url`, url);
+  const commit =
+    node.commit === null ? null : record(node.commit, `${path}.commit`);
+  return {
+    id,
+    url,
+    author,
+    commitOid:
+      commit === null ? null : string(commit.oid, `${path}.commit.oid`),
+    body: string(node.body, `${path}.body`),
+  };
+}
+function parseConversationComment(
+  value: unknown,
+  path: string
+): ConversationComment | null {
+  const node = record(value, path);
+  const author = parseAccount(at(node, ["author"]), `${path}.author`);
+  if (author === null) return null;
+  return {
+    url: string(node.url, `${path}.url`),
+    author,
+    association: string(node.authorAssociation, `${path}.authorAssociation`),
+    body: string(node.body, `${path}.body`),
+  };
+}
+function parseBodyReviews(
+  pullRequest: Record<string, unknown>,
+  reviewNodes: readonly unknown[]
+): Pick<T.ReviewState, "flaggedReviews" | "unreadReviews"> {
+  const headRefOid = optionalString(
+    at(pullRequest, ["headRefOid"]),
+    "pullRequest.headRefOid"
+  );
+  const author = at(pullRequest, ["author"]);
+  const prAuthor =
+    author === null
+      ? null
+      : string(
+          record(author, "pullRequest.author").login,
+          "pullRequest.author.login"
+        );
+  const reviews = reviewNodes.flatMap((node, index) => {
+    const review = parseSubmittedReview(node, `reviews.nodes[${index}]`);
+    return review === null ? [] : [review];
+  });
+  const comments = list(
+    at(pullRequest, ["comments", "nodes"]),
+    "comments.nodes"
+  ).flatMap((node, index) => {
+    const comment = parseConversationComment(node, `comments.nodes[${index}]`);
+    return comment === null ? [] : [comment];
+  });
+  if (headRefOid === null) return { flaggedReviews: [], unreadReviews: [] };
+  const report = flagReviewBodies({ headRefOid, prAuthor, reviews, comments });
+  return { flaggedReviews: report.flagged, unreadReviews: report.unread };
+}
 export function parseReviewState(value: unknown): T.ReviewState {
   const pullRequest = record(
     at(value, ["data", "repository", "pullRequest"]),
@@ -409,10 +498,11 @@ export function parseReviewState(value: unknown): T.ReviewState {
     at(pullRequest, ["reviewThreads", "nodes"]),
     "reviewThreads.nodes"
   );
-  const reviewLogins = list(
+  const reviewNodes = list(
     at(pullRequest, ["reviews", "nodes"]),
     "reviews.nodes"
-  ).flatMap((node, index) => {
+  );
+  const reviewLogins = reviewNodes.flatMap((node, index) => {
     const author = at(node, ["author"]);
     if (author === null) return [];
     return [
@@ -496,6 +586,7 @@ export function parseReviewState(value: unknown): T.ReviewState {
               },
       })),
     pendingBots,
+    ...parseBodyReviews(pullRequest, reviewNodes),
   };
 }
 export function parsePullRequest(

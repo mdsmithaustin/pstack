@@ -141,6 +141,8 @@ export async function readSnapshot(args: {
           )
       ) || reviewState.pendingBots.length > 0,
     pendingReviewBots: reviewState.pendingBots,
+    flaggedReviews: reviewState.flaggedReviews,
+    unreadReviews: reviewState.unreadReviews,
   };
 }
 const conflictBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
