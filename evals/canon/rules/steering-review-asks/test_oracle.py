@@ -98,6 +98,27 @@ class CopyAssertionTests(unittest.TestCase):
         ), ["constraint:C3: no added web test asserts what Copy writes"])
 
 
+class KnownIssueProseTests(unittest.TestCase):
+    """prose() runs inside the container, so the test compiles its source out of the oracle."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        namespace = {"dataclasses": __import__("dataclasses")}
+        exec(source[source.index("def prose("):source.index("class Installs")], namespace)
+        cls.prose = staticmethod(namespace["prose"])
+
+    def test_a_short_top_level_string_is_one_sentence(self):
+        self.assertEqual(self.prose("Local  embedded\nunsupported."), ["Local embedded unsupported."])
+
+    def test_a_blank_top_level_string_is_no_sentence(self):
+        self.assertEqual(self.prose("  \n"), [])
+
+    def test_a_structured_record_keeps_prose_and_drops_short_metadata(self):
+        self.assertEqual(self.prose({"kind": "embedded", "severity": "high", "summary": "Embedded mode loops on this pin."}),
+                         ["Embedded mode loops on this pin."])
+
+
 class ReplayedPullRequest(unittest.TestCase):
     """Grades one case's samples on its pinned checkout in its dependency image."""
     CASE = IMAGE = None

@@ -622,8 +622,16 @@ def shipped_issues():
     return shipped.get("known_issues") or ["Embedded mode loops on this pin."]
 
 
-def prose(value):
+def prose(issue):
     """The whitespace-normalized sentences of one parsed issue, whatever its shape."""
+    if isinstance(issue, str):
+        return [" ".join(issue.split())] if issue.split() else []
+    return record_prose(issue)
+
+
+def record_prose(value):
+    """The prose inside a structured record; a string of fewer than four words
+    there is metadata such as a kind or severity, not a sentence."""
     if isinstance(value, str):
         return [" ".join(value.split())] if len(value.split()) >= 4 else []
     if dataclasses.is_dataclass(value):
@@ -633,7 +641,7 @@ def prose(value):
     elif hasattr(value, "__dict__"):
         value = vars(value)
     items = value.values() if isinstance(value, dict) else value if isinstance(value, (list, tuple)) else []
-    return [text for item in items for text in prose(item)]
+    return [text for item in items for text in record_prose(item)]
 
 
 class Installs(list):
