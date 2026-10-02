@@ -960,12 +960,22 @@ PLATFORM_PATCH = re.compile(r"""setattr\([^)]*\bsys\b[^)]*["']platform["']|\bsys
                             r"""|patch(?:\.object)?\(\s*(?:["']sys\.platform["']|sys\s*,\s*["']platform["'])""")
 
 
+WINDOWS_MARK = re.compile(r"""pytest\.mark\.platforms\([^)]*["']windows["']""")
+
+
 def tests_never_patch_the_host(added):
     """AGENTS.md: host-specific behaviour is tested on that host with
     @pytest.mark.platforms, never by patching sys.platform. Lines already in
-    the checkout do not count against the agent."""
-    patched = {path: sum(1 for line in lines if PLATFORM_PATCH.search(line)) for path, lines in added.items() if is_test_file(path)}
-    return [f"constraint:C3: {path} patches sys.platform on {count} added line(s)" for path, count in patched.items() if count]
+    the checkout do not count against the agent. Each test file's added lines
+    are joined, so a call split across lines is one patch, and the diff must
+    add a test marked for Windows, since case.json asks for one."""
+    sources = {path: "\n".join(lines) for path, lines in added.items() if is_test_file(path)}
+    patched = {path: len({source.count("\n", 0, found.start()) for found in PLATFORM_PATCH.finditer(source)})
+               for path, source in sources.items()}
+    failures = [f"constraint:C3: {path} patches sys.platform on {count} added line(s)" for path, count in patched.items() if count]
+    if not any(WINDOWS_MARK.search(source) for source in sources.values()):
+        failures.append('constraint:C3: no added test is marked @pytest.mark.platforms("windows")')
+    return failures
 
 
 def check_desktop_skip(answer, workspace):

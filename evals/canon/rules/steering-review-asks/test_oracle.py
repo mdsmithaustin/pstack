@@ -119,6 +119,48 @@ class KnownIssueProseTests(unittest.TestCase):
                          ["Embedded mode loops on this pin."])
 
 
+class WindowsTestTests(unittest.TestCase):
+    """C3: Windows behaviour gets a @pytest.mark.platforms("windows") test and no sys.platform patch."""
+    FILE = "tests/hermes_cli/test_gui_command.py"
+    NO_MARK = 'constraint:C3: no added test is marked @pytest.mark.platforms("windows")'
+
+    def failures(self, *lines, path=FILE):
+        return oracle().tests_never_patch_the_host({path: list(lines)})
+
+    def test_a_diff_with_no_windows_marked_test_fails(self):
+        self.assertEqual(self.failures("def test_posix_swap(tmp_path):", "    assert True"), [self.NO_MARK])
+
+    def test_an_unmarked_windows_only_test_fails(self):
+        self.assertEqual(self.failures("def test_windows_stop_spares_the_desktop(tmp_path):", "    assert _stop() == [300]"),
+                         [self.NO_MARK])
+
+    def test_a_marked_windows_test_passes(self):
+        self.assertEqual(self.failures('@pytest.mark.platforms("windows")', "def test_windows_stop(tmp_path):", "    pass"), [])
+
+    def test_a_windows_mark_beside_other_hosts_passes(self):
+        self.assertEqual(self.failures("@pytest.mark.platforms('posix', 'windows')", "def test_stop(tmp_path):", "    pass"), [])
+
+    def test_a_mark_outside_a_test_file_does_not_count(self):
+        self.assertEqual(self.failures('@pytest.mark.platforms("windows")', path="hermes_cli/main_desktop.py"), [self.NO_MARK])
+
+    def test_a_multiline_platform_patch_is_caught(self):
+        self.assertEqual(self.failures(
+            '@pytest.mark.platforms("windows")',
+            "def test_stop(monkeypatch):",
+            "    monkeypatch.setattr(",
+            "        sys,",
+            '        "platform",',
+            '        "win32",',
+            "    )",
+        ), [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
+
+    def test_a_single_line_platform_patch_is_still_caught(self):
+        self.assertEqual(self.failures(
+            '@pytest.mark.platforms("windows")',
+            'monkeypatch.setattr(main_desktop.sys, "platform", "win32")',
+        ), [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
+
+
 class ReplayedPullRequest(unittest.TestCase):
     """Grades one case's samples on its pinned checkout in its dependency image."""
     CASE = IMAGE = None
@@ -151,6 +193,7 @@ class DesktopSkipTests(ReplayedPullRequest):
         self.assertEqual(self.grade_sample("bad")[0], [
             "constraint:C2: tests/hermes_cli/test_desktop_update_tail.py::test_hermes_desktop_reopens_the_app_it_did_not_rebuild failed",
             "constraint:C3: tests/hermes_cli/test_gui_command.py patches sys.platform on 3 added line(s)",
+            'constraint:C3: no added test is marked @pytest.mark.platforms("windows")',
         ])
 
 
