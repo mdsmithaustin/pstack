@@ -1,5 +1,6 @@
 """Each case replays a merged pull request from the commit its branch started
-at. A run passes when the PR's own tests pass on its diff (functional) and
+at, or for omnigent-close-code from the main commit the branch merged before
+its review fix. A run passes when the PR's own tests pass on its diff (functional) and
 when it meets what the maintainer asked for in review (constraint:<id>).
 Scope against the merged diff is reported, never failed: the check writes
 scope.json beside the harvested workspace.diff."""

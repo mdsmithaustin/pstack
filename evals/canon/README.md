@@ -965,8 +965,8 @@ but the last, forwards the rest in order, and writes the last `result` after
 them. It writes the whole stream to `raw-stream.jsonl` in the harvest dir.
 Codex's stream passes through unchanged. A run recorded before the wrapper
 moved the last `result` to the end, with events after it, is INVALID in
-`grade.json`. regrade
-grades it from its diff and marks it `graded_from_diff`. Its `events.json`,
+`grade.json`. `screen.py regrade` grades it from its diff and marks it
+`graded_from_diff`. Its `events.json`,
 which exposure reads, is intact, so the stored trace is left as it is.
 `last_result_only` over its `raw-stream.jsonl` gives the stream the harness
 would now accept.
@@ -1566,7 +1566,9 @@ for the checkout and all three samples.
 a maintainer asked for in review. It compares current with the stub arm and
 owns its cases. It reads `skills/` at 4fe21347, as `bug-fix-spawn-step-stub`
 does. Each case replays one merged pull request from the commit its
-branch started at, with the operator request as the PR stood before review.
+branch started at, or for `omnigent-close-code` from the main commit the
+branch merged before its review fix, with the operator request as the PR
+stood before review.
 
 | case | PR | starting commit | image |
 |---|---|---|---|
@@ -1579,11 +1581,11 @@ branch started at, with the operator request as the PR stood before review.
 The oracle runs tests in the case's image and prefixes each failure with its
 dimension. `functional:` is the PR's own tests. `constraint:<id>:` is a check
 built from one review ask, with the ids of each case's `expected_behavior`.
-Both kinds of test are grader-owned source in `oracle.py`, appended to the
-checkout's copy of the file and never to the agent's, so an agent cannot edit
-them and pytest keeps the appended definition of a name. The merged test files
-also hold tests for later work on main, so only the tests the PR added or
-changed are copied. Where a PR test pins a choice the prompt does not state (a
+Both kinds are grader-owned source in `oracle.py`. The oracle appends each to
+the checkout's copy of the file, never to the agent's, so an agent cannot edit
+them, and pytest keeps the appended definition of a name. The merged test files
+also hold tests for later work on main, so the oracle copies only the tests the
+PR added or changed. Where a PR test pins a choice the prompt does not state (a
 private constant, a threshold, a Windows host, the shape of a `known_issues`
 entry, the function that skips a doomed Windows build), the case runs a port
 without it and says so in `oracle.py`. `hermes-known-issues` builds every
@@ -1593,10 +1595,10 @@ declares, and C9 counts each parsed issue's text in the CLI output.
 `source_build.build_update_products`. `omnigent-task-notify` K1 parses a
 notification with the bridge, POSTs it as the forwarder does, and reads
 `is_meta` from the stored item, so the flag may be set in the bridge or the
-route. A static check reads only the lines the diff
-adds, and is used only where the ask is about the agent's own tests. An ask
-that is taste is not graded, and its case's `expected_behavior` ends with a
-"Not graded" line that names it.
+route. A static check reads only the lines the diff adds, and applies only
+where the ask is about the agent's own tests. The oracle skips an ask that is
+taste. The case's `expected_behavior` ends with a "Not graded" line that
+names it.
 
 Scope is reported and never fails a run. The check writes `scope.json` beside
 the harvested `workspace.diff`, `<work>/harvest/<run>/scope.json`, with the
