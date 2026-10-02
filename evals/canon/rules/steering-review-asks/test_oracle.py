@@ -154,6 +154,22 @@ class WindowsTestTests(unittest.TestCase):
             "    )",
         ), [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
 
+    def test_a_string_target_platform_patch_is_caught(self):
+        self.assertEqual(self.failures(
+            '@pytest.mark.platforms("windows")',
+            'monkeypatch.setattr("sys.platform", "win32")',
+        ), [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
+
+    def test_a_multiline_string_target_platform_patch_is_caught(self):
+        self.assertEqual(self.failures(
+            '@pytest.mark.platforms("windows")',
+            "monkeypatch.setattr(",
+            "    'sys.platform',",
+            '    "win32",',
+            "    raising=False,",
+            ")",
+        ), [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
+
     def test_a_single_line_platform_patch_is_still_caught(self):
         self.assertEqual(self.failures(
             '@pytest.mark.platforms("windows")',
