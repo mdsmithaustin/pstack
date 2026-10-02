@@ -4,8 +4,11 @@ its review fix. A run passes when the PR's own tests pass on its diff (functiona
 when it meets what the maintainer asked for in review (constraint:<id>).
 Scope against the merged diff is reported, never failed: the check writes
 scope.json beside the harvested workspace.diff."""
+import ast
+import io
 import json
 import re
+import tokenize
 from pathlib import PurePosixPath
 
 from shared import apply_diff, project_test_results
@@ -42,16 +45,111 @@ def result_status(results, node):
     return "skipped" if "skipped" in found else "passed"
 
 
-def added_lines(diff):
-    """{path: [each line the diff adds]} for every path a unified diff touches."""
-    added, path = {}, None
+def added_numbered(diff):
+    """{path: [(line number in the patched file, line)]} for each line a
+    unified diff adds."""
+    added, path, number, in_hunk = {}, None, 0, False
     for line in diff.splitlines():
         if line.startswith("diff --git "):
-            path = line.split(" b/", 1)[1]
+            path, in_hunk = line.split(" b/", 1)[1], False
             added[path] = []
-        elif line.startswith("+") and not line.startswith("+++") and path is not None:
-            added[path].append(line[1:])
+        elif line.startswith("@@") and path is not None:
+            number, in_hunk = int(re.search(r"\+(\d+)", line).group(1)) - 1, True
+        elif not in_hunk or line.startswith("\\"):
+            continue
+        elif line.startswith("+"):
+            number += 1
+            added[path].append((number, line[1:]))
+        elif line.startswith(" ") or line == "":
+            number += 1
     return added
+
+
+def added_lines(diff):
+    """{path: [each line the diff adds]} for every path a unified diff touches."""
+    return {path: [line for _, line in found] for path, found in added_numbered(diff).items()}
+
+
+def blank(lines, start, end):
+    """Spaces over the (row, column) span start..end of lines, rows from 1."""
+    for row in range(start[0], end[0] + 1):
+        text = lines[row - 1]
+        first = start[1] if row == start[0] else 0
+        last = end[1] if row == end[0] else len(text)
+        lines[row - 1] = text[:first] + " " * (last - first) + text[last:]
+
+
+def executable_python(source):
+    """source's lines with comments and docstrings or other bare string
+    statements blanked; None when it does not parse."""
+    lines = re.split(r"\r\n|\r|\n", source)
+    try:
+        tree = ast.parse(source)
+        comments = [token for token in tokenize.generate_tokens(io.StringIO(source).readline) if token.type == tokenize.COMMENT]
+    except (SyntaxError, tokenize.TokenError):
+        return None
+    for token in comments:
+        blank(lines, token.start, token.end)
+    def column(row, offset):
+        """ast columns are UTF-8 byte offsets and the lines are text."""
+        return len(lines[row - 1].encode()[:offset].decode(errors="ignore"))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Expr) and (isinstance(node.value, ast.JoinedStr)
+                                           or isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
+            blank(lines, (node.lineno, column(node.lineno, node.col_offset)), (node.end_lineno, column(node.end_lineno, node.end_col_offset)))
+    return lines
+
+
+def executable_js(source):
+    """source's lines with // and /* */ comments blanked, outside string and template literals."""
+    out, quote, comment, i = [], None, None, 0
+    while i < len(source):
+        char, pair = source[i], source[i:i + 2]
+        if comment == "line" and char == "\n":
+            comment = None
+        elif comment == "block" and pair == "*/":
+            out.append("  ")
+            comment, i = None, i + 2
+            continue
+        if comment:
+            out.append("\n" if char == "\n" else " ")
+        elif quote:
+            out.append(char)
+            if char == "\\" and i + 1 < len(source):
+                out.append(source[i + 1])
+                i += 1
+            elif char == quote or (char == "\n" and quote != "`"):
+                quote = None
+        elif char in "'\"`":
+            quote = char
+            out.append(char)
+        elif pair in ("//", "/*"):
+            comment = "line" if pair == "//" else "block"
+            out.append("  ")
+            i += 1
+        else:
+            out.append(char)
+        i += 1
+    return "".join(out).split("\n")
+
+
+def executable_added(diff, files):
+    """added_lines with the non-code text of each added Python or JS/TS line
+    blanked, so a static check never credits a comment or a docstring as a
+    test. files is apply_diff's {path: bytes or None}, the patched files the
+    added line numbers index into; a Python file that does not parse has no
+    executable lines."""
+    executable = {}
+    for path, found in added_numbered(diff).items():
+        data = files.get(path)
+        if data is None or not path.endswith((".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")):
+            executable[path] = [line for _, line in found]
+            continue
+        source = data.decode("utf-8", errors="replace")
+        lines = executable_python(source) if path.endswith(".py") else executable_js(source)
+        executable[path] = [lines[number - 1] if lines else "" for number, _ in found]
+    return executable
 
 
 def is_test_file(path):
@@ -78,7 +176,7 @@ def graded(workspace, image, sources, tests, footprint, statics=()):
     results = project_test_results(image, workspace.checkout, files, targets)
     failures = [f"{dimension}: {node} {status}" + (" (a skipped grader-owned test never ran)" if status == "skipped" else "")
                 for node, dimension in tests.items() if (status := result_status(results, node)) != "passed"]
-    added = added_lines(workspace.diff)
+    added = executable_added(workspace.diff, changed)
     return failures + [failure for static in statics for failure in static(added)]
 
 

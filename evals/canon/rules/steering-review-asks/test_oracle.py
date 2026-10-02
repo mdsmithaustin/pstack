@@ -178,6 +178,73 @@ class WindowsTestTests(unittest.TestCase):
         ), [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
 
 
+def new_file(path, content):
+    """(diff, files) for a file that a diff adds whole."""
+    lines = content.split("\n")
+    diff = (f"diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{len(lines)} @@\n"
+            + "".join(f"+{line}\n" for line in lines))
+    return diff, {path: content.encode()}
+
+
+class ExecutableOnlyTests(unittest.TestCase):
+    """A static check credits executable code only, never a comment or a docstring."""
+    PY = "tests/server/test_x.py"
+    TS = "web/src/chat.test.tsx"
+    FIXTURE = "<task-notification><task-id>x</task-id></task-notification>"
+    K4 = ["constraint:K4: no added test holds a task notification without <tool-use-id>"]
+    NO_MARK = 'constraint:C3: no added test is marked @pytest.mark.platforms("windows")'
+
+    def run_static(self, name, path, content):
+        module = oracle()
+        return getattr(module, name)(module.executable_added(*new_file(path, content)))
+
+    def test_executable_added_blanks_python_comments_and_docstrings_and_keeps_line_count(self):
+        content = '"""module doc"""\nx = 1  # trailing\ndef f():\n    """doc\n    more"""\n    "bare"\n    return "kept # not a comment"\n# whole line'
+        diff, files = new_file(self.PY, content)
+        self.assertEqual([line.rstrip() for line in oracle().executable_added(diff, files)[self.PY]],
+                         ["", "x = 1", "def f():", "", "", "", '    return "kept # not a comment"', ""])
+
+    def test_executable_added_blanks_js_comments_and_keeps_string_slashes(self):
+        content = 'const a = "http://x"; // tail\n/* block\n   more */\nconst b = `//t`;'
+        diff, files = new_file(self.TS, content)
+        self.assertEqual([line.rstrip() for line in oracle().executable_added(diff, files)[self.TS]],
+                         ['const a = "http://x";', "", "", "const b = `//t`;"])
+
+    def test_k4_ignores_a_fixture_in_a_comment(self):
+        self.assertEqual(self.run_static("adds_minimal_fixture", self.PY, f"# {self.FIXTURE}"), self.K4)
+
+    def test_k4_ignores_a_fixture_in_a_docstring_or_bare_string(self):
+        self.assertEqual(self.run_static("adds_minimal_fixture", self.PY, f'def test_a():\n    """{self.FIXTURE}"""'), self.K4)
+        self.assertEqual(self.run_static("adds_minimal_fixture", self.PY, f'"{self.FIXTURE}"'), self.K4)
+
+    def test_k4_accepts_a_fixture_in_a_string_literal(self):
+        self.assertEqual(self.run_static("adds_minimal_fixture", self.PY, f'NOTE = "{self.FIXTURE}"'), [])
+
+    def test_a_platform_patch_in_a_comment_or_docstring_is_not_a_patch(self):
+        content = ('@pytest.mark.platforms("windows")\ndef test_a(monkeypatch):\n    """monkeypatch.setattr(sys, \'platform\', \'win32\')"""\n'
+                   '    # monkeypatch.setattr("sys.platform", "win32")')
+        self.assertEqual(self.run_static("tests_never_patch_the_host", self.PY, content), [])
+
+    def test_a_windows_mark_in_a_comment_or_docstring_is_not_a_mark(self):
+        self.assertEqual(self.run_static("tests_never_patch_the_host", self.PY, '# @pytest.mark.platforms("windows")'), [self.NO_MARK])
+        self.assertEqual(self.run_static("tests_never_patch_the_host", self.PY,
+                                         'def test_a():\n    """@pytest.mark.platforms("windows")"""'), [self.NO_MARK])
+
+    def test_hidden_text_and_copy_assertions_in_js_comments_do_not_count(self):
+        content = ("// expect(writeText).toHaveBeenCalledWith(LONG_TEXT);\n"
+                   "/* expect(bubble).not.toHaveTextContent(TAIL);\n   expect(bubble).toHaveTextContent(HEAD); */")
+        self.assertEqual(self.run_static("tests_assert_hidden_text_and_copy", self.TS, content), [
+            "constraint:C3: no added web test asserts what Copy writes",
+            "constraint:C3: no added web test asserts that hidden prompt text is absent",
+            "constraint:C3: no added web test asserts that prompt text is present",
+        ])
+
+    def test_hidden_text_and_copy_assertions_in_code_still_count(self):
+        content = ("expect(writeText).toHaveBeenCalledWith(LONG_TEXT);\n"
+                   "expect(bubble).not.toHaveTextContent(TAIL);\nexpect(bubble).toHaveTextContent(HEAD);")
+        self.assertEqual(self.run_static("tests_assert_hidden_text_and_copy", self.TS, content), [])
+
+
 class ReplayedPullRequest(unittest.TestCase):
     """Grades one case's samples on its pinned checkout in its dependency image."""
     CASE = IMAGE = None
