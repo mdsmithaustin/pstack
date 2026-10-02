@@ -25,7 +25,7 @@ Create the store at `.orchestrate/<project-slug>/` in the main checkout, outside
 - `preferences.md` is the standing-orders register: numbered lines, one constraint each (model policy, stack shape and count, verification bar, forbidden paths, escalation policy). Paste it verbatim into every resume. A spawn may reference it by path, per The brief. Directives decay across resumes, and each dropped one costs a human turn. When you catch yourself restating an instruction, append the line before you act (principle-encode-lessons-in-structure).
 - `overview.md` is the durable PR and issue DB. Append. Never rewrite wholesale per event.
 - `units.tsv` has one row per unit: id, track, state, branch, PR, head SHA, brief path. Update rows in place.
-- `briefs/` holds every unit's and every sub-coordinator's brief as a file. When a worker starts, append the absolute path of its checkout to its brief. A respawn after a restart starts from that file.
+- `briefs/` holds every unit's and every sub-coordinator's brief as a file. Before spawning a worker, create its worktree at `.worktrees/<unit-id>` in the main checkout, per **Spawn a subagent** in the **pstack-harness** skill, and write that absolute path into its brief. If a CLI's own isolation picks the path instead, the worker's first report gives it and the coordinator appends it. A respawn after a restart starts from that file.
 - `frontier.json` is the computed merge frontier, per Stack safety.
 - `ledger.tsv` is the verification ledger, per Verification.
 - `inbox/` holds completion pointers. `gates.md` parks human gates (question, options, default on no answer).
