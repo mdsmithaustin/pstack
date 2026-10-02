@@ -537,7 +537,7 @@ class Resolve(ResolveRunner, unittest.TestCase):
         [reviewer] = self.resolve("codex", "trail reviewer")
         self.assertEqual(
             reviewer,
-            {"role": "trail reviewer", "arm": 1, "model": "gpt-6-luna", "effort": "xhigh", "source": "skill default ## codex"},
+            {"role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "skill default ## codex"},
         )
 
     def test_a_role_the_user_names_still_beats_the_shipped_section(self):

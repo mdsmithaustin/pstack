@@ -44,4 +44,4 @@ arena cross-judge pool: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
 swarm workers: gpt-6-luna@xhigh
 architect runners: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
 interrogate reviewers: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
-trail reviewer: gpt-6-luna@xhigh
+trail reviewer: gpt-6-astra@high
