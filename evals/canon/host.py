@@ -13,9 +13,10 @@ transcripts/codex/sessions/YYYY/MM/DD/rollout-*.jsonl. With --workspace it also
 checks out the commit $CANON_WORKSPACE describes before the agent starts and
 writes the diff of what the agent changed after, as workspace.py documents.
 Under --discovery it also registers the named agents (the personas, plus the
-effort agents on Claude Code) as sbx_inside.py setup does, keeps their files out
-of the harvest, and for Codex trusts the project with a -c override, since the
-harness's --ignore-user-config skips the config file's trust.
+effort agents on Claude Code) as sbx_inside.py setup does, for a workspace run
+keeps their files out of the harvest, and for Codex trusts the project with a
+-c override, since the harness's --ignore-user-config skips the config file's
+trust.
 
 The harness turns persistence off, with --no-session-persistence for Claude
 and --ephemeral for Codex, and removes its isolated CODEX_HOME when the run
@@ -189,18 +190,20 @@ def link(root, discovery):
     target.symlink_to(os.path.relpath(root / workspace.TREE, target.parent))
 
 
-def codex_config(command, root, trusted):
-    """command with the config Codex needs in a checkout, as -c overrides after
+def codex_config(command, root, writable, trusted):
+    """command with the config Codex needs in its cwd, as -c overrides after
     exec, since the harness's --ignore-user-config skips $CODEX_HOME/config.toml.
-    root/.git joins the workspace-write roots, because the sandbox keeps .git
-    read-only inside a writable root, which fails `git worktree add` and
-    `git commit` for an agent that delegates. A trusted project loads the
-    personas registered under root/.codex/agents."""
-    if "exec" not in command:
-        return command
-    settings = [f"sandbox_workspace_write.writable_roots={json.dumps([str(root / '.git')])}"]
+    A workspace run (writable) adds root/.git to the workspace-write roots,
+    because the sandbox keeps .git read-only inside a writable root, which fails
+    `git worktree add` and `git commit` for an agent that delegates. A trusted
+    project loads the personas registered under root/.codex/agents."""
+    settings = []
+    if writable:
+        settings.append(f"sandbox_workspace_write.writable_roots={json.dumps([str(root / '.git')])}")
     if trusted:
         settings.append(f"projects={{{json.dumps(str(root))}={{trust_level=\"trusted\"}}}}")
+    if "exec" not in command or not settings:
+        return command
     at = command.index("exec") + 1
     return [*command[:at], *(arg for setting in settings for arg in ("-c", setting)), *command[at:]]
 
@@ -214,17 +217,20 @@ def wrap(argv, stdin=sys.stdin.buffer, stdout=None):
     slot = workspace.next_slot(Path(os.environ["CANON_HARVEST"]))
     root = Path.cwd()
     checkout = Checkout(root, slot, agent) if "--workspace" in options else None
+    personas = []
     if checkout:
         if not checkout.materialize(discovery):
             return workspace.REFUSED
+        personas = checkout.record.get("agents")
     elif discovery:
         link(root, discovery)
+        personas = sbx_inside.register_agents(root, {"discovery": discovery, "harness": HARNESS[agent]})
     prompt = stdin.read()
     if token:
         prompt = token.encode() + b" " + prompt
     command, session = keep_session(agent, command)
-    if checkout and agent == "codex":
-        command = codex_config(command, root, bool(checkout.record.get("agents")))
+    if agent == "codex":
+        command = codex_config(command, root, bool(checkout), bool(personas))
     before = session_dirs(agent, session_store(agent))
     record_session(slot, agent, session)
     code, thread = run_agent(command, prompt, stdout)

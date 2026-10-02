@@ -420,6 +420,11 @@ as `agents` in the slot's `workspace.json`. For Codex it trusts the project with
 a `-c projects={...}` override, since `--ignore-user-config` skips the
 `config.toml` trust (probed on Codex 0.160.0: only the override puts
 `poteto-agent:` and `comment-sicko:` in the request).
+A pasted-project case under the same entry registers the agents and, for
+Codex, sets the same trust override, but adds no writable root, since its
+Codex run uses `--sandbox read-only`. Its cwd is the harness's temporary
+workspace, which the harness deletes after the run, and the case is graded from
+the final message, so the persona files reach neither.
 
 Claude runs through `claude-project-only`, whose `acceptEdits` mode denies
 Bash in a `-p` run. Claude Code 2.1.281 lists no Grep or Glob tool there, so

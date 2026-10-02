@@ -171,7 +171,7 @@ class MaterializeTests(ShopRepo):
             return subprocess.run([codex, "sandbox", "-c", "sandbox_mode=workspace-write", *flags, "--", "sh", "-c", script.format(name=name)],
                                   cwd=root, capture_output=True, text=True).returncode
 
-        flags = host.codex_config([codex, "exec"], root, False)[2:4]
+        flags = host.codex_config([codex, "exec"], root, True, False)[2:4]
         self.assertEqual((sandboxed("plain") != 0, sandboxed("rooted", *flags)), (True, 0))
 
     def test_repo_file_where_a_mounted_file_sits_is_refused(self):
@@ -610,6 +610,60 @@ class HostRegistersPersonasTests(ShopRepo):
 
         self.assertEqual((code, record["error"]), (workspace.REFUSED, "named agent install failed: boom"))
         self.assertFalse((root / "personas-seen.txt").exists())
+
+
+class PastedProjectPersonasTests(unittest.TestCase):
+    """host.py wrap without --workspace, the pasted-project case: a poteto-mode
+    run still registers the named agents, and Codex still trusts the project."""
+
+    def run_wrap(self, agent, discovery=True, *agent_args):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name).resolve()
+        root = base / "ws"
+        script = root / "skills" / "pstack" / "pstack-harness" / "scripts" / "subagents.py"
+        script.parent.mkdir(parents=True)
+        script.write_text(INSTALLER)
+        (base / "persona-agent.py").write_text(PERSONA_AGENT)
+        token, entry = screen.ENTRY_INVOCATION[agent]
+        options = ["--token", token, "--discovery", entry] if discovery else []
+        environment = {"CANON_HARVEST": str(base / "harvest"), "INSTALL_SEEN": str(base / "install-seen.json"), "ARGV_SEEN": str(base / "argv-seen.json"),
+                       "CLAUDE_CONFIG_DIR": str(base / "claude-home"), "CODEX_HOME": str(base / "codex-home")}
+        previous = Path.cwd()
+        os.chdir(root)
+        try:
+            with mock.patch.dict(os.environ, environment):
+                code = host.wrap(["--agent", agent, *options, "--", sys.executable, str(base / "persona-agent.py"), *agent_args],
+                                 stdin=io.BytesIO(b"Go."), stdout=io.BytesIO())
+        finally:
+            os.chdir(previous)
+        return code, root, json.loads((base / "argv-seen.json").read_text())
+
+    def test_both_agents_are_offered_the_personas_a_pasted_project_run_registered(self):
+        for agent, folder, suffix in (("claude", ".claude/agents", ".md"), ("codex", ".codex/agents", ".toml")):
+            with self.subTest(agent=agent):
+                code, root, _ = self.run_wrap(agent)
+
+                self.assertEqual(code, 0)
+                self.assertEqual(sorted((root / "personas-seen.txt").read_text().splitlines()),
+                                 [f"{folder}/comment-sicko{suffix}", f"{folder}/poteto-agent{suffix}"])
+
+    def test_codex_trusts_the_project_but_gains_no_writable_root_under_its_read_only_sandbox(self):
+        code, root, argv = self.run_wrap("codex", True, "exec", "--sandbox", "read-only", "--ignore-user-config", "-")
+
+        trust = f'projects={{{json.dumps(str(root))}={{trust_level="trusted"}}}}'
+        self.assertEqual(code, 0)
+        self.assertEqual(argv[argv.index("exec") + 1:][:2], ["-c", trust])
+        self.assertEqual([arg for arg in argv if "writable_roots" in arg], [])
+
+    def test_a_run_without_the_invocation_registers_nothing_and_trusts_nothing(self):
+        for agent in ("claude", "codex"):
+            with self.subTest(agent=agent):
+                code, root, argv = self.run_wrap(agent, False, "exec", "-")
+
+                self.assertEqual(code, 0)
+                self.assertEqual((root / "personas-seen.txt").read_text(), "")
+                self.assertEqual([arg for arg in argv if arg == "-c"], [])
 
 
 ARGV_AGENT = """#!/usr/bin/env python3
