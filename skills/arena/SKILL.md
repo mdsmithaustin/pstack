@@ -46,7 +46,7 @@ After all Phase B candidates complete, choose one arm of the `arena cross-judge 
 
 Read every candidate's rationale end to end before picking. Read a candidate's full artifact only when it is the base, or where you and the cross-judge disagree on a criterion. The cross-judge reads every artifact in full.
 
-Score each candidate against the rubric criterion by criterion, not on holistic feel. Compare against the cross-judge. Agreement on the base confirms the pick. Disagreement means one of you is biased or the rubric was ambiguous. Read both rationales before deciding.
+Score each candidate against the rubric criterion by criterion, not on holistic feel, from its rationale and the cross-judge's evidence for that criterion. Where those cannot settle a criterion, read that part of the artifact. Compare against the cross-judge. Agreement on the base confirms the pick. Disagreement means one of you is biased or the rubric was ambiguous. Read both rationales before deciding.
 
 Pick the base on which candidate a future maintainer can extend most easily without breaking invariants. Prefer the cleaner boundary or smaller API when two feel tied, per the Laziness Protocol.
 
