@@ -94,13 +94,13 @@ const readyWithoutProof: ReadyPr = unprovenPr;
 
 declare const openReview: OpenReview;
 
-// @ts-expect-error READY proof lists acknowledged reviews only, never an open one.
+// @ts-expect-error
 const readyWithOpenReview: ReadyPr = { ...readyPr, proof: { ...readyPr.proof, acknowledgedReviews: [openReview] } };
 
-// @ts-expect-error READY cannot carry the review-findings exit code.
+// @ts-expect-error
 const readyWithFindingsExit: ReadyVerdict = { ...ready, exitCode: 8 };
 
-// @ts-expect-error A review-findings blocker names at least one open review.
+// @ts-expect-error
 const findingsWithoutReview: MergeBlocker = { kind: "review-findings", pr: context, reviews: [] };
 
 void refusalIsNotAllowed;

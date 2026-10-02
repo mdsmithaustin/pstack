@@ -303,7 +303,7 @@ describe("bodies the registry does not understand", () => {
         id: "77",
         status: "open",
         bot: COPILOT,
-        reading: { kind: "unrecognized", excerpt: "## Copilot code review v3" },
+        reading: { kind: "unrecognized", untrustedExcerpt: "## Copilot code review v3" },
       },
     ]);
     expect(state.unreadReviews).toEqual([]);
@@ -317,7 +317,7 @@ describe("bodies the registry does not understand", () => {
         id: "77",
         url: "https://github.com/owner/repo/pull/1#pullrequestreview-77",
         bot: "cursor-bugbot",
-        excerpt: "Bugbot reviewed your changes and found no bugs!",
+        untrustedExcerpt: "Bugbot reviewed your changes and found no bugs!",
       },
     ]);
   });

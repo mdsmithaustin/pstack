@@ -1,5 +1,9 @@
 import { spawn } from "node:child_process";
-import { flagReviewBodies, reviewIdFromUrl } from "./review-bodies.ts";
+import {
+  commentAssociation,
+  flagReviewBodies,
+  reviewIdFromUrl,
+} from "./review-bodies.ts";
 import type {
   ConversationComment,
   SubmittedReview,
@@ -454,7 +458,9 @@ function parseConversationComment(
   return {
     url: string(node.url, `${path}.url`),
     author,
-    association: string(node.authorAssociation, `${path}.authorAssociation`),
+    association: commentAssociation(
+      string(node.authorAssociation, `${path}.authorAssociation`)
+    ),
     body: string(node.body, `${path}.body`),
   };
 }

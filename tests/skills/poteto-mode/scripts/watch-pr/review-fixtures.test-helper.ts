@@ -35,7 +35,7 @@ export function realAckComment(): RestComment {
   return comment;
 }
 
-/** REST review as the GraphQL `reviews` node the watcher queries. GraphQL logins carry no `[bot]` suffix. */
+/** GraphQL logins carry no `[bot]` suffix. */
 export function reviewNode(rest: RestReview): unknown {
   return {
     url: rest.html_url,

@@ -388,7 +388,7 @@ describe("bot review findings in the output", () => {
                 id: "9",
                 bot: "other-bot",
                 url: "https://github.com/owner/repo/pull/1#pullrequestreview-9",
-                excerpt: "Found no bugs!",
+                untrustedExcerpt: "Found no bugs!",
               },
             ],
           },
