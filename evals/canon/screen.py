@@ -425,7 +425,7 @@ def load_rule(rule_id):
         raise ScreenError(f"rules/{origin}/oracle.py CHECKS covers {sorted(checks)}, cases are {[case.id for case in cases]}")
     chosen = spec.get("cases")
     if chosen is not None:
-        if not isinstance(chosen, list) or not chosen or not set(chosen) <= checks:
+        if not isinstance(chosen, list) or not chosen or not all(isinstance(id, str) and id for id in chosen) or not set(chosen) <= checks:
             raise ScreenError(f"rules/{rule_id}/rule.json cases must be a list of case ids from {origin} {sorted(checks)}, not {chosen!r}")
         cases = tuple(case for case in cases if case.id in chosen)
     if not any(case.kind == "positive" for case in cases):

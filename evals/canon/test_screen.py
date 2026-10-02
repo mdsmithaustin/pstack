@@ -574,6 +574,14 @@ class CasesFromRulesTests(ScratchRules):
         with self.assertRaisesRegex(screen.ScreenError, r"cases must be a list of case ids from scratch-base \['shop'\], not \['shop', 'till'\]"):
             screen.load_rule("scratch-variant")
 
+    def test_a_case_id_that_is_not_a_nonempty_string_is_refused(self):
+        for bad in ('{"till": 1}', '["shop"]', '""', "3"):
+            with self.subTest(bad=bad):
+                self.write("scratch-variant", {"rule.json": f'{{"cases_from": "scratch-base", "cases": [{bad}]}}'})
+
+                with self.assertRaisesRegex(screen.ScreenError, r"cases must be a list of case ids from scratch-base \['shop'\]"):
+                    screen.load_rule("scratch-variant")
+
     def test_shared_case_is_no_clash_but_a_copied_prompt_is(self):
         base, variant = screen.load_rule("scratch-base"), screen.load_rule("scratch-variant")
         copy = screen.load_case("scratch-copy", self.rules / "scratch-copy" / "cases" / "shop")
