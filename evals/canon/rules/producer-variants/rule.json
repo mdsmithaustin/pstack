@@ -1,0 +1,6 @@
+{
+  "cases_from": "steering-review-asks",
+  "cases": ["omnigent-long-prompt", "omnigent-task-notify"],
+  "source": "a poteto-mode trigger to accept every variant a producer emits, require exactly the fields used, and cut text on character boundaries, from omnigent #2104 (task notifications without the optional tool-use-id tag, and user text that only opens with the tag) and omnigent #7731 (a collapsed prompt preview that split a surrogate pair). The pilot's current arm read feature.md in every long-prompt run but bug-fix.md in every task-notify run, so the rule sits in poteto-mode/SKILL.md",
+  "skills_at": "4fe213477eda148bbcdfdeea61b5b08209cbc993"
+}

@@ -1,0 +1,8 @@
+{
+  "cases_from": "steering-review-asks",
+  "cases": [
+    "omnigent-long-prompt"
+  ],
+  "source": "producer-variants reworded after its screen, where the rule fixed the split surrogate in all 3 long-prompt runs but every run then split the whole prompt into code points, which the #7731 review rejected. Screened only on omnigent-long-prompt, so it cannot show the wording generalizes",
+  "skills_at": "4fe213477eda148bbcdfdeea61b5b08209cbc993"
+}

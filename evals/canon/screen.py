@@ -26,7 +26,9 @@ unchanged from $CANON_COMPANIONS_ROOT (default ~/.agents/skills) into both
 arms beside pstack. The one-change check never sees them.
 
 A rule whose rule.json names cases_from is a placement variant. It has its own
-rule.patch and runs the named rule's cases and oracle unchanged.
+rule.patch and runs the named rule's cases and oracle unchanged, or only the
+case ids its "cases" list names. The named rule may be an arms rule that holds
+its own cases.
 
 An arms rule is a rule whose rule.json lists "arms", current first. It takes
 its cases from cases_from, or holds its own oracle.py and cases/ without it. Each
@@ -376,7 +378,7 @@ def rule_spec(rule_id):
     for own in ("oracle.py", "cases"):
         if (root / own).exists():
             raise ScreenError(f"rule {rule_id} takes its cases from {origin}, so it must not have {own}")
-    if not isinstance(origin, str) or not (RULES / origin / "rule.patch").is_file():
+    if not isinstance(origin, str) or origin == rule_id or not (RULES / origin / "rule.json").is_file():
         raise ScreenError(f"rules/{rule_id}/rule.json cases_from must name another rule, not {origin!r}")
     source = json.loads((RULES / origin / "rule.json").read_text())
     if "cases_from" in source:
@@ -418,11 +420,16 @@ def load_rule(rule_id):
             raise ScreenError(f"rule {origin} has no {required}")
     patch = None if arm_patches else (RULES / rule_id / "rule.patch").read_text()
     cases = tuple(load_case(rule_id, path) for path in sorted((root / "cases").iterdir()) if path.is_dir())
-    if not any(case.kind == "positive" for case in cases):
-        raise ScreenError(f"rule {origin} has no positive case")
     checks = set(oracle_checks(origin))
     if checks != {case.id for case in cases}:
         raise ScreenError(f"rules/{origin}/oracle.py CHECKS covers {sorted(checks)}, cases are {[case.id for case in cases]}")
+    chosen = spec.get("cases")
+    if chosen is not None:
+        if not isinstance(chosen, list) or not chosen or not all(isinstance(id, str) and id for id in chosen) or not set(chosen) <= checks:
+            raise ScreenError(f"rules/{rule_id}/rule.json cases must be a list of case ids from {origin} {sorted(checks)}, not {chosen!r}")
+        cases = tuple(case for case in cases if case.id in chosen)
+    if not any(case.kind == "positive" for case in cases):
+        raise ScreenError(f"rule {rule_id} runs no positive case")
     companions = spec.get("companions", [])
     if not isinstance(companions, list) or not all(isinstance(name, str) and COMPANION_NAME.match(name) for name in companions):
         raise ScreenError(f"rules/{rule_id}/rule.json companions must be a list of skill directory names, not {companions!r}")
