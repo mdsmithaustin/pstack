@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import test_workspace
-from test_workspace import ROOT, ShopRepo, ShopRule, git, harness_available, screen
+from test_workspace import ROOT, ShopRepo, ShopRule, git, harness_available, live_feature_patch, screen
 
 import host  # noqa: E402
 import review  # noqa: E402
@@ -79,7 +79,7 @@ class ReviewCase(ShopRepo):
         rules = self.base / "rules"
         rule = rules / RULE
         rule.mkdir(parents=True)
-        shutil.copyfile(ROOT / "rules" / "preparatory-refactor" / "rule.patch", rule / "rule.patch")
+        (rule / "rule.patch").write_text(live_feature_patch())
         (rule / "rule.json").write_text(json.dumps({"source": "shop review fixture"}))
         (rule / "oracle.py").write_text(ORACLE)
         for case_id, case in CASES.items():

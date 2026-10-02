@@ -87,6 +87,22 @@ def git(cwd, *args):
     return subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout
 
 
+def live_feature_patch():
+    """A one-line insertion into the live feature playbook, anchored by the
+    line it follows, so private fixture rules apply to the unpinned skills tree
+    however the playbook's earlier steps change. The pinned preparatory-refactor
+    patch cannot serve: screen.apply_patch matches context by line number."""
+    name = "poteto-mode/playbooks/feature.md"
+    lines = (screen.REPO / "skills" / name).read_text().splitlines(keepends=True)
+    anchor = next(index for index, line in enumerate(lines) if line.startswith("   Use the **sequence-verifiable-units**"))
+    before, after = lines[anchor - 2:anchor + 1], lines[anchor + 1:anchor + 4]
+    start = anchor - 2
+    added = "   Land a restructure that makes the feature smaller first, as its own commit.\n"
+    body = [f" {line}" for line in before] + [f"+{added}"] + [f" {line}" for line in after]
+    head = f"@@ -{start + 1},{len(before) + len(after)} +{start + 1},{len(before) + len(after) + 1} @@\n"
+    return f"--- a/{name}\n+++ b/{name}\n{head}{''.join(body)}"
+
+
 class ShopRepo(unittest.TestCase):
     """A tiny upstream repo with a pinned commit in a mirror under a private cache."""
 
@@ -576,7 +592,7 @@ class ShopRule(ShopRepo):
         case = rule / "cases" / "orders-amend"
         (case / "overlay").mkdir(parents=True)
         (case / "samples").mkdir()
-        shutil.copyfile(ROOT / "rules" / "preparatory-refactor" / "rule.patch", rule / "rule.patch")
+        (rule / "rule.patch").write_text(live_feature_patch())
         (rule / "rule.json").write_text(json.dumps({"source": "shop fixture"}))
         (rule / "oracle.py").write_text(ORACLE)
         (case / "case.json").write_text(json.dumps({
