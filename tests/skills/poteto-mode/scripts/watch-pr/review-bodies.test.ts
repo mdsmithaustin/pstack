@@ -476,6 +476,25 @@ describe("bodies the registry does not understand", () => {
     ]);
   });
 
+  it("flags an Open item that only mentions a thread id, without a link destination", () => {
+    const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (2)</strong></summary>\n\n- [Mention #discussion_r42 in the docs](#something)\n- Mention #discussion_r42 in the docs\n</details>`;
+    expect(at(body).flaggedReviews).toMatchObject([
+      {
+        reading: {
+          findings: [
+            { title: "[Mention #discussion_r42 in the docs](#something)" },
+            { title: "Mention #discussion_r42 in the docs" },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it("skips an Open item whose link destination is a review thread", () => {
+    const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (2)</strong></summary>\n\n- [Rename it](#discussion_r123) · New\n- [Rename that](https://github.com/o/r/pull/1#discussion_r456)\n</details>`;
+    expect(at(body).flaggedReviews).toEqual([]);
+  });
+
   it("flags an Open item that no thread carries", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Needs a thread-less look\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([

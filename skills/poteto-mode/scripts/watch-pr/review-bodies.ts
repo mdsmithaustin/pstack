@@ -46,7 +46,7 @@ interface CountedSection {
 }
 const SECTION = /<summary><strong>([^<]*)<\/strong><\/summary>/g;
 const COUNTED = /^(.*) \((\d+)\)$/;
-const THREAD_LINK = /#discussion_r\d+/;
+const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/g;
 function stripTags(html: string): string {
