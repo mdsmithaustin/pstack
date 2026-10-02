@@ -10,6 +10,8 @@ Classify each bot thread before acting:
 - `dismiss`: The comment matches a documented low-risk noisy pattern, and the current code/context proves the concern does not need a code change. Reply with a short reason and resolve the thread.
 - `ask`: The comment is novel, high-severity, security/privacy/data-related, or ambiguous. Ask the user instead of guessing.
 
+A finding that lives only in a bot's review body, with no thread, takes the same rubric. Babysit step 8 says how to acknowledge it, since there is no thread to resolve.
+
 When in doubt, ask. Skipping a noisy code-quality comment is cheap; skipping a real data or security bug is not.
 
 ## Learned pattern format
