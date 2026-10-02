@@ -927,6 +927,21 @@ class ContentLint(Tree):
         self.assertIn("SKILL.md:6: retired-text", out)
         self.assertIn("SKILL.md:10: retired-text", out)
 
+    def test_retired_cloud_spawn_text_fires(self) -> None:
+        code, out = self.body(
+            'Spawn each worker with environment: "cloud".\n'
+            "Pass cloud_base_branch in the brief.\n\n"
+            "````markdown\n"
+            "```text\n"
+            "cloud-sleeper\n"
+            "```\n"
+            "````"
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("SKILL.md:6: retired-text", out)
+        self.assertIn("SKILL.md:7: retired-text", out)
+        self.assertIn("SKILL.md:11: retired-text", out)
+
 
 class FenceHandling(Tree):
     def setUp(self) -> None:
