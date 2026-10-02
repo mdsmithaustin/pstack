@@ -281,6 +281,14 @@ class DesktopSkipTests(ReplayedPullRequest):
         ])
 
 
+    def test_an_unparseable_extra_test_file_cannot_hide_a_platform_patch(self):
+        extra = "tests/hermes_cli/test_extra.py"
+        broken = f'def test_x(:\n    # a comment\n    monkeypatch.setattr(sys, "platform", "win32")'
+        self.assertEqual(self.grade_sample("good", lambda diff: diff + new_file(extra, broken)[0])[0], [
+            f"constraint:C3: {extra} patches sys.platform on 1 added line(s)",
+        ])
+
+
 class KnownIssuesTests(ReplayedPullRequest):
     CASE, IMAGE = "hermes-known-issues", "hermes-8afaab3703e3"
 

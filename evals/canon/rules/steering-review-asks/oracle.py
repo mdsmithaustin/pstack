@@ -138,8 +138,8 @@ def executable_added(diff, files):
     """added_lines with the non-code text of each added Python or JS/TS line
     blanked, so a static check never credits a comment or a docstring as a
     test. files is apply_diff's {path: bytes or None}, the patched files the
-    added line numbers index into; a Python file that does not parse has no
-    executable lines."""
+    added line numbers index into. A Python file that does not parse fails
+    closed: its raw added lines count, minus those that start with #."""
     executable = {}
     for path, found in added_numbered(diff).items():
         data = files.get(path)
@@ -148,7 +148,10 @@ def executable_added(diff, files):
             continue
         source = data.decode("utf-8", errors="replace")
         lines = executable_python(source) if path.endswith(".py") else executable_js(source)
-        executable[path] = [lines[number - 1] if lines else "" for number, _ in found]
+        if lines is None:
+            executable[path] = ["" if line.lstrip().startswith("#") else line for _, line in found]
+        else:
+            executable[path] = [lines[number - 1] for number, _ in found]
     return executable
 
 
