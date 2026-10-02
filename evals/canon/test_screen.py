@@ -16,6 +16,8 @@ SPEC = importlib.util.spec_from_file_location("canon_screen", ROOT / "screen.py"
 screen = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(screen)
 
+import sandbox  # noqa: E402
+
 TREE = {
     "poteto-mode/SKILL.md": b"# Poteto mode\nRead the leaf.\n",
     "poteto-mode/playbooks/feature.md": b"1. Plan.\n2. Build.\n3. Ship.\n",
@@ -740,6 +742,139 @@ class ArmSelectionTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertTrue((self.out / "compare.json").is_file())
+
+
+LAST_MESSAGE_MISSING = 'sbx cp canon-codex-1035851e:/tmp/canon-last-message.txt failed (1): error: path "/tmp/canon-last-message.txt" not found in container'
+
+
+class SlotFixture(unittest.TestCase):
+    """Slots shaped like sandbox.py wrap's: one numbered dir per run holding
+    the workspace.json the wrapper recorded, three runs of one case."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.work = Path(directory.name) / "codex" / "rule" / "case" / "current"
+        self.work.mkdir(parents=True)
+        rows = [{"run_number": n, "run_dir": f"case/with_skill/run-{n}"} for n in (1, 2, 3)]
+        (self.work / "tasks.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+
+    def slot(self, number, tree="built", agent_rc=0, **record):
+        directory = self.work / "harvest" / f"{number:04d}"
+        directory.mkdir(parents=True)
+        (directory / "workspace.json").write_text(json.dumps({"tree": tree, "agent_rc": agent_rc, **record}))
+        (directory / "workspace.diff").write_text(f"diff {number}\n")
+
+    def mapped(self):
+        return sorted(path.name for path in (self.work / "harvest" / "case" / "with_skill").glob("run-*"))
+
+
+class SlotHarvestTests(SlotFixture):
+    def test_a_timed_out_slot_with_the_built_tree_is_mapped_beside_the_others(self):
+        self.slot(1, agent_rc=124, error=LAST_MESSAGE_MISSING)
+        self.slot(2)
+        self.slot(3)
+
+        screen.file_harvest(self.work, "built")
+
+        self.assertEqual(self.mapped(), ["run-1", "run-2", "run-3"])
+        self.assertEqual((self.work / "harvest" / "case" / "with_skill" / "run-1" / "workspace.diff").read_text(), "diff 1\n")
+        self.assertEqual(sorted(path.name for path in (self.work / "harvest").glob("[0-9]*")), [])
+
+    def test_a_timed_out_slot_on_another_tree_is_still_refused(self):
+        self.slot(1, tree="wrong", agent_rc=124, error=LAST_MESSAGE_MISSING)
+        self.slot(2)
+        self.slot(3)
+
+        with self.assertRaisesRegex(screen.ScreenError, "run-1: workspace tree wrong is not the built built$"):
+            screen.file_harvest(self.work, "built")
+
+    def test_any_other_recorded_error_is_refused_and_named_not_called_a_tree_mismatch(self):
+        self.slot(1, agent_rc=97, error="sandbox setup: boom")
+        self.slot(2)
+        self.slot(3)
+
+        with self.assertRaisesRegex(screen.ScreenError, "run-1: the wrapper recorded an error: sandbox setup: boom$"):
+            screen.file_harvest(self.work, "built")
+
+    def test_a_missing_last_message_after_a_clean_exit_is_refused(self):
+        self.slot(1, agent_rc=0, error=LAST_MESSAGE_MISSING)
+        self.slot(2)
+        self.slot(3)
+
+        with self.assertRaisesRegex(screen.ScreenError, "the wrapper recorded an error"):
+            screen.file_harvest(self.work, "built")
+
+    def test_slots_left_after_an_earlier_partial_mapping_fill_the_runs_still_unmapped(self):
+        moved = self.work / "harvest" / "case" / "with_skill" / "run-1"
+        moved.mkdir(parents=True)
+        (moved / "workspace.diff").write_text("diff 1\n")
+        self.slot(2, agent_rc=124, error=LAST_MESSAGE_MISSING)
+        self.slot(3)
+
+        screen.file_harvest(self.work, "built")
+
+        self.assertEqual(self.mapped(), ["run-1", "run-2", "run-3"])
+        self.assertEqual((self.work / "harvest" / "case" / "with_skill" / "run-2" / "workspace.diff").read_text(), "diff 2\n")
+
+    def test_the_error_sandbox_py_records_for_a_failed_last_message_copy_is_the_one_tolerated(self):
+        failed = subprocess.CompletedProcess([], 1, b"", b'error: path "/tmp/canon-last-message.txt" not found in container')
+        with mock.patch.object(sandbox.subprocess, "run", return_value=failed), self.assertRaises(sandbox.SandboxError) as caught:
+            sandbox.Sandbox("canon-codex-1035851e").get(sandbox.LAST_MESSAGE, "last-message.txt")
+
+        self.assertTrue(screen.last_message_missing({"agent_rc": 124, "error": str(caught.exception)}))
+
+    def test_a_slot_count_that_fits_neither_all_nor_the_unmapped_runs_is_refused(self):
+        self.slot(1)
+        self.slot(2)
+
+        with self.assertRaisesRegex(screen.ScreenError, "filled 2 harvest slot\\(s\\) for 3 unharvested of 3 run\\(s\\)"):
+            screen.file_harvest(self.work, "built")
+
+
+class RegradePartialHarvestTests(SlotFixture):
+    """screen.py regrade on an arm the harness never graded: the timed-out run
+    and the partly mapped layout both regrade from the diff."""
+
+    def setUp(self):
+        super().setUp()
+        self.out = self.work.parents[3]
+        arms = self.out / "arms" / "rule"
+        arms.mkdir(parents=True)
+        (arms / "build.json").write_text(json.dumps({"cases": {"case": {"workspace": {"tree": "built"}}}}))
+        for name in ("run-1", "run-2", "run-3"):
+            (self.work / "runs" / "case" / "with_skill" / name).mkdir(parents=True)
+
+    def regraded(self):
+        with mock.patch.object(screen, "refuse_leaks"), mock.patch.object(screen, "load_check"), mock.patch.object(screen, "compare"), \
+                mock.patch.object(screen, "regrade_run", return_value=("PASS", "")):
+            screen.regrade(self.out)
+        return json.loads((self.work / "regrade.json").read_text())["results"]
+
+    def test_an_arm_with_a_timed_out_run_regrades_every_run_from_its_diff(self):
+        self.slot(1, agent_rc=124, error=LAST_MESSAGE_MISSING)
+        self.slot(2)
+        self.slot(3)
+
+        rows = self.regraded()
+
+        self.assertEqual([(row["run"], row["verdict"], row["graded_from_diff"]) for row in rows], [(1, "PASS", True), (2, "PASS", True), (3, "PASS", True)])
+
+    def test_a_partly_mapped_harvest_regrades_every_run(self):
+        (self.work / "harvest" / "case" / "with_skill" / "run-1").mkdir(parents=True)
+        self.slot(2, agent_rc=124, error=LAST_MESSAGE_MISSING)
+        self.slot(3)
+
+        self.assertEqual([row["run"] for row in self.regraded()], [1, 2, 3])
+
+    def test_a_second_regrade_of_a_fully_mapped_arm_regrades_again(self):
+        self.slot(1)
+        self.slot(2)
+        self.slot(3)
+        self.regraded()
+
+        self.assertEqual([row["run"] for row in self.regraded()], [1, 2, 3])
+
 
 if __name__ == "__main__":
     unittest.main()

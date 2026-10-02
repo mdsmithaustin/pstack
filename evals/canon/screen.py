@@ -1076,24 +1076,49 @@ def backend_args(agent, out, entry, in_workspace=False, runner="host", effort=No
     return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}{pin}"]
 
 
+def last_message_missing(record):
+    """True when the only thing the wrapper recorded against a slot is that
+    its sandbox held no last message to copy out. Codex writes that file only
+    when it finishes, so a run the harness timed out leaves none, while the
+    tree and the diff harvested before the copy are sound. A clean exit that
+    wrote no message is not this."""
+    error = str(record.get("error") or "")
+    return (record.get("agent_rc") not in (None, 0, workspace.REFUSED)
+            and re.fullmatch(r"sbx cp \S+:/tmp/canon-last-message\.txt failed \(\d+\): .*", error, re.DOTALL) is not None)
+
+
+def slot_refusal(record, expected_tree):
+    """Why a slot's workspace.json cannot be graded, or None. A mismatched tree
+    and any other recorded error are told apart, because the trees of an
+    errored slot usually match."""
+    if record.get("tree") != expected_tree:
+        return f"workspace tree {record.get('tree')} is not the built {expected_tree}"
+    if record.get("error") and not last_message_missing(record):
+        return f"the wrapper recorded an error: {record['error']}"
+    return None
+
+
 def file_harvest(work, expected_tree=None):
     """Move the numbered slots the wrapper filled, in task order, to each run's
     path under work/harvest, and refuse a workspace run whose checkout was not
     the tree the build recorded. A slot whose wrapper the harness killed on
     timeout still names its pinned session, so every slot's transcript is
-    collected from here before any check can refuse the harvest (see host.py)."""
+    collected from here before any check can refuse the harvest (see host.py).
+    A run a refusal interrupted left its earlier slots moved, so the slots
+    still numbered fill the runs whose harvest dir does not exist yet."""
     harvest = work / "harvest"
     rows = [json.loads(line)["run_dir"] for line in (work / "tasks.jsonl").read_text().splitlines()]
     slots = sorted(harvest.glob("[0-9][0-9][0-9][0-9]")) if harvest.is_dir() else []
     for slot in slots:
         host.recover(slot)
-    if len(slots) != len(rows):
-        raise ScreenError(f"{work}: the wrapper filled {len(slots)} harvest slot(s) for {len(rows)} run(s)")
-    for slot, run_dir in zip(slots, rows):
+    pending = [run_dir for run_dir in rows if not (harvest / run_dir).exists()]
+    if len(slots) != len(pending):
+        raise ScreenError(f"{work}: the wrapper filled {len(slots)} harvest slot(s) for {len(pending)} unharvested of {len(rows)} run(s)")
+    for slot, run_dir in zip(slots, pending):
         if expected_tree:
-            record = json.loads((slot / "workspace.json").read_text())
-            if record.get("tree") != expected_tree or record.get("error"):
-                raise ScreenError(f"{work}/{run_dir}: workspace tree {record.get('tree')} is not the built {expected_tree} {record.get('error', '')}".rstrip())
+            refusal = slot_refusal(json.loads((slot / "workspace.json").read_text()), expected_tree)
+            if refusal:
+                raise ScreenError(f"{work}/{run_dir}: {refusal}")
         destination = harvest / run_dir
         destination.parent.mkdir(parents=True, exist_ok=True)
         slot.rename(destination)
