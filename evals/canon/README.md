@@ -958,10 +958,18 @@ Each run goes through `sandbox.py wrap`, which does this:
 
 The harness takes exactly one terminal `result` event from a Claude stream.
 A poteto-mode lead emits one each time it ends a turn while a background
-delegate runs, and one more at the end. So for Claude the wrapper reads the
-agent's stdout line by line, forwards every other line in order, and writes
-the last `result` line last, after any task notification that followed it. It writes the whole stream to `raw-stream.jsonl`
-in the harvest dir. Codex's stream passes through unchanged.
+delegate runs, and one more at the end. Task notifications and an
+interrupted delegate's events can still follow that last one. So for Claude
+the wrapper reads the agent's stdout line by line, drops every `result` line
+but the last, forwards the rest in order, and writes the last `result` after
+them. It writes the whole stream to `raw-stream.jsonl` in the harvest dir.
+Codex's stream passes through unchanged. A run recorded before the wrapper
+moved the last `result` to the end, with events after it, is INVALID in
+`grade.json`. `screen.py regrade` grades it from its diff and marks it
+`graded_from_diff`. Its `events.json`,
+which exposure reads, is intact, so the stored trace is left as it is.
+`last_result_only` over its `raw-stream.jsonl` gives the stream the harness
+would now accept.
 
 The harvest dir of a run holds `workspace.diff`, `workspace.json`,
 `network-log.json`, `raw-stream.jsonl` for Claude, and
@@ -1551,6 +1559,63 @@ for the checkout and all three samples.
 - **Claude passed 8 of 8, in both arms.** No run delegated investigation or code, including the spawn-step arm. Every run fixed the shared parser, `_shell.py`, rather than `github.py`, by stripping grouping tokens and extracting `<(…)` bodies, and none took the quote-aware splitter. 4 of the 8 listed e6b1c83a in a `git log --oneline` of the parser or `github.py`, which shows only its title. No run read its message, where the revert is, so every run reached the fix from the code.
 - **Codex failed 2 of 2.** One run left the brace-group and process-substitution pushes open, and the brace-group `cd`. The other denied a wrapped push to the allowed repo and branch, because it left trailing parentheses on the refspec. One of the two delegated investigation, and both delegated the code change.
 - **Reading.** On a multi-module bug, a Claude lead that investigates inline did not lose correctness. No run read the history, so this case did not test whether history helps: the correct fix is reachable from the code alone. The spawn step is not proposed.
+
+## Steering-review screen
+
+`steering-review-asks` asks whether the skill tree steers an agent toward what
+a maintainer asked for in review. It compares current with the stub arm and
+owns its cases. It reads `skills/` at 4fe21347, as `bug-fix-spawn-step-stub`
+does. Each case replays one merged pull request from the commit its
+branch started at, or for `omnigent-close-code` from the main commit the
+branch merged before its review fix, with the operator request as the PR
+stood before review.
+
+| case | PR | starting commit | image |
+|---|---|---|---|
+| `hermes-known-issues` | hermes #124058 | 8afaab37 | `hermes-8afaab3703e3` |
+| `hermes-desktop-skip` | hermes #123510 | d0288be5 | `hermes-8afaab3703e3` |
+| `omnigent-close-code` | omnigent #6005 | 33620780 | `omnigent-336207801509` |
+| `omnigent-task-notify` | omnigent #2104 | 77b211cd | `omnigent-77b211cd72ec` |
+| `omnigent-long-prompt` | omnigent #7731 | dfceb32f | `omnigent-dfceb32fc1a6` |
+
+The oracle runs tests in the case's image and prefixes each failure with its
+dimension. `functional:` is the PR's own tests. `constraint:<id>:` is a check
+built from one review ask, with the ids of each case's `expected_behavior`.
+Both kinds are grader-owned source in `oracle.py`. The oracle appends each to
+the checkout's copy of the file, never to the agent's, so an agent cannot edit
+them, and pytest keeps the appended definition of a name. The merged test files
+also hold tests for later work on main, so the oracle copies only the tests the
+PR added or changed. Where a PR test pins a choice the prompt does not state (a
+private constant, a threshold, a Windows host, the shape of a `known_issues`
+entry, the function that skips a doomed Windows build), the case runs a port
+without it and says so in `oracle.py`. `hermes-known-issues` builds every
+fixture from the `known_issues` the agent's own `plugin-catalog/hindsight.yaml`
+declares, and C9 counts each parsed issue's text in the CLI output.
+`hermes-desktop-skip` checks the Windows skip through the update tail,
+`source_build.build_update_products`. `omnigent-task-notify` K1 parses a
+notification with the bridge, POSTs it as the forwarder does, and reads
+`is_meta` from the stored item, so the flag may be set in the bridge or the
+route. A static check reads only the lines the diff adds, and applies only
+where the ask is about the agent's own tests. The oracle skips an ask that is
+taste. The case's `expected_behavior` ends with a "Not graded" line that
+names it.
+
+Scope is reported and never fails a run. The check writes `scope.json` beside
+the harvested `workspace.diff`, `<work>/harvest/<run>/scope.json`, with the
+paths the diff touches outside the merged diff's footprint, the lines it adds,
+and the lines the merged diff adds.
+
+`samples/good.diff` is the merged change replayed on the starting commit, or
+the PR head for `hermes-desktop-skip`, whose rebase merge carries unrelated main
+changes. `samples/bad.diff` is the pre-review head. `test_oracle.py` asserts the
+exact failures of both and skips a case whose mirror lacks its commit or whose
+image this machine has not built. One sample grades in 4 to 6 seconds, and 15
+for `hermes-known-issues`, which runs the agent's own tests twice more.
+
+regrade grades with the oracle each arm copied at build time. To regrade a
+finished screen with a fixed oracle, copy the out dir, copy the rule's
+`oracle.py` over `arms/<rule>/<case>/<arm>/rules/<rule>/oracle.py` in the copy,
+and run `screen.py regrade --out` on the copy.
 
 ## Reading the result
 

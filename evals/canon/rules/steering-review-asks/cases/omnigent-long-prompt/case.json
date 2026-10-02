@@ -1,0 +1,12 @@
+{
+  "kind": "positive",
+  "domain": "feature",
+  "workspace": {"repo": "omnigent", "commit": "dfceb32fc1a6ba6ae9d7793817c15353b326d586"},
+  "expected_behavior": [
+    "functional: a short prompt renders fully with no toggle, a long prompt's tail renders only while expanded, and Copy writes the whole prompt while it is collapsed.",
+    "C1: the collapsed preview never ends on half of a surrogate pair, at any cut offset, on the plain-text and markdown render paths.",
+    "C2: rendering a long prompt never walks the whole prompt one code point at a time (spread, Array.from, for-of, split(\"\"), or Intl.Segmenter).",
+    "C3: the added web tests assert that text past the cut is absent while collapsed, that it is present, and what Copy writes.",
+    "Not graded: the reviewer's 12,000-character threshold, which the reviewer called a conservative choice and the issue never names."
+  ]
+}

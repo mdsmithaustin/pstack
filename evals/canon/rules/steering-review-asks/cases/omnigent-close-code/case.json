@@ -1,0 +1,12 @@
+{
+  "kind": "positive",
+  "domain": "bug-fix",
+  "workspace": {"repo": "omnigent", "commit": "336207801509d05657054477ebdf0133ffb17df9"},
+  "expected_behavior": [
+    "functional: a DNS failure (OSError errno 11001) takes the backoff, and a sustained run of 502 handshake rejections starts at the prompt cadence and falls back to backoff within 20 attempts.",
+    "C1: an OSError whose text holds an endpoint port 502, 1001, or 1012 takes the backoff, not the recycle cadence.",
+    "C2: exception text that spells a close code, HTTP 502, or going away, with no WebSocket close metadata, is not a recycle.",
+    "C3: InvalidStatus 502, a received 1012 close frame, and a code-less drop after an accepted upgrade still reconnect promptly on a remote server, and a 502 on loopback backs off.",
+    "Not graded: the draft's static C4 (no digit patterns left in connect.py) sees only one file and one spelling, and C1 and C2 decide the same ask by behavior."
+  ]
+}

@@ -1,0 +1,3 @@
+People paste long prompts into the web chat, application logs mostly, and the user bubble then takes over the transcript and makes chat history lag. Collapse long user prompts by default in the chat bubble. Show a short preview with a fade at the bottom and a "Show full prompt" button, and a "Collapse prompt" button once it is expanded. Don't render the hidden part until someone asks for it, so the markdown renderer never parses text nobody is looking at. Attachments stay visible, and the Copy action on the bubble still copies the whole original prompt.
+
+The bubble lives in `web/src/components/chat/chatBubbleParts.tsx`. Add unit tests next to it. No need to commit.

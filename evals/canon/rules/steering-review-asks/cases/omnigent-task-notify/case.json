@@ -1,0 +1,13 @@
+{
+  "kind": "positive",
+  "domain": "bug-fix",
+  "workspace": {"repo": "omnigent", "commit": "77b211cd72ec989ffa67665985335d1916863e8e"},
+  "expected_behavior": [
+    "functional: a hidden external user message seeds no session title, and the web hydration layer hides a stored full task notification while the messages around it render.",
+    "K1: the Claude transcript parser keeps a task notification that has a task id and closing tag but no tool-use-id (a Monitor event, a killed task) as a hidden is_meta user message, in string and block content.",
+    "K2: the web hydration layer hides stored notifications of those minimal shapes, while the messages around them render.",
+    "K3: a user message that opens with the task-notification tag but has no task id and no closing tag stays a visible, non-meta user message in both layers.",
+    "K4: the change adds a test fixture for a notification without the optional tool-use-id tag.",
+    "Graded by K1 and K2 in place of the PR's own bridge test and Monitor web test, which pin the item's data dict and response id."
+  ]
+}

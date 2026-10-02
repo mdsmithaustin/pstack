@@ -1,0 +1,302 @@
+diff --git a/tests/e2e_ui/messages/test_user_message_long_prompt_collapse.py b/tests/e2e_ui/messages/test_user_message_long_prompt_collapse.py
+new file mode 100644
+index 00000000..e45becf5
+--- /dev/null
++++ b/tests/e2e_ui/messages/test_user_message_long_prompt_collapse.py
+@@ -0,0 +1,134 @@
++"""E2E: long user prompts collapse by default in the chat transcript.
++
++When a user sends a message longer than the 8 000-character threshold the UI
++collapses the bubble to a fixed-height preview and shows an expand button.
++Clicking the button expands the full text; clicking it again collapses.
++
++Selectors:
++  - user bubble:   ``data-testid="message-bubble"`` + ``data-role="user"``
++  - expand button: accessible name matching /show full prompt/i
++  - collapse button: accessible name matching /collapse prompt/i
++"""
++
++from __future__ import annotations
++
++from playwright.sync_api import Page, expect
++
++_COMPOSER_PLACEHOLDER = "Send a message…"
++_USER_BUBBLE = '[data-testid="message-bubble"][data-role="user"]'
++
++# Generate a prompt just over the 8 000-char threshold.
++_LONG_PROMPT = "word " * 1_700  # ~8 500 chars
++
++
++def _send(page: Page, text: str) -> None:
++    """Type ``text`` into the composer and click Send."""
++    composer = page.get_by_placeholder(_COMPOSER_PLACEHOLDER)
++    expect(composer).to_be_visible()
++    composer.fill(text)
++    page.get_by_role("button", name="Send", exact=True).click()
++
++
++def test_long_user_prompt_collapses_by_default(
++    page: Page,
++    seeded_session: tuple[str, str],
++) -> None:
++    """A prompt over 8 000 chars starts collapsed with an expand button visible.
++
++    A failure here means the collapse threshold, initial state, or the button
++    label regressed.
++    """
++    base_url, session_id = seeded_session
++    page.goto(f"{base_url}/c/{session_id}")
++
++    _send(page, _LONG_PROMPT)
++
++    bubble = page.locator(_USER_BUBBLE).last
++    expect(bubble).to_be_visible(timeout=15_000)
++
++    # Expand button must be present immediately after send.
++    expand_btn = bubble.get_by_role("button", name="Show full prompt", exact=False)
++    expect(expand_btn).to_be_visible(timeout=10_000)
++
++    # Collapse button must NOT be visible while still collapsed.
++    collapse_btn = bubble.get_by_role("button", name="Collapse prompt", exact=True)
++    expect(collapse_btn).not_to_be_visible()
++
++
++def test_long_user_prompt_expands_on_click(
++    page: Page,
++    seeded_session: tuple[str, str],
++) -> None:
++    """Clicking the expand button shows the full text and swaps button labels.
++
++    A failure means the click handler or state toggle regressed.
++    """
++    base_url, session_id = seeded_session
++    page.goto(f"{base_url}/c/{session_id}")
++
++    _send(page, _LONG_PROMPT)
++
++    bubble = page.locator(_USER_BUBBLE).last
++    expect(bubble).to_be_visible(timeout=15_000)
++
++    expand_btn = bubble.get_by_role("button", name="Show full prompt", exact=False)
++    expect(expand_btn).to_be_visible(timeout=10_000)
++    expand_btn.click()
++
++    # After expanding: collapse button appears, expand button disappears.
++    collapse_btn = bubble.get_by_role("button", name="Collapse prompt", exact=True)
++    expect(collapse_btn).to_be_visible(timeout=5_000)
++    expect(expand_btn).not_to_be_visible()
++
++
++def test_long_user_prompt_collapses_again_on_second_click(
++    page: Page,
++    seeded_session: tuple[str, str],
++) -> None:
++    """Clicking collapse restores the collapsed state.
++
++    A failure means the toggle is one-way only.
++    """
++    base_url, session_id = seeded_session
++    page.goto(f"{base_url}/c/{session_id}")
++
++    _send(page, _LONG_PROMPT)
++
++    bubble = page.locator(_USER_BUBBLE).last
++    expect(bubble).to_be_visible(timeout=15_000)
++
++    # Expand then collapse.
++    expand_btn = bubble.get_by_role("button", name="Show full prompt", exact=False)
++    expect(expand_btn).to_be_visible(timeout=10_000)
++    expand_btn.click()
++
++    collapse_btn = bubble.get_by_role("button", name="Collapse prompt", exact=True)
++    expect(collapse_btn).to_be_visible(timeout=5_000)
++    collapse_btn.click()
++
++    # Should be back to collapsed: expand button reappears, collapse disappears.
++    expect(expand_btn).to_be_visible(timeout=5_000)
++    expect(collapse_btn).not_to_be_visible()
++
++
++def test_short_user_prompt_never_collapses(
++    page: Page,
++    seeded_session: tuple[str, str],
++) -> None:
++    """A short prompt renders fully with no collapse button present.
++
++    Guards against accidentally collapsing every message.
++    """
++    base_url, session_id = seeded_session
++    page.goto(f"{base_url}/c/{session_id}")
++
++    short_prompt = "This is a short message."
++    _send(page, short_prompt)
++
++    bubble = page.locator(_USER_BUBBLE).last
++    expect(bubble).to_be_visible(timeout=15_000)
++    expect(bubble).to_contain_text(short_prompt)
++
++    # Neither collapse-related button should be present.
++    expect(bubble.get_by_role("button", name="Show full prompt", exact=False)).not_to_be_visible()
++    expect(bubble.get_by_role("button", name="Collapse prompt", exact=True)).not_to_be_visible()
+diff --git a/web/src/components/chat/chatBubbleParts.test.tsx b/web/src/components/chat/chatBubbleParts.test.tsx
+index e161d6b5..bcf8b01f 100644
+--- a/web/src/components/chat/chatBubbleParts.test.tsx
++++ b/web/src/components/chat/chatBubbleParts.test.tsx
+@@ -276,3 +276,80 @@ describe("AssistantBubble error retry", () => {
+     expect(JSON.parse(init.body as string)).toEqual({ type: "retry_session", data: {} });
+   });
+ });
++
++describe("UserBubble long-prompt collapse", () => {
++  // A unique tail that appears only after the 8 000-code-point boundary.
++  const TAIL = "UNIQUE_TAIL";
++
++  // 8 000 ASCII characters followed by the tail
++  const LONG_TEXT = "a".repeat(8000) + TAIL;
++
++  // An emoji placed at exactly the 8 000th code-point position.
++  const EMOJI_AT_BOUNDARY = "a".repeat(7999) + "🔥" + "b".repeat(100);
++
++  const SHORT_TEXT = "Hello, world!";
++
++  function userBubble(text: string): Extract<Bubble, { kind: "user" }> {
++    return {
++      kind: "user",
++      itemId: "user_collapse_test",
++      content: [{ type: "input_text", text }],
++    };
++  }
++
++  it("renders a short prompt fully without a collapse button", () => {
++    render(<BubbleView bubble={userBubble(SHORT_TEXT)} isLastAssistant={false} />);
++
++    expect(screen.getByTestId("message-bubble")).toHaveTextContent(SHORT_TEXT);
++    expect(screen.queryByRole("button", { name: /show full prompt/i })).toBeNull();
++    expect(screen.queryByRole("button", { name: /collapse prompt/i })).toBeNull();
++  });
++
++  it("hides the tail when collapsed, shows it when expanded, hides it again when re-collapsed", () => {
++    render(<BubbleView bubble={userBubble(LONG_TEXT)} isLastAssistant={false} />);
++
++    const bubble = screen.getByTestId("message-bubble");
++
++    // Initially collapsed
++    expect(bubble).not.toHaveTextContent(TAIL);
++    expect(screen.getByRole("button", { name: /show full prompt/i })).toBeInTheDocument();
++
++    // After expanding
++    fireEvent.click(screen.getByRole("button", { name: /show full prompt/i }));
++    expect(bubble).toHaveTextContent(TAIL);
++
++    // After collapsing again
++    fireEvent.click(screen.getByRole("button", { name: /collapse prompt/i }));
++    expect(bubble).not.toHaveTextContent(TAIL);
++  });
++
++  it("Copy always writes the full text to the clipboard regardless of collapse state", async () => {
++    const writtenTexts: string[] = [];
++    vi.stubGlobal("navigator", {
++      clipboard: {
++        writeText: vi.fn((text: string) => {
++          writtenTexts.push(text);
++          return Promise.resolve();
++        }),
++      },
++    });
++
++    render(<BubbleView bubble={userBubble(LONG_TEXT)} isLastAssistant={false} />);
++
++    const copyButton = screen.getByRole("button", { name: /^copy$/i });
++    fireEvent.click(copyButton);
++
++    await waitFor(() => expect(writtenTexts).toHaveLength(1));
++    expect(writtenTexts[0]).toBe(LONG_TEXT);
++    expect(writtenTexts[0]).toContain(TAIL);
++  });
++
++  it("does not corrupt an emoji at the 8000-code-point slice boundary", () => {
++    render(<BubbleView bubble={userBubble(EMOJI_AT_BOUNDARY)} isLastAssistant={false} />);
++
++    const bubble = screen.getByTestId("message-bubble");
++
++    expect(screen.getByRole("button", { name: /show full prompt/i })).toBeInTheDocument();
++    expect(bubble).toHaveTextContent("🔥");
++  });
++});
+diff --git a/web/src/components/chat/chatBubbleParts.tsx b/web/src/components/chat/chatBubbleParts.tsx
+index 98e71bd0..b72f7509 100644
+--- a/web/src/components/chat/chatBubbleParts.tsx
++++ b/web/src/components/chat/chatBubbleParts.tsx
+@@ -91,6 +91,13 @@ import {
+ // is the path. Global so all markers in a message are found / stripped.
+ const ATTACHED_RE = /\[Attached(?: file)?:\s*([^\]]*)\]\s*/g;
+ 
++const COLLAPSE_THRESHOLD = 8000;
++
++// Slice a string by Unicode code points rather than UTF-16 code units.
++function sliceByCodePoint(str: string, limit: number): string {
++  return [...str].slice(0, limit).join("");
++}
++
+ // Author labels render only in a shared session; ChatPage provides the
+ // value and UserBubble reads it, so the gate lives in one place.
+ export const SessionSharedContext = createContext(false);
+@@ -692,6 +699,12 @@ function UserBubble({ bubble }: { bubble: Extract<Bubble, { kind: "user" }> }) {
+   const { isLinkCopied, handleCopyLink } = useCopyMessageLink(
+     bubble.pending ? null : bubble.itemId,
+   );
++  // Collapse long prompts by default to avoid expensive Markdown parsing and
++  // a large DOM for text the user hasn't asked to read yet.
++  // Count code points (not UTF-16 code units) so the threshold is consistent
++  // with what sliceByCodePoint will cut at.
++  const isLong = [...text].length > COLLAPSE_THRESHOLD;
++  const [isCollapsed, setIsCollapsed] = useState(isLong);
+   // Runtime-injected `[System: ...]` notifications ride in on role=user. When
+   // the content is a pure system marker, swap in a muted centered indicator.
+   if (images.length === 0 && fileChips.length === 0 && mentionedChips.length === 0) {
+@@ -822,15 +835,37 @@ function UserBubble({ bubble }: { bubble: Extract<Bubble, { kind: "user" }> }) {
+             )}
+             {/* Render user text as markdown, matching the assistant bubble.
+               `breaks` keeps single newlines as line breaks. Empty text renders
+-              nothing rather than an empty markdown block. */}
++              nothing rather than an empty markdown block.
++              For long prompts, only the visible slice is passed to the renderer
++              so the Markdown parser never processes hidden text. */}
+             {text && (
+-              <FilePathAwareMessageResponse
+-                breaks
+-                mode="static"
+-                remarkRehypeOptions={USER_MESSAGE_REMARK_REHYPE_OPTIONS}
+-              >
+-                {text}
+-              </FilePathAwareMessageResponse>
++              <>
++                <div className={cn("relative", isCollapsed && "max-h-64 overflow-hidden")}>
++                  <FilePathAwareMessageResponse
++                    breaks
++                    mode="static"
++                    remarkRehypeOptions={USER_MESSAGE_REMARK_REHYPE_OPTIONS}
++                  >
++                    {isCollapsed ? sliceByCodePoint(text, COLLAPSE_THRESHOLD) : text}
++                  </FilePathAwareMessageResponse>
++                  {/* Gradient fade at the bottom of collapsed prompts to signal
++                      there is more content below. */}
++                  {isCollapsed && isLong && (
++                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-muted to-transparent" />
++                  )}
++                </div>
++                {isLong && (
++                  <button
++                    type="button"
++                    onClick={() => setIsCollapsed((c) => !c)}
++                    className="mt-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
++                  >
++                    {isCollapsed
++                      ? `Show full prompt (${text.length.toLocaleString()} chars)`
++                      : "Collapse prompt"}
++                  </button>
++                )}
++              </>
+             )}
+           </MessageContent>
+         </div>
