@@ -7,24 +7,25 @@ Ceremony must scale with the program. On cheap near-identical units, collapse it
 Three rules carry the rest.
 
 - Completions are queue events, not interrupts.
-- Every spawn and every resume carries the standing orders verbatim.
+- Every spawn carries the standing orders, and every resume carries them verbatim.
 - The brief is the product. A vague brief fails quietly, because a worker cannot ask you a question.
 
 #### Roles and placement
 
 - **Coordinator (this chat).** Local. Frames, authors briefs, drains the inbox, owns the human report, makes judgment calls. It never authors or edits code. Conflicted merges, restacks, and code changes are always tasks. Mechanically landing a verified unit (fast-forward or clean cherry-pick of a worker's commit, then push) is bookkeeping the coordinator may do itself on repos where local git is cheap. Queueing finished work behind an idle stacker is how a deadline harvests nothing. The loop is agentic end to end. Agents are spawned, resumed, and drained only through the Task tool. State reads and writes go through `scripts/orch/orch.ts` at drain points, one command in and one line out. The CLI never spawns, waits, or wakes anything.
-- **Sub-coordinator.** Always local, durable, one per track, and only when the program exceeds what one coordinator's drains can manage. A track the coordinator can drain itself needs no middle layer. Each nested layer re-pays a full orientation preamble, and a blocking sub-coordinator hides its children while the parent idles. Owns its track's units and boards, authors its workers' briefs, spawns its own workers and verifiers (nesting works to depth 3, and a nested spawn has the full Task schema including `environment`). Rolls up aggregates at wave boundaries. Never forwards raw child reports. Cap in-flight children at what one drain can process, roughly ten, as a rolling window. Never as blocking batches, which cost the slowest child of every batch.
+- **Sub-coordinator.** One per track, and only when the program exceeds what one coordinator's drains can manage. A track the coordinator can drain itself needs no middle layer. Each nested layer re-pays a full orientation preamble, and a blocking sub-coordinator hides its children while the parent idles. Owns its track's units and boards, authors its workers' briefs, spawns its own workers and verifiers where this CLI lets a subagent spawn (the **pstack-harness** skill names the CLIs that do not). Where it cannot, the coordinator drains every track itself. Rolls up aggregates at wave boundaries. Never forwards raw child reports. Cap in-flight children at what one drain can process, roughly ten, as a rolling window. Never as blocking batches, which cost the slowest child of every batch.
 - **Worker / verifier.** Always a background agent in its own isolated worktree. Every agent runs on this machine and ends with the session that spawned it. A worker's working directory is its worktree, so its brief gives the store's absolute path and points at repo paths. Prefer fewer, broader workers. One writer per worktree or branch (principle-separate-before-serializing-shared-state). Spawn per **Spawn a role** in the **pstack-harness** skill, which resolves the role and builds this CLI's spawn call. Run a unit's verifier on the `trail reviewer` role, which steps down a tier when it matches the worker's model.
 
 Depth stays at coordinator, track, worker. Author the track decomposition per project (build, landing, and verification are common cuts, not a required shape). Hard-coded swarm trees were tried and parked as too rigid.
 
 #### Store layout
 
-Create `orchestrate/<project-slug>/` in the current agent's store (path in the system prompt). Every file has exactly one writer. Owners publish facts, readers aggregate at read time. Use `bun scripts/orch/orch.ts` for bookkeeping, written below as `orch`, while its canonical plain TSV and JSON stay readable without the CLI.
+Create the store at `.orchestrate/<project-slug>/` in the main checkout, outside every worker's worktree, so it survives a CLI restart. A session scratchpad does not. If the repository does not ignore `.orchestrate/`, append it to `"$(git rev-parse --git-common-dir)/info/exclude"` first. Every file has exactly one writer. Owners publish facts, readers aggregate at read time. Use `bun scripts/orch/orch.ts --store <store-dir>` for bookkeeping, written below as `orch`, while its canonical plain TSV and JSON stay readable without the CLI. The CLI has no default store, so pass the store's absolute path on every call.
 
 - `preferences.md` is the standing-orders register: numbered lines, one constraint each (model policy, stack shape and count, verification bar, forbidden paths, escalation policy). Paste it verbatim into every spawn and every resume. Directives decay across resumes, and each dropped one costs a human turn. When you catch yourself restating an instruction, append the line before you act (principle-encode-lessons-in-structure).
 - `overview.md` is the durable PR and issue DB. Append. Never rewrite wholesale per event.
 - `units.tsv` has one row per unit: id, track, state, branch, PR, head SHA, brief path. Update rows in place.
+- `briefs/` holds every unit's and every sub-coordinator's brief as a file. A respawn after a restart starts from it.
 - `frontier.json` is the computed merge frontier, per Stack safety.
 - `ledger.tsv` is the verification ledger, per Verification.
 - `inbox/` holds completion pointers. `gates.md` parks human gates (question, options, default on no answer).
@@ -49,9 +50,9 @@ REPORT       status, branch, head SHA, PRs, verdict, what you actually ran, devi
 STANDING     <preferences.md pasted verbatim>
 ```
 
-Size the brief to the unit. A one-command unit gets the template collapsed to a paragraph that still names goal, scope, the verify command, and the report shape. A 4KB scaffold around a two-line edit costs more to write and obey than the edit. Local spawns may reference the standing-orders file by store path. Verbatim paste is for cloud spawns and every resume.
+Size the brief to the unit. A one-command unit gets the template collapsed to a paragraph that still names goal, scope, the verify command, and the report shape. A 4KB scaffold around a two-line edit costs more to write and obey than the edit. A spawn may reference the standing-orders file by its absolute store path. Every resume pastes it verbatim.
 
-A sub-coordinator brief adds its track boundary and unit list, its spawn budget with the cloud default and the local exception list, the drain protocol, and the rollup format (per child: name, status, PR, head SHA, verdict, one line, plus track status and frontier delta).
+A sub-coordinator brief adds its track boundary and unit list, its in-flight cap (this CLI's subagent limit, which the **pstack-harness** skill names, lowered when units contend for this machine's simulators, ports, or CPU), the drain protocol, and the rollup format (per child: name, status, PR, head SHA, verdict, one line, plus track status and frontier delta).
 
 A dependency is a context relay, not just ordering. Undeclared upstream context makes the worker guess. Missing fields are a refuse-to-spawn condition. Audit one sampled worker brief per sub-coordinator per wave, concurrently with the wave it samples, never as a gate in front of it. A failing brief stops that track and fixes the sub-coordinator's instructions, not just the worker, because brief quality decays late in a run. Never resume-chain a brief. Respawn fresh with consolidated scope.
 
@@ -68,7 +69,7 @@ A dependency is a context relay, not just ordering. Undeclared upstream context 
 #### Queue and drain
 
 - On a completion notification, run `orch inbox push <agent> <unit> <status> [--report PATH]` and return to what you were doing. Never deep-review inline. A completion that needs review becomes a verifier unit. Never review a diff inside a drain.
-- Drain in batches at four points: the end of a critical section, a track rollup, a frontier watcher wake (arm it via the loop skill, with a long heartbeat fallback), and before a human report. Begin each batch with `orch inbox drain`. Arrivals during a drain wait for the next one.
+- Drain in batches at four points: the end of a critical section, a track rollup, a frontier watcher wake (arm it through the harness's loop facility, per **Loops and wake-ups** in the **pstack-harness** skill, with a long heartbeat fallback), and before a human report. Begin each batch with `orch inbox drain`. Arrivals during a drain wait for the next one.
 - Critical sections you finish first: authoring a brief, a stack operation, a conflict decision, writing a gate, updating ledger or frontier.
 - Each drain classifies every pointer (landed, needs-verify, failed, zombie, noise), writes the resulting rows through `orch unit add`, `orch unit set`, and `orch ledger record`, runs `orch status`, then spawns the next wave in one message.
 - Account for every spawned child at its track's rollup: arrived, respawned, or its scope explicitly absorbed. Silently redoing a missing child's work hides both the wasted spend and the coverage gap its result existed to close.
@@ -77,7 +78,7 @@ A dependency is a context relay, not just ordering. Undeclared upstream context 
 #### Stack safety
 
 - The frontier is a computed object, never narrative. Recompute `frontier.json` after every merge and stack mutation: ordered PR list, branch names, head SHAs, a generation number, the lowest unmerged PR. `orch frontier set --repo <repo-dir>` prefers `gt`, which remains authoritative for a Graphite stack and is resolved from the stacker's clone. If `gt` is not installed, it uses `gh` to follow base/head PR links from the checked-out branch. The GitHub fallback is limited to same-repository linear stacks and rejects ambiguity, branching, or an incomplete result instead of guessing; use Graphite for its restack-aware view when it is available.
-- Exactly one stacker per stack may run `gt`, serialized within its stack. Record the holder in the standing orders. Restacks run in cloud. A local restack at this scale takes the laptop down.
+- Exactly one stacker per stack rewrites its topology, serialized within its stack. Record the holder in the standing orders. The stacker rebases a child onto its parent's exact tip, pushes with `--force-with-lease` after an `ls-remote` check, and retargets with `gh pr edit <pr> --base <parent-branch>`, or `origin pr edit` when Origin is the resolved forge. Never require Graphite (`gt`). Every restack runs on this machine, so run one at a time across stacks.
 - Workers never rebase and never run `gt`. Babysitters follow `playbooks/babysit.md`, one per stack, scoped to one immutable frontier generation. They report conflicts to the stacker rather than restacking.
 - PR closes and retargets go through the stacker only. Closing a base PR orphans every chain above it. Merges and stack surgery are units with briefs like any other.
 - One retro watcher follows merged PRs for reverts, post-merge CI breaks, and orphaned follow-ups.
@@ -88,7 +89,7 @@ Scale verification to the unit. When VERIFY is a single cheap command, the worke
 
 Write ledger rows with `orch ledger record`. Check the current PR and head SHA with `orch ledger check`. `ledger.tsv`, one row per verdict, keyed by PR number plus head SHA: `live-ui-verified | unit-test-verified | type-check-only | verifier-blocked | verifier-failed`. CI green is an input to a verdict, not a verdict. Behavioral work needs better than `type-check-only`. `verifier-blocked` is not a pass. Respawn when the environment heals. `verifier-failed` gets a fix unit, not a re-verify. A worker may self-report. A verifier overrides it on the same key. A new head SHA voids the row, so re-verify after restack. The ledger answers "was this verified", not memory and not the transcript.
 
-A unit is not done until its output is externalized the moment it lands, never batched to the end of the run. A worker pushes its branch, a verifier writes its ledger row, receipts land in the store. Work that exists only on one VM when that VM dies was never done.
+A unit is not done until its output is externalized the moment it lands, never batched to the end of the run. A worker pushes its branch at its first commit and after each verified step, a verifier writes its ledger row, receipts land in the store. Work that exists only inside a session when the session ends was never done.
 
 #### Liveness and failure
 
@@ -98,7 +99,7 @@ A unit is not done until its output is externalized the moment it lands, never b
 - A zombie that returns hours late reconciles against the current frontier and ledger before anything is accepted. Salvage unique findings through a fresh unit, never a blind merge.
 - When continued spawning would produce garbage tree-wide (bad upstream output, broken acceptance, dead infra), write a stop line at the top of the standing orders, let in-flight work finish, fix the cause, clear it.
 - Bound your own infra retries the same way you bound a child's. After a few consecutive tool aborts, stop retrying. Write a terminal handoff to durable state (what is done, where it lives, the exact command to resume) and end the run.
-- After a CLI restart: local agents are dead, cloud work is not. Re-read the standing orders and `units.tsv`, recompute the frontier, reattach cloud work by PR and branch rather than agent id, respawn one sub-coordinator per track from its stored brief plus current state, drain, resume. The dead session's store lock clears itself on the next write. `orch` replaces a lock whose holder pid is gone.
+- After a CLI restart, every worker, verifier, and sub-coordinator is dead, because each ran inside the session. The store, pushed branches, open PRs, and worktrees on disk survive. Re-read the standing orders and `units.tsv`, then recompute the frontier. For each unit not in a terminal state, reconcile its row against the forge and the disk. A pushed head newer than the row's SHA updates the row through `orch unit set`. `git worktree list` or `scripts/worktree-audit.sh` finds the unit's worktree and any unpushed commits or uncommitted edits. Respawn one fresh worker per unfinished unit from its stored brief plus that state, in the unit's existing worktree. Its first step keeps or discards the dead worker's uncommitted edits, and its report says which. Respawn sub-coordinators the same way, drain, resume. The dead session's store lock clears itself on the next write. `orch` replaces a lock whose holder pid is gone.
 
 #### Escalation
 
