@@ -1,6 +1,6 @@
 ---
 name: principle-guard-the-context-window
-description: "Apply when context is filling up: large outputs, long files, repeated reads, fan-out planning. Route bulk to subagents; keep summaries in the main thread, not raw payloads."
+description: "Apply before a large read, a long command output, or a subagent brief, not only when context is filling up. Route bulk to subagents, take thin reports back, and keep summaries in the main thread, not raw payloads."
 disable-model-invocation: true
 ---
 
@@ -14,3 +14,6 @@ The context window is finite and non-renewable within a session. Every token sho
 - **Isolate large payloads.** Route verbose outputs, screenshots, and large documents to subagents. The main context gets summaries, not raw data.
 - **Keep frequently used content inline.** Templates and references used on every invocation belong in the skill file, not in separate files that cost a read each time.
 - **Size phases and cap scope.** Limit files per phase, set turn budgets, account for mechanism costs.
+- **Return thin.** Every subagent brief names where the full report goes, a file the subagent writes or the PR, and asks for only the verdict or status line, any blockers, and that path or URL. Read the full report only to act on a blocker.
+- **Budget the lead's reads.** Send a file or command output longer than about 150 lines to a subagent unless you will edit it. Cut command output with `head`, `tail`, `grep`, or `--jq` before it reaches you. Do not reread a file a `how` pass already mapped unless you are about to edit it.
+- **Read steps, not whole playbooks.** To open a worklist, print the playbook's numbered steps (`grep -E '^[0-9]+\. ' <playbook>`) instead of the whole file.
