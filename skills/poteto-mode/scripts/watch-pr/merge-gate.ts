@@ -50,9 +50,21 @@ export interface GateReport {
   readonly ready: boolean;
 }
 
+export type ReviewConnection =
+  | "reviewThreads"
+  | "reviewRequests"
+  | "reviews"
+  | "comments";
+/** A connection holds more than the watcher's review query fetches. */
+export interface Truncation {
+  readonly connection: ReviewConnection;
+  readonly total: number;
+  readonly limit: number;
+}
 export interface Conversation {
   readonly prAuthor: string | null;
   readonly comments: readonly IssueComment[];
+  readonly truncated: readonly Truncation[];
 }
 export interface MergeRequest {
   readonly context: T.PrContext;
@@ -60,9 +72,18 @@ export interface MergeRequest {
   readonly subject: string;
   readonly bodyFile: string;
 }
-export interface MergeReceipt {
-  readonly mergeCommit: string | null;
-}
+/**
+ * `gh pr merge` can succeed by only enqueueing the PR. `merged` means a
+ * follow-up read saw the PR merged; anything else, including a failed read,
+ * is `pending` and carries what was observed.
+ */
+export type MergeReceipt =
+  | { readonly kind: "merged"; readonly mergeCommit: string | null }
+  | {
+      readonly kind: "pending";
+      readonly mergeCommit: string | null;
+      readonly observed: string;
+    };
 
 /** Every side effect and non-watcher read merge-gate performs. */
 export interface MergePort {
@@ -158,11 +179,31 @@ function checksGate(row: Extract<T.PrSnapshot, { kind: "open" }>): Outcome {
     : pass(`${plural(row.ci.all.length, "check")}, none failed or pending`);
 }
 
+const CONNECTION_NOUN: Record<ReviewConnection, string> = {
+  reviewThreads: "review threads",
+  reviewRequests: "review requests",
+  reviews: "reviews",
+  comments: "PR comments",
+};
+function truncationProblems(
+  conversation: Conversation,
+  connections: readonly ReviewConnection[]
+): readonly string[] {
+  return conversation.truncated
+    .filter((truncation) => connections.includes(truncation.connection))
+    .map(
+      (truncation) =>
+        `more than ${truncation.limit} ${CONNECTION_NOUN[truncation.connection]} (${truncation.total}); cannot verify`
+    );
+}
+
 function reviewBodiesGate(
   row: Extract<T.PrSnapshot, { kind: "open" }>,
   conversation: Conversation
 ): Outcome {
-  const problems: string[] = [];
+  const problems: string[] = [
+    ...truncationProblems(conversation, ["reviewRequests", "reviews", "comments"]),
+  ];
   const open = findingsBlocker(row);
   if (open?.kind === "review-findings")
     problems.push(
@@ -184,17 +225,26 @@ function reviewBodiesGate(
     : fail(problems.join("; "));
 }
 
-function threadsGate(row: Extract<T.PrSnapshot, { kind: "open" }>): Outcome {
+function threadsGate(
+  row: Extract<T.PrSnapshot, { kind: "open" }>,
+  conversation: Conversation
+): Outcome {
   const blocker = threadBlocker(row);
-  if (blocker?.kind !== "review-threads") return pass("no unresolved threads");
-  const places = blocker.threads.map((thread) =>
-    thread.firstComment?.path == null
-      ? thread.id
-      : `${thread.firstComment.path}:${thread.firstComment.line ?? "?"}`
-  );
-  return fail(
-    `${plural(blocker.threads.length, "unresolved review thread")}: ${places.join(", ")}`
-  );
+  const problems: string[] = [];
+  if (blocker?.kind === "review-threads") {
+    const places = blocker.threads.map((thread) =>
+      thread.firstComment?.path == null
+        ? thread.id
+        : `${thread.firstComment.path}:${thread.firstComment.line ?? "?"}`
+    );
+    problems.push(
+      `${plural(blocker.threads.length, "unresolved review thread")}: ${places.join(", ")}`
+    );
+  }
+  problems.push(...truncationProblems(conversation, ["reviewThreads"]));
+  return problems.length === 0
+    ? pass("no unresolved threads")
+    : fail(problems.join("; "));
 }
 
 function mergeabilityGate(snapshot: T.PrSnapshot): Outcome {
@@ -252,7 +302,7 @@ export async function evaluateGates(args: {
     checks: open === null ? notEvaluated : checksGate(open),
     "review-bodies":
       open === null ? notEvaluated : reviewBodiesGate(open, conversation),
-    threads: open === null ? notEvaluated : threadsGate(open),
+    threads: open === null ? notEvaluated : threadsGate(open, conversation),
     mergeability: mergeabilityGate(snapshot),
     draft: draftGate(facts.isDraft),
   };
@@ -299,13 +349,21 @@ export type MergeGateResult =
       readonly override: string | null;
     }
   | {
+      readonly kind: "QUEUED";
+      readonly report: GateReport;
+      readonly receipt: MergeReceiptLine;
+      readonly override: string | null;
+      readonly note: string;
+    }
+  | {
       readonly kind: "ERROR";
       readonly source: "github" | "git" | "gh";
       readonly detail: string;
     };
 
 export const EXIT_NOT_READY = 10;
-export function exitCodeOf(result: MergeGateResult): 0 | 1 | 10 {
+export const EXIT_QUEUED = 11;
+export function exitCodeOf(result: MergeGateResult): 0 | 1 | 10 | 11 {
   switch (result.kind) {
     case "CHECK":
       return result.report.ready ? 0 : EXIT_NOT_READY;
@@ -313,6 +371,8 @@ export function exitCodeOf(result: MergeGateResult): 0 | 1 | 10 {
       return 0;
     case "REFUSED":
       return EXIT_NOT_READY;
+    case "QUEUED":
+      return EXIT_QUEUED;
     case "ERROR":
       return 1;
     default: {
@@ -366,17 +426,22 @@ export async function runMergeGate(args: {
     subject: action.subject,
     bodyFile: action.bodyFile,
   });
-  return {
-    kind: "MERGED",
-    report,
-    override: report.ready ? null : action.override,
-    receipt: {
-      pr: args.context.number,
-      mergeCommit: merged.mergeCommit,
-      head: report.headSha,
-      patchId: report.localPatchId,
-      verdictUrl:
-        report.verdict.kind === "recorded" ? report.verdict.record.url : null,
-    },
+  const receipt: MergeReceiptLine = {
+    pr: args.context.number,
+    mergeCommit: merged.mergeCommit,
+    head: report.headSha,
+    patchId: report.localPatchId,
+    verdictUrl:
+      report.verdict.kind === "recorded" ? report.verdict.record.url : null,
   };
+  const override = report.ready ? null : action.override;
+  return merged.kind === "merged"
+    ? { kind: "MERGED", report, receipt, override }
+    : {
+        kind: "QUEUED",
+        report,
+        receipt,
+        override,
+        note: `PR is not merged yet (${merged.observed})`,
+      };
 }

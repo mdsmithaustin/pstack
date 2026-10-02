@@ -4,8 +4,10 @@ import {
   type MergePort,
   type MergeReceipt,
   type MergeRequest,
+  type Truncation,
 } from "./merge-gate.ts";
 import {
+  REVIEW_CONNECTION_LIMITS,
   at,
   graphqlArgs,
   list,
@@ -23,7 +25,7 @@ import type * as T from "./types.ts";
 import { parsePatchId, type CommitSha, type IssueComment, type PatchId } from "./verdict.ts";
 
 export const CONVERSATION_QUERY =
-  "\nquery MergeGateConversation($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      author { login }\n      comments(last: 100) {\n        nodes {\n          body\n          url\n          createdAt\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
+  "\nquery MergeGateConversation($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      author { login }\n      reviewThreads(first: 1) { totalCount }\n      reviewRequests(first: 1) { totalCount }\n      reviews(first: 1) { totalCount }\n      comments(last: 100) {\n        totalCount\n        nodes {\n          body\n          url\n          createdAt\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
 
 const firstLine = (value: string): string =>
   value.trim().split(/\r?\n/, 1)[0]?.slice(0, 240) ?? "";
@@ -41,6 +43,16 @@ async function exec(
       `${argv.slice(0, 3).join(" ")} could not start: ${error instanceof Error ? error.message : String(error)}`
     );
   }
+}
+
+function connectionTotal(
+  pullRequest: Record<string, unknown>,
+  connection: string
+): number {
+  const total = at(pullRequest, [connection, "totalCount"]);
+  if (typeof total !== "number" || !Number.isInteger(total))
+    throw new Error(`${connection}.totalCount is not an integer`);
+  return total;
 }
 
 export function parseConversation(value: unknown): Conversation {
@@ -69,7 +81,15 @@ export function parseConversation(value: unknown): Conversation {
       },
     ];
   });
+  const truncated = (
+    Object.keys(REVIEW_CONNECTION_LIMITS) as (keyof typeof REVIEW_CONNECTION_LIMITS)[]
+  ).flatMap((connection): readonly Truncation[] => {
+    const total = connectionTotal(pullRequest, connection);
+    const limit = REVIEW_CONNECTION_LIMITS[connection];
+    return total > limit ? [{ connection, total, limit }] : [];
+  });
   return {
+    truncated,
     prAuthor:
       author === null
         ? null
@@ -156,7 +176,7 @@ export class GhGitMergePort implements MergePort {
         "gh",
         `gh pr merge failed: ${firstLine(merged.stderr) || `exit ${merged.code}`}`
       );
-    return { mergeCommit: await this.mergeCommit(request.context) };
+    return this.receipt(request.context);
   }
 
   async comment(context: T.PrContext, body: string): Promise<void> {
@@ -177,7 +197,7 @@ export class GhGitMergePort implements MergePort {
       );
   }
 
-  private async mergeCommit(context: T.PrContext): Promise<string | null> {
+  private async receipt(context: T.PrContext): Promise<MergeReceipt> {
     try {
       const view = await runJson([
         "gh",
@@ -187,14 +207,24 @@ export class GhGitMergePort implements MergePort {
         "--repo",
         repoArg(context),
         "--json",
-        "mergeCommit",
+        "state,mergedAt,mergeCommit",
       ]);
-      const commit = at(view, ["mergeCommit"]);
-      return commit === null
-        ? null
-        : string(record(commit, "mergeCommit").oid, "mergeCommit.oid");
-    } catch {
-      return null;
+      const fields = record(view, "pull request");
+      const commit = at(fields, ["mergeCommit"]);
+      const mergeCommit =
+        commit === null
+          ? null
+          : string(record(commit, "mergeCommit").oid, "mergeCommit.oid");
+      const state = string(fields.state, "pull request.state");
+      return state === "MERGED" && fields.mergedAt !== null
+        ? { kind: "merged", mergeCommit }
+        : { kind: "pending", mergeCommit, observed: `state=${state}` };
+    } catch (error) {
+      return {
+        kind: "pending",
+        mergeCommit: null,
+        observed: `could not confirm the merge: ${error instanceof Error ? error.message : String(error)}`,
+      };
     }
   }
 }

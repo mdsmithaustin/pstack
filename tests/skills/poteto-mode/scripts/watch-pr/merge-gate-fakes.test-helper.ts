@@ -4,6 +4,7 @@ import type {
   MergePort,
   MergeReceipt,
   MergeRequest,
+  Truncation,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-gate.ts";
 import type { MergeGateRuntime } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-gate-cli.ts";
 import type {
@@ -101,6 +102,7 @@ export interface FakePortOptions {
   readonly patchIdError?: Error;
   readonly mergeError?: Error;
   readonly receipt?: MergeReceipt;
+  readonly truncated?: readonly Truncation[];
 }
 
 export function fakePort(
@@ -110,6 +112,7 @@ export function fakePort(
   const conversation: Conversation = {
     prAuthor: options.prAuthor === undefined ? "mdsmithaustin" : options.prAuthor,
     comments: options.comments ?? [issueComment()],
+    truncated: options.truncated ?? [],
   };
   return {
     calls,
@@ -125,7 +128,7 @@ export function fakePort(
     async merge(request) {
       calls.push({ kind: "merge", request });
       if (options.mergeError !== undefined) throw options.mergeError;
-      return options.receipt ?? { mergeCommit: "e5".repeat(20) };
+      return options.receipt ?? { kind: "merged", mergeCommit: "e5".repeat(20) };
     },
     async comment(_context, body) {
       calls.push({ kind: "comment", body });

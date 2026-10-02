@@ -24,6 +24,25 @@ function reportLines(report: GateReport): readonly string[] {
 const headline = (label: string, report: GateReport): string =>
   `${label}: pr=#${report.pr.number} ${report.ready ? "READY" : "NOT READY"} head=${report.headSha ?? "unknown"}`;
 
+function receiptLine(
+  label: "MERGED" | "QUEUED",
+  result: Extract<MergeGateResult, { kind: "MERGED" | "QUEUED" }>
+): string {
+  const failed = result.report.gates
+    .filter((gate) => !gate.ok)
+    .map((gate) => gate.gate);
+  return [
+    `${label}: pr=#${result.receipt.pr}`,
+    `commit=${result.receipt.mergeCommit ?? "unknown"}`,
+    `head=${result.receipt.head}`,
+    `patch-id=${result.receipt.patchId ?? "unknown"}`,
+    `verdict=${result.receipt.verdictUrl ?? "none"}`,
+    ...(result.override === null
+      ? []
+      : [`overridden=${JSON.stringify(result.override)}`, `failed=${failed.join(",")}`]),
+  ].join(" ");
+}
+
 export function renderPretty(result: MergeGateResult): string {
   switch (result.kind) {
     case "CHECK":
@@ -34,21 +53,10 @@ export function renderPretty(result: MergeGateResult): string {
         ...reportLines(result.report),
         ...(result.note === null ? [] : [`note: ${result.note}`]),
       ].join("\n")}\n`;
-    case "MERGED": {
-      const failed = result.report.gates
-        .filter((gate) => !gate.ok)
-        .map((gate) => gate.gate);
-      return `${[
-        `MERGED: pr=#${result.receipt.pr}`,
-        `commit=${result.receipt.mergeCommit ?? "unknown"}`,
-        `head=${result.receipt.head}`,
-        `patch-id=${result.receipt.patchId ?? "unknown"}`,
-        `verdict=${result.receipt.verdictUrl ?? "none"}`,
-        ...(result.override === null
-          ? []
-          : [`overridden=${JSON.stringify(result.override)}`, `failed=${failed.join(",")}`]),
-      ].join(" ")}\n`;
-    }
+    case "MERGED":
+      return `${receiptLine("MERGED", result)}\n`;
+    case "QUEUED":
+      return `${receiptLine("QUEUED", result)} note=${JSON.stringify(result.note)}\n`;
     case "ERROR":
       return `ERROR: ${result.source}: ${result.detail}\n`;
     default: {

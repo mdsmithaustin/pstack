@@ -9,6 +9,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  REVIEW_CONNECTION_LIMITS,
+  REVIEW_THREADS_QUERY,
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import { parseConversation } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-effects.ts";
 
 const SOURCE_DIR = join(
@@ -155,14 +159,14 @@ describe("GhGitMergePort gh commands", () => {
 
   it("squash-merges pinned to the head commit with the exact subject and body file", () => {
     withFakeGh(
-      `case "$2" in view) printf '%s\\n' '{"mergeCommit":{"oid":"${"e5".repeat(20)}"}}';; esac`,
+      `case "$2" in view) printf '%s\\n' '{"state":"MERGED","mergedAt":"2026-10-02T17:00:00Z","mergeCommit":{"oid":"${"e5".repeat(20)}"}}';; esac`,
       (path, argv) => {
         const out = runPort(
           process.cwd(),
           `console.log(JSON.stringify(await port.merge({ context, headSha: parseCommitSha(${JSON.stringify(HEAD)}), subject: "fix(x): land (#7)", bodyFile: "/tmp/b.md" })));`,
           path
         );
-        expect(out).toEqual({ mergeCommit: "e5".repeat(20) });
+        expect(out).toEqual({ kind: "merged", mergeCommit: "e5".repeat(20) });
         expect(argv().slice(0, 14)).toEqual([
           "---",
           "pr",
@@ -183,14 +187,29 @@ describe("GhGitMergePort gh commands", () => {
     );
   });
 
-  it("reports a null merge commit when the follow-up read fails", () => {
-    withFakeGh(`case "$2" in view) exit 1;; esac`, (path) => {
+  it("reports a queued PR as pending, never merged", () => {
+    withFakeGh(
+      `case "$2" in view) printf '%s\\n' '{"state":"OPEN","mergedAt":null,"mergeCommit":null}';; esac`,
+      (path) => {
+        const out = runPort(
+          process.cwd(),
+          `console.log(JSON.stringify(await port.merge({ context, headSha: parseCommitSha(${JSON.stringify(HEAD)}), subject: "s", bodyFile: "/tmp/b.md" })));`,
+          path
+        );
+        expect(out).toEqual({ kind: "pending", mergeCommit: null, observed: "state=OPEN" });
+      }
+    );
+  });
+
+  it("reports pending when the follow-up read fails, because the merge is unconfirmed", () => {
+    withFakeGh(`case "$2" in view) echo 'HTTP 502' >&2; exit 1;; esac`, (path) => {
       const out = runPort(
         process.cwd(),
         `console.log(JSON.stringify(await port.merge({ context, headSha: parseCommitSha(${JSON.stringify(HEAD)}), subject: "s", bodyFile: "/tmp/b.md" })));`,
         path
       );
-      expect(out).toEqual({ mergeCommit: null });
+      expect(out.kind).toBe("pending");
+      expect(out.observed).toStartWith("could not confirm the merge:");
     });
   });
 
@@ -234,6 +253,56 @@ describe("GhGitMergePort gh commands", () => {
   });
 });
 
+describe("parseConversation truncation", () => {
+  const page = (counts: Record<string, number>) => ({
+    data: {
+      repository: {
+        pullRequest: {
+          author: { login: "a" },
+          comments: { totalCount: counts.comments ?? 0, nodes: [] },
+          reviewThreads: { totalCount: counts.reviewThreads ?? 0 },
+          reviewRequests: { totalCount: counts.reviewRequests ?? 0 },
+          reviews: { totalCount: counts.reviews ?? 0 },
+        },
+      },
+    },
+  });
+
+  it("reports each connection whose total exceeds what the reads fetch", () => {
+    expect(
+      parseConversation(
+        page({ reviewThreads: 101, reviewRequests: 51, reviews: 101, comments: 101 })
+      ).truncated
+    ).toEqual([
+      { connection: "reviewThreads", total: 101, limit: 100 },
+      { connection: "reviewRequests", total: 51, limit: 50 },
+      { connection: "reviews", total: 101, limit: 100 },
+      { connection: "comments", total: 101, limit: 100 },
+    ]);
+  });
+
+  it("reports nothing at exactly the limit", () => {
+    expect(
+      parseConversation(
+        page({ reviewThreads: 100, reviewRequests: 50, reviews: 100, comments: 100 })
+      ).truncated
+    ).toEqual([]);
+  });
+
+  it("uses the same limits as the watcher's review query", () => {
+    expect(REVIEW_THREADS_QUERY).toContain("reviewThreads(first: 100)");
+    expect(REVIEW_THREADS_QUERY).toContain("reviewRequests(first: 50)");
+    expect(REVIEW_THREADS_QUERY).toContain("reviews(last: 100)");
+    expect(REVIEW_THREADS_QUERY).toContain("comments(last: 100)");
+    expect(REVIEW_CONNECTION_LIMITS).toEqual({
+      reviewThreads: 100,
+      reviewRequests: 50,
+      reviews: 100,
+      comments: 100,
+    });
+  });
+});
+
 describe("parseConversation", () => {
   it("keeps createdAt and association, and drops comments from deleted accounts", () => {
     const conversation = parseConversation({
@@ -241,7 +310,11 @@ describe("parseConversation", () => {
         repository: {
           pullRequest: {
             author: { login: "mdsmithaustin" },
+            reviewThreads: { totalCount: 0 },
+            reviewRequests: { totalCount: 0 },
+            reviews: { totalCount: 0 },
             comments: {
+              totalCount: 2,
               nodes: [
                 {
                   body: "Verdict: PASS",
@@ -265,6 +338,7 @@ describe("parseConversation", () => {
     });
     expect(conversation).toEqual({
       prAuthor: "mdsmithaustin",
+      truncated: [],
       comments: [
         {
           url: "https://github.com/o/r/pull/7#issuecomment-1",

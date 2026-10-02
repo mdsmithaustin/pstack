@@ -130,6 +130,41 @@ describe("merge-gate", () => {
     ]);
   });
 
+  describe("a merge that only enqueues", () => {
+    const pending = { kind: "pending", mergeCommit: null, observed: "state=OPEN" } as const;
+
+    it("reports QUEUED with exit 11, never MERGED", async () => {
+      const result = await run(MERGE_ARGS, { port: { receipt: pending } });
+      expect(result.exitCode).toBe(11);
+      expect(mergeCalls(result.port)).toHaveLength(1);
+      expect(parsed(result.stdout)).toMatchObject({
+        kind: "QUEUED",
+        exitCode: 11,
+        note: "PR is not merged yet (state=OPEN)",
+        override: null,
+        receipt: { pr: 1, mergeCommit: null, head: HEAD, patchId: PATCH },
+      });
+    });
+
+    it("says so in pretty mode, on one line", async () => {
+      const result = await run([...MERGE_ARGS, "--pretty"], { port: { receipt: pending } });
+      const text = result.stdout.join("");
+      expect(text.trimEnd().split("\n")).toHaveLength(1);
+      expect(text).toContain("QUEUED: pr=#1 commit=unknown");
+      expect(text).toContain("not merged yet");
+      expect(text).not.toContain("MERGED:");
+    });
+
+    it("stays QUEUED under --override and keeps the reason", async () => {
+      const result = await run([...MERGE_ARGS, "--override", "owner call"], {
+        ...brokenWorld,
+        port: { comments: [], receipt: pending },
+      });
+      expect(result.exitCode).toBe(11);
+      expect(parsed(result.stdout)).toMatchObject({ kind: "QUEUED", override: "owner call" });
+    });
+  });
+
   describe("--check", () => {
     it("prints the report and exits 0 for a ready PR without merging", async () => {
       const result = await run([...MERGE_ARGS, "--check"]);

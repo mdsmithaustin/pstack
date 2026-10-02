@@ -10,6 +10,12 @@ import type {
 } from "./review-bodies.ts";
 import type * as T from "./types.ts";
 import { nonEmpty, parsePrNumber } from "./types.ts";
+export const REVIEW_CONNECTION_LIMITS = {
+  reviewThreads: 100,
+  reviewRequests: 50,
+  reviews: 100,
+  comments: 100,
+} as const;
 export const REVIEW_THREADS_QUERY =
   "\nquery ReviewThreads($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      headRefOid\n      author { login }\n      reviewThreads(first: 100) {\n        nodes {\n          id\n          isResolved\n          comments(first: 10) {\n            nodes {\n              body\n              createdAt\n              path\n              line\n              author { login __typename }\n            }\n          }\n        }\n      }\n      reviewRequests(first: 50) {\n        nodes {\n          requestedReviewer {\n            __typename\n            ... on Bot { login }\n          }\n        }\n      }\n      reviews(last: 100) {\n        nodes {\n          body\n          state\n          url\n          commit { oid }\n          author { login __typename }\n        }\n      }\n      comments(last: 100) {\n        nodes {\n          body\n          url\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
 export const PR_COMMIT_STATUS_QUERY =

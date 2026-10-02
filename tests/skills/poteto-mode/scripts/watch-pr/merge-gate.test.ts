@@ -257,6 +257,32 @@ describe("evaluateGates", () => {
     });
   });
 
+  describe("truncated reads fail closed", () => {
+    const cases = [
+      ["reviewThreads", 150, 100, "threads", "more than 100 review threads (150); cannot verify"],
+      ["reviewRequests", 60, 50, "review-bodies", "more than 50 review requests (60); cannot verify"],
+      ["reviews", 120, 100, "review-bodies", "more than 100 reviews (120); cannot verify"],
+      ["comments", 130, 100, "review-bodies", "more than 100 PR comments (130); cannot verify"],
+    ] as const;
+    for (const [connection, total, limit, gate, detail] of cases)
+      it(`${connection} over ${limit} fails the ${gate} gate alone`, async () => {
+        const { report: result } = await report({
+          port: { truncated: [{ connection, total, limit }] },
+        });
+        expect(failedNames(result)).toEqual([gate]);
+        expect(detailOf(result, gate)).toContain(detail);
+      });
+
+    it("keeps real findings in the detail next to the truncation", async () => {
+      const { report: result } = await report({
+        threads: [unresolvedThread()],
+        port: { truncated: [{ connection: "reviewThreads", total: 150, limit: 100 }] },
+      });
+      expect(detailOf(result, "threads")).toContain("1 unresolved review thread");
+      expect(detailOf(result, "threads")).toContain("more than 100 review threads");
+    });
+  });
+
   it("reports every failing gate together instead of stopping at the first", async () => {
     const { report: result } = await report({
       facts: { mergeable: "CONFLICTING", mergeStateStatus: "DIRTY", isDraft: true },
