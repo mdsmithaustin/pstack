@@ -12,7 +12,7 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 ## Non-negotiables
 
-**Start every multi-step task with a worklist whose first items are the matched playbook's steps.** The failure mode is a bespoke plan that drops the playbook's named steps and their principle pointers.
+**Start every multi-step task with a worklist whose first items are the matched playbook's opening prose and steps.** The failure mode is a bespoke plan that drops the playbook's named steps and their principle pointers.
 
 The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
 
@@ -118,7 +118,7 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
 
 ## Playbooks
 
-Open a worklist whose first items are the matched playbook's steps, copied verbatim, before any task-specific items. The **pstack-harness** skill selects the best native carrier from live capability descriptions, without depending on a product-specific tool name. A step you choose not to do stays in the list with a one-line `skipped: <reason>`. Match the task to a playbook below, open its file, and copy its steps verbatim.
+Open a worklist whose first items are the matched playbook's steps, copied verbatim, before any task-specific items. The **pstack-harness** skill selects the best native carrier from live capability descriptions, without depending on a product-specific tool name. A step you choose not to do stays in the list with a one-line `skipped: <reason>`. Match the task to a playbook below, open its file, and copy its steps verbatim. Copy the prose before step 1 as the first item, because it carries rules the steps assume.
 
 A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
 
