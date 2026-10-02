@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -231,6 +232,30 @@ class KnownIssuesTests(ReplayedPullRequest):
             "constraint:C6: tests.hermes_cli.test_124037_catalog_known_issues_gate.TestCatalogParsing"
             "::test_live_catalog_hindsight_declares_known_issues passes only with the edited plugin-catalog/hindsight.yaml",
         ], {"outside_footprint": ["tests/hermes_cli/test_124037_catalog_known_issues_gate.py"], "added": 213, "merged_added": 130}))
+
+
+    def test_weakening_the_generated_files_test_does_not_hide_stale_contracts(self):
+        weakened = (
+            "diff --git a/tests/tui_gateway/contracts/test_generated.py b/tests/tui_gateway/contracts/test_generated.py\n"
+            "--- a/tests/tui_gateway/contracts/test_generated.py\n"
+            "+++ b/tests/tui_gateway/contracts/test_generated.py\n"
+            "@@ -30,7 +30,7 @@\n"
+            '     """Both committed artefacts equal an in-memory regeneration (byte-for-byte)."""\n'
+            "     stale = [path.relative_to(REPO) for path, text in gen.render_all().items()\n"
+            '              if (path.read_text(encoding="utf-8") if path.exists() else None) != text]\n'
+            '-    assert not stale, f"stale generated contract files {stale}: run scripts/gen_gateway_contracts.py"\n'
+            "+    assert True\n"
+            " \n"
+            " \n"
+            " # The emitter inventory the old gateway-events.json scan used, kept as the completeness oracle:\n")
+
+        def edit(diff):
+            sections = re.split(r"(?m)^(?=diff --git )", diff)
+            return "".join(section for section in sections if "gateway-contract" not in section.split("\n", 1)[0]) + weakened
+
+        self.assertEqual(self.grade_sample("good", edit)[0], [
+            "constraint:C8: tests/tui_gateway/contracts/test_generated.py::test_generated_files_are_current failed",
+        ])
 
 
 class CloseCodeTests(ReplayedPullRequest):

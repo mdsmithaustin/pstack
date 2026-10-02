@@ -561,6 +561,8 @@ def check_long_prompt(answer, workspace):
 # hermes #124058. The PR's install test pins its warning prefix, summary label,
 # and result key, so C1 and C4 grade the same asks by behavior. zoneinfo (C7)
 # and "two tests are enough" are the reviewer's taste and are not graded.
+# C8's generated-files test is the checkout's own, restored through sources so
+# an agent cannot weaken or delete it.
 # known_issues entries may be strings or structured records, so every fixture
 # takes its known_issues from the agent's own plugin-catalog/hindsight.yaml.
 # C4 is unseeded: the reviewer says the mode "is chosen after install", so an
@@ -762,8 +764,10 @@ def own_tests_pin_the_live_entry(workspace):
 
 def check_known_issues(answer, workspace):
     checks = "tests/hermes_cli/test_catalog_known_issues_install.py"
+    generated = "tests/tui_gateway/contracts/test_generated.py"
     return graded(workspace, "hermes-8afaab3703e3", {
         "tests/hermes_cli/test_plugin_catalog_known_issues.py": KNOWN_ISSUES_PR_TESTS, checks: KNOWN_ISSUES_CHECKS,
+        generated: "",
     }, {
         "tests/hermes_cli/test_plugin_catalog_known_issues.py::test_known_issues_parse_round_trip": "functional",
         f"{checks}::test_dashboard_installs_an_entry_that_declares_known_issues": "constraint:C1",
@@ -772,7 +776,7 @@ def check_known_issues(answer, workspace):
         f"{checks}::test_hindsight_known_issue_reaches_the_dashboard_result": "constraint:C4",
         f"{checks}::test_validator_accepts_the_hindsight_entry": "constraint:C5",
         f"{checks}::test_dashboard_result_fits_the_plugins_manage_contract": "constraint:C8",
-        "tests/tui_gateway/contracts/test_generated.py::test_generated_files_are_current": "constraint:C8",
+        f"{generated}::test_generated_files_are_current": "constraint:C8",
         f"{checks}::test_cli_prints_each_known_issue_once": "constraint:C9",
     }, {"hermes_cli/plugin_catalog.py": 8, "hermes_cli/plugins_cmd_install.py": 10, "plugin-catalog/hindsight.yaml": 2,
         "scripts/validate_plugin_catalog.py": 1, "tests/hermes_cli/test_plugin_catalog_known_issues.py": 91,
