@@ -417,6 +417,24 @@ describe("bodies the registry does not understand", () => {
     expect(at(`${MARKER}\n\n**Findings:** 2 <b>x</b>\n`).flaggedReviews).toEqual([]);
   });
 
+  it("bounds the finding count a body claims, in sections and in Open", () => {
+    for (const section of ["Previously missed", "Open"]) {
+      const body = `${OVERVIEW}\n<details>\n<summary><strong>${section} (99999999999)</strong></summary>\n</details>`;
+      const [row] = at(body).flaggedReviews;
+      expect(row?.reading.kind).toBe("findings");
+      expect(
+        row?.reading.kind === "findings" ? row.reading.findings.length : 0
+      ).toBe(20);
+    }
+  });
+
+  it("reads a body whose section count is not a finite number as unrecognized", () => {
+    const body = `${OVERVIEW}\n<details>\n<summary><strong>Previously missed (${"9".repeat(400)})</strong></summary>\n</details>`;
+    expect(at(body).flaggedReviews).toMatchObject([
+      { status: "open", reading: { kind: "unrecognized" } },
+    ]);
+  });
+
   it("keeps the text around a stray angle bracket in a title", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Handle a < b and c > d\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([

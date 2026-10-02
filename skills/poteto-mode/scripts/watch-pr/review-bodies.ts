@@ -60,6 +60,7 @@ function stripTags(html: string): string {
   return text.replace(/<(?=[A-Za-z/])/g, "").trim();
 }
 
+const MAX_PADDED_FINDINGS = 20;
 function countedSections(body: string): readonly CountedSection[] {
   const heads = [...body.matchAll(SECTION)];
   return heads.flatMap((head, index) => {
@@ -85,7 +86,12 @@ function threadlessOpenItems(section: CountedSection): readonly T.BodyFinding[] 
       location: null,
     }));
   const unparsed = Array.from(
-    { length: Math.max(0, section.count - lines.length) },
+    {
+      length: Math.max(
+        0,
+        Math.min(section.count, MAX_PADDED_FINDINGS) - lines.length
+      ),
+    },
     () => ({ section: section.name, title: "(unparsed)", location: null })
   );
   return [...loose, ...unparsed];
@@ -95,7 +101,7 @@ function threadlessSectionItems(
 ): readonly T.BodyFinding[] {
   const items = [...section.text.matchAll(NESTED_ITEM)];
   return Array.from(
-    { length: Math.max(section.count, items.length) },
+    { length: Math.max(Math.min(section.count, MAX_PADDED_FINDINGS), items.length) },
     (_, index) => {
       const item = items[index];
       if (item === undefined)
@@ -116,7 +122,8 @@ const COPILOT_OVERVIEW_V2 = {
   failClosedLogins: ["copilot-pull-request-reviewer"],
   claims: (body) =>
     body.includes("<!-- ccr-overview-v2 -->") &&
-    /\*\*Findings:\*\* (None|\d+)/.test(body),
+    /\*\*Findings:\*\* (None|\d+)/.test(body) &&
+    countedSections(body).every((section) => Number.isFinite(section.count)),
   findings: (body) =>
     countedSections(body).flatMap((section) => {
       if (section.name === "Resolved since last review" || section.count === 0)
