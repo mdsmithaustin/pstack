@@ -99,6 +99,12 @@ class SubagentCommands(unittest.TestCase):
         self.bundle.write_text(json.dumps(payload))
         self.assertIn("signature", self.run_cli("brief", "poteto-agent", expected=1).stderr)
 
+    def test_signature_that_is_only_part_of_a_body_line_invalidates_the_bundle(self):
+        payload = json.loads(self.bundle.read_text())
+        payload["roles"][0]["signature"] = "Yes"
+        self.bundle.write_text(json.dumps(payload))
+        self.assertIn("signature", self.run_cli("brief", "poteto-agent", expected=1).stderr)
+
     def test_unknown_role_has_no_partial_brief(self):
         result = self.run_cli("brief", "unregistered", expected=2)
         self.assertEqual(result.stdout, "")

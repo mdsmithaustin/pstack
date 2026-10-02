@@ -65,7 +65,7 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
         if not isinstance(item["source_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["source_sha256"]):
             raise ValueError(f"{item['id']}: invalid source digest")
         signature = item["signature"]
-        if signature is not None and (not isinstance(signature, str) or not signature.strip() or signature not in item["body"]):
+        if signature is not None and (not isinstance(signature, str) or not signature.strip() or signature.strip() not in (line.strip() for line in item["body"].splitlines())):
             raise ValueError(f"{item['id']}: signature must be null or a line of the persona body")
         for key in ("aliases", "skills"):
             values = item[key]
