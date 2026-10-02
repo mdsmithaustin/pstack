@@ -12,6 +12,7 @@ import type { RestComment, RestReview } from "./review-fixtures.test-helper.ts";
 
 const COPILOT = "copilot-pull-request-reviewer";
 const MARKER = "<!-- ccr-overview-v2 -->";
+const OVERVIEW = `${MARKER}\n**Findings:** None`;
 
 function flagged(args: {
   readonly head: string;
@@ -331,7 +332,7 @@ describe("bodies the registry does not understand", () => {
   });
 
   it("counts every item of an unknown section in a recognized Copilot body", () => {
-    const body = `${MARKER}\n<details>\n<summary><strong>Low confidence (2)</strong></summary>\n</details>`;
+    const body = `${OVERVIEW}\n<details>\n<summary><strong>Low confidence (2)</strong></summary>\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
         reading: {
@@ -346,19 +347,34 @@ describe("bodies the registry does not understand", () => {
   });
 
   it("leaves thread-linked Open items and Resolved items to the thread gate", () => {
-    const body = `${MARKER}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- [Rename it](#discussion_r42) · New\n</details>\n<details>\n<summary><strong>Resolved since last review (2)</strong></summary>\n\n- [Done](#discussion_r41)\n</details>`;
+    const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- [Rename it](#discussion_r42) · New\n</details>\n<details>\n<summary><strong>Resolved since last review (2)</strong></summary>\n\n- [Done](#discussion_r41)\n</details>`;
     expect(at(body).flaggedReviews).toEqual([]);
   });
 
+  it("blocks a marked Copilot body that has no Findings line, as unrecognized", () => {
+    const body = `${MARKER}\n\n## Copilot review overview\n\n<details>\n<summary><strong>Open (1)</strong></summary>\n</details>\n`;
+    expect(at(body).flaggedReviews).toMatchObject([
+      {
+        status: "open",
+        reading: { kind: "unrecognized", untrustedExcerpt: MARKER },
+      },
+    ]);
+  });
+
+  it("reads a marked body with a Findings line and no counted section as clean", () => {
+    expect(at(`${MARKER}\n\n**Findings:** None\n`).flaggedReviews).toEqual([]);
+    expect(at(`${MARKER}\n\n**Findings:** 2 <b>x</b>\n`).flaggedReviews).toEqual([]);
+  });
+
   it("keeps the text around a stray angle bracket in a title", () => {
-    const body = `${MARKER}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Handle a < b and c > d\n</details>`;
+    const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Handle a < b and c > d\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       { reading: { findings: [{ title: "Handle a < b and c > d" }] } },
     ]);
   });
 
   it("strips tags that only appear once an inner tag is removed", () => {
-    const body = `${MARKER}\n<details open>\n<summary><strong>Open (2)</strong></summary>\n\n- <<b>script>alert(1)</b>\n- tail <script\n</details>`;
+    const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (2)</strong></summary>\n\n- <<b>script>alert(1)</b>\n- tail <script\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
         reading: {
@@ -369,7 +385,7 @@ describe("bodies the registry does not understand", () => {
   });
 
   it("flags an unparsed finding when an Open section's items are not list lines", () => {
-    const body = `${MARKER}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n<details><summary>Nested item</summary>body</details>\n</details>`;
+    const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n<details><summary>Nested item</summary>body</details>\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
         reading: {
@@ -381,7 +397,7 @@ describe("bodies the registry does not understand", () => {
   });
 
   it("pads an Open section up to its count when some items are thread-linked", () => {
-    const body = `${MARKER}\n<details open>\n<summary><strong>Open (3)</strong></summary>\n\n- [Linked](#discussion_r42)\n- Loose item\n</details>`;
+    const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (3)</strong></summary>\n\n- [Linked](#discussion_r42)\n- Loose item\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
         reading: {
@@ -392,7 +408,7 @@ describe("bodies the registry does not understand", () => {
   });
 
   it("flags an Open item that no thread carries", () => {
-    const body = `${MARKER}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Needs a thread-less look\n</details>`;
+    const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Needs a thread-less look\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
         reading: {

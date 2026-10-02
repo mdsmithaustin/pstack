@@ -114,7 +114,9 @@ function threadlessSectionItems(
 const COPILOT_OVERVIEW_V2 = {
   name: "copilot-overview-v2",
   failClosedLogins: ["copilot-pull-request-reviewer"],
-  claims: (body) => body.includes("<!-- ccr-overview-v2 -->"),
+  claims: (body) =>
+    body.includes("<!-- ccr-overview-v2 -->") &&
+    /\*\*Findings:\*\* (None|\d+)/.test(body),
   findings: (body) =>
     countedSections(body).flatMap((section) => {
       if (section.name === "Resolved since last review" || section.count === 0)
