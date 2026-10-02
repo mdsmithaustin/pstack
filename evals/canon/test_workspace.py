@@ -106,12 +106,14 @@ def live_feature_patch():
 class ShopRepo(unittest.TestCase):
     """A tiny upstream repo with a pinned commit in a mirror under a private cache."""
 
+    tracked = {}
+
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.base = Path(directory.name)
         upstream = self.base / "upstream"
-        for path, text in UPSTREAM.items():
+        for path, text in {**UPSTREAM, **self.tracked}.items():
             (upstream / path).parent.mkdir(parents=True, exist_ok=True)
             (upstream / path).write_text(text)
         git(upstream, "init", "-q")
@@ -550,10 +552,7 @@ pathlib.Path("personas-seen.txt").write_text("\\n".join(found))
 """
 
 
-class HostRegistersPersonasTests(ShopRepo):
-    """host.py wrap --workspace registers the named agents as the sbx runner's
-    setup does, so a host-run lead is offered poteto-agent and comment-sicko."""
-
+class HostWrap(ShopRepo):
     def run_wrap(self, agent, *agent_args, **env):
         token, discovery = screen.ENTRY_INVOCATION[agent]
         root = self.harness_workspace(f"registered-{agent}", "# Poteto mode\n")
@@ -579,6 +578,11 @@ class HostRegistersPersonasTests(ShopRepo):
             os.chdir(previous)
         slot = harvest / "0001"
         return code, root, json.loads((slot / "workspace.json").read_text()), slot
+
+
+class HostRegistersPersonasTests(HostWrap):
+    """host.py wrap --workspace registers the named agents as the sbx runner's
+    setup does, so a host-run lead is offered poteto-agent and comment-sicko."""
 
     def test_both_agents_are_offered_the_personas_the_run_registered_and_the_harvest_leaves_them_out(self):
         for agent, harness, folder in (("claude", "claude-code", ".claude/agents"), ("codex", "codex", ".codex/agents")):
@@ -610,6 +614,22 @@ class HostRegistersPersonasTests(ShopRepo):
 
         self.assertEqual((code, record["error"]), (workspace.REFUSED, "named agent install failed: boom"))
         self.assertFalse((root / "personas-seen.txt").exists())
+
+
+class HostRefusesTrackedPersonasTests(HostWrap):
+    """The repo tracks a persona file the installer writes, so registration
+    changes the tree the run recorded and the agent must not start."""
+
+    tracked = {".claude/agents/poteto-agent.md": "stale\n", ".codex/agents/poteto-agent.toml": "stale\n"}
+
+    def test_a_tracked_persona_the_install_rewrites_refuses_the_run_before_the_agent_starts(self):
+        for agent in ("claude", "codex"):
+            with self.subTest(agent=agent):
+                code, root, record, slot = self.run_wrap(agent)
+
+                self.assertEqual(code, workspace.REFUSED)
+                self.assertRegex(record["error"], rf"^sandbox tree [0-9a-f]+ is not the recorded {record['expected_tree']}$")
+                self.assertFalse((root / "personas-seen.txt").exists())
 
 
 class PastedProjectPersonasTests(unittest.TestCase):

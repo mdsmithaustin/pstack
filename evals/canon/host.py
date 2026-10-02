@@ -272,6 +272,9 @@ class Checkout:
                 workspace.expose(self.root, discovery)
                 self.record["agents"] = sbx_inside.register_agents(self.root, {"discovery": discovery, "harness": HARNESS[self.agent]})
                 workspace.exclude(self.root, self.record["agents"])
+                tree = workspace.snapshot(self.root, "HEAD")
+                if tree != self.spec["tree"]:
+                    raise workspace.WorkspaceError(f"sandbox tree {tree} is not the recorded {self.spec['tree']}")
         except workspace.WorkspaceError as exc:
             self.record["error"] = str(exc)
             self.save()

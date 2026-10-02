@@ -424,7 +424,9 @@ A pasted-project case under the same entry registers the agents and, for
 Codex, sets the same trust override, but adds no writable root, since its
 Codex run uses `--sandbox read-only`. Its cwd is the harness's temporary
 workspace, which the harness deletes after the run, and the case is graded from
-the final message, so the persona files reach neither.
+the final message, so the persona files reach neither. The harness still lists
+them as pre-agent writes in the run dir's `workspace-changes.json`,
+`candidate.patch`, and `candidate-files/`, which canon does not read.
 
 Claude runs through `claude-project-only`, whose `acceptEdits` mode denies
 Bash in a `-p` run. Claude Code 2.1.281 lists no Grep or Glob tool there, so
