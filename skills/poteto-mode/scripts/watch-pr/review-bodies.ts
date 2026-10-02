@@ -133,10 +133,13 @@ export function reviewIdFromUrl(url: string): T.ReviewId | null {
   const digits = /#pullrequestreview-(\d+)$/.exec(url)?.[1];
   return digits === undefined ? null : (digits as T.ReviewId);
 }
-function linkedReviewIds(text: string): readonly string[] {
-  return [...text.matchAll(/#pullrequestreview-(\d+)/g)].map(
-    (match) => match[1] ?? ""
-  );
+function linksReview(body: string, reviewUrl: string): boolean {
+  for (let from = body.indexOf(reviewUrl); from !== -1; ) {
+    const next = body[from + reviewUrl.length];
+    if (next === undefined || !/\d/.test(next)) return true;
+    from = body.indexOf(reviewUrl, from + 1);
+  }
+  return false;
 }
 const untrustedExcerptOf = (body: string): string =>
   body.trim().split(/\r?\n/, 1)[0]?.slice(0, 180) ?? "";
@@ -166,22 +169,21 @@ function readBody(login: string, body: string): BodyOutcome {
     : { kind: "unread", untrustedExcerpt: untrustedExcerptOf(body) };
 }
 
-function acknowledgments(
+function acknowledgment(
   comments: readonly ConversationComment[],
-  prAuthor: string | null
-): ReadonlyMap<string, { author: string; url: string }> {
-  const acks = new Map<string, { author: string; url: string }>();
-  for (const comment of comments) {
-    if (
-      comment.author.isBot ||
-      (comment.author.login !== prAuthor && comment.association === "untrusted")
-    )
-      continue;
-    for (const id of linkedReviewIds(comment.body))
-      if (!acks.has(id))
-        acks.set(id, { author: comment.author.login, url: comment.url });
-  }
-  return acks;
+  prAuthor: string | null,
+  reviewUrl: string
+): { author: string; url: string } | undefined {
+  const comment = comments.find(
+    (candidate) =>
+      !candidate.author.isBot &&
+      (candidate.author.login === prAuthor ||
+        candidate.association !== "untrusted") &&
+      linksReview(candidate.body, reviewUrl)
+  );
+  return comment === undefined
+    ? undefined
+    : { author: comment.author.login, url: comment.url };
 }
 const isHeadBotReview = (
   review: SubmittedReview,
@@ -189,7 +191,6 @@ const isHeadBotReview = (
 ): boolean => review.author.isBot && review.commitOid === headRefOid;
 
 export function flagReviewBodies(input: ReviewBodyInput): ReviewBodyReport {
-  const acks = acknowledgments(input.comments, input.prAuthor);
   const flagged: T.FlaggedReview[] = [];
   const unread: T.UnreadReview[] = [];
   for (const review of input.reviews) {
@@ -211,7 +212,7 @@ export function flagReviewBodies(input: ReviewBodyInput): ReviewBodyReport {
       commitOid: input.headRefOid,
       reading: outcome.reading,
     };
-    const ack = acks.get(id);
+    const ack = acknowledgment(input.comments, input.prAuthor, review.url);
     flagged.push(
       ack === undefined
         ? { ...base, status: "open" }

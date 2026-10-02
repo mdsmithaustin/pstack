@@ -257,6 +257,57 @@ describe("acknowledging a flagged review", () => {
     ).toEqual(["open"]);
   });
 
+  it("rejects a bare review fragment without the full URL", () => {
+    expect(
+      statusOf([
+        comment({
+          id: 1,
+          body: "Not fixed: #pullrequestreview-5386371606",
+          login: "mdsmithaustin",
+          association: "OWNER",
+        }),
+      ])
+    ).toEqual(["open"]);
+  });
+
+  it("rejects another PR's URL that carries the same review id", () => {
+    expect(
+      statusOf([
+        comment({
+          id: 1,
+          body: "https://github.com/mdsmithaustin/pstack/pull/105#pullrequestreview-5386371606",
+          login: "mdsmithaustin",
+          association: "OWNER",
+        }),
+      ])
+    ).toEqual(["open"]);
+  });
+
+  it("rejects a URL whose review id merely starts with the flagged id", () => {
+    const review = botReview({ id: 5, commit: "head", body: `${OVERVIEW}\n<details>\n<summary><strong>Previously missed (1)</strong></summary>\n</details>` });
+    const statuses = (body: string) =>
+      flagged({
+        head: "head",
+        reviews: [review],
+        comments: [comment({ id: 1, body, login: "mdsmithaustin", association: "OWNER" })],
+      }).flaggedReviews.map((row) => row.status);
+    expect(statuses("https://github.com/owner/repo/pull/1#pullrequestreview-50")).toEqual(["open"]);
+    expect(statuses("https://github.com/owner/repo/pull/1#pullrequestreview-5")).toEqual(["acknowledged"]);
+  });
+
+  it("accepts the full URL as a Markdown link destination", () => {
+    expect(
+      statusOf([
+        comment({
+          id: 1,
+          body: `Valid, fixed in abc123 ([review](${link})).`,
+          login: "mdsmithaustin",
+          association: "OWNER",
+        }),
+      ])
+    ).toEqual(["acknowledged"]);
+  });
+
   it("rejects a comment that mentions the review without linking it", () => {
     expect(
       statusOf([
