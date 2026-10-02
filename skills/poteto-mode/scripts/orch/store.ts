@@ -165,8 +165,11 @@ export interface ResolveGateParams {
   readonly answer: string;
 }
 
+export type FrontierDiscovery = "github" | "graphite";
+
 export interface SetFrontierParams {
   readonly repo: string;
+  readonly discovery?: FrontierDiscovery;
   readonly prs?: readonly number[];
 }
 
@@ -1433,10 +1436,18 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   );
 }
 
-function resolveFrontier(repo: string): FrontierResolution {
+function resolveFrontier(
+  repo: string,
+  discovery: FrontierDiscovery
+): FrontierResolution {
   requireGitRepository(repo);
-  if (!graphiteIsAvailable(repo)) {
+  if (discovery === "github") {
     return { source: "GitHub", prs: githubFrontier(repo) };
+  }
+  if (!graphiteIsAvailable(repo)) {
+    throw new UsageError(
+      "--graphite requires gt; install Graphite or omit --graphite to discover the frontier through GitHub"
+    );
   }
   return {
     source: "gt",
@@ -1776,7 +1787,7 @@ export function openStore(
           throw new UserError("--prs must not contain duplicates");
         }
         const old = await readFrontier(store);
-        const frontier = resolveFrontier(repo);
+        const frontier = resolveFrontier(repo, params.discovery ?? "github");
         if (pin !== undefined) {
           validateFrontierPin({
             actual: frontier.prs.map((row) => row.pr),

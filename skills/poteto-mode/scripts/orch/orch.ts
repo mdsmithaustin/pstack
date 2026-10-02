@@ -82,6 +82,7 @@ interface GateResolveOptions {
 interface FrontierSetOptions {
   readonly repo?: string;
   readonly prs?: readonly number[];
+  readonly graphite?: boolean;
 }
 
 function message(error: unknown): string {
@@ -472,7 +473,7 @@ function createProgram(io: Io): Command {
 
   const frontier = program
     .command("frontier")
-    .description("manage the stack frontier (Graphite preferred, GitHub fallback)")
+    .description("manage the stack frontier (GitHub by default, Graphite on request)")
     .action(() => requireSubcommand(program));
   leaf(frontier, "set", "discover the stack frontier and set it")
     .addOption(
@@ -486,6 +487,10 @@ function createProgram(io: Io): Command {
       "optional expected pull request order pin",
       prList
     )
+    .option(
+      "--graphite",
+      "discover the frontier through gt instead of GitHub"
+    )
     .action((options: FrontierSetOptions) =>
       runStore(
         program,
@@ -494,6 +499,7 @@ function createProgram(io: Io): Command {
           store.frontier.set({
             repo: frontierRepo(options),
             prs: options.prs,
+            discovery: options.graphite === true ? "graphite" : "github",
           }),
         frontierLine
       )

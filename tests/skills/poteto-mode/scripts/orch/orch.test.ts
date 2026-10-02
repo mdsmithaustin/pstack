@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   NotFoundError,
+  UsageError,
   UserError,
   openStore,
   parseVerdict,
@@ -24,6 +25,7 @@ import {
 const SCRIPT = join(import.meta.dir, "../../../../../skills/poteto-mode/scripts/orch/orch.ts");
 const directories: string[] = [];
 const handles: Store[] = [];
+const GT_CALLS = "gt-calls.txt";
 
 interface RunResult {
   readonly code: number;
@@ -121,6 +123,7 @@ async function withFakeGt<T>({
     gt,
     `#!/usr/bin/env bash
 set -euo pipefail
+printf '%s\\n' "$*" >> "${join(directory, GT_CALLS)}"
 if [ "$(pwd -P)" != "${realpathSync(join(directory, "repo"))}" ]; then
   printf 'gt ran outside the fixture repo: %s\\n' "$(pwd -P)" >&2
   exit 2
@@ -207,7 +210,7 @@ esac
   await chmod(gh, 0o755);
 
   const originalPath = process.env.PATH;
-  process.env.PATH = `${bin}:/usr/bin:/bin`;
+  process.env.PATH = `${bin}:${originalPath ?? "/usr/bin:/bin"}`;
   try {
     return await operation();
   } finally {
@@ -506,7 +509,9 @@ describe("Store", () => {
       directory,
       output,
       operation: async () => {
-        expect(await store.frontier.set({ repo: stack.repo })).toEqual({
+        expect(
+          await store.frontier.set({ repo: stack.repo, discovery: "graphite" })
+        ).toEqual({
           generation: 1,
           prs: [
             {
@@ -534,6 +539,7 @@ describe("Store", () => {
           (
             await store.frontier.set({
               repo: stack.repo,
+              discovery: "graphite",
               prs: [10, 13, 11],
             })
           ).generation
@@ -542,6 +548,7 @@ describe("Store", () => {
         await expect(
           store.frontier.set({
             repo: stack.repo,
+            discovery: "graphite",
             prs: [10, 11, 12],
           })
         ).rejects.toThrow(
@@ -550,6 +557,7 @@ describe("Store", () => {
         await expect(
           store.frontier.set({
             repo: stack.repo,
+            discovery: "graphite",
             prs: [13, 10, 11],
           })
         ).rejects.toThrow(
@@ -558,6 +566,7 @@ describe("Store", () => {
         await expect(
           store.frontier.set({
             repo: stack.repo,
+            discovery: "graphite",
             prs: [10, 10],
           })
         ).rejects.toThrow("--prs must not contain duplicates");
@@ -565,7 +574,7 @@ describe("Store", () => {
     });
   });
 
-  it("falls back to the checked-out GitHub stack when gt is unavailable", async () => {
+  it("discovers the checked-out GitHub stack by default", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
 
@@ -631,6 +640,69 @@ describe("Store", () => {
     });
   });
 
+  it("never invokes gt for the default frontier even when gt is installed", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withFakeGt({
+      directory,
+      output: "",
+      operation: () =>
+        withFakeGithub({
+          directory,
+          output: JSON.stringify([
+            {
+              number: 11,
+              state: "OPEN",
+              headRefName: "stack/open",
+              headRefOid: stack.openSha,
+              baseRefName: "main",
+              isCrossRepository: false,
+            },
+          ]),
+          operation: async () => {
+            const frontier = await store.frontier.set({ repo: stack.repo });
+            expect(frontier.prs).toEqual([
+              {
+                pr: 11,
+                branches: "stack/open",
+                sha: stack.openSha,
+                state: "OPEN",
+              },
+            ]);
+            expect(
+              await readdir(directory).then((names) =>
+                names.includes(GT_CALLS)
+                  ? readFile(join(directory, GT_CALLS), "utf8")
+                  : ""
+              )
+            ).toBe("");
+          },
+        }),
+    });
+  });
+
+  it("fails a Graphite frontier request with a usage error when gt is missing", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withoutGtOrGh({
+      directory,
+      operation: async () => {
+        const failure = await store.frontier
+          .set({ repo: stack.repo, discovery: "graphite" })
+          .then(
+            () => undefined,
+            (error: unknown) => error
+          );
+        expect(failure).toBeInstanceOf(UsageError);
+        expect((failure as Error).message).toBe(
+          "--graphite requires gt; install Graphite or omit --graphite to discover the frontier through GitHub"
+        );
+      },
+    });
+  });
+
   it("rejects a cross-repository base in the GitHub fallback", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
@@ -686,7 +758,7 @@ describe("Store", () => {
       output: "◯ main\nthis line is not Graphite output\n",
       operation: async () => {
         await expect(
-          store.frontier.set({ repo: stack.repo })
+          store.frontier.set({ repo: stack.repo, discovery: "graphite" })
         ).rejects.toThrow(
           'gt log short output has an unparseable line 2: "this line is not Graphite output"'
         );
@@ -748,6 +820,7 @@ describe("orch CLI", () => {
     expect(frontierHelp.code).toBe(0);
     expect(frontierHelp.stdout).toContain("--repo <dir>");
     expect(frontierHelp.stdout).toContain("--prs <n,...>");
+    expect(frontierHelp.stdout).toContain("--graphite");
 
     const directory = await makeDirectory();
     const invalid = runCli(["--store", directory, "unit", "add", "u1"]);
