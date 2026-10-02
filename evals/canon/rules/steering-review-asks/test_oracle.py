@@ -4,14 +4,20 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from check import RULES, grade
+from check import RULES, grade, load_oracle
 from shared import PROJECT_IMAGES, Workspace
 
 sys.path.insert(0, str(RULES.parent))
 import workspace  # noqa: E402
 
 RULE = "steering-review-asks"
+
+
+def oracle():
+    load_oracle(RULE)
+    return sys.modules[f"canon_oracle_{RULE}"]
 
 
 def image_built(name):
@@ -21,6 +27,28 @@ def image_built(name):
                                                  capture_output=True, timeout=60, check=False).returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
+
+
+class SkippedGraderTests(unittest.TestCase):
+    """A grader-owned test that an agent-side conftest or marker skips never ran,
+    so its dimension must fail instead of passing."""
+
+    def graded(self, results):
+        module = oracle()
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(module, "project_test_results", return_value=results):
+            return module.graded(Workspace(Path(directory), "", None), "image", {}, {
+                "tests/test_x.py::test_a": "functional", "tests/test_x.py::test_b": "constraint:C2",
+            }, {})
+
+    def test_a_skipped_parameter_fails_its_dimension_and_says_why(self):
+        self.assertEqual(self.graded({
+            "tests.test_x::test_a[1]": "passed", "tests.test_x::test_a[2]": "skipped", "tests.test_x::test_b": "passed",
+        }), ["functional: tests/test_x.py::test_a skipped (a skipped grader-owned test never ran)"])
+
+    def test_a_failed_parameter_outranks_a_skipped_one(self):
+        self.assertEqual(self.graded({
+            "tests.test_x::test_a": "passed", "tests.test_x::test_b[1]": "skipped", "tests.test_x::test_b[2]": "failed",
+        }), ["constraint:C2: tests/test_x.py::test_b failed"])
 
 
 class ReplayedPullRequest(unittest.TestCase):

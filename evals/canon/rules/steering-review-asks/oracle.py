@@ -24,8 +24,10 @@ def appended(checkout, sources):
 
 
 def result_status(results, node):
-    """passed, failed, or missing for one pytest node id or vitest file::name,
-    folding the parameters of a parametrized test into one outcome."""
+    """passed, failed, skipped, or missing for one pytest node id or vitest
+    file::name, folding the parameters of a parametrized test into one outcome.
+    Any failed parameter fails it and any skipped one beats passed, since an
+    agent-side conftest or marker can skip a grader-owned test."""
     path, _, name = node.partition("::")
     if path.endswith(".py"):
         parts = name.split("::")
@@ -35,7 +37,9 @@ def result_status(results, node):
     found = [status for label, status in results.items() if label == key or label.startswith(key + "[")]
     if not found:
         return "missing"
-    return "failed" if "failed" in found else "passed"
+    if "failed" in found:
+        return "failed"
+    return "skipped" if "skipped" in found else "passed"
 
 
 def added_lines(diff):
@@ -72,8 +76,8 @@ def graded(workspace, image, sources, tests, footprint, statics=()):
     files = {**changed, **appended(workspace.checkout, sources)}
     targets = sorted({node if node.split("::")[0].endswith(".py") else node.split("::")[0] for node in tests})
     results = project_test_results(image, workspace.checkout, files, targets)
-    failures = [f"{dimension}: {node} {status}" for node, dimension in tests.items()
-                if (status := result_status(results, node)) != "passed"]
+    failures = [f"{dimension}: {node} {status}" + (" (a skipped grader-owned test never ran)" if status == "skipped" else "")
+                for node, dimension in tests.items() if (status := result_status(results, node)) != "passed"]
     added = added_lines(workspace.diff)
     return failures + [failure for static in statics for failure in static(added)]
 
