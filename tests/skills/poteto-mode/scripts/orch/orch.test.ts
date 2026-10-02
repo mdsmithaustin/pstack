@@ -729,7 +729,7 @@ describe("Store", () => {
       ]),
       operation: async () => {
         await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
-          "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+          "GitHub frontier discovery does not support cross-repository stacks; pass --graphite for a stack Graphite tracks"
         );
       },
     });
@@ -743,7 +743,7 @@ describe("Store", () => {
       directory,
       operation: async () => {
         await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
-          "GitHub frontier fallback requires gh; install GitHub CLI or Graphite"
+          "GitHub frontier discovery requires gh; install GitHub CLI, or pass --graphite for a stack Graphite tracks"
         );
       },
     });
