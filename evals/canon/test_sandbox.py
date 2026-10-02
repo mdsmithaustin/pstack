@@ -329,6 +329,35 @@ class InsideTests(test_workspace.ShopRepo):
         self.assertEqual((home / ".codex" / "config.toml").read_text(),
                          f'approval_policy = "never"\n\n[projects."{clone}"]\ntrust_level = "trusted"\n')
 
+    def ignored_after_setup(self, path, discovery):
+        clone = self.clone()
+        manifest, _ = self.payload(clone, "claude")
+        if not discovery:
+            record = json.loads(manifest.read_text())
+            record.update(discovery=None, harness=None, tree="skills")
+            manifest.write_text(json.dumps(record))
+        sbx_inside.setup(manifest)
+        return subprocess.run(["git", "check-ignore", "-q", path], cwd=clone).returncode == 0
+
+    def test_setup_excludes_the_worktrees_directory_in_the_clone(self):
+        self.assertTrue(self.ignored_after_setup(f"{workspace.WORKTREES}/x", discovery=True))
+
+    def test_setup_excludes_the_worktrees_directory_when_the_run_has_no_discovery(self):
+        self.assertTrue(self.ignored_after_setup(f"{workspace.WORKTREES}/x", discovery=False))
+
+    def test_harvest_leaves_out_a_worktree_the_agent_adds_inside_the_clone(self):
+        clone = self.clone()
+        manifest, _ = self.payload(clone, "claude")
+        sbx_inside.setup(manifest)
+        test_workspace.git(clone, "worktree", "add", "-q", "--detach", f"{workspace.WORKTREES}/x")
+        (clone / workspace.WORKTREES / "x" / "README.md").write_text("# Shop\nDelegate edit.\n")
+
+        with mock.patch.object(sbx_inside, "HOME", self.base / "home"):
+            record = sbx_inside.harvest(manifest, self.base / "out")
+
+        self.assertEqual(record["diff_bytes"], 0)
+        self.assertEqual((self.base / "out" / "workspace.diff").read_bytes(), b"")
+
     def test_setup_refuses_a_clone_at_another_commit(self):
         clone = self.clone()
         manifest, _ = self.payload(clone, "claude")
