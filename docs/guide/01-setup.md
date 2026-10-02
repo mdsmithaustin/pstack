@@ -20,7 +20,7 @@ Run:
 /setup-pstack
 ```
 
-[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex. Choose project or user scope if you want native agent files. Setup preserves existing user-managed agent files and reports payload readiness, native files, and live agent loading separately. A generic delegate can receive the complete persona while native loading remains unverified. Hermes uses that briefing through delegation context, and Grok Build gets it in each spawn prompt.
+[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex. Choose project or user scope if you want native agent files. Setup preserves existing user-managed agent files and reports payload readiness, native files, and live agent loading separately. `npx skills update` does not refresh registered agent files, so rerun `/setup-pstack` after an update. It finds personas an older version generated and offers to refresh them. A generic delegate can receive the complete persona while native loading remains unverified. Hermes uses that briefing through delegation context, and Grok Build gets it in each spawn prompt.
 
 Setup also checks whether Claude Code's task tools and Codex's plan tool are on, because `/poteto-mode` keeps its worklist in them. When one is off, setup shows you the exact setting and writes it only if you say yes.
 
