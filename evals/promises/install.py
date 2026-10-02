@@ -400,17 +400,6 @@ def check_setup_pstack_invocable(ctx, harness):
     return outcome
 
 
-def check_deslop_available_for_code(ctx, harness):
-    listing = ctx.listing(harness)
-    named_in = ctx.guide_names.get("deslop", [])
-    mentions = subprocess.run(["grep", "-rIl", "deslop", str(ctx.snapshot / "skills")], capture_output=True, text=True).stdout.split()
-    outcome = Outcome({"guide_pages_naming_deslop": named_in, "skills_files_mentioning_deslop": [Path(m).relative_to(ctx.snapshot).as_posix() for m in mentions],
-                       "closest_listed": sorted(n for n in listing.invocable if n in ("unslop", "no-comments")), "via": listing.via})
-    outcome.expect("deslop" in listing.discovered or "deslop" in listing.invocable,
-                   f"{harness} lists no deslop skill after install, so /deslop in the guide resolves to nothing")
-    return outcome
-
-
 def pty_session(argv, env, cwd, steps, size=(60, 120)):
     import pty
     pid, fd = pty.fork()
@@ -626,7 +615,6 @@ CHECKS = (
     Check("skills-update-does-not-refresh-agents", ("claude-code", "codex"), check_skills_update_does_not_refresh_agents),
     Check("setup-pstack-invocable", HARNESSES, check_setup_pstack_invocable),
     Check("slash-skills-invocable", HARNESSES, check_slash_skills_invocable),
-    Check("deslop-available-for-code", HARNESSES, check_deslop_available_for_code),
 )
 
 

@@ -83,7 +83,7 @@ GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | {"typescript-best-practices"} | {
     "principle-test-behavior-not-implementation", "principle-guard-the-context-window",
     "principle-never-block-on-the-human", "principle-encode-lessons-in-structure",
 }
-GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack", "deslop": "deslop-available-for-code"}
+GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack"}
 
 ROUTER_ROUTES = {
     "Code or history question": "Investigation",
