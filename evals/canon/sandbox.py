@@ -664,6 +664,35 @@ def run_judge(backend, model, prompt, verdict_schema, repo=None, commit=None):
     return record
 
 
+def personas_offered(agent, registered, evidence):
+    """{persona: whether the CLI offers it} for each persona file setup
+    registered. Codex names a role in the request it would send, as
+    "name: description"; Claude lists its agents in the init event."""
+    names = [Path(path).stem for path in registered]
+    if agent == "claude":
+        return {name: name in (evidence or []) for name in names}
+    return {name: f"{name}:" in evidence for name in names}
+
+
+def personas_missing(offered):
+    return sorted(name for name, seen in offered.items() if not seen)
+
+
+def probe_template(agent, repo, commit, deps):
+    """The template the probe starts from, the one a real run of this agent
+    would use. Without a case repo the run's CLI comes from the agent's pin,
+    and the run's network cannot install it, so the CLI-only template is built
+    once, keyed by the pin."""
+    if deps:
+        return deps_tag(agent, repo, commit)
+    if not CONFIG["agents"][agent].get("cli"):
+        return None
+    tag = deps_tag(agent)
+    if tag not in templates():
+        build_judge_template(agent)
+    return tag
+
+
 def probe(agent, repo=None, commit=None):
     """Create a run-shaped sandbox with the tracked skills mounted and the
     persona registered, then ask the agent for its tool list without a model
@@ -701,7 +730,7 @@ def probe(agent, repo=None, commit=None):
                                    "workspace.py": CANON / "workspace.py", "skills": root / "skills", "overlay": Path(directory) / "empty"})
         box = None
         try:
-            template = deps_tag(agent, repo, commit) if inside["deps"] else None
+            template = probe_template(agent, repo, commit, inside["deps"])
             box = Sandbox.create(f"{PREFIX}probe-{agent}-{secrets.token_hex(3)}", conf["kit"], root, template, CONFIG["run_deny_network"])
             egress_decisions, allowed = egress(box)
             refuse_open_egress(allowed)
@@ -710,6 +739,9 @@ def probe(agent, repo=None, commit=None):
             if setup.returncode != 0:
                 raise SandboxError(f"sandbox setup failed ({setup.returncode}): {setup.stderr.decode(errors='replace').strip()}")
             report = {"setup": _json_or_text(setup.stdout.strip().splitlines()[-1] if setup.stdout.strip() else b"")}
+            registered = (report["setup"] if isinstance(report["setup"], dict) else {}).get("agents") or []
+            if not registered:
+                raise SandboxError("sandbox setup registered no persona files")
             env = inside["deps"]["env"] if inside["deps"] else {}
             if inside["deps"]:
                 package = CONFIG["repos"][repo]["package"]
@@ -724,6 +756,7 @@ def probe(agent, repo=None, commit=None):
                 init = next(json.loads(line) for line in out.splitlines() if '"subtype":"init"' in line.replace(" ", ""))
                 report.update({key: init.get(key) for key in ("claude_code_version", "permissionMode", "tools", "agents")})
                 report["poteto-mode listed"] = "poteto-mode" in (init.get("slash_commands") or [])
+                report["personas offered"] = personas_offered("claude", registered, init.get("agents"))
             else:
                 command, _ = agent_command("codex", ["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write",
                                                      "--model", "canon-no-such-model", "--ephemeral", "--ignore-user-config", "-"])
@@ -741,8 +774,9 @@ def probe(agent, repo=None, commit=None):
                     names += [f"{tool.get('name')}.{inner.get('name')}" for inner in tool.get("tools") or []]
                 text = json.dumps(body)
                 report.update({"codex_version": box.exec("codex", "--version").stdout.decode().strip(), "tools": names,
-                               "poteto-agent role offered": "poteto-agent:" in text,
+                               "personas offered": personas_offered("codex", registered, text),
                                "poteto-mode injected": "name: poteto-mode" in json.dumps(body.get("input"))})
+            report["personas missing"] = personas_missing(report["personas offered"])
             report["policy"] = box.policy()
             report["reachable"] = box.reachable(conf["api"])
             report["egress"] = egress_decisions
@@ -781,7 +815,11 @@ def main(argv=None):
         if args.command == "deps":
             print(json.dumps(build_deps(args.agent, args.repo, args.commit), indent=2))
         elif args.command == "probe":
-            print(json.dumps(probe(args.agent, args.repo, args.commit), indent=2))
+            report = probe(args.agent, args.repo, args.commit)
+            print(json.dumps(report, indent=2))
+            if report["personas missing"]:
+                print(f"sandbox: {args.agent} does not offer {', '.join(report['personas missing'])}", file=sys.stderr)
+                return 1
         else:
             print(json.dumps(gc()))
     except (SandboxError, workspace.WorkspaceError) as exc:

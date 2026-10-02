@@ -31,8 +31,7 @@ def tracked(root, commit):
 def register_agents(root, manifest):
     """Install the harness's named agents the way a user would, from the
     mounted tree, and return the files it wrote: the personas, plus the
-    effort agents on Claude Code. Codex loads project roles only from a
-    trusted project, so the sandbox's own config trusts this one."""
+    effort agents on Claude Code."""
     script = root / manifest["discovery"] / "pstack-harness" / "scripts" / "subagents.py"
     if not manifest.get("harness") or not script.is_file():
         return []
@@ -44,11 +43,14 @@ def register_agents(root, manifest):
     report = json.loads(proc.stdout)
     # A skills tree pinned before effort agents existed reports no efforts.
     written = sorted(Path(row["path"]).relative_to(root).as_posix() for row in report["roles"] + report.get("efforts", []))
-    if manifest["harness"] == "codex":
-        config = HOME / ".codex" / "config.toml"
-        with config.open("a", encoding="utf-8") as handle:
-            handle.write(f'\n[projects."{root}"]\ntrust_level = "trusted"\n')
     return written
+
+
+def trust_project(config, root):
+    """Trust root in a Codex config.toml. Codex loads project roles only from a
+    trusted project."""
+    with Path(config).open("a", encoding="utf-8") as handle:
+        handle.write(f'\n[projects."{root}"]\ntrust_level = "trusted"\n')
 
 
 def link_deps(root, manifest):
@@ -88,11 +90,13 @@ def setup(manifest_path):
         raise workspace.WorkspaceError(f"the clone lacks the history of {head}")
     shutil.copytree(payload / "skills", root / "skills", symlinks=True, dirs_exist_ok=True)
     mounted = sorted(path.relative_to(root).as_posix() for path in (root / "skills").rglob("*") if path.is_file())
-    workspace.exclude(root, workspace.mount_roots(mounted, tracked(root, head)))
+    workspace.exclude(root, [*workspace.mount_roots(mounted, tracked(root, head)), workspace.WORKTREES])
     workspace.write_overlay(root, workspace.read_files(payload / "overlay"))
     if manifest.get("discovery"):
         workspace.expose(root, manifest["discovery"], manifest["tree"])
         record["agents"] = register_agents(root, manifest)
+        if record["agents"] and manifest["harness"] == "codex":
+            trust_project(HOME / ".codex" / "config.toml", root)
         workspace.exclude(root, record["agents"])
     record["deps"] = link_deps(root, manifest)
     record["tree"] = workspace.snapshot(root, head)

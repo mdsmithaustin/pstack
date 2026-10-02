@@ -196,6 +196,38 @@ class ScreenRunnerTests(unittest.TestCase):
         self.assertEqual(codex, ["--codex-cmd", f"{out / 'entry' / 'codex-sbx'} exec --json --skip-git-repo-check --sandbox workspace-write"])
         self.assertIn(f"{ROOT / 'sandbox.py'} wrap --agent claude --token /poteto-mode --discovery .claude/skills -- \"$@\"", wrapper)
 
+    def test_effort_reaches_a_codex_command_as_a_config_override_on_either_runner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            host = screen.backend_args("codex", out, "poteto-mode", False, "host", "xhigh")
+            sbx = screen.backend_args("codex", out, "poteto-mode", True, "sbx", "xhigh")
+            plain = screen.backend_args("codex", out, "poteto-mode", True, "sbx")
+
+        self.assertEqual(host[0], "--codex-cmd")
+        self.assertTrue(host[1].endswith(" exec --json --skip-git-repo-check --sandbox read-only -c model_reasoning_effort=xhigh"), host[1])
+        self.assertEqual(sbx, ["--codex-cmd", f"{out / 'entry' / 'codex-sbx'} exec --json --skip-git-repo-check --sandbox workspace-write -c model_reasoning_effort=xhigh"])
+        self.assertNotIn("effort", plain[1])
+
+    def test_effort_survives_the_sandbox_rewrite_of_the_harness_argv(self):
+        argv = ["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write", "-c", "model_reasoning_effort=xhigh",
+                "--model", "gpt-6-sol", "--ephemeral", "--ignore-user-config", "--output-last-message", "/tmp/last", "-"]
+
+        command, _ = sandbox.agent_command("codex", argv)
+
+        at = command.index("model_reasoning_effort=xhigh")
+        self.assertEqual(command[at - 1], "-c")
+        self.assertNotIn("--ignore-user-config", command)
+
+    def test_effort_is_refused_for_claude_whose_pinned_harness_has_no_effort_flag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for runner in ("host", "sbx"):
+                with self.subTest(runner=runner), self.assertRaisesRegex(screen.ScreenError, "--effort applies to --agent codex only"):
+                    screen.backend_args("claude", Path(directory), "poteto-mode", True, runner, "high")
+
+    def test_run_refuses_effort_for_claude_before_it_builds_anything(self):
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(screen.ScreenError, "--effort applies to --agent codex only"):
+            screen.run("claude", Path(directory) / "out", [], "sonnet", 1, None, effort="high")
+
 
 class StagingTests(test_workspace.ShopRepo):
     def test_staged_checkout_clones_without_the_host_mirror(self):
@@ -297,6 +329,35 @@ class InsideTests(test_workspace.ShopRepo):
         self.assertEqual((home / ".codex" / "config.toml").read_text(),
                          f'approval_policy = "never"\n\n[projects."{clone}"]\ntrust_level = "trusted"\n')
 
+    def ignored_after_setup(self, path, discovery):
+        clone = self.clone()
+        manifest, _ = self.payload(clone, "claude")
+        if not discovery:
+            record = json.loads(manifest.read_text())
+            record.update(discovery=None, harness=None, tree="skills")
+            manifest.write_text(json.dumps(record))
+        sbx_inside.setup(manifest)
+        return subprocess.run(["git", "check-ignore", "-q", path], cwd=clone).returncode == 0
+
+    def test_setup_excludes_the_worktrees_directory_in_the_clone(self):
+        self.assertTrue(self.ignored_after_setup(f"{workspace.WORKTREES}/x", discovery=True))
+
+    def test_setup_excludes_the_worktrees_directory_when_the_run_has_no_discovery(self):
+        self.assertTrue(self.ignored_after_setup(f"{workspace.WORKTREES}/x", discovery=False))
+
+    def test_harvest_leaves_out_a_worktree_the_agent_adds_inside_the_clone(self):
+        clone = self.clone()
+        manifest, _ = self.payload(clone, "claude")
+        sbx_inside.setup(manifest)
+        test_workspace.git(clone, "worktree", "add", "-q", "--detach", f"{workspace.WORKTREES}/x")
+        (clone / workspace.WORKTREES / "x" / "README.md").write_text("# Shop\nDelegate edit.\n")
+
+        with mock.patch.object(sbx_inside, "HOME", self.base / "home"):
+            record = sbx_inside.harvest(manifest, self.base / "out")
+
+        self.assertEqual(record["diff_bytes"], 0)
+        self.assertEqual((self.base / "out" / "workspace.diff").read_bytes(), b"")
+
     def test_setup_refuses_a_clone_at_another_commit(self):
         clone = self.clone()
         manifest, _ = self.payload(clone, "claude")
@@ -387,7 +448,7 @@ class FakeSbx:
         elif args[:2] == ["template", "save"]:
             self.saved.append(args[3])
         elif args[0] == "exec" and args[-1] == "codex --version":
-            stdout = b"codex-cli 0.157.0\n"
+            stdout = b"codex-cli 0.160.0\n"
         elif args[0] == "exec" and "setup" in args:
             if self.setup_error:
                 return subprocess.CompletedProcess(args, 1, b"", self.setup_error.encode())
@@ -492,6 +553,55 @@ class ProbeSetupTests(unittest.TestCase):
 
         setup = next(index for index, call in enumerate(fake.calls) if call[0] == "exec" and "setup" in call)
         self.assertEqual([call[0] for call in fake.calls[setup + 1:]], ["rm"])
+
+
+    def test_a_no_repo_probe_runs_the_pinned_cli_not_the_kits(self):
+        pin = sandbox.CONFIG["agents"]["codex"]["cli"]
+        fake = FakeSbx("unused", setup_error="WorkspaceError: stop here")
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(sandbox, "sbx", fake), \
+                mock.patch.object(sandbox, "records_dir", return_value=Path(directory)), self.assertRaises(sandbox.SandboxError):
+            sandbox.probe("codex")
+
+        self.assertTrue(any(call[0] == "exec" and call[-4:] == ["npm", "install", "-g", pin] for call in fake.calls))
+        creates = [call for call in fake.calls if call[0] == "create" and "--clone" in call]
+        self.assertEqual([call[call.index("-t") + 1] for call in creates], [sandbox.deps_tag("codex")])
+
+    def test_a_probe_for_an_agent_with_no_pin_installs_nothing(self):
+        fake = FakeSbx("unused", setup_error="WorkspaceError: stop here")
+
+        with mock.patch.object(sandbox, "sbx", fake), self.assertRaises(sandbox.SandboxError):
+            sandbox.probe("claude")
+
+        self.assertFalse(any("npm" in call for call in fake.calls))
+        self.assertFalse(any(call[0] == "create" and "-t" in call for call in fake.calls))
+
+
+class PersonasOfferedTests(unittest.TestCase):
+    registered = [".codex/agents/comment-sicko.toml", ".codex/agents/poteto-agent.toml"]
+
+    def test_codex_offers_a_persona_whose_role_the_request_names(self):
+        body = {"tools": [{"name": "spawn_agent", "description": "Available roles:\npoteto-agent: scoped delegate\n"}]}
+
+        self.assertEqual(sandbox.personas_offered("codex", self.registered, json.dumps(body)),
+                         {"comment-sicko": False, "poteto-agent": True})
+
+    def test_claude_offers_a_persona_that_init_lists_as_an_agent(self):
+        registered = [".claude/agents/comment-sicko.md", ".claude/agents/pstack-effort-low.md"]
+
+        self.assertEqual(sandbox.personas_offered("claude", registered, ["Explore", "comment-sicko"]),
+                         {"comment-sicko": True, "pstack-effort-low": False})
+
+    def test_a_probe_report_names_the_personas_that_are_not_offered(self):
+        self.assertEqual(sandbox.personas_missing({"comment-sicko": False, "poteto-agent": True}), ["comment-sicko"])
+        self.assertEqual(sandbox.personas_missing({"comment-sicko": True}), [])
+
+    def test_the_probe_command_exits_nonzero_when_a_persona_is_missing(self):
+        for missing, code in (["comment-sicko"], 1), ([], 0):
+            report = {"personas offered": {"comment-sicko": not missing}, "personas missing": missing}
+            with mock.patch.object(sandbox, "probe", return_value=report), contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(sandbox.main(["probe", "--agent", "codex"]), code)
 
 
 class JudgePolicyTests(unittest.TestCase):
@@ -599,12 +709,12 @@ class BuildJudgeTemplateTests(unittest.TestCase):
         self.assertLess(delete[0], fake.calls.index(save))
         self.assertIn("create", subcommands)
         self.assertIn("stop", subcommands)
-        self.assertTrue(any(call[0] == "exec" and call[-4:] == ["npm", "install", "-g", "@openai/codex@0.157.0"] for call in fake.calls))
+        self.assertTrue(any(call[0] == "exec" and call[-4:] == ["npm", "install", "-g", "@openai/codex@0.160.0"] for call in fake.calls))
         self.assertNotIn("cp", subcommands)
         self.assertFalse(any("uv" in call or "src.tar" in " ".join(call) for call in fake.calls))
-        self.assertEqual({key: written[key] for key in ("agent", "tag", "cli")}, {"agent": "codex", "tag": tag, "cli": "@openai/codex@0.157.0"})
+        self.assertEqual({key: written[key] for key in ("agent", "tag", "cli")}, {"agent": "codex", "tag": tag, "cli": "@openai/codex@0.160.0"})
         self.assertFalse({"repo", "uv", "sync"} & written.keys())
-        self.assertEqual(record["versions"], ["codex-cli 0.157.0"])
+        self.assertEqual(record["versions"], ["codex-cli 0.160.0"])
         self.assertEqual(fake.calls[-1][:2], ["rm", "--force"])
 
     def test_an_agent_with_no_cli_pin_has_nothing_to_build(self):

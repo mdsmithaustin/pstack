@@ -1050,7 +1050,17 @@ def sandbox_wrapper(agent, out, entry):
     return wrapper
 
 
-def backend_args(agent, out, entry, in_workspace=False, runner="host"):
+def refuse_effort(agent, effort):
+    if effort and agent != "codex":
+        raise ScreenError("--effort applies to --agent codex only; the pinned harness has no Claude effort flag")
+
+
+def backend_args(agent, out, entry, in_workspace=False, runner="host", effort=None):
+    """The harness flags that name the agent's command. effort pins Codex's
+    reasoning effort with a -c override in the command itself: the harness runs
+    Codex with --ignore-user-config, which skips config files but keeps -c, and
+    sandbox.py's argv rewrite passes it through, so both runners get it."""
+    refuse_effort(agent, effort)
     tools = skill_ci() / "tools"
     target = tools / ("claude-project-only" if agent == "claude" else "codex-project-only")
     if runner == "sbx":
@@ -1062,7 +1072,34 @@ def backend_args(agent, out, entry, in_workspace=False, runner="host"):
     if agent == "claude":
         return ["--claude-bin", target]
     sandbox = "workspace-write" if in_workspace else "read-only"
-    return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}"]
+    pin = f" -c {shlex.quote(f'model_reasoning_effort={effort}')}" if effort else ""
+    return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}{pin}"]
+
+
+TIMED_OUT_RC = 124
+
+
+def last_message_missing(record):
+    """True when the only thing the wrapper recorded against a slot is that
+    its sandbox held no last message to copy out. Codex writes that file only
+    when it finishes, so a run the harness timed out (GNU timeout exits 124)
+    leaves none, while the tree and the diff harvested before the copy are
+    sound. A crash, a clean exit that wrote no message, and any other copy
+    failure are not this."""
+    error = str(record.get("error") or "")
+    return (record.get("agent_rc") == TIMED_OUT_RC
+            and re.fullmatch(r'sbx cp \S+:/tmp/canon-last-message\.txt failed \(\d+\): .*not found in container\s*', error, re.DOTALL) is not None)
+
+
+def slot_refusal(record, expected_tree):
+    """Why a slot's workspace.json cannot be graded, or None. A mismatched tree
+    and any other recorded error are told apart, because the trees of an
+    errored slot usually match."""
+    if record.get("tree") != expected_tree:
+        return f"workspace tree {record.get('tree')} is not the built {expected_tree}"
+    if record.get("error") and not last_message_missing(record):
+        return f"the wrapper recorded an error: {record['error']}"
+    return None
 
 
 def file_harvest(work, expected_tree=None):
@@ -1070,19 +1107,22 @@ def file_harvest(work, expected_tree=None):
     path under work/harvest, and refuse a workspace run whose checkout was not
     the tree the build recorded. A slot whose wrapper the harness killed on
     timeout still names its pinned session, so every slot's transcript is
-    collected from here before any check can refuse the harvest (see host.py)."""
+    collected from here before any check can refuse the harvest (see host.py).
+    A run a refusal interrupted left its earlier slots moved, so the slots
+    still numbered fill the runs whose harvest dir does not exist yet."""
     harvest = work / "harvest"
     rows = [json.loads(line)["run_dir"] for line in (work / "tasks.jsonl").read_text().splitlines()]
     slots = sorted(harvest.glob("[0-9][0-9][0-9][0-9]")) if harvest.is_dir() else []
     for slot in slots:
         host.recover(slot)
-    if len(slots) != len(rows):
-        raise ScreenError(f"{work}: the wrapper filled {len(slots)} harvest slot(s) for {len(rows)} run(s)")
-    for slot, run_dir in zip(slots, rows):
+    pending = [run_dir for run_dir in rows if not (harvest / run_dir).exists()]
+    if len(slots) != len(pending):
+        raise ScreenError(f"{work}: the wrapper filled {len(slots)} harvest slot(s) for {len(pending)} unharvested of {len(rows)} run(s)")
+    for slot, run_dir in zip(slots, pending):
         if expected_tree:
-            record = json.loads((slot / "workspace.json").read_text())
-            if record.get("tree") != expected_tree or record.get("error"):
-                raise ScreenError(f"{work}/{run_dir}: workspace tree {record.get('tree')} is not the built {expected_tree} {record.get('error', '')}".rstrip())
+            refusal = slot_refusal(json.loads((slot / "workspace.json").read_text()), expected_tree)
+            if refusal:
+                raise ScreenError(f"{work}/{run_dir}: {refusal}")
         destination = harvest / run_dir
         destination.parent.mkdir(parents=True, exist_ok=True)
         slot.rename(destination)
@@ -1148,7 +1188,7 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
         judge_arm(out, agent, rule, case, arm)
 
 
-def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", only_arms=()):
+def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", only_arms=(), effort=None):
     """Answer, grade, and judge every arm of every case. An arm that fails is
     logged with its traceback and skipped, so the other arms still run; the
     run then exits nonzero naming each failed arm. A run limited to some
@@ -1156,14 +1196,17 @@ def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", o
     unknown = sorted(set(only_arms) - {arm for rule in rules for arm in rule.arm_names})
     if unknown:
         raise SystemExit(f"unknown arm(s): {', '.join(unknown)}")
+    refuse_effort(agent, effort)
     env = agent_env(agent, out, runner)
+    if effort:
+        print(f"{agent}: reasoning effort {effort}")
     built = build(out, rules, entry)
     failed = []
     for rule in rules:
         for case in rule.cases:
             case_build = built[rule.id]["cases"][case.id]
             try:
-                backend = backend_args(agent, out, entry, "workspace" in case_build, runner)
+                backend = backend_args(agent, out, entry, "workspace" in case_build, runner, effort)
                 for arm in rule.arm_names:
                     check_manifest(out / "arms" / rule.id / case.id / arm, case.kind)
             except Exception as exc:  # noqa: BLE001
@@ -1866,6 +1909,7 @@ def main(argv=None):
     p.add_argument("--agent", choices=sorted(DEFAULT_MODELS), required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--model")
+    p.add_argument("--effort", help="the lead's reasoning effort, e.g. high or xhigh; --agent codex only, on either runner")
     p.add_argument("--runs", type=int, default=1, help="paired repetitions per case (default 1)")
     p.add_argument("--timeout", type=int, help="seconds per answer; a workspace case defaults to its timeout_s, else 1800; "
                    "other cases to 900 under the poteto-mode entry, else their timeout_s")
@@ -1896,7 +1940,7 @@ def main(argv=None):
         elif args.command == "audit":
             audit(load_rules(args.rules), args.entry)
         elif args.command == "run":
-            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner, only_arms=tuple(args.arm))
+            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner, only_arms=tuple(args.arm), effort=args.effort)
         elif args.command == "regrade":
             regrade(out)
         elif args.command == "judge":

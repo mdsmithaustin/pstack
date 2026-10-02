@@ -407,7 +407,26 @@ skill directories to `.git/info/exclude`. It exits 97 without starting the
 agent when the checkout fails or its tree id differs from the one the build
 recorded. Under the poteto-mode entry it links the skills as before. A repo
 that already tracks `.claude/skills` gets a copy of each skill beside its own.
-Codex runs with `--sandbox workspace-write` for these cases.
+Codex runs with `--sandbox workspace-write` for these cases, and the wrapper
+also makes the checkout's `.git` writable with `-c
+sandbox_workspace_write.writable_roots`. Codex keeps `.git` read-only inside a
+writable root, which fails `git worktree add` and `git commit` for a lead that
+delegates into a worktree. The wrapper also excludes `.worktrees/` so a nested
+worktree stays out of the harvested diff.
+
+Under the poteto-mode entry the wrapper also registers the named agents as
+`sbx_inside.py setup` does, excludes the files from the harvest, and lists them
+as `agents` in the slot's `workspace.json`. For Codex it trusts the project with
+a `-c projects={...}` override, since `--ignore-user-config` skips the
+`config.toml` trust (probed on Codex 0.160.0: only the override puts
+`poteto-agent:` and `comment-sicko:` in the request).
+A pasted-project case under the same entry registers the agents and, for
+Codex, sets the same trust override, but adds no writable root, since its
+Codex run uses `--sandbox read-only`. Its cwd is the harness's temporary
+workspace, which the harness deletes after the run, and the case is graded from
+the final message, so the persona files reach neither. The harness still lists
+them as pre-agent writes in the run dir's `workspace-changes.json`,
+`candidate.patch`, and `candidate-files/`, which canon does not read.
 
 Claude runs through `claude-project-only`, whose `acceptEdits` mode denies
 Bash in a `-p` run. Claude Code 2.1.281 lists no Grep or Glob tool there, so
@@ -774,7 +793,10 @@ stopped after the agent ran, whether its harvest slots are still numbered
 `0001`, ... or it has no `grade.json`, is recovered by `screen.py regrade
 --out DIR`. regrade maps the slots with the same tree check as `run`, then
 grades each run from its diff. Such a run's `compare.json` row carries
-`graded_from_diff` and `ungraded`. A review arm then needs `screen.py judge
+`graded_from_diff` and `ungraded`. A Codex run the harness timed out (exit
+124) writes no last message, so the sbx wrapper records a failed copy against
+that slot. regrade still maps it and grades it from its diff. A crash, or any
+other recorded error, still refuses the slot. A review arm then needs `screen.py judge
 --out DIR`.
 
 ## Authoring review cases
@@ -862,7 +884,12 @@ python3 evals/canon/screen.py run --agent claude --model sonnet --entry poteto-m
 CODEX_BIN="$codex_bin" python3 evals/canon/screen.py run --agent codex --model gpt-6-sol --entry poteto-mode --out "/private/tmp/canon-entry/codex-$rule-$(date +%m%d%H%M)" "$rule"
 ```
 
-Drop `--entry poteto-mode` for the single-skill screen. `CODEX_BIN` puts that
+Drop `--entry poteto-mode` for the single-skill screen. `--effort E` pins a
+Codex lead's reasoning effort on either runner with `-c
+model_reasoning_effort=E` in the `--codex-cmd` string, which survives the
+harness's `--ignore-user-config` and `sandbox.py`'s argv rewrite. It is refused
+for `--agent claude`, since the pinned harness has no Claude effort flag.
+`CODEX_BIN` puts that
 binary first on `PATH`, so the `exec codex` in `codex-project-only` finds it.
 The shim also links every executable `codex-*` file beside the binary, because
 Codex starts helpers such as `codex-code-mode-host` from its own directory and
@@ -900,9 +927,10 @@ python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol
 ```
 
 Claude Code comes from the kit image, 2.1.280 on 2026-09-25. Codex comes
-from the dependency template: `sandbox.py deps` installs `@openai/codex@0.157.0`
+from the dependency template: `sandbox.py deps` installs `@openai/codex@0.160.0`
 (`sbx.json` `agents.codex.cli`) with npm over the kit's copy, so every Codex
-run uses 0.157.0. The kit image alone carried Codex 0.149.1 on 2026-09-25,
+run uses 0.160.0. A probe with no case repo starts from the CLI-only template
+built from the same pin. The kit image alone carried Codex 0.149.1 on 2026-09-25,
 and the model catalog and tool list below were observed on that kit-only
 version. Its catalog lists gpt-5.6-sol, terra, and luna, but not gpt-6-sol,
 the host screen's default, so pass `--model` for Codex.
@@ -1045,7 +1073,8 @@ sits under `$CANON_CACHE/sbx/`.
 **Tools observed.** `sandbox.py probe` builds a run-shaped sandbox and lists
 what the agent is offered without a paid model call. Claude gets a model name
 that does not exist, and its init event lists tools, agents, and slash commands
-before it fails. A probe whose sandbox setup fails stops there with setup's
+before it fails. The report marks each persona setup registered as offered or
+not, and the probe exits 1 when the agent does not offer one. A probe whose sandbox setup fails stops there with setup's
 stderr, before any check or agent runs. Codex is pointed at a local server inside the sandbox that
 records the request and answers 400. Observed on 2026-09-25, with and without
 a dependency template:
