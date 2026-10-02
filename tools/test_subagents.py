@@ -82,11 +82,22 @@ class SubagentCommands(unittest.TestCase):
         self.assertEqual(self.run_cli("brief", "Comment Sicko").stdout, self.run_cli("brief", "comment-sicko").stdout)
 
     def test_brief_asks_for_a_persona_line_in_the_first_reply(self):
-        for alias, role_id in (("poteto-agent", "poteto-agent"), ("Comment Sicko", "comment-sicko")):
-            with self.subTest(alias=alias):
-                brief = self.run_cli("brief", alias).stdout
-                self.assertIn(f"Put the exact line `persona: {role_id}` on its own line in your first reply.\n", brief)
-                self.assertTrue(brief.startswith("Pstack installed skill paths\n"))
+        brief = self.run_cli("brief", "poteto-agent").stdout
+        self.assertIn("Put the exact line `persona: poteto-agent` on its own line in your first reply.\n", brief)
+        self.assertTrue(brief.startswith("Pstack installed skill paths\n"))
+
+    def test_persona_with_its_own_first_line_gets_no_marker(self):
+        brief = self.run_cli("brief", "Comment Sicko").stdout
+        self.assertNotIn("persona: comment-sicko", brief)
+        self.assertNotIn("on its own line in your first reply", brief)
+        self.assertTrue(brief.startswith("Pstack installed skill paths\n"))
+        self.assertIn("Yes... Ha ha ha... Yes!", brief)
+
+    def test_signature_missing_from_the_body_invalidates_the_bundle(self):
+        payload = json.loads(self.bundle.read_text())
+        payload["roles"][0]["signature"] = "a line the body never says"
+        self.bundle.write_text(json.dumps(payload))
+        self.assertIn("signature", self.run_cli("brief", "poteto-agent", expected=1).stderr)
 
     def test_unknown_role_has_no_partial_brief(self):
         result = self.run_cli("brief", "unregistered", expected=2)

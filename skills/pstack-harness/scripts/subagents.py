@@ -20,6 +20,7 @@ class Role:
     body: str
     background: bool
     skills: tuple[str, ...]
+    signature: str | None
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,7 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
         raise ValueError("role bundle must contain roles")
     roles = []
     aliases = set()
-    fields = {"id", "aliases", "description", "body", "background", "skills", "source_sha256"}
+    fields = {"id", "aliases", "description", "body", "background", "skills", "signature", "source_sha256"}
     for item in payload["roles"]:
         if not isinstance(item, dict) or set(item) != fields:
             raise ValueError("invalid role fields")
@@ -63,6 +64,9 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
             raise ValueError(f"{item['id']}: background must be boolean")
         if not isinstance(item["source_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["source_sha256"]):
             raise ValueError(f"{item['id']}: invalid source digest")
+        signature = item["signature"]
+        if signature is not None and (not isinstance(signature, str) or not signature.strip() or signature not in item["body"]):
+            raise ValueError(f"{item['id']}: signature must be null or a line of the persona body")
         for key in ("aliases", "skills"):
             values = item[key]
             if not isinstance(values, list) or not values or any(not isinstance(value, str) or not value.strip() for value in values):
@@ -74,7 +78,7 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
         if any(not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill) for skill in item["skills"]):
             raise ValueError(f"{item['id']}: invalid sibling skill name")
         aliases.update(item["aliases"])
-        roles.append(Role(item["id"], tuple(item["aliases"]), item["description"], item["body"], item["background"], tuple(item["skills"])))
+        roles.append(Role(item["id"], tuple(item["aliases"]), item["description"], item["body"], item["background"], tuple(item["skills"]), signature))
     if not {"poteto-agent", "Comment Sicko", "comment-sicko"}.issubset(aliases):
         raise ValueError("role bundle lacks required pstack aliases")
     return tuple(roles)
@@ -107,7 +111,8 @@ def render_brief(role: Role, skills_root: Path) -> str:
         + json.dumps(str(skills_root), ensure_ascii=False) + ".\n"
     )
     guidance += "".join(f"- {name}: {json.dumps(str(path), ensure_ascii=False)}\n" for name, path in zip(role.skills, paths))
-    guidance += f"Put the exact line `persona: {role.id}` on its own line in your first reply.\n"
+    if role.signature is None:
+        guidance += f"Put the exact line `persona: {role.id}` on its own line in your first reply.\n"
     return guidance + "\n" + role.body
 
 

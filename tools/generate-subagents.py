@@ -13,6 +13,7 @@ ROLE_SKILLS = {
     "comment-sicko": ["how", "why"],
     "poteto-agent": ["poteto-mode"],
 }
+ROLE_SIGNATURES = {"comment-sicko": "Yes... Ha ha ha... Yes!"}
 
 
 def generate(root: Path) -> str:
@@ -46,6 +47,7 @@ def generate(root: Path) -> str:
             "body": parts[2],
             "background": metadata.get("is_background") == "true",
             "skills": ROLE_SKILLS[path.stem],
+            "signature": ROLE_SIGNATURES.get(path.stem),
             "source_sha256": hashlib.sha256(source).hexdigest(),
         })
     return json.dumps({"schema_version": 1, "roles": roles}, ensure_ascii=False, indent=2) + "\n"
