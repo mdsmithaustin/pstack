@@ -25,7 +25,7 @@
     {"skill":"principle-experience-first","example_request":"Choose the better user experience.","description_contains":["product, UX"],"implicit_allowed":false},
     {"skill":"principle-fix-root-causes","example_request":"Fix the root cause.","description_contains":["Trace each symptom"],"implicit_allowed":false},
     {"skill":"principle-foundational-thinking","example_request":"Choose the data model first.","description_contains":["choosing core types"],"implicit_allowed":false},
-    {"skill":"principle-guard-the-context-window","example_request":"Split this wide investigation.","description_contains":["context is filling"],"implicit_allowed":false},
+    {"skill":"principle-guard-the-context-window","example_request":"Read this 400-line log, then brief a subagent on it.","description_contains":["large read","subagent brief","context is filling"],"implicit_allowed":false},
     {"skill":"principle-laziness-protocol","example_request":"Make the smallest change.","description_contains":["Bias toward deletion"],"implicit_allowed":false},
     {"skill":"principle-make-operations-idempotent","example_request":"Make this command retry-safe.","description_contains":["same end state"],"implicit_allowed":false},
     {"skill":"principle-migrate-callers-then-delete-legacy-apis","example_request":"Migrate callers first.","description_contains":["Migrate callers"],"implicit_allowed":false},
