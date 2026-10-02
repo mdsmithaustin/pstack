@@ -81,7 +81,7 @@ class SubagentCommands(unittest.TestCase):
         self.assertEqual({row["native_file"] for row in report["roles"]}, {"not-requested"})
         self.assertEqual(self.run_cli("brief", "Comment Sicko").stdout, self.run_cli("brief", "comment-sicko").stdout)
 
-    def test_brief_tells_the_child_to_open_with_its_role_id(self):
+    def test_brief_asks_for_a_persona_line_in_the_first_reply(self):
         for alias, role_id in (("poteto-agent", "poteto-agent"), ("Comment Sicko", "comment-sicko")):
             with self.subTest(alias=alias):
                 brief = self.run_cli("brief", alias).stdout
