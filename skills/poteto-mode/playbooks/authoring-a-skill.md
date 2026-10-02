@@ -3,7 +3,7 @@
 **You own the skill's voice.**
 
 1. Author the `SKILL.md` per the [agentskills.io](https://agentskills.io) format: YAML frontmatter with `name` (kebab-case, matching the directory) and a `description` that names the concrete triggers — the words a user or task would actually contain — not generic keywords; then a body that opens with when-to-use, keeps steps imperative, and pushes bulk detail into `references/` files read on demand. Place project skills in `.agents/skills/<name>/`, personal ones in `~/.agents/skills/<name>/`, then link each project skill into whatever directories the CLIs in use discover skills from (what `npx skills` maintains on install) so every CLI finds it.
-   Write each step for an agent to execute, per the STE layer of the **technical-writing** skill: one instruction per sentence, the condition before the instruction, and a command, not narration.
+   Write each step for an agent to execute, per the STE layer of the **technical-writing** skill.
 2. Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve.
 3. Test cases if structural. Skip if subjective.
 4. Run **Opening a PR**.
