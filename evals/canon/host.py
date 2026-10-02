@@ -182,6 +182,16 @@ def link(root, discovery):
     target.symlink_to(os.path.relpath(root / workspace.TREE, target.parent))
 
 
+def writable_git_dir(command, root):
+    """command with root/.git added to Codex's workspace-write roots. The
+    sandbox keeps .git read-only inside a writable root, which fails
+    `git worktree add` and `git commit` for an agent that delegates."""
+    if "exec" not in command:
+        return command
+    at = command.index("exec") + 1
+    return [*command[:at], "-c", f"sandbox_workspace_write.writable_roots={json.dumps([str(root / '.git')])}", *command[at:]]
+
+
 def wrap(argv, stdin=sys.stdin.buffer, stdout=None):
     split = argv.index("--")
     options, command = argv[:split], argv[split + 1:]
@@ -200,6 +210,8 @@ def wrap(argv, stdin=sys.stdin.buffer, stdout=None):
     if token:
         prompt = token.encode() + b" " + prompt
     command, session = keep_session(agent, command)
+    if checkout and agent == "codex":
+        command = writable_git_dir(command, root)
     before = session_dirs(agent, session_store(agent))
     record_session(slot, agent, session)
     code, thread = run_agent(command, prompt, stdout)

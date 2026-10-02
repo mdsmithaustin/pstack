@@ -246,6 +246,11 @@ def snapshot(root, base):
         return git("write-tree", cwd=root, env=env).decode().strip()
 
 
+# Where an agent that delegates adds its delegates' git worktrees. git add -A
+# would record each as a gitlink in the harvested diff.
+WORKTREES = ".worktrees"
+
+
 def ignore_line(path):
     return "/" + re.sub(r"([*?\[\]\\!# ])", r"\\\1", path)
 
@@ -323,7 +328,7 @@ def materialize(root, mirror, commit, overlay, review=None, history=False):
     git("checkout", "-q", "--detach", commit, cwd=root)
     base = commit_review(root, commit, review)[review["branch"]] if review else commit
     write_overlay(root, overlay)
-    exclude(root, roots)
+    exclude(root, [*roots, WORKTREES])
     return snapshot(root, base)
 
 

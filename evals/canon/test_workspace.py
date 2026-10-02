@@ -152,6 +152,28 @@ class MaterializeTests(ShopRepo):
             self.assertEqual((root / "app" / "orders.py").read_text(), UPSTREAM["app/orders.py"])
             self.assertEqual(git(root, "status", "--porcelain"), "?? CONTEXT.md\n")
 
+    def test_a_worktree_the_agent_adds_under_the_checkout_stays_out_of_the_harvest(self):
+        root = self.harness_workspace("nested", "# Poteto mode\n")
+        tree = workspace.materialize(root, self.mirror, self.commit, self.spec.overlay)
+        git(root, "worktree", "add", "-q", "--detach", ".worktrees/x")
+        (root / ".worktrees" / "x" / "README.md").write_text("# Shop\nDelegate edit.\n")
+
+        self.assertEqual(workspace.harvest(root, tree), b"")
+
+    @unittest.skipUnless(os.environ.get("CANON_CODEX_BIN"), "set CANON_CODEX_BIN to a codex binary to run its real sandbox")
+    def test_codex_workspace_write_sandbox_adds_a_worktree_and_commits_only_with_the_git_dir_root(self):
+        codex = os.environ["CANON_CODEX_BIN"]
+        root = self.harness_workspace("sandboxed", "# Poteto mode\n").resolve()
+        workspace.materialize(root, self.mirror, self.commit, self.spec.overlay)
+        script = "git worktree add -q --detach .worktrees/{name} && git -c user.name=a -c user.email=a@example.com -C .worktrees/{name} commit -q --allow-empty -m x"
+
+        def sandboxed(name, *flags):
+            return subprocess.run([codex, "sandbox", "-c", "sandbox_mode=workspace-write", *flags, "--", "sh", "-c", script.format(name=name)],
+                                  cwd=root, capture_output=True, text=True).returncode
+
+        flags = host.writable_git_dir([codex, "exec"], root)[2:4]
+        self.assertEqual((sandboxed("plain") != 0, sandboxed("rooted", *flags)), (True, 0))
+
     def test_repo_file_where_a_mounted_file_sits_is_refused(self):
         root = self.harness_workspace("clash", "# Poteto mode\n")
         (root / "README.md").write_text("mounted\n")
@@ -563,9 +585,15 @@ class AgentFlagTests(ShopRepo):
     def test_claude_under_the_single_skill_entry_runs_unwrapped_outside_a_workspace(self):
         self.assertEqual(self.argv_seen("claude", False, entry="skill"), ["-p", "--model", "sonnet"])
 
-    def test_codex_in_a_workspace_gets_no_claude_rules(self):
+    def test_codex_in_a_workspace_may_write_the_checkouts_git_dir_and_gets_no_claude_rules(self):
+        root = (self.base / "cwd-codex-True-poteto-mode").resolve()
         self.assertEqual(self.argv_seen("codex", True),
-                         ["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write", "-p", "--model", "sonnet"])
+                         ["exec", "-c", f'sandbox_workspace_write.writable_roots=["{root}/.git"]',
+                          "--json", "--skip-git-repo-check", "--sandbox", "workspace-write", "-p", "--model", "sonnet"])
+
+    def test_codex_outside_a_workspace_keeps_its_read_only_sandbox_alone(self):
+        self.assertEqual(self.argv_seen("codex", False),
+                         ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only", "-p", "--model", "sonnet"])
 
 
 class MountClashTests(unittest.TestCase):

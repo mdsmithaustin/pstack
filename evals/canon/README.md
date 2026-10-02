@@ -407,7 +407,12 @@ skill directories to `.git/info/exclude`. It exits 97 without starting the
 agent when the checkout fails or its tree id differs from the one the build
 recorded. Under the poteto-mode entry it links the skills as before. A repo
 that already tracks `.claude/skills` gets a copy of each skill beside its own.
-Codex runs with `--sandbox workspace-write` for these cases.
+Codex runs with `--sandbox workspace-write` for these cases, and the wrapper
+also makes the checkout's `.git` writable with `-c
+sandbox_workspace_write.writable_roots`. Codex keeps `.git` read-only inside a
+writable root, which fails `git worktree add` and `git commit` for a lead that
+delegates into a worktree. The wrapper also excludes `.worktrees/` so a nested
+worktree stays out of the harvested diff.
 
 Claude runs through `claude-project-only`, whose `acceptEdits` mode denies
 Bash in a `-p` run. Claude Code 2.1.281 lists no Grep or Glob tool there, so
