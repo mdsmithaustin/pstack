@@ -134,6 +134,76 @@ describe("GhGitMergePort.patchId against a real repository", () => {
   });
 });
 
+describe("GhGitMergePort.patchId with binary files", () => {
+  function plainPatchId(cwd: string, range: string): string {
+    const diff = Bun.spawnSync(["git", "diff", range], { cwd });
+    const hashed = Bun.spawnSync(["git", "patch-id", "--stable"], {
+      cwd,
+      stdin: diff.stdout,
+    });
+    return decode(hashed.stdout).split(" ")[0] ?? "";
+  }
+  function viaPort(cwd: string, head: string): string {
+    return runPort(
+      cwd,
+      `console.log(JSON.stringify({ id: await port.patchId("main", parseCommitSha(${JSON.stringify(head)}))}));`
+    ).id;
+  }
+  function writeBinary(cwd: string, bytes: number[]): void {
+    writeFileSync(join(cwd, "image.bin"), Uint8Array.from(bytes));
+    git(cwd, "add", "image.bin");
+    git(cwd, "commit", "-m", "binary");
+  }
+
+  it("tells apart two different binary contents at the same path", () => {
+    const root = mkdtempSync(join(tmpdir(), "merge-gate-bin-"));
+    try {
+      const origin = join(root, "origin.git");
+      const work = join(root, "work");
+      mkdirSync(origin);
+      git(origin, "init", "--bare", "--initial-branch=main");
+      git(root, "clone", origin, "work");
+      git(work, "checkout", "-b", "main");
+      writeBinary(work, [0, 1, 2, 3]);
+      git(work, "push", "origin", "main");
+      git(work, "checkout", "-b", "first");
+      writeBinary(work, [0, 9, 9, 9]);
+      const first = git(work, "rev-parse", "HEAD");
+      git(work, "push", "origin", "first");
+      git(work, "checkout", "main");
+      git(work, "checkout", "-b", "second");
+      writeBinary(work, [0, 7, 7, 7]);
+      const second = git(work, "rev-parse", "HEAD");
+      git(work, "push", "origin", "second");
+      expect(viaPort(work, first)).not.toBe(viaPort(work, second));
+      expect(viaPort(work, first)).toBe(plainPatchId(work, `main...${first}`));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a text-only change at the patch-id plain git diff gives", () => {
+    const root = mkdtempSync(join(tmpdir(), "merge-gate-text-"));
+    try {
+      const origin = join(root, "origin.git");
+      const work = join(root, "work");
+      mkdirSync(origin);
+      git(origin, "init", "--bare", "--initial-branch=main");
+      git(root, "clone", origin, "work");
+      git(work, "checkout", "-b", "main");
+      commitFile(work, "a.txt", "one\ntwo\n");
+      git(work, "push", "origin", "main");
+      git(work, "checkout", "-b", "feature");
+      const head = commitFile(work, "a.txt", "one\ntwo\nthree\n");
+      git(work, "push", "origin", "feature");
+      expect(viaPort(work, head)).toBe(plainPatchId(work, `main...${head}`));
+      expect(viaPort(work, head)).toBe("e1a9243ae8a08b53e41d07c7bb3ca3a48104a3d9");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("GhGitMergePort gh commands", () => {
   function withFakeGh<T>(
     script: string,
