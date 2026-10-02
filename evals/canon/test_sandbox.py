@@ -196,6 +196,38 @@ class ScreenRunnerTests(unittest.TestCase):
         self.assertEqual(codex, ["--codex-cmd", f"{out / 'entry' / 'codex-sbx'} exec --json --skip-git-repo-check --sandbox workspace-write"])
         self.assertIn(f"{ROOT / 'sandbox.py'} wrap --agent claude --token /poteto-mode --discovery .claude/skills -- \"$@\"", wrapper)
 
+    def test_effort_reaches_a_codex_command_as_a_config_override_on_either_runner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory)
+            host = screen.backend_args("codex", out, "poteto-mode", False, "host", "xhigh")
+            sbx = screen.backend_args("codex", out, "poteto-mode", True, "sbx", "xhigh")
+            plain = screen.backend_args("codex", out, "poteto-mode", True, "sbx")
+
+        self.assertEqual(host[0], "--codex-cmd")
+        self.assertTrue(host[1].endswith(" exec --json --skip-git-repo-check --sandbox read-only -c model_reasoning_effort=xhigh"), host[1])
+        self.assertEqual(sbx, ["--codex-cmd", f"{out / 'entry' / 'codex-sbx'} exec --json --skip-git-repo-check --sandbox workspace-write -c model_reasoning_effort=xhigh"])
+        self.assertNotIn("effort", plain[1])
+
+    def test_effort_survives_the_sandbox_rewrite_of_the_harness_argv(self):
+        argv = ["exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write", "-c", "model_reasoning_effort=xhigh",
+                "--model", "gpt-6-sol", "--ephemeral", "--ignore-user-config", "--output-last-message", "/tmp/last", "-"]
+
+        command, _ = sandbox.agent_command("codex", argv)
+
+        at = command.index("model_reasoning_effort=xhigh")
+        self.assertEqual(command[at - 1], "-c")
+        self.assertNotIn("--ignore-user-config", command)
+
+    def test_effort_is_refused_for_claude_whose_pinned_harness_has_no_effort_flag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for runner in ("host", "sbx"):
+                with self.subTest(runner=runner), self.assertRaisesRegex(screen.ScreenError, "--effort applies to --agent codex only"):
+                    screen.backend_args("claude", Path(directory), "poteto-mode", True, runner, "high")
+
+    def test_run_refuses_effort_for_claude_before_it_builds_anything(self):
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(screen.ScreenError, "--effort applies to --agent codex only"):
+            screen.run("claude", Path(directory) / "out", [], "sonnet", 1, None, effort="high")
+
 
 class StagingTests(test_workspace.ShopRepo):
     def test_staged_checkout_clones_without_the_host_mirror(self):

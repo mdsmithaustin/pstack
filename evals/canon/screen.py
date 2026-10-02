@@ -1050,7 +1050,17 @@ def sandbox_wrapper(agent, out, entry):
     return wrapper
 
 
-def backend_args(agent, out, entry, in_workspace=False, runner="host"):
+def refuse_effort(agent, effort):
+    if effort and agent != "codex":
+        raise ScreenError("--effort applies to --agent codex only; the pinned harness has no Claude effort flag")
+
+
+def backend_args(agent, out, entry, in_workspace=False, runner="host", effort=None):
+    """The harness flags that name the agent's command. effort pins Codex's
+    reasoning effort with a -c override in the command itself: the harness runs
+    Codex with --ignore-user-config, which skips config files but keeps -c, and
+    sandbox.py's argv rewrite passes it through, so both runners get it."""
+    refuse_effort(agent, effort)
     tools = skill_ci() / "tools"
     target = tools / ("claude-project-only" if agent == "claude" else "codex-project-only")
     if runner == "sbx":
@@ -1062,7 +1072,8 @@ def backend_args(agent, out, entry, in_workspace=False, runner="host"):
     if agent == "claude":
         return ["--claude-bin", target]
     sandbox = "workspace-write" if in_workspace else "read-only"
-    return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}"]
+    pin = f" -c {shlex.quote(f'model_reasoning_effort={effort}')}" if effort else ""
+    return ["--codex-cmd", f"{shlex.quote(str(target))} exec --json --skip-git-repo-check --sandbox {sandbox}{pin}"]
 
 
 def file_harvest(work, expected_tree=None):
@@ -1148,7 +1159,7 @@ def run_arm(agent, out, rule, case, arm, case_build, backend, env, model, runs, 
         judge_arm(out, agent, rule, case, arm)
 
 
-def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", only_arms=()):
+def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", only_arms=(), effort=None):
     """Answer, grade, and judge every arm of every case. An arm that fails is
     logged with its traceback and skipped, so the other arms still run; the
     run then exits nonzero naming each failed arm. A run limited to some
@@ -1156,14 +1167,17 @@ def run(agent, out, rules, model, runs, timeout, entry="skill", runner="host", o
     unknown = sorted(set(only_arms) - {arm for rule in rules for arm in rule.arm_names})
     if unknown:
         raise SystemExit(f"unknown arm(s): {', '.join(unknown)}")
+    refuse_effort(agent, effort)
     env = agent_env(agent, out, runner)
+    if effort:
+        print(f"{agent}: reasoning effort {effort}")
     built = build(out, rules, entry)
     failed = []
     for rule in rules:
         for case in rule.cases:
             case_build = built[rule.id]["cases"][case.id]
             try:
-                backend = backend_args(agent, out, entry, "workspace" in case_build, runner)
+                backend = backend_args(agent, out, entry, "workspace" in case_build, runner, effort)
                 for arm in rule.arm_names:
                     check_manifest(out / "arms" / rule.id / case.id / arm, case.kind)
             except Exception as exc:  # noqa: BLE001
@@ -1866,6 +1880,7 @@ def main(argv=None):
     p.add_argument("--agent", choices=sorted(DEFAULT_MODELS), required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--model")
+    p.add_argument("--effort", help="the lead's reasoning effort, e.g. high or xhigh; --agent codex only, on either runner")
     p.add_argument("--runs", type=int, default=1, help="paired repetitions per case (default 1)")
     p.add_argument("--timeout", type=int, help="seconds per answer; a workspace case defaults to its timeout_s, else 1800; "
                    "other cases to 900 under the poteto-mode entry, else their timeout_s")
@@ -1896,7 +1911,7 @@ def main(argv=None):
         elif args.command == "audit":
             audit(load_rules(args.rules), args.entry)
         elif args.command == "run":
-            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner, only_arms=tuple(args.arm))
+            run(args.agent, args.out.resolve(), select_cases(load_rules(args.rules), args.case), args.model or DEFAULT_MODELS[args.agent], args.runs, args.timeout, args.entry, args.runner, only_arms=tuple(args.arm), effort=args.effort)
         elif args.command == "regrade":
             regrade(out)
         elif args.command == "judge":

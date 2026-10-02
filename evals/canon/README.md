@@ -414,6 +414,13 @@ writable root, which fails `git worktree add` and `git commit` for a lead that
 delegates into a worktree. The wrapper also excludes `.worktrees/` so a nested
 worktree stays out of the harvested diff.
 
+Under the poteto-mode entry the wrapper also registers the named agents as
+`sbx_inside.py setup` does, excludes the files from the harvest, and lists them
+as `agents` in the slot's `workspace.json`. For Codex it trusts the project with
+a `-c projects={...}` override, since `--ignore-user-config` skips the
+`config.toml` trust (probed on Codex 0.160.0: only the override puts
+`poteto-agent:` and `comment-sicko:` in the request).
+
 Claude runs through `claude-project-only`, whose `acceptEdits` mode denies
 Bash in a `-p` run. Claude Code 2.1.281 lists no Grep or Glob tool there, so
 without Bash it could not search a real repo while Codex runs git and grep. The
@@ -867,7 +874,12 @@ python3 evals/canon/screen.py run --agent claude --model sonnet --entry poteto-m
 CODEX_BIN="$codex_bin" python3 evals/canon/screen.py run --agent codex --model gpt-6-sol --entry poteto-mode --out "/private/tmp/canon-entry/codex-$rule-$(date +%m%d%H%M)" "$rule"
 ```
 
-Drop `--entry poteto-mode` for the single-skill screen. `CODEX_BIN` puts that
+Drop `--entry poteto-mode` for the single-skill screen. `--effort E` pins a
+Codex lead's reasoning effort on either runner with `-c
+model_reasoning_effort=E` in the `--codex-cmd` string, which survives the
+harness's `--ignore-user-config` and `sandbox.py`'s argv rewrite. It is refused
+for `--agent claude`, since the pinned harness has no Claude effort flag.
+`CODEX_BIN` puts that
 binary first on `PATH`, so the `exec codex` in `codex-project-only` finds it.
 The shim also links every executable `codex-*` file beside the binary, because
 Codex starts helpers such as `codex-code-mode-host` from its own directory and

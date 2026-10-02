@@ -171,7 +171,7 @@ class MaterializeTests(ShopRepo):
             return subprocess.run([codex, "sandbox", "-c", "sandbox_mode=workspace-write", *flags, "--", "sh", "-c", script.format(name=name)],
                                   cwd=root, capture_output=True, text=True).returncode
 
-        flags = host.writable_git_dir([codex, "exec"], root)[2:4]
+        flags = host.codex_config([codex, "exec"], root, False)[2:4]
         self.assertEqual((sandboxed("plain") != 0, sandboxed("rooted", *flags)), (True, 0))
 
     def test_repo_file_where_a_mounted_file_sits_is_refused(self):
@@ -528,6 +528,88 @@ class WrapTests(ShopRepo):
         self.assertIn("is not the recorded", record["error"])
         self.assertFalse((root / "prompt-seen.txt").exists())
         self.assertFalse((slot / "workspace.diff").exists())
+
+
+INSTALLER = """import json, os, pathlib, sys
+argv = sys.argv[1:]
+project = pathlib.Path(argv[argv.index("--project") + 1])
+harness = argv[argv.index("--harness") + 1]
+folder, suffix = (".claude/agents", ".md") if harness == "claude-code" else (".codex/agents", ".toml")
+paths = [project / folder / (name + suffix) for name in ("poteto-agent", "comment-sicko")]
+for path in paths:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("persona\\n")
+pathlib.Path(os.environ["INSTALL_SEEN"]).write_text(json.dumps({"argv": argv[:3], "skills_root": os.environ["PSTACK_SKILLS_ROOT"]}))
+print(json.dumps({"roles": [{"path": str(path)} for path in paths]}))
+"""
+PERSONA_AGENT = """import json, os, pathlib, sys
+sys.stdin.buffer.read()
+pathlib.Path(os.environ["ARGV_SEEN"]).write_text(json.dumps(sys.argv[1:]))
+found = sorted(str(path) for path in pathlib.Path(".").glob(".*/agents/*"))
+pathlib.Path("personas-seen.txt").write_text("\\n".join(found))
+"""
+
+
+class HostRegistersPersonasTests(ShopRepo):
+    """host.py wrap --workspace registers the named agents as the sbx runner's
+    setup does, so a host-run lead is offered poteto-agent and comment-sicko."""
+
+    def run_wrap(self, agent, *agent_args, **env):
+        token, discovery = screen.ENTRY_INVOCATION[agent]
+        root = self.harness_workspace(f"registered-{agent}", "# Poteto mode\n")
+        script = root / "skills" / "pstack" / "pstack-harness" / "scripts" / "subagents.py"
+        script.parent.mkdir(parents=True)
+        script.write_text(INSTALLER)
+        arm = self.base / f"arm-{agent}"
+        (arm / "overlay").mkdir(parents=True)
+        (arm / "overlay" / "CONTEXT.md").write_bytes(CONTEXT)
+        tree = workspace.reference_checkout(self.spec)[1]
+        (arm / "workspace.json").write_text(json.dumps({"repo": "shop", "commit": self.commit, "mirror": str(self.mirror), "tree": tree}))
+        (self.base / "persona-agent.py").write_text(PERSONA_AGENT)
+        harvest = self.base / f"harvest-{agent}"
+        environment = {"CANON_WORKSPACE": str(arm), "CANON_HARVEST": str(harvest), "INSTALL_SEEN": str(self.base / "install-seen.json"), "ARGV_SEEN": str(self.base / "argv-seen.json"),
+                       "CLAUDE_CONFIG_DIR": str(self.base / "claude-home"), "CODEX_HOME": str(self.base / "codex-home"), **env}
+        previous = Path.cwd()
+        os.chdir(root)
+        try:
+            with mock.patch.dict(os.environ, environment):
+                code = host.wrap(["--agent", agent, "--workspace", "--token", token, "--discovery", discovery, "--",
+                                  sys.executable, str(self.base / "persona-agent.py"), *agent_args], stdin=io.BytesIO(b"Go."), stdout=io.BytesIO())
+        finally:
+            os.chdir(previous)
+        slot = harvest / "0001"
+        return code, root, json.loads((slot / "workspace.json").read_text()), slot
+
+    def test_both_agents_are_offered_the_personas_the_run_registered_and_the_harvest_leaves_them_out(self):
+        for agent, harness, folder in (("claude", "claude-code", ".claude/agents"), ("codex", "codex", ".codex/agents")):
+            with self.subTest(agent=agent):
+                code, root, record, slot = self.run_wrap(agent)
+
+                suffix = ".md" if agent == "claude" else ".toml"
+                personas = [f"{folder}/comment-sicko{suffix}", f"{folder}/poteto-agent{suffix}"]
+                self.assertEqual(code, 0)
+                self.assertEqual(sorted((root / "personas-seen.txt").read_text().splitlines()), personas)
+                self.assertEqual(record["agents"], personas)
+                self.assertEqual(json.loads((self.base / "install-seen.json").read_text()),
+                                 {"argv": ["install", "--harness", harness], "skills_root": str(root.resolve() / screen.ENTRY_INVOCATION[agent][1])})
+                self.assertEqual(sorted(apply_diff(workspace.reference_checkout(self.spec)[0], (slot / "workspace.diff").read_text())),
+                                 ["personas-seen.txt"])
+
+    def test_codex_trusts_the_project_on_its_command_line_because_the_harness_ignores_the_config_file(self):
+        code, root, record, slot = self.run_wrap("codex", "exec", "--ignore-user-config", "-")
+
+        argv = json.loads((self.base / "argv-seen.json").read_text())
+        trust = f'projects={{{json.dumps(str(root.resolve()))}={{trust_level="trusted"}}}}'
+        self.assertEqual(code, 0)
+        self.assertEqual(argv[argv.index("exec") + 1:][:4], ["-c", f"sandbox_workspace_write.writable_roots={json.dumps([str(root.resolve() / '.git')])}", "-c", trust])
+        self.assertFalse((self.base / "codex-home" / "config.toml").exists())
+
+    def test_a_failed_install_refuses_the_run_before_the_agent_starts(self):
+        with mock.patch.object(host.sbx_inside, "register_agents", side_effect=workspace.WorkspaceError("named agent install failed: boom")):
+            code, root, record, slot = self.run_wrap("codex")
+
+        self.assertEqual((code, record["error"]), (workspace.REFUSED, "named agent install failed: boom"))
+        self.assertFalse((root / "personas-seen.txt").exists())
 
 
 ARGV_AGENT = """#!/usr/bin/env python3
