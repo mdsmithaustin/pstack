@@ -5,7 +5,8 @@ The chain a /poteto-mode run is meant to follow:
 
   1. the invocation injects poteto-mode/SKILL.md
   2. the agent reads one playbook, the one the task matches
-  3. it opens a worklist whose first items are that playbook's steps, verbatim,
+  3. it opens a worklist whose first items are that playbook's opening prose and
+     steps, verbatim,
      on a structured tool when one is offered, else in its progress messages
   4. it reads the principle leaf a decision needs before making the decision
   5. it delegates code-writing to a poteto-agent subagent whose brief names
