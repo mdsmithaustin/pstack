@@ -14,7 +14,7 @@ PLAYBOOKS = sorted(
 AWK_PROGRAM = (
     r"/^[0-9]+\. /{p=1} "
     r"!p && !/^#/ && NF {print; next} "
-    r"p&&/^[^ 0-9]/{exit} p"
+    r"p && /^[^ ]/ && !/^[0-9]+\. /{exit} p"
 )
 
 SENTINEL = "Read this playbook in full."
@@ -22,7 +22,7 @@ INDEX_SHAPED = frozenset({"multi-phase-plan.md", "opening-a-pr.md", "orchestrate
 REPLY = "**Reply:**"
 STEP = re.compile(r"[0-9]+\. ")
 HEADING = re.compile(r"#")
-STOP = re.compile(r"[^ 0-9]")
+NON_SPACE_LEAD = re.compile(r"[^ ]")
 
 
 def extract(text):
@@ -41,7 +41,7 @@ def extract(text):
         if not in_steps and not HEADING.match(line) and line.strip(" \t"):
             printed.append(line)
             continue
-        if in_steps and STOP.match(line):
+        if in_steps and NON_SPACE_LEAD.match(line) and not STEP.match(line):
             return printed, lines[index:]
         if in_steps:
             printed.append(line)
@@ -111,9 +111,13 @@ class Extract(unittest.TestCase):
         text = "1. a\n\n# Later\ntext\n"
         self.assertEqual(extract(text), (["1. a", ""], ["# Later", "text"]))
 
-    def test_digit_led_line_after_step_one_continues(self):
+    def test_digit_led_non_step_line_stops_the_block(self):
         text = "1. a\n2026 note\n10. ten\n"
-        self.assertEqual(extract(text), (["1. a", "2026 note", "10. ten"], []))
+        self.assertEqual(extract(text), (["1. a"], ["2026 note", "10. ten"]))
+
+    def test_two_digit_step_directly_after_steps_continues(self):
+        text = "1. a\n10. ten\n"
+        self.assertEqual(extract(text), (["1. a", "10. ten"], []))
 
     def test_matches_real_awk_on_every_playbook(self):
         awk = shutil.which("awk")
@@ -176,6 +180,12 @@ class FirstShapeViolation(unittest.TestCase):
         self.assertEqual(
             first_shape_violation("a.md", "1. a\n\nstray\n**Reply:** done\n"),
             "first offending line after the extractor stops: 'stray'",
+        )
+
+    def test_digit_led_paragraph_after_steps_is_the_first_offender(self):
+        self.assertEqual(
+            first_shape_violation("a.md", "1. a\n2026 note\n**Reply:** done\n"),
+            "first offending line after the extractor stops: '2026 note'",
         )
 
     def test_sentinel_in_an_unlisted_playbook_fails(self):
