@@ -165,8 +165,11 @@ export interface ResolveGateParams {
   readonly answer: string;
 }
 
+export type FrontierDiscovery = "github" | "graphite";
+
 export interface SetFrontierParams {
   readonly repo: string;
+  readonly discovery?: FrontierDiscovery;
   readonly prs?: readonly number[];
 }
 
@@ -1225,7 +1228,7 @@ function currentBranch(repo: string): string {
   const branch = raw.trim();
   if (branch.length === 0) {
     throw new UserError(
-      "GitHub frontier fallback requires a checked out branch"
+      "GitHub frontier discovery requires a checked out branch"
     );
   }
   return branch;
@@ -1286,7 +1289,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   } catch (error) {
     if (errorCode(error) === "ENOENT") {
       throw new UserError(
-        "GitHub frontier fallback requires gh; install GitHub CLI or Graphite"
+        "GitHub frontier discovery requires gh; install GitHub CLI, or pass --graphite for a stack Graphite tracks"
       );
     }
     throw new UserError(`gh pr list failed: ${errorMessage(error)}`);
@@ -1303,7 +1306,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   }
   if (decoded.length === 1000) {
     throw new UserError(
-      "gh pr list reached its 1000 PR limit; install Graphite or reduce repository history before resolving the frontier"
+      "gh pr list reached its 1000 PR limit; reduce repository history, or pass --graphite for a stack Graphite tracks, before resolving the frontier"
     );
   }
 
@@ -1343,7 +1346,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
     }
     if (candidates.length > 1) {
       throw new UserError(
-        `GitHub frontier fallback found multiple PRs for ${description} ${branch}`
+        `GitHub frontier discovery found multiple PRs for ${description} ${branch}`
       );
     }
     return candidates[0];
@@ -1357,12 +1360,12 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   });
   if (selected === undefined) {
     throw new UserError(
-      `GitHub frontier fallback found no PR for checked out branch ${branch}; checkout a branch in the stack or install Graphite`
+      `GitHub frontier discovery found no PR for checked out branch ${branch}; checkout a branch in the stack, or pass --graphite for a stack Graphite tracks`
     );
   }
   if (selected.isCrossRepository) {
     throw new UserError(
-      "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+      "GitHub frontier discovery does not support cross-repository stacks; pass --graphite for a stack Graphite tracks"
     );
   }
 
@@ -1373,7 +1376,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
     const baseCandidates = byBranch.get(cursor.base) ?? [];
     if (baseCandidates.some((row) => row.isCrossRepository)) {
       throw new UserError(
-        "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+        "GitHub frontier discovery does not support cross-repository stacks; pass --graphite for a stack Graphite tracks"
       );
     }
     const parent = singleBranchRow({
@@ -1395,7 +1398,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   for (const row of [...ancestors, selected]) {
     if ((children.get(row.branches) ?? []).length > 1) {
       throw new UserError(
-        `GitHub frontier fallback found a branched stack above ${row.branches}`
+        `GitHub frontier discovery found a branched stack above ${row.branches}`
       );
     }
   }
@@ -1408,7 +1411,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
     }
     if (candidates.length > 1) {
       throw new UserError(
-        `GitHub frontier fallback found a branched stack above ${cursor.branches}`
+        `GitHub frontier discovery found a branched stack above ${cursor.branches}`
       );
     }
     const child = candidates[0];
@@ -1417,7 +1420,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
     }
     if (child.isCrossRepository) {
       throw new UserError(
-        "GitHub frontier fallback does not support cross-repository stacks; install Graphite"
+        "GitHub frontier discovery does not support cross-repository stacks; pass --graphite for a stack Graphite tracks"
       );
     }
     if (seen.has(child.branches)) {
@@ -1433,10 +1436,18 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   );
 }
 
-function resolveFrontier(repo: string): FrontierResolution {
+function resolveFrontier(
+  repo: string,
+  discovery: FrontierDiscovery
+): FrontierResolution {
   requireGitRepository(repo);
-  if (!graphiteIsAvailable(repo)) {
+  if (discovery === "github") {
     return { source: "GitHub", prs: githubFrontier(repo) };
+  }
+  if (!graphiteIsAvailable(repo)) {
+    throw new UsageError(
+      "--graphite requires gt; install Graphite or omit --graphite to discover the frontier through GitHub"
+    );
   }
   return {
     source: "gt",
@@ -1776,7 +1787,7 @@ export function openStore(
           throw new UserError("--prs must not contain duplicates");
         }
         const old = await readFrontier(store);
-        const frontier = resolveFrontier(repo);
+        const frontier = resolveFrontier(repo, params.discovery ?? "github");
         if (pin !== undefined) {
           validateFrontierPin({
             actual: frontier.prs.map((row) => row.pr),
