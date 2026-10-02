@@ -254,9 +254,20 @@ function reviewStateResponse(args: {
     data: {
       repository: {
         pullRequest: {
+          headRefOid: "head",
+          author: { login: "octocat" },
           reviewThreads: { nodes: args.threads ?? [] },
-          reviews: { nodes: args.reviews ?? [] },
+          reviews: {
+            nodes: (args.reviews ?? []).map((review) => ({
+              url: "https://github.com/owner/repo/pull/42#pullrequestreview-1",
+              body: "",
+              state: "COMMENTED",
+              commit: { oid: "head" },
+              ...(review as object),
+            })),
+          },
           reviewRequests: { nodes: args.reviewRequests ?? [] },
+          comments: { nodes: [] },
         },
       },
     },

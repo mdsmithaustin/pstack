@@ -22,13 +22,20 @@ function ciCell(row: T.PrSnapshot): string {
 function reviewCell(row: T.PrSnapshot): string {
   if (row.kind !== "open") return "\u2014";
   const open = row.threads.length;
-  return row.reviewAutomationRunning
-    ? open
-      ? `🤖 running, ${open} open`
-      : "🤖 running"
-    : open
-      ? `📝 ${open} open`
+  const flagged = row.flaggedReviews.filter(
+    (review) => review.status === "open"
+  ).length;
+  const labels = [
+    ...(row.reviewAutomationRunning ? ["running"] : []),
+    ...(open ? [`${open} open`] : []),
+    ...(flagged ? [`${flagged} flagged review${flagged === 1 ? "" : "s"}`] : []),
+  ];
+  const lead = row.reviewAutomationRunning
+    ? "🤖"
+    : labels.length
+      ? "📝"
       : "✅";
+  return labels.length ? `${lead} ${labels.join(", ")}` : lead;
 }
 function mergeCell(row: T.PrSnapshot): string {
   if (row.kind === "merged") return "✅ merged";
@@ -42,14 +49,21 @@ function mergeCell(row: T.PrSnapshot): string {
     ? "⚠️ conflict"
     : "✅";
 }
+const prUrl = (pr: T.PrContext): string =>
+  `https://${pr.host}/${pr.owner}/${pr.repo}/pull/${pr.number}`;
+const unreadNote = (unread: T.UnreadReview, pr: T.PrContext | null): string =>
+  `note=${pr === null ? "" : `#${pr.number} `}unread bot review body: ${unread.bot} ${unread.url} ${unread.untrustedExcerpt}`;
 export function renderStatusTable(rows: T.NonEmpty<T.PrSnapshot>): string {
   const lines = ["| PR | CI | Review | Merge |", "| --- | --- | --- | --- |"];
   for (const row of rows) {
-    const url = `https://${row.context.host}/${row.context.owner}/${row.context.repo}/pull/${row.context.number}`;
     lines.push(
-      `| [#${row.context.number}](${url}) | ${ciCell(row)} | ${reviewCell(row)} | ${mergeCell(row)} |`
+      `| [#${row.context.number}](${prUrl(row.context)}) | ${ciCell(row)} | ${reviewCell(row)} | ${mergeCell(row)} |`
     );
   }
+  for (const row of rows)
+    if (row.kind === "open")
+      for (const unread of row.unreadReviews)
+        lines.push(unreadNote(unread, row.context));
   return `${lines.join("\n")}\n`;
 }
 function threadLine(thread: T.ReviewThread): string {
@@ -64,6 +78,18 @@ function threadLine(thread: T.ReviewThread): string {
       : `bot=${thread.bot.login} passes=${thread.bot.passes}`,
     (comment?.body ?? "").split(/\r?\n/, 1)[0]?.slice(0, 180) ?? "",
   ].join(" ");
+}
+function reviewLines(review: T.OpenReview): readonly string[] {
+  const reading = review.reading;
+  return [
+    `${review.id} ${review.bot} ${reading.kind === "findings" ? reading.format : "unrecognized"} ${review.url}`,
+    ...(reading.kind === "findings"
+      ? reading.findings.map(
+          (finding) =>
+            `  ${finding.section}: ${finding.title}${finding.location === null ? "" : ` ${finding.location}`}`
+        )
+      : [`  unrecognized body: ${reading.untrustedExcerpt}`]),
+  ];
 }
 type StatusQueryBlocker = {
   readonly kind: "status-query";
@@ -86,6 +112,14 @@ function renderBlocker(blocker: T.MergeBlocker | StatusQueryBlocker): string {
         `pr=${blocker.pr.number}`,
         `unresolved=${blocker.threads.length}`,
         ...blocker.threads.map(threadLine),
+      ].join("\n");
+    case "review-findings":
+      return [
+        "BLOCKER: review-findings",
+        `pr=${blocker.pr.number}`,
+        `unacknowledged=${blocker.reviews.length}`,
+        ...blocker.reviews.flatMap(reviewLines),
+        "action=fix and push, or post a PR comment that links the review URL with the disproof or the fixing commit",
       ].join("\n");
     case "failing-checks": {
       const failed = blocker.ci.kind === "ci-failing" ? blocker.ci.failed : [];
@@ -131,6 +165,15 @@ function renderBlocker(blocker: T.MergeBlocker | StatusQueryBlocker): string {
     }
   }
 }
+function readyReviewLines(pr: T.ReadyPr): readonly string[] {
+  return [
+    ...pr.proof.acknowledgedReviews.map(
+      (review) =>
+        `acknowledged=${review.id} pr=#${pr.context.number} by=${review.ack.author} ack=${review.ack.url}`
+    ),
+    ...pr.proof.unreadReviews.map((unread) => unreadNote(unread, null)),
+  ];
+}
 export function renderPretty(verdict: T.WatcherVerdict): string {
   switch (verdict.kind) {
     case "QUEUE":
@@ -161,7 +204,12 @@ export function renderPretty(verdict: T.WatcherVerdict): string {
         verdict.scope.kind === "single" && verdict.scope.pr.kind === "ready-pr"
           ? `\nmergeStateStatus=${verdict.scope.pr.proof.ci.github.mergeStateStatus}\nreviewDecision=${verdict.scope.pr.proof.gate.reviewDecision}\nisDraft=${verdict.scope.pr.proof.gate.draft === "draft-allowed"}${verdict.scope.pr.proof.gate.draft === "draft-allowed" ? "\nnote=draft allowed (--allow-draft); leave draft \u2014 do not mark ready" : ""}`
           : "";
-      return `READY: no merge conflicts, no unresolved review threads, no failing or pending checks${detail}\n`;
+      const prs =
+        verdict.scope.kind === "single" ? [verdict.scope.pr] : verdict.scope.prs;
+      const review = prs.flatMap((pr) =>
+        pr.kind === "ready-pr" ? readyReviewLines(pr) : []
+      );
+      return `READY: no merge conflicts, no unresolved review threads, no unacknowledged bot review findings, no failing or pending checks${detail}${review.map((line) => `\n${line}`).join("")}\n`;
     }
     case "COMPLETE":
       return `COMPLETE: queued stack merged (${verdict.queue.length} PR${verdict.queue.length === 1 ? "" : "s"})\n`;

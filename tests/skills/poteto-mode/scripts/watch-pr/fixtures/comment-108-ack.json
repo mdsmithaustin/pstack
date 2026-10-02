@@ -1,0 +1,10 @@
+{
+  "id": 5945280704,
+  "html_url": "https://github.com/mdsmithaustin/pstack/pull/108#issuecomment-5945280704",
+  "author_association": "OWNER",
+  "body": "Re https://github.com/mdsmithaustin/pstack/pull/108#pullrequestreview-5388128492 (Previously missed, PORTING.md:45): valid. Fixed in ce89aee8. The port-addition bullet now says orchestrate's spawn budget, restack, and restart lines still assume cloud workers until its local rework lands. That rework follows as its own PR and removes the caveat.\n",
+  "user": {
+    "login": "mdsmithaustin",
+    "type": "User"
+  }
+}

@@ -141,6 +141,8 @@ export async function readSnapshot(args: {
           )
       ) || reviewState.pendingBots.length > 0,
     pendingReviewBots: reviewState.pendingBots,
+    flaggedReviews: reviewState.flaggedReviews,
+    unreadReviews: reviewState.unreadReviews,
   };
 }
 const conflictBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
@@ -156,6 +158,18 @@ function threadBlocker(row: T.PrSnapshot): T.MergeBlocker | null {
   return threads === null
     ? null
     : { kind: "review-threads", pr: row.context, threads };
+}
+const isOpenReview = (review: T.FlaggedReview): review is T.OpenReview =>
+  review.status === "open";
+const isAcknowledgedReview = (
+  review: T.FlaggedReview
+): review is T.AcknowledgedReview => review.status === "acknowledged";
+function findingsBlocker(row: T.PrSnapshot): T.MergeBlocker | null {
+  if (row.kind !== "open") return null;
+  const reviews = nonEmpty(row.flaggedReviews.filter(isOpenReview));
+  return reviews === null
+    ? null
+    : { kind: "review-findings", pr: row.context, reviews };
 }
 const ciBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
   row.kind === "open" &&
@@ -199,6 +213,7 @@ function readyContribution(
     row.kind !== "open" ||
     row.ci.kind !== "ci-clean" ||
     row.threads.length !== 0 ||
+    findingsBlocker(row) !== null ||
     row.pendingReviewBots.length !== 0 ||
     conflictBlocker(row) !== null ||
     gateReason(row, allowDraft) !== null
@@ -212,6 +227,8 @@ function readyContribution(
     proof: {
       mergeability: "clear",
       threads: [],
+      acknowledgedReviews: row.flaggedReviews.filter(isAcknowledgedReview),
+      unreadReviews: row.unreadReviews,
       ci: row.ci,
       gate: {
         state: "OPEN",
@@ -228,6 +245,7 @@ export function classifyPr(
   for (const blocker of [
     conflictBlocker(row),
     threadBlocker(row),
+    findingsBlocker(row),
     ciBlocker(row),
     gateBlocker(row, allowDraft),
   ])
@@ -257,7 +275,7 @@ export function selectTierMajorStackDecision(
   rows: T.NonEmpty<T.PrSnapshot>,
   allowDraft = false
 ): T.StackDecision {
-  for (const tier of [conflictBlocker, threadBlocker, ciBlocker])
+  for (const tier of [conflictBlocker, threadBlocker, findingsBlocker, ciBlocker])
     for (const row of rows) {
       const blocker = tier(row);
       if (blocker !== null) return { kind: "blocker", blocker };
@@ -346,6 +364,8 @@ function blockerVerdict(
       return stamp({ kind: "BLOCKER", terminal: true, exitCode: 2, blocker });
     case "review-threads":
       return stamp({ kind: "BLOCKER", terminal: true, exitCode: 3, blocker });
+    case "review-findings":
+      return stamp({ kind: "BLOCKER", terminal: true, exitCode: 8, blocker });
     case "failing-checks":
       return stamp({ kind: "BLOCKER", terminal: true, exitCode: 4, blocker });
     case "merge-gate":
