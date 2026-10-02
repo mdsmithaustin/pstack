@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Swarm
 
-Fan out N parallel cloud workers. They may cover separate slices, race the same brief, or mix both. The parent waits, aggregates, and returns one report.
+Fan out N parallel workers. They may cover separate slices, race the same brief, or mix both. The parent waits, aggregates, and returns one report.
 
 ## Start
 
@@ -21,7 +21,7 @@ Open a worklist with one entry per phase before launching anything.
 
 1. State the done predicate and the artifact or report the swarm must return.
 2. Choose the shape. Partition into slices, race N workers on identical briefs, or mix both. For a race or mixed shape, declare `first pass`, `rank all`, or `best-of` before spawning.
-3. Set N from the user or derive it from the shape. N is total workers, not the cloud concurrency limit.
+3. Set N from the user or derive it from the shape. N is total workers, not the concurrency limit.
 4. Pick each worker's role by what it does. Spawn per **Spawn a role** in the **pstack-harness** skill, which resolves the role and builds this CLI's spawn call.
    - A worker that runs something and reports what it saw uses the `swarm workers` role, default `sonnet`. Its `PASS` or `ISSUES` comes from a command's output or an observed result. Gate, live, regression, and perf lanes, coverage slices, and exploration partitions are this kind.
    - A worker that reads code, a diff, or another artifact and judges it uses the `trail reviewer` role, default `opus`. Audit and review lanes are this kind, and so is a worker that both runs something and judges the work. Before you spawn it, find the model that wrote the work, because **Spawn a role** steps this role down a tier when it resolves to that model. When that model is unknown, run the role as resolved and say so in the report.
@@ -30,9 +30,9 @@ Open a worklist with one entry per phase before launching anything.
 
 ## Phase B: Fan out
 
-Spawn all N workers in one message with no persona, `environment: "cloud"`, `run_in_background: true`, and the spawn call **Spawn a role** builds from each worker's step 4 role. Use `environment: "local"` only when the worker needs access to something on the user's computer.
+Spawn all N workers in one message with no persona, `run_in_background: true`, and the spawn call **Spawn a role** builds from each worker's step 4 role.
 
-When a worker must start from a non-default pushed branch, pass `cloud_base_branch`.
+A worker that must start from another pushed branch gets a worktree at that branch's SHA, named in its brief.
 
 Every brief stands alone. Include the goal, scope, exact slice or race arm, how to verify, and what to report. Reports use `PASS`, `ISSUES`, or `BLOCKED` with evidence. A worker that can prove a defect reports `ISSUES` and lists every issue it can prove, not only the first.
 
