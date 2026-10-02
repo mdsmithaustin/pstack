@@ -53,7 +53,7 @@ Each writer gets its own git worktree, whichever mechanism spawns it. Keep the l
 - A throwaway checkout (verify, review, replay, eval arm) goes under `mktemp -d "${TMPDIR:-/tmp}/pstack-<slug>.XXXXXX"`. Remove it with `git worktree remove` when its run ends.
 - A worktree that holds unpushed work goes under `.worktrees/<slug>` in the main checkout. If the repository does not ignore `.worktrees/`, append it to `"$(git rev-parse --git-common-dir)/info/exclude"` first.
 
-If `git worktree add` fails, spawn the writer in the current checkout anyway, and run writers one at a time. Codex's `workspace-write` sandbox causes this, because it keeps `.git` read-only. A failed worktree never moves the work back to the lead.
+If `git worktree add` fails, spawn the writer in the current checkout. Run one writer at a time. Codex's `workspace-write` sandbox keeps `.git` read-only, so `git worktree add` fails there. Never take the writer's work back into the lead.
 
 **Parallelism.** Real where the mechanism allows it (independent tool calls in one message, concurrent subprocesses); otherwise sequential with the same arm count.
 

@@ -786,7 +786,10 @@ stopped after the agent ran, whether its harvest slots are still numbered
 `0001`, ... or it has no `grade.json`, is recovered by `screen.py regrade
 --out DIR`. regrade maps the slots with the same tree check as `run`, then
 grades each run from its diff. Such a run's `compare.json` row carries
-`graded_from_diff` and `ungraded`. A review arm then needs `screen.py judge
+`graded_from_diff` and `ungraded`. A Codex run the harness timed out (exit
+124) writes no last message, so the sbx wrapper records a failed copy against
+that slot. regrade still maps it and grades it from its diff. A crash, or any
+other recorded error, still refuses the slot. A review arm then needs `screen.py judge
 --out DIR`.
 
 ## Authoring review cases
@@ -917,9 +920,10 @@ python3 evals/canon/screen.py run --runner sbx --agent codex --model gpt-5.6-sol
 ```
 
 Claude Code comes from the kit image, 2.1.280 on 2026-09-25. Codex comes
-from the dependency template: `sandbox.py deps` installs `@openai/codex@0.157.0`
+from the dependency template: `sandbox.py deps` installs `@openai/codex@0.160.0`
 (`sbx.json` `agents.codex.cli`) with npm over the kit's copy, so every Codex
-run uses 0.157.0. The kit image alone carried Codex 0.149.1 on 2026-09-25,
+run uses 0.160.0. A probe with no case repo starts from the CLI-only template
+built from the same pin. The kit image alone carried Codex 0.149.1 on 2026-09-25,
 and the model catalog and tool list below were observed on that kit-only
 version. Its catalog lists gpt-5.6-sol, terra, and luna, but not gpt-6-sol,
 the host screen's default, so pass `--model` for Codex.
@@ -1062,7 +1066,8 @@ sits under `$CANON_CACHE/sbx/`.
 **Tools observed.** `sandbox.py probe` builds a run-shaped sandbox and lists
 what the agent is offered without a paid model call. Claude gets a model name
 that does not exist, and its init event lists tools, agents, and slash commands
-before it fails. A probe whose sandbox setup fails stops there with setup's
+before it fails. The report marks each persona setup registered as offered or
+not, and the probe exits 1 when the agent does not offer one. A probe whose sandbox setup fails stops there with setup's
 stderr, before any check or agent runs. Codex is pointed at a local server inside the sandbox that
 records the request and answers 400. Observed on 2026-09-25, with and without
 a dependency template:
