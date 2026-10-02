@@ -18,6 +18,7 @@ AWK_PROGRAM = (
 )
 
 SENTINEL = "Read this playbook in full."
+INDEX_SHAPED = frozenset({"multi-phase-plan.md", "opening-a-pr.md", "orchestrate.md"})
 REPLY = "**Reply:**"
 STEP = re.compile(r"[0-9]+\. ")
 HEADING = re.compile(r"#")
@@ -51,16 +52,20 @@ def is_index_shaped(printed):
     return any(line.startswith(SENTINEL) for line in printed)
 
 
-def first_shape_violation(text):
+def first_shape_violation(name, text):
     """Return a description of why the playbook breaks the rule, or None."""
     printed, rest = extract(text)
     if is_index_shaped(printed):
-        return None
-    if not any(STEP.match(line) for line in printed):
+        if name in INDEX_SHAPED:
+            return None
+        return f"index-shaped playbook is not in INDEX_SHAPED: {name!r}"
+    if not any(line.startswith("1. ") for line in printed):
         return "no numbered step 1"
     for line in rest:
         if line.strip() and not line.startswith(REPLY):
             return f"first offending line after the extractor stops: {line!r}"
+    if not any(line.startswith(REPLY) for line in rest):
+        return f"no {REPLY} line after the steps"
     return None
 
 
@@ -133,20 +138,55 @@ class PlaybookShape(unittest.TestCase):
         self.assertTrue(PLAYBOOKS, "no playbooks found")
         for path in PLAYBOOKS:
             with self.subTest(playbook=path.name):
-                violation = first_shape_violation(path.read_text(encoding="utf-8"))
+                violation = first_shape_violation(path.name, path.read_text(encoding="utf-8"))
                 self.assertIsNone(violation, f"{path}: {violation}")
 
-    def test_sentinel_exemption_is_not_vacuous(self):
-        shaped = [
+    def test_index_shaped_playbooks_are_exactly_the_named_set(self):
+        shaped = {
             path.name
             for path in PLAYBOOKS
             if is_index_shaped(extract(path.read_text(encoding="utf-8"))[0])
-        ]
-        self.assertLessEqual(
-            len(shaped), 3, f"index-shaped playbooks should be a short list: {shaped}"
+        }
+        self.assertEqual(shaped, INDEX_SHAPED)
+
+
+class FirstShapeViolation(unittest.TestCase):
+    def test_step_numbered_two_is_not_step_one(self):
+        self.assertEqual(
+            first_shape_violation("a.md", "2. a\n**Reply:** done\n"),
+            "no numbered step 1",
         )
-        self.assertLess(
-            len(shaped), len(PLAYBOOKS), "every playbook is exempt, so the rule checks nothing"
+
+    def test_step_numbered_ten_is_not_step_one(self):
+        self.assertEqual(
+            first_shape_violation("a.md", "10. a\n**Reply:** done\n"),
+            "no numbered step 1",
+        )
+
+    def test_steps_that_reach_end_of_file_have_no_reply(self):
+        self.assertEqual(
+            first_shape_violation("a.md", "1. a\n2. b\n"),
+            "no **Reply:** line after the steps",
+        )
+
+    def test_reply_after_steps_passes(self):
+        self.assertIsNone(first_shape_violation("a.md", "1. a\n\n**Reply:** done\n"))
+
+    def test_stray_line_before_reply_still_fails(self):
+        self.assertEqual(
+            first_shape_violation("a.md", "1. a\n\nstray\n**Reply:** done\n"),
+            "first offending line after the extractor stops: 'stray'",
+        )
+
+    def test_sentinel_in_an_unlisted_playbook_fails(self):
+        self.assertEqual(
+            first_shape_violation("other.md", "Read this playbook in full.\n"),
+            "index-shaped playbook is not in INDEX_SHAPED: 'other.md'",
+        )
+
+    def test_sentinel_in_a_listed_playbook_passes(self):
+        self.assertIsNone(
+            first_shape_violation("orchestrate.md", "Read this playbook in full.\n")
         )
 
 
