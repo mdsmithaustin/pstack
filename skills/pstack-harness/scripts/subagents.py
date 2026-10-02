@@ -100,7 +100,6 @@ def render_brief(role: Role, skills_root: Path) -> str:
         if not path.is_file():
             raise ValueError(f"{role.id}: missing sibling skill {path}")
     guidance = (
-        f"Put the exact line `persona: {role.id}` on its own line in your first reply.\n\n"
         "Pstack installed skill paths\n\n"
         "Use these local files when the persona below requires a skill read. "
         "Read each required SKILL.md in full; follow its relative references from its directory. "
@@ -108,6 +107,7 @@ def render_brief(role: Role, skills_root: Path) -> str:
         + json.dumps(str(skills_root), ensure_ascii=False) + ".\n"
     )
     guidance += "".join(f"- {name}: {json.dumps(str(path), ensure_ascii=False)}\n" for name, path in zip(role.skills, paths))
+    guidance += f"Put the exact line `persona: {role.id}` on its own line in your first reply.\n"
     return guidance + "\n" + role.body
 
 

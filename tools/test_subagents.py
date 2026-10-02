@@ -86,7 +86,7 @@ class SubagentCommands(unittest.TestCase):
             with self.subTest(alias=alias):
                 brief = self.run_cli("brief", alias).stdout
                 self.assertIn(f"Put the exact line `persona: {role_id}` on its own line in your first reply.\n", brief)
-                self.assertLess(brief.index("persona: "), brief.index("Use these local files"))
+                self.assertTrue(brief.startswith("Pstack installed skill paths\n"))
 
     def test_unknown_role_has_no_partial_brief(self):
         result = self.run_cli("brief", "unregistered", expected=2)
