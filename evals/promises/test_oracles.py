@@ -882,7 +882,7 @@ class DeslopPass(unittest.TestCase):
         live.make_project(load_case("deslop-run"), project)
         (project / "roster" / "report.py").write_text(report)
         if restore_load:
-            (project / "roster" / "load.py").write_text((FIXTURES / "roster" / "roster" / "load.py").read_text())
+            (project / "roster" / "load.py").write_text((CASES / "deslop-run" / "expected" / "roster" / "load.py").read_text())
         return project
 
     def grade(self, project, case=None, **trace):
@@ -916,7 +916,14 @@ class DeslopPass(unittest.TestCase):
     def test_a_kept_unrelated_edit_fails(self):
         result = self.grade(self.roster(restore_load=False))
         self.assertEqual(result["verdict"], FAIL)
-        self.assertEqual(result["failures"], ["unrelated edit kept instead of reverted: ['roster/load.py']"])
+        self.assertEqual(result["failures"], ["file differs from its expected result: ['roster/load.py']"])
+
+    def test_restoring_the_whole_file_loses_the_users_uncommitted_edit_and_fails(self):
+        project = self.roster(restore_load=False)
+        (project / "roster" / "load.py").write_text((FIXTURES / "roster" / "roster" / "load.py").read_text())
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["file differs from its expected result: ['roster/load.py']"])
 
     def test_a_run_that_never_loads_deslop_fails(self):
         result = self.grade(self.roster(), events=[edit(1, "roster/report.py")])
@@ -980,7 +987,7 @@ class DeslopPass(unittest.TestCase):
         (project / "roster" / "load.py").unlink()
         result = self.grade(project)
         self.assertEqual(result["verdict"], FAIL)
-        self.assertIn("unrelated edit kept instead of reverted: ['roster/load.py']", result["failures"])
+        self.assertIn("file differs from its expected result: ['roster/load.py']", result["failures"])
 
     def test_a_cut_that_changes_behavior_fails_the_check(self):
         no_filter = "from collections import Counter\n\n\ndef count_by_team(rows, team=None):\n    return sorted(Counter(row[\"team\"] for row in rows).items())\n"

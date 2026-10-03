@@ -1799,16 +1799,16 @@ def deslop_cleans(view):
     survived = [c for c in expect.get("gone", []) if c in texts]
     missing = [f"{rel}: {c}" for rel, wanted in expect.get("kept", {}).items() for c in wanted
                if not (view.project / rel).is_file() or c not in (view.project / rel).read_text(encoding="utf-8", errors="replace")]
-    churn = [rel for rel in expect.get("untouched", [])
+    churn = [rel for rel, want in expect.get("expected", {}).items()
              if not (view.project / rel).is_file()
-             or (view.git("show", f"{base[0]}:{rel}") or "") != (view.project / rel).read_text(encoding="utf-8", errors="replace")]
+             or (view.project / rel).read_bytes() != (HERE / "cases" / view.case["id"] / want).read_bytes()]
     planted = {rel for rel in (view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()
                if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
     added = sorted(project_files(view) - planted)
     deleted = sorted(rel for rel in planted if not (view.project / rel).exists())
     changed = [rel for rel in expect.get("preserved", []) if not same_as_history(view, rel)]
     broken = [problem for problem in map(lambda c: check_problem(view.project, c), expect.get("checks", [])) if problem]
-    evidence += [f"planted slop still present: {survived}", f"branch work missing: {missing}", f"unrelated edits kept: {churn}",
+    evidence += [f"planted slop still present: {survived}", f"branch work missing: {missing}", f"files off their expected result: {churn}",
                  f"files added: {added}", f"files deleted: {deleted}", f"uncommitted work changed: {changed}", f"checks run: {len(expect.get('checks', []))}, failing: {len(broken)}"]
     failures = [] if loaded else ["the deslop skill was never loaded"]
     if survived:
@@ -1816,7 +1816,7 @@ def deslop_cleans(view):
     if missing:
         failures.append(f"the branch's own work went missing: {missing}")
     if churn:
-        failures.append(f"unrelated edit kept instead of reverted: {churn}")
+        failures.append(f"file differs from its expected result: {churn}")
     if added:
         failures.append(f"new files appeared: {added}")
     if deleted:

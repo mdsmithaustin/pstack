@@ -31,9 +31,6 @@
     "def test_team_keeps_one_team"
    ]
   },
-  "untouched": [
-   "roster/load.py"
-  ],
   "checks": [
    {
     "cmd": "python3 -m unittest discover -s tests"
@@ -45,6 +42,9 @@
   ],
   "preserved": [
    "tests/test_report.py"
-  ]
+  ],
+  "expected": {
+   "roster/load.py": "expected/roster/load.py"
+  }
  }
 }
