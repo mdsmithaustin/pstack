@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import live
 import oracles
 from harnesses import grok
 from oracles import FAIL, INCONCLUSIVE, PASS
@@ -863,6 +864,167 @@ class LiveFalseFails(unittest.TestCase):
         result = grade("no-comments-spawns-comment-sicko", self.sicko_trace(reply), case, self.rollup(comment_survives=True))
         self.assertEqual(result["verdict"], FAIL)
         self.assertTrue(result["failures"][0].startswith("constraint comment survived"))
+
+
+class DeslopPass(unittest.TestCase):
+    CLEAN_REPORT = (
+        "from collections import Counter\n\n\n"
+        "def count_by_team(rows, team=None):\n"
+        "    if team is not None:\n"
+        "        rows = [row for row in rows if row[\"team\"] == team]\n"
+        "    counts = Counter(row[\"team\"] for row in rows)\n"
+        "    return sorted(counts.items())\n")
+
+    def roster(self, report=CLEAN_REPORT, restore_load=True):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = Path(tmp.name) / "project"
+        live.make_project(load_case("deslop-run"), project)
+        (project / "roster" / "report.py").write_text(report)
+        if restore_load:
+            (project / "roster" / "load.py").write_text((CASES / "deslop-run" / "expected" / "roster" / "load.py").read_text())
+        return project
+
+    def grade(self, project, case=None, **trace):
+        events = trace.pop("events", [read(0, "deslop/SKILL.md"), edit(1, "roster/report.py")])
+        trace.setdefault("x_baseline", live.baseline(project) if project.is_dir() else None)
+        return grade("deslop-cleans-code-slop", minimal(events=events, final_reply="Removed 8 lines.", **trace), case or load_case("deslop-run"), project)
+
+    def test_a_clean_tree_with_green_tests_passes(self):
+        result = self.grade(self.roster())
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("deslop skill read by the lead: True", result["evidence"][0])
+
+    def test_a_skill_tool_load_counts_as_the_lead_reading_deslop(self):
+        events = [{"seq": 0, "kind": "tool_call", "name": "Skill", "input": {"skill": "deslop"}}, edit(1, "roster/report.py")]
+        result = self.grade(self.roster(), events=events)
+        self.assertIn("deslop skill read by the lead: True", result["evidence"][0])
+
+    def test_the_planted_history_itself_fails_on_every_plant(self):
+        project = self.roster(report=(HISTORIES / "roster-team-filter" / "step-1" / "roster" / "report.py").read_text(), restore_load=False)
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(result["failures"][0].startswith("planted slop survived"))
+        self.assertIn("'roster/load.py'", result["failures"][1])
+
+    def test_a_surviving_shim_fails(self):
+        shim = self.CLEAN_REPORT + "\n\ndef filter_rows(rows, team):\n    return count_by_team(rows, team)\n"
+        result = self.grade(self.roster(report=shim))
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["planted slop survived: ['def filter_rows(']"])
+
+    def test_a_kept_unrelated_edit_fails(self):
+        result = self.grade(self.roster(restore_load=False))
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["file differs from its expected result: ['roster/load.py']"])
+
+    def test_restoring_the_whole_file_loses_the_users_uncommitted_edit_and_fails(self):
+        project = self.roster(restore_load=False)
+        (project / "roster" / "load.py").write_text((FIXTURES / "roster" / "roster" / "load.py").read_text())
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["file differs from its expected result: ['roster/load.py']"])
+
+    def test_a_run_that_never_loads_deslop_fails(self):
+        result = self.grade(self.roster(), events=[edit(1, "roster/report.py")])
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["the deslop skill was never loaded"])
+
+    def test_a_hanging_check_fails_instead_of_blocking(self):
+        case = load_case("deslop-run")
+        case["expect"] = dict(case["expect"], checks=[{"cmd": "python3 -c 'import time; time.sleep(30)'", "timeout_s": 1}])
+        result = self.grade(self.roster(), case=case)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("timed out after 1s", result["failures"][0])
+
+    def test_branch_work_moved_into_a_comment_fails(self):
+        project = self.roster()
+        main = project / "roster" / "__main__.py"
+        line = '    parser.add_argument("--team", help="show only this team")\n'
+        main.write_text(main.read_text().replace(line, ""))
+        report = project / "roster" / "report.py"
+        report.write_text(report.read_text() + "#" + line)
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(any(f.startswith("the branch's own work went missing") for f in result["failures"]), result)
+
+    def test_an_unrelated_deleted_file_fails(self):
+        project = self.roster()
+        (project / "README.md").unlink()
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("files deleted: ['README.md']", result["failures"])
+
+    def test_a_weakened_uncommitted_test_fails(self):
+        project = self.roster()
+        test = project / "tests" / "test_report.py"
+        test.write_text(test.read_text().replace("self.assertEqual(", "self.assertTrue(True) or self.assertEqual("))
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("files outside the cleanup changed: ['tests/test_report.py']", result["failures"])
+
+    def test_an_unrelated_edit_to_an_existing_file_fails(self):
+        project = self.roster()
+        readme = project / "README.md"
+        readme.write_text(readme.read_text() + "\nSee also: teams.\n")
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("files outside the cleanup changed: ['README.md']", result["failures"])
+
+    def test_an_amended_branch_commit_cannot_hide_a_new_file(self):
+        project = self.roster()
+        base = live.baseline(project)
+        (project / "roster" / "notes.py").write_text("x = 1\n")
+        git_in(project, "add", "roster/notes.py")
+        git_in(project, "commit", "-q", "--amend", "--no-edit")
+        result = self.grade(project, x_baseline=base)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("new files appeared: ['roster/notes.py']", result["failures"])
+
+    def test_an_agent_commit_is_not_part_of_the_base(self):
+        project = self.roster()
+        (project / "roster" / "notes.py").write_text("x = 1\n")
+        git_in(project, "add", "-A")
+        git_in(project, "commit", "-q", "-m", "deslop")
+        result = self.grade(project, x_baseline=None)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["new files appeared: ['roster/notes.py']"])
+
+    def test_a_deleted_untouched_file_fails_without_crashing(self):
+        project = self.roster()
+        (project / "roster" / "load.py").unlink()
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("file differs from its expected result: ['roster/load.py']", result["failures"])
+
+    def test_a_cut_that_changes_behavior_fails_the_check(self):
+        no_filter = "from collections import Counter\n\n\ndef count_by_team(rows, team=None):\n    return sorted(Counter(row[\"team\"] for row in rows).items())\n"
+        result = self.grade(self.roster(report=no_filter))
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(result["failures"][0].startswith("check failed after the pass"), result)
+
+    def test_a_new_file_fails(self):
+        project = self.roster()
+        (project / "roster" / "notes.py").write_text("x = 1\n")
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["new files appeared: ['roster/notes.py']"])
+
+    def test_removing_the_branch_work_fails(self):
+        project = self.roster()
+        main = project / "roster" / "__main__.py"
+        main.write_text(main.read_text().replace('    parser.add_argument("--team", help="show only this team")\n', ""))
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(result["failures"][0].startswith("the branch's own work went missing"), result)
+
+    def test_no_project_is_inconclusive(self):
+        result = grade("deslop-cleans-code-slop", minimal(final_reply="done"), load_case("deslop-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+
+    def test_a_killed_run_with_no_edit_is_inconclusive(self):
+        result = self.grade(self.roster(), events=[], exit_code=137)
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
 
 
 def git_in(path, *args):

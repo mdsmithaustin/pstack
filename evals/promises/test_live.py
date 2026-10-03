@@ -85,7 +85,7 @@ class GradeRun(unittest.TestCase):
 
 
 class MakeProject(unittest.TestCase):
-    def build(self, commit):
+    def build(self, commit, branch=None, extra_steps=()):
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(tmp)]))
         (tmp / "fixtures" / "app").mkdir(parents=True)
@@ -95,8 +95,12 @@ class MakeProject(unittest.TestCase):
         (step / "a.py").write_text("x = '1'\n")
         for path in (tmp / "fixtures" / "app" / "a.py", step / "a.py"):
             os.utime(path, (1_700_000_000, 1_700_000_000))
-        (tmp / "histories" / "h" / "steps.json").write_text(json.dumps(
-            {"fixture": "app", "steps": [{"dir": "step-1", "message": "quote style", "commit": commit}]}))
+        steps = [{"dir": "step-1", "message": "quote style", "commit": commit, **({"branch": branch} if branch else {})}]
+        for n, extra in enumerate(extra_steps, start=2):
+            (tmp / "histories" / "h" / f"step-{n}").mkdir()
+            (tmp / "histories" / "h" / f"step-{n}" / f"f{n}.py").write_text(f"y = {n}\n")
+            steps.append({"dir": f"step-{n}", "message": f"step {n}", **extra})
+        (tmp / "histories" / "h" / "steps.json").write_text(json.dumps({"fixture": "app", "steps": steps}))
         old = (live.FIXTURES, live.HISTORIES)
         live.FIXTURES, live.HISTORIES = tmp / "fixtures", tmp / "histories"
         self.addCleanup(lambda: setattr(live, "FIXTURES", old[0]) or setattr(live, "HISTORIES", old[1]))
@@ -114,6 +118,25 @@ class MakeProject(unittest.TestCase):
         git = self.build(False)
         self.assertEqual(git("log", "--format=%s"), "initial import\n")
         self.assertEqual(git("status", "--short"), " M a.py\n")
+
+    def test_a_step_with_a_branch_commits_there_and_leaves_main_alone(self):
+        git = self.build(True, branch="team-filter")
+        self.assertEqual(git("branch", "--show-current"), "team-filter\n")
+        self.assertEqual(git("log", "--format=%s", "main"), "initial import\n")
+        self.assertEqual(git("diff", "--name-only", "main...HEAD"), "a.py\n")
+
+    def test_a_later_step_on_an_existing_branch_keeps_its_commits(self):
+        git = self.build(True, branch="feature", extra_steps=[{"branch": "main"}])
+        self.assertEqual(git("log", "--format=%s", "main"), "step 2\ninitial import\n")
+        self.assertEqual(git("log", "--format=%s", "feature"), "quote style\ninitial import\n")
+
+    def test_the_baseline_holds_every_branchs_commits_and_ends_at_head(self):
+        git = self.build(True, branch="feature", extra_steps=[{"branch": "main"}])
+        project = Path(git("rev-parse", "--show-toplevel").strip())
+        base = live.baseline(project)
+        self.assertEqual(sorted(base), sorted(git("rev-list", "--branches").split()))
+        self.assertEqual(base[-1], git("rev-parse", "HEAD").strip())
+        self.assertEqual(base[0], git("rev-list", "--max-parents=0", "HEAD").strip())
 
 
 if __name__ == "__main__":

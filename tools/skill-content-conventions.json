@@ -2,7 +2,6 @@
   "version": 1,
   "retired_text": {
     "pstack/skills/": "use the installed or verified-source root instead of the upstream monorepo path",
-    "/deslop": "use the bundled unslop skill instead of the retired command",
     "named-role contract": "say persona contract; a role is only a models-config role",
     "native role": "say native persona or native agent; a role is only a models-config role",
     "gpt-5.6": "name gpt-6 models; the resolver runs gpt-6.1 where Codex lists it",

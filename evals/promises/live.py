@@ -41,6 +41,7 @@ class Run:
     skills_at: str
     timeout_s: int
     turns: list = field(default_factory=list)
+    baseline: list = field(default_factory=list)
 
     @property
     def project(self):
@@ -145,12 +146,23 @@ def make_project(case, dest):
     git_run(dest, "add", "-A")
     git_run(dest, "commit", "-qm", case.get("commit_message", "initial import"))
     for step in history_steps(case):
+        if step.get("branch"):
+            exists = subprocess.run(["git", "-C", str(dest), "rev-parse", "--verify", "--quiet", f"refs/heads/{step['branch']}"],
+                                    capture_output=True).returncode == 0
+            git_run(dest, "checkout", "-q", *([] if exists else ["-b"]), step["branch"])
         shutil.copytree(step["path"], dest, dirs_exist_ok=True, copy_function=shutil.copy)
         for rel in step.get("delete", []):
             (dest / rel).unlink()
         if step.get("commit", True):
             git_run(dest, "add", "-A")
             git_run(dest, "commit", "-q", "--allow-empty", "-F", "-", input=step["message"], text=True)
+
+
+def baseline(project):
+    """Every commit make_project wrote, root first and the checked-out head last, recorded before any turn so an agent's amend or rebase cannot move them."""
+    head = git_run(project, "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
+    commits = git_run(project, "rev-list", "--reverse", "--topo-order", "--branches", capture_output=True, text=True).stdout.split()
+    return [c for c in commits if c != head] + [head]
 
 
 def history_steps(case):
@@ -191,6 +203,7 @@ def run_case(harness, case_id, skills_at, out, index):
     run = Run(root, harness, case, commit, timeout_for(case, harness))
     run.project.parent.mkdir(parents=True)
     make_project(case, run.project)
+    run.baseline = baseline(run.project)
     install_tree(run.skills_at, run.project / module.SKILLS_DIR)
     exclude = run.project / ".git" / "info" / "exclude"
     exclude.write_text(exclude.read_text() + "".join(f"{d}\n" for d in module.PRIVATE_DIRS))
@@ -214,7 +227,7 @@ def run_case(harness, case_id, skills_at, out, index):
 
 def meta(run):
     return {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at, "project": str(run.project),
-            "timeout_s": run.timeout_s, "turns": run.turns}
+            "timeout_s": run.timeout_s, "turns": run.turns, "baseline": run.baseline}
 
 
 def grade(root):
@@ -224,6 +237,7 @@ def grade(root):
     case = load_case(record["case"])
     trace = json.loads((root / "trace.json").read_text())
     trace.setdefault("x_turns", record.get("turns", []))
+    trace.setdefault("x_baseline", record.get("baseline"))
     verdict = {"case": case["id"], "harness": record["harness"], "skills_at": record["skills_at"],
                "promises": {pid: oracles.check(pid, trace, case, Path(record.get("project", root / "project")))
                             for pid in case["promises"]}}

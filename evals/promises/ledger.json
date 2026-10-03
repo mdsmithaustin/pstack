@@ -738,12 +738,21 @@
   },
   "deslop-available-for-code": {
    "check": "install",
-   "claim": "A `/deslop` command exists in the port to clean slop out of code, as the guide's division-of-labor sentence and `deslop it` advice assume.",
+   "claim": "A `/deslop` skill exists in the port to clean slop out of code, as the guide's division-of-labor sentence and `deslop it` advice assume.",
    "harness_sensitive": true,
    "owners": [
-    "skills/unslop/SKILL.md",
-    "README.md"
+    "skills/deslop/SKILL.md"
    ]
+  },
+  "deslop-cleans-code-slop": {
+   "check": "live",
+   "claim": "Saying `deslop it` before a commit removes the code slop the branch added (narrating comments, a guard on an impossible state, a dead compatibility shim, a one-caller wrapper, an unrelated formatting edit) and leaves the branch's own work and its tests intact.",
+   "harness_sensitive": true,
+   "live_case": "roster fixture with a history commit that plants one instance of each slop class; prompt `deslop it before i commit`; pass when every planted line is gone, the unrelated edit is reverted byte for byte, no file is added, the --team feature and its test survive, and the fixture's tests pass.",
+   "owners": [
+    "skills/deslop/SKILL.md"
+   ],
+   "scenario": "deslop-run"
   },
   "disk-prompt-routes-to-worktree-cleanup": {
    "check": "live",
@@ -1433,14 +1442,25 @@
    ],
    "scenario": "open-pr-run"
   },
-  "opening-a-pr-unslops-diff-and-prose": {
+  "opening-a-pr-deslops-diff": {
    "check": "static",
-   "claim": "Opening a PR runs unslop over the diff before each commit and again over the PR description and commit bodies.",
+   "claim": "Opening a PR runs /deslop over the diff before each commit.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Run the **unslop** skill over the diff before commit."
-    },
+     "quote": "Run `/deslop` over the diff before commit."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/deslop/SKILL.md"
+   ]
+  },
+  "opening-a-pr-unslops-prose": {
+   "check": "static",
+   "claim": "Opening a PR applies /unslop to the PR description and commit bodies.",
+   "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
      "quote": "Write every PR title, PR description, and commit body with `/technical-writing`, then apply `/unslop`."
@@ -3646,7 +3666,7 @@
   "2d0c8c50d7dc": {
    "class": "cursor-only",
    "file": "05-build-and-clean.md",
-   "reason": "names cursor-team-kit's /deslop; the port substitutes its bundled unslop skill over the diff (PORTING.md substitution map)",
+   "reason": "names cursor-team-kit as the home of /deslop; the port ships its own deslop skill at skills/deslop/ (PORTING.md substitution map)",
    "sources": [
     "upstream"
    ],
@@ -5143,7 +5163,8 @@
   "76ed01baacb5": {
    "also": [
     "unslop-takes-target-and-rules",
-    "no-comments-spawns-comment-sicko"
+    "no-comments-spawns-comment-sicko",
+    "deslop-cleans-code-slop"
    ],
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -5498,12 +5519,15 @@
    "text": "A coverage matrix, set of parallel checks, or race with declared arms is `/swarm`."
   },
   "85dcd4d37510": {
+   "also": [
+    "opening-a-pr-unslops-prose"
+   ],
    "class": "substituted",
    "file": "05-build-and-clean.md",
    "ported_as": [
-    "9414371f11a7"
+    "f712b0e65103"
    ],
-   "promise": "opening-a-pr-unslops-diff-and-prose",
+   "promise": "opening-a-pr-deslops-diff",
    "sources": [
     "upstream"
    ],
@@ -5852,15 +5876,6 @@
     "port"
    ],
    "text": "Either way, the comment comes out."
-  },
-  "9414371f11a7": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "opening-a-pr-unslops-diff-and-prose",
-   "sources": [
-    "port"
-   ],
-   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs [`/unslop`](../../skills/unslop/SKILL.md) over the diff before each commit and again on the PR description and commit bodies."
   },
   "94d97f7f91ff": {
    "class": "context",
@@ -7169,6 +7184,9 @@
    "text": "When you're ready to land, say so:"
   },
   "cedd235d3270": {
+   "also": [
+    "deslop-cleans-code-slop"
+   ],
    "class": "promise",
    "file": "05-build-and-clean.md",
    "promise": "deslop-available-for-code",
@@ -8073,6 +8091,19 @@
     "port"
    ],
    "text": "The skill ships a [worked feature-map example](../../skills/create-verification-skill/references/feature-map-example/) with a README index and one file per feature using the four required H2s."
+  },
+  "f712b0e65103": {
+   "also": [
+    "opening-a-pr-unslops-prose",
+    "slash-skills-invocable"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "opening-a-pr-deslops-diff",
+   "sources": [
+    "port"
+   ],
+   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs [`/deslop`](../../skills/deslop/SKILL.md) on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
   },
   "f7233b98640a": {
    "class": "promise",

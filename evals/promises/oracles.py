@@ -598,9 +598,11 @@ class View:
     def base_commits(self):
         history = self.case.get("history")
         steps = history_steps(history) if history else []
-        return 1 + len(steps)
+        return 1 + sum(1 for step in steps if step.get("commit", True))
 
     def base_shas(self):
+        if self.trace.get("x_baseline"):
+            return self.trace["x_baseline"]
         out = self.git("rev-list", "--reverse", "HEAD")
         return out.split()[:self.base_commits()] if out else None
 
@@ -626,7 +628,8 @@ class View:
             names |= set((self.git_in(path, "diff", "--name-only", base[-1], "HEAD") or "").split())
             names |= {line[3:].strip() for line in self.git_dirty(path) or []}
         for branch in (self.git("for-each-ref", "--format=%(refname)", "refs/heads") or "").split():
-            names |= set((self.git("diff", "--name-only", base[-1], branch) or "").split())
+            if (self.git("rev-parse", branch) or "").strip() not in base:
+                names |= set((self.git("diff", "--name-only", base[-1], branch) or "").split())
         return names
 
     def worktrees(self):
@@ -1770,6 +1773,84 @@ def comment_sicko(view):
     if signature and offer:
         return passed(*evidence)
     return inconclusive("no project to inspect, so constraint comments cannot be checked; the reply or the spawn result lacks what would stand in", *evidence)
+
+
+def project_files(view):
+    tracked = (view.git("ls-files") or "").split()
+    untracked = (view.git("ls-files", "--others", "--exclude-standard") or "").split()
+    return {rel for rel in tracked + untracked if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
+
+
+@oracle("deslop-cleans-code-slop")
+def deslop_cleans(view):
+    expect = view.case.get("expect") or {}
+    loaded = "deslop/SKILL.md" in view.lead_reads() or any(
+        c.get("name") == "Skill" and (c.get("input") or {}).get("skill") == "deslop" for c in view.tool_calls)
+    evidence = [f"deslop skill read by the lead: {loaded}"]
+    if not (view.project and view.project.is_dir()):
+        return inconclusive("no project to inspect; this pass is graded on the tree, not the reply", *evidence)
+    if view.killed and not view.edits():
+        return inconclusive("run killed before any edit", *evidence)
+    base = view.base_shas()
+    if not base:
+        return inconclusive("project has no git history to diff against", *evidence)
+    texts = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in view.project.rglob("*.py")
+                      if not str(p.relative_to(view.project)).startswith(PRIVATE_PREFIXES))
+    survived = [c for c in expect.get("gone", []) if c in texts]
+    missing = [f"{rel}: {c}" for rel, wanted in expect.get("kept", {}).items() for c in wanted
+               if not (view.project / rel).is_file() or c not in (view.project / rel).read_text(encoding="utf-8", errors="replace")]
+    churn = [rel for rel, want in expect.get("expected", {}).items()
+             if not (view.project / rel).is_file()
+             or (view.project / rel).read_bytes() != (HERE / "cases" / view.case["id"] / want).read_bytes()]
+    planted = {rel for rel in (view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()
+               if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
+    added = sorted(project_files(view) - planted)
+    deleted = sorted(rel for rel in planted if not (view.project / rel).exists())
+    allowed = set(expect.get("editable", [])) | set(expect.get("expected", {}))
+    changed = sorted(rel for rel in planted - allowed
+                     if (view.project / rel).is_file() and (view.project / rel).read_bytes() != pre_turn_bytes(view, base, rel))
+    broken = [problem for problem in map(lambda c: check_problem(view.project, c), expect.get("checks", [])) if problem]
+    evidence += [f"planted slop still present: {survived}", f"branch work missing: {missing}", f"files off their expected result: {churn}",
+                 f"files added: {added}", f"files deleted: {deleted}", f"files outside the cleanup changed: {changed}", f"checks run: {len(expect.get('checks', []))}, failing: {len(broken)}"]
+    failures = [] if loaded else ["the deslop skill was never loaded"]
+    if survived:
+        failures.append(f"planted slop survived: {survived}")
+    if missing:
+        failures.append(f"the branch's own work went missing: {missing}")
+    if churn:
+        failures.append(f"file differs from its expected result: {churn}")
+    if added:
+        failures.append(f"new files appeared: {added}")
+    if deleted:
+        failures.append(f"files deleted: {deleted}")
+    if changed:
+        failures.append(f"files outside the cleanup changed: {changed}")
+    failures += [f"check failed after the pass: {problem}" for problem in broken]
+    return failed(failures, *evidence) if failures else passed(*evidence)
+
+
+def pre_turn_bytes(view, base, rel):
+    history = view.case.get("history")
+    for step in reversed(history_steps(history) if history else []):
+        if step.get("commit", True):
+            break
+        source = HISTORIES / history / step["dir"] / rel
+        if source.is_file():
+            return source.read_bytes()
+    return subprocess.run(["git", "-C", str(view.project), "show", f"{base[-1]}:{rel}"], capture_output=True).stdout
+
+
+def check_problem(project, check):
+    timeout = check.get("timeout_s", 120)
+    try:
+        run = subprocess.run(shlex.split(check["cmd"]), cwd=project, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return f"{check['cmd']} timed out after {timeout}s"
+    if run.returncode != 0:
+        return f"{check['cmd']} exited {run.returncode}: {(run.stderr or run.stdout).strip().splitlines()[-1:]}"
+    if "stdout" in check and run.stdout != check["stdout"]:
+        return f"{check['cmd']} printed {run.stdout!r}, expected {check['stdout']!r}"
+    return None
 
 
 def need_turns(view):
