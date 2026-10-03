@@ -40,7 +40,7 @@ A guard at a system boundary (user input, network, file, environment, external A
 
 ### Dead paths
 
-7. **Compatibility shims.** An old path kept beside the new one, an alias or re-export kept "for callers" with no caller, a deprecation notice for code this branch replaced. Delete the shim and migrate the caller in the same change.
+7. **Compatibility shims.** An old path kept beside the new one, an alias or re-export kept "for callers" with no caller, a deprecation notice for code this branch replaced. Delete a shim with no caller. When every caller sits inside the branch's hunks, migrate them and delete the shim in the same change. A shim with a caller outside those hunks stays, and the report names it, because migrating that caller would edit outside Scope.
 8. **Unused parameters, exports, and flags.** A parameter nothing passes, an export nothing imports, an option with one value, a flag with one reachable branch, a branch marked temporary. Delete it.
 9. **Debug residue.** Debug logs and prints, tagged or not, throwaway prototypes, variant switchers. Delete them.
 
