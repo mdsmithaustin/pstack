@@ -1306,7 +1306,7 @@ def design_ladder(view):
     reads = [r for r in view.lead_reads() if r.startswith(("architect/", "arena/"))]
     evidence = [f"design skills read by the lead: {reads}", f"fan-out signals: {signals}"]
     if signals:
-        return failed("a one-function change with one clear shape ran the architect/arena design fan-out", *evidence)
+        return failed("a one-function change ran the architect/arena design fan-out", *evidence)
     if len(view.tool_calls) < 3 and view.killed:
         return inconclusive("run ended before a design decision", *evidence)
     return passed(*evidence)
