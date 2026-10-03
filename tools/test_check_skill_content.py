@@ -885,7 +885,7 @@ class ContentLint(Tree):
         self.skill(
             "a",
             'name: a\ndescription: "d"',
-            "- **L** (**principle-nope**). Run /deslop.\n\n```\nnode pstack/skills/x.mjs\n```",
+            "- **L** (**principle-nope**). Pass cloud_base_branch.\n\n```\nnode pstack/skills/x.mjs\n```",
         )
         self.assertEqual(run(CONTENT, self.root), (0, ""))
 
@@ -907,19 +907,6 @@ class ContentLint(Tree):
             "````markdown\n"
             "```sh\n"
             "node pstack/skills/example/check.mjs\n"
-            "```\n"
-            "````"
-        )
-        self.assertEqual(code, 1)
-        self.assertIn("SKILL.md:6: retired-text", out)
-        self.assertIn("SKILL.md:10: retired-text", out)
-
-    def test_retired_deslop_command_fires_in_prose_and_fenced_templates(self) -> None:
-        code, out = self.body(
-            "Run /deslop before the commit.\n\n"
-            "````markdown\n"
-            "```text\n"
-            "/deslop\n"
             "```\n"
             "````"
         )
@@ -974,7 +961,7 @@ class FenceHandling(Tree):
         self.assertEqual(self.body("```\nx\n```\n\nSee [x](../gone/n.md).")[0], 1)
 
     def test_unclosed_fence_is_reported(self) -> None:
-        code, out = self.body("```\nx\n\nSee [x](../gone/n.md).\nRun /deslop.")
+        code, out = self.body("```\nx\n\nSee [x](../gone/n.md).\nPass cloud_base_branch.")
         self.assertEqual(code, 1, "an unclosed fence hides the rest of the file")
         self.assertIn("unclosed-fence", out)
         self.assertIn("link and sibling checks skip the rest of the file", out)
