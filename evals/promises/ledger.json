@@ -1747,6 +1747,14 @@
    ],
    "scenario": "overnight-run"
   },
+  "principle-count-matches-shipped-skills": {
+   "check": "static",
+   "claim": "The principle count the guide states equals the skills/principle-*/SKILL.md directories, the principle links on 08-principles.md, and poteto-mode's Principles index.",
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/SKILL.md"
+   ]
+  },
   "principle-leaf-summaries-match": {
    "check": "static",
    "claim": "Each of the 23 principle links on the principles page resolves to an existing leaf whose rule matches the one-line summary the guide gives it.",
@@ -2475,14 +2483,6 @@
     "skills/poteto-mode/SKILL.md"
    ]
   },
-  "twenty-three-principle-skills": {
-   "check": "static",
-   "claim": "Exactly 23 skills/principle-*/SKILL.md directories exist and poteto-mode's Principles index lists the same 23.",
-   "harness_sensitive": false,
-   "owners": [
-    "skills/poteto-mode/SKILL.md"
-   ]
-  },
   "typescript-rules-auto-load-on-ts-files": {
    "check": "live",
    "claim": "typescript-best-practices loads whenever the agent touches a .ts or .tsx file without the user invoking it.",
@@ -3115,16 +3115,6 @@
    ],
    "text": "If one agent could finish the work in a session, the playbook itself routes you back to the overnight contract above:"
   },
-  "14d160198e03": {
-   "class": "promise",
-   "file": "README.md",
-   "promise": "twenty-three-principle-skills",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Steer with principle names](./08-principles.md). The 23 names that redirect an agent mid-task."
-  },
   "14d46a5480f6": {
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -3740,6 +3730,16 @@
     "port"
    ],
    "text": "The qualifiers do real work."
+  },
+  "30ef830976b1": {
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-count-matches-shipped-skills",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "pstack ships 24 principles as individual skills."
   },
   "31ba7ca1d7f0": {
    "class": "promise",
@@ -4742,16 +4742,6 @@
     "port"
    ],
    "text": "A contested design that's expensive to reverse gets `/architect`, then `/interrogate` before shipping."
-  },
-  "63593ce58c12": {
-   "class": "promise",
-   "file": "08-principles.md",
-   "promise": "twenty-three-principle-skills",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "pstack ships 23 principles as individual skills."
   },
   "63a874252a50": {
    "class": "context",
@@ -7277,6 +7267,16 @@
    ],
    "text": "It loads whenever the agent touches a `.ts` or `.tsx` file and turns the type-system principles into concrete rules: discriminated unions, `unknown` at boundaries, exhaustive variants, schema-derived types."
   },
+  "d12943b3cae9": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "principle-count-matches-shipped-skills",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Steer with principle names](./08-principles.md). The 24 names that redirect an agent mid-task."
+  },
   "d1b46ae55235": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -7940,6 +7940,16 @@
     "port"
    ],
    "text": "Say two parallel attempts are about to write to the same branch:"
+  },
+  "f00689b111ed": {
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-leaf-summaries-match",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Explain the Number](../../skills/principle-explain-the-number/SKILL.md) names what limits a measured number and rules out that it measured something else, before anyone trusts or reports it."
   },
   "f024eea80460": {
    "class": "substituted",

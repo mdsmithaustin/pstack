@@ -40,6 +40,7 @@ PLAYBOOK_FILES = [
 
 PRINCIPLE_RULES = {
     "principle-laziness-protocol": "Bias toward deletion and the smallest change that solves the problem.",
+    "principle-explain-the-number": "find what limits it and rule out that it measured something else",
     "principle-foundational-thinking": "choosing core types and data structures",
     "principle-redesign-from-first-principles": "foundational assumption from day one",
     "principle-attack-the-premise": "question the premise",
@@ -70,19 +71,7 @@ GUIDE_SLASH_SKILLS = {
     "maintain-verification-skill", "documentation-impact", "show-me-your-work", "figure-it-out",
     "automate-me", "reflect", "technical-writing", "bro", "setup-pstack", "poteto-mode",
 }
-GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | {"typescript-best-practices"} | {
-    "principle-laziness-protocol", "principle-foundational-thinking",
-    "principle-redesign-from-first-principles", "principle-attack-the-premise",
-    "principle-subtract-before-you-add", "principle-minimize-reader-load",
-    "principle-outcome-oriented-execution", "principle-experience-first",
-    "principle-exhaust-the-design-space", "principle-build-the-lever", "principle-model-the-domain",
-    "principle-boundary-discipline", "principle-type-system-discipline",
-    "principle-make-operations-idempotent", "principle-migrate-callers-then-delete-legacy-apis",
-    "principle-separate-before-serializing-shared-state", "principle-prove-it-works",
-    "principle-fix-root-causes", "principle-sequence-verifiable-units",
-    "principle-test-behavior-not-implementation", "principle-guard-the-context-window",
-    "principle-never-block-on-the-human", "principle-encode-lessons-in-structure",
-}
+GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | {"typescript-best-practices"} | set(PRINCIPLE_RULES)
 GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack", "deslop": "deslop-available-for-code"}
 
 ROUTER_ROUTES = {
@@ -137,9 +126,10 @@ class TestStaticPromises(unittest.TestCase):
         self.assertEqual(on_disk, PLAYBOOK_FILES)
         self.assertEqual(len(list(PLAYBOOKS.iterdir())), 25)
 
-    def test_twenty_three_principle_skills(self):
+    def test_principle_count_matches_shipped_skills(self):
         on_disk = sorted(p.parent.name for p in SKILLS.glob("principle-*/SKILL.md"))
-        self.assertEqual(len(on_disk), 23)
+        stated = {int(n) for n in re.findall(r"(?:ships|The) (\d+) (?:principles|names)", guide_text())}
+        self.assertEqual(stated, {len(on_disk)})
         self.assertEqual(on_disk, sorted(PRINCIPLE_RULES))
         index = section(read(POTETO), "\n## Principles\n")
         listed = sorted(set(re.findall(r"\(\*\*(principle-[a-z-]+)\*\*\)", index)))
@@ -148,7 +138,6 @@ class TestStaticPromises(unittest.TestCase):
     def test_principle_leaf_summaries_match(self):
         page = read(GUIDE / "08-principles.md")
         links = re.findall(r"\[[^\]]+\]\(\.\./\.\./skills/(principle-[a-z-]+)/SKILL\.md\)", page)
-        self.assertEqual(len(links), 23)
         self.assertEqual(sorted(links), sorted(PRINCIPLE_RULES))
         for name, rule in PRINCIPLE_RULES.items():
             leaf = SKILLS / name / "SKILL.md"
@@ -179,7 +168,6 @@ class TestStaticPromises(unittest.TestCase):
         self.assertEqual(slashed - set(GUIDE_SLASH_NON_SKILLS), GUIDE_SLASH_SKILLS)
         linked = set(re.findall(r"\.\./\.\./skills/([a-z0-9-]+)/SKILL\.md", text))
         self.assertEqual(linked, GUIDE_LINKED_SKILLS)
-        self.assertEqual(len(linked), 47)
         for name in GUIDE_LINKED_SKILLS:
             self.assertTrue((SKILLS / name / "SKILL.md").is_file(), name)
         for name in GUIDE_SLASH_NON_SKILLS:
