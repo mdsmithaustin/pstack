@@ -40,11 +40,11 @@
     "stdout": "   3  infra\n"
    }
   ],
-  "preserved": [
-   "tests/test_report.py"
-  ],
   "expected": {
    "roster/load.py": "expected/roster/load.py"
-  }
+  },
+  "editable": [
+   "roster/report.py"
+  ]
  }
 }

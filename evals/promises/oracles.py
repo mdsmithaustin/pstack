@@ -1806,10 +1806,12 @@ def deslop_cleans(view):
                if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
     added = sorted(project_files(view) - planted)
     deleted = sorted(rel for rel in planted if not (view.project / rel).exists())
-    changed = [rel for rel in expect.get("preserved", []) if not same_as_history(view, rel)]
+    allowed = set(expect.get("editable", [])) | set(expect.get("expected", {}))
+    changed = sorted(rel for rel in planted - allowed
+                     if (view.project / rel).is_file() and (view.project / rel).read_bytes() != pre_turn_bytes(view, base, rel))
     broken = [problem for problem in map(lambda c: check_problem(view.project, c), expect.get("checks", [])) if problem]
     evidence += [f"planted slop still present: {survived}", f"branch work missing: {missing}", f"files off their expected result: {churn}",
-                 f"files added: {added}", f"files deleted: {deleted}", f"uncommitted work changed: {changed}", f"checks run: {len(expect.get('checks', []))}, failing: {len(broken)}"]
+                 f"files added: {added}", f"files deleted: {deleted}", f"files outside the cleanup changed: {changed}", f"checks run: {len(expect.get('checks', []))}, failing: {len(broken)}"]
     failures = [] if loaded else ["the deslop skill was never loaded"]
     if survived:
         failures.append(f"planted slop survived: {survived}")
@@ -1822,16 +1824,20 @@ def deslop_cleans(view):
     if deleted:
         failures.append(f"files deleted: {deleted}")
     if changed:
-        failures.append(f"uncommitted work changed: {changed}")
+        failures.append(f"files outside the cleanup changed: {changed}")
     failures += [f"check failed after the pass: {problem}" for problem in broken]
     return failed(failures, *evidence) if failures else passed(*evidence)
 
 
-def same_as_history(view, rel):
-    sources = [HISTORIES / view.case["history"] / s["dir"] / rel for s in history_steps(view.case["history"])
-               if (HISTORIES / view.case["history"] / s["dir"] / rel).is_file()]
-    current = view.project / rel
-    return bool(sources) and current.is_file() and current.read_bytes() == sources[-1].read_bytes()
+def pre_turn_bytes(view, base, rel):
+    history = view.case.get("history")
+    for step in reversed(history_steps(history) if history else []):
+        if step.get("commit", True):
+            break
+        source = HISTORIES / history / step["dir"] / rel
+        if source.is_file():
+            return source.read_bytes()
+    return subprocess.run(["git", "-C", str(view.project), "show", f"{base[-1]}:{rel}"], capture_output=True).stdout
 
 
 def check_problem(project, check):

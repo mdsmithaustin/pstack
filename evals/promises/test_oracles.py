@@ -961,7 +961,15 @@ class DeslopPass(unittest.TestCase):
         test.write_text(test.read_text().replace("self.assertEqual(", "self.assertTrue(True) or self.assertEqual("))
         result = self.grade(project)
         self.assertEqual(result["verdict"], FAIL)
-        self.assertIn("uncommitted work changed: ['tests/test_report.py']", result["failures"])
+        self.assertIn("files outside the cleanup changed: ['tests/test_report.py']", result["failures"])
+
+    def test_an_unrelated_edit_to_an_existing_file_fails(self):
+        project = self.roster()
+        readme = project / "README.md"
+        readme.write_text(readme.read_text() + "\nSee also: teams.\n")
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("files outside the cleanup changed: ['README.md']", result["failures"])
 
     def test_an_amended_branch_commit_cannot_hide_a_new_file(self):
         project = self.roster()
