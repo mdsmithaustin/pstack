@@ -144,6 +144,12 @@ Upstream #414 (70b2dc8, 15 cuts) and #419 (b0b9c7a) justified their lead-side cu
   - #414's poteto-tdd "Run nearby validation" step: no restored run read poteto-tdd, and a test run wider than one test followed the last edit in 47 of 48 runs.
   - Hidden tests passed in 16 of 24 runs without the cuts and 19 of 24 with them.
 
+## Guide-promise fixes
+
+Each entry below changes upstream skill text so the port keeps a promise the guide makes, with the live evidence from `evals/promises/live.py`. A sync that rewrites the same text must keep the fix or rerun the named case on all four harnesses. Each entry says whether upstream's own text has the same gap, so the issue can go upstream.
+
+- **Step-away routing** (`skills/poteto-mode/SKILL.md`, the Autonomous run bullet). The guide says work you review after stepping away routes through figure-it-out. With upstream's text, "im stepping away. keep going until the migration check reports zero old callers" reached autonomous-run on Claude Code, Hermes, and Grok Build, and figure-it-out only on Codex (case `route-figure-it-out`, 2026-10-02). The bullet's trigger phrases match "keep going until", and the figure-it-out rule sits in prose above the list. The bullet now names the step-away case and sends it to figure-it-out. All eight runs with the fix opened figure-it-out first. The guide's going-to-bed recipe (case `route-going-to-bed`) reached figure-it-out in 1 of 6 runs before the fix and in 5 of 5 decisive runs after it, on Claude Code, Codex, and Hermes. The sixth run found the finish condition already met and stopped before routing. Upstream gap: yes, both sentences are verbatim upstream.
+
 ## What deliberately did not change
 
 - Skill bodies, playbooks, and principles retain upstream engineering content except for the substitutions and port additions recorded above.
