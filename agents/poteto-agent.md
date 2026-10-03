@@ -1,6 +1,6 @@
 ---
 name: poteto-agent
-description: Scoped delegate for one unit inside a poteto-mode playbook step. Spawn one per unit with file paths, a data shape, and success criteria. The main conversation runs `/poteto-mode`, owns the plan, never hands it a whole request, and never resumes it across phases. Reads the `poteto-mode` skill's `SKILL.md` in full before any work, including its inline Principles index. A bare general-purpose delegate skips that read and drifts.
+description: Scoped delegate for one unit inside a poteto-mode playbook step. Spawn one per unit with file paths, a data shape, and success criteria. The main conversation runs `/poteto-mode`, owns the plan, never hands it a whole request, and never resumes it across phases. Spawn a fresh one for each new unit, and resume one only in the strict cases that poteto-mode's Subagents section names. Reads the `poteto-mode` skill's `SKILL.md` in full before any work, including its inline Principles index. A bare general-purpose delegate skips that read and drifts.
 is_background: true
 ---
 
