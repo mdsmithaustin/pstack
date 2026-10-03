@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "poteto-tdd-failing-test-first"
+ ],
+ "fixture": "rollup",
+ "entry": "poteto-tdd",
+ "turns": [
+  "implement a --limit N flag that exports only the first N rows."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "note": "05-build-and-clean.md gives `/poteto-tdd implement`; the object is named so the run has a target"
+}

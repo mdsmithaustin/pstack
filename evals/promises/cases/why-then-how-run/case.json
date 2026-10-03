@@ -1,0 +1,16 @@
+{
+ "promises": [
+  "why-then-how-composition"
+ ],
+ "fixture": "relay",
+ "entry": null,
+ "turns": [
+  "do why first then how. why is the retry limit five, and how does the import use it?"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "history": "relay-retry-limit",
+ "note": "03-understand.md gives `do why first then how`; the question names the subject"
+}

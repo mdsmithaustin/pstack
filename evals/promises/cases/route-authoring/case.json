@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "skill-prompt-routes-to-authoring-playbook"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "write a skill for verifying database migrations in this repo"
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "authoring-a-skill"
+ },
+ "tmp_lock": false
+}

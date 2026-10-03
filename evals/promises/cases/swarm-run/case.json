@@ -1,0 +1,25 @@
+{
+ "promises": [
+  "swarm-fans-out-and-aggregates",
+  "swarm-workers-report-pass-issues-blocked",
+  "swarm-returns-one-report-with-gaps"
+ ],
+ "fixture": "kiln",
+ "entry": "swarm",
+ "turns": [
+  "check every package under packages/ against its check.sh. one worker per package. one report."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "packages": [
+   "ingest",
+   "shape",
+   "render",
+   "publish"
+  ],
+  "failing": "render"
+ }
+}

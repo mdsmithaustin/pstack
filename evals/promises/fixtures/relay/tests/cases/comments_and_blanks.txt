@@ -1,0 +1,7 @@
+# partner export, nightly
+
+id=c3;name=Charlie
+
+   
+# trailing note
+id=d4;name=Delta

@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "disk-prompt-routes-to-worktree-cleanup"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "what's eating my disk? prune the worktrees that are safe to prune."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "worktree-cleanup"
+ },
+ "tmp_lock": false
+}

@@ -1,0 +1,10 @@
+{
+  "fixture": "relay",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "docs: expand the readme\n\nThe old readme was four lines and left out how feeds are read and what the parser accepts. This spells out the format, the retry behavior, and what the two parsers share.",
+      "delete": []
+    }
+  ]
+}

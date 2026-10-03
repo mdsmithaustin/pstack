@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "interrogate-multi-reviewer-adversarial",
+  "interrogate-read-only-when-asked",
+  "interrogate-reviewers-on-different-models",
+  "interrogate-sorts-four-buckets-no-auto-apply"
+ ],
+ "fixture": "relay",
+ "entry": "interrogate",
+ "turns": [
+  "the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug or regression in behavior."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "history": "relay-branch-work"
+}

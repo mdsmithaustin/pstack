@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "why-reports-cited-history",
+  "why-queries-evidence-categories-in-parallel",
+  "why-reports-null-results",
+  "how-why-reports-name-sources-searched"
+ ],
+ "fixture": "relay",
+ "entry": "why",
+ "turns": [
+  "was the retry limit set to five? does the reason still hold?"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "history": "relay-retry-limit"
+}

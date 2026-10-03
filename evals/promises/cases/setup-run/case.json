@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "setup-checks-personas-offers-registration",
+  "setup-checks-task-tool-switches",
+  "setup-detects-models-and-asks-budget",
+  "setup-offers-verification-skill-once",
+  "setup-reports-three-states-separately",
+  "setup-rerun-keeps-changed-roles",
+  "setup-writes-models-config"
+ ],
+ "fixture": "tally",
+ "entry": "setup-pstack",
+ "turns": [
+  ""
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "needs a fresh HOME per harness and scripted answers to the budget, role, switch, and verify-skill questions; the runner has no answer channel"
+}

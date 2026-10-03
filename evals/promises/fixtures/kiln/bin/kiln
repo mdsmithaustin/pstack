@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+for name in ("ingest", "shape", "render", "publish"):
+    sys.path.insert(0, str(ROOT / "packages" / name))
+
+from ingest import read_file
+from publish import publish
+from render import Row, render_group
+from shape import group_by_tag
+
+
+def main(argv):
+    if len(argv) != 2:
+        print("usage: kiln <notes.txt> <out-dir>", file=sys.stderr)
+        return 2
+    source, out_dir = argv
+    groups = group_by_tag(read_file(source))
+    blocks = [
+        render_group(group.tag, [Row(e.timestamp, e.text) for e in group.entries])
+        for group in groups
+    ]
+    for written in publish(blocks, out_dir):
+        print(f"{written.path} ({written.size} bytes)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

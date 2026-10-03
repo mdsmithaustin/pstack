@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "worktree-request-honored"
+ ],
+ "fixture": "relay",
+ "entry": "poteto-mode",
+ "turns": [
+  "new task. branch off main in a fresh worktree, then port the parser change there."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "needs a second branch carrying the parser change to port; make_project in live.py builds one linear history and cannot create a branch, so the case needs a branch step in histories/<name>/steps.json first"
+}

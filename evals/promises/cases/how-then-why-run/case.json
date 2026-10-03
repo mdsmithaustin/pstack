@@ -1,0 +1,16 @@
+{
+ "promises": [
+  "how-then-why-sequence-honored",
+  "how-why-reports-name-sources-searched"
+ ],
+ "fixture": "relay",
+ "entry": null,
+ "turns": [
+  "use /how first to understand how this initialization works. then use /why to figure out why it broke recently."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "history": "relay-init-break"
+}

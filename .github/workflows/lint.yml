@@ -27,6 +27,10 @@ jobs:
         run: python3 tools/generate-subagents.py --check
       - name: Skill lint and runtime command tests
         run: python3 -m unittest discover -s tools -p 'test_*.py'
+      - name: Guide promise ledger and model-free promise checks
+        run: |
+          python3 evals/promises/ledger.py audit
+          python3 -m unittest discover -s evals/promises -p 'test_*.py'
       - name: Verify-command oracle contract tests
         working-directory: evals/verify-commands/oracles
         run: |
@@ -72,3 +76,20 @@ jobs:
       - name: poteto-mode script typecheck
         working-directory: skills/poteto-mode/scripts
         run: bun run typecheck
+  worktree-audit:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install rg and jq for worktree-audit.sh
+        run: brew install ripgrep jq
+      - name: Guide promise worktree-cleanup-classifies-worktrees
+        working-directory: evals/promises
+        run: |
+          set -o pipefail
+          python3 -m unittest -v test_scripts.WorktreeAuditPromises 2>&1 | tee worktree-audit.log
+          grep -q "test_worktree_cleanup_classifies_worktrees .* \.\.\. ok$" worktree-audit.log

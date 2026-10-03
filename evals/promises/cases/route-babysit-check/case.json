@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "babysit-status-request-no-loop"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "check on pr 123. anything outstanding?"
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "babysit"
+ },
+ "tmp_lock": false
+}
