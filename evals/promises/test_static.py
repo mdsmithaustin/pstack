@@ -67,12 +67,12 @@ PRINCIPLE_RULES = {
 
 GUIDE_SLASH_SKILLS = {
     "how", "why", "poteto-teach", "recall", "architect", "arena", "swarm", "interrogate",
-    "poteto-tdd", "unslop", "no-comments", "blast-radius", "create-verification-skill",
+    "poteto-tdd", "deslop", "unslop", "no-comments", "blast-radius", "create-verification-skill",
     "maintain-verification-skill", "documentation-impact", "show-me-your-work", "figure-it-out",
     "automate-me", "reflect", "technical-writing", "bro", "setup-pstack", "poteto-mode",
 }
 GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | {"typescript-best-practices"} | set(PRINCIPLE_RULES)
-GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack", "deslop": "deslop-available-for-code"}
+GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack"}
 
 ROUTER_ROUTES = {
     "Code or history question": "Investigation",
