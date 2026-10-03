@@ -731,7 +731,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "Otherwise, keep this step with `skipped: <reason>`."
+     "quote": "A small, self-contained change, such as a flag handled inside one function, keeps this step with `skipped: <reason>`."
     }
    ],
    "harness_sensitive": true,

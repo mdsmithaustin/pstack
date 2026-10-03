@@ -3,7 +3,7 @@
 **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
 
 1. `how` over the affected subsystem.
-2. `architect` for parallel design exploration when the change crosses a function boundary. Otherwise, keep this step with `skipped: <reason>`.
+2. `architect` for parallel design exploration when the change crosses a function boundary. A small, self-contained change, such as a flag handled inside one function, keeps this step with `skipped: <reason>`.
 3. Write the throughput checkpoint as four items in the same worklist. A dimension that genuinely does not apply (single file, no fan-out) keeps its item with `skipped: <reason>` rather than being dropped:
    - **Blocking first steps.** Gates run before fan-out.
    - **Independent workstreams.** Disjoint files, services, or layers parallelize. Shared writes serialize.
