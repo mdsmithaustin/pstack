@@ -1574,8 +1574,7 @@ def interrogate_models(view):
     evidence = [f"reviewer models: {models}", *reviewer_evidence(view)]
     if len(distinct) >= 2:
         return passed(*evidence)
-    labels = {re.search(r"reviewer [a-c]\b", (s.get("prompt_head") or "").lower()) for s in reviewers}
-    labels.discard(None)
+    labels = {hit.group(0) for hit in (re.search(r"reviewer [a-c]\b", (s.get("prompt_head") or "").lower()) for s in reviewers) if hit}
     if not any(models):
         if len(labels) >= 2:
             return passed(*evidence, f"no model field on this harness; arms differentiated by label: {len(labels)}")
@@ -2202,9 +2201,12 @@ def arena_judge(view):
     if judge.get("seq", 0) < max(s.get("seq", 0) for s in candidates):
         return failed("judge spawned before the candidates", *evidence)
     cand_models = {s.get("model") for s in candidates if s.get("model")}
-    if judge.get("model") and cand_models and judge["model"] in cand_models and len(cand_models) > 1:
-        evidence.append("judge shares a candidate model although another family was available")
-    return passed(*evidence) if readonly or not judge.get("prompt_head") else failed("judge brief is not read-only", *evidence)
+    failures = []
+    if judge.get("model") and judge["model"] in cand_models and len(cand_models) > 1:
+        failures.append("judge shares a candidate model although the candidates spanned several")
+    if judge.get("prompt_head") and not readonly:
+        failures.append("judge brief is not read-only")
+    return failed(failures, *evidence) if failures else passed(*evidence)
 
 
 @oracle("arena-lead-reads-rationales-and-base")

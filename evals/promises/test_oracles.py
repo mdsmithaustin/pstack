@@ -497,6 +497,36 @@ class InterrogateSwarmArena(unittest.TestCase):
         self.assertEqual(grade("arena-candidate-count-adjustable", three, case)["verdict"], FAIL)
         self.assertEqual(grade("arena-lead-reads-rationales-and-base", trace, case)["verdict"], FAIL)
 
+    def test_arena_judge_sharing_a_candidate_model_fails_when_candidates_span_models(self):
+        case = load_case("arena-run")
+        models = ["opus", "fable", "opus", "fable", "opus"]
+        candidates = [{"seq": i, "tool": "Agent", "persona": "poteto-agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/relay-key/candidate-{i}"}
+                      for i, m in enumerate(models, 1)]
+        events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, 6)]
+        reply = "Base: candidate 3. Grafts: the hashing from candidate 1. Verified with the import run."
+
+        def judged_by(model):
+            judge = {"seq": 9, "tool": "Agent", "persona": None, "model": model, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
+            return minimal(events=events, spawns=candidates + [judge], final_reply=reply)
+
+        shared = grade("arena-readonly-cross-judge", judged_by("opus"), case)
+        self.assertEqual(shared["verdict"], FAIL, shared)
+        self.assertEqual(grade("arena-readonly-cross-judge", judged_by("sonnet"), case)["verdict"], PASS)
+
+    def test_two_reviewers_with_one_label_are_not_differentiated_arms(self):
+        case = load_case("interrogate-run")
+        events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}}]
+        reply = "## Verdict\n### Act On\n- bug\n### Consider\n- x\n### Noted\n- y\n### Dismissed\n- z: nit"
+        twins = [{"seq": i, "tool": "Agent", "persona": None, "model": "opus", "prompt_head": "You are an adversarial code reviewer. Reviewer A"} for i in (1, 2)]
+        result = grade("interrogate-reviewers-on-different-models", minimal(events=events, spawns=twins, final_reply=reply), case)
+        self.assertEqual(result["verdict"], FAIL, result)
+        blind = grade("interrogate-reviewers-on-different-models",
+                      minimal(events=events, spawns=[dict(s, model=None) for s in twins], final_reply=reply), case)
+        self.assertEqual(blind["verdict"], INCONCLUSIVE, blind)
+        arms = [dict(twins[0]), dict(twins[1], prompt_head="You are an adversarial code reviewer. Reviewer B")]
+        paired = grade("interrogate-reviewers-on-different-models", minimal(events=events, spawns=arms, final_reply=reply), case)
+        self.assertEqual(paired["verdict"], PASS, paired)
+
 
 class OvernightAndDocs(unittest.TestCase):
     def test_attention_section(self):
