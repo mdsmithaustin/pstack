@@ -406,8 +406,6 @@ def harvest(run):
     if final is None:
         final = next((e["text"] for e in reversed(events) if e["kind"] == "text"), "")
     spawn_rows = spawns(events, session_dir)
-    for event in events:
-        event.pop("id", None)
     argvs = [t["argv"] for t in run.turns]
     requested = next((a[i + 1] for a in argvs[:1] for i, v in enumerate(a) if v == "--effort"), None)
     return {
