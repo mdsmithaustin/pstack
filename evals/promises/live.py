@@ -130,18 +130,26 @@ def install_tree(ref, dest):
             tar.extractall(dest, members=[m for m in tar.getmembers() if m.name], filter="tar")
 
 
+GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+GIT_IDENTITY = ["-c", "user.name=dev", "-c", "user.email=dev@example.com", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"]
+
+
+def git_run(dest, *args, **kwargs):
+    return subprocess.run(["git", "-C", str(dest), *GIT_IDENTITY, *args], check=True,
+                          env={**os.environ, **GIT_ISOLATION}, **kwargs)
+
+
 def make_project(case, dest):
     shutil.copytree(FIXTURES / case["fixture"], dest)
-    git = ["git", "-C", str(dest), "-c", "user.name=dev", "-c", "user.email=dev@example.com"]
-    subprocess.run(git[:3] + ["init", "-q", "-b", "main"], check=True)
-    subprocess.run(git + ["add", "-A"], check=True)
-    subprocess.run(git + ["commit", "-qm", case.get("commit_message", "initial import")], check=True)
+    git_run(dest, "init", "-q", "-b", "main")
+    git_run(dest, "add", "-A")
+    git_run(dest, "commit", "-qm", case.get("commit_message", "initial import"))
     for step in history_steps(case):
         shutil.copytree(step["path"], dest, dirs_exist_ok=True)
         for rel in step.get("delete", []):
             (dest / rel).unlink()
-        subprocess.run(git + ["add", "-A"], check=True)
-        subprocess.run(git + ["commit", "-q", "--allow-empty", "-F", "-"], input=step["message"], text=True, check=True)
+        git_run(dest, "add", "-A")
+        git_run(dest, "commit", "-q", "--allow-empty", "-F", "-", input=step["message"], text=True)
 
 
 def history_steps(case):
