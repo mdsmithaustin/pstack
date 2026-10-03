@@ -1,0 +1,16 @@
+{
+ "promises": [
+  "open-pr-prompt-routes-to-opening-a-pr",
+  "opening-a-pr-worktree-small-commits-link"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "open the pr. small ordered commits, evidence in the description."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "beyond routing it needs a GitHub remote to push to and a PR link to return"
+}

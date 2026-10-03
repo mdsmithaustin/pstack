@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "bug-prompt-routes-to-bug-fix"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "this command emits two records after a retry. repro first, then fix and verify."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "bug-fix"
+ },
+ "tmp_lock": false
+}

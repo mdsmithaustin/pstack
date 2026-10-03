@@ -1,0 +1,16 @@
+{
+ "promises": [
+  "how-fans-out-explorers-for-big-subsystem",
+  "how-explains-current-code"
+ ],
+ "fixture": "kiln",
+ "entry": "how",
+ "turns": [
+  "does the whole pipeline work, from ingest to publish?"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "note": "adapted from the ledger's wide question `/how does the whole pipeline work`"
+}

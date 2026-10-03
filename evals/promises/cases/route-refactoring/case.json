@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "refactoring-prompt-routes-to-refactoring"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "move parsing into one module, zero behavior change. record the current output first and prove it's unchanged after."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "refactoring"
+ },
+ "tmp_lock": false
+}

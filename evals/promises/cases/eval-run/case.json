@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "eval-prompt-routes-to-eval-playbook"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "run the eval playbook on this skill change. same task for both variants, candidates stay blind."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "beyond routing it needs a skill fixture with two variants and a multi-hour candidate-plus-judge run"
+}

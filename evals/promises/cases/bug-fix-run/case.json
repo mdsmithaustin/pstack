@@ -1,0 +1,22 @@
+{
+ "promises": [
+  "bug-prompt-routes-to-bug-fix",
+  "bug-fix-reproduces-before-fixing",
+  "bug-fix-uses-poteto-tdd-when-cheap",
+  "reply-says-inconclusive-when-check-cannot-run"
+ ],
+ "fixture": "rollup",
+ "entry": "poteto-mode",
+ "turns": [
+  "the export writes duplicate rows when a retry lands mid-run. repro first, then fix and verify."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "bug-fix",
+  "repro_command": "ROLLUP_BUSY_AFTER=\\d+|-m\\s+rollup\\b",
+  "artifact_command": "-m\\s+rollup\\b"
+ }
+}

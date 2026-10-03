@@ -1,0 +1,2 @@
+id=a1;name=Alpha;kind=tool
+id=b2;name=Bravo;kind=library

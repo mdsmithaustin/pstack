@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "eval-prompt-routes-to-eval-playbook"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "run the eval playbook on this skill change. same task for both variants, candidates stay blind."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "eval"
+ },
+ "tmp_lock": false
+}

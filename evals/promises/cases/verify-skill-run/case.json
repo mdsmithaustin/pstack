@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "create-verification-skill-invocable",
+  "create-verification-skill-interviews-repo",
+  "verification-skill-written-to-agents-skills",
+  "verification-skill-proven-once",
+  "maintain-verification-skill-audits",
+  "swarm-splits-verification-by-feature-map"
+ ],
+ "fixture": "tally",
+ "entry": "create-verification-skill",
+ "turns": [
+  "",
+  "/maintain-verification-skill"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "needs an app with a drivable surface and a multi-hour create-then-maintain run; tally has no surface beyond stdout"
+}

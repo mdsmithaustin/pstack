@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "research-prompt-routes-to-research-playbook"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "check whether the current client supports resumable uploads. compare the official docs and release notes before we choose it."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "research"
+ },
+ "tmp_lock": false
+}

@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "automate-me-mines-transcripts",
+  "automate-me-drafts-mode-skill-and-opens-pr",
+  "automate-me-update-mode-mines-since-last-edit"
+ ],
+ "fixture": "tally",
+ "entry": "automate-me",
+ "turns": [
+  "",
+  "update my mode skill with everything since its last edit"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "needs a workspace with prior session transcripts (private history), an interactive which-patterns-are-yours answer, and a GitHub remote for the PR"
+}

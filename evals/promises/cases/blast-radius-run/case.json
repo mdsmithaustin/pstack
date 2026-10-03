@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "blast-radius-finds-breakage",
+  "blast-radius-proves-one-fact-by-running-code"
+ ],
+ "fixture": "relay",
+ "entry": "blast-radius",
+ "turns": [
+  "this diff"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "diff_files": [
+   "relay/cache.py"
+  ]
+ },
+ "history": "relay-risky-diff"
+}

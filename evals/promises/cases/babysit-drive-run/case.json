@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "babysit-prompt-routes-to-babysit-drive"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "babysit this pr. get it green."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "beyond routing it needs GitHub: an open PR with a conflict, a bot review body finding, and a failing check"
+}

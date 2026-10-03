@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "autopilot-prompt-routes-to-autopilot-full"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "full autopilot on this queue. each item is independent. i want them merged by morning."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "beyond routing it needs a GitHub queue of independent items and hours of owner-plus-verifier runs"
+}

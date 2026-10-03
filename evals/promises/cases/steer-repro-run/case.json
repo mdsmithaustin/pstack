@@ -1,0 +1,19 @@
+{
+ "promises": [
+  "steering-prompt-redirects-run"
+ ],
+ "fixture": "rollup",
+ "entry": "poteto-mode",
+ "turns": [
+  "the export writes duplicate rows when a retry lands mid-run. repro first.",
+  "i said the goal is to repro. i did not ask for a fix yet."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "bug-fix"
+ },
+ "note": "turn 0 trims the README prompt to its repro clause so the correction in 10-recipes-and-pitfalls.md has a drift to catch"
+}

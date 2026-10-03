@@ -1,0 +1,31 @@
+{
+ "promises": [
+  "poteto-mode-routes-to-playbook",
+  "worklist-opens-with-playbook-steps",
+  "worklist-in-native-task-tool",
+  "skipped-step-stays-in-worklist",
+  "reply-carries-commands-and-outputs",
+  "reply-says-inconclusive-when-check-cannot-run",
+  "prove-it-works-checks-real-artifact",
+  "claude-effort-applies-via-effort-agents",
+  "persona-delivery-hermes-grok",
+  "poteto-mode-reads-principles-and-names-applied",
+  "design-ladder-spares-small-changes"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --json flag to this command. text output stays byte-identical. verify both."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "artifact_command": "-m\\s+tally\\b"
+ },
+ "env": {
+  "todo_tools": true
+ }
+}

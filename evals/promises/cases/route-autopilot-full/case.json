@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "autopilot-prompt-routes-to-autopilot-full"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "full autopilot on this queue. each item is independent. i want them merged by morning."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "autopilot-full"
+ },
+ "tmp_lock": false
+}

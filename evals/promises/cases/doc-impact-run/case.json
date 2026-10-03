@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "poteto-runs-documentation-impact-before-completion",
+  "documentation-impact-independent-review-pass-required",
+  "documentation-impact-modes-invocable"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "add --json; update whatever docs need it",
+  "/documentation-impact review this change's documentation coverage without editing files."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "playbook": "feature",
+  "artifact_command": "-m\\s+tally\\b"
+ }
+}

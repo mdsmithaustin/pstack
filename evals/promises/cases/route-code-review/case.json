@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "review-prompt-routes-to-code-review"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "review this PR"
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "code-review"
+ },
+ "tmp_lock": false
+}

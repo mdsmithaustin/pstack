@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "babysit-prompt-routes-to-babysit-drive"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "babysit this pr. get it green."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "babysit"
+ },
+ "tmp_lock": false
+}

@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "orchestrate-prompt-routes-to-orchestrate"
+ ],
+ "fixture": "kiln",
+ "entry": "poteto-mode",
+ "turns": [
+  "orchestrate the store migration. own it until every package is converted and merged. i'll check in twice a day."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "orchestrate"
+ },
+ "tmp_lock": false
+}

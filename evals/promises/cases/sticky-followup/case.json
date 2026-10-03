@@ -1,0 +1,24 @@
+{
+ "promises": [
+  "poteto-mode-sticky",
+  "short-prompt-continues-in-context",
+  "new-task-rematches",
+  "read-only-phrase-pins-investigation"
+ ],
+ "fixture": "relay",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --json flag. text output stays byte-identical. verify both forms.",
+  "continue",
+  "/poteto-mode do it",
+  "/poteto-mode new task. figure out why the cache entry survives logout. don't change any code yet."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "playbook": "feature",
+  "rematch": "investigation"
+ }
+}

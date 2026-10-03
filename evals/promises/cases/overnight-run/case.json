@@ -1,0 +1,25 @@
+{
+ "promises": [
+  "step-away-routes-to-figure-it-out",
+  "overnight-contract-routes-to-figure-it-out",
+  "autonomous-run-uses-loop-facility",
+  "pre-answered-permission-not-asked",
+  "session-override-keeps-going",
+  "show-me-your-work-spawns-trail-reviewer",
+  "show-me-your-work-review-ends-with-attention"
+ ],
+ "fixture": "relay",
+ "entry": "poteto-mode",
+ "turns": [
+  "im going to bed. migrate every caller to the new parser in a fresh worktree off main.\ndone means zero old callers, all parser fixtures pass, old api deleted.\nkeep a decision log. don't ask me before committing.\n/loop until done. if you're truly stuck after a few hours, stop and write up why.",
+  "/show-me-your-work catch me up on what you did last night"
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "skill": "figure-it-out"
+ },
+ "note": "`<base>` in the 07-overnight.md contract is `main` here"
+}

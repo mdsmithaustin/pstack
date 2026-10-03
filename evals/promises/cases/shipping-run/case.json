@@ -1,0 +1,17 @@
+{
+ "promises": [
+  "land-prompt-routes-to-shipping",
+  "shipping-verifies-each-pr-independently",
+  "shipping-fresh-verifier-per-pr-never-author"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "land the stack."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "beyond routing it needs GitHub: a two-PR stack with CI, the lower verified, and merge-gate"
+}

@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "arena-candidate-count-adjustable",
+  "arena-candidates-own-worktrees",
+  "arena-fans-out-and-grafts",
+  "arena-readonly-cross-judge",
+  "arena-lead-reads-rationales-and-base"
+ ],
+ "fixture": "relay",
+ "entry": "arena",
+ "turns": [
+  "this, 5 candidates. the cache key format is expensive to change later."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "candidates": 5
+ }
+}
