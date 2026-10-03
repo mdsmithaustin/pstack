@@ -339,7 +339,7 @@ def parse_session(chat_path, cwd, entry_skill, lead=False, prompts=()):
                     args = {"_raw": call.get("arguments")}
                 name = call.get("name")
                 names[call.get("id")] = name
-                seq = add({"kind": "tool_call", "name": name, "input": args})
+                seq = add({"kind": "tool_call", "name": name, "input": args, "id": call.get("id")})
                 reads = []
                 if name == "read_file" and args.get("target_file"):
                     path = args["target_file"]
@@ -365,7 +365,7 @@ def parse_session(chat_path, cwd, entry_skill, lead=False, prompts=()):
             content = text_of(rec.get("content"))
             ok = not re.match(r"\s*(error|Error:|failed|Tool execution failed)", content or "")
             add({"kind": "tool_result", "name": names.get(rec.get("tool_call_id")), "ok": ok,
-                 "output_head": (content or "")[:400]})
+                 "output_head": (content or "")[:400], "id": rec.get("tool_call_id")})
     return {"events": events, "files_read": list(dict.fromkeys(files)), "worklist": worklist, "spawns": spawns,
             "final_reply": final, "model": model, "effort": effort, "injected": injected, "read_entry": read_entry,
             "first_reply": first_reply, "turn_skills": turn_skills}

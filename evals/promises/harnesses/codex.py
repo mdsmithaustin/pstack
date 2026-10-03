@@ -250,7 +250,7 @@ def harvest_rollout(path, prompts=None):
                 name = payload.get("name")
                 names[payload.get("call_id")] = name
                 tool_input = {"code": payload.get("input")} if ptype == "custom_tool_call" else parse_arguments(payload.get("arguments"))
-                seq = add({"kind": "tool_call", "name": name, "input": tool_input})
+                seq = add({"kind": "tool_call", "name": name, "input": tool_input, "id": payload.get("call_id")})
                 if name == "update_plan":
                     worklist.append({"seq": seq, "carrier": name, "items": plan_items(tool_input)})
                 if name == "exec":
@@ -272,16 +272,17 @@ def harvest_rollout(path, prompts=None):
                 output = payload.get("output")
                 body = text_of(output) if isinstance(output, list) else (output if isinstance(output, str) else json.dumps(output))
                 ok = not re.search(r"^(Script failed|Error|error:)", body or "", re.M)
-                add({"kind": "tool_result", "name": names.get(payload.get("call_id")), "ok": ok, "output_head": (body or "")[:400]})
+                add({"kind": "tool_result", "name": names.get(payload.get("call_id")), "ok": ok, "output_head": (body or "")[:400],
+                     "id": payload.get("call_id")})
         if kind == "event_msg" and payload.get("type") == "item_completed":
             item = payload.get("item") or {}
             itype = item.get("type")
             if itype == "CommandExecution":
                 script = shell_script(item.get("command"))
                 item_cwd = Path(str(item.get("cwd", cwd)).removeprefix("file://"))
-                add({"kind": "tool_call", "name": "exec_command", "input": {"cmd": script, "cwd": str(item_cwd)}})
+                add({"kind": "tool_call", "name": "exec_command", "input": {"cmd": script, "cwd": str(item_cwd)}, "id": item.get("id")})
                 add({"kind": "tool_result", "name": "exec_command", "ok": item.get("exit_code") in (0, None) and item.get("status") == "completed",
-                     "output_head": str(item.get("stdout") or item.get("aggregated_output") or "")[:400]})
+                     "output_head": str(item.get("stdout") or item.get("aggregated_output") or "")[:400], "id": item.get("id")})
                 read = [p.get("path") or p.get("name") for p in item.get("parsed_cmd") or [] if p.get("type") == "read"]
                 files += [str((item_cwd / r).resolve()) for r in read if r] + paths_read(script, item_cwd)
             elif itype == "SubAgentActivity" and item.get("kind") == "started" and item.get("id") in spawn_by_call:
