@@ -727,11 +727,11 @@
   },
   "design-ladder-spares-small-changes": {
    "check": "live",
-   "claim": "A small, self-contained change sent through /poteto-mode runs no architect or arena design fan-out.",
+   "claim": "A change that stays inside one function and has one clear shape, sent through /poteto-mode, runs no architect or arena design fan-out.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "A small, self-contained change keeps this step with `skipped: <reason>`."
+     "quote": "Otherwise, keep this step with `skipped: <reason>`."
     }
    ],
    "harness_sensitive": true,
