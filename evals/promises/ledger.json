@@ -2588,6 +2588,7 @@
    "harness_sensitive": true,
    "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
    "owners": [
+    "skills/poteto-mode/SKILL.md",
     "skills/pstack-harness/SKILL.md"
    ],
    "scenario": "feature-run"
