@@ -325,7 +325,7 @@ Pinning the runner does not make those two commands complete. Neither resolves `
 
 `skill-audit` is stricter than CI on one point. CI skips `audit-manifest` for a manifest with no cases, and the task audits every manifest it finds, so an empty manifest fails locally and passes in CI. Nothing in this repository has one today.
 
-`skill-lint` is not a superset of the fenced list above. It runs the frontmatter and content checkers without the trigger declaration corpus, so it reports `52 skills, 0 errors` where the fenced command adds `trigger declaration coverage`.
+`skill-lint` is not a superset of the fenced list above. It runs the frontmatter and content checkers without the trigger declaration corpus, so it reports `54 skills, 0 errors` where the fenced command adds `trigger declaration coverage`.
 
 `skill-trigger <skill>` and `skill-run <skill>` spend model budget on your own logins and never run in CI. Both default their output to `<skill>/eval-runs/`, inside the skills tree. A git install never sees it, because `.gitignore` covers it, but an install from a local working tree copies that directory like any other, which is what the repository-root `evals/` tree prevents. Pass `OUT` to write under `evals/` instead.
 
