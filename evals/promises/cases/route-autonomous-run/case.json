@@ -1,0 +1,19 @@
+{
+ "promises": [
+  "loop-prompt-routes-to-autonomous-run"
+ ],
+ "fixture": "relay",
+ "entry": "poteto-mode",
+ "turns": [
+  "run the migration check and keep fixing callers until it shows no old ones left."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "autonomous-run"
+ },
+ "tmp_lock": false,
+ "note": "route-figure-it-out's task without the step-away cue, so the step-away rule must not take it"
+}

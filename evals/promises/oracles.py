@@ -901,7 +901,7 @@ ROUTING_PROMISES = (
     "autopilot-prompt-routes-to-autopilot-full", "stack-prompt-routes-to-autopilot-stack",
     "orchestrate-prompt-routes-to-orchestrate", "takeover-prompt-routes-to-session-pickup",
     "disk-prompt-routes-to-worktree-cleanup", "skill-prompt-routes-to-authoring-playbook",
-    "eval-prompt-routes-to-eval-playbook", "open-pr-prompt-routes-to-opening-a-pr",
+    "eval-prompt-routes-to-eval-playbook", "open-pr-prompt-routes-to-opening-a-pr", "loop-prompt-routes-to-autonomous-run",
 )
 
 

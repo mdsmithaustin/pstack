@@ -2679,6 +2679,17 @@
     "skills/poteto-mode/playbooks/opening-a-pr.md"
    ],
    "scenario": "worktree-isolation-run"
+  },
+  "loop-prompt-routes-to-autonomous-run": {
+   "check": "live",
+   "claim": "A run-until-done request from a user who stays in the conversation opens the Autonomous run playbook, not figure-it-out.",
+   "harness_sensitive": true,
+   "live_case": "route-autonomous-run: route-figure-it-out's task with no step-away cue; pass when the lead opens autonomous-run first.",
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/playbooks/autonomous-run.md"
+   ],
+   "scenario": "route-autonomous-run"
   }
  },
  "units": {
@@ -8164,7 +8175,10 @@
    "sources": [
     "port"
    ],
-   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
+   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup.",
+   "also": [
+    "loop-prompt-routes-to-autonomous-run"
+   ]
   },
   "fd47d831e0c7": {
    "class": "promise",
