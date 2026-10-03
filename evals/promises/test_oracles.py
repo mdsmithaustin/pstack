@@ -917,6 +917,22 @@ class DeslopPass(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL)
         self.assertEqual(result["failures"], ["unrelated edit kept instead of reverted: ['roster/load.py']"])
 
+    def test_an_agent_commit_is_not_part_of_the_base(self):
+        project = self.roster()
+        (project / "roster" / "notes.py").write_text("x = 1\n")
+        git_in(project, "add", "-A")
+        git_in(project, "commit", "-q", "-m", "deslop")
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["new files appeared: ['roster/notes.py']"])
+
+    def test_a_deleted_untouched_file_fails_without_crashing(self):
+        project = self.roster()
+        (project / "roster" / "load.py").unlink()
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("unrelated edit kept instead of reverted: ['roster/load.py']", result["failures"])
+
     def test_a_cut_that_changes_behavior_fails_the_check(self):
         no_filter = "from collections import Counter\n\n\ndef count_by_team(rows, team=None):\n    return sorted(Counter(row[\"team\"] for row in rows).items())\n"
         result = self.grade(self.roster(report=no_filter))

@@ -598,7 +598,7 @@ class View:
     def base_commits(self):
         history = self.case.get("history")
         steps = history_steps(history) if history else []
-        return 1 + len(steps)
+        return 1 + sum(1 for step in steps if step.get("commit", True))
 
     def base_shas(self):
         out = self.git("rev-list", "--reverse", "HEAD")
@@ -1796,7 +1796,8 @@ def deslop_cleans(view):
     survived = [c for c in expect.get("gone", []) if c in texts]
     missing = [c for c in expect.get("kept", []) if c not in texts]
     churn = [rel for rel in expect.get("untouched", [])
-             if (view.git("show", f"{base[0]}:{rel}") or "") != (view.project / rel).read_text(encoding="utf-8", errors="replace")]
+             if not (view.project / rel).is_file()
+             or (view.git("show", f"{base[0]}:{rel}") or "") != (view.project / rel).read_text(encoding="utf-8", errors="replace")]
     added = sorted(project_files(view) - set((view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()))
     check = expect.get("check")
     run = subprocess.run(shlex.split(check), cwd=view.project, capture_output=True, text=True) if check else None
