@@ -736,15 +736,6 @@
    ],
    "scenario": "feature-run"
   },
-  "deslop-available-for-code": {
-   "check": "install",
-   "claim": "A `/deslop` command exists in the port to clean slop out of code, as the guide's division-of-labor sentence and `deslop it` advice assume.",
-   "harness_sensitive": true,
-   "owners": [
-    "skills/unslop/SKILL.md",
-    "README.md"
-   ]
-  },
   "disk-prompt-routes-to-worktree-cleanup": {
    "check": "live",
    "claim": "A disk-space or prune-worktrees prompt opens the Worktree cleanup playbook.",
@@ -3793,6 +3784,19 @@
    ],
    "text": "```text\n/arena take my prompt to the arena verbatim. i want to compare their proposals with yours.\n```"
   },
+  "32f24eecc435": {
+   "also": [
+    "unslop-takes-target-and-rules",
+    "no-comments-spawns-comment-sicko"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "opening-a-pr-unslops-diff-and-prose",
+   "sources": [
+    "port"
+   ],
+   "text": "`/unslop` cleans slop out of prose, including the names and messages in a diff, and `/no-comments` hands the comments to a reviewer who didn't write them."
+  },
   "32f4afbac79d": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -5115,14 +5119,6 @@
    ],
    "text": "Changes that didn't help get discarded, not left to ride."
   },
-  "74e7065802e3": {
-   "class": "context",
-   "file": "05-build-and-clean.md",
-   "sources": [
-    "port"
-   ],
-   "text": "If you'd rather ask for the diff pass in plain words: remove narrating comments, unsupported guards, dead compatibility paths, and unrelated edits."
-  },
   "74ec8caa61ef": {
    "class": "context",
    "file": "07-overnight.md",
@@ -5151,16 +5147,14 @@
    "text": "Setup then detects the models you have access to, asks for a reasoning budget, shows you each role (code delegates, judgment, the review panels), and asks what you want."
   },
   "76ed01baacb5": {
-   "also": [
-    "unslop-takes-target-and-rules",
-    "no-comments-spawns-comment-sicko"
-   ],
-   "class": "promise",
+   "class": "substituted",
    "file": "05-build-and-clean.md",
-   "promise": "deslop-available-for-code",
+   "ported_as": [
+    "32f24eecc435"
+   ],
+   "promise": "opening-a-pr-unslops-diff-and-prose",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "`/deslop` cleans slop out of the code, `/unslop` cleans it out of prose, and `/no-comments` hands the comments to a reviewer who didn't write them."
   },
@@ -5629,6 +5623,15 @@
    ],
    "text": "After that, each page stands alone."
   },
+  "8b2df44258b9": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "opening-a-pr-unslops-diff-and-prose",
+   "sources": [
+    "port"
+   ],
+   "text": "`/unslop` covers prose, so its diff pass reaches comments, names, and messages."
+  },
   "8b7306579a2e": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -5686,6 +5689,14 @@
     "port"
    ],
    "text": "Findings are repaired and reviewed again."
+  },
+  "8d3b94a81704": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "port"
+   ],
+   "text": "For the code itself, ask in plain words: remove unsupported guards, dead compatibility paths, and unrelated edits."
   },
   "8d4d37d0397c": {
    "class": "promise",
@@ -7001,7 +7012,8 @@
    "class": "substituted",
    "file": "05-build-and-clean.md",
    "ported_as": [
-    "74e7065802e3"
+    "8b2df44258b9",
+    "8d3b94a81704"
    ],
    "sources": [
     "upstream"
@@ -7179,12 +7191,14 @@
    "text": "When you're ready to land, say so:"
   },
   "cedd235d3270": {
-   "class": "promise",
+   "class": "substituted",
    "file": "05-build-and-clean.md",
-   "promise": "deslop-available-for-code",
+   "ported_as": [
+    "d5fe5c97b7e0"
+   ],
+   "promise": "opening-a-pr-unslops-diff-and-prose",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "If the diff feels padded, say `deslop it` before you commit, not after review calls it out."
   },
@@ -7398,6 +7412,14 @@
     "port"
    ],
    "text": "Next: [Build and clean the change](./05-build-and-clean.md)."
+  },
+  "d5fe5c97b7e0": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "port"
+   ],
+   "text": "If the diff feels padded, ask in plain words for the narrating comments, unsupported guards, and dead compatibility paths to go before you commit, not after review calls it out."
   },
   "d72e6863abdf": {
    "class": "context",
