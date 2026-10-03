@@ -140,16 +140,17 @@ def git_run(dest, *args, **kwargs):
 
 
 def make_project(case, dest):
-    shutil.copytree(FIXTURES / case["fixture"], dest)
+    shutil.copytree(FIXTURES / case["fixture"], dest, copy_function=shutil.copy)
     git_run(dest, "init", "-q", "-b", "main")
     git_run(dest, "add", "-A")
     git_run(dest, "commit", "-qm", case.get("commit_message", "initial import"))
     for step in history_steps(case):
-        shutil.copytree(step["path"], dest, dirs_exist_ok=True)
+        shutil.copytree(step["path"], dest, dirs_exist_ok=True, copy_function=shutil.copy)
         for rel in step.get("delete", []):
             (dest / rel).unlink()
-        git_run(dest, "add", "-A")
-        git_run(dest, "commit", "-q", "--allow-empty", "-F", "-", input=step["message"], text=True)
+        if step.get("commit", True):
+            git_run(dest, "add", "-A")
+            git_run(dest, "commit", "-q", "--allow-empty", "-F", "-", input=step["message"], text=True)
 
 
 def history_steps(case):

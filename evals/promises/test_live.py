@@ -1,8 +1,13 @@
 import json
 import os
+import os
+import subprocess
+import tempfile
+import json
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 from pathlib import Path
 from unittest import mock
 
@@ -68,6 +73,39 @@ class GradeRun(unittest.TestCase):
             self.assertEqual({r["verdict"] for r in graded["promises"].values()}, {"INCONCLUSIVE"})
             self.assertEqual(set(graded["promises"]), set(case["promises"]))
             self.assertEqual(json.loads((root / "verdict.json").read_text()), graded)
+
+
+
+class MakeProject(unittest.TestCase):
+    def build(self, commit):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(tmp)]))
+        (tmp / "fixtures" / "app").mkdir(parents=True)
+        (tmp / "fixtures" / "app" / "a.py").write_text('x = "1"\n')
+        step = tmp / "histories" / "h" / "step-1"
+        step.mkdir(parents=True)
+        (step / "a.py").write_text("x = '1'\n")
+        for path in (tmp / "fixtures" / "app" / "a.py", step / "a.py"):
+            os.utime(path, (1_700_000_000, 1_700_000_000))
+        (tmp / "histories" / "h" / "steps.json").write_text(json.dumps(
+            {"fixture": "app", "steps": [{"dir": "step-1", "message": "quote style", "commit": commit}]}))
+        old = (live.FIXTURES, live.HISTORIES)
+        live.FIXTURES, live.HISTORIES = tmp / "fixtures", tmp / "histories"
+        self.addCleanup(lambda: setattr(live, "FIXTURES", old[0]) or setattr(live, "HISTORIES", old[1]))
+        project = tmp / "work" / "app"
+        live.make_project({"fixture": "app", "history": "h"}, project)
+        git = lambda *a: subprocess.run(["git", "-C", str(project), *a], capture_output=True, text=True).stdout
+        return git
+
+    def test_a_same_size_edit_in_a_history_step_is_committed(self):
+        git = self.build(True)
+        self.assertEqual(git("log", "--format=%s"), "quote style\ninitial import\n")
+        self.assertEqual(git("show", "HEAD:a.py"), "x = '1'\n")
+
+    def test_an_uncommitted_step_stays_in_the_working_tree(self):
+        git = self.build(False)
+        self.assertEqual(git("log", "--format=%s"), "initial import\n")
+        self.assertEqual(git("status", "--short"), " M a.py\n")
 
 
 if __name__ == "__main__":
