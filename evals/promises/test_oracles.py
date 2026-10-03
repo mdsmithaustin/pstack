@@ -885,9 +885,10 @@ class DeslopPass(unittest.TestCase):
             (project / "roster" / "load.py").write_text((FIXTURES / "roster" / "roster" / "load.py").read_text())
         return project
 
-    def grade(self, project, **trace):
+    def grade(self, project, case=None, **trace):
         events = trace.pop("events", [read(0, "deslop/SKILL.md"), edit(1, "roster/report.py")])
-        return grade("deslop-cleans-code-slop", minimal(events=events, final_reply="Removed 8 lines.", **trace), load_case("deslop-run"), project)
+        trace.setdefault("x_baseline", live.baseline(project) if project.is_dir() else None)
+        return grade("deslop-cleans-code-slop", minimal(events=events, final_reply="Removed 8 lines.", **trace), case or load_case("deslop-run"), project)
 
     def test_a_clean_tree_with_green_tests_passes(self):
         result = self.grade(self.roster())
@@ -917,12 +918,45 @@ class DeslopPass(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL)
         self.assertEqual(result["failures"], ["unrelated edit kept instead of reverted: ['roster/load.py']"])
 
+    def test_a_run_that_never_loads_deslop_fails(self):
+        result = self.grade(self.roster(), events=[edit(1, "roster/report.py")])
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["the deslop skill was never loaded"])
+
+    def test_a_hanging_check_fails_instead_of_blocking(self):
+        case = load_case("deslop-run")
+        case["expect"] = dict(case["expect"], checks=[{"cmd": "python3 -c 'import time; time.sleep(30)'", "timeout_s": 1}])
+        result = self.grade(self.roster(), case=case)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("timed out after 1s", result["failures"][0])
+
+    def test_branch_work_moved_into_a_comment_fails(self):
+        project = self.roster()
+        main = project / "roster" / "__main__.py"
+        line = '    parser.add_argument("--team", help="show only this team")\n'
+        main.write_text(main.read_text().replace(line, ""))
+        report = project / "roster" / "report.py"
+        report.write_text(report.read_text() + "#" + line)
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(any(f.startswith("the branch's own work went missing") for f in result["failures"]), result)
+
+    def test_an_amended_branch_commit_cannot_hide_a_new_file(self):
+        project = self.roster()
+        base = live.baseline(project)
+        (project / "roster" / "notes.py").write_text("x = 1\n")
+        git_in(project, "add", "roster/notes.py")
+        git_in(project, "commit", "-q", "--amend", "--no-edit")
+        result = self.grade(project, x_baseline=base)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("new files appeared: ['roster/notes.py']", result["failures"])
+
     def test_an_agent_commit_is_not_part_of_the_base(self):
         project = self.roster()
         (project / "roster" / "notes.py").write_text("x = 1\n")
         git_in(project, "add", "-A")
         git_in(project, "commit", "-q", "-m", "deslop")
-        result = self.grade(project)
+        result = self.grade(project, x_baseline=None)
         self.assertEqual(result["verdict"], FAIL)
         self.assertEqual(result["failures"], ["new files appeared: ['roster/notes.py']"])
 

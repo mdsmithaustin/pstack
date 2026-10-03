@@ -61,7 +61,7 @@ A symbol on the package's public surface (an entry-point export, a documented AP
 
 ### Scope
 
-17. **Unrelated edits.** Formatting churn, renames, import reorders, or syntax modernizing in code the task did not need to touch. Revert the hunks git can restore: those committed on the branch, and those you wrote this session. An uncommitted hunk you did not write stays, and the report names it, because reverting it would destroy work no commit holds.
+17. **Unrelated edits.** Formatting churn, renames, import reorders, or syntax modernizing in code the task did not need to touch. Revert the hunks git can restore: those committed on the branch, and those you wrote this session. An uncommitted hunk you did not write stays, and the report names it, because reverting it would destroy work no commit holds. `git diff <base>...HEAD` shows the committed hunks and `git diff HEAD` the uncommitted ones. Revert hunk by hunk, never by restoring a whole file, so an uncommitted hunk in the same file survives.
 18. **A behavior change inside cleanup.** A hunk that changes what the code does under a cleanup label. Split it out and name it in the report.
 19. **Style against the file.** A pattern the surrounding file does not use. Match the file.
 

@@ -601,6 +601,8 @@ class View:
         return 1 + sum(1 for step in steps if step.get("commit", True))
 
     def base_shas(self):
+        if self.trace.get("x_baseline"):
+            return self.trace["x_baseline"]
         out = self.git("rev-list", "--reverse", "HEAD")
         return out.split()[:self.base_commits()] if out else None
 
@@ -1794,16 +1796,16 @@ def deslop_cleans(view):
     texts = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in view.project.rglob("*.py")
                       if not str(p.relative_to(view.project)).startswith(PRIVATE_PREFIXES))
     survived = [c for c in expect.get("gone", []) if c in texts]
-    missing = [c for c in expect.get("kept", []) if c not in texts]
+    missing = [f"{rel}: {c}" for rel, wanted in expect.get("kept", {}).items() for c in wanted
+               if not (view.project / rel).is_file() or c not in (view.project / rel).read_text(encoding="utf-8", errors="replace")]
     churn = [rel for rel in expect.get("untouched", [])
              if not (view.project / rel).is_file()
              or (view.git("show", f"{base[0]}:{rel}") or "") != (view.project / rel).read_text(encoding="utf-8", errors="replace")]
     added = sorted(project_files(view) - set((view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()))
-    check = expect.get("check")
-    run = subprocess.run(shlex.split(check), cwd=view.project, capture_output=True, text=True) if check else None
+    broken = [problem for problem in map(lambda c: check_problem(view.project, c), expect.get("checks", [])) if problem]
     evidence += [f"planted slop still present: {survived}", f"branch work missing: {missing}", f"unrelated edits kept: {churn}",
-                 f"files added: {added}", f"check {check!r} exit: {run.returncode if run else 'not run'}"]
-    failures = []
+                 f"files added: {added}", f"checks run: {len(expect.get('checks', []))}, failing: {len(broken)}"]
+    failures = [] if loaded else ["the deslop skill was never loaded"]
     if survived:
         failures.append(f"planted slop survived: {survived}")
     if missing:
@@ -1812,9 +1814,21 @@ def deslop_cleans(view):
         failures.append(f"unrelated edit kept instead of reverted: {churn}")
     if added:
         failures.append(f"new files appeared: {added}")
-    if run and run.returncode != 0:
-        failures.append(f"check failed after the pass: {(run.stderr or run.stdout).strip().splitlines()[-1:]}")
+    failures += [f"check failed after the pass: {problem}" for problem in broken]
     return failed(failures, *evidence) if failures else passed(*evidence)
+
+
+def check_problem(project, check):
+    timeout = check.get("timeout_s", 120)
+    try:
+        run = subprocess.run(shlex.split(check["cmd"]), cwd=project, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return f"{check['cmd']} timed out after {timeout}s"
+    if run.returncode != 0:
+        return f"{check['cmd']} exited {run.returncode}: {(run.stderr or run.stdout).strip().splitlines()[-1:]}"
+    if "stdout" in check and run.stdout != check["stdout"]:
+        return f"{check['cmd']} printed {run.stdout!r}, expected {check['stdout']!r}"
+    return None
 
 
 def need_turns(view):

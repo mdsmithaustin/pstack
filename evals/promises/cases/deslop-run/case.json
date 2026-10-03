@@ -23,13 +23,25 @@
    "# kept for callers of the old name",
    "def _sorted_items("
   ],
-  "kept": [
-   "parser.add_argument(\"--team\"",
-   "def test_team_keeps_one_team"
-  ],
+  "kept": {
+   "roster/__main__.py": [
+    "parser.add_argument(\"--team\""
+   ],
+   "tests/test_report.py": [
+    "def test_team_keeps_one_team"
+   ]
+  },
   "untouched": [
    "roster/load.py"
   ],
-  "check": "python3 -m unittest discover -s tests"
+  "checks": [
+   {
+    "cmd": "python3 -m unittest discover -s tests"
+   },
+   {
+    "cmd": "python3 -m roster data/members.csv --team infra",
+    "stdout": "   3  infra\n"
+   }
+  ]
  }
 }
