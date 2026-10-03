@@ -894,6 +894,11 @@ class DeslopPass(unittest.TestCase):
         self.assertEqual(result["verdict"], PASS, result)
         self.assertIn("deslop skill read by the lead: True", result["evidence"][0])
 
+    def test_a_skill_tool_load_counts_as_the_lead_reading_deslop(self):
+        events = [{"seq": 0, "kind": "tool_call", "name": "Skill", "input": {"skill": "deslop"}}, edit(1, "roster/report.py")]
+        result = self.grade(self.roster(), events=events)
+        self.assertIn("deslop skill read by the lead: True", result["evidence"][0])
+
     def test_the_planted_history_itself_fails_on_every_plant(self):
         project = self.roster(report=(HISTORIES / "roster-team-filter" / "step-1" / "roster" / "report.py").read_text(), restore_load=False)
         result = self.grade(project)

@@ -1781,7 +1781,9 @@ def project_files(view):
 @oracle("deslop-cleans-code-slop")
 def deslop_cleans(view):
     expect = view.case.get("expect") or {}
-    evidence = [f"deslop skill read by the lead: {'deslop/SKILL.md' in view.lead_reads()}"]
+    loaded = "deslop/SKILL.md" in view.lead_reads() or any(
+        c.get("name") == "Skill" and (c.get("input") or {}).get("skill") == "deslop" for c in view.tool_calls)
+    evidence = [f"deslop skill read by the lead: {loaded}"]
     if not (view.project and view.project.is_dir()):
         return inconclusive("no project to inspect; this pass is graded on the tree, not the reply", *evidence)
     if view.killed and not view.edits():

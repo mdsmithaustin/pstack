@@ -6,7 +6,7 @@
 
 Source: https://github.com/cursor/plugins/blob/23e4138daa01c42d4969f7a5465f82704e64f798/cursor-team-kit/skills/deslop/SKILL.md (commit `23e4138d`, read 2026-10-03).
 
-Carried over: the name `deslop`, the scope sentence (check the diff against the base branch and remove the slop the branch introduced), four of the five focus areas (unnecessary comments, defensive checks and `try/catch` on trusted paths, casts to `any` that only bypass the checker, deep nesting an early return flattens, patterns inconsistent with the surrounding file), and two guardrails (keep behavior unchanged, prefer minimal edits over broad rewrites, a summary of one to three sentences). Rules 10, 14, and 19 and process step 2 restate these in this skill's words.
+Carried over: the name `deslop`, the scope sentence (check the diff against the base branch and remove the slop the branch introduced), the five focus areas (unnecessary comments, defensive checks and `try/catch` on trusted paths, casts to `any` that only bypass the checker, deep nesting an early return flattens, patterns inconsistent with the surrounding file), and the three guardrails (keep behavior unchanged, prefer minimal edits over broad rewrites, a summary of one to three sentences). Rules 10, 14, and 19 and process step 2 restate these in this skill's words.
 
 Copyright (c) 2026 Cursor. MIT License.
 
@@ -14,7 +14,7 @@ Copyright (c) 2026 Cursor. MIT License.
 
 Source: https://github.com/addyosmani/agent-skills/tree/a06bc63b3f8b829c14b0bbf53d99fefc39d58092 (commit `a06bc63b`, read 2026-10-03), files `skills/code-simplification/SKILL.md`, `skills/code-review-and-quality/SKILL.md`, `skills/incremental-implementation/SKILL.md`, `skills/deprecation-and-migration/SKILL.md`, and `skills/git-workflow-and-versioning/SKILL.md`.
 
-Carried over: "three similar lines" as the limit on extracting a shared shape (rule 15), the rule that a simplification which needs a test change changed behavior (process step 4), the ban on drive-by refactors of code the task did not touch (rule 17), the "did not touch" section of the report, and the remove-the-shim sequence behind rule 7. Rules 1, 2, 11, and 12 restate its "what" comment, dead code, wrapper, and speculative abstraction rows.
+Carried over: "three similar lines" as the limit on extracting a shared shape (rule 15), the rule that a simplification which needs a test change changed behavior (process step 4), the ban on drive-by refactors of code the task did not touch (rule 17), the "did not touch" section of the report, the remove-the-shim sequence behind rule 7, and two phrases from `code-review-and-quality`: "a silent fallback that hides an unclear invariant" in rule 5 and "a new conditional bolted onto an unrelated flow" in rule 16. Rules 1, 2, 11, and 12 restate its "what" comment, dead code, wrapper, and speculative abstraction rows.
 
 Copyright (c) 2025 Addy Osmani. MIT License.
 
@@ -36,4 +36,4 @@ Each source above is licensed under the MIT License, whose notice reads:
 >
 > THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-The keep list in rule 3 is pstack's own, from `agents/comment-sicko.md`. Rules 4 to 6, 8, 13, 16, and 18 come from pstack's principle skills (boundary discipline, subtract before you add, minimize reader load, migrate callers then delete legacy APIs) and from the `make-pr-easy-to-review` skill in `cursor-team-kit`, under the Cursor notice above.
+The keep list in rule 3 is pstack's own, from `agents/comment-sicko.md`. Apart from those two Addy Osmani phrases, rules 4 to 6, 8, 13, 16, and 18 come from pstack's principle skills (boundary discipline, subtract before you add, minimize reader load, migrate callers then delete legacy APIs) and from the `make-pr-easy-to-review` skill in `cursor-team-kit`, under the Cursor notice above.
