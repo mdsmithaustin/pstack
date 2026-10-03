@@ -728,6 +728,12 @@
   "design-ladder-spares-small-changes": {
    "check": "live",
    "claim": "A small, self-contained change sent through /poteto-mode runs no architect or arena design fan-out.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "A small, self-contained change keeps this step with `skipped: <reason>`."
+    }
+   ],
    "harness_sensitive": true,
    "live_case": "feature-run: the six-line --json flag on tally; FAIL when the lead reads architect/arena SKILL.md or spawns parallel design sketches.",
    "owners": [
@@ -1698,7 +1704,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "2. `architect` for parallel design exploration."
+     "quote": "2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes."
     }
    ],
    "harness_sensitive": false,
