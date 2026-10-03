@@ -145,6 +145,8 @@ def make_project(case, dest):
     git_run(dest, "add", "-A")
     git_run(dest, "commit", "-qm", case.get("commit_message", "initial import"))
     for step in history_steps(case):
+        if step.get("branch"):
+            git_run(dest, "checkout", "-q", "-B", step["branch"])
         shutil.copytree(step["path"], dest, dirs_exist_ok=True, copy_function=shutil.copy)
         for rel in step.get("delete", []):
             (dest / rel).unlink()

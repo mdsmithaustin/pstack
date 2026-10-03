@@ -85,7 +85,7 @@ class GradeRun(unittest.TestCase):
 
 
 class MakeProject(unittest.TestCase):
-    def build(self, commit):
+    def build(self, commit, branch=None):
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: subprocess.run(["rm", "-rf", str(tmp)]))
         (tmp / "fixtures" / "app").mkdir(parents=True)
@@ -96,7 +96,8 @@ class MakeProject(unittest.TestCase):
         for path in (tmp / "fixtures" / "app" / "a.py", step / "a.py"):
             os.utime(path, (1_700_000_000, 1_700_000_000))
         (tmp / "histories" / "h" / "steps.json").write_text(json.dumps(
-            {"fixture": "app", "steps": [{"dir": "step-1", "message": "quote style", "commit": commit}]}))
+            {"fixture": "app", "steps": [{"dir": "step-1", "message": "quote style", "commit": commit,
+                                          **({"branch": branch} if branch else {})}]}))
         old = (live.FIXTURES, live.HISTORIES)
         live.FIXTURES, live.HISTORIES = tmp / "fixtures", tmp / "histories"
         self.addCleanup(lambda: setattr(live, "FIXTURES", old[0]) or setattr(live, "HISTORIES", old[1]))
@@ -114,6 +115,12 @@ class MakeProject(unittest.TestCase):
         git = self.build(False)
         self.assertEqual(git("log", "--format=%s"), "initial import\n")
         self.assertEqual(git("status", "--short"), " M a.py\n")
+
+    def test_a_step_with_a_branch_commits_there_and_leaves_main_alone(self):
+        git = self.build(True, branch="team-filter")
+        self.assertEqual(git("branch", "--show-current"), "team-filter\n")
+        self.assertEqual(git("log", "--format=%s", "main"), "initial import\n")
+        self.assertEqual(git("diff", "--name-only", "main...HEAD"), "a.py\n")
 
 
 if __name__ == "__main__":
