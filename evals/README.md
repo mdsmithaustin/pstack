@@ -10,6 +10,11 @@ each harness. See `promises/README.md`.
 
 Model answers, traces, judge transcripts, reports, and private cases stay
 outside Git. A committed case is tuning material, not sealed evidence.
+Oracle regression fixtures under `promises/testdata/` are an exception. They
+are reduced, sanitized traces that keep only what the oracle tests read, and
+`promises/reduce_trace.py` rebuilds one from a raw trace. `promises/results/`
+is a second exception. It holds aggregated verdict matrices with no model
+answers.
 
 ## What is measured
 

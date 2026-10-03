@@ -48,7 +48,7 @@ python3 -m unittest discover -s evals/promises -p 'test_*.py'
 python3 evals/promises/install.py --out /tmp/pstack-install
 ```
 
-The unittest run takes about 20 seconds. The `merge-gate` tests skip without `bun`. The `worktree-audit` test skips off macOS or without `rg` and `jq`. `install.py` uses the network for `npx skills`, and needs each harness's CLI and login. It exits 1 when any check FAILs. An INCONCLUSIVE check does not change the exit status, so read the summary line it prints to stderr.
+The unittest run takes about 20 seconds. The `merge-gate` tests skip without `bun`. The `worktree-audit` test skips off macOS or without `rg` and `jq`, so the `worktree-audit` job in `.github/workflows/lint.yml` runs it on macOS. `install.py` uses the network for `npx skills`, and needs each harness's CLI and login. It exits 1 when any check FAILs. An INCONCLUSIVE check does not change the exit status, so read the summary line it prints to stderr.
 
 ## Run live cases
 
