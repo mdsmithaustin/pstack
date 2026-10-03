@@ -57,7 +57,7 @@ python3 evals/promises/live.py run --harness <claude-code|codex|hermes|grok> --c
 python3 evals/promises/live.py report <dir> --upstream-ref upstream/main
 ```
 
-Each run makes a fresh git repository from `fixtures/<name>/` and `histories/<name>/`. It installs `skills/` from `--skills-at` (default `HEAD`) where the harness discovers project skills, and runs the case's turns headless. Each run directory gets `run.json`, `trace.json`, and `verdict.json`. Every adapter writes the same trace schema, with events, files read, worklist snapshots, spawns, and the final reply. `oracles.py` grades each promise as `PASS`, `FAIL`, or `INCONCLUSIVE`. A verdict is `INCONCLUSIVE` when the trace cannot show the behavior.
+Each run makes a fresh git repository from `fixtures/<name>/` and `histories/<name>/`. It installs `skills/` from `--skills-at` (default `HEAD`) where the harness discovers project skills, and runs the case's turns headless. Each run directory gets `run.json`, `trace.json`, and `verdict.json`. Every adapter writes the same trace schema, with events, files read, worklist snapshots, spawns, and the final reply. A tool event carries its harness call id, so each result pairs with its own call. `oracles.py` grades each promise as `PASS`, `FAIL`, or `INCONCLUSIVE`. A verdict is `INCONCLUSIVE` when the trace cannot show the behavior, or when the harness reports `x_host_skill_hits`, which means the user's own skills touched the run.
 
 Live runs spend model budget. Codex and Hermes draw on the same ChatGPT plan when Hermes uses the `openai-codex` provider. A Feature case takes about 5 minutes on Claude Code and over 20 minutes on Codex.
 
@@ -69,5 +69,7 @@ Each adapter in `harnesses/` isolates its harness from the host's own skills and
 - **Grok Build.** A temp `HOME` and `GROK_HOME`, with an auth provider that reads `~/.grok/auth.json` and never writes it.
 
 No adapter writes to the user's own harness configuration. Agents still write literal `/tmp` paths named after the project. `live.py` therefore runs one case of a fixture at a time on the host harnesses, unless the case sets `tmp_lock` to false.
+
+`testdata/traces/` holds reduced traces that `test_oracles.py` grades. `python3 evals/promises/reduce_trace.py <trace.json> --case feature-run --case route-feature` rewrites a raw trace down to the events and fields that keep every verdict.
 
 `cases/<id>/case.json` sets the cases. `deferred` marks a case this suite records but does not run yet, with the reason. Prompts follow the blinding rules in `skills/poteto-mode/playbooks/eval.md`, and `test_oracles.py` rejects meta words in prompts and fixtures.
