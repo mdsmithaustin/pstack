@@ -1166,6 +1166,15 @@ class CaseHygiene(unittest.TestCase):
                 if not case.get("deferred") and case.get("kind", "live") == "live":
                     self.assertTrue(case["turns"], "a live case needs at least one turn")
 
+    def test_a_deferred_reason_stands_alone(self):
+        tracked = set(subprocess.run(["git", "-C", str(ROOT), "ls-files"], capture_output=True, text=True, check=True).stdout.split("\n"))
+        names = {Path(t).name for t in tracked}
+        for case_dir in sorted(CASES.iterdir()):
+            case = json.loads((case_dir / "case.json").read_text(encoding="utf-8"))
+            for ref in re.findall(r"[\w./-]+\.(?:md|py|json|sh)\b", case.get("deferred") or ""):
+                with self.subTest(case=case_dir.name, reference=ref):
+                    self.assertTrue(ref in tracked or Path(ref).name in names, f"{case_dir.name} points at {ref}, which is not in the repository")
+
 
 def install_checks():
     import install
