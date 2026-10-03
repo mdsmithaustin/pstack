@@ -42,8 +42,9 @@ def static_tests():
 def live_cases():
     bound = {}
     for case in sorted(CASES.glob("*/case.json")):
-        for pid in json.loads(case.read_text(encoding="utf-8")).get("promises", []):
-            bound.setdefault(pid, []).append(case.parent.name)
+        spec = json.loads(case.read_text(encoding="utf-8"))
+        for pid in spec.get("promises", []):
+            bound.setdefault(pid, set()).add(spec.get("kind", "live"))
     return bound
 
 
@@ -70,6 +71,11 @@ def audit(ledger, port_guide, upstream_guide=None):
                 errors.append(f"unclassified {source} unit {key} in {unit.file}: {unit.text[:120]}")
             elif source not in entry.get("sources", []):
                 errors.append(f"{key} is in the {source} guide but the ledger lists sources {entry.get('sources')}")
+            else:
+                if entry.get("file") != unit.file:
+                    errors.append(f"{key} file is {entry.get('file')!r} but the {source} guide holds it in {unit.file!r}")
+                if entry.get("text") != unit.text:
+                    errors.append(f"{key} text differs from the {source} guide: ledger {entry.get('text', '')[:80]!r}, guide {unit.text[:80]!r}")
     for key, entry in entries.items():
         for source in entry.get("sources", []):
             if source in guides and key not in guides[source]:
@@ -110,8 +116,8 @@ def audit(ledger, port_guide, upstream_guide=None):
                 errors.append(f"promise {pid} quotes missing file {ev.get('file')}")
             elif units.normalize(ev.get("quote", "")) not in units.normalize(path.read_text(encoding="utf-8")):
                 errors.append(f"promise {pid} quote no longer in {ev['file']}: {ev.get('quote', '')[:100]}")
-        if check in {"install", "live"} and pid not in cases:
-            errors.append(f"promise {pid} ({check}) has no case under evals/promises/cases/")
+        if check in {"install", "live"} and check not in cases.get(pid, set()):
+            errors.append(f"promise {pid} ({check}) has no {check} case under evals/promises/cases/")
     return errors
 
 

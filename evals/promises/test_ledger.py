@@ -55,6 +55,32 @@ class AuditTest(unittest.TestCase):
         self.assertEqual(errors, ["promise babysit-never-merges quote no longer in skills/poteto-mode/playbooks/babysit.md: "
                                   "Babysit merges the PR once it is green."])
 
+    def test_a_live_promise_bound_only_to_an_install_case_is_unchecked(self):
+        book = copy.deepcopy(self.book)
+        pid = "deslop-available-for-code"
+        self.assertEqual(book["promises"][pid]["check"], "install")
+        book["promises"][pid]["check"] = "live"
+        errors = ledger.audit(book, GUIDE)
+        self.assertEqual(errors, [f"promise {pid} (live) has no live case under evals/promises/cases/"])
+
+    def test_an_install_promise_bound_only_to_a_live_case_is_unchecked(self):
+        book = copy.deepcopy(self.book)
+        pid = "arena-readonly-cross-judge"
+        self.assertEqual(book["promises"][pid]["check"], "live")
+        book["promises"][pid]["check"] = "install"
+        errors = ledger.audit(book, GUIDE)
+        self.assertEqual(errors, [f"promise {pid} (install) has no install case under evals/promises/cases/"])
+
+    def test_a_hand_edited_unit_text_or_file_is_reported(self):
+        book = copy.deepcopy(self.book)
+        key = next(k for k, e in book["units"].items() if "port" in e["sources"] and e["class"] == "promise")
+        original = book["units"][key]
+        book["units"][key] = dict(original, text="Something the guide never says.", file="99-elsewhere.md")
+        errors = ledger.audit(book, GUIDE)
+        self.assertEqual(len(errors), 2, errors)
+        self.assertTrue(any(e.startswith(f"{key} text differs from the port guide") for e in errors), errors)
+        self.assertTrue(any(e.startswith(f"{key} file is '99-elsewhere.md'") for e in errors), errors)
+
     def test_owner_status_tells_verbatim_from_port_only(self):
         upstream = self.tmp / "pstack"
         (upstream / "skills" / "tdd").mkdir(parents=True)

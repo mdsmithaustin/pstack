@@ -25,9 +25,10 @@ The user guide in `docs/guide/` tells readers what pstack does. This directory c
 
 - A guide unit has no ledger entry.
 - A ledger entry names a guide that no longer holds its text.
+- A ledger entry's `file` or `text` differs from the guide unit its key names.
 - A promise reference dangles, or a promise has no guide unit.
 - A static promise has neither a quote nor a test, or one of its quotes is missing from its file.
-- A script promise has no test, or a live or install promise has no case.
+- A script promise has no test, or a live or install promise has no case of its own kind.
 
 CI runs the audit against the port guide. Add `--upstream-ref upstream/main` (after `git fetch upstream`) to audit upstream's guide as well. The upstream-sync workflow and step 5 of **Syncing from upstream** in `PORTING.md` run that form.
 
