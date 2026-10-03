@@ -9,7 +9,7 @@ Clean AI slop out of the code a branch changed, and leave behavior unchanged. Us
 
 ## Scope
 
-Use the caller's files or diff. Otherwise diff against the base branch, default `main`, including the working tree. Edit only inside the hunks the branch added or changed. Read whatever the rules need to judge them: callers, types, existing helpers, and the rest of the file. Slop you notice elsewhere goes in the report and stays untouched.
+Use the caller's files or diff. Otherwise diff against the branch this one builds on, including the working tree: the pull request's base when one is open, else the branch it was cut from, else `main`. On a stacked branch, `main` would pull the parent's commits into the diff. Edit only inside the hunks the branch added or changed. Read whatever the rules need to judge them: callers, types, existing helpers, and the rest of the file. Slop you notice elsewhere goes in the report and stays untouched.
 
 ## Process
 
