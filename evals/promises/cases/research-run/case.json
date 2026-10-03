@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "research-prompt-routes-to-research-playbook"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "check whether the current client supports resumable uploads. compare the official docs and release notes before we choose it."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "beyond routing it needs web access and a judge for the missing-documentation versus evidence-of-absence split"
+}

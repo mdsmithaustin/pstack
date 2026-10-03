@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "technical-writing-picks-mode-then-sentences"
+ ],
+ "fixture": "relay",
+ "entry": "technical-writing",
+ "turns": [
+  "review the readme changes"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "history": "relay-readme-rewrite"
+}

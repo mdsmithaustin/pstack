@@ -1,0 +1,15 @@
+{
+  "fixture": "relay",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "retry: raise the limit to five\n\nThe partner mirror rebuilds nightly and feeds timed out three times in a row during it, which used up all three attempts. The longest rebuild we measured was 41 seconds, and five attempts cover it.",
+      "delete": []
+    },
+    {
+      "dir": "step-2",
+      "message": "retry: stop retrying malformed feeds\n\nRetries were masking a feed format problem: a malformed line fails the same way on every attempt, so each bad feed burned all five tries before anyone saw the error. Only Transient deserves another attempt, so ParseError now propagates at once and the importer exits with the line number. A cut-off JSON download now raises Transient so it is still retried.",
+      "delete": []
+    }
+  ]
+}

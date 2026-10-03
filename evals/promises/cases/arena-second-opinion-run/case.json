@@ -1,0 +1,16 @@
+{
+ "promises": [
+  "arena-second-opinion-includes-current-design"
+ ],
+ "fixture": "relay",
+ "entry": null,
+ "turns": [
+  "propose a cache key format for relay. keep it to a design note, no code.",
+  "ask /arena for a second opinion on this thread and our approach"
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "note": "turn 0 gives the thread a current design for the 10-recipes-and-pitfalls.md prompt to second-guess"
+}

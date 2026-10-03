@@ -1,0 +1,20 @@
+{
+ "promises": [
+  "unslop-takes-target-and-rules"
+ ],
+ "fixture": "relay",
+ "entry": "unslop",
+ "turns": [
+  "the readme changes, no emdashes"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "only": [
+   "README.md"
+  ]
+ },
+ "history": "relay-readme-rewrite"
+}

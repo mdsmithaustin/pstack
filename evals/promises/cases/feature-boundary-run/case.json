@@ -1,0 +1,9 @@
+{
+ "promises": ["poteto-mode-triggers-architect-on-boundary-crossing"],
+ "fixture": "relay",
+ "entry": "poteto-mode",
+ "turns": ["imports from flaky partner feeds sometimes die halfway. retry each source with backoff, record the attempt count on every stored record, and let the cli set the retry policy. verify it end to end."],
+ "timeout_s": {"default": 2400, "codex": 3000},
+ "expect": {"playbook": "feature"},
+ "note": "near-miss guard for design-ladder-spares-small-changes: this change spans sources, ingest, store, retry, and the cli, so architect must still run"
+}

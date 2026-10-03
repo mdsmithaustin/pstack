@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "poteto-teach-runs-how-and-why"
+ ],
+ "fixture": "relay",
+ "entry": "poteto-teach",
+ "turns": [
+  "me how this PR changes retries. convince me it fixes the cause and not the symptom."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "history": "relay-retry-limit"
+}

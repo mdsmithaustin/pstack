@@ -1,0 +1,37 @@
+{
+ "promises": [
+  "principle-name-steers-agent",
+  "poteto-mode-reads-principles-and-names-applied"
+ ],
+ "fixture": "relay",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a tsv source to the importer.",
+  "use subtract before you add. delete the obsolete adapters first, then design what's left.",
+  "apply prove it works. run the real import flow and show me the written records."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "playbook": "feature",
+  "steers": [
+   {
+    "turn": 1,
+    "principle": "principle-subtract-before-you-add",
+    "deletes": "xml_source|legacy_xml",
+    "gone": [
+     "relay/sources/xml_source.py",
+     "relay/sources/legacy_xml.py"
+    ]
+   },
+   {
+    "turn": 2,
+    "principle": "principle-prove-it-works",
+    "command": "-m\\s+relay import"
+   }
+  ]
+ },
+ "note": "turn 0 is the task the two 08-principles.md steers act on"
+}

@@ -1,0 +1,10 @@
+{
+  "fixture": "relay",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "cache: shorten the cache key\n\nThe key showed up in log lines and the trailing offset made them hard to grep across a run. Keying on the feed name alone gives one stable string per feed.",
+      "delete": []
+    }
+  ]
+}

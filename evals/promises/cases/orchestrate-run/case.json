@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "orchestrate-prompt-routes-to-orchestrate"
+ ],
+ "fixture": "kiln",
+ "entry": "poteto-mode",
+ "turns": [
+  "orchestrate the store migration. own it until every package is converted and merged. i'll check in twice a day."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "beyond routing it is a multi-day program with stacked PRs on GitHub and a coordinator that outlives the session"
+}

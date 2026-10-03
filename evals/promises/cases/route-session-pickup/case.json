@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "takeover-prompt-routes-to-session-pickup"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "take over this branch. read the decision log, figure out what's done, and continue from there. don't redo finished work."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "session-pickup"
+ },
+ "tmp_lock": false
+}

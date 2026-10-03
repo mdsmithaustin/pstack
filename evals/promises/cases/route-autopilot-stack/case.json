@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "stack-prompt-routes-to-autopilot-stack"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "autopilot these five changes but stack them, don't ship. i'll land the stack in the morning."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "autopilot-stack"
+ },
+ "tmp_lock": false
+}

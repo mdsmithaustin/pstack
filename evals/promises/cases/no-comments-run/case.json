@@ -1,0 +1,26 @@
+{
+ "promises": [
+  "no-comments-spawns-comment-sicko"
+ ],
+ "fixture": "rollup",
+ "entry": "no-comments",
+ "turns": [
+  "the diff"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "gone": [
+   "# read the rows",
+   "# loop over batches",
+   "# retry when busy",
+   "# flush to disk"
+  ],
+  "kept": [
+   "do not remove: the sink needs a trailing newline on every row"
+  ]
+ },
+ "history": "rollup-comments"
+}

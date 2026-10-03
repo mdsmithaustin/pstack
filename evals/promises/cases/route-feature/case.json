@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "feature-prompt-routes-to-feature"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --json flag to this command. text output stays byte-identical. verify both."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "feature"
+ },
+ "tmp_lock": false
+}

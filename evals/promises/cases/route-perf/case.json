@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "perf-prompt-routes-to-perf-issue"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "startup takes 1.8s on this fixture. trace it, fix the measured cause, show me before and after."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "perf-issue"
+ },
+ "tmp_lock": false
+}

@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "reflect-three-reviewers-then-synthesizer"
+ ],
+ "fixture": "tally",
+ "entry": "reflect",
+ "turns": [
+  "that took way too long. capture what we learned so the next run doesn't repeat it."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "needs a long prior transcript in the session store and an approval answer before any skill edit"
+}
