@@ -4,7 +4,8 @@
     {
       "dir": "step-1",
       "message": "report: add --team to show one team\n\nThe report printed every team. With --team, it prints the count for that team only.",
-      "delete": []
+      "delete": [],
+      "commit": false
     }
   ]
 }
