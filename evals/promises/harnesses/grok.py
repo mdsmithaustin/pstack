@@ -20,7 +20,15 @@ EFFORT = "high"
 ENV_KEPT = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES", "TERM", "USER", "LOGNAME", "SHELL", "TZ",
             "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
             "http_proxy", "https_proxy", "no_proxy")
-HOME_LINKS = (".gitconfig", ".local", ".config", ".cache", ".npm", ".zshrc", ".zprofile")
+HOME_DIRS = (".config", ".local", ".cache", ".npm")
+GITCONFIG = """[user]
+\tname = dev
+\temail = dev@example.com
+[commit]
+\tgpgsign = false
+[init]
+\tdefaultBranch = main
+"""
 SESSION_FILES = ("chat_history.jsonl", "events.jsonl", "usage.json", "summary.json", "tool_definitions.json")
 
 AUTH_PROVIDER = """#!{python}
@@ -127,10 +135,9 @@ def prepare(run):
     root = run.root
     for name in ("home", "grok-home", "tmp", "transcripts"):
         (root / name).mkdir(exist_ok=True)
-    for name in HOME_LINKS:
-        source, link = host_home() / name, home(run) / name
-        if source.exists() and not link.is_symlink():
-            link.symlink_to(source)
+    for name in HOME_DIRS:
+        (home(run) / name).mkdir(exist_ok=True)
+    (home(run) / ".gitconfig").write_text(GITCONFIG)
     auth = host_grok_home() / "auth.json"
     if not auth.is_file():
         raise RuntimeError(f"no grok login at {auth}")
