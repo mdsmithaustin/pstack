@@ -5,6 +5,9 @@ This directory holds public development corpora for `verify-commands`,
 `with_skill` and `without_skill` arms. They do not represent upstream Cursor
 pstack and do not prove that a skill improves production work.
 
+`promises/` holds a separate suite that checks the user guide's promises on
+each harness. See `promises/README.md`.
+
 Model answers, traces, judge transcripts, reports, and private cases stay
 outside Git. A committed case is tuning material, not sealed evidence.
 
