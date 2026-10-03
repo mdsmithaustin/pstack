@@ -274,6 +274,7 @@ class View:
         self.exit_code = trace.get("exit_code")
         self.skills_root = self.find_skills_root()
         self._turns = self.turn_boundaries()
+        self._answers = self.pair_results()
 
     def find_skills_root(self):
         if self.project and self.project.is_dir():
@@ -290,11 +291,32 @@ class View:
     def tool_calls(self):
         return [e for e in self.events if e.get("kind") == "tool_call"]
 
-    def results_for(self, call):
+    def pair_results(self):
+        calls = self.tool_calls
+        by_id = {}
+        for c in calls:
+            if c.get("id"):
+                by_id.setdefault(c["id"], []).append(c)
+        answers, loose = {}, []
         for event in self.events:
-            if event.get("kind") == "tool_result" and event.get("seq", 0) > call.get("seq", 0) and event.get("name") == call.get("name"):
-                return event
-        return None
+            if event.get("kind") != "tool_result":
+                continue
+            if event.get("id"):
+                call = next((c for c in by_id.get(event["id"], []) if id(c) not in answers and c.get("seq", 0) < event.get("seq", 0)), None)
+                if call is not None:
+                    answers[id(call)] = event
+            else:
+                loose.append(event)
+        for event in loose:
+            for call in calls:
+                if (id(call) not in answers and not call.get("id") and call.get("name") == event.get("name")
+                        and call.get("seq", 0) < event.get("seq", 0)):
+                    answers[id(call)] = event
+                    break
+        return answers
+
+    def results_for(self, call):
+        return self._answers.get(id(call))
 
     def turn_boundaries(self):
         marks = [e for e in self.events if "turn" in e]
@@ -334,7 +356,7 @@ class View:
         texts = self.texts(turn)
         return texts[-1] if texts else ""
 
-    def event_reads(self):
+    def read_attempts(self):
         out = []
         for call in self.tool_calls:
             name, given = call.get("name"), call.get("input") or {}
@@ -344,14 +366,21 @@ class View:
                     if isinstance(value, str) and value:
                         rel = f"{value}/SKILL.md" if name == "skill_view" else skill_rel(value)
                         if rel:
-                            out.append((call.get("seq"), rel))
+                            out.append((call.get("seq"), rel, (self.results_for(call) or {}).get("ok") is not False))
                         break
             elif name in SHELL_TOOLS:
                 for token in resolved_shell_paths(str(given.get(SHELL_TOOLS[name]) or "")):
                     rel = skill_rel(token)
                     if rel:
-                        out.append((call.get("seq"), rel))
+                        out.append((call.get("seq"), rel, True))
         return out
+
+    def event_reads(self):
+        return [(seq, rel) for seq, rel, ok in self.read_attempts() if ok]
+
+    def unread(self):
+        attempts = self.read_attempts()
+        return {rel for _, rel, ok in attempts if not ok} - {rel for _, rel, ok in attempts if ok}
 
     def lead_read_list(self):
         by = self.trace.get("x_files_read_by") or self.trace.get("files_read_by") or {}
@@ -363,9 +392,10 @@ class View:
             if rel not in seen:
                 seen.add(rel)
                 out.append(rel)
+        unread = self.unread()
         for path in self.lead_read_list():
             rel = skill_rel(path)
-            if rel and rel not in seen:
+            if rel and rel not in seen and rel not in unread:
                 seen.add(rel)
                 out.append(rel)
         return out
@@ -380,10 +410,12 @@ class View:
             pools.append(child.get("files_read") or [])
         for spawn in self.spawns:
             pools.append(spawn.get("files_read") or [])
+        elsewhere = {skill_rel(path) for pool in pools[1:] for path in pool}
+        unread = self.unread() - elsewhere
         for pool in pools:
             for path in pool:
                 rel = skill_rel(path)
-                if rel and rel not in out:
+                if rel and rel not in out and rel not in unread:
                     out.append(rel)
         return out
 
@@ -754,6 +786,9 @@ def check(pid, trace, case, project):
     fn = ORACLES.get(pid)
     if fn is None:
         return inconclusive(f"no oracle for {pid}")
+    hits = trace.get("x_host_skill_hits")
+    if hits:
+        return inconclusive(f"the harness reported host skills in this run, so its behavior may not come from the installed skills: {sorted(hits)}")
     view = View(trace, case, project)
     if run_never_started(view):
         return inconclusive(f"run never started: every turn exited nonzero with no tool call; last reply {view.final_reply[:80]!r}")

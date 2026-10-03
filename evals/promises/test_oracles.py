@@ -384,6 +384,76 @@ class HarnessDelivery(unittest.TestCase):
         self.assertEqual(grade("persona-delivery-hermes-grok", unbriefed, feature_case())["verdict"], FAIL)
 
 
+class ToolResultPairing(unittest.TestCase):
+    def view(self, events):
+        return oracles.View(minimal(events=events), load_case("bug-fix-run"), None)
+
+    def commands(self, events):
+        return [(seq, ok) for seq, _, ok, _ in self.view(events).commands()]
+
+    def test_parallel_calls_pair_with_their_own_results_by_id(self):
+        events = [{"seq": 2, "kind": "tool_call", "name": "Bash", "id": "a", "input": {"command": "python3 -m unittest discover -s tests"}},
+                  {"seq": 3, "kind": "tool_call", "name": "Bash", "id": "b", "input": {"command": "git status"}},
+                  {"seq": 4, "kind": "tool_result", "name": "Bash", "id": "b", "ok": True, "output_head": "clean"},
+                  {"seq": 5, "kind": "tool_result", "name": "Bash", "id": "a", "ok": False, "output_head": "FAIL: test_retry"}]
+        self.assertEqual(self.commands(events), [(2, False), (3, True)])
+
+    def test_parallel_calls_without_ids_pair_in_order_and_each_result_is_used_once(self):
+        events = [{"seq": 2, "kind": "tool_call", "name": "Bash", "input": {"command": "python3 -m unittest discover -s tests"}},
+                  {"seq": 3, "kind": "tool_call", "name": "Bash", "input": {"command": "git status"}},
+                  {"seq": 4, "kind": "tool_result", "name": "Bash", "ok": False, "output_head": "FAIL: test_retry"},
+                  {"seq": 5, "kind": "tool_result", "name": "Bash", "ok": True, "output_head": "clean"}]
+        self.assertEqual(self.commands(events), [(2, False), (3, True)])
+
+    def test_a_call_with_no_result_stays_unanswered(self):
+        events = [{"seq": 2, "kind": "tool_call", "name": "Bash", "id": "a", "input": {"command": "pytest"}},
+                  {"seq": 3, "kind": "tool_result", "name": "Bash", "id": "zzz", "ok": False, "output_head": "other"}]
+        self.assertEqual(self.commands(events), [(2, None)])
+
+
+class FailedReads(unittest.TestCase):
+    BRIEF = "architect/references/runner-prompt.md"
+
+    def trace(self, ok, **extra):
+        events = [read(0, "poteto-mode/playbooks/feature.md"), {"seq": 1, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "x"},
+                  read(2, self.BRIEF), {"seq": 3, "kind": "tool_result", "name": "Read", "ok": ok, "output_head": "x" if ok else "File does not exist"}]
+        return minimal(events=events, final_reply="done", **extra)
+
+    def test_a_read_whose_result_failed_is_not_evidence(self):
+        case = load_case("feature-boundary-run")
+        pid = "poteto-mode-triggers-architect-on-boundary-crossing"
+        self.assertEqual(grade(pid, self.trace(True), case)["verdict"], PASS)
+        self.assertEqual(grade(pid, self.trace(False), case)["verdict"], FAIL)
+        listed = self.trace(False, files_read=[f"/w/.claude/skills/{self.BRIEF}"])
+        self.assertEqual(grade(pid, listed, case)["verdict"], FAIL)
+
+    def test_a_later_good_read_of_the_same_file_still_counts(self):
+        case = load_case("feature-boundary-run")
+        retried = self.trace(False)
+        retried["events"] += [read(4, self.BRIEF), {"seq": 5, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "x"}]
+        self.assertEqual(grade("poteto-mode-triggers-architect-on-boundary-crossing", retried, case)["verdict"], PASS)
+
+
+class HostSkillContamination(unittest.TestCase):
+    def test_a_run_that_touched_host_skills_grades_inconclusive_for_every_promise(self):
+        case = load_case("feature-boundary-run")
+        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
+        hits = ["/Users/someone/.claude/skills"]
+        for pid in case["promises"]:
+            with self.subTest(pid=pid):
+                clean = grade(pid, minimal(events=events, final_reply="done"), case)
+                dirty = grade(pid, minimal(events=events, final_reply="done", x_host_skill_hits=hits), case)
+                self.assertEqual(dirty["verdict"], INCONCLUSIVE, dirty)
+                self.assertTrue(any("host skills" in r for r in dirty["failures"]), dirty)
+                self.assertNotEqual(clean["verdict"], INCONCLUSIVE, clean)
+
+    def test_empty_hits_do_not_block_grading(self):
+        case = load_case("feature-boundary-run")
+        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, final_reply="done", x_host_skill_hits=[]), case)
+        self.assertEqual(result["verdict"], PASS)
+
+
 class BugFixOracles(unittest.TestCase):
     def test_repro_before_fix(self):
         case = load_case("bug-fix-run")
