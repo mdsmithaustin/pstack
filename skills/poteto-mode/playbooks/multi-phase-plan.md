@@ -34,7 +34,6 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 ### Arm the program
 
 - [ ] State the protocol and this plan to the operator, then stop. Start execution only on the operator's explicit go.
-- [ ] On the operator's go, arm a `/goal` with this exact text. "<The plan path, the PR ids in order, the verification rule, who merges, and the done condition.>"
 - [ ] In private, untracked run state, record the absolute `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, and `PROJECT_ROOT` bindings from the **pstack-harness** skill. Record whether this program owns `PSTACK_TEMP_ROOT`. Keep concrete host paths out of this plan and other shared files.
 - [ ] Read these from trunk at program start. Re-read them at every tick.
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/poteto-mode/playbooks/<execution playbook>.md'`
@@ -42,8 +41,8 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] `git -C "${PROJECT_ROOT:?}" show "origin/main:$CONTROL_SKILL_PATH"`
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/poteto-mode/playbooks/opening-a-pr.md'`
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/<each other leaf skill the program uses>'`
-- [ ] Arm the 30-minute audit tick through the harness's loop facility, per **Loops and wake-ups** in the **pstack-harness** skill. In Claude Code, that is a real terminal `/loop`. Never leave the cadence to memory.
-- [ ] Use this tick prompt, verbatim. "Re-read the execution playbook from trunk and the armed /goal. Audit the operation against both and fix drift in this tick. Probe every active lane and judge progress by side effects only. Stand down a stuck lane and dispatch its replacement now. Then post a short status message to the operator in chat only when the audit found a tracked change that no earlier status message reported, such as a PR opened, a code-ready head, a round launched or closed, a verdict, a merge, a stuck agent and the action taken, a blocker added or cleared, or a decision only the operator can make. Name every such change and nothing else. Do not repeat a table, the merged list, or an unchanged blocker. If the audit found none, end the turn with no reply text. Either way, log this tick's row in your decision trail. The row names the items reported, or none."
+- [ ] On the operator's go, arm the audit tick through the harness's loop facility, per **Loops and wake-ups** in the **pstack-harness** skill, as `/loop 1h` in Claude Code, with the tick prompt below. Never leave the cadence to memory.
+- [ ] Use this tick prompt, verbatim. "Re-read the execution playbook from trunk. Audit the operation against it and fix drift in this tick. Probe every active lane and judge progress by side effects only. Stand down a stuck lane and dispatch its replacement now. Then post a short status message to the operator in chat only when the audit found a tracked change that no earlier status message reported, such as a PR opened, a code-ready head, a round launched or closed, a verdict, a merge, a stuck agent and the action taken, a blocker added or cleared, or a decision only the operator can make. Name every such change and nothing else. Do not repeat a table, the merged list, or an unchanged blocker. If the audit found none, end the turn with no reply text. Either way, log this tick's row in your decision trail. The row names the items reported, or none."
 - [ ] On the operator's hold or stand-down, send every owner a zero-writes order at once.
 
 ### Spawn owners
@@ -59,7 +58,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 ### PR mechanics, for every PR
 
 - [ ] Resolve the forge once. Default to `gh`; if `command -v origin` succeeds and Origin can resolve the repository, use `origin pr` for every PR operation. Record any fallback to `gh`. Never require `gt`.
-- [ ] Open the PR ready, never draft, with `origin pr create --status open --base <base-branch>` or `gh pr create --base <base-branch>` according to the resolved forge. A stack child targets its parent branch.
+- [ ] Open the PR ready, never draft, per **Opening a PR**. Use the run's built-in PR tool when it has one, else `origin pr create --status open --base <base-branch>` or `gh pr create --base <base-branch>` according to the resolved forge. A stack child targets its parent branch.
 - [ ] Run the repo's lint and typecheck once before the PR-facing push. Push with hooks on.
 - [ ] Read `"$PSTACK_SKILLS_ROOT/unslop/SKILL.md"` and apply the bundled **unslop** skill before each commit. Run `/no-comments` before review.
 - [ ] Triage every Bugbot and automated security reviewer comment per `../references/bugbot-triage.md`.

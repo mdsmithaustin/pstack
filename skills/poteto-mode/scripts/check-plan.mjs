@@ -19,7 +19,7 @@ const SUB_BLOCKS = [
 const PROGRAM_H3 = ["Arm the program", "Spawn owners", "PR mechanics", "Verdict and merge", "Boot recipe"];
 const PSTACK_TRUNK_READ =
 	"git -C \"${PSTACK_SOURCE_ROOT:?}\" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C \"$PSTACK_SOURCE_ROOT\" show 'origin/main:skills/";
-const PROGRAM_MARKERS = ["/goal", PSTACK_TRUNK_READ, /30[- ]minute/, "status message"];
+const PROGRAM_MARKERS = [PSTACK_TRUNK_READ, "/loop 1h", "status message"];
 const HOW_TO_READ_MARKERS = [
 	"One box is one unit of work",
 	"names the evidence",
@@ -96,8 +96,7 @@ else {
 		else cursor = at + 1;
 	}
 	for (const marker of PROGRAM_MARKERS) {
-		const ok = marker instanceof RegExp ? marker.test(bodyText(program)) : bodyText(program).includes(marker);
-		if (!ok) fail(program.n, `Program checklist lacks "${marker}"`);
+		if (!bodyText(program).includes(marker)) fail(program.n, `Program checklist lacks "${marker}"`);
 	}
 }
 
