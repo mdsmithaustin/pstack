@@ -665,7 +665,10 @@ def main(argv=None):
         (out / "install.json").write_text(json.dumps(results, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         if not args.keep:
             shutil.rmtree(ctx.work, ignore_errors=True)
-    return 0
+    counts = {v: sum(1 for r in results if r["verdict"] == v) for v in ("PASS", "FAIL", "INCONCLUSIVE")}
+    note = "; INCONCLUSIVE does not change the exit status" if counts["INCONCLUSIVE"] else ""
+    print(f"{counts['PASS']} PASS, {counts['FAIL']} FAIL, {counts['INCONCLUSIVE']} INCONCLUSIVE{note}", file=sys.stderr)
+    return 1 if counts["FAIL"] else 0
 
 
 if __name__ == "__main__":
