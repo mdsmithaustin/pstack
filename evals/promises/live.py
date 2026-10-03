@@ -159,9 +159,10 @@ def make_project(case, dest):
 
 
 def baseline(project):
-    """The commits make_project wrote, recorded before any turn so an agent's amend or rebase cannot move them."""
-    out = git_run(project, "rev-list", "--reverse", "HEAD", capture_output=True, text=True).stdout
-    return out.split()
+    """Every commit make_project wrote, root first and the checked-out head last, recorded before any turn so an agent's amend or rebase cannot move them."""
+    head = git_run(project, "rev-parse", "HEAD", capture_output=True, text=True).stdout.strip()
+    commits = git_run(project, "rev-list", "--reverse", "--topo-order", "--branches", capture_output=True, text=True).stdout.split()
+    return [c for c in commits if c != head] + [head]
 
 
 def history_steps(case):

@@ -941,6 +941,13 @@ class DeslopPass(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL)
         self.assertTrue(any(f.startswith("the branch's own work went missing") for f in result["failures"]), result)
 
+    def test_an_unrelated_deleted_file_fails(self):
+        project = self.roster()
+        (project / "README.md").unlink()
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("files deleted: ['README.md']", result["failures"])
+
     def test_a_weakened_uncommitted_test_fails(self):
         project = self.roster()
         test = project / "tests" / "test_report.py"

@@ -628,7 +628,8 @@ class View:
             names |= set((self.git_in(path, "diff", "--name-only", base[-1], "HEAD") or "").split())
             names |= {line[3:].strip() for line in self.git_dirty(path) or []}
         for branch in (self.git("for-each-ref", "--format=%(refname)", "refs/heads") or "").split():
-            names |= set((self.git("diff", "--name-only", base[-1], branch) or "").split())
+            if (self.git("rev-parse", branch) or "").strip() not in base:
+                names |= set((self.git("diff", "--name-only", base[-1], branch) or "").split())
         return names
 
     def worktrees(self):
@@ -1801,11 +1802,14 @@ def deslop_cleans(view):
     churn = [rel for rel in expect.get("untouched", [])
              if not (view.project / rel).is_file()
              or (view.git("show", f"{base[0]}:{rel}") or "") != (view.project / rel).read_text(encoding="utf-8", errors="replace")]
-    added = sorted(project_files(view) - set((view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()))
+    planted = {rel for rel in (view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()
+               if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
+    added = sorted(project_files(view) - planted)
+    deleted = sorted(rel for rel in planted if not (view.project / rel).exists())
     changed = [rel for rel in expect.get("preserved", []) if not same_as_history(view, rel)]
     broken = [problem for problem in map(lambda c: check_problem(view.project, c), expect.get("checks", [])) if problem]
     evidence += [f"planted slop still present: {survived}", f"branch work missing: {missing}", f"unrelated edits kept: {churn}",
-                 f"files added: {added}", f"uncommitted work changed: {changed}", f"checks run: {len(expect.get('checks', []))}, failing: {len(broken)}"]
+                 f"files added: {added}", f"files deleted: {deleted}", f"uncommitted work changed: {changed}", f"checks run: {len(expect.get('checks', []))}, failing: {len(broken)}"]
     failures = [] if loaded else ["the deslop skill was never loaded"]
     if survived:
         failures.append(f"planted slop survived: {survived}")
@@ -1815,6 +1819,8 @@ def deslop_cleans(view):
         failures.append(f"unrelated edit kept instead of reverted: {churn}")
     if added:
         failures.append(f"new files appeared: {added}")
+    if deleted:
+        failures.append(f"files deleted: {deleted}")
     if changed:
         failures.append(f"uncommitted work changed: {changed}")
     failures += [f"check failed after the pass: {problem}" for problem in broken]

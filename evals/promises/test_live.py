@@ -130,6 +130,14 @@ class MakeProject(unittest.TestCase):
         self.assertEqual(git("log", "--format=%s", "main"), "step 2\ninitial import\n")
         self.assertEqual(git("log", "--format=%s", "feature"), "quote style\ninitial import\n")
 
+    def test_the_baseline_holds_every_branchs_commits_and_ends_at_head(self):
+        git = self.build(True, branch="feature", extra_steps=[{"branch": "main"}])
+        project = Path(git("rev-parse", "--show-toplevel").strip())
+        base = live.baseline(project)
+        self.assertEqual(sorted(base), sorted(git("rev-list", "--branches").split()))
+        self.assertEqual(base[-1], git("rev-parse", "HEAD").strip())
+        self.assertEqual(base[0], git("rev-list", "--max-parents=0", "HEAD").strip())
+
 
 if __name__ == "__main__":
     unittest.main()
