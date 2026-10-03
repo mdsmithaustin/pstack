@@ -107,6 +107,8 @@ def container_name(run, tag):
 def run_in_container(run, tag, entrypoint, args, timeout_s=120):
     argv = container_argv(run, container_name(run, tag), hermes_image(), entrypoint, args)
     done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s, env=docker_env())
+    if done.returncode:
+        raise RuntimeError(f"docker run {tag} exited {done.returncode}: {(done.stderr or done.stdout).strip()[-300:]}")
     return done.stdout.strip()
 
 
@@ -291,15 +293,17 @@ def walk(con, session):
                 fn = call.get("function") or {}
                 args = parse_json(fn.get("arguments")) or {}
                 inner = unwrap_bridge(fn.get("name", "unknown"), args)
-                pending[call.get("id") or call.get("call_id")] = inner[0] if len(inner) == 1 else ("tool_call", args)
+                call_id = call.get("id") or call.get("call_id")
+                single = len(inner) == 1
+                pending[call_id] = (*inner[0], single) if single else ("tool_call", args, single)
                 for name, inner_args in inner:
-                    yield {"kind": "tool_call", "name": name, "input": inner_args}, [], None
+                    yield {"kind": "tool_call", "name": name, "input": inner_args, **({"id": call_id} if single else {})}, [], None
         elif m["role"] == "tool":
-            name, args = pending.get(m["tool_call_id"], (m["tool_name"] or "unknown", {}))
+            name, args, single = pending.get(m["tool_call_id"], (m["tool_name"] or "unknown", {}, False))
             content = m["content"] or ""
             result = parse_json(content)
-            yield ({"kind": "tool_result", "name": name, "ok": result_ok(content), "output_head": content[:400]},
-                   tool_reads(name, args, result, cwd), result)
+            yield ({"kind": "tool_result", "name": name, "ok": result_ok(content), "output_head": content[:400],
+                    **({"id": m["tool_call_id"]} if single else {})}, tool_reads(name, args, result, cwd), result)
 
 
 def copy_state(run):
@@ -310,6 +314,26 @@ def copy_state(run):
         if src.exists():
             shutil.copy2(src, dest / f"state.db{suffix}")
     return dest / "state.db"
+
+
+def first_user_text(con, session):
+    row = con.execute("select content from messages where session_id=? and role='user' order by id limit 1", (session["id"],)).fetchone()
+    return (row[0] or "").strip() if row else ""
+
+
+def match_child(con, children, claimed, task, outcome):
+    free = [c for c in children if c["id"] not in claimed]
+    usage = (outcome or {}).get("tokens") or {}
+    if outcome and usage:
+        for c in free:
+            if (c.get("api_call_count") == outcome.get("api_calls") and c.get("output_tokens") == usage.get("output")
+                    and (c.get("input_tokens") or 0) + (c.get("cache_read_tokens") or 0) == usage.get("input")):
+                return c, "usage"
+    goal = (task.get("goal") or "").strip()
+    for c in free:
+        if goal and first_user_text(con, c) == goal:
+            return c, "goal"
+    return (free[0], "order") if free else (None, None)
 
 
 def first_reply(con, session):
@@ -368,19 +392,23 @@ def harvest(run):
                 if event["kind"] == "text" and (items := text_worklist(event["text"])):
                     worklist.append({"seq": seq, "turn": events[seq]["turn"], "carrier": "text", "items": items})
                 if event["kind"] == "tool_call" and event["name"] == "delegate_task":
-                    spawn_calls.append([seq, event["input"], None, events[seq]["turn"]])
+                    spawn_calls.append({"seq": seq, "args": event["input"], "ok": None, "turn": events[seq]["turn"],
+                                        "id": event.get("id"), "result": None})
                 if event["kind"] == "tool_result" and event["name"] == "delegate_task":
-                    waiting = next((c for c in spawn_calls if c[2] is None), None)
+                    waiting = next((c for c in spawn_calls if c["ok"] is None and (not event.get("id") or c["id"] == event["id"])), None)
                     if waiting:
-                        waiting[2] = event["ok"]
-        child_iter = iter(children)
-        for seq, args, ok, spawn_turn in spawn_calls:
-            if ok is False:
+                        waiting["ok"], waiting["result"] = event["ok"], result
+        claimed = set()
+        for call in spawn_calls:
+            seq, args, spawn_turn = call["seq"], call["args"], call["turn"]
+            if call["ok"] is False:
                 continue
             tasks = args.get("tasks") or ([{"goal": args["goal"], "context": args.get("context", "")}]
                                           if args.get("goal") else [])
-            for task in tasks:
-                child = next(child_iter, None)
+            outcomes = {r.get("task_index"): r for r in (call["result"] or {}).get("results") or [] if isinstance(r, dict)}
+            for index, task in enumerate(tasks):
+                child, matched = match_child(con, children, claimed, task, outcomes.get(index))
+                claimed.add(child["id"] if child else None)
                 brief = f"{task.get('goal', '')}\n{task.get('context', '')}"
                 reply = first_reply(con, child) if child else None
                 line = PERSONA_LINE.search(reply or "")
@@ -390,7 +418,8 @@ def harvest(run):
                     "model": child["model"] if child else None,
                     "effort": ((child or {}).get("model_config", {}).get("reasoning_config") or {}).get("effort"),
                     "prompt_head": brief[:300], "x_child_first_reply": reply[:200] if reply else None,
-                    "x_persona_line": line.group(1) if line else None})
+                    "x_persona_line": line.group(1) if line else None,
+                    "x_child_session": child["id"] if child else None, "x_child_match": matched})
         for child in children:
             for _, reads, _ in walk(con, child):
                 files_read.extend(reads)
