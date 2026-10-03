@@ -1,0 +1,15 @@
+{
+  "fixture": "relay",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "import: add --dedupe\n\nPartners occasionally resend a record inside one feed, and the second copy overwrote the first in the store. With the flag, the import keeps the first record for each id and skips the rest.",
+      "delete": []
+    },
+    {
+      "dir": "step-2",
+      "message": "import: tidy the dedupe pass\n\nReplaced the seen-set loop with one comprehension over the ids so the pass reads top to bottom. Same result, fewer lines to hold in your head.",
+      "delete": []
+    }
+  ]
+}

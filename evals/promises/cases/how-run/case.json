@@ -1,0 +1,16 @@
+{
+ "promises": [
+  "how-narrow-question-no-explorers",
+  "how-explains-current-code"
+ ],
+ "fixture": "tally",
+ "entry": "how",
+ "turns": [
+  "do we lowercase words before counting? is there a second pass over the file?"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "note": "adapted from 03-understand.md (`/how do we dedupe notifications? is there an n+1 when we look up subscribers?`) to a question the fixture can answer"
+}

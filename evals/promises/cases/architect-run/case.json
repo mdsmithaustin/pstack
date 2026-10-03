@@ -1,0 +1,16 @@
+{
+ "promises": [
+  "architect-grounds-with-how-and-why",
+  "architect-runs-arena-for-sketches",
+  "architect-sketches-before-implementation"
+ ],
+ "fixture": "relay",
+ "entry": "architect",
+ "turns": [
+  "design the import pipeline before writing any code. i care most about how callers use it."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ }
+}

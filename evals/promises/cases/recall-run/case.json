@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "recall-rebuilds-context-brief"
+ ],
+ "fixture": "tally",
+ "entry": "recall",
+ "turns": [
+  "catch me up on the export work from last week"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "needs several prior sessions on one topic in the harness's session store; that is private transcript history"
+}

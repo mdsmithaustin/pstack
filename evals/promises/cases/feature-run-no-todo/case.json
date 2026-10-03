@@ -1,0 +1,22 @@
+{
+ "promises": [
+  "worklist-falls-back-to-numbered-list",
+  "worklist-opens-with-playbook-steps"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --json flag to this command. text output stays byte-identical. verify both."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "artifact_command": "-m\\s+tally\\b"
+ },
+ "env": {
+  "todo_tools": false
+ }
+}

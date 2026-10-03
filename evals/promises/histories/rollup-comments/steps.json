@@ -1,0 +1,10 @@
+{
+  "fixture": "rollup",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "export: annotate the write loop\n\nThe export loop and the sink had no notes for someone new to the file. Added comments through both modules and marked the newline the sink depends on.",
+      "delete": []
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "open-pr-prompt-routes-to-opening-a-pr"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "open the pr. small ordered commits, evidence in the description."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "opening-a-pr"
+ },
+ "tmp_lock": false
+}

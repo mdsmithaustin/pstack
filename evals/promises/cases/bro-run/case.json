@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "bro-restates-last-message"
+ ],
+ "fixture": "relay",
+ "entry": "how",
+ "turns": [
+  "does the retry loop decide when to give up?",
+  "/bro"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ }
+}

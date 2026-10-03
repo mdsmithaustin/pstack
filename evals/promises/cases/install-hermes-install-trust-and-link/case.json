@@ -1,0 +1,14 @@
+{
+ "promises": [
+  "hermes-install-trust-and-link"
+ ],
+ "fixture": "tally",
+ "entry": null,
+ "turns": [],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "kind": "install",
+ "runner": "install.py"
+}

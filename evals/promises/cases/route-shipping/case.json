@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "land-prompt-routes-to-shipping"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "land the stack."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "playbook": "shipping"
+ },
+ "tmp_lock": false
+}

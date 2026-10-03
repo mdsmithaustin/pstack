@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "disk-prompt-routes-to-worktree-cleanup"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "what's eating my disk? prune the worktrees that are safe to prune."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "beyond routing it needs merged, dirty, and active worktrees on disk and an interactive answer for the dirty one"
+}

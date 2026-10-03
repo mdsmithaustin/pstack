@@ -27,6 +27,10 @@ jobs:
         run: python3 tools/generate-subagents.py --check
       - name: Skill lint and runtime command tests
         run: python3 -m unittest discover -s tools -p 'test_*.py'
+      - name: Guide promise ledger and model-free promise checks
+        run: |
+          python3 evals/promises/ledger.py audit
+          python3 -m unittest discover -s evals/promises -p 'test_*.py'
       - name: Verify-command oracle contract tests
         working-directory: evals/verify-commands/oracles
         run: |
