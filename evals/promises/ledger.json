@@ -744,6 +744,16 @@
     "skills/deslop/SKILL.md"
    ]
   },
+  "deslop-cleans-code-slop": {
+   "check": "live",
+   "claim": "Saying `deslop it` before a commit removes the code slop the branch added (narrating comments, a guard on an impossible state, a dead compatibility shim, a one-caller wrapper, an unrelated formatting edit) and leaves the branch's own work and its tests intact.",
+   "harness_sensitive": true,
+   "live_case": "roster fixture with a history commit that plants one instance of each slop class; prompt `deslop it before i commit`; pass when every planted line is gone, the unrelated edit is reverted byte for byte, no file is added, the --team feature and its test survive, and the fixture's tests pass.",
+   "owners": [
+    "skills/deslop/SKILL.md"
+   ],
+   "scenario": "deslop-run"
+  },
   "disk-prompt-routes-to-worktree-cleanup": {
    "check": "live",
    "claim": "A disk-space or prune-worktrees prompt opens the Worktree cleanup playbook.",
@@ -5153,7 +5163,8 @@
   "76ed01baacb5": {
    "also": [
     "unslop-takes-target-and-rules",
-    "no-comments-spawns-comment-sicko"
+    "no-comments-spawns-comment-sicko",
+    "deslop-cleans-code-slop"
    ],
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -7173,6 +7184,9 @@
    "text": "When you're ready to land, say so:"
   },
   "cedd235d3270": {
+   "also": [
+    "deslop-cleans-code-slop"
+   ],
    "class": "promise",
    "file": "05-build-and-clean.md",
    "promise": "deslop-available-for-code",

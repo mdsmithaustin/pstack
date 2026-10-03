@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import live
 import oracles
 from harnesses import grok
 from oracles import FAIL, INCONCLUSIVE, PASS
@@ -863,6 +864,82 @@ class LiveFalseFails(unittest.TestCase):
         result = grade("no-comments-spawns-comment-sicko", self.sicko_trace(reply), case, self.rollup(comment_survives=True))
         self.assertEqual(result["verdict"], FAIL)
         self.assertTrue(result["failures"][0].startswith("constraint comment survived"))
+
+
+class DeslopPass(unittest.TestCase):
+    CLEAN_REPORT = (
+        "from collections import Counter\n\n\n"
+        "def count_by_team(rows, team=None):\n"
+        "    if team is not None:\n"
+        "        rows = [row for row in rows if row[\"team\"] == team]\n"
+        "    counts = Counter(row[\"team\"] for row in rows)\n"
+        "    return sorted(counts.items())\n")
+
+    def roster(self, report=CLEAN_REPORT, restore_load=True):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = Path(tmp.name) / "project"
+        live.make_project(load_case("deslop-run"), project)
+        (project / "roster" / "report.py").write_text(report)
+        if restore_load:
+            (project / "roster" / "load.py").write_text((FIXTURES / "roster" / "roster" / "load.py").read_text())
+        return project
+
+    def grade(self, project, **trace):
+        events = trace.pop("events", [read(0, "deslop/SKILL.md"), edit(1, "roster/report.py")])
+        return grade("deslop-cleans-code-slop", minimal(events=events, final_reply="Removed 8 lines.", **trace), load_case("deslop-run"), project)
+
+    def test_a_clean_tree_with_green_tests_passes(self):
+        result = self.grade(self.roster())
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("deslop skill read by the lead: True", result["evidence"][0])
+
+    def test_the_planted_history_itself_fails_on_every_plant(self):
+        project = self.roster(report=(HISTORIES / "roster-team-filter" / "step-1" / "roster" / "report.py").read_text(), restore_load=False)
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(result["failures"][0].startswith("planted slop survived"))
+        self.assertIn("'roster/load.py'", result["failures"][1])
+
+    def test_a_surviving_shim_fails(self):
+        shim = self.CLEAN_REPORT + "\n\ndef filter_rows(rows, team):\n    return count_by_team(rows, team)\n"
+        result = self.grade(self.roster(report=shim))
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["planted slop survived: ['def filter_rows(']"])
+
+    def test_a_kept_unrelated_edit_fails(self):
+        result = self.grade(self.roster(restore_load=False))
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["unrelated edit kept instead of reverted: ['roster/load.py']"])
+
+    def test_a_cut_that_changes_behavior_fails_the_check(self):
+        no_filter = "from collections import Counter\n\n\ndef count_by_team(rows, team=None):\n    return sorted(Counter(row[\"team\"] for row in rows).items())\n"
+        result = self.grade(self.roster(report=no_filter))
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(result["failures"][0].startswith("check failed after the pass"), result)
+
+    def test_a_new_file_fails(self):
+        project = self.roster()
+        (project / "roster" / "notes.py").write_text("x = 1\n")
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["new files appeared: ['roster/notes.py']"])
+
+    def test_removing_the_branch_work_fails(self):
+        project = self.roster()
+        main = project / "roster" / "__main__.py"
+        main.write_text(main.read_text().replace('    parser.add_argument("--team", help="show only this team")\n', ""))
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(result["failures"][0].startswith("the branch's own work went missing"), result)
+
+    def test_no_project_is_inconclusive(self):
+        result = grade("deslop-cleans-code-slop", minimal(final_reply="done"), load_case("deslop-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+
+    def test_a_killed_run_with_no_edit_is_inconclusive(self):
+        result = self.grade(self.roster(), events=[], exit_code=137)
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
 
 
 def git_in(path, *args):

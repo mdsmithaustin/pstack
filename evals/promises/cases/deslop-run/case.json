@@ -1,0 +1,35 @@
+{
+ "promises": [
+  "deslop-cleans-code-slop"
+ ],
+ "fixture": "roster",
+ "entry": null,
+ "turns": [
+  "deslop it before i commit"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "history": "roster-team-filter",
+ "expect": {
+  "gone": [
+   "# Phase 1: filter the rows",
+   "# keep only the rows for the requested team",
+   "# Phase 2: count per team",
+   "# return the pairs sorted by team",
+   "if rows is None:",
+   "def filter_rows(",
+   "# kept for callers of the old name",
+   "def _sorted_items("
+  ],
+  "kept": [
+   "parser.add_argument(\"--team\"",
+   "def test_team_keeps_one_team"
+  ],
+  "untouched": [
+   "roster/load.py"
+  ],
+  "check": "python3 -m unittest discover -s tests"
+ }
+}

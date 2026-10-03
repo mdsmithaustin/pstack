@@ -1772,6 +1772,48 @@ def comment_sicko(view):
     return inconclusive("no project to inspect, so constraint comments cannot be checked; the reply or the spawn result lacks what would stand in", *evidence)
 
 
+def project_files(view):
+    tracked = (view.git("ls-files") or "").split()
+    untracked = (view.git("ls-files", "--others", "--exclude-standard") or "").split()
+    return {rel for rel in tracked + untracked if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
+
+
+@oracle("deslop-cleans-code-slop")
+def deslop_cleans(view):
+    expect = view.case.get("expect") or {}
+    evidence = [f"deslop skill read by the lead: {'deslop/SKILL.md' in view.lead_reads()}"]
+    if not (view.project and view.project.is_dir()):
+        return inconclusive("no project to inspect; this pass is graded on the tree, not the reply", *evidence)
+    if view.killed and not view.edits():
+        return inconclusive("run killed before any edit", *evidence)
+    base = view.base_shas()
+    if not base:
+        return inconclusive("project has no git history to diff against", *evidence)
+    texts = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in view.project.rglob("*.py")
+                      if not str(p.relative_to(view.project)).startswith(PRIVATE_PREFIXES))
+    survived = [c for c in expect.get("gone", []) if c in texts]
+    missing = [c for c in expect.get("kept", []) if c not in texts]
+    churn = [rel for rel in expect.get("untouched", [])
+             if (view.git("show", f"{base[0]}:{rel}") or "") != (view.project / rel).read_text(encoding="utf-8", errors="replace")]
+    added = sorted(project_files(view) - set((view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()))
+    check = expect.get("check")
+    run = subprocess.run(shlex.split(check), cwd=view.project, capture_output=True, text=True) if check else None
+    evidence += [f"planted slop still present: {survived}", f"branch work missing: {missing}", f"unrelated edits kept: {churn}",
+                 f"files added: {added}", f"check {check!r} exit: {run.returncode if run else 'not run'}"]
+    failures = []
+    if survived:
+        failures.append(f"planted slop survived: {survived}")
+    if missing:
+        failures.append(f"the branch's own work went missing: {missing}")
+    if churn:
+        failures.append(f"unrelated edit kept instead of reverted: {churn}")
+    if added:
+        failures.append(f"new files appeared: {added}")
+    if run and run.returncode != 0:
+        failures.append(f"check failed after the pass: {(run.stderr or run.stdout).strip().splitlines()[-1:]}")
+    return failed(failures, *evidence) if failures else passed(*evidence)
+
+
 def need_turns(view):
     if len(view.case.get("turns", [])) > 1 and not view.has_turns:
         return inconclusive("multi-turn case but the trace carries no turn markers (core change: stamp events with `turn`)")
