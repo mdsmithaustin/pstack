@@ -2680,14 +2680,14 @@
    ],
    "scenario": "worktree-isolation-run"
   },
-  "loop-prompt-routes-to-autonomous-run": {
+  "in-conversation-run-skips-figure-it-out": {
    "check": "live",
-   "claim": "A run-until-done request from a user who stays in the conversation opens the Autonomous run playbook, not figure-it-out.",
+   "claim": "A run-until-done request from a user who stays in the conversation does not route through figure-it-out, which the guide reserves for work reviewed later.",
    "harness_sensitive": true,
-   "live_case": "route-autonomous-run: route-figure-it-out's task with no step-away cue; pass when the lead opens autonomous-run first.",
+   "live_case": "route-autonomous-run: `/loop until` on the rollup duplicate-row bug, with no step-away cue and no migration; FAIL when the lead opens figure-it-out first or its opening worklist carries figure-it-out's phases.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
-    "skills/poteto-mode/playbooks/autonomous-run.md"
+    "skills/figure-it-out/SKILL.md"
    ],
    "scenario": "route-autonomous-run"
   }
@@ -6516,7 +6516,8 @@
   },
   "af316b7f55f7": {
    "also": [
-    "figure-it-out-keeps-decision-log"
+    "figure-it-out-keeps-decision-log",
+    "in-conversation-run-skips-figure-it-out"
    ],
    "class": "promise",
    "file": "02-poteto-mode.md",
@@ -8175,10 +8176,7 @@
    "sources": [
     "port"
    ],
-   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup.",
-   "also": [
-    "loop-prompt-routes-to-autonomous-run"
-   ]
+   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
   },
   "fd47d831e0c7": {
    "class": "promise",

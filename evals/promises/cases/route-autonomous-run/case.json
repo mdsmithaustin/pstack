@@ -1,19 +1,16 @@
 {
  "promises": [
-  "loop-prompt-routes-to-autonomous-run"
+  "in-conversation-run-skips-figure-it-out"
  ],
- "fixture": "relay",
+ "fixture": "rollup",
  "entry": "poteto-mode",
  "turns": [
-  "run the migration check and keep fixing callers until it shows no old ones left."
+  "/loop until the export of data/orders.csv writes each order exactly once for every ROLLUP_BUSY_AFTER from 1 to 7."
  ],
  "timeout_s": {
   "default": 300,
   "codex": 420
  },
- "expect": {
-  "playbook": "autonomous-run"
- },
  "tmp_lock": false,
- "note": "route-figure-it-out's task without the step-away cue, so the step-away rule must not take it"
+ "note": "a run-until-done request with no step-away cue and no migration, so neither the step-away rule nor the migration rule sends it to figure-it-out"
 }

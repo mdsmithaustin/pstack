@@ -901,7 +901,7 @@ ROUTING_PROMISES = (
     "autopilot-prompt-routes-to-autopilot-full", "stack-prompt-routes-to-autopilot-stack",
     "orchestrate-prompt-routes-to-orchestrate", "takeover-prompt-routes-to-session-pickup",
     "disk-prompt-routes-to-worktree-cleanup", "skill-prompt-routes-to-authoring-playbook",
-    "eval-prompt-routes-to-eval-playbook", "open-pr-prompt-routes-to-opening-a-pr", "loop-prompt-routes-to-autonomous-run",
+    "eval-prompt-routes-to-eval-playbook", "open-pr-prompt-routes-to-opening-a-pr",
 )
 
 
@@ -916,6 +916,22 @@ def step_away(view):
     if result["verdict"] == PASS and not view.skill_read("figure-it-out", anywhere=False):
         return failed("figure-it-out/SKILL.md was never read by the lead", *result["evidence"])
     return result
+
+
+@oracle("in-conversation-run-skips-figure-it-out")
+def in_conversation_run(view):
+    first = first_route_read(view, "figure-it-out")
+    opening = opening_worklist(view)
+    opened = identify_playbook(opening["items"], view.skills_root) if opening else None
+    evidence = [f"first playbook or figure-it-out read by the lead: {first[1] if first else None}",
+                f"playbooks read in order: {view.playbooks_read()}", f"opening worklist identified as: {opened}"]
+    if (first and first[1] == "figure-it-out") or opened == "figure-it-out":
+        return failed("an in-conversation run routed through figure-it-out", *evidence)
+    if not first and not opened:
+        if view.killed:
+            return inconclusive("run ended before any playbook read or worklist", *evidence)
+        return failed("no playbook read and no worklist", *evidence)
+    return passed(*evidence)
 
 
 @oracle("read-only-phrase-pins-investigation")
