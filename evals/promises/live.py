@@ -147,7 +147,9 @@ def make_project(case, dest):
     git_run(dest, "commit", "-qm", case.get("commit_message", "initial import"))
     for step in history_steps(case):
         if step.get("branch"):
-            git_run(dest, "checkout", "-q", "-B", step["branch"])
+            exists = subprocess.run(["git", "-C", str(dest), "rev-parse", "--verify", "--quiet", f"refs/heads/{step['branch']}"],
+                                    capture_output=True).returncode == 0
+            git_run(dest, "checkout", "-q", *([] if exists else ["-b"]), step["branch"])
         shutil.copytree(step["path"], dest, dirs_exist_ok=True, copy_function=shutil.copy)
         for rel in step.get("delete", []):
             (dest / rel).unlink()

@@ -941,6 +941,14 @@ class DeslopPass(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL)
         self.assertTrue(any(f.startswith("the branch's own work went missing") for f in result["failures"]), result)
 
+    def test_a_weakened_uncommitted_test_fails(self):
+        project = self.roster()
+        test = project / "tests" / "test_report.py"
+        test.write_text(test.read_text().replace("self.assertEqual(", "self.assertTrue(True) or self.assertEqual("))
+        result = self.grade(project)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("uncommitted work changed: ['tests/test_report.py']", result["failures"])
+
     def test_an_amended_branch_commit_cannot_hide_a_new_file(self):
         project = self.roster()
         base = live.baseline(project)

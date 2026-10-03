@@ -42,6 +42,9 @@
     "cmd": "python3 -m roster data/members.csv --team infra",
     "stdout": "   3  infra\n"
    }
+  ],
+  "preserved": [
+   "tests/test_report.py"
   ]
  }
 }
