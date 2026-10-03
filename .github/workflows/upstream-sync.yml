@@ -89,8 +89,17 @@ jobs:
                must exit zero. Commit the generated installed role bundle
                with its source. Keep the persona contract, native format
                translations, safe optional setup, and full persona briefings.
-            6. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
-            7. If there are portable changes: create branch
+            6. Run `python3 evals/promises/ledger.py audit --upstream-ref upstream/main`.
+               It must exit zero before you continue. An "unclassified upstream
+               unit" is a guide sentence upstream added or reworded: classify it
+               in evals/promises/ledger.json per evals/promises/README.md, and
+               port the sentence into docs/guide with the substitution map. A
+               "quote no longer in" line means a synced skill edit removed the
+               text behind a static guide promise: keep the promise true or
+               record the change for human judgment in the PR body. List every
+               ledger change in the PR body under "Guide promises".
+            7. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
+            8. If there are portable changes: create branch
                `sync/upstream-<YYYYMMDD>`, commit with a message summarizing
                the upstream commits ported, push it, and open a DRAFT PR to
                main with `gh pr create --draft --repo mdsmithaustin/pstack`

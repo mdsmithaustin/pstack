@@ -293,6 +293,8 @@ Run the full CI-equivalent checks from the repository root:
 docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
 (cd evals/verify-commands/oracles && python3 -m unittest -v test_check_plan)
 (cd evals/canon && python3 -m unittest -v)
+.venv/bin/python evals/promises/ledger.py audit
+.venv/bin/python -m unittest discover -s evals/promises -p 'test_*.py'
 .venv/bin/python tools/probe-subagent-install.py
 .venv/bin/python -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
 .venv/bin/python skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
@@ -303,7 +305,9 @@ lefthook validate
 git diff --check
 ```
 
-Each command exits nonzero when its check fails. The four unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
+Each command exits nonzero when its check fails. The five unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
+
+`evals/promises/` checks that the port keeps the user guide's promises on all four harnesses. Its README covers the ledger audit, the live runs, and how to classify a guide sentence that an upstream sync adds.
 
 Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The same reasoning keeps tests out: they live under `tests/`, mirroring their path under `skills/` (`tests/skills/poteto-mode/scripts/` and `tests/skills/setup-pstack/scripts/`), and the same test fails if a tracked file under `skills/` matches a test-file pattern. The Bun and typecheck scripts in `skills/poteto-mode/scripts/package.json` reach into `tests/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 
