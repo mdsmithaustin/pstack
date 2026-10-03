@@ -918,6 +918,22 @@ def step_away(view):
     return result
 
 
+@oracle("in-conversation-run-skips-figure-it-out")
+def in_conversation_run(view):
+    first = first_route_read(view, "figure-it-out")
+    opening = opening_worklist(view)
+    opened = identify_playbook(opening["items"], view.skills_root) if opening else None
+    evidence = [f"first playbook or figure-it-out read by the lead: {first[1] if first else None}",
+                f"playbooks read in order: {view.playbooks_read()}", f"opening worklist identified as: {opened}"]
+    if (first and first[1] == "figure-it-out") or opened == "figure-it-out":
+        return failed("an in-conversation run routed through figure-it-out", *evidence)
+    if not first and not opened:
+        if view.killed:
+            return inconclusive("run ended before any playbook read or worklist", *evidence)
+        return failed("no playbook read and no worklist", *evidence)
+    return passed(*evidence)
+
+
 @oracle("read-only-phrase-pins-investigation")
 def read_only_pin(view):
     turn = None

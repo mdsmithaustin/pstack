@@ -187,6 +187,18 @@ class RoutingOracle(unittest.TestCase):
         self.assertEqual(grade("step-away-routes-to-figure-it-out", good, case)["verdict"], PASS)
         self.assertEqual(grade("step-away-routes-to-figure-it-out", bad, case)["verdict"], FAIL)
 
+    def test_an_in_conversation_run_must_not_route_through_figure_it_out(self):
+        case = load_case("route-autonomous-run")
+        pid = "in-conversation-run-skips-figure-it-out"
+        for first in ("poteto-mode/playbooks/autonomous-run.md", "poteto-mode/playbooks/bug-fix.md"):
+            self.assertEqual(grade(pid, minimal(events=[read(0, first)]), case)["verdict"], PASS, first)
+        phases = [{"text": t, "state": "pending"} for t in ("Read the Principles section of the poteto-mode skill.", "Phase A: Frame", "Phase B: Design the workflow", "Phase C: Run the loop",
+                                                           "Phase D: Keep the audit trail", "Phase E: Verify and hand back")]
+        for trace in (minimal(events=[read(0, "figure-it-out/SKILL.md")]),
+                      minimal(events=[read(0, "poteto-mode/playbooks/autonomous-run.md")],
+                              worklist=[{"seq": 3, "carrier": "TodoWrite", "items": phases}])):
+            self.assertEqual(grade(pid, trace, case)["verdict"], FAIL)
+
     def test_read_only_pin_fails_on_an_edit(self):
         case = load_case("route-investigation")
         trace = minimal(events=[read(0, "poteto-mode/playbooks/investigation.md"), edit(1, "/w/relay/cache.py")])

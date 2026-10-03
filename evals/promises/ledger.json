@@ -2679,6 +2679,17 @@
     "skills/poteto-mode/playbooks/opening-a-pr.md"
    ],
    "scenario": "worktree-isolation-run"
+  },
+  "in-conversation-run-skips-figure-it-out": {
+   "check": "live",
+   "claim": "A run-until-done request from a user who stays in the conversation does not route through figure-it-out, which the guide reserves for work reviewed later.",
+   "harness_sensitive": true,
+   "live_case": "route-autonomous-run: `/loop until` on the rollup duplicate-row bug, with no step-away cue and no migration; FAIL when the lead opens figure-it-out first or its opening worklist carries figure-it-out's phases.",
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/figure-it-out/SKILL.md"
+   ],
+   "scenario": "route-autonomous-run"
   }
  },
  "units": {
@@ -6505,7 +6516,8 @@
   },
   "af316b7f55f7": {
    "also": [
-    "figure-it-out-keeps-decision-log"
+    "figure-it-out-keeps-decision-log",
+    "in-conversation-run-skips-figure-it-out"
    ],
    "class": "promise",
    "file": "02-poteto-mode.md",
