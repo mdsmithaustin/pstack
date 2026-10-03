@@ -30,6 +30,8 @@ The user guide in `docs/guide/` tells readers what pstack does. This directory c
 - A static promise has neither a quote nor a test, or one of its quotes is missing from its file.
 - A script promise has no test, or a live or install promise has no case of its own kind.
 
+The audit also lists live and install promises whose only cases are `deferred`. Those promises have a check on record that does not run yet, so they are not failures.
+
 CI runs the audit against the port guide. Add `--upstream-ref upstream/main` (after `git fetch upstream`) to audit upstream's guide as well. The upstream-sync workflow and step 5 of **Syncing from upstream** in `PORTING.md` run that form.
 
 ## Classify a new or changed guide unit
@@ -48,7 +50,7 @@ python3 -m unittest discover -s evals/promises -p 'test_*.py'
 python3 evals/promises/install.py --out /tmp/pstack-install
 ```
 
-The unittest run takes about 20 seconds. The `merge-gate` tests skip without `bun`. The `worktree-audit` test skips off macOS or without `rg` and `jq`, so the `worktree-audit` job in `.github/workflows/lint.yml` runs it on macOS. `install.py` uses the network for `npx skills`, and needs each harness's CLI and login. It exits 1 when any check FAILs. An INCONCLUSIVE check does not change the exit status, so read the summary line it prints to stderr.
+The unittest run takes about 20 seconds. The `merge-gate` tests skip without `bun`. The `worktree-audit` test skips off macOS or without `rg` and `jq`, so the `worktree-audit` job in `.github/workflows/lint.yml` runs it on macOS. `install.py` uses the network for `npx skills`, and needs each harness's CLI and login. It exits 1 when any check FAILs, and 2 when a check crashed instead of reaching a verdict. Any other INCONCLUSIVE check does not change the exit status, so read the summary line it prints to stderr.
 
 ## Run live cases
 

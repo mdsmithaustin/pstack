@@ -1,13 +1,8 @@
 import json
 import os
-import os
-import subprocess
-import tempfile
-import json
 import subprocess
 import tempfile
 import unittest
-from pathlib import Path
 from pathlib import Path
 from unittest import mock
 
@@ -73,6 +68,19 @@ class GradeRun(unittest.TestCase):
             self.assertEqual({r["verdict"] for r in graded["promises"].values()}, {"INCONCLUSIVE"})
             self.assertEqual(set(graded["promises"]), set(case["promises"]))
             self.assertEqual(json.loads((root / "verdict.json").read_text()), graded)
+
+    def test_a_run_with_a_clean_turn_is_graded_even_when_the_trace_carries_only_the_last_exit_code(self):
+        with tempfile.TemporaryDirectory(prefix="pstack-live-test-") as tmp:
+            root = Path(tmp)
+            case = live.load_case("principle-steer-run")
+            trace = {"harness": "claude-code", "model": "m", "exit_code": 1, "events": [{"seq": 0, "kind": "text", "text": "Done."}],
+                     "worklist": [], "spawns": [], "files_read": [], "final_reply": "Done."}
+            run = {"harness": "claude-code", "case": case["id"], "skills_at": "x", "project": str(root / "p"),
+                   "turns": [{"exit_code": 0}, {"exit_code": 1}]}
+            (root / "run.json").write_text(json.dumps(run))
+            (root / "trace.json").write_text(json.dumps(trace))
+            graded = live.grade(root)
+            self.assertNotIn("never started", json.dumps(graded))
 
 
 

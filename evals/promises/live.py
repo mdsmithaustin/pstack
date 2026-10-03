@@ -223,6 +223,7 @@ def grade(root):
     record = json.loads((root / "run.json").read_text())
     case = load_case(record["case"])
     trace = json.loads((root / "trace.json").read_text())
+    trace.setdefault("x_turns", record.get("turns", []))
     verdict = {"case": case["id"], "harness": record["harness"], "skills_at": record["skills_at"],
                "promises": {pid: oracles.check(pid, trace, case, Path(record.get("project", root / "project")))
                             for pid in case["promises"]}}

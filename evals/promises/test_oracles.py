@@ -427,6 +427,15 @@ class FailedReads(unittest.TestCase):
         listed = self.trace(False, files_read=[f"/w/.claude/skills/{self.BRIEF}"])
         self.assertEqual(grade(pid, listed, case)["verdict"], FAIL)
 
+    def test_a_killed_runs_last_read_with_no_result_is_not_evidence(self):
+        case = load_case("feature-boundary-run")
+        pid = "poteto-mode-triggers-architect-on-boundary-crossing"
+        unanswered = self.trace(True)
+        unanswered["events"].pop()
+        self.assertEqual(grade(pid, unanswered, case)["verdict"], PASS)
+        unanswered["exit_code"] = 137
+        self.assertNotEqual(grade(pid, unanswered, case)["verdict"], PASS)
+
     def test_a_later_good_read_of_the_same_file_still_counts(self):
         case = load_case("feature-boundary-run")
         retried = self.trace(False)
@@ -893,6 +902,33 @@ class OracleFalseVerdicts(unittest.TestCase):
             self.assertEqual(result["verdict"], INCONCLUSIVE, pid)
             self.assertIn("never started", result["failures"][0])
             self.assertIn("Failed to authenticate", result["failures"][0])
+
+    def test_a_failed_harvest_is_inconclusive_for_every_promise(self):
+        case = load_case("principle-steer-run")
+        trace = minimal(harness="hermes", final_reply="Done.", x_harvest_error="database disk image is malformed")
+        for pid in case["promises"]:
+            result = grade(pid, trace, case)
+            self.assertEqual(result["verdict"], INCONCLUSIVE, pid)
+            self.assertIn("database disk image is malformed", result["failures"][0])
+
+    def test_a_spawn_result_is_its_own_not_a_siblings(self):
+        events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "id": "a", "input": {}},
+                  {"seq": 2, "kind": "tool_call", "name": "Agent", "id": "b", "input": {}},
+                  {"seq": 3, "kind": "tool_result", "name": "Agent", "id": "b", "ok": True, "output_head": "persona: poteto-agent"},
+                  {"seq": 4, "kind": "tool_result", "name": "Agent", "id": "a", "ok": True, "output_head": "mapped the parser"}]
+        spawns = [{"seq": 1, "tool": "Agent"}, {"seq": 2, "tool": "Agent"}]
+        view = oracles.View(minimal(events=events, spawns=spawns), load_case("feature-run"), None)
+        self.assertEqual(view.spawn_result(spawns[0]), "mapped the parser")
+        self.assertEqual(view.spawn_result(spawns[1]), "persona: poteto-agent")
+
+    def test_a_lone_spawn_keeps_its_wait_results(self):
+        events = [{"seq": 1, "kind": "tool_call", "name": "spawn_agent", "id": "a", "input": {}},
+                  {"seq": 2, "kind": "tool_result", "name": "spawn_agent", "id": "a", "ok": True, "output_head": "started"},
+                  {"seq": 3, "kind": "tool_call", "name": "wait_agent", "id": "w", "input": {"timeout_ms": 10000}},
+                  {"seq": 4, "kind": "tool_result", "name": "wait_agent", "id": "w", "ok": True, "output_head": "ha ha ha, MUST KILL"}]
+        spawns = [{"seq": 1, "tool": "spawn_agent"}]
+        view = oracles.View(minimal(events=events, spawns=spawns, harness="codex"), load_case("feature-run"), None)
+        self.assertEqual(view.spawn_result(spawns[0]), "started\nha ha ha, MUST KILL")
 
     def test_a_run_with_one_clean_turn_is_not_dead(self):
         case = load_case("principle-steer-run")

@@ -27,6 +27,7 @@ EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file
               "edit", "write", "insert", "create", "replace_in_file"}
 PATH_FIELDS = ("file_path", "path", "target_file", "target_path", "filename", "file", "notebook_path")
 SPAWN_TOOLS = {"Agent", "Task", "spawn_agent", "spawn_subagent", "delegate_task", "SubAgentActivity"}
+WAIT_TOOLS = {"get_command_or_subagent_output", "wait_agent", "TaskOutput"}
 FOLLOWUP_TOOLS = {"followup_task", "send_message"}
 ASK_TOOLS = {"AskUserQuestion", "ask_user", "request_user_input", "AskQuestion", "ask_question"}
 PRIVATE_PREFIXES = (".claude/", ".agents/", ".codex/", ".hermes/", ".grok/", ".git/")
@@ -366,7 +367,7 @@ class View:
                     if isinstance(value, str) and value:
                         rel = f"{value}/SKILL.md" if name == "skill_view" else skill_rel(value)
                         if rel:
-                            out.append((call.get("seq"), rel, (self.results_for(call) or {}).get("ok") is not False))
+                            out.append((call.get("seq"), rel, self.read_returned(call)))
                         break
             elif name in SHELL_TOOLS:
                 for token in resolved_shell_paths(str(given.get(SHELL_TOOLS[name]) or "")):
@@ -374,6 +375,13 @@ class View:
                     if rel:
                         out.append((call.get("seq"), rel, True))
         return out
+
+    def read_returned(self, call):
+        answer = self.results_for(call)
+        if answer is not None:
+            return answer.get("ok") is not False
+        seq = call.get("seq", 0)
+        return not self.killed or any(e.get("seq", 0) > seq and e.get("kind") in ("text", "tool_call") for e in self.events)
 
     def event_reads(self):
         return [(seq, rel) for seq, rel, ok in self.read_attempts() if ok]
@@ -550,14 +558,13 @@ class View:
         return True
 
     def spawn_result(self, spawn):
-        heads = []
         seq = spawn.get("seq") or 0
-        for event in self.events:
-            if event.get("kind") != "tool_result" or event.get("seq", 0) <= seq:
-                continue
-            if event.get("name") in SPAWN_TOOLS | {"get_command_or_subagent_output", "wait_agent", "TaskOutput"}:
-                heads.append(event.get("output_head") or "")
-        return "\n".join(heads)
+        call = next((c for c in self.tool_calls if c.get("seq") == seq), None)
+        heads = [(self.results_for(call) or {}).get("output_head") or ""] if call else []
+        if len(self.spawns) == 1:
+            heads += [e.get("output_head") or "" for e in self.events
+                      if e.get("kind") == "tool_result" and e.get("seq", 0) > seq and e.get("name") in WAIT_TOOLS]
+        return "\n".join(h for h in heads if h)
 
     def code_delegate_seqs(self):
         out = []
@@ -786,6 +793,8 @@ def check(pid, trace, case, project):
     fn = ORACLES.get(pid)
     if fn is None:
         return inconclusive(f"no oracle for {pid}")
+    if trace.get("x_harvest_error"):
+        return inconclusive(f"the harness transcript could not be read: {trace['x_harvest_error']}")
     hits = trace.get("x_host_skill_hits")
     if hits:
         return inconclusive(f"the harness reported host skills in this run, so its behavior may not come from the installed skills: {sorted(hits)}")

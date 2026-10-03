@@ -639,7 +639,8 @@ def evaluate(ctx, check, harness):
         verdict, evidence, failures = "INCONCLUSIVE", {"reason": str(reason)}, []
     except Exception as err:
         verdict, failures = "INCONCLUSIVE", []
-        evidence = {"reason": f"check error: {type(err).__name__}: {err}", "trace": traceback.format_exc().splitlines()[-4:]}
+        evidence = {"reason": f"check error: {type(err).__name__}: {err}", "check_error": True,
+                    "trace": traceback.format_exc().splitlines()[-4:]}
     evidence = {"skills_cli": ctx.skills_version, **evidence}
     return {"promise": check.promise, "harness": harness, "verdict": verdict, "evidence": evidence, "failures": failures}
 
@@ -666,9 +667,10 @@ def main(argv=None):
         if not args.keep:
             shutil.rmtree(ctx.work, ignore_errors=True)
     counts = {v: sum(1 for r in results if r["verdict"] == v) for v in ("PASS", "FAIL", "INCONCLUSIVE")}
-    note = "; INCONCLUSIVE does not change the exit status" if counts["INCONCLUSIVE"] else ""
+    errors = sum(1 for r in results if r["evidence"].get("check_error"))
+    note = f"; {errors} check error(s), which exit 2" if errors else ""
     print(f"{counts['PASS']} PASS, {counts['FAIL']} FAIL, {counts['INCONCLUSIVE']} INCONCLUSIVE{note}", file=sys.stderr)
-    return 1 if counts["FAIL"] else 0
+    return 1 if counts["FAIL"] else 2 if errors else 0
 
 
 if __name__ == "__main__":

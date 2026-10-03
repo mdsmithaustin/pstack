@@ -92,8 +92,10 @@ jobs:
             6. Run `python3 evals/promises/ledger.py audit --upstream-ref upstream/main`.
                It must exit zero before you continue. An "unclassified upstream
                unit" is a guide sentence upstream added or reworded: classify it
-               in evals/promises/ledger.json per evals/promises/README.md, and
-               port the sentence into docs/guide with the substitution map. A
+               in evals/promises/ledger.json per evals/promises/README.md. Port
+               the sentence into docs/guide with the substitution map, unless
+               you classify it `cursor-only` (with its reason) or `substituted`
+               (naming the port units that replace it). A
                "quote no longer in" line means a synced skill edit removed the
                text behind a static guide promise: keep the promise true or
                record the change for human judgment in the PR body. List every

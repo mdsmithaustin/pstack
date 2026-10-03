@@ -48,6 +48,15 @@ def live_cases():
     return bound
 
 
+def deferred_only(ledger):
+    runnable, recorded = set(), set()
+    for case in CASES.glob("*/case.json"):
+        spec = json.loads(case.read_text(encoding="utf-8"))
+        (recorded if spec.get("deferred") else runnable).update(spec.get("promises", []))
+    return sorted(pid for pid, p in ledger["promises"].items()
+                  if p["check"] in {"install", "live"} and pid in recorded - runnable)
+
+
 def promise_ids(entry):
     return ([entry["promise"]] if entry.get("promise") else []) + entry.get("also", [])
 
@@ -184,7 +193,10 @@ def main(argv=None):
         errors = audit(ledger, ROOT / "docs" / "guide", upstream / "docs" / "guide" if upstream else None)
     for e in errors:
         print(e)
-    print(f"{len(errors)} problem(s), {len(ledger['units'])} units, {len(ledger['promises'])} promises")
+    deferred = deferred_only(ledger)
+    if deferred:
+        print(f"bound only to deferred cases, so not yet run: {', '.join(deferred)}")
+    print(f"{len(errors)} problem(s), {len(ledger['units'])} units, {len(ledger['promises'])} promises, {len(deferred)} deferred")
     return 1 if errors else 0
 
 

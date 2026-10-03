@@ -34,6 +34,14 @@ class ExitStatus(unittest.TestCase):
             results = json.loads((Path(tmp) / "install.json").read_text())
         return code, results, err.getvalue()
 
+    def test_a_check_that_crashes_exits_nonzero(self):
+        def broken(ctx, harness):
+            raise NameError("name 'listing' is not defined")
+        code, results, err = self.run_main(passing, broken)
+        self.assertEqual([r["verdict"] for r in results], ["PASS", "INCONCLUSIVE"])
+        self.assertEqual(code, 2)
+        self.assertIn("1 check error", err)
+
     def test_a_failed_promise_exits_nonzero(self):
         code, results, err = self.run_main(passing, failing)
         self.assertEqual([r["verdict"] for r in results], ["PASS", "FAIL"])
@@ -44,7 +52,8 @@ class ExitStatus(unittest.TestCase):
         code, results, err = self.run_main(passing, undecided)
         self.assertEqual([r["verdict"] for r in results], ["PASS", "INCONCLUSIVE"])
         self.assertEqual(code, 0)
-        self.assertIn("INCONCLUSIVE does not change the exit status", err)
+        self.assertIn("1 INCONCLUSIVE", err)
+        self.assertNotIn("check error", err)
 
     def test_all_pass_exits_zero(self):
         code, _, err = self.run_main(passing)

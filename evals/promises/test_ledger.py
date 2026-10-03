@@ -81,6 +81,11 @@ class AuditTest(unittest.TestCase):
         self.assertTrue(any(e.startswith(f"{key} text differs from the port guide") for e in errors), errors)
         self.assertTrue(any(e.startswith(f"{key} file is '99-elsewhere.md'") for e in errors), errors)
 
+    def test_promises_bound_only_to_deferred_cases_are_listed(self):
+        deferred = ledger.deferred_only(self.book)
+        self.assertIn("worktree-request-honored", deferred)
+        self.assertNotIn("arena-readonly-cross-judge", deferred)
+
     def test_owner_status_tells_verbatim_from_port_only(self):
         upstream = self.tmp / "pstack"
         (upstream / "skills" / "tdd").mkdir(parents=True)
