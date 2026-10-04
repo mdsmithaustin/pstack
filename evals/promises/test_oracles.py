@@ -1779,6 +1779,25 @@ class CandidateNeedle(unittest.TestCase):
         self.assertIn("runner spawns: 0", result["evidence"])
 
 
+class SynthesizerNoun(unittest.TestCase):
+    def test_a_synthesizer_named_by_noun_is_not_an_investigator(self):
+        spawns = [{"seq": 10, "tool": "Agent", "prompt_head": "Source control investigator: search git history for why the retry limit is five. Read-only.",
+                   "description": "git history investigator"},
+                  {"seq": 20, "tool": "Agent", "prompt_head": "Role: synthesizer. Combine the investigators' reports into one answer.", "description": "synthesizer"}]
+        events = [{"seq": 10, "kind": "tool_call", "name": "Agent", "input": {"description": "git history investigator"}}, text(15, "waiting"),
+                  {"seq": 20, "kind": "tool_call", "name": "Agent", "input": {"description": "synthesizer"}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, final_reply="x"), load_case("why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+    def test_a_synthesis_task_is_not_an_investigator(self):
+        spawns = [{"seq": 10, "tool": "Agent", "prompt_head": "Investigate source control for the retry limit.", "task_name": "retry_history"},
+                  {"seq": 20, "tool": "Agent", "prompt_head": "Write the synthesis of the git history findings.", "task_name": "retry_synthesis"}]
+        events = [{"seq": 10, "kind": "tool_call", "name": "Agent", "input": {}}, text(15, "waiting"), {"seq": 20, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, final_reply="x"), load_case("why-run"))
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

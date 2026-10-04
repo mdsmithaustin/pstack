@@ -49,7 +49,7 @@ BUCKETS = ("act on", "consider", "noted", "dismissed")
 STOP = {"the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "it", "its", "this", "that",
         "with", "per", "as", "be", "by", "at", "from", "over", "into", "if", "then", "run", "use"}
 JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
-SYNTH_ROLE = re.compile(r"\bsynthesi[sz](?:e|es|ing)\b")
+SYNTH_ROLE = re.compile(r"(?<![a-z])synthes(?:is|i[sz](?:e|es|ing))\b|(?<!separate )(?<![a-z])synthesi[sz]ers?\b")
 READ_ONLY_BRIEF = re.compile(r"read[- ]only|do not (?:edit|write|modify|change)|don't (?:edit|write|modify)")
 WRITES_CODE = re.compile(r"\bimplement(?:s|ing)?\b|\bfix(?:es|ing)?\b|write (?:the )?code")
 COUNTED_DESIGNS = re.compile(r"\b(?:two|three|four|five|six|[2-9])\b[^.]{0,40}?\b(?:candidates|sketches|designs)\b")
