@@ -2461,11 +2461,19 @@ def arena_worktrees(view):
 PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on) (?:candidate|arm) [\w-]+")
 
 
+def picked(low):
+    for match in PICKED.finditer(low):
+        clause = low[max(low.rfind(".", 0, match.start()), low.rfind("\n", 0, match.start())) + 1:match.start()]
+        if not re.search(r"\b(?:no|not|none|never|neither)\b", clause):
+            return True
+    return False
+
+
 @oracle("arena-fans-out-and-grafts")
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = "base" in low or bool(PICKED.search(low))
+    base = "base" in low or picked(low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:

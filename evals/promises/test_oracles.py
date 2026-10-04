@@ -1544,6 +1544,10 @@ class ReplyWording(unittest.TestCase):
         result = self.arena("Arena result\n- Candidate 1 was selected, with strict type validation grafted from candidate 2.\n- Verified: 8 unit tests passed.")
         self.assertEqual(result["verdict"], PASS, result)
 
+    def test_a_negated_selection_is_not_a_base(self):
+        result = self.arena("Arena result\n- No candidate 1 was selected and no graft was applied.\n- Verified: 8 unit tests passed.")
+        self.assertEqual(result["verdict"], FAIL, result)
+
     def test_grafts_without_a_pick_still_fail(self):
         result = self.arena("Arena result\n- Strict type validation grafted from candidate 2.\n- Verified: 8 unit tests passed.")
         self.assertEqual(result["verdict"], FAIL, result)
