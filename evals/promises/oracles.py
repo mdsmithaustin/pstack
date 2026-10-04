@@ -51,8 +51,10 @@ STOP = {"the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "it"
         "with", "per", "as", "be", "by", "at", "from", "over", "into", "if", "then", "run", "use"}
 JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
 SYNTH_ROLE = re.compile(r"(?<![a-z])synthes(?:is|i[sz](?:e|es|ing))\b|(?<!separate )(?<![a-z])synthesi[sz]ers?\b")
-READ_ONLY_BRIEF = re.compile(r"read[- ]only|do not (?:edit|write|modify|change)|don't (?:edit|write|modify)")
-WRITES_CODE = re.compile(r"\bimplement(?:s|ing)?\b|\bfix(?:es|ing)?\b|write (?:the )?code")
+READ_ONLY_BRIEF = re.compile(r"read[- ]only|(?:do not|don't|never) (?:edit|write|modify|change|touch)(?: or (?:edit|write|modify|change))? (?:any )?(?:files|anything)"
+                             r"|make no (?:edits|changes)")
+EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+)\s*(?:[-*]\s+|\d+[.)]\s+)?"
+                        r"(?:add|change|update|create|write|implement|fix|refactor|remove|delete|rename|edit)\b")
 COUNTED_DESIGNS = re.compile(r"\b(?:two|three|four|five|six|[2-9])\b[^.]{0,40}?\b(?:candidates|sketches|designs)\b")
 REPLY_HEAD = 300
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
@@ -558,7 +560,8 @@ class View:
 
     def explores(self, spawn):
         brief = self.spawn_brief(spawn).lower()
-        return bool(READ_ONLY_BRIEF.search(brief)) and not WRITES_CODE.search(brief)
+        brief = brief.replace("\\n", "\n")
+        return bool(READ_ONLY_BRIEF.search(brief)) and not EDIT_ORDER.search(brief)
 
     def spawns_where(self, *needles, turn=None):
         pattern = re.compile("|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles))
@@ -1512,7 +1515,7 @@ def how_wide(view):
     explainers = view.spawns_where("explainer", "architectural explanation", r"synthesi[sz]\w*")
     evidence = [f"explorer spawns: {len(explorers)}", f"explainer spawns: {len(explainers)}"]
     waves = view.waves(view.spawns)
-    if not explorers and len(waves) >= 2 and 2 <= len(waves[0]) <= 4 and (view.encrypted() or all(view.explores(s) for s in waves[0])):
+    if not explorers and len(waves) >= 2 and 2 <= len(waves[0]) <= 4 and (all(s.get("x_prompt_encrypted") for s in waves[0]) or all(view.explores(s) for s in waves[0])):
         explorers, explainers = waves[0], waves[1]
         evidence.append(f"explorers found by structure: a wave of {len(waves[0])} at seq {waves[0][0].get('seq')}, then a spawn at seq {waves[1][0].get('seq')}")
     if not explorers:

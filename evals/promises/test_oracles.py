@@ -1903,6 +1903,35 @@ class WritesThroughVariables(unittest.TestCase):
         self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
 
 
+class ReadOnlyWave(unittest.TestCase):
+    def wave(self, heads, sealed=()):
+        spawns = [dict(delegate(27, h), x_prompt_encrypted=n in sealed) for n, h in enumerate(heads)] + [delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+
+    def test_writers_that_spare_one_file_are_not_read_only(self):
+        result = self.wave(["Add a --json flag to src/cli.py and update the parser. Do not modify the README.",
+                            "Refactor src/export.py to share the formatter. Do not modify tests."])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_sparing_one_file_is_not_a_read_only_marker(self):
+        result = self.wave(["Trace the ingest stage. Do not modify the README.", "Trace the render stage. Do not modify tests."])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_read_only_briefs_that_also_say_change_are_not_read_only(self):
+        result = self.wave(["Read-only: do not edit or write files. Trace ingest.", "Do not modify any files. Then change the render docstring."])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_one_sealed_spawn_does_not_vouch_for_a_readable_wave(self):
+        result = self.wave(["Trace the ingest stage and report.", "Trace the render stage and report."], sealed=(0,))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_wave_of_explicit_read_only_tracers_passes(self):
+        result = self.wave(["Trace the ingest stage. Read-only: do not edit or write files.", "Audit the tests. Do not modify anything."])
+        self.assertEqual(result["verdict"], PASS, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
