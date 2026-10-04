@@ -508,6 +508,7 @@ class View:
         full = (Path(path) if path.startswith("/") else self.project / path).resolve()
         roots = sorted({Path(w).resolve() for w in self.worktrees() or []} | {self.project.resolve()}, key=lambda r: len(str(r)), reverse=True)
         return next((str(full.relative_to(r)) for r in roots if full.is_relative_to(r)), path)
+
     def project_rel(self, path):
         if self.project and path.startswith("/") and self.inside_project(path):
             return str(Path(path).resolve().relative_to(self.project.resolve()))
