@@ -1853,7 +1853,7 @@ def encoding_landed(changes, constraint, reply=""):
     for path, added in sorted(changes.items()):
         if ENCODING_FILE.search(path) and any(n in added.lower() for n in needles):
             return path
-    explained = [n for w in words if w in reply.lower() for n in (w, *CONSTRAINT_ALIASES.get(w, ()))]
+    explained = [a for w in words if re.search(rf"\b{re.escape(w)}\b", reply.lower()) for a in CONSTRAINT_ALIASES.get(w, ())]
     for path, added in sorted(changes.items()):
         if path.endswith(".py") and any(n in added.lower() for n in explained):
             return f"runtime: {path}"
