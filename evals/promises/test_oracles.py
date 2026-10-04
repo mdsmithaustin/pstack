@@ -272,6 +272,8 @@ class RuntimeEncoding(unittest.TestCase):
         self.assertEqual(oracles.encoding_landed(changes, constraint, "Sink.append now adds the trailing newline itself"),
                          "runtime: rollup/sink.py")
         self.assertIsNone(oracles.encoding_landed(changes, constraint, "removed 20 comments"))
+        self.assertIsNone(oracles.encoding_landed({"rollup/sink.py": "    for row in rows:"}, constraint,
+                                                  "every comment is gone"))
 
 
 class BoundaryGuard(unittest.TestCase):
