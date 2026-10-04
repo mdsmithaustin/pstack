@@ -393,6 +393,103 @@ class PreparedHarvest(unittest.TestCase):
         self.assertEqual(list(self.state.paths.transcripts.iterdir()), [])
 
 
+@unittest.skipUnless(platform.system() == "Darwin" and os.access("/usr/bin/sandbox-exec", os.X_OK),
+                     "requires Darwin sandbox-exec")
+class NativeFilesystem(unittest.TestCase):
+    def test_policy_confines_filesystem_operations_and_preserves_project_root(self):
+        for confined in (True, False):
+            with self.subTest(confined=confined), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                run = live.Run(root / "run", "claude-code", {"fixture": "tally"}, "0" * 40, 60)
+                run.project.mkdir(parents=True)
+                runtime = claude_code.HostRuntime(
+                    Path("/bin/sh"), "test", root / "home", "test-user",
+                    tuple(Path(p) for p in ("/", "/bin/sh", "/bin/cat", "/bin/mv", "/dev/null")),
+                    (Path("/System/Library"), Path("/usr/lib")), (), "/usr/bin:/bin", "/bin/sh")
+                state = claude_code._bind_paths(run, runtime)
+                env = claude_code.child_env(run)
+                prefix = ["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0)] if confined else []
+                inside = run.project / "inside.txt"
+                inside.write_bytes(b"inside-before\n")
+                outside = root / "outside.txt"
+                outside.write_bytes(b"outside-before\n")
+                link = run.project / "outward-link"
+                link.symlink_to(outside)
+                identity = run.project.stat()
+                done = subprocess.run(prefix + [
+                    "/bin/sh", "-c",
+                    '/bin/cat "$1" && printf "inside-after\\n" > "$1" && '
+                    '/bin/mv "$1" "$2" && /bin/mv "$2" "$1" && /bin/cat "$1"',
+                    "sh", str(inside), str(run.project / "moved.txt")],
+                    cwd=run.project, env=env, capture_output=True, timeout=10)
+                self.assertEqual(done.returncode, 0, (done.stdout, done.stderr))
+                self.assertEqual(done.stdout, b"inside-before\ninside-after\n")
+                self.assertEqual(inside.read_bytes(), b"inside-after\n")
+                write = 'printf "outside-after\\n" > "$1" && /bin/cat "$1"'
+                operations = (
+                    ("absolute-read", ["/bin/cat", str(outside)], b"outside-before\n"),
+                    ("absolute-write", ["/bin/sh", "-c", write, "sh", str(outside)], b"outside-after\n"),
+                    ("symlink-read", ["/bin/cat", str(link)], b"outside-before\n"),
+                    ("symlink-write", ["/bin/sh", "-c", write, "sh", str(link)], b"outside-after\n"),
+                    ("descendant-read", ["/bin/sh", "-c", '/bin/sh -c \'/bin/cat "$1"\' sh "$1"',
+                                         "sh", str(outside)], b"outside-before\n"),
+                    ("descendant-write", ["/bin/sh", "-c", '/bin/sh -c "$1" sh "$2"',
+                                          "sh", write, str(outside)], b"outside-after\n"),
+                )
+                for operation, argv, expected in operations:
+                    with self.subTest(operation=operation):
+                        outside.write_bytes(b"outside-before\n")
+                        done = subprocess.run(prefix + argv, cwd=run.project, env=env,
+                                              capture_output=True, timeout=10)
+                        if confined:
+                            self.assertNotEqual(done.returncode, 0, (done.stdout, done.stderr))
+                            self.assertEqual(done.stdout, b"")
+                        else:
+                            self.assertEqual(done.returncode, 0, (done.stdout, done.stderr))
+                            self.assertEqual(done.stdout, expected)
+                        self.assertEqual(outside.read_bytes(), b"outside-before\n" if confined else expected)
+                        self.assertEqual(inside.read_bytes(), b"inside-after\n")
+                        current = run.project.stat()
+                        self.assertEqual((current.st_dev, current.st_ino), (identity.st_dev, identity.st_ino))
+                        self.assertFalse(run.project.is_symlink())
+                outside.write_bytes(b"outside-before\n")
+                displaced = state.paths.config / "displaced-project"
+                replacement = state.paths.config / "replacement-project"
+                replacement.mkdir()
+                (replacement / "inside.txt").write_bytes(b"replacement\n")
+                replacement_identity = replacement.stat()
+                for operation, argv in (
+                    ("unlink-root", ["/bin/mv", str(run.project), str(displaced)]),
+                    ("replace-root", ["/bin/sh", "-c", '/bin/mv "$1" "$2" && /bin/mv "$3" "$1"',
+                                      "sh", str(run.project), str(displaced), str(replacement)]),
+                ):
+                    with self.subTest(operation=operation):
+                        done = subprocess.run(prefix + argv, cwd=state.paths.tmp, env=env,
+                                              capture_output=True, timeout=10)
+                        self.assertEqual(done.stdout, b"")
+                        self.assertEqual(outside.read_bytes(), b"outside-before\n")
+                        if confined:
+                            self.assertNotEqual(done.returncode, 0, (done.stdout, done.stderr))
+                            current = run.project.stat()
+                            self.assertEqual((current.st_dev, current.st_ino), (identity.st_dev, identity.st_ino))
+                            self.assertFalse(run.project.is_symlink())
+                            self.assertEqual(inside.read_bytes(), b"inside-after\n")
+                            self.assertFalse(displaced.exists())
+                        else:
+                            self.assertEqual(done.returncode, 0, (done.stdout, done.stderr))
+                            moved = displaced.stat()
+                            self.assertEqual((moved.st_dev, moved.st_ino), (identity.st_dev, identity.st_ino))
+                            self.assertEqual((displaced / "inside.txt").read_bytes(), b"inside-after\n")
+                            if operation == "unlink-root":
+                                self.assertFalse(run.project.exists())
+                                displaced.rename(run.project)
+                            else:
+                                current = run.project.stat()
+                                self.assertEqual((current.st_dev, current.st_ino),
+                                                 (replacement_identity.st_dev, replacement_identity.st_ino))
+                                self.assertEqual(inside.read_bytes(), b"replacement\n")
+
+
 @unittest.skipUnless((platform.system(), platform.release(), platform.machine(), str(Path.home())) ==
                      ("Darwin", "25.6.0", "arm64", "/Users/msmith1"), "requires the measured Claude runtime")
 class NativeGit(unittest.TestCase):
