@@ -700,7 +700,7 @@ describe("Store", () => {
         const env = { ...process.env, GH_REPO: "unrelated/project" };
         expect(runCli(["--store", storeDirectory, "init"], env).code).toBe(0);
         const result = runCli(
-          ["--store", storeDirectory, "frontier", "set", "--repo", stack.repo],
+          ["--store", storeDirectory, "--json", "frontier", "set", "--repo", stack.repo],
           env
         );
         expect(result).toEqual({
