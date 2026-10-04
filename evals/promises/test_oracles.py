@@ -2091,6 +2091,31 @@ class PythonCwdPerInvocation(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class PythonWritesAreNotReads(unittest.TestCase):
+    def test_an_inline_python_write_is_not_a_rationale_read(self):
+        brief = "Write `rationale.md` in your directory."
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        for n in range(1, 6):
+            events += bash(18 + 2 * n, f"python3 -c \"open('/tmp/c{n}/rationale.md','w').write('x')\"")
+        events += bash(40, "cat /tmp/c1/relay/cache.py")
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+    def test_a_read_through_a_variable_counts_once(self):
+        brief = "Write `rationale.md` in your directory."
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        for n in range(1, 4):
+            events += bash(18 + 2 * n, f'R=/tmp/c{n}/rationale.md; cat "$R"')
+        events += bash(40, "cat /tmp/c1/relay/cache.py")
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 3")
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

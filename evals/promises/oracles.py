@@ -2489,9 +2489,9 @@ def arena_lead_reads(view):
         given = call.get("input") or {}
         if call.get("name") in SHELL_TOOLS:
             command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
-            written = set(shell_writes(command))
+            written = shell_writes(command) + python_writes(command)
             reads += [p for p in resolved_shell_paths(strip_heredocs(command))
-                      if p.strip("\"'") not in written and not ASSIGNMENT.fullmatch(" " + p)]
+                      if not any(w in p for w in written) and not ASSIGNMENT.fullmatch(" " + p)]
         else:
             reads += [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
     named = rationale_pattern(view, candidates)
