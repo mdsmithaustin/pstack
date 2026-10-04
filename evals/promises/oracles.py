@@ -9,6 +9,36 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 HISTORIES = HERE / "histories"
 PASS, FAIL, INCONCLUSIVE = "PASS", "FAIL", "INCONCLUSIVE"
+_IO = None
+
+
+def _read_text(path, encoding="utf-8", errors="strict"):
+    return _IO.read_text(path, encoding, errors) if _IO else path.read_text(encoding=encoding, errors=errors)
+
+
+def _read_bytes(path):
+    return _IO.read_bytes(path) if _IO else path.read_bytes()
+
+
+def _exists(path):
+    return _IO.exists(path) if _IO else path.exists()
+
+
+def _is_file(path):
+    return _IO.exists(path, "file") if _IO else path.is_file()
+
+
+def _is_dir(path):
+    return _IO.exists(path, "dir") if _IO else path.is_dir()
+
+
+def _files(path, pattern, recursive=False):
+    if _IO:
+        if "/" in pattern and not recursive:
+            folder, pattern = pattern.rsplit("/", 1)
+            path = path / folder
+        return _IO.files(path, pattern, recursive)
+    return path.rglob(pattern) if recursive else path.glob(pattern)
 
 PLAYBOOK = re.compile(r"^poteto-mode/playbooks/([a-z0-9-]+)\.md$")
 SKILL_FILE = re.compile(r"^([a-z0-9-]+)/SKILL\.md$")
@@ -149,10 +179,10 @@ def extract_steps(text):
 
 def playbook_shape(name, skills_root):
     path = Path(skills_root) / "poteto-mode" / "playbooks" / f"{name}.md"
-    if not path.is_file():
+    if not _is_file(path):
         return None
     prose, steps = [], []
-    for line in extract_steps(path.read_text(encoding="utf-8")):
+    for line in extract_steps(_read_text(path)):
         match = STEP_LINE.match(line)
         if match:
             steps.append({"n": int(match.group(1)), "text": line[match.end():], "subitems": []})
@@ -169,7 +199,7 @@ def playbook_shape(name, skills_root):
 
 def all_playbooks(skills_root):
     folder = Path(skills_root) / "poteto-mode" / "playbooks"
-    return sorted(p.stem for p in folder.glob("*.md")) if folder.is_dir() else []
+    return sorted(p.stem for p in _files(folder, "*.md")) if _is_dir(folder) else []
 
 
 def item_matches_prose(item_text, shape):
@@ -295,9 +325,11 @@ class View:
         self._answers = self.pair_results()
 
     def find_skills_root(self):
-        if self.project and self.project.is_dir():
+        if _IO:
+            return _IO.skills
+        if self.project and _is_dir(self.project):
             for sub in (".claude/skills", ".agents/skills", ".hermes/skills", ".grok/skills", "skills"):
-                if (self.project / sub / "poteto-mode" / "SKILL.md").is_file():
+                if _is_file(self.project / sub / "poteto-mode" / "SKILL.md"):
                     return self.project / sub
         return ROOT / "skills"
 
@@ -630,7 +662,7 @@ class View:
         return out
 
     def git(self, *args):
-        if not self.project or not (self.project / ".git").exists():
+        if not self.project or not _exists(self.project / ".git"):
             return None
         return self.git_in(self.project, *args)
 
@@ -645,7 +677,7 @@ class View:
         return [l for l in out.splitlines() if not l[3:].startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(l[3:])]
 
     def git_in(self, path, *args):
-        proc = subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True)
+        proc = _IO.git(path, args) if _IO else subprocess.run(["git", "-C", str(path), *args], capture_output=True, text=True)
         return proc.stdout if proc.returncode == 0 else None
 
     def base_commits(self):
@@ -687,7 +719,8 @@ class View:
 
     def worktrees(self):
         out = self.git("worktree", "list", "--porcelain")
-        return re.findall(r"^worktree (.+)$", out or "", re.M)
+        paths = re.findall(r"^worktree (.+)$", out or "", re.M)
+        return _IO.worktrees(paths) if _IO else paths
 
 
 def strip_heredocs(command):
@@ -827,9 +860,9 @@ def python_writes(command):
 
 def history_steps(name):
     path = HISTORIES / name / "steps.json"
-    if not path.is_file():
+    if not _is_file(path):
         return []
-    return json.loads(path.read_text(encoding="utf-8")).get("steps", [])
+    return json.loads(_read_text(path)).get("steps", [])
 
 
 def history_subjects(name):
@@ -1371,7 +1404,7 @@ def persona_delivery(view):
 
 
 def principle_index(skills_root):
-    text = (Path(skills_root) / "poteto-mode" / "SKILL.md").read_text(encoding="utf-8")
+    text = _read_text(Path(skills_root) / "poteto-mode" / "SKILL.md")
     return re.findall(r"\*\*([^*]+)\*\* \(\*\*(principle-[a-z-]+)\*\*\)", text)
 
 
@@ -1421,7 +1454,7 @@ def principle_steers(view):
                          and re.search(r"\b(delete|remove)\b", view.spawn_text(sp), re.I)
                          and re.search(steer["deletes"].replace("_", "[_ ]?"), view.spawn_text(sp), re.I)]
             acted = acted or bool(delegated) or any(re.search(steer["deletes"], c) and re.search(r"\b(rm|git rm|mv)\b", c) for _, c, _, _ in cmds) \
-                or (view.project is not None and all(not (view.project / p).exists() for p in steer.get("gone", [])) and bool(steer.get("gone")))
+                or (view.project is not None and all(not _exists(view.project / p) for p in steer.get("gone", [])) and bool(steer.get("gone")))
         evidence.append(f"turn {turn}: leaf read {read}, acted {acted}, commands {len(cmds)}, edits {len(edits)}")
         if not read:
             failures.append(f"turn {turn}: {slug}/SKILL.md not read")
@@ -1841,7 +1874,7 @@ def added_since_base(view):
             changes[path] = changes.get(path, "") + line[1:] + "\n"
     for rel in (view.git("ls-files", "--others", "--exclude-standard") or "").split():
         try:
-            changes[rel] = (view.project / rel).read_text(encoding="utf-8", errors="replace")
+            changes[rel] = _read_text(view.project / rel, errors="replace")
         except OSError:
             pass
     return changes
@@ -1873,8 +1906,8 @@ def comment_sicko(view):
     expect = view.case.get("expect") or {}
     offer = bool(ENCODING_OFFER.search(view.final_reply))
     evidence.append(f"encoding offer in reply: {offer}")
-    if view.project and view.project.is_dir():
-        texts = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in view.project.rglob("*.py") if ".agents" not in p.parts and ".claude" not in p.parts)
+    if view.project and _is_dir(view.project):
+        texts = "\n".join(_read_text(p, errors="replace") for p in _files(view.project, "*.py", recursive=True) if ".agents" not in p.parts and ".claude" not in p.parts)
         gone = [c for c in expect.get("gone", []) if c in texts]
         survived = [c for c in expect.get("kept", []) if c in texts]
         changes = added_since_base(view) or {}
@@ -1904,28 +1937,28 @@ def deslop_cleans(view):
     expect = view.case.get("expect") or {}
     loaded = "deslop/SKILL.md" in view.lead_reads()
     evidence = [f"deslop skill read by the lead: {loaded}"]
-    if not (view.project and view.project.is_dir()):
+    if not (view.project and _is_dir(view.project)):
         return inconclusive("no project to inspect; this pass is graded on the tree, not the reply", *evidence)
     if view.killed and not view.edits():
         return inconclusive("run killed before any edit", *evidence)
     base = view.base_shas()
     if not base:
         return inconclusive("project has no git history to diff against", *evidence)
-    texts = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in view.project.rglob("*.py")
+    texts = "\n".join(_read_text(p, errors="replace") for p in _files(view.project, "*.py", recursive=True)
                       if not str(p.relative_to(view.project)).startswith(PRIVATE_PREFIXES))
     survived = [c for c in expect.get("gone", []) if c in texts]
     missing = [f"{rel}: {c}" for rel, wanted in expect.get("kept", {}).items() for c in wanted
-               if not (view.project / rel).is_file() or c not in (view.project / rel).read_text(encoding="utf-8", errors="replace")]
+               if not _is_file(view.project / rel) or c not in _read_text(view.project / rel, errors="replace")]
     churn = [rel for rel, want in expect.get("expected", {}).items()
-             if not (view.project / rel).is_file()
-             or (view.project / rel).read_bytes() != (HERE / "cases" / view.case["id"] / want).read_bytes()]
+             if not _is_file(view.project / rel)
+             or _read_bytes(view.project / rel) != _read_bytes(HERE / "cases" / view.case["id"] / want)]
     planted = {rel for rel in (view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()
                if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
     added = sorted(project_files(view) - planted)
-    deleted = sorted(rel for rel in planted if not (view.project / rel).exists())
+    deleted = sorted(rel for rel in planted if not _exists(view.project / rel))
     allowed = set(expect.get("editable", [])) | set(expect.get("expected", {}))
     changed = sorted(rel for rel in planted - allowed
-                     if (view.project / rel).is_file() and (view.project / rel).read_bytes() != pre_turn_bytes(view, base, rel))
+                     if _is_file(view.project / rel) and _read_bytes(view.project / rel) != pre_turn_bytes(view, base, rel))
     broken = [problem for problem in map(lambda c: check_problem(view.project, c), expect.get("checks", [])) if problem]
     evidence += [f"planted slop still present: {survived}", f"branch work missing: {missing}", f"files off their expected result: {churn}",
                  f"files added: {added}", f"files deleted: {deleted}", f"files outside the cleanup changed: {changed}", f"checks run: {len(expect.get('checks', []))}, failing: {len(broken)}"]
@@ -1952,15 +1985,18 @@ def pre_turn_bytes(view, base, rel):
         if step.get("commit", True):
             break
         source = HISTORIES / history / step["dir"] / rel
-        if source.is_file():
-            return source.read_bytes()
+        if _is_file(source):
+            return _read_bytes(source)
+    if _IO:
+        return _IO.git(view.project, ("show", f"{base[-1]}:{rel}"), text=False).stdout
     return subprocess.run(["git", "-C", str(view.project), "show", f"{base[-1]}:{rel}"], capture_output=True).stdout
 
 
 def check_problem(project, check):
     timeout = check.get("timeout_s", 120)
     try:
-        run = subprocess.run(shlex.split(check["cmd"]), cwd=project, capture_output=True, text=True, timeout=timeout)
+        run = (_IO.check(project, check["cmd"], timeout) if _IO else
+               subprocess.run(shlex.split(check["cmd"]), cwd=project, capture_output=True, text=True, timeout=timeout))
     except subprocess.TimeoutExpired:
         return f"{check['cmd']} timed out after {timeout}s"
     if run.returncode != 0:
@@ -1978,9 +2014,9 @@ def need_turns(view):
 
 def playbook_titles(skills_root):
     path = Path(skills_root) / "poteto-mode" / "SKILL.md"
-    if not path.is_file():
+    if not _is_file(path):
         return {}
-    found = (PLAYBOOK_ENTRY.match(line) for line in path.read_text(encoding="utf-8").splitlines())
+    found = (PLAYBOOK_ENTRY.match(line) for line in _read_text(path).splitlines())
     return {m.group(1).lower(): m.group(2) for m in found if m}
 
 
@@ -2061,9 +2097,9 @@ def overnight_route(view):
         return result
     log_writes = [e for e in view.edits() if e[2] == "log"] + [c for c in view.commands() if re.search(r"decisions\.tsv|\.audit/", c[1])]
     on_disk = []
-    if view.project and view.project.is_dir():
+    if view.project and _is_dir(view.project):
         for root in [view.project] + [Path(w) for w in view.worktrees() or []]:
-            on_disk += [str(p) for p in Path(root).glob("decisions.tsv")] + [str(p) for p in Path(root).glob(".audit/*.tsv")]
+            on_disk += [str(p) for p in _files(Path(root), "decisions.tsv")] + [str(p) for p in _files(Path(root), ".audit/*.tsv")]
     evidence = [*result["evidence"], f"decision log writes: {len(log_writes)}", f"logs on disk: {on_disk[:3]}"]
     if log_writes or on_disk:
         return passed(*evidence)
@@ -2238,7 +2274,7 @@ def unslop_target(view):
     only = set((view.case.get("expect") or {}).get("only") or ["README.md"])
     stray = sorted(changed - only)
     readme = view.project / "README.md"
-    dashes = readme.read_text(encoding="utf-8").count("—") if readme.is_file() else None
+    dashes = _read_text(readme).count("—") if _is_file(readme) else None
     evidence = [f"files changed since the fixture: {sorted(changed)}", f"em dashes left in README: {dashes}"]
     if not changed:
         return inconclusive("nothing changed" + (" (run killed)" if view.killed else ""), *evidence)
