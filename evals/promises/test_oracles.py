@@ -2182,6 +2182,25 @@ class RationaleReadPaths(unittest.TestCase):
         self.assertEqual(writes["verdict"], FAIL, writes)
 
 
+class RoleEvidence(unittest.TestCase):
+    def sealed(self, seq, reply, task="t", model="gpt-6.1-sol"):
+        return {"seq": seq, "tool": "spawn_agent", "model": model, "prompt_head": None, "x_prompt_encrypted": True, "x_child_first_reply": reply, "task_name": task}
+
+    def test_f3_a_first_reply_that_cites_the_architect_design_is_not_a_runner(self):
+        spawns = [self.sealed(10, "I'll implement the change following the architect design."), self.sealed(10, "I'll write tests following the architect design.")]
+        events = [{"seq": 10, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": "t"}}]
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=spawns, harness="codex", final_reply="done"),
+                       load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_f7_a_candidate_that_mentions_the_rubric_is_not_a_judge(self):
+        spawns = [self.sealed(10 + n, "I'll design to the rubric and score my own approach.") for n in range(5)]
+        events = [{"seq": s["seq"], "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": "t"}} for s in spawns]
+        result = grade("arena-candidate-count-adjustable", minimal(events=events, spawns=spawns, harness="codex"), load_case("arena-run"))
+        self.assertIn("candidate spawns: 5 (wanted 5)", result["evidence"])
+        self.assertIn("judge spawns: 0", result["evidence"])
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

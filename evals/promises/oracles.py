@@ -542,11 +542,11 @@ class View:
                 hits.append(text.strip()[-200:])
         return hits
 
-    def spawn_text(self, spawn):
+    def spawn_text(self, spawn, reply=True):
         call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
         given = (call or {}).get("input") or {}
         extra = [str(given.get(k) or "") for k in ("description", "task_name", "name")] if isinstance(given, dict) else []
-        reply = str(spawn.get("x_child_first_reply") or "")[:REPLY_HEAD]
+        reply = str(spawn.get("x_child_first_reply") or "")[:REPLY_HEAD] if reply else ""
         return " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra + [reply]).lower()
 
     def spawn_brief(self, spawn):
@@ -563,10 +563,10 @@ class View:
         brief = brief.replace("\\n", "\n")
         return bool(READ_ONLY_BRIEF.search(brief)) and not EDIT_ORDER.search(brief)
 
-    def spawns_where(self, *needles, turn=None):
+    def spawns_where(self, *needles, turn=None, reply=True):
         pattern = re.compile("|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles))
         return [s for s in self.spawns
-                if (turn is None or self.turn_of(s.get("seq")) == turn) and pattern.search(self.spawn_text(s))]
+                if (turn is None or self.turn_of(s.get("seq")) == turn) and pattern.search(self.spawn_text(s, reply))]
 
     def supports(self, spawn):
         text = self.spawn_text(spawn)
@@ -2364,11 +2364,11 @@ def doc_impact_modes(view):
 
 
 def candidate_spawns(view):
-    return [s for s in view.spawns if not re.search(r"judge|cross-judge|score|rubric", view.spawn_text(s))]
+    return [s for s in view.spawns if not re.search(r"judge|cross-judge|score|rubric", view.spawn_text(s, reply=False))]
 
 
 def judge_spawns(view):
-    return [s for s in view.spawns if re.search(r"judge|cross-judge|rubric", view.spawn_text(s))]
+    return [s for s in view.spawns if re.search(r"judge|cross-judge|rubric", view.spawn_text(s, reply=False))]
 
 
 @oracle("arena-candidate-count-adjustable")
@@ -2536,7 +2536,7 @@ def runner_spawns(view):
     needles = ["runner", "candidate design", "design candidate", "architect", "design sketch", "design package"]
     if view.skill_read("arena") or view.skill_read("architect"):
         needles.append("candidate")
-    return [s for s in view.spawns_where(*needles) if not view.supports(s)]
+    return [s for s in view.spawns_where(*needles, reply=False) if not view.supports(s)]
 
 
 @oracle("architect-grounds-with-how-and-why")
