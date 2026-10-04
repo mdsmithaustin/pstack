@@ -781,24 +781,17 @@ PYTHON_BOUND_WRITE = re.compile(r"(\w+)\.(?:write_text|write_bytes)\(")
 PYTHON_OPEN_WRITE = re.compile(r"\bopen\(\s*(['\"])([^'\"\n]+)\1\s*,\s*(['\"])([^'\"\n]*)\3")
 
 
-def python_sources(command):
-    sources = [body for header, body in heredoc_bodies(command) if PYTHON_HEADER.search(header)]
-    rest = strip_heredocs(command)
-    return sources + ([rest] if PYTHON_HEADER.search(rest) else [])
-
-
-def python_base(command):
-    base = ""
-    for segment, _ in shell_segments(strip_heredocs(command)):
-        if PYTHON_HEADER.search(segment):
-            return base
-        base = cd_into(segment, base) or base
-    return base
-
-
 def python_writes(command):
-    out, base = [], python_base(command)
-    for source in python_sources(command):
+    out, base, bodies = [], "", [body for _, body in heredoc_bodies(command)]
+    for segment, _ in shell_segments(strip_heredocs(command)):
+        moved = cd_into(segment, base)
+        if moved is not None:
+            base = moved
+            continue
+        body = bodies.pop(0) if HEREDOC.search(segment) and bodies else None
+        if not PYTHON_HEADER.search(segment):
+            continue
+        source = segment if body is None else body
         found = [(m.start(), m.group(2)) for m in PYTHON_DIRECT_WRITE.finditer(source)]
         bound = {m.group(1): m.group(3) for m in PYTHON_BOUND_PATH.finditer(source)}
         found += [(m.start(), bound[m.group(1)]) for m in PYTHON_BOUND_WRITE.finditer(source) if m.group(1) in bound]
