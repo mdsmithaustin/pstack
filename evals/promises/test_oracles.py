@@ -1667,6 +1667,30 @@ class ProjectRelativePaths(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class SteerRevert(unittest.TestCase):
+    def steer(self, keep_change):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/export.py": "start = 0\n", "tests/test_export.py": "x = 0\n"})
+        if keep_change:
+            (project / "rollup" / "export.py").write_text("start = 1\n")
+        patch = "*** Begin Patch\n*** Update File: rollup/export.py\n@@\n-    start = 0\n*** End Patch"
+        events = (in_turn(0, [{"seq": 0, "kind": "user", "text": "repro first."}, edit(10, f"{project}/rollup/export.py"), text(117, "Fixed.")])
+                  + in_turn(1, [{"seq": 118, "kind": "user", "text": "i said the goal is to repro. i did not ask for a fix yet."},
+                                {"seq": 121, "kind": "tool_call", "name": "patch", "input": {"mode": "patch", "patch": patch}},
+                                {"seq": 122, "kind": "tool_result", "name": "patch", "ok": True, "output_head": "{\"success\": true}"},
+                                text(127, "I reverted the fix and regression test. The working tree is clean.")]))
+        return grade("steering-prompt-redirects-run", minimal(events=events, harness="hermes"), load_case("steer-repro-run"), project)
+
+    def test_a_revert_to_the_fixture_is_the_redirect(self):
+        result = self.steer(keep_change=False)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_an_edit_that_leaves_source_changed_still_fails(self):
+        result = self.steer(keep_change=True)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

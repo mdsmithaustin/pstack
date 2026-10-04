@@ -490,13 +490,17 @@ class View:
             return True
         return Path(path).resolve().is_relative_to(self.project.resolve())
 
+    def project_rel(self, path):
+        if self.project and path.startswith("/") and self.inside_project(path):
+            return str(Path(path).resolve().relative_to(self.project.resolve()))
+        return path
+
     def classify(self, path):
         path = path.strip("\"'")
         if CACHE_PATH.search(path):
             return "scratch"
-        rel, inside = path, False
-        if self.project and path.startswith("/") and self.inside_project(path):
-            rel, inside = str(Path(path).resolve().relative_to(self.project.resolve())), True
+        rel = self.project_rel(path)
+        inside = rel != path
         if rel.startswith(PRIVATE_PREFIXES) or "/skills/" in path:
             return "private"
         if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) \
@@ -1405,6 +1409,9 @@ def steering_redirects(view):
         return inconclusive("multi-turn case but the trace carries no turn markers (core change: stamp events with `turn`)")
     turn = len(turns) - 1
     edits = view.source_edits(turn)
+    kept = view.changed_since_base()
+    if kept is not None:
+        edits = [e for e in edits if view.project_rel(e[1].strip("\"'")) in kept]
     reply = view.reply_of_turn(turn)
     evidence = [f"source edits after the correction: {[e[1] for e in edits][:4]}", f"reply head: {reply[:160]!r}"]
     if edits:
