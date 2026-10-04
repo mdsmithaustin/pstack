@@ -494,12 +494,13 @@ class View:
         path = path.strip("\"'")
         if CACHE_PATH.search(path):
             return "scratch"
-        rel = path
-        if self.project and path.startswith(str(self.project)):
-            rel = path[len(str(self.project)):].lstrip("/")
+        rel, inside = path, False
+        if self.project and path.startswith("/") and self.inside_project(path):
+            rel, inside = str(Path(path).resolve().relative_to(self.project.resolve())), True
         if rel.startswith(PRIVATE_PREFIXES) or "/skills/" in path:
             return "private"
-        if path.startswith(SCRATCH_PREFIXES + ("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) or rel.startswith(("tmp/", "scratch", "repro", "verify", "baseline")):
+        if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) \
+                or rel.startswith(("tmp/", "scratch", "repro", "verify", "baseline")):
             return "scratch"
         if any(tag in rel for tag in LOG_NAMES):
             return "log"
@@ -724,18 +725,34 @@ def is_write_target(target):
     return "$" not in target and not re.fullmatch(r"\{\}[+;\\]*", target)
 
 
+def cd_into(segment, base):
+    words = segment.strip().split()
+    if words[:1] != ["cd"] or len(words) < 2:
+        return None
+    target = words[1].strip("\"'")
+    return target if target.startswith("/") or not base else f"{base}/{target}"
+
+
+def under(base, target):
+    return target if not base or target.startswith(("/", "$", "~")) else f"{base}/{target}"
+
+
 def shell_writes(command):
-    out = []
+    out, base = [], ""
     for segment, masked in shell_segments(strip_heredocs(command)):
+        moved = cd_into(segment, base)
+        if moved is not None:
+            base = moved
+            continue
         found = [m for pattern in (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
-                                   r"\bsed\s+-i[^\s]*\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
+                                   r"\bsed\s+-i[^\s]*(?:\s+(?:''|\"\"))?\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
                                    r"\b(?:rm|git rm)\s+(?:-\w+\s+)*([^\s;&|]+)",
                                    r"\bmv\s+(?:-\w+\s+)*\S+\s+([^\s;&|]+)")
                  for m in re.finditer(pattern, masked)]
         for match in found:
             target = segment[match.start(1):match.end(1)].strip("\"'")
             if is_write_target(target):
-                out.append(target)
+                out.append(under(base, target))
     return out
 
 
@@ -752,14 +769,23 @@ def python_sources(command):
     return sources + ([rest] if PYTHON_HEADER.search(rest) else [])
 
 
+def python_base(command):
+    base = ""
+    for segment, _ in shell_segments(strip_heredocs(command)):
+        if PYTHON_HEADER.search(segment):
+            return base
+        base = cd_into(segment, base) or base
+    return base
+
+
 def python_writes(command):
-    out = []
+    out, base = [], python_base(command)
     for source in python_sources(command):
         found = [(m.start(), m.group(2)) for m in PYTHON_DIRECT_WRITE.finditer(source)]
         bound = {m.group(1): m.group(3) for m in PYTHON_BOUND_PATH.finditer(source)}
         found += [(m.start(), bound[m.group(1)]) for m in PYTHON_BOUND_WRITE.finditer(source) if m.group(1) in bound]
         found += [(m.start(), m.group(2)) for m in PYTHON_OPEN_WRITE.finditer(source) if re.search(r"[wax]", m.group(4))]
-        out += [path for _, path in sorted(found)]
+        out += [under(base, path) for _, path in sorted(found)]
     return out
 
 
@@ -2106,6 +2132,12 @@ def attention_section(view):
     return passed(*evidence) if reviewed else failed("Attention section lacks the `reviewed by <model>@<effort>` line", *evidence)
 
 
+def runs_after_write(command, path):
+    command = strip_heredocs(command)
+    written, run = command.find(Path(path).name), re.search(r"unittest|pytest|npm test|node .*test", command)
+    return written >= 0 and run is not None and written < run.start()
+
+
 @oracle("poteto-tdd-failing-test-first")
 def tdd_first(view):
     tests = [e for e in view.edits() if e[2] == "test"]
@@ -2113,8 +2145,9 @@ def tdd_first(view):
     runs = [(seq, c, ok, head) for seq, c, ok, head in view.commands() if re.search(r"unittest|pytest|test_|npm test|node .*test", c)]
     failing = [r for r in runs if r[2] is False or re.search(r"\bFAIL|Error|failures=\d*[1-9]|✗|not ok", r[3])]
     green = [r for r in runs if r[2] is not False and re.search(r"\bOK\b|passed|ok\b", r[3]) and not re.search(r"FAIL|Error", r[3])]
+    after_fix = [g for g in green if sources and (g[0] > sources[0][0] or (g[0] == sources[0][0] and runs_after_write(g[1], sources[0][1])))]
     evidence = [f"test edits: {[e[1] for e in tests][:2]}", f"source edits: {[e[1] for e in sources][:2]}",
-                f"failing runs: {len(failing)}, green runs after a source edit: {len([g for g in green if sources and g[0] > sources[0][0]])}"]
+                f"failing runs: {len(failing)}, green runs after a source edit: {len(after_fix)}"]
     if not tests:
         if view.spawns and not sources:
             return inconclusive("work delegated; the delegate's test-first order is not visible", *evidence)
@@ -2125,7 +2158,7 @@ def tdd_first(view):
         return failed("source edited before the test", *evidence)
     if not any(f[0] > tests[0][0] and f[0] < sources[0][0] for f in failing):
         return failed("no failing run between writing the test and the fix", *evidence)
-    if not any(g[0] > sources[0][0] for g in green):
+    if not after_fix:
         return inconclusive("failing test first and fix on top, but no green rerun visible", *evidence)
     return passed(*evidence)
 
@@ -2500,10 +2533,11 @@ def architect_sketch_first(view):
 @oracle("architect-checkpoint-opt-in")
 def architect_checkpoint(view):
     sources = view.source_edits()
+    tree = sorted(p for p in view.changed_since_base() or () if view.classify(p) == "source")
     low = view.final_reply.lower()
     pause = bool(re.search(r"sign-off|approve|before implementing|proceed\?|shall i implement|waiting", low))
-    evidence = [f"source edits: {[e[1] for e in sources][:3]}", f"reply pauses for sign-off: {pause}"]
-    if sources:
+    evidence = [f"source edits: {[e[1] for e in sources][:3]}", f"project source changed since the fixture: {tree[:3]}", f"reply pauses for sign-off: {pause}"]
+    if sources or tree:
         return failed("checkpoint requested but implementation started", *evidence)
     if not view.final_reply:
         return inconclusive("no final reply" + (" (run killed)" if view.killed else ""), *evidence)

@@ -1619,6 +1619,54 @@ class AuthorResultInWorkRecord(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class ProjectRelativePaths(unittest.TestCase):
+    def project(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return make_repo(tmp.name, 1, {"relay/feed.py": "x = 0\n", "README.md": "relay\n"})
+
+    def test_a_test_file_inside_a_project_under_tmp_is_a_test(self):
+        project = self.project()
+        view = oracles.View(minimal(), load_case("tdd-run"), project)
+        self.assertEqual(view.classify(f"{project}/tests/test_main.py"), "test")
+        self.assertEqual(view.classify("/private/tmp/elsewhere/tests/test_main.py"), "scratch")
+
+    def test_a_green_run_in_the_same_command_after_the_fix_counts(self):
+        project = self.project()
+        fix_and_run = "cat > rollup/__main__.py <<'EOF'\nimport argparse\nEOF\npython3 -m unittest discover -s tests -v 2>&1 | tail -8"
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main 2>&1 | tail -25", head="FAIL: test_limit_exports_only_first_n_rows\nFAILED (failures=2)")
+                  + bash(13, fix_and_run, head="test_limit ... ok\nRan 3 tests\n\nOK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_test_run_before_the_write_in_one_command_is_not_the_green_rerun(self):
+        project = self.project()
+        run_then_fix = "python3 -m unittest discover -s tests 2>&1 | tail -3; cat > rollup/__main__.py <<'EOF'\nimport argparse\nEOF"
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main", head="FAIL: test_limit\nFAILED (failures=1)")
+                  + bash(13, run_then_fix, head="Ran 3 tests\n\nOK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_writes_after_cd_into_a_scratch_sketch_are_not_project_edits(self):
+        project = self.project()
+        sketch = f"{project.parent}/tmp/arena-relay/synthesis/sketch"
+        events = (bash(54, f"cd {sketch}/relay && python3 - <<'EOF'\nimport pathlib\np = pathlib.Path(\"_formats.py\"); s = p.read_text()\np.write_text(s)\nEOF")
+                  + bash(56, f"cd {sketch} && sed -i '' \"s/start with a dot/not . or ../\" README.md && grep -n name README.md")
+                  + bash(58, f"cd {sketch} && python3 - <<'EOF'\nimport pathlib\npathlib.Path(\"relay/summarize.py\").write_text(\"x\")\nEOF")
+                  + bash(68, "git status --short && echo clean", head="clean"))
+        reply = "I've stopped before implementing anything. git status is clean again. Approve the design and I'll implement it."
+        result = grade("architect-checkpoint-opt-in", minimal(events=events, final_reply=reply), load_case("architect-checkpoint-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_project_source_edit_still_breaks_the_checkpoint(self):
+        project = self.project()
+        events = bash(54, f"cd {project} && sed -i '' \"s/x = 0/x = 1/\" relay/feed.py")
+        result = grade("architect-checkpoint-opt-in", minimal(events=events, final_reply="Approve the design?"), load_case("architect-checkpoint-run"), project)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
