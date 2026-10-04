@@ -312,6 +312,8 @@ class AcquisitionReplayControls(_OwnerFixture):
         self.note = str(self.project / "note.txt")
         (self.project / "note.txt").write_text("first note")
         db = HermesDatabase(hermes.profile(self.run) / "state.db")
+        db.con.execute("pragma journal_mode=wal")
+        db.con.execute("pragma wal_autocheckpoint=0")
         db.session("root")
         db.session("kid", parent="root", started=1, model="child-model")
         db.con.execute("update sessions set cwd=?", (str(self.project),))
@@ -384,15 +386,22 @@ class AcquisitionReplayControls(_OwnerFixture):
         self.assert_first(self.first)
         actual = hermes.build_trace(self.replay(self.first["x_acquisition"]).read())
         self.assert_first(actual)
+        changed = {"x_acquisition", "x_provenance", "transcript_paths"}
+        self.assertEqual({k: v for k, v in actual.items() if k not in changed},
+                         {k: v for k, v in self.first.items() if k not in changed})
 
     def test_actual_entry_skill_survives_prepared_case_and_public_record_mutation(self):
         self.database()
         captured = self.owner.read()
+        metadata = self.custody.thaw(captured.meta)
+        metadata["cli_version"] = "poison"
+        metadata["preloads"]["how"]["loaded"].clear()
         self.run.case["entry"] = "why"
         self.run.case["turns"] = ["/why poisoned", "/why wrong plan"]
         self.run.turns[0]["hermes_argv"].append("poison")
         self.assertEqual(hermes.harvest(self.run)["x_turn_entries"], [{"turn": 0, "skill": "how", "entry": "injected"}])
         self.assertEqual(hermes.build_trace(captured)["x_turn_entries"], [{"turn": 0, "skill": "how", "entry": "injected"}])
+        self.assertEqual(hermes.build_trace(captured)["cli_version"], "Hermes fixture 1")
 
     def test_later_acquisition_uses_actual_second_skill_and_second_user_boundary(self):
         self.temporal_pair()
@@ -407,6 +416,314 @@ class AcquisitionReplayControls(_OwnerFixture):
         self.assertEqual(actual["files_read"], [])
         self.assertEqual(actual["x_path_evidence"][0]["kind"], "directory")
         self.assertEqual(actual["final_reply"], "second reply")
+
+    def test_reexport_preserves_all_attempts_turns_and_bytes_including_wal_and_grade(self):
+        import shutil
+        self.temporal_pair()
+        before = {str(p.relative_to(self.moved)): p.read_bytes() for p in self.moved.rglob("*") if p.is_file()}
+        self.assertIn(f'hermes-evidence/acquisitions/{self.first["x_acquisition"]}/raw/state.db-wal', before)
+        self.assertIn(f'hermes-evidence/acquisitions/{self.first["x_acquisition"]}/raw/state.db-shm', before)
+        replay = self.replay(self.first["x_acquisition"])
+        first_offline = hermes.build_trace(replay.read())
+        self.assert_first(first_offline)
+        pair = replay.retain_pair(self.custody.OwnedExport(self.base / "reexport"))
+        after = {str(p.relative_to(pair.root)): p.read_bytes() for p in pair.root.rglob("*") if p.is_file()}
+        for member, data in before.items():
+            if member in ("pair.json", "hermes-evidence/binding.json"):
+                prefix = "hermes-evidence/imported-pair-" if member == "pair.json" else "hermes-evidence/imported-binding-"
+                self.assertIn(data, [value for name, value in after.items() if name.startswith(prefix)])
+            else:
+                self.assertEqual(after[member], data, member)
+        self.assertEqual({str(p.relative_to(self.moved)): p.read_bytes() for p in self.moved.rglob("*") if p.is_file()}, before)
+        manifest = json.loads(after["pair.json"])
+        self.assertEqual(manifest["acquisitions"], [self.first["x_acquisition"], self.second["x_acquisition"],
+            self.third["x_acquisition"], first_offline["x_acquisition"]])
+        self.assertEqual(manifest["turn_members"], ["turn-0000.json", "turn-0001.json"])
+        relocated = self.base / "reexport-moved"
+        shutil.copytree(pair.root, relocated)
+        self.moved.rename(self.base / "preserved-moved")
+        pair.root.rename(self.base / "preserved-reexport")
+        for acquisition in (self.first["x_acquisition"], first_offline["x_acquisition"]):
+            self.assert_first(hermes.build_trace(self.replay(acquisition, relocated).read()))
+        failed = hermes.build_trace(self.replay(self.third["x_acquisition"], relocated).read())
+        self.assertIn("pair-incomplete", failed["x_harvest_error"])
+        self.assertIn("missing-state", failed["x_harvest_error"])
+
+    def test_none_positions_duplicate_skills_and_conflicting_override(self):
+        self.database()
+        self.run.turns.append(hermes.turn(self.run, "ordinary second", 1))
+        self.run.turns.append(hermes.turn(self.run, "/how repeated", 2))
+        evidence = self.owner.read()
+        self.assertEqual(evidence.entry_skills, ("how", None, "how"))
+        expected = [{"turn": 0, "skill": "how", "entry": "injected"}, {"turn": 2, "skill": "how", "entry": "injected"}]
+        self.assertEqual(hermes.build_trace(evidence)["x_turn_entries"], expected)
+        with self.assertRaisesRegex(ValueError, "entry skills disagree"):
+            hermes.build_trace(evidence, ("why",))
+        self.assertEqual(hermes.build_trace(evidence, ("how", None, "how"))["x_turn_entries"], expected)
+
+    def recatalog(self, pair):
+        import hashlib
+        manifest = json.loads((pair / "pair.json").read_text())
+        for member in manifest["members"]:
+            data = (pair / member).read_bytes()
+            manifest["members"][member] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        (pair / "pair.json").write_text(json.dumps(manifest))
+
+    def test_semantic_corruption_of_selected_and_unselected_contexts_refuses(self):
+        import hashlib
+        import shutil
+        self.temporal_pair()
+        mutations = {
+            "run": lambda c: c.update(run_id="other-run"),
+            "acquisition": lambda c: c.update(acquisition_id="other-attempt"),
+            "future-prefix": lambda c: c["turns"].append(second_context["turns"][1]),
+            "reordered-prefix": lambda c: c["turns"].reverse(),
+            "duplicate-index": lambda c: c["turns"][1].update(index=0),
+            "entry": lambda c: c["turns"][0]["record"].update(entry_skill="why"),
+            "inventory-kind": lambda c: c["inventory"]["entries"][0].update(kind="invented"),
+            "inventory-duplicate": lambda c: c["inventory"]["entries"].append(c["inventory"]["entries"][0]),
+            "inventory-ancestor": lambda c: c["inventory"]["entries"].append({"components": ["missing", "child"], "kind": "regular"}),
+            "absent-inventory": lambda c: c.update(inventory={"kind": "not-observed"}),
+            "metadata": lambda c: c["meta"].update(cli_version="invented"),
+            "writer": lambda c: c["writers"][0].update(name="invented"),
+            "context-version": lambda c: c.update(schema_version=9),
+            "source": lambda c: c.update(observation={"kind": "replay-of", "acquisition_id": self.third["x_acquisition"]}),
+        }
+        first_id, second_id = self.first["x_acquisition"], self.second["x_acquisition"]
+        second_context = json.loads((self.moved / f"hermes-evidence/acquisitions/{second_id}/context.json").read_text())
+        for name, mutate in mutations.items():
+            with self.subTest(mutation=name):
+                pair = self.base / ("corrupt-" + name)
+                shutil.copytree(self.moved, pair)
+                target = second_id if name in ("reordered-prefix", "duplicate-index") else first_id
+                context_path = pair / f"hermes-evidence/acquisitions/{target}/context.json"
+                context = json.loads(context_path.read_text())
+                mutate(context)
+                context_path.write_text(json.dumps(context))
+                result_path = context_path.with_name("result.json")
+                result = json.loads(result_path.read_text())
+                result["context"]["sha256"] = hashlib.sha256(context_path.read_bytes()).hexdigest()
+                result_path.write_text(json.dumps(result))
+                self.recatalog(pair)
+                for selected in (first_id, second_id):
+                    owner = self.replay(selected, pair)
+                    trace = hermes.build_trace(owner.read())
+                    self.assertIn("pair-incomplete", trace["x_harvest_error"])
+                    self.assertEqual(trace["events"], [])
+                    with self.assertRaises(self.custody.RetentionUnavailable):
+                        owner.retain_pair(self.custody.OwnedExport(self.base / (name + "-blocked-" + selected)))
+
+    def test_recataloged_result_database_and_preparation_mismatches_refuse(self):
+        import shutil
+        self.temporal_pair()
+        aid = self.first["x_acquisition"]
+        changes = [
+            ("context-digest", f"acquisitions/{aid}/result.json", lambda r: r["context"].update(sha256="0" * 64)),
+            ("result-id", f"acquisitions/{aid}/result.json", lambda r: r.update(id="other")),
+            ("result-run", f"acquisitions/{aid}/result.json", lambda r: r.update(run_id="other")),
+            ("raw-digest", f"acquisitions/{aid}/database.json", lambda r: r["main"].update(sha256="0" * 64)),
+            ("duplicate-source", f"acquisitions/{aid}/result.json", lambda r: r["members"].append(r["members"][0])),
+            ("preparation", "meta.json", lambda r: r.update(cli_version="invented")),
+            ("writer-shape", "writer-0000.json", lambda r: 42),
+        ]
+        for name, member, mutate in changes:
+            with self.subTest(mutation=name):
+                pair = self.base / name
+                shutil.copytree(self.moved, pair)
+                path = pair / "hermes-evidence" / member
+                value = json.loads(path.read_text())
+                replacement = mutate(value)
+                if replacement is not None:
+                    value = replacement
+                path.write_text(json.dumps(value))
+                self.recatalog(pair)
+                trace = hermes.build_trace(self.replay(self.second["x_acquisition"], pair).read())
+                self.assertIn("pair-incomplete", trace["x_harvest_error"])
+
+    def test_unfinished_publication_is_explicit_and_partial_corruption_blocks_export(self):
+        from unittest import mock
+        self.database()
+        save = self.owner._save
+        def fail_result(member, value):
+            if member.endswith("/result.json"):
+                raise OSError("controlled terminal publication failure")
+            save(member, value)
+        with mock.patch.object(self.owner, "_save", fail_result):
+            with self.assertRaises(self.custody.RetentionUnavailable):
+                self.owner.read()
+        aid = self.owner._attempts[-1]
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "unfinished"))
+        self.run_id = pair.run_id
+        trace = hermes.build_trace(self.replay(aid, pair.root).read())
+        self.assertIn("terminal-state-absent", trace["x_harvest_error"])
+        context = self.owner.private_root / f"acquisitions/{aid}/context.json"
+        before = context.read_bytes()
+        context.write_bytes(b'{"partial":')
+        with self.assertRaises(self.custody.RetentionUnavailable):
+            self.owner.retain_pair(self.custody.OwnedExport(self.base / "corrupt-private"))
+        self.assertEqual(context.read_bytes(), b'{"partial":')
+        self.assertEqual((pair.root / f"hermes-evidence/acquisitions/{aid}/context.json").read_bytes(), before)
+
+    def test_historical_decode_failure_and_unbound_v1_success_remain_incomplete_on_reexport(self):
+        import hashlib
+        import oracles
+        import shutil
+        from unittest import mock
+        self.database()
+        success = hermes.harvest(self.run)
+        with mock.patch.object(self.owner, "_decode", side_effect=self.custody.EvidenceRefused("decode-failed", "historical decoder restriction")):
+            failed = hermes.harvest(self.run)
+        self.assertIn("historical decoder restriction", failed["x_harvest_error"])
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "historical"))
+        self.run_id = pair.run_id
+        legacy = self.base / "v1"
+        shutil.copytree(pair.root, legacy)
+        manifest = json.loads((legacy / "pair.json").read_text())
+        manifest["schema_version"] = 1
+        del manifest["contexts"]
+        for aid in manifest["acquisitions"]:
+            member = f"hermes-evidence/acquisitions/{aid}/context.json"
+            (legacy / member).rename(self.base / (aid + "-preserved-context.json"))
+            del manifest["members"][member]
+            result_path = legacy / f"hermes-evidence/acquisitions/{aid}/result.json"
+            result = json.loads(result_path.read_text())
+            del result["run_id"], result["context"]
+            result_path.write_text(json.dumps(result))
+        (legacy / "pair.json").write_text(json.dumps(manifest))
+        self.recatalog(legacy)
+        before = {str(p.relative_to(legacy)): hashlib.sha256(p.read_bytes()).hexdigest() for p in legacy.rglob("*") if p.is_file()}
+        for selected, expected in ((success["x_acquisition"], "context-unavailable"), (failed["x_acquisition"], "decode-failed")):
+            for source in (legacy, pair.root) if selected == failed["x_acquisition"] else (legacy,):
+                with self.subTest(selected=selected, source=source.name):
+                    owner = self.replay(selected, source)
+                    trace = hermes.build_trace(owner.read())
+                    self.assertIn("pair-incomplete", trace["x_harvest_error"])
+                    self.assertIn(expected, trace["x_harvest_error"])
+                    self.assertEqual(trace["events"], [])
+                    for promise in oracles.ORACLES:
+                        self.assertEqual(oracles.check(promise, trace, {}, self.project)["verdict"], "INCONCLUSIVE")
+                    if expected == "decode-failed":
+                        self.assertIn("historical decoder restriction", trace["x_harvest_error"])
+                    exported = owner.retain_pair(self.custody.OwnedExport(self.base / ("reexport-" + source.name + selected)))
+                    again = hermes.build_trace(self.replay(selected, exported.root).read())
+                    self.assertIn(expected, again["x_harvest_error"])
+                    if source == legacy:
+                        rewritten = json.loads((exported.root / "pair.json").read_text())
+                        self.assertEqual(rewritten["contexts"][selected], {"kind": "unbound-v1"})
+                        for member, digest in before.items():
+                            if member not in ("pair.json", "hermes-evidence/binding.json"):
+                                self.assertEqual(hashlib.sha256((exported.root / member).read_bytes()).hexdigest(), digest)
+        self.assertEqual({str(p.relative_to(legacy)): hashlib.sha256(p.read_bytes()).hexdigest() for p in legacy.rglob("*") if p.is_file()}, before)
+
+    def test_missing_unselected_context_or_raw_member_blocks_later_selection(self):
+        import shutil
+        self.temporal_pair()
+        for name in ("context.json", "raw/state.db"):
+            pair = self.base / ("missing-" + name.replace("/", "-"))
+            shutil.copytree(self.moved, pair)
+            member = pair / f'hermes-evidence/acquisitions/{self.first["x_acquisition"]}/{name}'
+            member.rename(self.base / ("preserved-" + name.replace("/", "-")))
+            trace = hermes.build_trace(self.replay(self.second["x_acquisition"], pair).read())
+            self.assertIn("pair-incomplete", trace["x_harvest_error"])
+        self.assert_first(hermes.build_trace(self.replay(self.first["x_acquisition"]).read()))
+
+    def test_historical_refused_prefix_survives_a_later_regular_file(self):
+        from test_hermes import tool_call
+        blocked = self.project / "blocked"
+        blocked.write_text("regular prefix")
+        db = HermesDatabase(hermes.profile(self.run) / "state.db")
+        db.session("root")
+        db.con.execute("update sessions set cwd=?", (str(self.project),))
+        db.message("root", "user", "first")
+        db.message("root", "assistant", calls=[tool_call("refused-1", "terminal", command="cat blocked/../note.txt")])
+        db.message("root", "tool", '{"exit_code":0}', call_id="refused-1", tool_name="terminal")
+        db.message("root", "assistant", "refused reply")
+        db.done()
+        first = hermes.harvest(self.run)
+        blocked.rename(self.base / "preserved-blocked")
+        blocked.mkdir()
+        (self.project / "note.txt").write_text("now reachable")
+        later = hermes.harvest(self.run)
+        self.assertEqual(later["files_read"], [str(self.project / "note.txt")])
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "refused-prefix"))
+        self.run_id = pair.run_id
+        trace = hermes.build_trace(self.replay(first["x_acquisition"], pair.root).read())
+        self.assertEqual(trace["x_harvest_error"], "path-refused: recorded read crosses an unavailable fixture prefix")
+        self.assertEqual(trace["x_path_evidence"], [{"requested": "blocked/../note.txt", "cwd": str(self.project),
+            "spelling": None, "disposition": "unavailable", "reason": "unavailable-prefix", "kind": "unavailable-prefix"}])
+        self.assertEqual(trace["events"][1]["id"], "refused-1")
+        self.assertEqual(trace["final_reply"], "refused reply")
+
+    def test_failed_partial_capture_and_context_absence_retain_available_members(self):
+        from unittest import mock
+        self.database()
+        write = self.owner._write
+        def fail_work(directory, name, data):
+            if directory.path.name == "work" and name == "state.db":
+                raise OSError("controlled work-copy refusal")
+            write(directory, name, data)
+        with mock.patch.object(self.owner, "_write", fail_work):
+            partial = hermes.harvest(self.run)
+        self.assertIn("controlled work-copy refusal", partial["x_harvest_error"])
+        save = self.owner._save
+        def fail_context(member, value):
+            if member.endswith("/context.json"):
+                raise OSError("controlled context publication failure")
+            save(member, value)
+        with mock.patch.object(self.owner, "_save", fail_context):
+            with self.assertRaises(self.custody.RetentionUnavailable):
+                self.owner.read()
+        unfinished = self.owner._attempts[-1]
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "partial"))
+        self.run_id = pair.run_id
+        manifest = json.loads((pair.root / "pair.json").read_text())
+        self.assertEqual(manifest["contexts"][unfinished], {"kind": "unfinished"})
+        self.assertNotIn(f'hermes-evidence/acquisitions/{partial["x_acquisition"]}/database.json', manifest["members"])
+        self.assertIn(f'hermes-evidence/acquisitions/{partial["x_acquisition"]}/raw/state.db', manifest["members"])
+        for selected, expected in ((partial["x_acquisition"], "controlled work-copy refusal"), (unfinished, "terminal-state-absent")):
+            replay = self.replay(selected, pair.root)
+            trace = hermes.build_trace(replay.read())
+            self.assertIn(expected, trace["x_harvest_error"])
+            exported = replay.retain_pair(self.custody.OwnedExport(self.base / ("partial-reexport-" + selected)))
+            again = hermes.build_trace(self.replay(selected, exported.root).read())
+            self.assertIn(expected, again["x_harvest_error"])
+
+    def test_derived_inventory_must_equal_selected_context_even_when_recataloged(self):
+        import hashlib
+        self.temporal_pair()
+        owner = self.replay(self.first["x_acquisition"])
+        actual = hermes.build_trace(owner.read())
+        exported = owner.retain_pair(self.custody.OwnedExport(self.base / "derived"))
+        context_path = exported.root / f'hermes-evidence/acquisitions/{actual["x_acquisition"]}/context.json'
+        context = json.loads(context_path.read_text())
+        context["inventory"]["entries"][0]["kind"] = "directory"
+        context_path.write_text(json.dumps(context))
+        result_path = context_path.with_name("result.json")
+        result = json.loads(result_path.read_text())
+        result["context"]["sha256"] = hashlib.sha256(context_path.read_bytes()).hexdigest()
+        result_path.write_text(json.dumps(result))
+        self.recatalog(exported.root)
+        trace = hermes.build_trace(self.replay(self.first["x_acquisition"], exported.root).read())
+        self.assertIn("derived context differs from selected source", trace["x_harvest_error"])
+
+    def test_duplicate_json_keys_and_noncontiguous_turn_catalog_refuse(self):
+        import shutil
+        self.temporal_pair()
+        duplicate = self.base / "duplicate-json"
+        shutil.copytree(self.moved, duplicate)
+        member = duplicate / f'hermes-evidence/acquisitions/{self.first["x_acquisition"]}/result.json'
+        member.write_text(member.read_text().replace('"reason": null', '"reason": null, "reason": null'))
+        self.recatalog(duplicate)
+        trace = hermes.build_trace(self.replay(self.second["x_acquisition"], duplicate).read())
+        self.assertIn("duplicate JSON key", trace["x_harvest_error"])
+        reordered = self.base / "reordered-turns"
+        shutil.copytree(self.moved, reordered)
+        path = reordered / "pair.json"
+        manifest = json.loads(path.read_text())
+        manifest["turn_members"].reverse()
+        path.write_text(json.dumps(manifest))
+        trace = hermes.build_trace(self.replay(self.second["x_acquisition"], reordered).read())
+        self.assertIn("not contiguous", trace["x_harvest_error"])
 
 
 class NativeFtsControls(_OwnerFixture):
