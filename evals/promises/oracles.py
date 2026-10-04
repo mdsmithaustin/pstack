@@ -1511,7 +1511,9 @@ def how_wide(view):
         if view.killed and not view.spawns:
             return inconclusive("run killed before any spawn", *evidence)
         if view.spawns and all(s.get("x_prompt_encrypted") for s in view.spawns):
-            return inconclusive("every brief is sealed and the spawns do not form a wave then a later spawn, so their roles cannot be read", *evidence)
+            if any(2 <= len(wave) <= 4 for wave in waves[:-1]):
+                return inconclusive("every brief is sealed; a later wave of two to four spawns could be the explorers, but their roles cannot be read", *evidence)
+            return failed("every brief is sealed and no wave of two to four spawns has a later spawn", *evidence)
         return failed("no explorers for a subsystem-scale question", *evidence)
     if not 2 <= len(explorers) <= 4:
         return failed(f"{len(explorers)} explorers; the skill fans out two to four", *evidence)

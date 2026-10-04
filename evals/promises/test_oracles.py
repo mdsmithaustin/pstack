@@ -2128,12 +2128,24 @@ class SealedUnmatchedFanOut(unittest.TestCase):
         events.sort(key=lambda e: e["seq"])
         return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="codex"), load_case("how-wide-run"))
 
-    def test_one_sealed_spawn_is_inconclusive(self):
+    def test_one_sealed_spawn_fails(self):
         result = self.sealed([22], [])
-        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertEqual(result["verdict"], FAIL, result)
 
-    def test_a_sealed_wave_with_no_later_spawn_is_inconclusive(self):
+    def test_a_sealed_wave_with_no_later_spawn_fails(self):
         result = self.sealed([22, 25], [])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_sealed_spawns_sent_one_at_a_time_fail(self):
+        result = self.sealed([10, 20, 30], [(15, "waiting"), (25, "waiting")])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_five_sealed_spawns_in_one_wave_fail(self):
+        result = self.sealed([10, 11, 12, 13, 14, 30], [(20, "waiting")])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_later_sealed_wave_that_could_be_explorers_is_inconclusive(self):
+        result = self.sealed([10, 20, 21, 40], [(15, "waiting"), (30, "waiting")])
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)
 
     def test_one_readable_explainer_still_fails(self):
