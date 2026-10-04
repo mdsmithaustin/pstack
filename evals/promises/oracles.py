@@ -2151,9 +2151,22 @@ def attention_section(view):
     return passed(*evidence) if reviewed else failed("Attention section lacks the `reviewed by <model>@<effort>` line", *evidence)
 
 
+def blank_heredocs(command):
+    out, end = [], None
+    for line in command.split("\n"):
+        if end is not None:
+            out.append(" " * len(line))
+            end = None if line.strip() == end else end
+            continue
+        out.append(line)
+        match = HEREDOC.search(line)
+        end = match.group(2) if match else None
+    return "\n".join(out)
+
+
 def runs_after_write(command, path):
-    command = strip_heredocs(command)
-    written, run = command.find(Path(path).name), re.search(r"unittest|pytest|npm test|node .*test", command)
+    written = command.find(Path(path).name)
+    run = re.search(r"unittest|pytest|npm test|node .*test", blank_heredocs(command))
     return written >= 0 and run is not None and written < run.start()
 
 

@@ -2033,6 +2033,30 @@ class AssignedRationaleNames(unittest.TestCase):
         self.assertEqual(result["verdict"], PASS, result)
 
 
+class HeredocRerun(unittest.TestCase):
+    def test_a_green_rerun_after_a_python_heredoc_fix_counts(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/__main__.py": "x = 0\n"})
+        fix = "python3 - <<'EOF'\nopen('rollup/__main__.py', 'w').write('x = 1\\n')\nEOF\npython3 -m unittest discover -s tests -v 2>&1 | tail -3"
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main", head="FAIL: test_limit\nFAILED (failures=1)")
+                  + bash(13, fix, head="Ran 3 tests\n\nOK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_heredoc_body_that_mentions_unittest_is_not_a_test_run(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/__main__.py": "x = 0\n"})
+        fix = "python3 - <<'EOF'\nopen('rollup/__main__.py', 'w').write('x = 1\\n')\nimport unittest\nEOF"
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main", head="FAIL: test_limit\nFAILED (failures=1)")
+                  + bash(13, fix, head="OK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
