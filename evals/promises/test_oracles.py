@@ -2008,6 +2008,31 @@ class ArmDirectoryResolution(unittest.TestCase):
         self.assertEqual(oracles.arm_dirs("git worktree add -B cand-2 /tmp/k/maple"), {"/tmp/k/maple"})
 
 
+class AssignedRationaleNames(unittest.TestCase):
+    def lead_reads(self, brief, reads):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        events += [e for n, command in enumerate(reads) for e in bash(20 + 2 * n, command)]
+        return grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+
+    def test_a_shared_input_the_brief_names_is_not_a_rationale(self):
+        result = self.lead_reads("Read `REQUIREMENTS.md` first. Write `rationale.md` in your directory.",
+                                 ["cat /tmp/k/REQUIREMENTS.md"] * 5 + ["cat /tmp/k/c1/relay/cache.py"])
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+    def test_a_write_order_that_reads_an_input_first_names_only_its_output(self):
+        result = self.lead_reads("Write your notes after you read `REQUIREMENTS.md`; save them to `rationale.md`.",
+                                 ["cat /tmp/k/REQUIREMENTS.md"] * 5 + ["cat /tmp/k/c1/relay/cache.py"])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_an_output_file_the_brief_assigns_is_a_rationale(self):
+        result = self.lead_reads("Read `REQUIREMENTS.md` first. Save your reasoning to `decision-log.md`.",
+                                 [f"cat /tmp/k/c{n}/decision-log.md" for n in range(1, 6)] + ["cat /tmp/k/c1/relay/cache.py"])
+        self.assertEqual(result["verdict"], PASS, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

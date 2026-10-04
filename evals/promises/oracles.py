@@ -2463,8 +2463,11 @@ def arena_judge(view):
     return failed(failures, *evidence) if failures else passed(*evidence)
 
 
+ASSIGNED_OUTPUT = re.compile(r"\b(?:write|save|put|record|output:?)\b(?:(?!\b(?:read|see|from)\b)[^.\n]){0,60}?([\w-]+(?:\.[\w-]+)*\.md)\b", re.I)
+
+
 def rationale_pattern(view, candidates):
-    named = {m.lower() for s in candidates for m in re.findall(r"[\w.-]+\.md\b", view.spawn_brief(s))} - {"readme.md"}
+    named = {m.lower() for s in candidates for m in ASSIGNED_OUTPUT.findall(view.spawn_brief(s))} - {"readme.md"}
     return re.compile("|".join([r"rationale", r"design[-_ ]?notes"] + [re.escape(n) for n in sorted(named)]), re.I)
 
 
