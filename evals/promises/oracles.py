@@ -1529,7 +1529,7 @@ def how_wide(view):
     explainers = view.spawns_where("explainer", "architectural explanation", r"synthesi[sz]\w*")
     evidence = [f"explorer spawns: {len(explorers)}", f"explainer spawns: {len(explainers)}"]
     waves = view.waves(view.spawns)
-    if not explorers and len(waves) >= 2 and 2 <= len(waves[0]) <= 4 and (all(s.get("x_prompt_encrypted") for s in waves[0]) or all(view.explores(s) for s in waves[0])):
+    if not explorers and len(waves) >= 2 and 2 <= len(waves[0]) <= 4 and (all(s.get("x_prompt_encrypted") for s in waves[0]) or all(view.explores(s) and not view.supports(s) for s in waves[0])):
         explorers, explainers = waves[0], waves[1]
         evidence.append(f"explorers found by structure: a wave of {len(waves[0])} at seq {waves[0][0].get('seq')}, then a spawn at seq {waves[1][0].get('seq')}")
     if not explorers:
@@ -2205,7 +2205,8 @@ def tdd_first(view):
     runs = [(seq, c, ok, head) for seq, c, ok, head in view.commands() if re.search(r"unittest|pytest|test_|npm test|node .*test", c)]
     failing = [r for r in runs if r[2] is False or re.search(r"\bFAIL|Error|failures=\d*[1-9]|✗|not ok", r[3])]
     green = [r for r in runs if r[2] is not False and re.search(r"\bOK\b|passed|ok\b", r[3]) and not re.search(r"FAIL|Error", r[3])]
-    after_fix = [g for g in green if sources and (g[0] > sources[0][0] or (g[0] == sources[0][0] and runs_after_write(g[1], sources[0][1])))]
+    after_fix = [g for g in green if sources and (g[0] > sources[0][0] or (g[0] == sources[0][0] and all(
+        runs_after_write(g[1], s[1]) for s in sources if s[0] == g[0])))]
     evidence = [f"test edits: {[e[1] for e in tests][:2]}", f"source edits: {[e[1] for e in sources][:2]}",
                 f"failing runs: {len(failing)}, green runs after a source edit: {len(after_fix)}"]
     if not tests:
@@ -2367,7 +2368,8 @@ def doc_impact_review(view):
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
     result = turn_author_result(view, turn, reply)
     reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
-    verdict_word = re.search(r"\bpass\b|\breview\b[^.\n]{0,40}\bpassed\b", reply or "", re.I)
+    verdict_word = next((m for m in re.finditer(r"\bpass\b|\breview\b[^.\n]{0,40}\bpassed\b", reply or "", re.I)
+                         if not re.search(r"\b(?:not|never|no)\b|n't\b", (reply or "")[max(0, m.start() - 20):m.end()], re.I)), None)
     evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {bool(verdict_word)}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)
@@ -2447,7 +2449,7 @@ def arm_dirs(command):
 @oracle("arena-candidates-own-worktrees")
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
-    made = len(set().union(*(arm_dirs(c[1]) for c in view.commands())))
+    made = len(set().union(*(arm_dirs(c[1]) for c in view.commands() if c[2] is not False)))
     paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
     evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:

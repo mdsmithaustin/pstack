@@ -675,6 +675,19 @@ class SmallSkills(unittest.TestCase):
         no_red = minimal(events=[edit(0, "/w/tests/test_export.py"), edit(1, "/w/rollup/export.py")] + bash(2, "python3 -m unittest", head="OK"))
         self.assertEqual(grade("poteto-tdd-failing-test-first", no_red, case)["verdict"], FAIL)
 
+    def test_a_rerun_between_two_writes_in_one_command_does_not_cover_the_second(self):
+        case = load_case("tdd-run")
+        trace = minimal(events=[edit(0, "/w/tests/test_export.py")] + bash(1, "python3 -m unittest discover -s tests", ok=False, head="FAIL: test_limit")
+                        + bash(3, "echo x > rollup/export.py; python3 -m unittest discover -s tests; echo y > rollup/load.py", head="OK"))
+        self.assertNotEqual(grade("poteto-tdd-failing-test-first", trace, case)["verdict"], PASS)
+
+    def test_a_negated_review_verdict_is_not_a_pass(self):
+        case = load_case("doc-impact-run")
+        trace = minimal(events=[dict(text(1, "Done. Author result: independent review required. The independent review has not passed."), turn=0),
+                                dict(text(3, "Review mode run."), turn=1)],
+                        spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+        self.assertNotEqual(grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"], PASS)
+
     def test_ts_autoload(self):
         case = load_case("ts-autoload")
         loaded = minimal(events=[edit(0, "/w/src/cli.ts"), read(1, "typescript-best-practices/SKILL.md")])
@@ -1478,6 +1491,15 @@ class FanOutStructure(unittest.TestCase):
         result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
         self.assertEqual(result["verdict"], PASS, result)
 
+    def test_a_readable_wave_of_judges_is_not_explorers(self):
+        spawns = [delegate(27, "Read-only. You are a judge. Score the two designs against the rubric."),
+                  delegate(27, "Read-only. You are a judge. Score the two designs for risk."),
+                  delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "Both scores are in."),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
     def test_one_explainer_alone_is_still_no_fan_out(self):
         spawns = [{"seq": 9, "tool": "Agent", "prompt_head": "Read-only. You are writing an architectural explanation for a senior engineer."}]
         events = [{"seq": 9, "kind": "tool_call", "name": "Agent", "input": {}}]
@@ -1587,14 +1609,19 @@ class ReplyWording(unittest.TestCase):
 class ArenaWorktrees(unittest.TestCase):
     GOAL = "Design and implement one candidate for a durable cache-key format. Produce an isolated candidate artifact."
 
-    def hermes_arena(self, setup, with_paths=True):
+    def hermes_arena(self, setup, with_paths=True, ok=True):
         def task(n):
             where = f" Write exactly these files under /w/tmp/arena-cache-key/candidate-{n}/: cache.py, rationale.md." if with_paths else ""
             return {"goal": self.GOAL, "context": "Repository root: /w/relay. Inspect README.md and relay/cache.py." + where}
-        events = bash(35, setup) + [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(n) for n in range(1, 5)]}},
+        events = bash(35, setup, ok=ok) + [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(n) for n in range(1, 5)]}},
                                      {"seq": 45, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(5)]}}]
         spawns = [{"seq": 43, "tool": "delegate_task", "prompt_head": self.GOAL} for _ in range(4)] + [{"seq": 45, "tool": "delegate_task", "prompt_head": self.GOAL}]
         return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, harness="hermes"), load_case("arena-run"))
+
+    def test_a_failed_mkdir_makes_no_candidate_dirs(self):
+        dirs = " ".join(f"/w/tmp/arena-cache-key/candidate-{n}" for n in range(1, 6))
+        result = self.hermes_arena(f"mkdir -p {dirs}", with_paths=False, ok=False)
+        self.assertNotEqual(result["verdict"], PASS, result)
 
     def test_one_mkdir_of_five_candidate_dirs_gives_each_its_own(self):
         dirs = " ".join(f'"$TMPDIR/arena-cache-key/candidate-{n}"' for n in range(1, 6))
