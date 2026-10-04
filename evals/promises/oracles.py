@@ -570,7 +570,7 @@ class View:
 
     def waves(self, spawns):
         out = []
-        for spawn in sorted(spawns, key=lambda s: int(s.get("seq") or 0)):
+        for spawn in sorted(spawns, key=lambda s: s.get("seq") or 0):
             if out and self.one_message(out[-1] + [spawn]):
                 out[-1].append(spawn)
             else:
@@ -583,7 +583,7 @@ class View:
     def one_message(self, spawns):
         if len(spawns) < 2:
             return True
-        seqs = sorted(int(s.get("seq") or 0) for s in spawns)
+        seqs = sorted(s.get("seq") or 0 for s in spawns)
         for event in self.events:
             seq = event.get("seq", 0)
             if seqs[0] < seq < seqs[-1]:
@@ -1520,7 +1520,7 @@ def how_wide(view):
         return failed("no explorers for a subsystem-scale question", *evidence)
     if not 2 <= len(explorers) <= 4:
         return failed(f"{len(explorers)} explorers; the skill fans out two to four", *evidence)
-    if explainers and min(int(s.get("seq")) for s in explainers) < max(int(s.get("seq")) for s in explorers):
+    if explainers and min(s.get("seq") for s in explainers) < max(s.get("seq") for s in explorers):
         return failed("explainer spawned before the explorers finished launching", *evidence)
     if not view.one_message(explorers):
         return failed("explorers were not spawned in one message", *evidence)
@@ -2456,7 +2456,7 @@ def rationale_pattern(view, candidates):
 @oracle("arena-lead-reads-rationales-and-base")
 def arena_lead_reads(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
-    after = max((int(s.get("seq") or 0) for s in candidates), default=0)
+    after = max((s.get("seq") or 0 for s in candidates), default=0)
     reads = []
     for call in view.tool_calls:
         if call.get("seq", 0) <= after or call.get("name") in EDIT_TOOLS:

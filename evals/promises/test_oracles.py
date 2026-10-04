@@ -1798,6 +1798,63 @@ class SynthesizerNoun(unittest.TestCase):
         self.assertEqual(result["evidence"][0], "investigator spawns: 1")
 
 
+class UntestedHunks(unittest.TestCase):
+    def project(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return make_repo(tmp.name, 1, {"relay/feed.py": "x = 0\n", "README.md": "relay\n"})
+
+    def test_a_source_change_in_the_tree_breaks_the_checkpoint_without_a_lead_edit(self):
+        project = self.project()
+        (project / "relay" / "feed.py").write_text("x = 1\n")
+        spawn = {"seq": 3, "tool": "Agent", "prompt_head": "Apply the design."}
+        trace = minimal(events=[{"seq": 3, "kind": "tool_call", "name": "Agent", "input": {}}], spawns=[spawn], final_reply="Approve the design?")
+        result = grade("architect-checkpoint-opt-in", trace, load_case("architect-checkpoint-run"), project)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_shell_write_after_cd_out_of_the_project_is_not_a_project_edit(self):
+        project = self.project()
+        trace = minimal(events=bash(1, "cd /private/tmp/sketch && echo 'x = 2' > relay/feed.py"), final_reply="Read only.")
+        result = grade("interrogate-read-only-when-asked", trace, load_case("interrogate-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+        inside = minimal(events=bash(1, f"cd {project} && echo 'x = 2' > relay/feed.py"), final_reply="Read only.")
+        self.assertEqual(grade("interrogate-read-only-when-asked", inside, load_case("interrogate-run"), project)["verdict"], FAIL)
+
+    def test_sed_with_an_empty_backup_suffix_edits_the_named_file(self):
+        project = self.project()
+        trace = minimal(events=bash(1, "sed -i '' \"s/relay/Relay/\" README.md"), final_reply="Approve the design before I implement?")
+        view = oracles.View(trace, load_case("architect-checkpoint-run"), project)
+        self.assertEqual([e[1:] for e in view.edits()], [("README.md", "doc")])
+        self.assertEqual(grade("architect-checkpoint-opt-in", trace, load_case("architect-checkpoint-run"), project)["verdict"], PASS)
+
+    def test_a_hyphenated_source_control_spawn_is_why_evidence(self):
+        spawns = [{"seq": 5, "tool": "delegate_task", "prompt_head": "Investigate source-control history for the init change."}]
+        trace = minimal(events=[read(1, "how/SKILL.md"), {"seq": 5, "kind": "tool_call", "name": "delegate_task", "input": {}}],
+                        spawns=spawns, final_reply="Sources consulted: git log")
+        result = grade("how-then-why-sequence-honored", trace, load_case("how-then-why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_watcher_spawn_is_a_loop_facility(self):
+        spawn = {"seq": 4, "tool": "Agent", "prompt_head": "Start a watcher for the migration build."}
+        trace = minimal(events=[{"seq": 4, "kind": "tool_call", "name": "Agent", "input": {}}], spawns=[spawn], final_reply="x")
+        result = grade("autonomous-run-uses-loop-facility", trace, load_case("overnight-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_fixing_delegate_after_the_repro_is_a_delegated_fix(self):
+        spawn = {"seq": 4, "tool": "Agent", "prompt_head": "Fixing the export retry: resume at the first unaccepted row."}
+        trace = minimal(events=bash(1, "ROLLUP_BUSY_AFTER=2 python3 -m rollup data/orders.csv out.csv") + [{"seq": 4, "kind": "tool_call", "name": "Agent", "input": {}}],
+                        spawns=[spawn])
+        result = grade("bug-fix-reproduces-before-fixing", trace, load_case("bug-fix-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_an_independent_reviewer_spawn_is_the_docs_review(self):
+        events = [dict(text(1, "Author result: independent review required."), turn=0), {"seq": 2, "turn": 0, "kind": "tool_call", "name": "Agent", "input": {}},
+                  dict(text(3, "The docs review returned pass."), turn=0), dict(text(4, "pass"), turn=1)]
+        spawn = {"seq": 2, "turn": 0, "tool": "Agent", "prompt_head": "You are an independent reviewer of the README change."}
+        result = grade("documentation-impact-independent-review-pass-required", minimal(events=events, spawns=[spawn]), load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
