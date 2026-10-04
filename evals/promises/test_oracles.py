@@ -1753,8 +1753,8 @@ class DesignJudgeSignal(unittest.TestCase):
             self.assertEqual(result["verdict"], FAIL, (head, result))
             self.assertEqual(grade("design-ladder-spares-small-changes", self.lone_judge(head), load_case("feature-run"))["verdict"], PASS)
 
-    def test_a_design_judge_after_two_other_spawns_is_the_fan_out(self):
-        spawns = [{"seq": s, "tool": "Agent", "prompt_head": f"Sketch option {s} for the --json output."} for s in (2, 3)]
+    def test_two_design_sketches_then_a_judge_are_the_fan_out(self):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": f"Design sketch {s} for the --json output."} for s in (2, 3)]
         spawns.append({"seq": 5, "tool": "Agent", "prompt_head": "You are the cross-judge. Score the design sketches against the rubric."})
         events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (2, 3)] + [text(4, "Both are back."),
                   {"seq": 5, "kind": "tool_call", "name": "Agent", "input": {}}]
@@ -1941,6 +1941,16 @@ class ReadOnlyWave(unittest.TestCase):
     def test_a_wave_of_explicit_read_only_tracers_passes(self):
         result = self.wave(["Trace the ingest stage. Read-only: do not edit or write files.", "Audit the tests. Do not modify anything."])
         self.assertEqual(result["verdict"], PASS, result)
+
+
+class JudgeAfterExplorers(unittest.TestCase):
+    def test_explorers_then_a_design_worded_reviewer_are_not_the_fan_out(self):
+        spawns = [{"seq": 5, "tool": "Agent", "prompt_head": "Explorer: trace the CLI. Read-only.", "description": "explorer 1"},
+                  {"seq": 6, "tool": "Agent", "prompt_head": "Explorer: trace the store. Read-only.", "description": "explorer 2"},
+                  {"seq": 20, "tool": "Agent", "prompt_head": "You are a judge. Judge whether the implementation matches the design and the rubric.", "description": "review judge"}]
+        events = [{"seq": s["seq"], "kind": "tool_call", "name": "Agent", "input": {"description": s["description"]}} for s in spawns]
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=spawns, final_reply="done"), load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
 
 
 class CaseHygiene(unittest.TestCase):

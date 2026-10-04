@@ -1274,12 +1274,6 @@ def design_fan_out(view):
         signals.append("read architect/references/runner-prompt.md to brief runners")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
-    judges = judge_spawns(view)
-    for judge in judges:
-        before = [s for s in view.spawns if s not in judges and (s.get("seq") or 0) < (judge.get("seq") or 0)]
-        if re.search(r"design|sketch|architect", view.spawn_text(judge)) and len(before) >= 2:
-            signals.append(f"a judge scoring design candidates after {len(before)} other spawns")
-            break
     attempted = sum(len(DESIGN_BRIEF.findall(json.dumps(c.get("input") or {}))) for c in view.tool_calls
                     if c.get("name") in SPAWN_TOOL_NAMES)
     if not runners and attempted >= 2:
