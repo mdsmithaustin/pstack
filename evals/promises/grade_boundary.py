@@ -1,5 +1,3 @@
-"""Controller authority and the confined parent grader."""
-
 import errno
 import hashlib
 import hmac
@@ -418,7 +416,6 @@ def _seal(handle, record, trace, *, write=True):
 
 
 def _authorize_fixture(root, project, case, record, trace, *, worktrees=(), output=None):
-    """Issue authority from trusted temporary-fixture setup."""
     controller = _Controller(Path(root).parent, create=True)
     handle = controller.issue(root, project, case, record, worktrees=worktrees, output=output)
     _seal(handle, record, trace)
@@ -426,7 +423,6 @@ def _authorize_fixture(root, project, case, record, trace, *, worktrees=(), outp
 
 
 def _authorize_retained(out, root, *, project, original_project, output, case, worktrees=()):
-    """The trusted caller attests the original or reviewed relocation mapping."""
     raw = _Root.open(root)
     try:
         record = json.loads(raw.read("run.json"))
