@@ -139,7 +139,7 @@ class Harvest(unittest.TestCase):
                         "observed": {"models": ["child-model"], "efforts": ["high"]},
                         "x_child_first_reply": child_reply, "x_persona_line": "poteto-agent",
                     }])
-                    self.assertEqual(trace["x_files_read_by"]["agent-child"], [str(run.project / "child.py")])
+                    self.assertEqual(trace["x_files_read_by"]["agent-child"], [str((run.project / "child.py").resolve())])
                     self.assertEqual(trace["final_reply"], expected_reply)
                     self.assertEqual(trace["x_cost_usd"], 0.125 if with_result else 0)
                     self.assertEqual(trace["cli_version"], "test-version")
