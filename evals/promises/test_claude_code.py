@@ -1,4 +1,6 @@
 import json
+import hashlib
+import os
 import tempfile
 import unittest
 import uuid
@@ -75,7 +77,7 @@ class RecordedReads(unittest.TestCase):
 class Harvest(unittest.TestCase):
     def test_claude_tool_events_keep_their_call_id(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             session = str(uuid.uuid4())
             case = {"id": "x", "fixture": "tally", "entry": "poteto-mode", "turns": ["fix it"]}
             run = live.Run(root, "claude-code", case, "0" * 40, 60)
@@ -85,15 +87,14 @@ class Harvest(unittest.TestCase):
             rows = session_rows(str(run.project))
             (transcripts / f"{session}.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
             run.turns = [{"session_id": session, "stream": str(root / "stream-0.jsonl"), "argv": ["claude"], "exit_code": 0, "timed_out": False, "duration_s": 1.0}]
-            with patch.object(claude_code, "config_dir", return_value=root / "claude-config"):
-                trace = claude_code.harvest(run)
+            trace = claude_code.harvest(run)
         ids = [(e["kind"], e.get("id")) for e in trace["events"] if e["kind"] in ("tool_call", "tool_result")]
         self.assertEqual(ids, [("tool_call", "toolu_a"), ("tool_call", "toolu_b"),
                                ("tool_result", "toolu_b"), ("tool_result", "toolu_a")])
 
     def test_literal_unicode_survives_lead_stream_and_child_harvest(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             session = str(uuid.uuid4())
             case = {"id": "x", "fixture": "tally", "entry": "poteto-mode", "turns": ["fix it"]}
             run = live.Run(root, "claude-code", case, "0" * 40, 60)
@@ -135,8 +136,7 @@ class Harvest(unittest.TestCase):
                     records = [init] + ([{"type": "result", "result": stream_reply, "total_cost_usd": 0.125}]
                                         if with_result else [])
                     stream.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in records), encoding="utf-8")
-                    with patch.object(claude_code, "config_dir", return_value=root / "claude-config"):
-                        trace = claude_code.harvest(run)
+                    trace = claude_code.harvest(run)
                     self.assertEqual([(e["seq"], e["kind"], e.get("name"), e.get("id")) for e in trace["events"]], [
                         (0, "user", None, None),
                         (1, "tool_call", "Read", "toolu_a"),
@@ -163,6 +163,104 @@ class Harvest(unittest.TestCase):
                     self.assertEqual(trace["model"], "lead-model")
                     self.assertEqual(trace["x_init_tools"], ["Read", "Agent"])
                     self.assertEqual(trace["x_session_id"], session)
+
+
+class PrivateEvidence(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        case = {"id": "x", "fixture": "tally", "turns": ["first", "second"]}
+        self.run = live.Run(self.root, "claude-code", case, "0" * 40, 60)
+        self.run.project.mkdir(parents=True)
+        binary = self.root / "native.bin"
+        binary.write_bytes(b"test executable identity")
+        digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+        runtime = claude_code.HostRuntime(binary, "test", self.root / "outside-home", "test-user", (), (),
+                                          ((binary, digest),), "/usr/bin:/bin", "/bin/sh")
+        self.state = claude_code._bind_paths(self.run, runtime)
+        self.session = self.state.session
+        self.native = self.state.paths.config / "projects" / "slug"
+        self.native.mkdir(parents=True)
+        self.lead = self.native / f"{self.session}.jsonl"
+        self.lead.write_text(json.dumps({"type": "assistant", "message": {"content": "first"}}) + "\n")
+
+    def test_copy_preserves_native_sources_and_publishes_a_whole_snapshot(self):
+        child = self.native / self.session / "subagents" / "agent-child.jsonl"
+        child.parent.mkdir(parents=True)
+        child.write_text('{"type":"assistant","message":{"content":"child"}}\n')
+        first_root, first = claude_code._evidence(self.run, self.session)
+        self.assertEqual(first[Path("slug") / self.lead.name], self.lead.read_bytes())
+        self.assertEqual((first_root / "slug" / self.session / "subagents" / child.name).read_bytes(), child.read_bytes())
+        self.assertEqual(claude_code._evidence(self.run, self.session), (first_root, first))
+        replay = live.Run(self.root, "claude-code", self.run.case, "0" * 40, 60)
+        self.assertEqual(claude_code._evidence(replay, self.session), (first_root, first))
+        self.lead.write_text('{"type":"assistant","message":{"content":"resumed"}}\n')
+        second_root, second = claude_code._evidence(self.run, self.session)
+        self.assertEqual(second[Path("slug") / self.lead.name], b'{"type":"assistant","message":{"content":"resumed"}}\n')
+        self.assertEqual((first_root / "slug" / self.lead.name).read_bytes(), first[Path("slug") / self.lead.name])
+        self.assertNotEqual(first_root, second_root)
+
+    def test_unsafe_native_files_do_not_publish_or_touch_outside_data(self):
+        outside = self.root / "outside.jsonl"
+        outside.write_text("outside unchanged")
+        child = self.native / self.session / "subagents" / "agent-child.jsonl"
+        child.parent.mkdir(parents=True)
+        for unsafe in ("symlink", "hardlink", "fifo"):
+            with self.subTest(unsafe=unsafe):
+                if unsafe == "symlink":
+                    child.symlink_to(outside)
+                elif unsafe == "hardlink":
+                    os.link(outside, child)
+                else:
+                    os.mkfifo(child)
+                with self.assertRaises((claude_code.IsolationUnavailable, OSError)):
+                    claude_code._evidence(self.run, self.session)
+                self.assertEqual(list(self.state.paths.transcripts.iterdir()), [])
+                self.assertEqual(outside.read_text(), "outside unchanged")
+                child.unlink()
+        child.write_text("inside regular evidence")
+        _, evidence = claude_code._evidence(self.run, self.session)
+        self.assertEqual(evidence[Path("slug") / self.session / "subagents" / child.name], b"inside regular evidence")
+
+    def test_duplicate_leads_and_replaced_roots_fail_closed(self):
+        duplicate = self.state.paths.config / "projects" / "duplicate"
+        duplicate.mkdir()
+        (duplicate / self.lead.name).write_text("duplicate")
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "found 2"):
+            claude_code._evidence(self.run, self.session)
+        (duplicate / self.lead.name).unlink()
+        duplicate.rmdir()
+        self.assertEqual(claude_code._command(self.run, "first", 0).session, self.session)
+        original = self.state.paths.config
+        original.rename(self.root / "old-config")
+        original.mkdir()
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "replaced"):
+            claude_code._command(self.run, "first", 0)
+
+    def test_changed_binary_and_unprepared_runs_refuse_launch(self):
+        self.assertEqual(claude_code._command(self.run, "first", 0).session, self.session)
+        self.state.runtime.binary.write_text("changed")
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "executable changed"):
+            claude_code._command(self.run, "first", 0)
+        unprepared = live.Run(self.root, "claude-code", self.run.case, "0" * 40, 60)
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "preparation state"):
+            claude_code._command(unprepared, "first", 0)
+
+    def test_environment_and_stream_readers_ignore_candidate_path_authority(self):
+        with patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/outside/config", "PATH": "/outside/bin"}):
+            env = claude_code.child_env(self.run)
+        self.assertEqual(env["CLAUDE_CONFIG_DIR"], str(self.root / "claude-config"))
+        self.assertEqual(env["PATH"], "/usr/bin:/bin")
+        (self.root / "stream-0.jsonl").write_text('{"type":"result","result":"inside result"}\n')
+        self.assertEqual(claude_code._stream_rows(self.root, 0), [{"type": "result", "result": "inside result"}])
+        (self.root / "stream-0.jsonl").unlink()
+        outside = self.root / "outside-stream"
+        outside.write_text("outside unchanged")
+        (self.root / "stream-0.jsonl").symlink_to(outside)
+        with self.assertRaises(OSError):
+            claude_code._stream_rows(self.root, 0)
+        self.assertEqual(outside.read_text(), "outside unchanged")
 
 
 if __name__ == "__main__":
