@@ -16,6 +16,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from grade_boundary import grade, GradeRefused, _before_turns, _lookup, _seal, _write_record
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 CASES = HERE / "cases"
@@ -207,20 +209,21 @@ def run_case(harness, case_id, skills_at, out, index):
     install_tree(run.skills_at, run.project / module.SKILLS_DIR)
     exclude = run.project / ".git" / "info" / "exclude"
     exclude.write_text(exclude.read_text() + "".join(f"{d}\n" for d in module.PRIVATE_DIRS))
+    authorization = _before_turns(run)
     module.prepare(run)
     lock = fixture_lock(case["fixture"]) if module.SHARES_HOST_TMP and case.get("tmp_lock", True) else None
     try:
         for i, text in enumerate(case["turns"]):
             record = module.turn(run, text, i)
             run.turns.append(record)
-            (root / "run.json").write_text(json.dumps(meta(run), indent=1) + "\n")
+            _write_record(authorization, meta(run))
     finally:
         if lock:
             lock.close()
     trace = module.harvest(run)
-    (root / "trace.json").write_text(json.dumps(trace, indent=1) + "\n")
-    verdict = grade(root)
-    print(json.dumps({"run": str(root), "case": case_id, "harness": harness, "n": index,
+    _seal(authorization, meta(run), trace)
+    verdict = grade(authorization)
+    print(json.dumps({"run": str(root), "authorization_id": authorization._id, "case": case_id, "harness": harness, "n": index,
                       "verdicts": {p: v["verdict"] for p, v in verdict["promises"].items()}}))
     return root
 
@@ -228,21 +231,6 @@ def run_case(harness, case_id, skills_at, out, index):
 def meta(run):
     return {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at, "project": str(run.project),
             "timeout_s": run.timeout_s, "turns": run.turns, "baseline": run.baseline}
-
-
-def grade(root):
-    import oracles
-    root = Path(root)
-    record = json.loads((root / "run.json").read_text())
-    case = load_case(record["case"])
-    trace = json.loads((root / "trace.json").read_text())
-    trace.setdefault("x_turns", record.get("turns", []))
-    trace.setdefault("x_baseline", record.get("baseline"))
-    verdict = {"case": case["id"], "harness": record["harness"], "skills_at": record["skills_at"],
-               "promises": {pid: oracles.check(pid, trace, case, Path(record.get("project", root / "project")))
-                            for pid in case["promises"]}}
-    (root / "verdict.json").write_text(json.dumps(verdict, indent=1) + "\n")
-    return verdict
 
 
 def main(argv=None):
@@ -255,7 +243,8 @@ def main(argv=None):
     r.add_argument("--skills-at", default="HEAD")
     r.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "pstack-live"))
     g = sub.add_parser("grade")
-    g.add_argument("runs", nargs="+")
+    g.add_argument("run_ids", nargs="+", help="controller-issued run IDs")
+    g.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "pstack-live"))
     p = sub.add_parser("report")
     p.add_argument("out")
     p.add_argument("--upstream")
@@ -269,8 +258,12 @@ def main(argv=None):
                 run_case(args.harness, case_id, args.skills_at, out, n)
         return 0
     if args.cmd == "grade":
-        for root in args.runs:
-            print(json.dumps(grade(root)))
+        for run_id in args.run_ids:
+            try:
+                print(json.dumps(grade(_lookup(args.out, run_id))))
+            except GradeRefused as refusal:
+                print(json.dumps({"refusal": refusal.receipt}), file=sys.stderr)
+                return 2
         return 0
     import ledger
     import report
