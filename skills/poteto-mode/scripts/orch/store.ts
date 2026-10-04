@@ -13,6 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { parseRemote } from "../watch-pr/remote.ts";
 
 const UNIT_HEADER = "id\ttrack\tstate\tbranch\tpr\tsha\tbrief";
 const LEDGER_HEADER = "pr\tsha\tverdict\tevidence\tverifier\tts";
@@ -1282,6 +1283,12 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
       "GitHub frontier discovery requires a nonempty origin URL"
     );
   }
+  const identity = parseRemote(repository);
+  if (identity === null) {
+    throw new UserError(
+      "GitHub frontier discovery requires a supported credential-free origin URL"
+    );
+  }
 
   let raw: string;
   try {
@@ -1292,7 +1299,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
         "pr",
         "list",
         "--repo",
-        repository,
+        `${identity.host}/${identity.owner}/${identity.repo}`,
         "--state",
         "all",
         "--limit",

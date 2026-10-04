@@ -208,7 +208,7 @@ case "$*" in
   "pr list --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
     cat "${upstreamPath}"
     ;;
-  "pr list --repo https://github.com/personal/project.git --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
+  "pr list --repo github.com/personal/project --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
     cat "${outputPath}"
     ;;
   *)
@@ -849,12 +849,82 @@ esac
           expect(result.stderr).toContain("GitHub frontier discovery requires");
           expect(await readFile(callsPath, "utf8")).toBe("");
           expect((await readdir(storeDirectory)).sort()).toEqual(entries);
+          expect(await readdir(join(storeDirectory, "inbox"))).toEqual([]);
           expect(await Promise.all(names.map((name) => readFile(join(storeDirectory, name))))).toEqual(before);
         }
         git({ repo: stack.repo, args: ["remote", "remove", "origin"] });
         expect(runCli(args).code).toBe(1);
         expect(await readFile(callsPath, "utf8")).toBe("");
         expect(await Promise.all(names.map((name) => readFile(join(storeDirectory, name))))).toEqual(before);
+      },
+    });
+  });
+
+  it("uses a credential-free fetch identity for supported transports, rewrites, and gh failures", async () => {
+    const directory = await makeDirectory();
+    const stack = await makeGitStack(directory);
+    const storeDirectory = join(directory, "store");
+    const selected = {
+      number: 11,
+      state: "OPEN",
+      headRefName: "stack/open",
+      headRefOid: stack.openSha,
+      baseRefName: "main",
+      isCrossRepository: false,
+    };
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([selected]),
+      operation: async () => {
+        const callsPath = join(directory, "gh-calls.txt");
+        const failurePath = join(directory, "gh-fails");
+        await writeFile(join(directory, "github-bin", "gh"), `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$@" >> "${callsPath}"
+if [ "$#" -ne 10 ] || [ "$3" != "--repo" ] || [ "\${GH_REPO+x}" = x ] || [ "$(pwd -P)" != "${realpathSync(stack.repo)}" ]; then exit 2; fi
+case "$4" in
+  github.com/personal/project|example.com/personal/project) ;;
+  *) exit 2 ;;
+esac
+if [ -f "${failurePath}" ]; then printf 'ordinary fixture query failure\\n' >&2; exit 3; fi
+cat "${join(directory, "github-output.json")}"
+`);
+        expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
+        git({ repo: stack.repo, args: ["config", "remote.origin.pushurl", "https://github.com/upstream/project.git"] });
+        git({ repo: stack.repo, args: ["config", "url.https://github.com/.insteadOf", "pstack-fixture:"] });
+        const args = ["--store", storeDirectory, "--json", "frontier", "set", "--repo", stack.repo];
+        let generation = 0;
+        for (const [origin, identity] of [
+          ["https://github.com/personal/project.git", "github.com/personal/project"],
+          ["git@github.com:personal/project.git", "github.com/personal/project"],
+          ["ssh://git@github.com/personal/project.git", "github.com/personal/project"],
+          ["https://example.com/personal/project", "example.com/personal/project"],
+          ["pstack-fixture:personal/project.git", "github.com/personal/project"],
+        ]) {
+          git({ repo: stack.repo, args: ["config", "remote.origin.url", origin] });
+          await writeFile(callsPath, "");
+          const result = runCli(args, { ...process.env, GH_REPO: "ambient/wrong", GH_HOST: "wrong.example.com" });
+          expect(result.code).toBe(0);
+          expect(result.stderr).toBe("");
+          expect(JSON.parse(result.stdout)).toEqual({
+            generation: ++generation,
+            prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
+            lowestUnmerged: 11,
+          });
+          expect(await readFile(callsPath, "utf8")).toBe(
+            `pr\nlist\n--repo\n${identity}\n--state\nall\n--limit\n1000\n--json\nnumber,state,headRefName,headRefOid,baseRefName,isCrossRepository\n`
+          );
+        }
+        const before = await readFile(join(storeDirectory, "frontier.json"));
+        await writeFile(failurePath, "");
+        const failed = runCli(args);
+        expect(failed.code).toBe(1);
+        expect(failed.stdout).toBe("");
+        expect(failed.stderr).toContain("gh pr list failed");
+        expect(failed.stderr).toContain("ordinary fixture query failure");
+        expect(failed.stderr).toContain("github.com/personal/project");
+        expect(failed.stderr).not.toContain("pstack-fixture:");
+        expect(await readFile(join(storeDirectory, "frontier.json"))).toEqual(before);
       },
     });
   });
@@ -880,7 +950,7 @@ esac
         git({ repo: stack.repo, args: ["config", "remote.origin.url", ""] });
         expect(git({ repo: stack.repo, args: ["remote", "get-url", "origin"] })).toBe("origin");
         await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
-          "gh pr list failed"
+          "GitHub frontier discovery requires a supported credential-free origin URL"
         );
         expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
       },
@@ -915,7 +985,7 @@ if [ "$#" -ne 10 ] || [ "$3" != "--repo" ]; then
   exit 2
 fi
 case "$4" in
-  https://github.com/personal/project.git) cat "${join(directory, "github-output.json")}" ;;
+  github.com/personal/project) cat "${join(directory, "github-output.json")}" ;;
   "") cat "${join(directory, "upstream-output.json")}" ;;
   *) exit 2 ;;
 esac
@@ -929,7 +999,7 @@ esac
             prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
             lowestUnmerged: 11,
           });
-          expect(await readFile(callsPath, "utf8")).toBe("https://github.com/personal/project.git\n");
+          expect(await readFile(callsPath, "utf8")).toBe("github.com/personal/project\n");
           const before = await readFile(join(storeDirectory, "frontier.json"), "utf8");
           await writeFile(callsPath, "");
           git({ repo: stack.repo, args: ["config", "remote.origin.url", origin] });
