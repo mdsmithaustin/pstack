@@ -1741,15 +1741,26 @@ class DesignJudgeSignal(unittest.TestCase):
         result = grade("design-ladder-spares-small-changes", self.lone_judge("judge: design quality"), load_case("feature-run"))
         self.assertEqual(result["verdict"], PASS, result)
 
-    def test_a_judge_after_an_arena_load_is_the_fan_out(self):
-        trace = self.lone_judge("You are the read-only cross-judge. Score each against the rubric.", [read(1, "arena/SKILL.md")])
+    def test_a_lone_judge_after_an_arena_load_is_not_the_fan_out(self):
+        trace = self.lone_judge("Judge this diff against the rubric.", [read(1, "arena/SKILL.md")])
         result = grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, load_case("feature-boundary-run"))
-        self.assertEqual(result["verdict"], PASS, result)
-
-    def test_a_judge_scoring_three_design_candidates_is_the_fan_out(self):
-        trace = self.lone_judge("Cross-judge three tally --json design candidates and recommend the base plus grafts.")
-        result = grade("design-ladder-spares-small-changes", trace, load_case("feature-run"))
         self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_lone_judge_naming_three_sketches_is_not_the_fan_out(self):
+        for head in ("You are a judge. Score the three sketches against the rubric: naming, tests.",
+                     "You are a judge. Judge whether the two designs in the doc still match the rubric."):
+            result = grade("poteto-mode-triggers-architect-on-boundary-crossing", self.lone_judge(head), load_case("feature-boundary-run"))
+            self.assertEqual(result["verdict"], FAIL, (head, result))
+            self.assertEqual(grade("design-ladder-spares-small-changes", self.lone_judge(head), load_case("feature-run"))["verdict"], PASS)
+
+    def test_a_design_judge_after_two_other_spawns_is_the_fan_out(self):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": f"Sketch option {s} for the --json output."} for s in (2, 3)]
+        spawns.append({"seq": 5, "tool": "Agent", "prompt_head": "You are the cross-judge. Score the design sketches against the rubric."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (2, 3)] + [text(4, "Both are back."),
+                  {"seq": 5, "kind": "tool_call", "name": "Agent", "input": {}}]
+        trace = minimal(events=events, spawns=spawns, final_reply="done")
+        self.assertEqual(grade("design-ladder-spares-small-changes", trace, load_case("feature-run"))["verdict"], FAIL)
+        self.assertEqual(grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, load_case("feature-boundary-run"))["verdict"], PASS)
 
 
 class CandidateNeedle(unittest.TestCase):

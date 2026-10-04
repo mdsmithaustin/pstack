@@ -50,7 +50,10 @@
  ],
  "spawns": [
   {
-   "prompt_head": "Cross-judge three tally --json design candidates and recommend the base plus grafts.\nYou are the read-only cross-judge for an architect arena. Role `a"
+   "prompt_head": "Produce a structurally coherent design candidate for the tally --json featu"
+  },
+  {
+   "prompt_head": "Produce a structurally coherent design candidate for the tally --json featu"
   },
   {
    "persona": "poteto-agent",

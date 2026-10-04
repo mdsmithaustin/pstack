@@ -55,7 +55,6 @@ READ_ONLY_BRIEF = re.compile(r"read[- ]only|(?:do not|don't|never) (?:edit|write
                              r"|make no (?:edits|changes)")
 EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+)\s*(?:[-*]\s+|\d+[.)]\s+)?"
                         r"(?:add|change|update|create|write|implement|fix|refactor|remove|delete|rename|edit)\b")
-COUNTED_DESIGNS = re.compile(r"\b(?:two|three|four|five|six|[2-9])\b[^.]{0,40}?\b(?:candidates|sketches|designs)\b")
 REPLY_HEAD = 300
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -1275,10 +1274,12 @@ def design_fan_out(view):
         signals.append("read architect/references/runner-prompt.md to brief runners")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
-    loaded = view.skill_read("arena") or view.skill_read("architect")
-    if any(loaded or len(runners) >= 2 or (re.search(r"design|sketch|architect", view.spawn_text(j)) and COUNTED_DESIGNS.search(view.spawn_text(j)))
-           for j in judge_spawns(view)):
-        signals.append("a judge scoring design candidates")
+    judges = judge_spawns(view)
+    for judge in judges:
+        before = [s for s in view.spawns if s not in judges and (s.get("seq") or 0) < (judge.get("seq") or 0)]
+        if re.search(r"design|sketch|architect", view.spawn_text(judge)) and len(before) >= 2:
+            signals.append(f"a judge scoring design candidates after {len(before)} other spawns")
+            break
     attempted = sum(len(DESIGN_BRIEF.findall(json.dumps(c.get("input") or {}))) for c in view.tool_calls
                     if c.get("name") in SPAWN_TOOL_NAMES)
     if not runners and attempted >= 2:
