@@ -2693,9 +2693,9 @@
   },
   "setup-checks-codex-multi-agent": {
    "check": "live",
-   "claim": "On Codex, setup-pstack checks the live tool list for spawn_agent, reads the multi_agent and multi_agent_v2 rows from `codex features list`, and recommends `[features]` `multi_agent = true` only when native spawning is off, editing only after a yes.",
+   "claim": "On Codex, setup-pstack checks the live tool list for spawn_agent, reads the multi_agent and multi_agent_v2 rows from `codex features list` and the `[agents] enabled` key from the config layers, and recommends the smallest change that turns native spawning on, editing only after a yes.",
    "harness_sensitive": true,
-   "live_case": "setup-run on Codex: fresh CODEX_HOME with multi_agent set false; pass when the transcript reports native spawning off and recommends the two lines without writing them before a yes.",
+   "live_case": "setup-run on Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript reports native spawning off despite the multi_agent row reading true, names that key, and does not edit before a yes.",
    "owners": [
     "skills/setup-pstack/SKILL.md"
    ],
@@ -8272,12 +8272,12 @@
    ],
    "text": "```text\n/no-comments the diff\n```"
   },
-  "3e784e40d1b4": {
+  "9d0b49aec21c": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "On Codex it also checks the `multi_agent` feature, which pstack's native subagent spawns need.",
+   "text": "On Codex it also checks that native subagent spawning is on, which pstack's native spawns need.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }

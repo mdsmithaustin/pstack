@@ -40,20 +40,24 @@ poteto-mode keeps its worklist in the harness's structured task tool when that t
 
 ### 0c. Check Codex subagents
 
-On Codex, pstack spawns roles natively through `spawn_agent`, which the `multi_agent` feature provides, and `multi_agent_v2` provides it too. Run this check when this skill runs on Codex or the user also runs pstack there.
+On Codex, pstack spawns roles natively through `spawn_agent`. As of Codex 0.160.0, a new session gets `spawn_agent` when the `multi_agent` or `multi_agent_v2` feature is on, and `multi_agent` is on by default. The config key `[agents]` `enabled = false` turns `multi_agent` off without changing its feature row, and only `multi_agent_v2` overrides it. Run this check when this skill runs on Codex or the user also runs pstack there.
 
 - When this skill runs inside a Codex session, check the live tool list first. If `spawn_agent` is missing, native spawning is off for this session, whatever the config says. A `-c` flag the session started with is visible only there.
-- Then run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`. It reports the state the config layers give a new session, but not flags a running session was started with. Report the `multi_agent` and `multi_agent_v2` rows. Native spawning works in new sessions when either reads `true`.
+- Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`. Report the `multi_agent` and `multi_agent_v2` rows. They show the state the config layers give a new session, but not flags a running session was started with.
+- `codex features list` does not report `[agents]` `enabled`, so read that key from `config.toml` under `$CODEX_HOME` or `~/.codex/`, and from the project's `.codex/config.toml` when the project is trusted. A trusted project's file wins.
 - When `codex` is not on PATH, as when this skill runs from another CLI, report the check as unverified.
 
-The `multi_agent` feature is stable and on by default as of Codex 0.160.0, so it reads `false` only when a layer turns it off. When both rows read `false`, recommend these lines in `config.toml` under `$CODEX_HOME` or `~/.codex/`, or `codex features enable multi_agent`, which writes them:
+Native spawning is on for new sessions when `multi_agent_v2` reads `true`, or when `multi_agent` reads `true` and no layer sets `[agents]` `enabled = false`. When it is off, recommend the smallest change that turns it on, and name the file that holds the blocking key:
+
+- `[agents]` `enabled = false` is set: delete that line, or set it to `true`.
+- Both feature rows read `false`: add these lines, or run `codex features enable multi_agent`, which writes them:
 
 ```toml
 [features]
 multi_agent = true
 ```
 
-Edit a file only after the user says yes, and keep every other key. A trusted project's `.codex/config.toml` that sets it to false still wins, so name that file if it holds the key. The change applies from the next session. When only the session's launch flags turn it off, name the wrapper or command that passes them instead. While native spawning is off, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent.
+Edit a file only after the user says yes, and keep every other key. The change applies from the next session. When only the session's launch flags turn spawning off, name the wrapper or command that passes them instead. While native spawning is off, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent.
 
 ### 1. Detect available models and efforts
 
