@@ -291,6 +291,116 @@ os._exit(0)
         self.assertIn("pair-incomplete", hermes.build_trace(incomplete.read())["x_harvest_error"])
 
 
+class NativeFtsControls(_OwnerFixture):
+    def database(self):
+        import sqlite3
+        path = super().database()
+        with sqlite3.connect(path) as con:
+            con.executescript("""
+                create view messages_fts_src as select id, content, tool_name, tool_calls from messages;
+                create view messages_fts_trigram_src as select id, content, tool_name from messages;
+                create virtual table messages_fts using fts5(content, tool_name, tool_calls,
+                    content='messages_fts_src', content_rowid='id');
+                create virtual table messages_fts_trigram using fts5(content, tool_name,
+                    content='messages_fts_trigram_src', content_rowid='id', tokenize='trigram');
+                insert into messages_fts(messages_fts) values ('rebuild');
+                insert into messages_fts_trigram(messages_fts_trigram) values ('rebuild');
+            """)
+        con.close()
+        return path
+
+    def assert_preserved_harvest(self, path, reply):
+        before = {p.name: p.read_bytes() for p in path.parent.glob("state.db*")}
+        trace = hermes.harvest(self.run)
+        self.assertNotIn("x_harvest_error", trace, trace.get("x_harvest_error"))
+        self.assertEqual(trace["final_reply"], reply)
+        self.assertEqual(trace["x_session_ids"], ["root"])
+        self.assertEqual({p.name: p.read_bytes() for p in path.parent.glob("state.db*")}, before)
+        raw = self.owner.private_root / "acquisitions" / trace["x_acquisition"] / "raw"
+        self.assertEqual({p.name: p.read_bytes() for p in raw.iterdir()}, before)
+
+    def test_native_fts_tables_harvest_ordinary_messages_without_changing_raw_bytes(self):
+        self.assert_preserved_harvest(self.database(), "native owned reply")
+
+    def test_native_fts_tables_include_the_reply_committed_only_in_wal(self):
+        import sqlite3
+        import subprocess
+        import sys
+        path = self.database()
+        script = '''import os, sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.execute("pragma journal_mode=wal")
+con.execute("pragma wal_autocheckpoint=0")
+con.execute("pragma wal_checkpoint(truncate)")
+con.execute("insert into messages values (3,'root','assistant','native FTS reply only in WAL',null,null,null)")
+con.execute("insert into messages_fts(rowid,content) values (3,'native FTS reply only in WAL')")
+con.execute("insert into messages_fts_trigram(rowid,content) values (3,'native FTS reply only in WAL')")
+con.commit()
+os._exit(0)
+'''
+        subprocess.run([sys.executable, "-c", script, str(path)], check=True, capture_output=True)
+        self.assertGreater((path.parent / "state.db-wal").stat().st_size, 32)
+        main_only = self.base / "main-only.db"
+        main_only.write_bytes(path.read_bytes())
+        with sqlite3.connect(main_only) as con:
+            self.assertEqual(con.execute("select content from messages where role='assistant'").fetchall(),
+                             [("native owned reply",)])
+        con.close()
+        self.assert_preserved_harvest(path, "native FTS reply only in WAL")
+
+    def test_integrity_and_decode_policies_deny_unrelated_access(self):
+        import sqlite3
+        path = self.database()
+        for policy in (self.owner._authorize_integrity, self.owner._authorize):
+            with self.subTest(policy=policy.__name__), sqlite3.connect(path) as con:
+                con.execute("create table unrelated(id text)")
+                con.commit()
+                con.execute("attach ':memory:' as extra")
+                con.execute("create table extra.messages(id text)")
+                con.commit()
+                con.enable_load_extension(False)
+                con.set_authorizer(policy)
+                for statement in ("select * from unrelated", "select * from extra.messages", "begin",
+                                  "attach ':memory:' as outside", "pragma writable_schema=on",
+                                  "pragma main.data_version=1", "delete from messages",
+                                  "select load_extension('owned')", "select content from messages_fts",
+                                  "select content from messages_fts_trigram"):
+                    with self.subTest(statement=statement), self.assertRaises(sqlite3.DatabaseError):
+                        con.execute(statement)
+            con.close()
+            with sqlite3.connect(path) as con:
+                con.execute("drop table unrelated")
+            con.close()
+
+    def test_decode_policy_denies_fts_reads_after_integrity_initialization(self):
+        import sqlite3
+        path = self.database()
+        with sqlite3.connect(path) as con:
+            con.set_authorizer(self.owner._authorize_integrity)
+            self.assertEqual(con.execute("pragma quick_check").fetchall(), [("ok",)])
+            con.set_authorizer(self.owner._authorize)
+            self.assertEqual(con.execute("select content from messages where role='assistant'").fetchall(),
+                             [("native owned reply",)])
+            for statement in ("select k,v from messages_fts_config", "select segid,term,pgno from messages_fts_idx",
+                              "select k,v from messages_fts_trigram_config",
+                              "select segid,term,pgno from messages_fts_trigram_idx", "pragma main.data_version",
+                              "select content from messages_fts", "select content from messages_fts_trigram"):
+                with self.subTest(statement=statement), self.assertRaises(sqlite3.DatabaseError):
+                    con.execute(statement)
+        con.close()
+
+    def test_unknown_virtual_table_refuses_integrated_harvest(self):
+        import sqlite3
+        path = self.database()
+        with sqlite3.connect(path) as con:
+            con.execute("create virtual table unrelated_fts using fts5(content)")
+        con.close()
+        trace = hermes.harvest(self.run)
+        self.assertIn("decode-failed", trace["x_harvest_error"])
+        self.assertEqual(trace["events"], [])
+        self.assertEqual(trace["final_reply"], "")
+
+
 class InventoryInference(unittest.TestCase):
     def test_prefixes_are_checked_before_dot_cancellation_without_host_queries(self):
         import os
