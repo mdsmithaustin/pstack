@@ -2463,8 +2463,8 @@ PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|p
 
 def picked(low):
     for match in PICKED.finditer(low):
-        clause = low[max(low.rfind(".", 0, match.start()), low.rfind("\n", 0, match.start())) + 1:match.start()]
-        if not re.search(r"\b(?:no|not|none|never|neither)\b", clause):
+        clause = re.split(r"[.,;:\n]|\bbut\b", low[:match.start()])[-1]
+        if not re.search(r"\b(?:no|not|none|never|neither)\b", " ".join(clause.split()[-3:])):
             return True
     return False
 

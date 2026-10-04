@@ -1544,6 +1544,13 @@ class ReplyWording(unittest.TestCase):
         result = self.arena("Arena result\n- Candidate 1 was selected, with strict type validation grafted from candidate 2.\n- Verified: 8 unit tests passed.")
         self.assertEqual(result["verdict"], PASS, result)
 
+    def test_an_earlier_negation_in_the_sentence_does_not_cancel_a_pick(self):
+        for line in ("Candidate 2 was not selected, but candidate 1 was selected, with retries grafted from candidate 3.",
+                     "We did not hesitate; candidate 1 was selected, with retries grafted from candidate 3.",
+                     "Neither run converged; candidate 1 was selected anyway, with retries grafted from candidate 3."):
+            result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
+            self.assertEqual(result["verdict"], PASS, (line, result))
+
     def test_a_negated_selection_is_not_a_base(self):
         result = self.arena("Arena result\n- No candidate 1 was selected and no graft was applied.\n- Verified: 8 unit tests passed.")
         self.assertEqual(result["verdict"], FAIL, result)
