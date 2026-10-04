@@ -1,13 +1,13 @@
 import json
+import os
 import sqlite3
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest import mock
 
 from harnesses import hermes
+from harnesses.hermes_evidence import HermesEvidence, LegacyReplayBinding
 
 SESSION_COLUMNS = ("id text, parent_session_id text, model_config text, started_at real, model text, cwd text, "
                    "api_call_count integer, input_tokens integer, output_tokens integer, cache_read_tokens integer")
@@ -35,15 +35,39 @@ class HermesDatabase:
         self.con.close()
 
 
-def tool_call(call_id, name, **arguments):
-    return {"id": call_id, "function": {"name": name, "arguments": json.dumps(arguments)}}
+def tool_call(call_id, tool_name, **arguments):
+    return {"id": call_id, "function": {"name": tool_name, "arguments": json.dumps(arguments)}}
+
+
+def owned_directory(test, prefix):
+    retained = os.environ.get("PSTACK_HERMES_TEST_ARTIFACTS")
+    if retained:
+        return Path(tempfile.mkdtemp(prefix=prefix, dir=retained)).resolve()
+    temporary = tempfile.TemporaryDirectory(prefix=prefix)
+    test.addCleanup(temporary.cleanup)
+    return Path(temporary.name).resolve()
+
+
+def bind_legacy(run, cleanup):
+    (run.root / "run.json").write_text(json.dumps({"turns": run.turns}))
+    for index, turn in enumerate(run.turns):
+        (run.root / "transcripts" / f"turn-{index}.stream.jsonl").write_text(json.dumps({"type": "system", "session_id": turn["session_id"]}) + "\n")
+        (run.root / "transcripts" / f"turn-{index}.stderr.txt").write_text("")
+    retained = os.environ.get("PSTACK_HERMES_TEST_ARTIFACTS")
+    private = tempfile.mkdtemp(prefix="hermes-test-private-", dir=retained)
+    if not retained:
+        import shutil
+        cleanup(lambda: shutil.rmtree(private))
+    run._hermes_evidence = HermesEvidence.replay_legacy(
+        LegacyReplayBinding(run.root, str(run.project), ("w", "p"), "native-profile", "owned fixture writer closed"),
+        Path(private).resolve())
+    cleanup(run._hermes_evidence.close)
 
 
 class HermesDelegates(unittest.TestCase):
     def setUp(self):
-        tmp = tempfile.TemporaryDirectory(prefix="pstack-hermes-test-")
-        self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name)
+        self.root = owned_directory(self, "pstack-hermes-test-")
+        (self.root / "w" / "p").mkdir(parents=True)
         (self.root / "hroot/profiles/probe").mkdir(parents=True)
         (self.root / "transcripts").mkdir()
         (self.root / "hermes.json").write_text(json.dumps({
@@ -67,6 +91,7 @@ class HermesDelegates(unittest.TestCase):
 
     def harvest(self):
         self.db.done()
+        bind_legacy(self.run_, self.addCleanup)
         return hermes.harvest(self.run_)
 
     def test_children_started_out_of_task_order_still_match_their_own_task(self):
@@ -105,24 +130,55 @@ class HermesDelegates(unittest.TestCase):
         self.assertEqual(events, [("tool_call", "c1", None), ("tool_call", "c2", None), ("tool_result", "c2", False), ("tool_result", "c1", True)])
 
 
-class HermesContainerStatus(unittest.TestCase):
-    def setUp(self):
-        self.run_ = SimpleNamespace(root=Path("/r"), project=Path("/r/w/p"))
-        patcher = mock.patch.object(hermes, "hermes_image", return_value="img")
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-    def docker(self, code, out="", err=""):
-        return mock.patch.object(hermes.subprocess, "run", return_value=subprocess.CompletedProcess([], code, out, err))
-
-    def test_a_failed_docker_run_raises_with_its_stderr(self):
-        with self.docker(125, "", "Unable to find image 'img'"):
-            with self.assertRaisesRegex(RuntimeError, "Unable to find image"):
-                hermes.run_in_container(self.run_, "version", hermes.HERMES_BIN, ["--version"])
-
-    def test_a_successful_probe_returns_stripped_stdout(self):
-        with self.docker(0, " Hermes 1.2\n"):
-            self.assertEqual(hermes.run_in_container(self.run_, "version", hermes.HERMES_BIN, ["--version"]), "Hermes 1.2")
+class HermesTraceParity(unittest.TestCase):
+    def test_literal_bridge_todos_root_turns_and_child_reads(self):
+        root = owned_directory(self, "hermes-parity-")
+        project = root / "w/p"
+        project.mkdir(parents=True)
+        (project / "a.py").write_text("owned a")
+        (project / "b.py").write_text("owned b")
+        (root / "hroot/profiles/probe").mkdir(parents=True)
+        (root / "transcripts").mkdir()
+        (root / "hermes.json").write_text(json.dumps({"image": "img", "cli_version": "1", "entry": "poteto-mode",
+            "preload": {"loaded": ["poteto-mode"], "missing": []}, "preloads": {"poteto-mode": {"loaded": ["poteto-mode"]}},
+            "todo_eager": True, "todo_tools": "on"}))
+        run = SimpleNamespace(root=root, project=project, case={"entry": "poteto-mode", "turns": ["first", "second"]},
+            turns=[{"session_id": "root", "hermes_argv": ["hermes", "chat"], "exit_code": 0, "duration_s": 1},
+                   {"session_id": "root", "hermes_argv": ["hermes", "chat", "--resume", "root"], "exit_code": 0, "duration_s": 2}])
+        db = HermesDatabase(root / "hroot/profiles/probe/state.db")
+        db.session("root")
+        db.session("kid", parent="root", started=1, model="child-model", usage=(1, 2, 3, 4))
+        db.con.execute("update sessions set cwd=?", (str(project),))
+        db.message("root", "user", "first")
+        db.message("root", "assistant", "1. pending. inspect\n2. completed. plan")
+        db.message("root", "assistant", calls=[tool_call("bridge", "tool_call", name="read_file", arguments={"path": "a.py"})])
+        db.message("root", "tool", "{}", call_id="bridge")
+        db.message("root", "assistant", calls=[tool_call("todo", "todo_list", todos=[])])
+        db.message("root", "tool", json.dumps({"todos": [{"content": "inspect", "status": "completed"}]}), call_id="todo")
+        db.message("root", "assistant", calls=[tool_call("spawn", "delegate_task", goal="child goal", context="poteto-agent")])
+        db.message("root", "tool", json.dumps({"results": [{"task_index": 0, "api_calls": 1, "tokens": {"input": 6, "output": 3}}]}), call_id="spawn")
+        db.message("root", "user", "second")
+        db.message("root", "assistant", "finished second turn")
+        db.message("kid", "user", "child goal")
+        db.message("kid", "assistant", "persona: poteto-agent\nchild reply")
+        db.message("kid", "assistant", calls=[tool_call("read", "terminal", command="cat b.py")])
+        db.message("kid", "tool", '{"exit_code":0}', call_id="read")
+        db.done()
+        bind_legacy(run, self.addCleanup)
+        trace = hermes.harvest(run)
+        self.assertNotIn("x_harvest_error", trace)
+        self.assertEqual([(e["seq"], e["turn"], e["kind"], e.get("id")) for e in trace["events"]], [
+            (0, 0, "user", None), (1, 0, "text", None), (2, 0, "tool_call", "bridge"), (3, 0, "tool_result", "bridge"),
+            (4, 0, "tool_call", "todo"), (5, 0, "tool_result", "todo"), (6, 0, "tool_call", "spawn"),
+            (7, 0, "tool_result", "spawn"), (8, 1, "user", None), (9, 1, "text", None)])
+        self.assertEqual(trace["files_read"], [str(project / "a.py"), str(project / "b.py")])
+        self.assertEqual(trace["worklist"], [
+            {"seq": 1, "turn": 0, "carrier": "text", "items": [{"text": "pending. inspect", "state": "pending"}, {"text": "completed. plan", "state": "completed"}]},
+            {"seq": 5, "turn": 0, "carrier": "todo_list", "items": [{"text": "inspect", "state": "completed"}]}])
+        self.assertEqual(trace["spawns"], [{"seq": 6, "turn": 0, "tool": "delegate_task", "persona": "poteto-agent",
+            "model": "child-model", "effort": "high", "prompt_head": "child goal\npoteto-agent",
+            "x_child_first_reply": "persona: poteto-agent\nchild reply", "x_persona_line": "poteto-agent", "x_child_session": "kid", "x_child_match": "usage"}])
+        self.assertEqual((trace["final_reply"], trace["duration_s"], trace["entry"]), ("finished second turn", 3, "injected"))
 
 
 if __name__ == "__main__":

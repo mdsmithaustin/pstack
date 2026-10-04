@@ -2,51 +2,17 @@ import json
 import os
 import re
 import shlex
-import shutil
-import sqlite3
-import subprocess
+import posixpath
+import uuid
 from pathlib import Path
 
 import live
+from harnesses.hermes_evidence import (HermesEvidence, RunBinding, NativeSetup, NativeTurn,
+    IncompleteEvidence, thaw, TOOLSETS, USER_HERMES)
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents"]
 SHARES_HOST_TMP = False
-
-GATEWAY_CONTAINER = "hermes-default-gateway"
-HERMES_BIN = "/opt/hermes/.venv/bin/hermes"
-PYTHON_BIN = "/opt/hermes/.venv/bin/python"
-TOOLSETS = ("delegation", "file", "skills", "terminal", "todo")
-USER_HERMES = Path.home() / ".hermes"
-DOCKER_ENV_KEYS = ("PATH", "HOME", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_CONFIG")
-
-PRELOAD_CHECK = """
-import json, sys
-sys.path.insert(0, "/opt/hermes")
-from agent.skill_commands import build_preloaded_skills_prompt
-text, loaded, missing = build_preloaded_skills_prompt([sys.argv[1]])
-print(json.dumps({"loaded": loaded, "missing": missing, "chars": len(text)}))
-"""
-
-CONFIG = """{model}agent:
-  max_turns: 90
-  reasoning_effort: high
-terminal:
-  backend: local
-  cwd: {project}
-  timeout: 300
-skills:
-  trusted_project_dirs:
-    - {project}
-delegation:
-  max_concurrent_children: 4
-  max_spawn_depth: 1
-  subagent_auto_approve: true
-  oneshot_max_children: 0
-platform_toolsets:
-  cli:
-{toolsets}{tools}"""
-EAGER_TOOLS = 'tools:\n  tool_search:\n    enabled: "off"\n'
 
 PERSONA_LINE = re.compile(r"^persona: ([\w-]+)[ \t]*$", re.M)
 READ_COMMANDS = {"cat", "head", "tail", "sed", "nl", "less", "more", "awk", "bat", "wc", "grep", "rg", "diff", "cmp"}
@@ -66,18 +32,6 @@ def transcripts(run):
     return run.root / "transcripts"
 
 
-def hermes_image():
-    if os.environ.get("HERMES_IMAGE"):
-        return os.environ["HERMES_IMAGE"]
-    fmt = "{{.Config.Image}}\n{{.Image}}"
-    probe = subprocess.run(["docker", "inspect", GATEWAY_CONTAINER, "--format", fmt], capture_output=True, text=True)
-    if probe.returncode:
-        raise RuntimeError(f"no Hermes image: set HERMES_IMAGE or run the {GATEWAY_CONTAINER} container "
-                           f"({probe.stderr.strip()})")
-    ref, image_id = probe.stdout.split()
-    return ref if "@sha256:" in ref else image_id
-
-
 def user_model_block():
     text = (USER_HERMES / "config.yaml").read_text(encoding="utf-8")
     found = re.search(r"^model:\n(?:[ \t]+.*\n)+", text, re.M)
@@ -86,98 +40,28 @@ def user_model_block():
     return found.group(0)
 
 
-def docker_env():
-    return {k: os.environ[k] for k in DOCKER_ENV_KEYS if k in os.environ}
-
-
-def container_argv(run, name, image, entrypoint, args):
-    auth = profile(run).parents[1] / "auth.json"
-    env = {"HOME": run.root / "home", "HERMES_HOME": profile(run), "TERMINAL_CWD": run.project,
-           "HERMES_WRITE_SAFE_ROOT": f"{run.project}:{profile(run) / 'cache'}", "TMPDIR": run.root / "tmp"}
-    flags = [x for k, v in env.items() for x in ("-e", f"{k}={v}")]
-    return ["docker", "run", "--rm", "-i", "--init", "--name", name, "--entrypoint", entrypoint,
-            "-v", f"{run.root}:{run.root}", "-v", f"{USER_HERMES / 'auth.json'}:{auth}:ro",
-            *flags, "-w", run.project, image, *args]
-
-
-def container_name(run, tag):
-    return f"pstack-hermes-{run.root.name}-{tag}"
-
-
-def run_in_container(run, tag, entrypoint, args, timeout_s=120):
-    argv = container_argv(run, container_name(run, tag), hermes_image(), entrypoint, args)
-    done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s, env=docker_env())
-    if done.returncode:
-        raise RuntimeError(f"docker run {tag} exited {done.returncode}: {(done.stderr or done.stdout).strip()[-300:]}")
-    return done.stdout.strip()
-
-
 def prepare(run):
+    parent = getattr(run, "hermes_retain_out", None) or run.root.parent
+    owner = HermesEvidence.bind(RunBinding(uuid.uuid4().hex, run.root, run.project, parent), run.timeout_s)
+    run._hermes_evidence = owner
     if not (USER_HERMES / "auth.json").is_file():
         raise RuntimeError(f"{USER_HERMES / 'auth.json'} is missing; log in to Hermes first")
-    home = profile(run)
-    for d in (home, run.root / "home", run.root / "tmp", transcripts(run)):
-        d.mkdir(parents=True, exist_ok=True)
-    (home / ".no-bundled-skills").touch()
-    (home.parents[1] / "auth.json").touch()
+    skills = tuple(dict.fromkeys(s for i, text in enumerate(run.case["turns"])
+                               for s in [live.split_entry(run.case, text, i)[0]] if s))
     eager = run.case.get("env", {}).get("todo_tools") is not False
-    (home / "config.yaml").write_text(CONFIG.format(
-        model=user_model_block(), project=run.project,
-        toolsets="".join(f"    - {t}\n" for t in toolsets(run)),
-        tools=EAGER_TOOLS if eager else ""))
-    entry = run.case.get("entry")
-    skills = list(dict.fromkeys(s for i, text in enumerate(run.case["turns"])
-                                for s in [live.split_entry(run.case, text, i)[0]] if s))
-    preloads = {}
-    for skill in skills:
-        out = run_in_container(run, f"preload-{skill}", PYTHON_BIN, ["-c", PRELOAD_CHECK, skill])
-        preloads[skill] = json.loads(out.splitlines()[-1]) if out else {"loaded": [], "missing": [skill]}
-    preload = preloads.get(entry, {})
-    version = run_in_container(run, "version", HERMES_BIN, ["--version"])
-    (run.root / "hermes.json").write_text(json.dumps({
-        "image": hermes_image(), "cli_version": version.splitlines()[0] if version else None,
-        "entry": entry, "preload": preload, "preloads": preloads, "todo_eager": eager,
-        "todo_tools": "off" if run.case.get("env", {}).get("todo_tools") is False else "on"}, indent=1) + "\n")
-
-
-def session_id_of(stdout_path):
-    found = None
-    for line in Path(stdout_path).read_text(encoding="utf-8", errors="replace").splitlines():
-        if line.startswith("{"):
-            try:
-                event = json.loads(line)
-            except ValueError:
-                continue
-            if event.get("type") in ("system", "result") and event.get("session_id"):
-                found = found or event["session_id"]
-        elif line.startswith("session_id: "):
-            found = found or line.split(": ", 1)[1].strip()
-    return found
+    owner.prepare(NativeSetup(os.environ.get("HERMES_IMAGE"), user_model_block(), run.case.get("entry"),
+                              skills, eager, "on" if eager else "off"))
 
 
 def turn(run, text, index):
     skill, rest = live.split_entry(run.case, text, index)
     entry = run.case.get("entry")
-    sessions = [t.get("session_id") for t in run.turns if t.get("session_id")]
-    if index and not sessions:
-        raise RuntimeError(f"turn {index} cannot resume: no earlier turn reported a Hermes session id")
     query = rest or f"/{skill}"
     args = ["chat", "-Q", f"--query={query}", "--format", "stream-json", "--reasoning", "high",
             "-t", ",".join(toolsets(run)), "--yolo", "--run-budget", str(max(30, int(run.timeout_s * 0.9)))]
     for name in dict.fromkeys(n for n in (entry, skill) if n):
         args += ["-s", name]
-    if index:
-        args += ["--resume", sessions[0]]
-    image = hermes_image()
-    name = container_name(run, f"turn{index}")
-    stream, stderr = (transcripts(run) / f"turn-{index}.{ext}" for ext in ("stream.jsonl", "stderr.txt"))
-    try:
-        record = live.execute(container_argv(run, name, image, HERMES_BIN, args), run.project, docker_env(),
-                              run.timeout_s, stream, stderr)
-    finally:
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True, env=docker_env())
-    return {**record, "hermes_argv": ["hermes", *args], "image": image, "session_id": session_id_of(stream),
-            "stream": str(stream)}
+    return run._hermes_evidence.turn(NativeTurn(index, tuple(args)))
 
 
 def parse_json(text):
@@ -187,40 +71,83 @@ def parse_json(text):
         return None
 
 
-def resolve_path(path, cwd):
-    p = Path(os.path.expanduser(path))
-    return str((p if p.is_absolute() else Path(cwd) / p).resolve())
-
-
-def shell_reads(command, cwd):
-    found = []
-    for segment in re.split(r"&&|\|\||;|\||\n", command):
-        try:
-            words = shlex.split(segment)
-        except ValueError:
-            continue
-        if words[:1] == ["cd"] and len(words) > 1:
-            cwd = resolve_path(words[1], cwd)
-            continue
-        if not words or Path(words[0]).name not in READ_COMMANDS:
-            continue
-        for w in words[1:]:
-            if w.startswith("-") or not re.search(r"[/.]", w):
+def classify_path(path, cwd, fixture):
+    inventory = {entry.components: entry.kind for entry in fixture.entries}
+    root = fixture.original_spelling.rstrip("/")
+    def components(value):
+        if not isinstance(value, str) or any(c in value for c in ("~", "$", "`", "*", "?", "\x00")):
+            return None
+        if value == root:
+            return []
+        if value.startswith(root + "/"):
+            return value[len(root) + 1:].split("/")
+        return None
+    def walk(parts, stack):
+        for index, part in enumerate(parts):
+            if part in ("", "."):
                 continue
-            full = resolve_path(w, cwd)
-            if os.path.isfile(full):
-                found.append(full)
-    return found
+            if part == "..":
+                if not stack:
+                    return None, "escape"
+                stack.pop()
+                continue
+            stack.append(part)
+            kind = inventory.get(tuple(stack), "missing")
+            if kind in ("symlink", "hardlink", "special", "unavailable"):
+                return None, kind
+            if index < len(parts) - 1 and kind != "directory":
+                return None, "unavailable-prefix"
+        return stack, inventory.get(tuple(stack), "directory" if not stack else "missing")
+    base = components(cwd)
+    if base is None:
+        return {"requested": path, "cwd": cwd, "spelling": None, "disposition": "unavailable", "reason": "outside-cwd"}
+    stack, kind = walk(base, [])
+    if stack is None or kind != "directory":
+        return {"requested": path, "cwd": cwd, "spelling": None, "disposition": "unavailable", "reason": "refused-cwd"}
+    absolute = isinstance(path, str) and path.startswith("/")
+    parts = components(path) if absolute else components(root + "/" + path) if isinstance(path, str) else None
+    if parts is None:
+        return {"requested": path, "cwd": cwd, "spelling": None, "disposition": "unavailable", "reason": "outside-or-uninterpreted"}
+    stack, kind = walk(parts, [] if absolute else stack)
+    return {"requested": path, "cwd": cwd, "spelling": root + ("/" + "/".join(stack) if stack else "") if stack is not None else None,
+            "disposition": "unavailable" if stack is None else "fixture-missing" if kind == "missing" else "fixture-request",
+            "reason": kind if stack is None else None, "kind": kind}
 
 
-def tool_reads(name, args, result, cwd):
+def tool_reads(name, args, result, cwd, fixture, evidence):
+    found = []
+    def classify(path, base, shell=False):
+        record = classify_path(path, base, fixture)
+        evidence.append(record)
+        if record["disposition"] in ("fixture-request", "fixture-missing") and (not shell or record["kind"] == "regular"):
+            found.append(record["spelling"])
+        return record
     if name == "read_file" and args.get("path"):
-        return [resolve_path(args["path"], cwd)]
-    if name == "skill_view" and isinstance(result, dict) and result.get("skill_dir"):
-        return [str(Path(result["skill_dir"]) / (args.get("file_path") or "SKILL.md"))]
-    if name == "terminal" and args.get("command"):
-        return shell_reads(args["command"], args.get("workdir") or cwd)
-    return []
+        classify(args["path"], cwd)
+    elif name == "skill_view" and isinstance(result, dict) and result.get("skill_dir"):
+        directory = classify_path(result["skill_dir"], cwd, fixture)
+        evidence.append(directory)
+        if directory["disposition"] != "unavailable":
+            classify(args.get("file_path") or "SKILL.md", directory["spelling"])
+    elif name == "terminal" and args.get("command"):
+        base = args.get("workdir") or cwd
+        for segment in re.split(r"&&|\|\||;|\||\n", args["command"]):
+            try:
+                words = shlex.split(segment)
+            except ValueError:
+                continue
+            if words[:1] == ["cd"] and len(words) > 1:
+                record = classify_path(words[1], base, fixture)
+                evidence.append(record)
+                base = record["spelling"] if record["disposition"] != "unavailable" else ""
+                continue
+            if not words or posixpath.basename(words[0]) not in READ_COMMANDS:
+                continue
+            for word in words[1:]:
+                if word.startswith("-") or not re.search(r"[/.]", word):
+                    continue
+                classify(word, base, shell=True)
+    return found
 
 
 def result_ok(content):
@@ -269,20 +196,10 @@ def todo_items(todos):
 def text_worklist(text):
     return live.chat_worklist(text) or []
 
-def session_rows(con):
-    con.row_factory = sqlite3.Row
-    rows = [dict(r) for r in con.execute("select * from sessions order by started_at")]
-    for r in rows:
-        r["model_config"] = parse_json(r.get("model_config")) or {}
-        r["delegate_from"] = r["parent_session_id"] or r["model_config"].get("_delegate_from")
-    return rows
-
-
-def walk(con, session):
+def walk(messages, session, fixture, path_evidence):
     cwd = session.get("cwd") or "/"
     pending = {}
-    rows = con.execute("select * from messages where session_id=? order by id", (session["id"],))
-    for m in map(dict, rows):
+    for m in messages[session["id"]]:
         if m["role"] == "user":
             if (m["content"] or "").strip():
                 yield {"kind": "user", "text": m["content"]}, [], None
@@ -303,25 +220,14 @@ def walk(con, session):
             content = m["content"] or ""
             result = parse_json(content)
             yield ({"kind": "tool_result", "name": name, "ok": result_ok(content), "output_head": content[:400],
-                    **({"id": m["tool_call_id"]} if single else {})}, tool_reads(name, args, result, cwd), result)
+                    **({"id": m["tool_call_id"]} if single else {})}, tool_reads(name, args, result, cwd, fixture, path_evidence), result)
 
 
-def copy_state(run):
-    dest = transcripts(run)
-    dest.mkdir(parents=True, exist_ok=True)
-    for suffix in ("", "-wal", "-shm"):
-        src = profile(run) / f"state.db{suffix}"
-        if src.exists():
-            shutil.copy2(src, dest / f"state.db{suffix}")
-    return dest / "state.db"
+def first_user_text(messages, session):
+    return next(((m["content"] or "").strip() for m in messages[session["id"]] if m["role"] == "user"), "")
 
 
-def first_user_text(con, session):
-    row = con.execute("select content from messages where session_id=? and role='user' order by id limit 1", (session["id"],)).fetchone()
-    return (row[0] or "").strip() if row else ""
-
-
-def match_child(con, children, claimed, task, outcome):
+def match_child(messages, children, claimed, task, outcome):
     free = [c for c in children if c["id"] not in claimed]
     usage = (outcome or {}).get("tokens") or {}
     if outcome and usage:
@@ -331,19 +237,18 @@ def match_child(con, children, claimed, task, outcome):
                 return c, "usage"
     goal = (task.get("goal") or "").strip()
     for c in free:
-        if goal and first_user_text(con, c) == goal:
+        if goal and first_user_text(messages, c) == goal:
             return c, "goal"
     return (free[0], "order") if free else (None, None)
 
 
-def first_reply(con, session):
-    return next((e["text"] for e, _, _ in walk(con, session) if e["kind"] == "text"), None)
+def first_reply(messages, session):
+    return next((m["content"] for m in messages[session["id"]] if m["role"] == "assistant" and (m["content"] or "").strip()), None)
 
 
-def turn_entries(run, meta):
+def turn_entries(skills, meta):
     found = []
-    for index, text in enumerate(run.case["turns"][:len(run.turns)]):
-        skill = live.split_entry(run.case, text, index)[0]
+    for index, skill in enumerate(skills):
         if skill:
             check = meta["preloads"].get(skill, {})
             state = "injected" if skill in check.get("loaded", []) else "not-registered" if skill in check.get("missing", []) else "not-observed"
@@ -365,22 +270,37 @@ def entry_kind(entry, preload, events):
 
 
 def harvest(run):
-    meta = json.loads((run.root / "hermes.json").read_text())
-    db = copy_state(run)
-    stream_files = sorted(str(p) for p in transcripts(run).glob("turn-*"))
-    roots = list(dict.fromkeys(t["session_id"] for t in run.turns if t.get("session_id")))
+    evidence = run._hermes_evidence.read()
+    skills = tuple(live.split_entry(run.case, text, i)[0] for i, text in enumerate(run.case["turns"][:len(evidence.turns)]))
+    return build_trace(evidence, skills)
+
+
+def build_trace(evidence, skills=()):
+    try:
+        return _build_trace(evidence, skills)
+    except (TypeError, ValueError, KeyError, AttributeError, RecursionError) as exc:
+        incomplete = IncompleteEvidence(evidence.acquisition.run_id, evidence.acquisition.id, "invalid-native-records",
+                                        str(exc), evidence.meta, evidence.turns, evidence.retained_paths)
+        return _build_trace(incomplete, skills)
+
+
+def _build_trace(evidence, skills=()):
+    meta = thaw(evidence.meta) if evidence.meta else {"cli_version": None, "image": None, "entry": None, "preload": {}, "todo_eager": None}
+    turns = [thaw(t.record) for t in evidence.turns]
+    roots = list(dict.fromkeys(t["session_id"] for t in turns if t.get("session_id")))
+    path_evidence = []
     events, files_read, worklist, spawn_calls, spawns = [], [], [], [], []
     root_row, children, error = {}, [], None
-    try:
-        con = sqlite3.connect(db)
-        rows = session_rows(con)
+    if not isinstance(evidence, IncompleteEvidence):
+        rows = [thaw(r.session) for r in evidence.sessions]
+        messages = {thaw(r.session)["id"]: [thaw(m) for m in r.messages] for r in evidence.sessions}
         by_id = {r["id"]: r for r in rows}
         root_rows = [by_id[i] for i in roots if i in by_id]
         root_row = root_rows[-1] if root_rows else {}
         children = [r for r in rows if r["delegate_from"] in roots]
         turn = -1
         for session in root_rows:
-            for event, reads, result in walk(con, session):
+            for event, reads, result in walk(messages, session, evidence.fixture, path_evidence):
                 seq = len(events)
                 turn += event["kind"] == "user"
                 events.append({"seq": seq, "turn": max(turn, 0), **event})
@@ -407,10 +327,10 @@ def harvest(run):
                                           if args.get("goal") else [])
             outcomes = {r.get("task_index"): r for r in (call["result"] or {}).get("results") or [] if isinstance(r, dict)}
             for index, task in enumerate(tasks):
-                child, matched = match_child(con, children, claimed, task, outcomes.get(index))
+                child, matched = match_child(messages, children, claimed, task, outcomes.get(index))
                 claimed.add(child["id"] if child else None)
                 brief = f"{task.get('goal', '')}\n{task.get('context', '')}"
-                reply = first_reply(con, child) if child else None
+                reply = first_reply(messages, child) if child else None
                 line = PERSONA_LINE.search(reply or "")
                 spawns.append({
                     "seq": seq, "turn": spawn_turn, "tool": "delegate_task",
@@ -421,13 +341,14 @@ def harvest(run):
                     "x_persona_line": line.group(1) if line else None,
                     "x_child_session": child["id"] if child else None, "x_child_match": matched})
         for child in children:
-            for _, reads, _ in walk(con, child):
+            for _, reads, _ in walk(messages, child, evidence.fixture, path_evidence):
                 files_read.extend(reads)
-        con.close()
-    except sqlite3.DatabaseError as exc:
-        error = f"{type(exc).__name__}: {exc}"
+    else:
+        error = f"{evidence.reason}: {evidence.detail}"
+    if any(p["disposition"] == "unavailable" for p in path_evidence):
+        error = "path-refused: recorded read crosses an unavailable fixture prefix"
     texts = [e["text"] for e in events if e["kind"] == "text"]
-    argv = (run.turns[0].get("hermes_argv") if run.turns else None) or []
+    argv = (turns[0].get("hermes_argv") if turns else None) or []
     effort = ((root_row.get("model_config") or {}).get("reasoning_config") or {}).get("effort")
     trace = {
         "harness": "hermes",
@@ -435,24 +356,27 @@ def harvest(run):
         "model": root_row.get("model"),
         "effort": effort or ("high" if argv else None),
         "argv": argv,
-        "cwd": root_row.get("cwd") or str(run.project),
-        "exit_code": run.turns[-1].get("exit_code") if run.turns else None,
-        "duration_s": round(sum(t.get("duration_s", 0) for t in run.turns), 1),
+        "cwd": root_row.get("cwd") or evidence.fixture.original_spelling if not isinstance(evidence, IncompleteEvidence) else "",
+        "exit_code": turns[-1].get("exit_code") if turns else None,
+        "duration_s": round(sum(t.get("duration_s", 0) for t in turns), 1),
         "entry": entry_kind(meta["entry"], meta["preload"], events),
         "events": events,
         "files_read": list(dict.fromkeys(files_read)),
         "worklist": worklist,
         "spawns": spawns,
         "final_reply": texts[-1] if texts else "",
-        "transcript_paths": [str(db), *stream_files],
+        "transcript_paths": list(evidence.retained_paths),
         "x_image": meta["image"],
         "x_session_ids": roots,
         "x_delegate_sessions": [c["id"] for c in children],
-        "x_turn_argvs": [t.get("hermes_argv") for t in run.turns],
+        "x_turn_argvs": [t.get("hermes_argv") for t in turns],
         "x_todo_eager": meta["todo_eager"],
         "x_todo_tools": meta.get("todo_tools", "on"),
-        "x_turn_entries": turn_entries(run, meta) if "preloads" in meta else [],
+        "x_turn_entries": turn_entries(skills, meta) if "preloads" in meta else [],
     }
+    trace["x_path_evidence"] = path_evidence
+    trace["x_acquisition"] = evidence.acquisition.id if not isinstance(evidence, IncompleteEvidence) else evidence.acquisition_id
+    trace["x_provenance"] = evidence.acquisition.provenance if not isinstance(evidence, IncompleteEvidence) else "incomplete"
     if error:
         trace["x_harvest_error"] = error
     return trace
