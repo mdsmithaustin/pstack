@@ -66,13 +66,13 @@ Live runs spend model budget. Codex and Hermes draw on the same ChatGPT plan whe
 Each adapter in `harnesses/` isolates its harness from the host's own skills and settings:
 
 - **Claude Code.** `--setting-sources project` loads project settings. `--strict-mcp-config` and `--mcp-config '{"mcpServers":{}}'` exclude account MCP servers on initial and resumed turns. The scrubbed environment preserves `HOME` and any existing `CLAUDE_CONFIG_DIR` for login and sessions. Claude Code discovers the project's installed skills.
-- **Codex.** A moved `HOME` and a private `CODEX_HOME` that holds only an `auth.json` link.
+- **Codex.** A moved `HOME` and a private `CODEX_HOME` with an `auth.json` link preserve login without loading host settings. `--disable apps` excludes account apps and their `codex_apps` MCP tools on initial and resumed turns.
 - **Hermes.** A throwaway `docker run` of the gateway image, with a temp `HERMES_HOME` and `auth.json` mounted read-only.
 - **Grok Build.** A temp `HOME` and `GROK_HOME`, with an auth provider that reads `~/.grok/auth.json` and never writes it.
 
 No adapter writes to the user's own harness configuration. Agents still write literal `/tmp` paths named after the project. `live.py` therefore runs one case of a fixture at a time on the host harnesses, unless the case sets `tmp_lock` to false.
 
-Claude Code cases expose no MCP servers. The parallel half of `why-queries-evidence-categories-in-parallel` remains unmeasured without a common stub issue-tracker MCP on every harness.
+Claude Code and Codex cases exclude account MCP servers. The parallel half of `why-queries-evidence-categories-in-parallel` remains unmeasured without a common stub issue-tracker MCP on every harness.
 
 `testdata/traces/` holds reduced traces that `test_oracles.py` grades. `python3 evals/promises/reduce_trace.py <trace.json> --case feature-run --case route-feature` rewrites a raw trace down to the events and fields that keep every verdict and failure reason. Add `--exact <promise>` to keep that promise's evidence lines too, as `test_claude_high_reply_quotes_executed_commands_with_outputs` needs for `claude-code-feature-2.json`.
 
