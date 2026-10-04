@@ -767,13 +767,29 @@ def under(base, target):
     return target if not base or target.startswith(("/", "$", "~")) else f"{base}/{target}"
 
 
-def shell_writes(command):
-    out, base = [], ""
-    for segment, masked in shell_segments(expand_assignments(strip_heredocs(command))):
+def walk_segments(command):
+    base, outer = "", []
+    for segment, masked in shell_segments(command):
+        opening = re.match(r"\s*(\(*)", masked)
+        outer += [base] * len(opening.group(1))
+        segment, masked = segment[opening.end():], masked[opening.end():]
+        closing = re.search(r"(\)*)\s*$", masked)
+        shut = min(len(closing.group(1)), len(outer))
+        if shut:
+            end = closing.end(1) - shut
+            segment, masked = segment[:end], masked[:end]
         moved = cd_into(segment, base)
         if moved is not None:
             base = moved
-            continue
+        else:
+            yield segment, masked, base
+        for _ in range(shut):
+            base = outer.pop()
+
+
+def shell_writes(command):
+    out = []
+    for segment, masked, base in walk_segments(expand_assignments(strip_heredocs(command))):
         found = [m for pattern in (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
                                    r"\bsed\s+-i[^\s]*(?:\s+(?:''|\"\"))?\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
                                    r"\b(?:rm|git rm)\s+(?:-\w+\s+)*([^\s;&|]+)",
@@ -794,12 +810,8 @@ PYTHON_OPEN_WRITE = re.compile(r"\bopen\(\s*(['\"])([^'\"\n]+)\1\s*,\s*(['\"])([
 
 
 def python_writes(command):
-    out, base, bodies = [], "", [body for _, body in heredoc_bodies(command)]
-    for segment, _ in shell_segments(strip_heredocs(command)):
-        moved = cd_into(segment, base)
-        if moved is not None:
-            base = moved
-            continue
+    out, bodies = [], [body for _, body in heredoc_bodies(command)]
+    for segment, _, base in walk_segments(strip_heredocs(command)):
         body = bodies.pop(0) if HEREDOC.search(segment) and bodies else None
         if not PYTHON_HEADER.search(segment):
             continue
