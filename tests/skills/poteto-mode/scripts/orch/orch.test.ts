@@ -703,37 +703,21 @@ describe("Store", () => {
           ["--store", storeDirectory, "--json", "frontier", "set", "--repo", stack.repo],
           env
         );
-        expect(result).toEqual({
-          code: 0,
-          stdout: `${JSON.stringify({
-            generation: 1,
-            prs: [
-              {
-                pr: 10,
-                branches: "stack/merged",
-                sha: stack.mergedSha,
-                state: "MERGED",
-              },
-              {
-                pr: 13,
-                branches: "stack/closed",
-                sha: stack.closedSha,
-                state: "CLOSED",
-              },
-              {
-                pr: 11,
-                branches: "stack/open",
-                sha: stack.openSha,
-                state: "OPEN",
-              },
-            ],
-            lowestUnmerged: 11,
-          })}\n`,
-          stderr: "",
-        });
+        expect(result.code).toBe(0);
+        expect(result.stderr).toBe("");
+        const expected = {
+          generation: 1,
+          prs: [
+            { pr: 10, branches: "stack/merged", sha: stack.mergedSha, state: "MERGED" },
+            { pr: 13, branches: "stack/closed", sha: stack.closedSha, state: "CLOSED" },
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+          ],
+          lowestUnmerged: 11,
+        };
+        expect(JSON.parse(result.stdout)).toEqual(expected);
         expect(
           JSON.parse(await readFile(join(storeDirectory, "frontier.json"), "utf8"))
-        ).toEqual(JSON.parse(result.stdout));
+        ).toEqual(expected);
       },
     });
   });
@@ -792,6 +776,96 @@ describe("Store", () => {
           prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
           lowestUnmerged: 11,
         });
+      },
+    });
+  });
+
+  it("rejects missing and empty origin identities without recording a frontier", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([{
+        number: 11,
+        state: "OPEN",
+        headRefName: "stack/open",
+        headRefOid: stack.openSha,
+        baseRefName: "main",
+        isCrossRepository: false,
+      }]),
+      operation: async () => {
+        git({ repo: stack.repo, args: ["remote", "remove", "origin"] });
+        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+          "GitHub frontier discovery requires an origin remote"
+        );
+        git({ repo: stack.repo, args: ["config", "remote.origin.url", ""] });
+        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+          "gh pr list failed"
+        );
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+      },
+    });
+  });
+
+  it("keeps historical ambiguity and topology checks after repository selection", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const selected = {
+      number: 11,
+      state: "OPEN",
+      headRefName: "stack/open",
+      headRefOid: stack.openSha,
+      baseRefName: "stack/merged",
+      isCrossRepository: false,
+    };
+    const parent = {
+      ...selected,
+      number: 10,
+      state: "MERGED",
+      headRefName: "stack/merged",
+      headRefOid: stack.mergedSha,
+      baseRefName: "main",
+    };
+    const cases = [
+      {
+        rows: [selected, parent, { ...parent, number: 12, state: "CLOSED" }],
+        error: "multiple PRs for base branch stack/merged",
+      },
+      {
+        rows: [selected, { ...selected, number: 12, state: "MERGED" }],
+        error: "multiple PRs for checked out branch stack/open",
+      },
+      {
+        rows: [selected, parent, { ...selected, number: 12, headRefName: "stack/sibling" }],
+        error: "branched stack above stack/merged",
+      },
+      {
+        rows: [selected, { ...parent, baseRefName: "stack/open" }],
+        error: "cyclic stack",
+      },
+      {
+        rows: [selected, { ...parent, isCrossRepository: true }],
+        error: "does not support cross-repository stacks",
+      },
+      {
+        rows: [selected, { ...parent, number: 11 }],
+        error: "duplicate PR #11",
+      },
+    ];
+    await withFakeGithub({
+      directory,
+      output: "[]",
+      operation: async () => {
+        for (const { rows, error } of cases) {
+          await writeFile(
+            join(directory, "github-output.json"),
+            JSON.stringify(rows)
+          );
+          await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+            error
+          );
+          expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+        }
       },
     });
   });
