@@ -2690,6 +2690,24 @@
     "skills/figure-it-out/SKILL.md"
    ],
    "scenario": "route-autonomous-run"
+  },
+  "setup-checks-codex-multi-agent": {
+   "check": "static",
+   "claim": "On Codex, setup-pstack reads the effective multi_agent feature state from `codex features list` and recommends `[features]` `multi_agent = true` when it is off.",
+   "evidence": [
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Report the effective state in the `multi_agent` row."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "multi_agent = true"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/SKILL.md"
+   ]
   }
  },
  "units": {
@@ -8261,6 +8279,15 @@
     "port"
    ],
    "text": "```text\n/no-comments the diff\n```"
+  },
+  "86b865ad2b70": {
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "On Codex it also checks the `multi_agent` feature, which every pstack spawn needs.",
+   "class": "promise",
+   "promise": "setup-checks-codex-multi-agent"
   }
  }
 }

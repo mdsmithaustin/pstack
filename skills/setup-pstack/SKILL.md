@@ -38,6 +38,17 @@ poteto-mode keeps its worklist in the harness's structured task tool when that t
 - **Hermes** has no known switch. Report nothing to change.
 - **Grok Build** ships its `todo_write` tool with no known switch. Report nothing to change.
 
+### 0c. Check Codex subagents
+
+On Codex, pstack spawns every role through `spawn_agent`, which the `multi_agent` feature provides. Run this check when this skill runs on Codex or the user also runs pstack there. Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`. Report the effective state in the `multi_agent` row. The command applies every config layer and `-c` flag, so read its row rather than the config files. The feature is stable and on by default as of Codex 0.160.0, so the row reads `false` only when a layer turns it off. When it is off, recommend these lines in `config.toml` under `$CODEX_HOME` or `~/.codex/`, or `codex features enable multi_agent`, which writes them:
+
+```toml
+[features]
+multi_agent = true
+```
+
+Edit a file only after the user says yes, and keep every other key. A trusted project's `.codex/config.toml` that sets it to false still wins, so name that file if it holds the key. The change applies from the next session. While the feature is off, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent.
+
 ### 1. Detect available models and efforts
 
 Enumerate the model values your session's spawn mechanism accepts, and the reasoning-effort values it accepts per spawn (find the mechanism per the **pstack-harness** skill). On Claude Code, the per-spawn efforts are the levels whose `pstack-effort-<level>` agent the live catalog lists, and none when no effort agent is loaded. That is the dependable source. If your CLI also exposes a models API or command that lists the user's entitled models, such as `codex debug models` or `grok models`, prefer it for completeness. If you cannot detect any, ask the user to paste the slugs they have access to. Never write a real slug you have not confirmed is available. The aliases `inherit-parent` and `auto` are always valid even though they are not detected slugs.
