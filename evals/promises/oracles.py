@@ -2354,10 +2354,15 @@ def arena_grafts(view):
     return failed("reply does not name the base and the grafts", *evidence)
 
 
+def same_model(spawned, lead):
+    spawned, lead = (spawned or "").lower(), (lead or "").lower()
+    return spawned == lead or ("-" not in spawned and spawned in re.split(r"[-.]", lead))
+
+
 @oracle("arena-readonly-cross-judge")
 def arena_judge(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
-    evidence = [f"judge spawns: {len(judges)}", f"candidate models: {sorted({s.get('model') for s in candidates if s.get('model')})}",
+    evidence = [f"judge spawns: {len(judges)}", f"lead model: {view.model}", f"candidate models: {sorted({s.get('model') for s in candidates if s.get('model')})}",
                 f"judge models: {[s.get('model') for s in judges]}"]
     if not judges:
         if view.encrypted():
@@ -2368,10 +2373,10 @@ def arena_judge(view):
     evidence.append(f"judge brief marked read-only: {readonly}")
     if judge.get("seq", 0) < max(s.get("seq", 0) for s in candidates):
         return failed("judge spawned before the candidates", *evidence)
-    cand_models = {s.get("model") for s in candidates if s.get("model")}
+    others = [s.get("model") for s in view.spawns if s.get("model") and not same_model(s["model"], view.model)]
     failures = []
-    if judge.get("model") and judge["model"] in cand_models and len(cand_models) > 1:
-        failures.append("judge shares a candidate model although the candidates spanned several")
+    if judge.get("model") and same_model(judge["model"], view.model) and others:
+        failures.append("judge runs on the lead's model although the run used another")
     if judge.get("prompt_head") and not readonly:
         failures.append("judge brief is not read-only")
     return failed(failures, *evidence) if failures else passed(*evidence)

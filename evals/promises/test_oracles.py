@@ -589,21 +589,29 @@ class InterrogateSwarmArena(unittest.TestCase):
         self.assertEqual(grade("arena-candidate-count-adjustable", three, case)["verdict"], FAIL)
         self.assertEqual(grade("arena-lead-reads-rationales-and-base", trace, case)["verdict"], FAIL)
 
-    def test_arena_judge_sharing_a_candidate_model_fails_when_candidates_span_models(self):
-        case = load_case("arena-run")
-        models = ["opus", "fable", "opus", "fable", "opus"]
+    def judged_by(self, lead, models, judge_model):
         candidates = [{"seq": i, "tool": "Agent", "persona": "poteto-agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/relay-key/candidate-{i}"}
                       for i, m in enumerate(models, 1)]
-        events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, 6)]
-        reply = "Base: candidate 3. Grafts: the hashing from candidate 1. Verified with the import run."
+        events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, len(models) + 1)]
+        judge = {"seq": 9, "tool": "Agent", "persona": None, "model": judge_model, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
+        trace = minimal(events=events, spawns=candidates + [judge], final_reply="Base: candidate 3. Grafts: the hashing from candidate 1.")
+        trace["model"] = lead
+        return grade("arena-readonly-cross-judge", trace, load_case("arena-run"))
 
-        def judged_by(model):
-            judge = {"seq": 9, "tool": "Agent", "persona": None, "model": model, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
-            return minimal(events=events, spawns=candidates + [judge], final_reply=reply)
+    def test_a_judge_on_another_tier_than_the_lead_passes_even_when_it_shares_a_candidate_model(self):
+        result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], "fable")
+        self.assertEqual(result["verdict"], PASS, result)
+        codex = self.judged_by("gpt-6.1-sol", ["gpt-6.1-sol", "gpt-6.1-sol", "gpt-6-luna", "gpt-6.1-sol", "gpt-6.1-sol"], "gpt-6-luna")
+        self.assertEqual(codex["verdict"], PASS, codex)
 
-        shared = grade("arena-readonly-cross-judge", judged_by("opus"), case)
-        self.assertEqual(shared["verdict"], FAIL, shared)
-        self.assertEqual(grade("arena-readonly-cross-judge", judged_by("sonnet"), case)["verdict"], PASS)
+    def test_a_judge_on_the_leads_model_fails_when_the_run_used_another(self):
+        result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], "opus")
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["failures"], ["judge runs on the lead's model although the run used another"])
+
+    def test_a_judge_on_the_leads_model_passes_when_no_other_model_was_used(self):
+        result = self.judged_by("gpt-5.6-sol", ["gpt-5.6-sol"] * 5, "gpt-5.6-sol")
+        self.assertEqual(result["verdict"], PASS, result)
 
     def test_two_reviewers_with_one_label_are_not_differentiated_arms(self):
         case = load_case("interrogate-run")
