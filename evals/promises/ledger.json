@@ -8290,12 +8290,12 @@
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   },
-  "4d95df3175f8": {
+  "688f1e94ab33": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "When a launch flag or a layer it cannot read is the cause, it says so instead.",
+   "text": "When a launch flag, the selected model, or a layer it cannot read is the cause, it says so instead.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }
