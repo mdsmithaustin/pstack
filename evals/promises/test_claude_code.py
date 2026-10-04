@@ -3,6 +3,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import live
 from harnesses import claude_code
@@ -33,7 +34,8 @@ class Harvest(unittest.TestCase):
             rows = session_rows(str(run.project))
             (transcripts / f"{session}.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
             run.turns = [{"session_id": session, "stream": str(root / "stream-0.jsonl"), "argv": ["claude"], "exit_code": 0, "timed_out": False, "duration_s": 1.0}]
-            trace = claude_code.harvest(run)
+            with patch.object(claude_code, "config_dir", return_value=root / "claude-config"):
+                trace = claude_code.harvest(run)
         ids = [(e["kind"], e.get("id")) for e in trace["events"] if e["kind"] in ("tool_call", "tool_result")]
         self.assertEqual(ids, [("tool_call", "toolu_a"), ("tool_call", "toolu_b"),
                                ("tool_result", "toolu_b"), ("tool_result", "toolu_a")])
