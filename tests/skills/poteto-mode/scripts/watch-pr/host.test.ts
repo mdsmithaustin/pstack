@@ -111,6 +111,14 @@ describe("repository host inference", () => {
     for (const remote of [
       "https://git@example.com/team/project.git",
       "bob@example.com:team/project.git",
+      "https://@example.com/team/project.git",
+      "https://example.com/team/%2Fproject.git",
+      "https://example.com/team/project.git?token=PUBLIC_TEST_SENTINEL",
+      "https://example.com/team/project.git#PUBLIC_TEST_SENTINEL",
+      "https://example.com/team//project.git",
+      "https://example.com/other/../team/project.git",
+      "ssh://git:PUBLIC_TEST_SENTINEL@" + "example.com/team/project.git",
+      "https://example.com:443/team/project.git",
     ]) {
       expect(
         readerOutput(

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { parseRemote } from "./remote.ts";
 import {
   commentAssociation,
   flagReviewBodies,
@@ -181,35 +182,6 @@ const reviewDecision = (value: unknown): T.ReviewDecision =>
     REVIEW_DECISIONS,
     "pull request.reviewDecision"
   );
-function parseRemote(value: string): T.Repository | null {
-  let normalized = value.trim();
-  const scp = normalized.includes("://")
-    ? null
-    : /^git@([^:/]+):([^:]+)$/.exec(normalized);
-  if (scp) normalized = `https://${scp[1]}/${scp[2]}`;
-  try {
-    const url = new URL(normalized);
-    const parts = url.pathname
-      .replace(/\.git$/, "")
-      .split("/")
-      .filter(Boolean);
-    if (
-      !["https:", "ssh:"].includes(url.protocol) ||
-      url.port ||
-      (url.protocol === "ssh:"
-        ? url.username !== "git"
-        : Boolean(url.username)) ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      parts.length !== 2
-    )
-      return null;
-    return { host: url.hostname, owner: parts[0], repo: parts[1] };
-  } catch {
-    return null;
-  }
-}
 function parsePrUrl(value: string): T.PrContext {
   try {
     const url = new URL(value);
