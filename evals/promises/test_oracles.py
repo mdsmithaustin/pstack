@@ -1953,6 +1953,30 @@ class JudgeAfterExplorers(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class EditOrders(unittest.TestCase):
+    def wave(self, contexts):
+        tasks = [{"goal": "Trace one stage.", "context": c} for c in contexts]
+        spawns = [delegate(27, "Trace one stage.") for _ in contexts] + [delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": tasks}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {"goal": "Write the answer."}}]
+        return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+
+    def test_an_edit_order_on_its_own_line_counts(self):
+        result = self.wave(["Read-only: do not edit or write files.\n- Fix the parser.", "Read-only: do not edit or write files."])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_more_edit_verbs_disqualify_a_read_only_brief(self):
+        for order in ("Modify src/parse.py to accept CSV.", "Rewrite src/export.py to stream.", "Patch src/export.py.",
+                      "We need you to add a --json flag in src/cli.py.", "Your job is to patch src/export.py.",
+                      "Replace the parser.", "Insert a guard in src/cli.py.", "Apply the diff to src/x.py.", "Append a test to tests/t.py."):
+            result = self.wave(["Read-only: do not edit or write files. " + order, "Read-only: do not edit or write files. Trace the store."])
+            self.assertEqual(result["verdict"], FAIL, (order, result))
+
+    def test_tracing_briefs_still_explore(self):
+        result = self.wave(["Read-only: do not edit or write files. Trace the CLI.\n- Report components.", "Do not modify anything. Audit the tests."])
+        self.assertEqual(result["verdict"], PASS, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

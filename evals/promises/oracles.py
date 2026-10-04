@@ -53,8 +53,9 @@ JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
 SYNTH_ROLE = re.compile(r"(?<![a-z])synthes(?:is|i[sz](?:e|es|ing))\b|(?<!separate )(?<![a-z])synthesi[sz]ers?\b")
 READ_ONLY_BRIEF = re.compile(r"read[- ]only|(?:do not|don't|never) (?:edit|write|modify|change|touch)(?: or (?:edit|write|modify|change))? (?:any )?(?:files|anything)"
                              r"|make no (?:edits|changes)")
-EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+)\s*(?:[-*]\s+|\d+[.)]\s+)?"
-                        r"(?:add|change|update|create|write|implement|fix|refactor|remove|delete|rename|edit)\b")
+EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\b(?:you|job is|task is) to\s+)\s*(?:[-*]\s+|\d+[.)]\s+)?"
+                        r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
+                        r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
