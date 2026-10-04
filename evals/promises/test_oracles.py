@@ -1549,6 +1549,34 @@ class ReplyWording(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class ArenaWorktrees(unittest.TestCase):
+    GOAL = "Design and implement one candidate for a durable cache-key format. Produce an isolated candidate artifact."
+
+    def hermes_arena(self, setup, with_paths=True):
+        def task(n):
+            where = f" Write exactly these files under /w/tmp/arena-cache-key/candidate-{n}/: cache.py, rationale.md." if with_paths else ""
+            return {"goal": self.GOAL, "context": "Repository root: /w/relay. Inspect README.md and relay/cache.py." + where}
+        events = bash(35, setup) + [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(n) for n in range(1, 5)]}},
+                                     {"seq": 45, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(5)]}}]
+        spawns = [{"seq": 43, "tool": "delegate_task", "prompt_head": self.GOAL} for _ in range(4)] + [{"seq": 45, "tool": "delegate_task", "prompt_head": self.GOAL}]
+        return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, harness="hermes"), load_case("arena-run"))
+
+    def test_one_mkdir_of_five_candidate_dirs_gives_each_its_own(self):
+        dirs = " ".join(f'"$TMPDIR/arena-cache-key/candidate-{n}"' for n in range(1, 6))
+        result = self.hermes_arena(f'python3 -m unittest discover -s tests && mkdir -p {dirs} "$TMPDIR/arena-cache-key/judge"', with_paths=False)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("candidate directories created: 5", result["evidence"])
+
+    def test_output_paths_past_the_prompt_head_count(self):
+        result = self.hermes_arena("ls", with_paths=True)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("distinct output paths named in briefs: 5", result["evidence"])
+
+    def test_one_shared_directory_still_fails(self):
+        result = self.hermes_arena('mkdir -p "$TMPDIR/arena-cache-key/candidates"', with_paths=False)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

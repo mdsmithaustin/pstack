@@ -542,9 +542,6 @@ class View:
         call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
         given = (call or {}).get("input") or {}
         head = spawn.get("prompt_head") or ""
-        tasks = given.get("tasks") if isinstance(given.get("tasks"), list) else []
-        if tasks:
-            given = next((t for t in tasks if isinstance(t, dict) and head and json.dumps(t).find(json.dumps(head[:60])[1:-1]) >= 0), {})
         return head + " " + json.dumps(given)
 
     def spawns_where(self, *needles, turn=None):
@@ -2319,20 +2316,29 @@ def arena_count(view):
     return passed(*evidence) if len(candidates) == want else failed(f"{len(candidates)} candidates, not {want}", *evidence)
 
 
+ARM_DIR = re.compile(r"(?:worktree|candidate|arm|attempt)", re.I)
+
+
+def arm_dirs_made(command):
+    made = len(re.findall(r"git worktree add", command))
+    for segment in re.split(r"&&|\|\||[;|\n]", command):
+        words = shell_paths(segment) if re.match(r"\s*mkdir\b", segment) else []
+        made += sum(1 for w in words if ARM_DIR.search(w.rsplit("/", 1)[-1]))
+    return made
+
+
 @oracle("arena-candidates-own-worktrees")
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
-    adds = [c for c in view.commands() if re.search(r"git worktree add|mkdir -p .*(?:candidate|arm|attempt)", c[1])]
-    paths = set()
-    for s in candidates:
-        for match in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", s.get("prompt_head") or "", re.I):
-            paths.add(match)
-    evidence = [f"worktree/dir setup commands: {len(adds)}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
+    made = sum(arm_dirs_made(c[1]) for c in view.commands())
+    briefs = {str(s.get("seq")): view.spawn_brief(s) for s in candidates}
+    paths = {m.rstrip("/") for brief in briefs.values() for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
+    evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
     if view.encrypted():
-        return inconclusive("briefs encrypted; worktree assignment unreadable", *evidence) if not adds else passed(*evidence)
-    if len(paths) >= len(candidates) or len(adds) >= len(candidates) or len(view.worktrees() or []) > len(candidates):
+        return inconclusive("briefs encrypted; worktree assignment unreadable", *evidence) if not made else passed(*evidence)
+    if len(paths) >= len(candidates) or made >= len(candidates) or len(view.worktrees() or []) > len(candidates):
         return passed(*evidence)
     return failed("candidates do not each get their own worktree or directory", *evidence)
 
