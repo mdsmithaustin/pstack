@@ -2239,6 +2239,11 @@ def author_result(text):
     return None
 
 
+def turn_author_result(view, turn, reply):
+    inputs = [json.dumps(c.get("input") or {}) for c in view.tool_calls if turn is None or view.turn_of(c.get("seq")) == turn]
+    return author_result(reply) or author_result(" ".join(view.texts(turn))) or author_result(" ".join(inputs).replace("\\n", " "))
+
+
 @oracle("poteto-runs-documentation-impact-before-completion")
 def doc_impact_before_completion(view):
     turn = 0 if len(view.case.get("turns", [])) > 1 else None
@@ -2247,8 +2252,8 @@ def doc_impact_before_completion(view):
     reads = [(seq, rel) for seq, rel in view.event_reads() if rel.startswith("documentation-impact/") and (turn is None or view.turn_of(seq) == turn)]
     read_any = bool(reads) or view.skill_read("documentation-impact")
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
-    result = author_result(reply) or author_result(" ".join(view.texts(turn)))
-    evidence = [f"documentation-impact read in the change turn: {bool(reads)} (anywhere: {read_any})", f"author result in reply: {result}"]
+    result = turn_author_result(view, turn, reply)
+    evidence = [f"documentation-impact read in the change turn: {bool(reads)} (anywhere: {read_any})", f"author result in the reply or work record: {result}"]
     if not read_any:
         return inconclusive("run killed before completion", *evidence) if view.killed else failed("documentation-impact never ran before completion", *evidence)
     if not result:
@@ -2262,9 +2267,9 @@ def doc_impact_review(view):
     if turn is not None and not view.has_turns:
         return inconclusive("multi-turn case but the trace carries no turn markers (core change: stamp events with `turn`)")
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
-    result = author_result(reply) or author_result(" ".join(view.texts(turn)))
+    result = turn_author_result(view, turn, reply)
     reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
-    verdict_word = re.search(r"\bpass\b", reply or "", re.I)
+    verdict_word = re.search(r"\bpass\b|\breview\b[^.\n]{0,40}\bpassed\b", reply or "", re.I)
     evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {bool(verdict_word)}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)

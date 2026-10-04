@@ -1577,6 +1577,48 @@ class ArenaWorktrees(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class AuthorResultInWorkRecord(unittest.TestCase):
+    def doc_turns(self, record):
+        events = in_turn(0, [{"seq": 0, "kind": "user", "text": "add --json"}, read(7, "documentation-impact/SKILL.md"), record,
+                             text(127, "Added --json. The docs review returned pass.")])
+        events += in_turn(1, [{"seq": 130, "kind": "user", "text": "review the docs"}, read(131, "documentation-impact/SKILL.md"), text(133, "pass")])
+        return minimal(events=events, harness="hermes")
+
+    def test_an_author_result_kept_in_the_worklist_counts(self):
+        todo = {"seq": 125, "kind": "tool_call", "name": "todo_list", "input": {"todos": [
+            {"content": "Run documentation-impact in author mode. Author result: independent review required. Same-model trail review: pass.", "status": "completed"}]}}
+        result = grade("poteto-runs-documentation-impact-before-completion", self.doc_turns(todo), load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_an_author_record_written_by_the_lead_counts(self):
+        record = {"seq": 174, "kind": "tool_call", "name": "exec_command", "input": {"cmd":
+                  "python3 - <<'PY'\nrecord = {'mode': 'author', 'result': 'independent review required', 'reason': 'README changed.'}\nPY"}}
+        result = grade("poteto-runs-documentation-impact-before-completion", self.doc_turns(record), load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def review_turn(self, reply):
+        todo = {"seq": 125, "kind": "tool_call", "name": "todo_list", "input": {"todos": [{"content": "Author result: independent review required."}]}}
+        trace = self.doc_turns(todo)
+        trace["events"] = ([e for e in trace["events"] if e.get("seq") != 127]
+                           + [{"seq": 117, "turn": 0, "kind": "tool_call", "name": "delegate_task", "input": {}}, dict(text(127, reply), turn=0)])
+        trace["spawns"] = [{"seq": 117, "turn": 0, "tool": "delegate_task", "prompt_head": "Run the independent review under documentation-impact review mode."}]
+        return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))
+
+    def test_a_review_reported_as_passed_is_a_pass_verdict(self):
+        result = self.review_turn("Verification.\n- All 4 tests passed.\n- The independent documentation review passed with no findings.")
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_passing_tests_are_not_the_reviews_verdict(self):
+        result = self.review_turn("Verification.\n- All 4 tests passed.\n- The docs are updated.")
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_plan_to_get_any_required_review_is_not_an_author_result(self):
+        todo = {"seq": 40, "kind": "tool_call", "name": "todo_list", "input": {"todos": [
+            {"content": "Run documentation-impact in author mode and obtain any required independent review.", "status": "pending"}]}}
+        result = grade("poteto-runs-documentation-impact-before-completion", self.doc_turns(todo), load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
