@@ -2382,24 +2382,31 @@ def arena_judge(view):
     return failed(failures, *evidence) if failures else passed(*evidence)
 
 
+def rationale_pattern(view, candidates):
+    named = {m.lower() for s in candidates for m in re.findall(r"[\w.-]+\.md\b", view.spawn_brief(s))} - {"readme.md"}
+    return re.compile("|".join([r"rationale", r"design[-_ ]?notes"] + [re.escape(n) for n in sorted(named)]), re.I)
+
+
 @oracle("arena-lead-reads-rationales-and-base")
 def arena_lead_reads(view):
-    judges = judge_spawns(view)
-    after = max((s.get("seq", 0) for s in judges), default=0)
+    candidates, judges = candidate_spawns(view), judge_spawns(view)
+    after = max((int(s.get("seq") or 0) for s in candidates), default=0)
     reads = []
     for call in view.tool_calls:
-        if call.get("seq", 0) <= after:
+        if call.get("seq", 0) <= after or call.get("name") in EDIT_TOOLS:
             continue
         given = call.get("input") or {}
-        for field in PATH_FIELDS:
-            if isinstance(given.get(field), str):
-                reads.append(given[field])
         if call.get("name") in SHELL_TOOLS:
-            reads += shell_paths(str(given.get(SHELL_TOOLS[call["name"]]) or ""))
-    rationales = [p for p in reads if re.search(r"rationale|synthesis", p, re.I)]
+            command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
+            written = set(shell_writes(command))
+            reads += [p for p in resolved_shell_paths(strip_heredocs(command)) if p.strip("\"'") not in written]
+        else:
+            reads += [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
+    named = rationale_pattern(view, candidates)
+    rationales = [p for p in reads if named.search(p) and not skill_rel(p)]
     others = [p for p in reads if p not in rationales and not skill_rel(p)]
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
-    evidence = [f"rationale files read after the judge: {len(rationales)}", f"other candidate files read: {len(others)}"]
+    evidence = [f"rationale files read after the last candidate spawn: {len(rationales)}", f"other candidate files read: {len(others)}"]
     if not judges:
         return inconclusive("no judge spawn to anchor the read phase", *evidence)
     if len(rationales) >= want and others:

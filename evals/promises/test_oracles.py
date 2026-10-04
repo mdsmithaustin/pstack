@@ -1486,6 +1486,45 @@ class FanOutStructure(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class ArenaLeadReads(unittest.TestCase):
+    def test_brief_named_design_notes_read_in_a_loop_and_after_the_judge_count(self):
+        brief = "You're working in the relay repo. Settle the cache key format. Write `DESIGN_NOTES.md` with your reasoning."
+        calls = [{"seq": seq, "kind": "tool_call", "name": "Agent", "input": {"description": f"Cache key design {c}", "prompt": brief}}
+                 for seq, c in zip((7, 9, 11, 13, 15), "ABCDE")]
+        spawns = [{"seq": c["seq"], "tool": "Agent", "model": "opus", "prompt_head": brief} for c in calls]
+        spawns.append({"seq": 26, "tool": "Agent", "model": "fable", "prompt_head": "READ-ONLY. You are judging five independent implementations against the rubric."})
+        loop = 'W="$PWD/.claude/worktrees"; for x in a1:A a2:B a3:C a4:D; do id=${x%%:*}; cat "$W/agent-$id/DESIGN_NOTES.md"; done'
+        events = (calls + bash(22, loop) + [{"seq": 26, "kind": "tool_call", "name": "Agent", "input": {}}]
+                  + bash(28, 'cat "$PWD/.claude/worktrees/agent-a5/DESIGN_NOTES.md"')
+                  + bash(30, 'cd "$PWD/.claude/worktrees/agent-a5"; cat relay/cache.py; cat tests/test_cache.py')
+                  + [{"seq": 55, "kind": "tool_call", "name": "Write", "input": {"file_path": "/tmp/arena-cache-key/SYNTHESIS.md", "content": "x"}}])
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 5")
+
+    def test_the_leads_own_writes_are_not_rationale_reads(self):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": "Candidate: write rationale.md in /tmp/k/c{s}"} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = ([{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2, 3, 4, 5, 9)]
+                  + [{"seq": 20, "kind": "tool_call", "name": "Write", "input": {"file_path": f"/tmp/k/c{n}/rationale.md"}} for n in range(1, 6)]
+                  + bash(30, "cat > /tmp/k/rationale-summary.md <<'EOF'\nsummary\nEOF") + bash(32, "cat /tmp/k/c1/relay/cache.py"))
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+    def test_encrypted_candidates_with_design_notes_read_one_by_one(self):
+        events, spawns = [], []
+        for seq, task in ((40, "cedar"), (43, "maple"), (46, "birch"), (80, "elm"), (103, "ash"), (140, "cross_judge")):
+            more, spawn = codex_spawn(seq, task, "")
+            events += more
+            spawns.append(spawn)
+        for n, label in enumerate(("maple", "cedar", "birch", "elm", "ash")):
+            events += [{"seq": 144 + 2 * n, "kind": "tool_call", "name": "exec_command", "input": {"cmd": f"cat /tmp/relay-keys/{label}/design-notes.md"}}]
+        events += [{"seq": 156, "kind": "tool_call", "name": "exec_command", "input": {"cmd": "cat /tmp/relay-keys/cedar/relay/cache.py /tmp/relay-keys/cedar/README.md"}}]
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns, harness="codex"), load_case("arena-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
