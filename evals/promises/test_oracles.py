@@ -2268,6 +2268,16 @@ class ModelTiers(unittest.TestCase):
         self.assertEqual(self.judged("gpt-6-luna", "gpt-6.1-sol", ["gpt-6.1-sol", "gpt-6-luna"])["verdict"], PASS)
 
 
+class SkillNamespaces(unittest.TestCase):
+    def test_f10_a_foreign_namespace_skill_is_not_a_pstack_load(self):
+        events = [{"seq": 1, "kind": "tool_call", "name": "Skill", "input": {"skill": "acme:how"}, "id": "s1"},
+                  {"seq": 2, "kind": "tool_result", "name": "Skill", "ok": True, "output_head": "Launching skill: acme:how", "id": "s1"},
+                  {"seq": 3, "kind": "tool_call", "name": "Skill", "input": {"skill": "pstack:why"}, "id": "s3"},
+                  {"seq": 4, "kind": "tool_result", "name": "Skill", "ok": True, "output_head": "Launching skill: pstack:why", "id": "s3"}]
+        view = oracles.View(minimal(events=events), load_case("why-then-how-run"), None)
+        self.assertEqual(view.lead_reads(), ["why/SKILL.md"])
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

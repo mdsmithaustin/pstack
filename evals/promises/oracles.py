@@ -228,6 +228,11 @@ def skill_rel(path):
     return hits[-1] if hits else None
 
 
+def skill_load(name):
+    namespace, _, bare = name.lstrip("/").rpartition(":")
+    return f"{bare}/SKILL.md" if namespace in ("", "pstack") else None
+
+
 ASSIGNMENT = re.compile(r"(?:^|[;&|\s])([A-Za-z_][A-Za-z0-9_]*)=([^\s;&|$`'\"]+)")
 
 
@@ -377,7 +382,7 @@ class View:
                 for field in READ_TOOLS[name]:
                     value = given.get(field)
                     if isinstance(value, str) and value:
-                        rel = f"{value.lstrip('/').split(':')[-1]}/SKILL.md" if name in SKILL_LOAD_TOOLS else skill_rel(value)
+                        rel = skill_load(value) if name in SKILL_LOAD_TOOLS else skill_rel(value)
                         if rel:
                             out.append((call.get("seq"), rel, self.read_returned(call)))
                         break
