@@ -496,6 +496,13 @@ class View:
             return True
         return Path(path).resolve().is_relative_to(self.project.resolve())
 
+    def tree_rel(self, path):
+        path = path.strip("\"'")
+        if not self.project:
+            return path
+        full = (Path(path) if path.startswith("/") else self.project / path).resolve()
+        roots = sorted({Path(w).resolve() for w in self.worktrees() or []} | {self.project.resolve()}, key=lambda r: len(str(r)), reverse=True)
+        return next((str(full.relative_to(r)) for r in roots if full.is_relative_to(r)), path)
     def project_rel(self, path):
         if self.project and path.startswith("/") and self.inside_project(path):
             return str(Path(path).resolve().relative_to(self.project.resolve()))
@@ -1416,7 +1423,7 @@ def steering_redirects(view):
     edits = view.source_edits(turn)
     kept = view.changed_since_base()
     if kept is not None:
-        edits = [e for e in edits if view.project_rel(e[1].strip("\"'")) in kept]
+        edits = [e for e in edits if view.tree_rel(e[1]) in kept]
     reply = view.reply_of_turn(turn)
     evidence = [f"source edits after the correction: {[e[1] for e in edits][:4]}", f"reply head: {reply[:160]!r}"]
     if edits:

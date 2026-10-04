@@ -2217,6 +2217,29 @@ class StatedAuthorResult(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class WorktreeRelativeEdits(unittest.TestCase):
+    def steer(self, path_of, worktree=False):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/export.py": "start = 0\n", "tests/test_export.py": "x = 0\n"})
+        changed = project / "rollup" / "export.py"
+        if worktree:
+            tree = project / ".worktrees" / "fix"
+            subprocess.run(["git", "-C", str(project), "worktree", "add", "-q", "-b", "fixbranch", str(tree)], check=True, capture_output=True)
+            changed = tree / "rollup" / "export.py"
+        changed.write_text("start = 1\n")
+        events = (in_turn(0, [{"seq": 0, "kind": "user", "text": "repro first."}, text(117, "Fixed.")])
+                  + in_turn(1, [{"seq": 118, "kind": "user", "text": "i said the goal is to repro."}, edit(121, path_of(changed)), text(127, "Reverted.")]))
+        return grade("steering-prompt-redirects-run", minimal(events=events), load_case("steer-repro-run"), project)
+
+    def test_f6_a_dot_slash_edit_that_stays_changed_still_fails(self):
+        self.assertEqual(self.steer(lambda p: "./rollup/export.py")["verdict"], FAIL)
+        self.assertEqual(self.steer(lambda p: "rollup//export.py")["verdict"], FAIL)
+
+    def test_f6_a_kept_edit_in_a_worktree_inside_the_project_still_fails(self):
+        self.assertEqual(self.steer(str, worktree=True)["verdict"], FAIL)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
