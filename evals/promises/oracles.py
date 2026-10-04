@@ -2364,8 +2364,9 @@ VERDICT_NEGATION = re.compile(r"\b(?:not|never|cannot|unable|fail(?:ed|s)?|witho
 
 
 def negated_verdict(reply, match):
-    before = re.split(r"[.;:!?\n]", reply[:match.start()])[-1]
-    return bool(VERDICT_NEGATION.search(" ".join(before.split()[-4:])) or VERDICT_NEGATION.search(match.group(0)))
+    word = list(re.finditer(r"\bpass(?:ed)?\b", match.group(0), re.I))[-1]
+    clause = re.split(r"[.,;:!?\n]|\b(?:then|and|but)\b", reply[:match.start() + word.start()], flags=re.I)[-1]
+    return bool(VERDICT_NEGATION.search(" ".join(clause.split()[-4:])))
 
 
 @oracle("documentation-impact-independent-review-pass-required")

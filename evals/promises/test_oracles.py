@@ -692,6 +692,11 @@ class SmallSkills(unittest.TestCase):
         for line in ("No findings. The review passed.", "No files edited. Pass.", "There were no blockers; the review passed."):
             self.assertEqual(self.review_verdict(line), PASS, line)
 
+    def test_a_failed_review_then_a_passed_re_review_is_a_pass(self):
+        for line in ("The first review failed, then the re-review passed.", "The first review failed; the second passed.",
+                     "The review did not find any issues and passed."):
+            self.assertEqual(self.review_verdict(line), PASS, line)
+
     def test_cannot_and_failed_to_pass_are_not_a_pass(self):
         for line in ("The review cannot pass until the README changes.", "The review failed to pass.", "The reviewer was unable to pass it."):
             self.assertNotEqual(self.review_verdict(line), PASS, line)
