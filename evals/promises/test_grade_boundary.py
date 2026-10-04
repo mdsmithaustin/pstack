@@ -216,6 +216,50 @@ class ControllerBoundary(BoundaryFixtures):
             root.write("verdict.json", b"changed\n")
         self.assertEqual(self.write_marker.read_bytes(), b"outside-original\n")
 
+    def test_filesystem_errors_refuse_and_missing_inputs_stay_optional(self):
+        (self.project / "safe.txt").write_bytes(b"inside-positive\n")
+        root = _Root.open(self.project)
+        self.addCleanup(root.close)
+        self.assertEqual(root.info("safe.txt").st_size, 16)
+        self.assertEqual(root.files(), [self.project / "safe.txt"])
+        for operation, syscall in ((lambda: root.info("safe.txt"), "stat"),
+                                   (root.files, "listdir"), (root.files, "stat")):
+            with self.subTest(syscall=syscall), mock.patch("grade_boundary.os." + syscall,
+                    side_effect=PermissionError("owned filesystem denial")):
+                with self.assertRaises(GradeRefused) as refused:
+                    operation()
+                self.assertEqual(refused.exception.receipt["reason"], "unsafe_link")
+        for operation in (root.info, root.read):
+            with self.subTest(operation=operation.__name__), self.assertRaises(FileNotFoundError):
+                operation("absent.txt")
+        with mock.patch("grade_boundary.os.listdir", side_effect=TypeError("programming error")):
+            with self.assertRaisesRegex(TypeError, "programming error"):
+                root.files()
+        self.assertEqual(root.read("safe.txt"), b"inside-positive\n")
+
+    def test_publication_syscall_errors_refuse_before_replacing_prior_bytes(self):
+        root = _Root.open(self.root)
+        self.addCleanup(root.close)
+        root.write("verdict.json", b"prior-verdict\n")
+        original_open = os.open
+
+        def denied_write_open(path, flags, *args, **kwargs):
+            if flags & os.O_WRONLY:
+                raise PermissionError("owned publication denial")
+            return original_open(path, flags, *args, **kwargs)
+
+        for syscall, failure in (("open", denied_write_open),
+                                 ("fsync", OSError("owned publication I/O failure")),
+                                 ("rename", PermissionError("owned publication denial"))):
+            with self.subTest(syscall=syscall), mock.patch("grade_boundary.os." + syscall, side_effect=failure):
+                with self.assertRaises(GradeRefused) as refused:
+                    root.write("verdict.json", b"replacement-verdict\n")
+                self.assertEqual(refused.exception.receipt["reason"], "output_unsafe")
+            self.assertEqual((self.root / "verdict.json").read_bytes(), b"prior-verdict\n")
+            self.assertEqual(root.files(), [self.root / "verdict.json"])
+        root.write("verdict.json", b"replacement-verdict\n")
+        self.assertEqual((self.root / "verdict.json").read_bytes(), b"replacement-verdict\n")
+
     def test_controller_detects_root_and_ancestor_replacement(self):
         root = _Root.open(self.project)
         self.addCleanup(root.close)
@@ -266,6 +310,69 @@ class ControllerBoundary(BoundaryFixtures):
 
 @unittest.skipUnless(NATIVE, "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class NativeParentBoundary(BoundaryFixtures):
+    def test_project_traversal_errors_return_cli_refusal_receipts(self):
+        case = self.deslop()
+        base = self.repository()
+        authority = self.authority(case, record=self.record(case, baseline=base))
+        positive = live.grade(authority)
+        self.assertEqual(positive["promises"]["deslop-cleans-code-slop"]["verdict"], "PASS")
+        prior = (self.root / "verdict.json").read_bytes()
+        target = self.project / "unreadable"
+        target.mkdir()
+        (target / "owned.txt").write_bytes(b"owned-marker\n")
+        target.chmod(0)
+        try:
+            result = subprocess.run([live.sys.executable, str(live.HERE / "live.py"), "grade", "--out", str(self.out),
+                                     authority._id], capture_output=True, text=True, timeout=10)
+            (self.assets / "project-traversal.stdout").write_text(result.stdout)
+            (self.assets / "project-traversal.stderr").write_text(result.stderr)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertEqual(result.stdout, "")
+            receipt = json.loads(result.stderr)["refusal"]
+            self.assertEqual(receipt["reason"], "unsafe_link")
+            self.assertEqual(receipt["run_id"], authority._id)
+            self.assertEqual(json.loads((Path(receipt["attempt"]) / "refusal.json").read_text()), receipt)
+            self.assertEqual((self.root / "verdict.json").read_bytes(), prior)
+        finally:
+            target.chmod(0o700)
+        self.assertEqual((target / "owned.txt").read_bytes(), b"owned-marker\n")
+
+    def test_malformed_registered_worktree_metadata_returns_cli_refusal_receipts(self):
+        base = self.repository()
+        sibling = self.assets / "approved-sibling"
+        self.git("worktree", "add", "-q", "-b", "sibling", str(sibling))
+        case = self.deslop()
+        authority = self.authority(case, record=self.record(case, baseline=base), worktrees=(sibling,))
+        positive = live.grade(authority)
+        self.assertEqual(positive["promises"]["deslop-cleans-code-slop"]["verdict"], "PASS")
+        prior = (self.root / "verdict.json").read_bytes()
+        directory = Path((sibling / ".git").read_text().split("gitdir: ", 1)[1].strip())
+        for target in (sibling / ".git", directory / "commondir", directory / "gitdir"):
+            original = target.read_bytes()
+            for encoding, malformed in (("utf8", b"\xff\xfe\x00owned-invalid-metadata"),
+                                        ("nul", original + b"\x00owned-invalid-metadata")):
+                with self.subTest(target=target, encoding=encoding):
+                    backup = target.with_name(target.name + ".original")
+                    target.rename(backup)
+                    target.write_bytes(malformed)
+                    try:
+                        result = subprocess.run([live.sys.executable, str(live.HERE / "live.py"), "grade", "--out", str(self.out),
+                                                 authority._id], capture_output=True, text=True, timeout=10)
+                        (self.assets / f"malformed-{target.name}-{encoding}.stdout").write_text(result.stdout)
+                        (self.assets / f"malformed-{target.name}-{encoding}.stderr").write_text(result.stderr)
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertEqual(result.stdout, "")
+                        receipt = json.loads(result.stderr)["refusal"]
+                        self.assertEqual(receipt["reason"], "unapproved_git")
+                        self.assertEqual(receipt["run_id"], authority._id)
+                        self.assertEqual(json.loads((Path(receipt["attempt"]) / "refusal.json").read_text()), receipt)
+                        self.assertEqual((self.root / "verdict.json").read_bytes(), prior)
+                        self.assertEqual(backup.read_bytes(), original)
+                        self.assertEqual(target.read_bytes(), malformed)
+                    finally:
+                        target.unlink()
+                        backup.rename(target)
+
     def test_missing_sealed_inputs_return_cli_refusal_receipts(self):
         case = self.deslop()
         base = self.repository()
