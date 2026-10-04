@@ -1277,6 +1277,11 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
       `git remote get-url origin failed: ${errorMessage(error)}; GitHub frontier discovery requires an origin remote`
     );
   }
+  if (repository.length === 0) {
+    throw new UserError(
+      "GitHub frontier discovery requires a nonempty origin URL"
+    );
+  }
 
   let raw: string;
   try {
