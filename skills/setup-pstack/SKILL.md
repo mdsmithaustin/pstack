@@ -55,17 +55,17 @@ Whether a session has `spawn_agent` depends on more than config. As of Codex 0.1
 - **The config signals.** Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`, and report the `multi_agent` and `multi_agent_v2` rows. Then read `[agents]` `enabled` from `config.toml` under `$CODEX_HOME` or `~/.codex/`, and from the project's `.codex/config.toml` when the project is trusted, because `codex features list` does not report it. Report these as signals, not as a verdict on spawning.
 - **When `codex` is not on PATH**, as when this skill runs from another CLI, report the check as unverified.
 
-Offer an edit only for a blocking key that a config file actually shows:
+A key in a file you read is a possible cause, not a proven one, because `multi_agent_v2` or a layer you cannot read can override it. Offer an edit only when a Codex session confirms `spawn_agent` is missing, and only for a possible cause a config file shows:
 
 - `[agents]` `enabled = false` in a file you read: offer to delete that line or set it to `true`. On Codex 0.160.0 this key removes `spawn_agent` even while the `multi_agent` row reads `true`.
-- `spawn_agent` is confirmed missing in a session and both feature rows read `false`: offer these lines, or `codex features enable multi_agent`, which writes them to the user config only. A trusted project's `.codex/config.toml` that sets the feature false still wins, so name that file instead when it holds the key.
+- Both feature rows read `false`: offer these lines, or `codex features enable multi_agent`, which writes them to the user config only. A trusted project's `.codex/config.toml` that sets the feature false still wins, so name that file instead when it holds the key.
 
 ```toml
 [features]
 multi_agent = true
 ```
 
-Edit a file only after the user says yes, and keep every other key. The change applies from the next session. Without a session to confirm, report the signals and say spawning is unverified.
+Edit a file only after the user says yes, and keep every other key. The change applies from the next session. Without a session to confirm, report the signals and any possible causes, say spawning is unverified, and offer no edit.
 
 ### 1. Detect available models and efforts
 

@@ -2693,9 +2693,9 @@
   },
   "setup-checks-codex-multi-agent": {
    "check": "live",
-   "claim": "On Codex, setup-pstack treats a live session's callable spawn_agent as the answer and config as signals: it reports the multi_agent and multi_agent_v2 rows and the `[agents] enabled` key, offers an edit only for a blocking key a config file shows and only after a yes, and otherwise reports what it saw and the causes it cannot rule out.",
+   "claim": "On Codex, setup-pstack treats a live session's callable spawn_agent as the answer and config as signals: it reports the multi_agent and multi_agent_v2 rows and the `[agents] enabled` key as possible causes, offers an edit only when a session confirms spawn_agent is missing and only after a yes, and otherwise reports what it saw and the causes it cannot rule out.",
    "harness_sensitive": true,
-   "live_case": "setup-run on Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript reports spawn_agent missing, names that key from the config file, and does not edit before a yes.",
+   "live_case": "setup-run inside Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript confirms spawn_agent is missing in the session, names that key as a possible cause, and does not edit before a yes.",
    "owners": [
     "skills/setup-pstack/SKILL.md"
    ],
@@ -8281,21 +8281,21 @@
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   },
-  "518a9416b697": {
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "When a config file shows the key that blocks it, setup names the key and edits it only with your yes.",
-   "class": "promise",
-   "promise": "setup-checks-codex-multi-agent"
-  },
   "4b84fcd1e65d": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
    "text": "Otherwise it reports what it saw and the causes it cannot rule out.",
+   "class": "promise",
+   "promise": "setup-checks-codex-multi-agent"
+  },
+  "003add5cdc95": {
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "When a Codex session shows spawning is missing and a config file holds a key that could cause it, setup names that key as a possible cause and edits it only with your yes.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }
