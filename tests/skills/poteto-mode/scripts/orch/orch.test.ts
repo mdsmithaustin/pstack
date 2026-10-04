@@ -780,6 +780,85 @@ describe("Store", () => {
     });
   });
 
+  it("rejects unsafe origin identities through the CLI without leaking them or changing store bytes", async () => {
+    const directory = await makeDirectory();
+    const stack = await makeGitStack(directory);
+    const storeDirectory = join(directory, "store");
+    const selected = {
+      number: 11,
+      state: "OPEN",
+      headRefName: "stack/open",
+      headRefOid: stack.openSha,
+      baseRefName: "main",
+      isCrossRepository: false,
+    };
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([selected]),
+      operation: async () => {
+        const callsPath = join(directory, "gh-calls.txt");
+        await writeFile(join(directory, "github-bin", "gh"), `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$@" >> "${callsPath}"
+case "$4" in
+  https://github.com/personal/project.git|github.com/personal/project) cat "${join(directory, "github-output.json")}" ;;
+  *) printf 'repository rejected: %s\\n' "$4" >&2; exit 2 ;;
+esac
+`);
+        expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
+        const args = ["--store", storeDirectory, "--json", "frontier", "set", "--repo", stack.repo];
+        const valid = runCli(args);
+        expect(valid.code).toBe(0);
+        expect(JSON.parse(valid.stdout)).toEqual({
+          generation: 1,
+          prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
+          lowestUnmerged: 11,
+        });
+        const entries = (await readdir(storeDirectory)).sort();
+        const names = (await readdir(storeDirectory, { withFileTypes: true }))
+          .filter((entry) => entry.isFile())
+          .map((entry) => entry.name).sort();
+        const before = await Promise.all(names.map((name) => readFile(join(storeDirectory, name))));
+        const marker = "PUBLIC_TEST_SENTINEL";
+        const host = "github.com";
+        for (const origin of [
+          `https://user:${marker}@${host}/personal/project.git`,
+          `https://${marker}@${host}/personal/project.git`,
+          `https://@github.com/personal/project.git`,
+          `ssh://git:${marker}@${host}/personal/project.git`,
+          `https://github.com/personal/project.git?token=${marker}`,
+          `https://github.com/personal/project.git#${marker}`,
+          `https://github.com/personal/%2F${marker}.git`,
+          `https://github.com/%${marker}/project.git`,
+          `https://github.com/personal/${marker}\\project.git`,
+          `https://github.com:8443/personal/${marker}.git`,
+          `file:///personal/${marker}.git`,
+          `${marker}@${host}:personal/project.git`,
+          "https://github.com/personal//project.git",
+          "https://github.com/other/../personal/project.git",
+          " ",
+          "\t",
+          "",
+        ]) {
+          await writeFile(callsPath, "");
+          git({ repo: stack.repo, args: ["config", "remote.origin.url", origin] });
+          const result = runCli(args);
+          expect(result.code).toBe(1);
+          expect(result.stdout).toBe("");
+          expect(result.stderr).not.toContain(marker);
+          expect(result.stderr).toContain("GitHub frontier discovery requires");
+          expect(await readFile(callsPath, "utf8")).toBe("");
+          expect((await readdir(storeDirectory)).sort()).toEqual(entries);
+          expect(await Promise.all(names.map((name) => readFile(join(storeDirectory, name))))).toEqual(before);
+        }
+        git({ repo: stack.repo, args: ["remote", "remove", "origin"] });
+        expect(runCli(args).code).toBe(1);
+        expect(await readFile(callsPath, "utf8")).toBe("");
+        expect(await Promise.all(names.map((name) => readFile(join(storeDirectory, name))))).toEqual(before);
+      },
+    });
+  });
+
   it("rejects missing and empty origin identities without recording a frontier", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
