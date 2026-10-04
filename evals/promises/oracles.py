@@ -754,7 +754,7 @@ def under(base, target):
 
 def shell_writes(command):
     out, base = [], ""
-    for segment, masked in shell_segments(strip_heredocs(command)):
+    for segment, masked in shell_segments(expand_assignments(strip_heredocs(command))):
         moved = cd_into(segment, base)
         if moved is not None:
             base = moved
@@ -2480,8 +2480,9 @@ def arena_lead_reads(view):
         given = call.get("input") or {}
         if call.get("name") in SHELL_TOOLS:
             command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
-            written = set(shell_writes(command))
-            reads += [p for p in resolved_shell_paths(strip_heredocs(command)) if p.strip("\"'") not in written]
+            written = {w.strip("\"'") for w in shell_writes(command)}
+            reads += [p for p in resolved_shell_paths(strip_heredocs(command))
+                      if p.strip("\"'") not in written and not ASSIGNMENT.fullmatch(" " + p)]
         else:
             reads += [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
     named = rationale_pattern(view, candidates)

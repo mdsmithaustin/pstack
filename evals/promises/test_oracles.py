@@ -1888,6 +1888,21 @@ class ArenaDistinctDirectories(unittest.TestCase):
         self.assertEqual(again["verdict"], INCONCLUSIVE, again)
 
 
+class WritesThroughVariables(unittest.TestCase):
+    def test_a_write_through_a_shell_variable_is_not_a_rationale_read(self):
+        brief = "Write `DESIGN_NOTES.md` with your reasoning."
+        calls = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"description": f"cand {c}", "prompt": brief}} for s, c in zip((7, 9, 11, 13, 15), "ABCDE")]
+        spawns = [{"seq": c["seq"], "tool": "Agent", "model": "opus", "prompt_head": brief} for c in calls]
+        spawns.append({"seq": 26, "tool": "Agent", "model": "fable", "prompt_head": "READ-ONLY. You are judging five implementations against the rubric."})
+        events = calls + [{"seq": 26, "kind": "tool_call", "name": "Agent", "input": {}}]
+        for n, seq in enumerate(range(30, 40, 2)):
+            events += bash(seq, f'R=/tmp/w/cand-{n}/DESIGN_NOTES.md; cat > "$R" <<EOF\nnotes\nEOF')
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events + bash(50, "cat /tmp/w/x/notes.txt"), spawns=spawns, final_reply="x"),
+                       load_case("arena-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
