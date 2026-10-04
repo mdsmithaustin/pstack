@@ -2116,6 +2116,33 @@ class PythonWritesAreNotReads(unittest.TestCase):
         self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 3")
 
 
+class SealedUnmatchedFanOut(unittest.TestCase):
+    def sealed(self, seqs, texts):
+        events, spawns = [], []
+        for seq in seqs:
+            more, spawn = codex_spawn(seq, f"task_{seq}", "")
+            events += more
+            spawns.append(spawn)
+        for seq, body in texts:
+            events.append(text(seq, body))
+        events.sort(key=lambda e: e["seq"])
+        return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="codex"), load_case("how-wide-run"))
+
+    def test_one_sealed_spawn_is_inconclusive(self):
+        result = self.sealed([22], [])
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_a_sealed_wave_with_no_later_spawn_is_inconclusive(self):
+        result = self.sealed([22, 25], [])
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_one_readable_explainer_still_fails(self):
+        spawns = [{"seq": 9, "tool": "Agent", "prompt_head": "Read-only. You are writing an architectural explanation."}]
+        events = [{"seq": 9, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, final_reply="x"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
