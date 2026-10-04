@@ -61,7 +61,7 @@ def turn(run, text, index):
             "-t", ",".join(toolsets(run)), "--yolo", "--run-budget", str(max(30, int(run.timeout_s * 0.9)))]
     for name in dict.fromkeys(n for n in (entry, skill) if n):
         args += ["-s", name]
-    return run._hermes_evidence.turn(NativeTurn(index, tuple(args)))
+    return run._hermes_evidence.turn(NativeTurn(index, tuple(args), skill))
 
 
 def parse_json(text):
@@ -270,12 +270,14 @@ def entry_kind(entry, preload, events):
 
 
 def harvest(run):
-    evidence = run._hermes_evidence.read()
-    skills = tuple(live.split_entry(run.case, text, i)[0] for i, text in enumerate(run.case["turns"][:len(evidence.turns)]))
-    return build_trace(evidence, skills)
+    return build_trace(run._hermes_evidence.read())
 
 
-def build_trace(evidence, skills=()):
+def build_trace(evidence, skills=None):
+    captured = evidence.entry_skills
+    if skills is not None and captured is not None and skills != captured:
+        raise ValueError("entry skills disagree with the acquisition context")
+    skills = captured if captured is not None else skills or ()
     try:
         return _build_trace(evidence, skills)
     except (TypeError, ValueError, KeyError, AttributeError, RecursionError) as exc:

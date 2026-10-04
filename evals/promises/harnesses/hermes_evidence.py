@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import signal
@@ -110,6 +111,7 @@ class NativeSetup:
 class NativeTurn:
     index: int
     arguments: tuple[str, ...]
+    entry_skill: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,6 +172,22 @@ class FixtureInventory:
 
 
 @dataclass(frozen=True)
+class AcquisitionContext:
+    run_id: str
+    acquisition_id: str
+    kind: Literal["complete", "incomplete"]
+    meta: FrozenObject | None
+    turns: tuple[CapturedTurn, ...]
+    fixture: FixtureInventory | None
+    writers: tuple[WriterObservation, ...]
+    observation: FrozenObject
+
+    @property
+    def entry_skills(self):
+        return tuple(thaw(turn.record).get("entry_skill") for turn in self.turns)
+
+
+@dataclass(frozen=True)
 class SessionRecords:
     session: FrozenObject
     messages: tuple[FrozenObject, ...]
@@ -193,6 +211,7 @@ class CompleteEvidence:
     sessions: tuple[SessionRecords, ...]
     fixture: FixtureInventory
     retained_paths: tuple[str, ...]
+    entry_skills: tuple[str | None, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +223,7 @@ class IncompleteEvidence:
     meta: FrozenObject | None
     turns: tuple[CapturedTurn, ...]
     retained_paths: tuple[str, ...]
+    entry_skills: tuple[str | None, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -302,6 +322,10 @@ class HermesEvidence:
         owner._turns = ()
         owner._writers = ()
         owner._attempts = []
+        owner._contexts = {}
+        owner._selected_id = None
+        owner._selected_context = None
+        owner._retention_error = None
         owner._meta = None
         owner._provenance = "native-stopped"
         owner._replay_error = None
@@ -570,7 +594,8 @@ class HermesEvidence:
                 raise RuntimeError(f"turn {command.index} cannot resume: no earlier turn reported a Hermes session id")
             args += ["--resume", self.first_session]
         record, output, _ = self._native(f"turn{command.index}", HERMES_BIN, args, self.timeout_s)
-        record.update(hermes_argv=["hermes", *args], image=self._image, session_id=_session_id(output))
+        record.update(hermes_argv=["hermes", *args], image=self._image, session_id=_session_id(output),
+                      entry_skill=command.entry_skill)
         self._turns += (CapturedTurn(command.index, freeze(record)),)
         self._save(f"turn-{command.index:04d}.json", record)
         return thaw(self._turns[-1].record)
@@ -602,6 +627,13 @@ class HermesEvidence:
 
     def read(self):
         aid = uuid.uuid4().hex
+        selected = self._selected_context
+        meta = selected.meta if selected else self._meta if self._selected_id is None else None
+        turns = selected.turns if selected else self._turns if self._selected_id is None else ()
+        writers = selected.writers if selected else self._writers if self._selected_id is None else ()
+        inventory = selected.fixture if selected else None
+        observation = ({"kind": "replay-of", "acquisition_id": self._selected_id} if self._selected_id else
+                       {"kind": "live", "turn_count": len(turns), "inventory_phase": "not-reached"})
         attempt = self._mkdir(self._acquisitions, aid)
         self._attempts.append(aid)
         raw = self._mkdir(attempt, "raw")
@@ -612,7 +644,7 @@ class HermesEvidence:
             self._check()
             if self._replay_error:
                 raise EvidenceRefused("pair-incomplete", self._replay_error)
-            if self._meta is None:
+            if meta is None:
                 raise EvidenceRefused("invalid-meta", "no captured prepared metadata")
             source = self._source or self._profile
             if source is None:
@@ -638,12 +670,14 @@ class HermesEvidence:
             if "state.db-wal" in opened:
                 self._validate_wal(self._bytes(raw, "state.db"), self._bytes(raw, "state.db-wal"))
             sessions = self._decode(work)
-            roots = tuple(dict.fromkeys(thaw(t.record).get("session_id") for t in self._turns if thaw(t.record).get("session_id")))
+            roots = tuple(dict.fromkeys(thaw(t.record).get("session_id") for t in turns if thaw(t.record).get("session_id")))
             ids = {thaw(s.session)["id"] for s in sessions}
             populated = {thaw(s.session)["id"] for s in sessions if s.messages}
             if not roots or any(s not in ids or s not in populated for s in roots):
                 raise EvidenceRefused("missing-root", "captured root session is absent from native records")
-            inventory = self._inventory()
+            if self._selected_id is None:
+                inventory = self._inventory()
+                observation["inventory_phase"] = "after-decode-before-final-source-check"
             for receipt in receipts:
                 if isinstance(receipt, PresentBytes):
                     fd, stamp = opened[receipt.member]
@@ -659,21 +693,32 @@ class HermesEvidence:
                         continue
                     raise EvidenceRefused("source-changed", f"sidecar appeared: {receipt.member}")
             self._check()
-            acquisition = Acquisition(self.binding.run_id, aid, self._provenance, database, self._writers,
+            acquisition = Acquisition(self.binding.run_id, aid, self._provenance, database, writers,
                                       tuple(k for k in self._catalog if k.startswith(f"acquisitions/{aid}/")))
-            result = CompleteEvidence(self._meta, self._turns, acquisition, sessions, inventory, ())
+            result = CompleteEvidence(meta, turns, acquisition, sessions, inventory, ())
         except (OSError, ValueError, sqlite3.Error, EvidenceRefused, RecursionError) as exc:
             reason = exc.reason if isinstance(exc, EvidenceRefused) else "decode-failed"
-            result = IncompleteEvidence(self.binding.run_id, aid, reason, f"{type(exc).__name__}: {exc}", self._meta, self._turns, ())
+            result = IncompleteEvidence(self.binding.run_id, aid, reason, f"{type(exc).__name__}: {exc}", meta, turns, ())
         finally:
             for fd, _ in opened.values():
                 os.close(fd)
             self._collect_work(work)
-        self._save(f"acquisitions/{aid}/result.json", {"id": aid, "provenance": self._provenance, "reason": reason,
-                     "detail": result.detail if isinstance(result, IncompleteEvidence) else None,
-                     "members": [asdict(r) for r in receipts]})
+        context = AcquisitionContext(self.binding.run_id, aid, "incomplete" if reason else "complete",
+                                     meta, turns, inventory, writers, freeze(observation))
+        member = f"acquisitions/{aid}/context.json"
+        try:
+            self._save(member, _context_record(context))
+            self._contexts[aid] = {"kind": "bound-context-v1", "member": member}
+            self._save(f"acquisitions/{aid}/result.json", {"id": aid, "run_id": self.binding.run_id,
+                "provenance": self._provenance, "reason": reason,
+                "detail": result.detail if isinstance(result, IncompleteEvidence) else None,
+                "members": [asdict(r) for r in receipts],
+                "context": {"member": member, "sha256": self._catalog[member]["sha256"]}})
+        except (OSError, ValueError, EvidenceRefused) as exc:
+            raise RetentionUnavailable(f"Acquisition publication failed; private evidence remains at {self.private_root}: {exc}") from exc
         from dataclasses import replace
-        return replace(result, retained_paths=tuple(str(self.private_root / k) for k in self._catalog))
+        return replace(result, retained_paths=tuple(str(self.private_root / k) for k in self._catalog),
+                       entry_skills=context.entry_skills if self._selected_id is None or selected else None)
 
     def _collect_work(self, work):
         for name in os.listdir(work.fd):
@@ -823,6 +868,18 @@ class HermesEvidence:
     def retain_pair(self, export: OwnedExport):
         try:
             self._check()
+            if self._retention_error:
+                raise EvidenceRefused("pair-incomplete", self._retention_error)
+            private_files, private_directories = self._tree(self._private)
+            if {"/".join(p) for p, _, _, _ in private_files} != set(self._catalog):
+                raise EvidenceRefused("pair-incomplete", "private catalog membership mismatch")
+            contexts = {}
+            for aid in self._attempts:
+                if f"acquisitions/{aid}/result.json" in self._catalog or self._contexts.get(aid) == {"kind": "unbound-v1"}:
+                    contexts[aid] = self._contexts[aid]
+                else:
+                    member = f"acquisitions/{aid}/context.json"
+                    contexts[aid] = {"kind": "unfinished", **({"member": member} if member in self._catalog else {})}
             destination = export.destination
             if destination.is_relative_to(self.binding.root) or destination.is_relative_to(self.private_root):
                 raise EvidenceRefused("path-refused", "pair destination must be outside the run and private evidence")
@@ -840,7 +897,7 @@ class HermesEvidence:
                     raise EvidenceRefused("source-changed", f"export source changed: {parts}")
                 self._write(self._walk(run_dest, parts[:-1]), parts[-1], data)
                 catalog["run/" + "/".join(parts)] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
-            evidence_dirs = {parts[:i] for member in self._catalog for parts in [_components(member)] for i in range(1, len(parts))}
+            evidence_dirs = set(private_directories)
             for parts in sorted(evidence_dirs, key=lambda p: (len(p), p)):
                 self._mkdir(self._walk(evidence_dest, parts[:-1]), parts[-1])
             for member, expected in self._catalog.items():
@@ -851,16 +908,23 @@ class HermesEvidence:
                 self._write(self._walk(evidence_dest, parts[:-1]), parts[-1], data)
                 catalog["hermes-evidence/" + member] = expected
             self._check()
-            manifest = {"schema_version": 1, "run_id": self.binding.run_id,
+            manifest = {"schema_version": 2, "run_id": self.binding.run_id,
                 "original_root": str(self.binding.root), "original_fixture": self._original_fixture,
-                "fixture_components": self._fixture_components, "acquisitions": self._attempts,
+                "fixture_components": list(self._fixture_components), "acquisitions": self._attempts,
+                "contexts": contexts,
                 "turn_members": [f"turn-{t.index:04d}.json" for t in self._turns],
                 "members": catalog, "directories": ["run", "hermes-evidence", *("run/" + "/".join(p) for p in directories),
                                                       *("hermes-evidence/" + "/".join(p) for p in sorted(evidence_dirs))],
                 "absent_run_records": [name for name in ("run.json", "trace.json", "verdict.json") if "run/" + name not in catalog]}
+            def read_json(member):
+                if member not in catalog:
+                    raise ValueError(f"uncataloged association: {member}")
+                parts = _components(member)
+                return json.loads(self._bytes(self._walk(pair, parts[:-1]), parts[-1]), object_pairs_hook=_unique_object)
+            _validate_attempts(manifest, read_json)
             self._write(pair, "pair.json", (json.dumps(manifest, indent=2) + "\n").encode())
             return RetainedPair(destination, self.binding.run_id, tuple(self._attempts))
-        except (OSError, ValueError, EvidenceRefused) as exc:
+        except (OSError, ValueError, KeyError, TypeError, EvidenceRefused) as exc:
             raise RetentionUnavailable(f"Hermes pair export failed; private evidence remains at {self.private_root}: {exc}") from exc
 
     @classmethod
@@ -870,19 +934,20 @@ class HermesEvidence:
         try:
             pair = reader._absolute(binding.pair_root)
             manifest = json.loads(reader._bytes(pair, "pair.json"), object_pairs_hook=_unique_object)
-            if manifest["schema_version"] != 1 or manifest["run_id"] != binding.expected_run_id:
+            if manifest["schema_version"] not in (1, 2) or manifest["run_id"] != binding.expected_run_id:
                 raise EvidenceRefused("pair-incomplete", "pair identity does not match replay binding")
             if len(set(manifest["acquisitions"])) != len(manifest["acquisitions"]) or len(set(manifest["directories"])) != len(manifest["directories"]):
                 raise EvidenceRefused("pair-incomplete", "duplicate pair member")
             if binding.acquisition_id not in manifest["acquisitions"]:
                 raise EvidenceRefused("pair-incomplete", "requested acquisition is not cataloged")
-            _components(binding.acquisition_id)
+            _name(binding.acquisition_id)
             components = tuple(manifest["fixture_components"])
             _components("/".join(components))
             owner = cls.bind(RunBinding(binding.expected_run_id, binding.pair_root / "run",
                                        binding.pair_root / "run" / Path(*components), private_parent), 1)
             owner._fixture_spelling = manifest["original_fixture"]
             owner._provenance = "pair-offline"
+            owner._selected_id = binding.acquisition_id
             try:
                 expected_members = manifest["members"]
                 for member, expected in expected_members.items():
@@ -897,6 +962,12 @@ class HermesEvidence:
                     raise EvidenceRefused("pair-incomplete", "pair membership mismatch")
                 if {"/".join(p) for p in directories} != set(manifest["directories"]):
                     raise EvidenceRefused("pair-incomplete", "pair directory membership mismatch")
+                def read_json(member):
+                    if member not in expected_members:
+                        raise ValueError(f"uncataloged association: {member}")
+                    parts = _components(member)
+                    return json.loads(reader._bytes(reader._walk(pair, parts[:-1]), parts[-1]), object_pairs_hook=_unique_object)
+                meta, turns, contexts, results, descriptors = _validate_attempts(manifest, read_json)
                 for member, expected in expected_members.items():
                     parts = _components(member)
                     if parts[0] != "hermes-evidence":
@@ -914,20 +985,28 @@ class HermesEvidence:
                     if {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} != expected:
                         raise EvidenceRefused("pair-incomplete", f"catalog changed during import: {member}")
                     owner._write(target, relative[-1], data)
+                owner._write(owner._private, "imported-pair-" + uuid.uuid4().hex + ".json", reader._bytes(pair, "pair.json"))
                 owner._attempts = list(manifest["acquisitions"])
+                owner._contexts = dict(descriptors)
                 evidence = owner._private
-                owner._meta = _prepared(json.loads(owner._bytes(evidence, "meta.json")))
-                owner._turns = tuple(CapturedTurn(i, freeze(json.loads(owner._bytes(evidence, name))))
-                                    for i, name in enumerate(manifest["turn_members"]))
-                owner._source = owner._walk(evidence, ("acquisitions", binding.acquisition_id, "raw"))
-                result_dir = owner._walk(evidence, ("acquisitions", binding.acquisition_id))
-                receipt = json.loads(owner._bytes(result_dir, "result.json"))
-                if receipt["reason"] is not None:
-                    raise EvidenceRefused("pair-incomplete", f"selected acquisition is incomplete: {receipt['reason']}")
+                owner._meta, owner._turns = meta, turns
+                owner._selected_context = contexts[binding.acquisition_id]
+                receipt = results[binding.acquisition_id]
+                if receipt is None:
+                    owner._replay_error = "selected acquisition is incomplete: terminal-state-absent"
+                elif receipt["reason"] is not None:
+                    owner._replay_error = f"selected acquisition is incomplete: {receipt['reason']}: {receipt['detail']}"
+                elif owner._selected_context is None:
+                    owner._replay_error = "selected acquisition is incomplete: context-unavailable: legacy acquisition has no temporal association"
+                else:
+                    owner._source = owner._walk(evidence, ("acquisitions", binding.acquisition_id, "raw"))
+                if receipt is not None and receipt["reason"] is not None and owner._selected_context is None:
+                    owner._replay_error += "; context-unavailable: legacy acquisition has no temporal association"
                 owner._save("replay-" + uuid.uuid4().hex + ".json", {"run_id": binding.expected_run_id, "acquisition_id": binding.acquisition_id,
                                            "pair_root": str(binding.pair_root), "provenance": owner._provenance})
             except (OSError, ValueError, KeyError, TypeError, EvidenceRefused) as exc:
                 owner._replay_error = str(exc)
+                owner._retention_error = str(exc)
             return owner
         finally:
             reader.close()
@@ -954,7 +1033,7 @@ class HermesEvidence:
                 owner._write(owner._captures, f"legacy-{index}.stdout", data)
                 owner._write(owner._captures, f"legacy-{index}.stderr", err)
                 detached = {k: turn.get(k) for k in ("argv", "hermes_argv", "exit_code", "duration_s", "timed_out")}
-                detached.update(session_id=_session_id(data), stream=str(owner.private_root / "captures" / f"legacy-{index}.stdout"),
+                detached.update(session_id=_session_id(data), entry_skill=None, stream=str(owner.private_root / "captures" / f"legacy-{index}.stdout"),
                                 stderr=str(owner.private_root / "captures" / f"legacy-{index}.stderr"))
                 owner._turns += (CapturedTurn(index, freeze(detached)),)
                 owner._save(f"turn-{index:04d}.json", detached)
@@ -973,6 +1052,243 @@ def _unique_object(pairs):
             raise ValueError(f"duplicate JSON key: {key}")
         result[key] = value
     return result
+
+
+def _context_record(context):
+    return {"schema_version": 1, "run_id": context.run_id, "acquisition_id": context.acquisition_id,
+        "kind": context.kind, "meta": thaw(context.meta),
+        "turns": [{"index": t.index, "record": thaw(t.record)} for t in context.turns],
+        "inventory": {"kind": "observed", **asdict(context.fixture)} if context.fixture else {"kind": "not-observed"},
+        "writers": [asdict(w) for w in context.writers], "observation": thaw(context.observation)}
+
+
+def _captured_turn(index, record):
+    if not isinstance(record, dict):
+        raise ValueError("invalid captured turn")
+    for key in ("argv", "hermes_argv"):
+        value = record.get(key)
+        if value is not None and (not isinstance(value, list) or any(not isinstance(v, str) for v in value)):
+            raise ValueError("invalid captured arguments")
+    for key in ("session_id", "entry_skill"):
+        value = record.get(key)
+        if value is not None and (not isinstance(value, str) or not value):
+            raise ValueError("invalid captured identity")
+    duration = record.get("duration_s")
+    if type(duration) not in (int, float) or not math.isfinite(duration) or duration < 0:
+        raise ValueError("invalid captured duration")
+    if type(record.get("exit_code")) is not int:
+        raise ValueError("invalid captured exit status")
+    return CapturedTurn(index, freeze(record))
+
+
+def _parse_context(value, run_id, aid, meta, turns, original_fixture, read_json):
+    if (type(value["schema_version"]) is not int or value["schema_version"] != 1 or value["run_id"] != run_id or value["acquisition_id"] != aid
+            or value["kind"] not in ("complete", "incomplete")):
+        raise ValueError("context identity or version mismatch")
+    prepared = _prepared(value["meta"]) if value["meta"] is not None else None
+    if prepared is not None and prepared != meta:
+        raise ValueError("context prepared metadata mismatch")
+    embedded = value["turns"]
+    if not isinstance(embedded, list) or len(embedded) > len(turns):
+        raise ValueError("context turn prefix exceeds captured turns")
+    prefix = []
+    for index, item in enumerate(embedded):
+        if type(item["index"]) is not int or item["index"] != index or "entry_skill" not in item["record"]:
+            raise ValueError("invalid context turn index or entry skill")
+        turn = _captured_turn(index, item["record"])
+        if turn != turns[index]:
+            raise ValueError("context turn prefix mismatch")
+        prefix.append(turn)
+    inventory = value["inventory"]
+    fixture = None
+    if inventory["kind"] == "observed":
+        if inventory["original_spelling"] != original_fixture:
+            raise ValueError("context fixture spelling mismatch")
+        entries = inventory["entries"]
+        if not isinstance(entries, list) or len(entries) > MAX_ENTRIES:
+            raise ValueError("invalid context inventory")
+        paths = {}
+        for entry in entries:
+            parts = entry["components"]
+            if not isinstance(parts, list) or not parts or len(parts) > MAX_DEPTH + 1:
+                raise ValueError("invalid inventory components")
+            for part in parts:
+                if not isinstance(part, str):
+                    raise ValueError("invalid inventory component")
+                _name(part)
+            parts = tuple(parts)
+            if parts in paths or entry["kind"] not in ("directory", "regular", "symlink", "hardlink", "special", "unavailable"):
+                raise ValueError("duplicate inventory path or invalid kind")
+            paths[parts] = entry["kind"]
+        if any(paths.get(parts[:i]) != "directory" for parts in paths for i in range(1, len(parts))):
+            raise ValueError("invalid inventory ancestor")
+        fixture = FixtureInventory(original_fixture, tuple(FixtureEntry(p, k) for p, k in paths.items()))
+    elif inventory != {"kind": "not-observed"}:
+        raise ValueError("invalid inventory observation")
+    writers = []
+    for index, item in enumerate(value["writers"]):
+        writer = WriterObservation(**item)
+        if (type(writer.launch_index) is not int or writer.launch_index != index
+                or writer.receipt_member != f"writer-{index:04d}.json"
+                or writer.disposition not in ("removed", "verified-absent", "unknown")
+                or not isinstance(writer.name, str) or not writer.name
+                or writer.container_id is not None and not isinstance(writer.container_id, str)):
+            raise ValueError("invalid writer observation")
+        receipt = read_json("hermes-evidence/" + writer.receipt_member)
+        launch = read_json(f"hermes-evidence/launch-{index:04d}.json")
+        if not isinstance(receipt, dict) or not isinstance(launch, dict):
+            raise ValueError("invalid writer receipt")
+        if any(receipt.get(k) != v for k, v in item.items()) or any(launch.get(k) != item[k] for k in ("launch_index", "name", "receipt_member")):
+            raise ValueError("context writer receipt mismatch")
+        writers.append(writer)
+    observation = value["observation"]
+    if observation["kind"] == "live":
+        phase = "after-decode-before-final-source-check" if fixture is not None else "not-reached"
+        if type(observation["turn_count"]) is not int or observation != {"kind": "live", "turn_count": len(prefix), "inventory_phase": phase}:
+            raise ValueError("invalid live context observation")
+    elif observation["kind"] != "replay-of" or set(observation) != {"kind", "acquisition_id"}:
+        raise ValueError("invalid replay context observation")
+    if value["kind"] == "complete" and (prepared is None or fixture is None or not prefix or any(w.disposition == "unknown" for w in writers)):
+        raise ValueError("complete context lacks required observations")
+    return AcquisitionContext(run_id, aid, value["kind"], prepared, tuple(prefix), fixture, tuple(writers), freeze(observation))
+
+
+def _validate_attempts(manifest, read_json):
+    members = manifest["members"]
+    acquisitions = manifest["acquisitions"]
+    if (not isinstance(acquisitions, list) or len(set(acquisitions)) != len(acquisitions)
+            or type(manifest["schema_version"]) is not int or manifest["schema_version"] not in (1, 2)):
+        raise ValueError("invalid acquisition list or pair version")
+    for aid in acquisitions:
+        if not isinstance(aid, str):
+            raise ValueError("invalid acquisition ID")
+        _name(aid)
+    binding = read_json("hermes-evidence/binding.json")
+    if binding["run_id"] != manifest["run_id"] or binding["fixture_components"] != manifest["fixture_components"]:
+        raise ValueError("owner binding differs from pair")
+    if manifest["absent_run_records"] != [name for name in ("run.json", "trace.json", "verdict.json") if "run/" + name not in members]:
+        raise ValueError("run record absence mismatch")
+    turn_members = manifest["turn_members"]
+    if not isinstance(turn_members, list) or turn_members != [f"turn-{i:04d}.json" for i in range(len(turn_members))]:
+        raise ValueError("captured turn membership is not contiguous")
+    retained_turns = {m.removeprefix("hermes-evidence/") for m in members if re.fullmatch(r"hermes-evidence/turn-\d+\.json", m)}
+    if retained_turns != set(turn_members):
+        raise ValueError("captured turn catalog mismatch")
+    turns = tuple(_captured_turn(i, read_json("hermes-evidence/" + m)) for i, m in enumerate(turn_members))
+    for turn in turns:
+        for field in ("stream", "stderr"):
+            path = thaw(turn.record).get(field)
+            if not isinstance(path, str) or "hermes-evidence/captures/" + path.split("/")[-1] not in members:
+                raise ValueError("captured turn output is not retained")
+    meta_member = "hermes-evidence/meta.json"
+    meta = _prepared(read_json(meta_member)) if meta_member in members else None
+    descriptors = manifest.get("contexts") if manifest["schema_version"] == 2 else {a: {"kind": "unbound-v1"} for a in acquisitions}
+    if not isinstance(descriptors, dict) or set(descriptors) != set(acquisitions):
+        raise ValueError("context membership mismatch")
+    for member in members:
+        if member.startswith("hermes-evidence/acquisitions/"):
+            parts = _components(member)
+            if len(parts) < 4 or parts[2] not in descriptors:
+                raise ValueError("uncataloged acquisition member")
+    for directory in manifest["directories"]:
+        if directory.startswith("hermes-evidence/acquisitions/") and _components(directory)[2] not in descriptors:
+            raise ValueError("uncataloged acquisition directory")
+    contexts, results, raw_sets = {}, {}, {}
+    for aid in acquisitions:
+        prefix = f"hermes-evidence/acquisitions/{aid}/"
+        result_member, database_member, context_member = (prefix + name for name in ("result.json", "database.json", "context.json"))
+        descriptor = descriptors[aid]
+        kind = descriptor["kind"]
+        if kind not in ("bound-context-v1", "unbound-v1", "unfinished"):
+            raise ValueError("unknown context descriptor")
+        has_context = context_member in members
+        if kind == "unbound-v1":
+            if descriptor != {"kind": "unbound-v1"} or has_context:
+                raise ValueError("legacy context association is invalid")
+            context = None
+        else:
+            expected = {"kind": kind, **({"member": context_member.removeprefix("hermes-evidence/")} if has_context else {})}
+            if descriptor != expected or kind == "bound-context-v1" and not has_context:
+                raise ValueError("context member association mismatch")
+            context = _parse_context(read_json(context_member), manifest["run_id"], aid, meta, turns,
+                                     manifest["original_fixture"], read_json) if has_context else None
+        contexts[aid] = context
+        raw = {m[len(prefix + "raw/"):]: receipt for m, receipt in members.items() if m.startswith(prefix + "raw/")}
+        if any(name not in STATE_MEMBERS for name in raw):
+            raise ValueError("invalid raw database member")
+        raw_sets[aid] = raw
+        if kind == "unfinished" or kind == "unbound-v1" and result_member not in members:
+            if result_member in members:
+                raise ValueError("unfinished attempt has a terminal result")
+            result = None
+        else:
+            result = read_json(result_member)
+            if result["id"] != aid or result["provenance"] not in ("native-stopped", "pair-offline", "legacy-offline"):
+                raise ValueError("result identity mismatch")
+            if kind == "bound-context-v1":
+                if (result["run_id"] != manifest["run_id"] or result["context"] != {
+                        "member": descriptor["member"], "sha256": members[context_member]["sha256"]}
+                        or context.kind != ("complete" if result["reason"] is None else "incomplete")):
+                    raise ValueError("result context association mismatch")
+            elif "context" in result or "run_id" in result:
+                raise ValueError("legacy result contains a new context association")
+            if result["reason"] is None:
+                if result["detail"] is not None:
+                    raise ValueError("complete result has failure detail")
+            elif not isinstance(result["reason"], str) or not result["reason"] or not isinstance(result["detail"], str):
+                raise ValueError("invalid incomplete result")
+        results[aid] = result
+        receipt_list = result["members"] if result else None
+        database = read_json(database_member) if database_member in members else None
+        if database is not None:
+            if set(database) != {"main", "wal", "shm"}:
+                raise ValueError("invalid database receipt")
+            database_receipts = [database[key] for key in ("main", "wal", "shm")]
+            if [r["member"] for r in database_receipts] != list(STATE_MEMBERS):
+                raise ValueError("database member association mismatch")
+            if receipt_list is not None and {r["member"]: r for r in receipt_list} != {r["member"]: r for r in database_receipts}:
+                raise ValueError("result database receipt mismatch")
+            if receipt_list is None:
+                receipt_list = database_receipts
+        if receipt_list is not None:
+            if not isinstance(receipt_list, list):
+                raise ValueError("invalid source receipts")
+            seen, present = set(), set()
+            for receipt in receipt_list:
+                name = receipt["member"]
+                if name not in STATE_MEMBERS or name in seen:
+                    raise ValueError("duplicate or invalid source receipt")
+                seen.add(name)
+                if set(receipt) == {"member"}:
+                    if name == "state.db" or name in raw:
+                        raise ValueError("absent database member is present")
+                else:
+                    if set(receipt) != {"member", "size", "sha256", "source"}:
+                        raise ValueError("invalid present source receipt")
+                    stamp = SourceStamp(**receipt["source"])
+                    if (any(type(v) is not int or v < 0 for v in asdict(stamp).values()) or stamp.link_count != 1
+                            or stamp.size != receipt["size"] or raw.get(name) != {"size": receipt["size"], "sha256": receipt["sha256"]}):
+                        raise ValueError("raw database receipt mismatch")
+                    present.add(name)
+            if present != set(raw):
+                raise ValueError("raw database lacks a source receipt")
+            if result and result["reason"] is None and (database is None or seen != set(STATE_MEMBERS)):
+                raise ValueError("complete result lacks database observations")
+        if context and thaw(context.observation)["kind"] == "replay-of":
+            source_id = thaw(context.observation)["acquisition_id"]
+            if source_id == aid or source_id not in results:
+                raise ValueError("replay source is not an earlier acquisition")
+            source = contexts[source_id]
+            expected = (source.meta, source.turns, source.fixture, source.writers) if source else (None, (), None, ())
+            if (context.meta, context.turns, context.fixture, context.writers) != expected:
+                raise ValueError("derived context differs from selected source")
+            if result and result["provenance"] != "pair-offline":
+                raise ValueError("derived context has invalid provenance")
+            if result and result["reason"] is None:
+                original = results[source_id]
+                if not source or not original or original["reason"] is not None or raw != raw_sets[source_id]:
+                    raise ValueError("complete replay does not match its selected source")
+    return meta, turns, contexts, results, descriptors
 
 
 def _prepared(meta):
