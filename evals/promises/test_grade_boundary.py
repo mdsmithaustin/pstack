@@ -74,6 +74,61 @@ class BoundaryFixtures(unittest.TestCase):
 
 
 class ControllerBoundary(BoundaryFixtures):
+    def test_concurrent_first_initializers_preserve_both_registered_authorizations(self):
+        script = self.assets / "initialize.py"
+        script.write_text("import sys, time\nfrom pathlib import Path\n"
+            f"sys.path.insert(0, {str(live.HERE)!r})\n"
+            "from grade_boundary import _Controller, _Root\n"
+            "assets, actor = Path(sys.argv[1]), sys.argv[2]\n"
+            "read = _Root.read\n"
+            "def paused_read(self, name):\n"
+            " try: return read(self, name)\n"
+            " except FileNotFoundError:\n"
+            "  if name == 'key.json':\n"
+            "   (assets / ('missing-' + actor)).touch()\n"
+            "   if actor == '1':\n"
+            "    deadline = time.monotonic() + 10\n"
+            "    while not (assets / 'release').exists():\n"
+            "     if time.monotonic() >= deadline: raise TimeoutError('initializer release missing')\n"
+            "     time.sleep(0.01)\n"
+            "  raise\n"
+            "_Root.read = paused_read\n"
+            "(assets / ('started-' + actor)).touch()\n"
+            "controller = _Controller(assets / 'shared-out', create=True)\n"
+            "controller.save({'id': actor * 32, 'actor': actor})\n"
+            "print(actor)\n")
+        processes = []
+        try:
+            for actor, marker in (("1", "missing-1"), ("2", "started-2")):
+                process = subprocess.Popen([live.sys.executable, str(script), str(self.assets), actor],
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                processes.append(process)
+                deadline = time.monotonic() + 5
+                while not (self.assets / marker).exists() and process.poll() is None and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue((self.assets / marker).exists(), f"initializer {actor} did not reach {marker}")
+            try:
+                processes[1].communicate(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
+            (self.assets / "release").touch()
+            for actor, process in zip(("1", "2"), processes):
+                stdout, stderr = process.communicate(timeout=5)
+                (self.assets / f"initializer-{actor}.stdout").write_text(stdout)
+                (self.assets / f"initializer-{actor}.stderr").write_text(stderr)
+                self.assertEqual(process.returncode, 0, stderr)
+                self.assertEqual(stdout, actor + "\n")
+            controller = _Controller(self.assets / "shared-out")
+            self.addCleanup(controller.root.close)
+            states = [controller.load(actor * 32)[1] for actor in ("1", "2")]
+            self.assertEqual(states, [{"id": "1" * 32, "actor": "1"}, {"id": "2" * 32, "actor": "2"}])
+        finally:
+            (self.assets / "release").touch()
+            for process in processes:
+                if process.poll() is None:
+                    process.kill()
+                process.communicate()
+
     def test_raw_run_storage_cannot_overlap_any_candidate_writable_root(self):
         case = self.deslop()
         output = self.assets / "diagnostic"
@@ -211,6 +266,83 @@ class ControllerBoundary(BoundaryFixtures):
 
 @unittest.skipUnless(NATIVE, "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class NativeParentBoundary(BoundaryFixtures):
+    def test_missing_sealed_inputs_return_cli_refusal_receipts(self):
+        case = self.deslop()
+        base = self.repository()
+        authority = self.authority(case, record=self.record(case, baseline=base))
+        positive = live.grade(authority)
+        self.assertEqual(positive["promises"]["deslop-cleans-code-slop"]["verdict"], "PASS")
+        prior = (self.root / "verdict.json").read_bytes()
+        diagnostic = self.assets / "diagnostic"
+        diagnostic.mkdir()
+        (diagnostic / "verdict.json").write_bytes(prior)
+        retained = _authorize_retained(self.assets / "retained-out", self.root, project=self.project,
+                                      original_project=self.project, output=diagnostic, case=case)
+        for name in ("run.json", "trace.json", "verdict.json"):
+            with self.subTest(name=name):
+                target = self.root / name
+                backup = target.with_name(name + ".original")
+                contents = target.read_bytes()
+                target.rename(backup)
+                handle, out, output = ((retained, self.assets / "retained-out", diagnostic) if name == "verdict.json"
+                                       else (authority, self.out, self.root))
+                try:
+                    result = subprocess.run([live.sys.executable, str(live.HERE / "live.py"), "grade", "--out", str(out),
+                                             handle._id], capture_output=True, text=True, timeout=10)
+                    (self.assets / f"missing-{name}.stdout").write_text(result.stdout)
+                    (self.assets / f"missing-{name}.stderr").write_text(result.stderr)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertEqual(result.stdout, "")
+                    receipt = json.loads(result.stderr)["refusal"]
+                    self.assertEqual(receipt["reason"], "input_changed")
+                    self.assertEqual(receipt["run_id"], handle._id)
+                    self.assertIn(str(target), receipt["detail"])
+                    self.assertEqual(json.loads((Path(receipt["attempt"]) / "refusal.json").read_text()), receipt)
+                    self.assertEqual((output / "verdict.json").read_bytes(), prior)
+                    self.assertEqual(backup.read_bytes(), contents)
+                    self.assertFalse(target.exists())
+                finally:
+                    backup.rename(target)
+
+    def test_completed_scratch_links_and_sockets_do_not_change_repeat_grades(self):
+        base = self.repository({"a.py": b"value = 1\n", "check.py":
+            b"import os, socket, sys\nos.chdir(os.environ['HOME'])\n"
+            b"if sys.argv[1] == 'link': os.symlink('owned-target', 'harmless-link')\n"
+            b"else: s=socket.socket(socket.AF_UNIX); s.bind('harmless.sock')\nprint('inside-positive')\n"})
+        for name in ("link", "socket"):
+            with self.subTest(name=name):
+                case = self.deslop([{"cmd": f"python3 check.py {name}", "stdout": "inside-positive\n"}])
+                authority = self.authority(case, record=self.record(case, baseline=base))
+                first = live.grade(authority)
+                self.assertEqual(first["promises"]["deslop-cleans-code-slop"]["verdict"], "PASS")
+                before = {n: (self.root / n).read_bytes() for n in ("run.json", "trace.json", "verdict.json")}
+                self.assertEqual(live.grade(authority), first)
+                self.assertEqual({n: (self.root / n).read_bytes() for n in before}, before)
+                scratches = list((authority._controller.root.path / authority._id).glob("*/scratch"))
+                self.assertEqual(len(scratches), 2)
+                self.assertTrue(all((p / "harmless-link").is_symlink() if name == "link" else
+                                    (p / "harmless.sock").is_socket() for p in scratches))
+
+    def test_protected_input_links_still_refuse_on_repeat_grades(self):
+        case = self.deslop()
+        base = self.repository()
+        authority = self.authority(case, record=self.record(case, baseline=base))
+        positive = live.grade(authority)
+        self.assertEqual(positive["promises"]["deslop-cleans-code-slop"]["verdict"], "PASS")
+        prior = (self.root / "verdict.json").read_bytes()
+        private = authority._controller.root.path / authority._id
+        for name in ("code", "references", "fallback"):
+            with self.subTest(name=name):
+                link = private / name / "outside-link"
+                link.symlink_to(self.read_marker)
+                try:
+                    with self.assertRaisesRegex(GradeRefused, "unsafe_link"):
+                        live.grade(authority)
+                    self.assertEqual((self.root / "verdict.json").read_bytes(), prior)
+                    self.assertEqual(self.read_marker.read_bytes(), b"private-canary-42\n")
+                finally:
+                    link.unlink()
+
     def test_detached_descendant_pipes_do_not_block_timeout_verdicts(self):
         (self.project / "child.py").write_text("import os, pathlib, sys, time\n"
             "pathlib.Path('child-' + sys.argv[1] + '.pid').write_text(str(os.getpid()))\ntime.sleep(8)\n")
