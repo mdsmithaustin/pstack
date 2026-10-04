@@ -2143,6 +2143,33 @@ class SealedUnmatchedFanOut(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class RationaleReadPaths(unittest.TestCase):
+    def arena_reads(self, commands, brief="Write `design-notes.md` with your reasoning."):
+        calls = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"description": f"cand {c}", "prompt": brief}} for s, c in zip((7, 9, 11, 13, 15), "ABCDE")]
+        spawns = [{"seq": c["seq"], "tool": "Agent", "model": "opus", "prompt_head": brief} for c in calls]
+        spawns.append({"seq": 26, "tool": "Agent", "model": "fable", "prompt_head": "READ-ONLY. You are judging five implementations against the rubric."})
+        events = calls + [{"seq": 26, "kind": "tool_call", "name": "Agent", "input": {}}]
+        for n, command in enumerate(commands):
+            events += bash(30 + 2 * n, command)
+        return grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns, final_reply="x"), load_case("arena-run"))
+
+    def test_f1_a_write_target_inside_a_read_name_does_not_drop_the_read(self):
+        result = self.arena_reads([f"cat /tmp/w/c{n}/design-notes.md > notes.md" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(result["verdict"], PASS, result)
+        same_name = self.arena_reads([f"cat /tmp/w/c{n}/design-notes.md >> /tmp/w/design-notes.md" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(same_name["verdict"], PASS, same_name)
+
+    def test_f1_an_unspaced_redirect_is_a_write_not_a_read(self):
+        result = self.arena_reads([f"echo x >/tmp/w/c{n}/design-notes.md" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_f1_a_python_read_of_a_rationale_counts_and_its_write_does_not(self):
+        reads = self.arena_reads([f"python3 -c \"print(open('/tmp/w/c{n}/design-notes.md').read())\"" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(reads["verdict"], PASS, reads)
+        writes = self.arena_reads([f"python3 -c \"open('/tmp/w/c{n}/design-notes.md','w').write('x')\"" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(writes["verdict"], FAIL, writes)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
