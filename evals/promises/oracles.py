@@ -1584,7 +1584,7 @@ def sources_named(view):
     if gate:
         return gate
     low = view.final_reply.lower()
-    section = re.search(r"sources (?:consulted|searched|checked)|### sources|\*\*sources", low)
+    section = re.search(r"sources (?:consulted|searched|checked)|sources? coverage|### sources|\*\*sources", low)
     git = re.search(r"\bgit\b|commit", low)
     evidence = [f"sources section: {bool(section)}", f"git named: {bool(git)}"]
     return passed(*evidence) if section and git else failed("reply has no sources section naming what was searched", *evidence)
@@ -2337,19 +2337,23 @@ def arena_worktrees(view):
     return failed("candidates do not each get their own worktree or directory", *evidence)
 
 
+PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on) (?:candidate|arm) [\w-]+")
+
+
 @oracle("arena-fans-out-and-grafts")
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
+    base = "base" in low or bool(PICKED.search(low))
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
-                f"reply names a base: {'base' in low}, grafts: {'graft' in low}, verification: {'verif' in low}"]
+                f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
         return inconclusive("run killed before the fan-out", *evidence) if view.killed else failed("fewer than two candidates", *evidence)
     if not view.one_message(candidates):
         return failed("candidates spawned sequentially", *evidence)
     if not view.final_reply:
         return inconclusive("no synthesis reply" + (" (run killed)" if view.killed else ""), *evidence)
-    if "base" in low and ("graft" in low or "converge" in low or "consensus" in low):
+    if base and ("graft" in low or "converge" in low or "consensus" in low):
         return passed(*evidence)
     return failed("reply does not name the base and the grafts", *evidence)
 

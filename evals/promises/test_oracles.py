@@ -1525,6 +1525,30 @@ class ArenaLeadReads(unittest.TestCase):
         self.assertEqual(result["verdict"], PASS, result)
 
 
+class ReplyWording(unittest.TestCase):
+    def test_a_source_coverage_list_is_a_sources_section(self):
+        reply = ("The caller adjustment was omitted in 3f2a1c9.\n\nSource coverage:\n\n- Git: reviewed all four commits, diffs, blame.\n"
+                 "- Issues: repository identity is unavailable.\n- Team chat: no matching tool available.")
+        result = grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("how-then-why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        bare = grade("how-why-reports-name-sources-searched", minimal(final_reply="The source of the bug is in git commit 3f2a1c9."), load_case("how-then-why-run"))
+        self.assertEqual(bare["verdict"], FAIL, bare)
+
+    def arena(self, reply):
+        candidates = [{"seq": 43, "tool": "delegate_task", "prompt_head": f"Design one candidate {n}. Write under /tmp/k/candidate-{n}/"} for n in range(1, 6)]
+        judge = {"seq": 49, "tool": "delegate_task", "prompt_head": "Independently cross-judge all five candidates. Read-only."}
+        events = [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {}}, {"seq": 49, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        return grade("arena-fans-out-and-grafts", minimal(events=events, spawns=candidates + [judge], final_reply=reply, harness="hermes"), load_case("arena-run"))
+
+    def test_a_selected_candidate_with_grafts_names_the_base(self):
+        result = self.arena("Arena result\n- Candidate 1 was selected, with strict type validation grafted from candidate 2.\n- Verified: 8 unit tests passed.")
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_grafts_without_a_pick_still_fail(self):
+        result = self.arena("Arena result\n- Strict type validation grafted from candidate 2.\n- Verified: 8 unit tests passed.")
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
