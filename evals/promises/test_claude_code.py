@@ -55,6 +55,23 @@ class LoadJsonl(unittest.TestCase):
                 claude_code.load_jsonl(Path(tmp) / "missing.jsonl")
 
 
+class RecordedReads(unittest.TestCase):
+    def test_shell_paths_are_recorded_without_opening_the_host(self):
+        with patch.object(Path, "is_file", side_effect=AssertionError("host path queried")), \
+                patch.object(Path, "resolve", side_effect=AssertionError("host path resolved")):
+            self.assertEqual(claude_code.shell_reads("cat inside.py; cd ../other; head missing.py; cat /outside/canary", "/fixture/project"),
+                             ["/fixture/project/inside.py", "/fixture/other/missing.py", "/outside/canary"])
+
+    def test_native_read_paths_keep_lexical_identity(self):
+        rows = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Read", "input": {"file_path": "dir/../inside.py"}},
+            {"type": "tool_use", "name": "Read", "input": {"file_path": "/outside/link/canary"}},
+        ]}}]
+        with patch.object(Path, "resolve", side_effect=AssertionError("host path resolved")):
+            self.assertEqual(claude_code.files_read(rows, "/fixture/project"),
+                             ["/fixture/project/inside.py", "/outside/link/canary"])
+
+
 class Harvest(unittest.TestCase):
     def test_claude_tool_events_keep_their_call_id(self):
         with tempfile.TemporaryDirectory() as tmp:
