@@ -1,4 +1,5 @@
 import json
+import io
 import os
 import platform
 import subprocess
@@ -6,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+from contextlib import redirect_stdout
+from contextlib import nullcontext
 
 import live
 from grade_boundary import _authorize_fixture
@@ -60,6 +63,47 @@ class FixtureCommits(unittest.TestCase):
 @unittest.skipUnless((platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64"),
                      "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class GradeRun(unittest.TestCase):
+    def test_run_case_grades_actual_codex_and_grok_harvests_without_model_turns(self):
+        case = live.load_case("principle-steer-run")
+        case["turns"] = ["first prompt", "second prompt"]
+        case["tmp_lock"] = False
+        retained = os.environ.get("PSTACK_GRADE_TEST_ARTIFACTS")
+        temporary = nullcontext(tempfile.mkdtemp(prefix="pstack-live-harvest-", dir=retained)) if retained else \
+                    tempfile.TemporaryDirectory(prefix="pstack-live-harvest-")
+        with temporary as tmp:
+            out = Path(tmp).resolve()
+            for harness in ("codex", "grok"):
+                with self.subTest(harness=harness):
+                    module = live.adapter(harness)
+
+                    def prepare(run):
+                        (run.root / "launch.json").write_text(json.dumps({"path": "synthetic-no-model",
+                            "source": "test", "version": "test", "rejected": []}))
+
+                    def turn(run, text, index):
+                        return {"index": index, "session_id": "owned-session", "argv": [harness, text],
+                            "exit_code": 0 if index == 0 else -9, "timed_out": index == 1, "duration_s": 0.25,
+                            "stream": str(run.root / f"turn-{index}.jsonl"), "stderr": str(run.root / f"turn-{index}.err"),
+                            f"{harness}_bin": "synthetic-no-model", f"{harness}_bin_source": "test",
+                            **({"last_message": str(run.root / "last.txt")} if harness == "codex" else {})}
+
+                    output = io.StringIO()
+                    with mock.patch.object(live, "load_case", return_value=case), \
+                         mock.patch.object(module, "prepare", side_effect=prepare), \
+                         mock.patch.object(module, "turn", side_effect=turn), redirect_stdout(output):
+                        root = live.run_case(harness, case["id"], "HEAD", out, 0)
+                    trace = json.loads((root / "trace.json").read_text())
+                    record = json.loads((root / "run.json").read_text())
+                    self.assertEqual(trace["x_turns"], [
+                        {"index": 0, "session_id": "owned-session", "argv": [harness, "first prompt"],
+                         "exit_code": 0, "timed_out": False, "duration_s": 0.25},
+                        {"index": 1, "session_id": "owned-session", "argv": [harness, "second prompt"],
+                         "exit_code": -9, "timed_out": True, "duration_s": 0.25}])
+                    self.assertIn("stream", record["turns"][0])
+                    self.assertEqual(len(json.loads(output.getvalue())["authorization_id"]), 32)
+                    verdict = json.loads((root / "verdict.json").read_text())
+                    self.assertEqual({p["verdict"] for p in verdict["promises"].values()}, {"INCONCLUSIVE"})
+
     def test_a_run_with_host_skill_hits_writes_inconclusive_for_every_promise(self):
         with tempfile.TemporaryDirectory(prefix="pstack-live-test-") as tmp:
             root = Path(tmp).resolve()

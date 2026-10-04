@@ -1,6 +1,8 @@
 import json
+import copy
 import os
 import platform
+import signal
 import subprocess
 import tempfile
 import time
@@ -72,6 +74,60 @@ class BoundaryFixtures(unittest.TestCase):
 
 
 class ControllerBoundary(BoundaryFixtures):
+    def test_raw_run_storage_cannot_overlap_any_candidate_writable_root(self):
+        case = self.deslop()
+        output = self.assets / "diagnostic"
+        output.mkdir()
+        controller = _Controller(self.out, create=True)
+        self.addCleanup(controller.root.close)
+        for project, worktrees, allocations in ((self.root, (), ()), (self.root.parent, (), ()),
+                                                 (self.project, (self.root,), ()), (self.project, (), (self.out,))):
+            with self.subTest(project=project, worktrees=worktrees, allocations=allocations), \
+                 self.assertRaisesRegex(GradeRefused, "raw run storage overlaps"):
+                controller.issue(self.root, project, case, {**self.record(case), "project": str(project)},
+                                 worktrees=worktrees, allocations=allocations, output=output)
+
+    def test_turn_projection_preserves_trusted_fields_and_rejects_other_shapes(self):
+        case = self.deslop()
+        turns = [{"index": 0, "session_id": "session-0", "argv": ["codex", "first"], "exit_code": 0,
+                  "timed_out": False, "duration_s": 0.25, "stream": "transport-0"},
+                 {"index": 1, "session_id": "session-1", "argv": ["codex", "second"], "exit_code": -9,
+                  "timed_out": True, "duration_s": 0.5, "stream": "transport-1"}]
+        projected = [{"index": 0, "session_id": "session-0", "argv": ["codex", "first"], "exit_code": 0,
+                      "timed_out": False, "duration_s": 0.25},
+                     {"index": 1, "session_id": "session-1", "argv": ["codex", "second"], "exit_code": -9,
+                      "timed_out": True, "duration_s": 0.5}]
+        for harness in ("codex", "grok", "claude-code", "hermes"):
+            record = {**self.record(case), "harness": harness, "turns": turns, "baseline": ["trusted-base"]}
+            authority = self.authority(case, {**self.trace(), "harness": harness}, record=record)
+            _seal(authority, record, {**self.trace(), "harness": harness, "x_turns": turns})
+            if harness not in ("codex", "grok"):
+                with self.assertRaisesRegex(GradeRefused, "x_turns conflicts"):
+                    _seal(authority, record, {**self.trace(), "x_turns": projected})
+                continue
+            _seal(authority, record, {**self.trace(), "x_turns": projected})
+            self.assertEqual(json.loads((self.root / "trace.json").read_text())["x_turns"], projected)
+            mutations = []
+            for key, value in (("index", 4), ("session_id", "forged"), ("argv", ["codex", "forged"]),
+                               ("exit_code", 7), ("exit_code", False), ("timed_out", True), ("timed_out", 0),
+                               ("duration_s", 1.25)):
+                changed = copy.deepcopy(projected)
+                changed[0][key] = value
+                mutations.append(changed)
+            for key in projected[0]:
+                changed = copy.deepcopy(projected)
+                del changed[0][key]
+                mutations.append(changed)
+            mutations.extend([list(reversed(projected)), projected[:1], projected + [projected[0]],
+                              [{**projected[0], "extra": "untrusted"}, projected[1]], {"0": projected[0]}])
+            for changed in mutations:
+                with self.subTest(harness=harness, turns=changed), self.assertRaisesRegex(GradeRefused, "x_turns conflicts"):
+                    _seal(authority, record, {**self.trace(), "x_turns": changed})
+            with self.assertRaisesRegex(GradeRefused, "x_baseline conflicts"):
+                _seal(authority, record, {**self.trace(), "x_turns": projected, "x_baseline": ["forged-base"]})
+            with self.assertRaisesRegex(GradeRefused, "pre-turn controller metadata"):
+                _seal(authority, {**record, "baseline": ["forged-base"]}, self.trace())
+
     def test_a_path_cannot_issue_grade_authority(self):
         with self.assertRaisesRegex(GradeRefused, "path-based grading"):
             live.grade(self.root)
@@ -155,6 +211,80 @@ class ControllerBoundary(BoundaryFixtures):
 
 @unittest.skipUnless(NATIVE, "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class NativeParentBoundary(BoundaryFixtures):
+    def test_detached_descendant_pipes_do_not_block_timeout_verdicts(self):
+        (self.project / "child.py").write_text("import os, pathlib, sys, time\n"
+            "pathlib.Path('child-' + sys.argv[1] + '.pid').write_text(str(os.getpid()))\ntime.sleep(8)\n")
+        (self.project / "parent.py").write_text("import subprocess, sys, time\n"
+            "subprocess.Popen([sys.executable, 'child.py', sys.argv[1]], start_new_session=True)\n"
+            "if sys.argv[1] == 'sleep': time.sleep(8)\n")
+        base = self.repository()
+        for mode in ("sleep", "exit"):
+            with self.subTest(mode=mode):
+                command = f"python3 parent.py {mode}"
+                case = self.deslop([{"cmd": command, "timeout_s": 0.3}])
+                authority = self.authority(case, record=self.record(case, baseline=base))
+                try:
+                    result = subprocess.run([live.sys.executable, str(live.HERE / "live.py"), "grade", "--out", str(self.out),
+                                             authority._id], capture_output=True, text=True, timeout=3)
+                    (self.assets / f"timeout-{mode}.stdout").write_text(result.stdout)
+                    (self.assets / f"timeout-{mode}.stderr").write_text(result.stderr)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    failures = json.loads(result.stdout)["promises"]["deslop-cleans-code-slop"]["failures"]
+                    self.assertIn(f"check failed after the pass: {command} timed out after 0.3s", failures)
+                finally:
+                    pid_file = self.project / f"child-{mode}.pid"
+                    if pid_file.exists():
+                        try:
+                            os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+
+    def test_retained_raw_project_refuses_before_checks_can_change_sealed_inputs(self):
+        self.project = self.root
+        (self.project / "check.py").write_text("from pathlib import Path\n"
+            "for name in ('run.json', 'trace.json'): Path(name).write_text('candidate-changed')\nprint('inside-positive')\n")
+        base = self.repository()
+        case = self.deslop([{"cmd": "python3 check.py", "stdout": "inside-positive\n"}])
+        for name, value in (("run.json", self.record(case, baseline=base)), ("trace.json", self.trace()), ("verdict.json", {})):
+            (self.root / name).write_text(json.dumps(value))
+        before = {name: (self.root / name).read_bytes() for name in ("run.json", "trace.json", "verdict.json")}
+        output = self.assets / "diagnostic"
+        output.mkdir()
+        with self.assertRaisesRegex(GradeRefused, "raw run storage overlaps"):
+            authority = _authorize_retained(self.out, self.root, project=self.project, original_project=self.project,
+                                           output=output, case=case)
+            live.grade(authority)
+        self.assertEqual({name: (self.root / name).read_bytes() for name in before}, before)
+        self.assertFalse((output / "verdict.json").exists())
+
+    def test_missing_registered_worktree_metadata_returns_cli_refusal_receipts(self):
+        base = self.repository()
+        sibling = self.assets / "approved-sibling"
+        self.git("worktree", "add", "-q", "-b", "sibling", str(sibling))
+        case = self.deslop()
+        authority = self.authority(case, record=self.record(case, baseline=base), worktrees=(sibling,))
+        positive = live.grade(authority)
+        self.assertEqual(positive["promises"]["deslop-cleans-code-slop"]["verdict"], "PASS")
+        prior_verdict = (self.root / "verdict.json").read_bytes()
+        directory = Path((sibling / ".git").read_text().split("gitdir: ", 1)[1].strip())
+        for target in (sibling / ".git", directory / "commondir", directory / "gitdir"):
+            with self.subTest(target=target):
+                contents = target.read_bytes()
+                target.unlink()
+                try:
+                    result = subprocess.run([live.sys.executable, str(live.HERE / "live.py"), "grade", "--out", str(self.out),
+                                             authority._id], capture_output=True, text=True, timeout=10)
+                    (self.assets / f"missing-{target.name}.stdout").write_text(result.stdout)
+                    (self.assets / f"missing-{target.name}.stderr").write_text(result.stderr)
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    receipt = json.loads(result.stderr)["refusal"]
+                    self.assertEqual(receipt["reason"], "unapproved_git")
+                    self.assertEqual(receipt["run_id"], authority._id)
+                    self.assertEqual(json.loads((Path(receipt["attempt"]) / "refusal.json").read_text()), receipt)
+                    self.assertEqual((self.root / "verdict.json").read_bytes(), prior_verdict)
+                finally:
+                    target.write_bytes(contents)
+
     def test_regular_project_grades_and_publishes_exact_existing_verdict_bytes(self):
         case = live.load_case("no-comments-run")
         trace = {**self.trace(), "spawns": [{"seq": 0, "persona": "comment-sicko"}], "final_reply": "offer to encode"}
