@@ -53,7 +53,7 @@ Whether a session has `spawn_agent` depends on more than config. As of Codex 0.1
 
   Do not pick one without evidence.
 - **The config signals.** Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`, and report the `multi_agent` and `multi_agent_v2` rows. Then read `[agents]` `enabled` from `config.toml` under `$CODEX_HOME` or `~/.codex/`, and from the project's `.codex/config.toml` when the project is trusted, because `codex features list` does not report it. Report these as signals, not as a verdict on spawning.
-- **When `codex` is not on PATH**, as when this skill runs from another CLI, report the check as unverified.
+- **When `codex` is not on PATH**, as when this skill runs from another CLI or from an app-bundled Codex, report the config signals as unverified. A live session's answer still stands.
 
 A key in a file you read is a possible cause, not a proven one, because `multi_agent_v2` or a layer you cannot read can override it. Offer an edit only when a Codex session confirms `spawn_agent` is missing, and only for a possible cause a config file shows:
 
