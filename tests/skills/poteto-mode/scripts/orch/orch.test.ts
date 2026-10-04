@@ -799,6 +799,7 @@ describe("Store", () => {
           "GitHub frontier discovery requires an origin remote"
         );
         git({ repo: stack.repo, args: ["config", "remote.origin.url", ""] });
+        expect(git({ repo: stack.repo, args: ["remote", "get-url", "origin"] })).toBe("origin");
         await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
           "gh pr list failed"
         );
@@ -806,6 +807,63 @@ describe("Store", () => {
       },
     });
   });
+
+  for (const [name, origin] of [["space", " "], ["tab", "\t"]] as const) {
+    it(`rejects a ${name}-only origin through the CLI before gh can select upstream`, async () => {
+      const directory = await makeDirectory();
+      const stack = await makeGitStack(directory);
+      const storeDirectory = join(directory, "store");
+      const selected = {
+        number: 11,
+        state: "OPEN",
+        headRefName: "stack/open",
+        headRefOid: stack.openSha,
+        baseRefName: "main",
+        isCrossRepository: false,
+      };
+      git({ repo: stack.repo, args: ["remote", "add", "upstream", "https://github.com/upstream/project.git"] });
+      git({ repo: stack.repo, args: ["config", "remote.upstream.gh-resolved", "base"] });
+      await withFakeGithub({
+        directory,
+        output: JSON.stringify([selected]),
+        upstreamOutput: JSON.stringify([{ ...selected, number: 911 }]),
+        operation: async () => {
+          const callsPath = join(directory, "gh-calls.txt");
+          await writeFile(join(directory, "github-bin", "gh"), `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$4" >> "${callsPath}"
+if [ "$#" -ne 10 ] || [ "$3" != "--repo" ]; then
+  exit 2
+fi
+case "$4" in
+  https://github.com/personal/project.git) cat "${join(directory, "github-output.json")}" ;;
+  "") cat "${join(directory, "upstream-output.json")}" ;;
+  *) exit 2 ;;
+esac
+`);
+          expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
+          const args = ["--store", storeDirectory, "--json", "frontier", "set", "--repo", stack.repo];
+          const valid = runCli(args);
+          expect(valid.code).toBe(0);
+          expect(JSON.parse(valid.stdout)).toEqual({
+            generation: 1,
+            prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
+            lowestUnmerged: 11,
+          });
+          expect(await readFile(callsPath, "utf8")).toBe("https://github.com/personal/project.git\n");
+          const before = await readFile(join(storeDirectory, "frontier.json"), "utf8");
+          await writeFile(callsPath, "");
+          git({ repo: stack.repo, args: ["config", "remote.origin.url", origin] });
+          const result = runCli(args);
+          expect(result.code).toBe(1);
+          expect(result.stderr).toContain("GitHub frontier discovery requires a nonempty origin URL");
+          expect(result.stdout).toBe("");
+          expect(await readFile(callsPath, "utf8")).toBe("");
+          expect(await readFile(join(storeDirectory, "frontier.json"), "utf8")).toBe(before);
+        },
+      });
+    });
+  }
 
   it("keeps historical ambiguity and topology checks after repository selection", async () => {
     const { directory, store } = await initializedStore();
