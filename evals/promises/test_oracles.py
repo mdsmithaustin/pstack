@@ -681,6 +681,21 @@ class SmallSkills(unittest.TestCase):
                         + bash(3, "echo x > rollup/export.py; python3 -m unittest discover -s tests; echo y > rollup/load.py", head="OK"))
         self.assertNotEqual(grade("poteto-tdd-failing-test-first", trace, case)["verdict"], PASS)
 
+    def review_verdict(self, line):
+        case = load_case("doc-impact-run")
+        trace = minimal(events=[dict(text(1, f"Done. Author result: independent review required. {line}"), turn=0),
+                                dict(text(3, "Review mode run."), turn=1)],
+                        spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+        return grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"]
+
+    def test_a_negation_in_an_earlier_sentence_does_not_void_a_pass(self):
+        for line in ("No findings. The review passed.", "No files edited. Pass.", "There were no blockers; the review passed."):
+            self.assertEqual(self.review_verdict(line), PASS, line)
+
+    def test_cannot_and_failed_to_pass_are_not_a_pass(self):
+        for line in ("The review cannot pass until the README changes.", "The review failed to pass.", "The reviewer was unable to pass it."):
+            self.assertNotEqual(self.review_verdict(line), PASS, line)
+
     def test_a_negated_review_verdict_is_not_a_pass(self):
         case = load_case("doc-impact-run")
         trace = minimal(events=[dict(text(1, "Done. Author result: independent review required. The independent review has not passed."), turn=0),

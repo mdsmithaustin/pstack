@@ -2360,6 +2360,14 @@ def doc_impact_before_completion(view):
     return passed(*evidence)
 
 
+VERDICT_NEGATION = re.compile(r"\b(?:not|never|cannot|unable|fail(?:ed|s)?|without)\b|n't\b", re.I)
+
+
+def negated_verdict(reply, match):
+    before = re.split(r"[.;:!?\n]", reply[:match.start()])[-1]
+    return bool(VERDICT_NEGATION.search(" ".join(before.split()[-4:])) or VERDICT_NEGATION.search(match.group(0)))
+
+
 @oracle("documentation-impact-independent-review-pass-required")
 def doc_impact_review(view):
     turn = 0 if len(view.case.get("turns", [])) > 1 else None
@@ -2369,7 +2377,7 @@ def doc_impact_review(view):
     result = turn_author_result(view, turn, reply)
     reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
     verdict_word = next((m for m in re.finditer(r"\bpass\b|\breview\b[^.\n]{0,40}\bpassed\b", reply or "", re.I)
-                         if not re.search(r"\b(?:not|never|no)\b|n't\b", (reply or "")[max(0, m.start() - 20):m.end()], re.I)), None)
+                         if not negated_verdict(reply, m)), None)
     evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {bool(verdict_word)}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)
