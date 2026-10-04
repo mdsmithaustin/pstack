@@ -313,6 +313,8 @@ class _Controller:
         if record.get("project", str(Path(run_root) / "project")) != str(original_project or project):
             raise GradeRefused("input_changed", "record project differs from controller authority")
         writable = [Path(project), *(Path(p) for p in worktrees), *(Path(p) for p in allocations)]
+        if any(Path(run_root).is_relative_to(p) for p in writable):
+            raise GradeRefused("unsafe_root", "raw run storage overlaps candidate writable roots")
         if self.root.path.is_relative_to(Path(run_root)) or any(self.root.path.is_relative_to(p) for p in writable):
             raise GradeRefused("unsafe_root", "controller state overlaps candidate storage")
         if any(Path(output or run_root).is_relative_to(p) for p in writable):
@@ -399,9 +401,17 @@ def _seal(handle, record, trace, *, write=True):
         _write_record(handle, record)
     state["record"] = record
     state["trace"] = trace
-    for key, value in (("x_turns", record.get("turns", [])), ("x_baseline", record.get("baseline"))):
-        if key in trace and trace[key] != value:
-            raise GradeRefused("input_changed", f"{key} conflicts with sealed metadata", handle._id)
+    if "x_turns" in trace:
+        turns = record.get("turns", [])
+        expected = [turns]
+        if record["harness"] in ("codex", "grok"):
+            expected.append([{k: t.get(k) for k in ("index", "session_id", "argv", "exit_code", "timed_out", "duration_s")}
+                             for t in turns])
+        observed = json.dumps(trace["x_turns"], sort_keys=True)
+        if all(observed != json.dumps(value, sort_keys=True) for value in expected):
+            raise GradeRefused("input_changed", "x_turns conflicts with sealed metadata", handle._id)
+    if "x_baseline" in trace and trace["x_baseline"] != record.get("baseline"):
+        raise GradeRefused("input_changed", "x_baseline conflicts with sealed metadata", handle._id)
     root = _Root.open(state["run"]["path"], state["run"]["identity"])
     try:
         if write:
@@ -509,6 +519,8 @@ def _approved_trees(state):
             finally:
                 opened.close()
         return list(approved.values())
+    except FileNotFoundError as error:
+        raise GradeRefused("unapproved_git", f"missing worktree metadata: {error}") from error
     finally:
         if common:
             common.close()
@@ -595,8 +607,12 @@ class _Environment:
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
-            proc.communicate()
+            if proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            proc.wait()
             raise
         return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
 

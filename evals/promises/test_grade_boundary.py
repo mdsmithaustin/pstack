@@ -434,7 +434,7 @@ class NativeParentBoundary(BoundaryFixtures):
 
     def test_git_fsmonitor_helper_cannot_access_outside_bytes(self):
         helper = self.project / "helper.py"
-        helper.write_text(f"#!{live.sys.executable}\nimport pathlib\nresults=[]\n"
+        helper.write_text(f"#!{Path(live.sys.executable).resolve()}\nimport pathlib\nresults=[]\n"
             f"for op in (lambda:pathlib.Path({str(self.read_marker)!r}).read_bytes(), lambda:pathlib.Path({str(self.write_marker)!r}).write_bytes(b'changed')):\n"
             " try: op(); results.append('escaped')\n except PermissionError: results.append('denied')\n"
             f"pathlib.Path({str(self.project / 'git-positive.txt')!r}).write_text(' '.join(results))\nprint('token\\0', end='')\n")
