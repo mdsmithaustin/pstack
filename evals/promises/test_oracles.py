@@ -1346,6 +1346,138 @@ class SkillToolLoads(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+def codex_spawn(seq, task, reply, model="gpt-6.1-sol"):
+    events = [{"seq": seq, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": task, "model": model, "message": "gAAAAABqwbhN"}},
+              {"seq": seq + 1, "kind": "tool_call", "name": "SubAgentActivity", "input": {"kind": "started", "agent_path": f"/root/{task}"}},
+              {"seq": seq + 2, "kind": "tool_result", "name": "spawn_agent", "ok": True, "output_head": f"{{\"task_name\":\"/root/{task}\"}}"}]
+    spawn = {"seq": seq, "tool": "spawn_agent", "model": model, "prompt_head": None, "x_prompt_encrypted": True, "x_child_first_reply": reply}
+    return events, spawn
+
+
+def delegate(seq, head, reply=""):
+    return {"seq": seq, "tool": "delegate_task", "prompt_head": head, "x_child_first_reply": reply}
+
+
+class SpawnIdentity(unittest.TestCase):
+    def test_codex_investigators_are_named_by_their_first_reply(self):
+        events, spawns = [], []
+        for seq, task, reply in ((29, "retry_history", "### Source\n\nSource control and tracked repository files. Read-only."),
+                                 (32, "retry_issues", "### Source\n\nIssue / ticket tracker through GitHub MCP, read-only."),
+                                 (35, "retry_docs", "### Source\n\nLong-form documents through Pages MCP. Read-only."),
+                                 (59, "retry_synthesis", "Five was chosen to cover the partner mirror's nightly rebuild.\n\n[Direct] Commit 401725e")):
+            more, spawn = codex_spawn(seq, task, reply)
+            events += more
+            spawns.append(spawn)
+        events.insert(9, {"seq": 40, "kind": "tool_call", "name": "wait_agent", "input": {}})
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][:2], ["investigator spawns: 3", "one message: True"])
+
+    def test_a_hyphenated_source_control_investigator_counts_and_the_synthesizer_does_not(self):
+        spawns = [delegate(55, "Investigate source-control evidence for why the retry limit was raised to five."),
+                  delegate(67, "Synthesize a confidence-calibrated answer from the supplied investigation.")]
+        events = [{"seq": 55, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(60, "The history is in."),
+                  {"seq": 67, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, harness="hermes"), load_case("why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+    def test_a_synthesizer_that_names_investigators_is_not_one(self):
+        spawns = [{"seq": 60, "tool": "spawn_subagent", "prompt_head": "You are investigating the historical context and motivation behind a piece of code. "
+                   "A separate synthesizer combines your findings with other investigators' into a final answer."},
+                  {"seq": 68, "tool": "spawn_subagent", "prompt_head": "You are answering a \"why\" question about a piece of code by synthesizing findings from investigators."}]
+        events = [{"seq": 60, "kind": "tool_call", "name": "spawn_subagent", "input": {}}, text(66, "The source-control search is in."),
+                  {"seq": 68, "kind": "tool_call", "name": "spawn_subagent", "input": {}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, harness="grok"), load_case("why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+    def test_architecture_is_not_architect_and_the_cross_judge_is_not_a_runner(self):
+        spawns = [delegate(89, "Investigate source-control and in-repo rationale for the current import architecture. Read-only."),
+                  *[delegate(107, f"Produce caller-first candidate {c}: a deep import architecture. Read-only: do not edit files.") for c in "ABC"],
+                  delegate(123, "Cross-judge the three import-pipeline architecture candidates against the caller-first rubric."),
+                  delegate(125, "Synthesize the final caller-first import-pipeline design from the arena outcome.")]
+        events = [read(80, "arena/SKILL.md"), {"seq": 89, "kind": "tool_call", "name": "delegate_task", "input": {}},
+                  {"seq": 95, "kind": "tool_call", "name": "read_file", "input": {"path": "/w/relay/ingest.py"}},
+                  {"seq": 107, "kind": "tool_call", "name": "delegate_task", "input": {}},
+                  {"seq": 110, "kind": "tool_call", "name": "terminal", "input": {"command": "ls /tmp"}},
+                  {"seq": 123, "kind": "tool_call", "name": "delegate_task", "input": {}},
+                  {"seq": 125, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("architect-runs-arena-for-sketches", minimal(events=events, spawns=spawns, harness="hermes"), load_case("architect-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("runner spawns: 3", result["evidence"])
+
+    def test_a_later_extra_runner_keeps_the_first_wave_and_the_full_brief_carries_callers(self):
+        brief = "You are an architect runner (role: `architect runners`, arm {n}). READ-ONLY on the repo."
+        full = brief + " ... the user said: i care most about how callers use it. Write usage first."
+        calls = {n: {"seq": seq, "kind": "tool_call", "name": "Agent", "input": {"description": f"Architect runner {n}", "prompt": full.format(n=n)}}
+                 for n, seq in ((1, 21), (2, 23), (3, 25), (4, 39))}
+        spawns = [{"seq": c["seq"], "tool": "Agent", "prompt_head": brief.format(n=n)} for n, c in calls.items()]
+        spawns.append({"seq": 45, "tool": "Agent", "prompt_head": "You are the arena cross-judge (role: `arena cross-judge pool`). READ-ONLY. Four candidate designs are at /tmp/architect-relay."})
+        events = [read(5, "arena/SKILL.md"), calls[1], calls[2], calls[3], text(27, "All three sketch runners are working in parallel."),
+                  text(38, "These three differ only in policy details, so I'm spawning a fourth runner."), calls[4],
+                  {"seq": 45, "kind": "tool_call", "name": "Agent", "input": {"description": "Arena cross-judge (fable)"}}]
+        result = grade("architect-runs-arena-for-sketches", minimal(events=events, spawns=spawns), load_case("architect-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("briefs that lead with caller usage: 4", result["evidence"])
+
+    def test_sequential_runners_still_fail(self):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": "You are an architect runner. Write caller usage first."} for s in (21, 30)]
+        events = [read(5, "arena/SKILL.md"), {"seq": 21, "kind": "tool_call", "name": "Agent", "input": {}}, text(25, "First one is running."),
+                  {"seq": 30, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("architect-runs-arena-for-sketches", minimal(events=events, spawns=spawns), load_case("architect-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_encrypted_candidate_runners_cannot_show_caller_usage(self):
+        events, spawns = [], []
+        for seq, task in ((92, "candidate_one_call"), (95, "candidate_prepared"), (98, "candidate_importer")):
+            more, spawn = codex_spawn(seq, task, "")
+            events += more
+            spawns.append(spawn)
+        trace = minimal(events=[read(5, "arena/SKILL.md")] + events, spawns=spawns, harness="codex")
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("runner spawns: 3", result["evidence"])
+
+
+class FanOutStructure(unittest.TestCase):
+    def test_encrypted_explorers_are_known_by_a_parallel_wave_then_a_lone_spawn(self):
+        events, spawns = [], []
+        for seq, task, reply in ((22, "ingest_shape", "I'm tracing the CLI, ingest, and shape code."),
+                                 (25, "render_publish", "I'll trace the render and publish code and report to the agent preparing the explanation."),
+                                 (42, "pipeline_explanation", "bin/kiln converts a notes file into one file per tag.")):
+            more, spawn = codex_spawn(seq, task, reply)
+            events += more
+            spawns.append(spawn)
+        events[6:6] = [{"seq": 30, "kind": "tool_call", "name": "wait_agent", "input": {}}, text(38, "The CLI runs four stages.")]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="codex"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("explorers found by structure: a wave of 2 at seq 22, then a spawn at seq 42", result["evidence"])
+
+    def test_paraphrased_explorers_in_one_delegate_call_then_a_synthesizer(self):
+        spawns = [delegate(27, "Trace the complete ingest-to-publish pipeline. Return factual findings with file paths."),
+                  delegate(27, "Audit the verification evidence for the full pipeline. Do not modify anything."),
+                  delegate(41, "Synthesize a direct answer stating whether the full pipeline works.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "Both reports are in."),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_one_explainer_alone_is_still_no_fan_out(self):
+        spawns = [{"seq": 9, "tool": "Agent", "prompt_head": "Read-only. You are writing an architectural explanation for a senior engineer."}]
+        events = [{"seq": 9, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, final_reply="x"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_paraphrased_spawns_one_at_a_time_are_not_a_fan_out(self):
+        spawns = [delegate(27, "Trace the ingest stage."), delegate(31, "Trace the render stage."), delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(29, "One is out."),
+                  {"seq": 31, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "Both are in."),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

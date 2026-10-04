@@ -48,6 +48,11 @@ HOW_SECTIONS = ("overview", "key concepts", "how it works", "where things live",
 BUCKETS = ("act on", "consider", "noted", "dismissed")
 STOP = {"the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "it", "its", "this", "that",
         "with", "per", "as", "be", "by", "at", "from", "over", "into", "if", "then", "run", "use"}
+JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
+SYNTH_ROLE = re.compile(r"\bsynthesi[sz](?:e|es|ing)\b")
+REPLY_HEAD = 300
+WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
+              "error ?/ ?exception tracking", "product analytics")
 QUESTION_CUES = ("should i", "do you want", "would you like", "let me know", "shall i", "want me to",
                  "can you confirm", "which approach", "please confirm", "may i")
 
@@ -530,16 +535,34 @@ class View:
         call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
         given = (call or {}).get("input") or {}
         extra = [str(given.get(k) or "") for k in ("description", "task_name", "name")] if isinstance(given, dict) else []
-        return " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra).lower()
+        reply = str(spawn.get("x_child_first_reply") or "")[:REPLY_HEAD]
+        return " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra + [reply]).lower()
+
+    def spawn_brief(self, spawn):
+        call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
+        given = (call or {}).get("input") or {}
+        head = spawn.get("prompt_head") or ""
+        tasks = given.get("tasks") if isinstance(given.get("tasks"), list) else []
+        if tasks:
+            given = next((t for t in tasks if isinstance(t, dict) and head and json.dumps(t).find(json.dumps(head[:60])[1:-1]) >= 0), {})
+        return head + " " + json.dumps(given)
 
     def spawns_where(self, *needles, turn=None):
+        pattern = re.compile("|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles))
+        return [s for s in self.spawns
+                if (turn is None or self.turn_of(s.get("seq")) == turn) and pattern.search(self.spawn_text(s))]
+
+    def supports(self, spawn):
+        text = self.spawn_text(spawn)
+        return bool(JUDGE_ROLE.search(text) or SYNTH_ROLE.search(text))
+
+    def waves(self, spawns):
         out = []
-        for spawn in self.spawns:
-            if turn is not None and self.turn_of(spawn.get("seq")) != turn:
-                continue
-            text = self.spawn_text(spawn)
-            if any(n.lower() in text for n in needles):
-                out.append(spawn)
+        for spawn in sorted(spawns, key=lambda s: int(s.get("seq") or 0)):
+            if out and self.one_message(out[-1] + [spawn]):
+                out[-1].append(spawn)
+            else:
+                out.append([spawn])
         return out
 
     def encrypted(self):
@@ -548,7 +571,7 @@ class View:
     def one_message(self, spawns):
         if len(spawns) < 2:
             return True
-        seqs = sorted(s.get("seq") or 0 for s in spawns)
+        seqs = sorted(int(s.get("seq") or 0) for s in spawns)
         for event in self.events:
             seq = event.get("seq", 0)
             if seqs[0] < seq < seqs[-1]:
@@ -1211,8 +1234,8 @@ def design_fan_out(view):
         signals.append("read architect/references/runner-prompt.md to brief runners")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
-    if runners and judge_spawns(view):
-        signals.append("a design judge beside the runners")
+    if any(re.search(r"design|sketch|architect", view.spawn_text(j)) for j in judge_spawns(view)):
+        signals.append("a judge scoring design candidates")
     attempted = sum(len(DESIGN_BRIEF.findall(json.dumps(c.get("input") or {}))) for c in view.tool_calls
                     if c.get("name") in SPAWN_TOOL_NAMES)
     if not runners and attempted >= 2:
@@ -1376,7 +1399,7 @@ def repro_first(view):
     evidence = [f"repro commands: {len(repros)} (first at seq {repros[0][0] if repros else None})",
                 f"first source edit at seq {edits[0][0] if edits else None}"]
     if not edits:
-        delegated = view.spawns_where("bug-fix", "fix", "implement") or any(repros and repros[0][0] < seq for seq in view.code_delegate_seqs())
+        delegated = view.spawns_where("bug-fix", r"fix\w*", r"implement\w*") or any(repros and repros[0][0] < seq for seq in view.code_delegate_seqs())
         if delegated and repros:
             return passed(*evidence, "fix delegated; the lead reproduced before spawning")
         return inconclusive("no source edit by the lead" + (" (run killed)" if view.killed else ""), *evidence)
@@ -1425,7 +1448,7 @@ def why_evidence(view):
     seq = view.read_seq("why/SKILL.md")
     if seq is not None:
         seqs.append(seq)
-    seqs += [s.get("seq") for s in view.spawns_where("investigator", "synthesizer", "historical context", "source control", "git history")]
+    seqs += [s.get("seq") for s in view.spawns_where("investigator", "synthesizer", "historical context", "source[- ]control", "git history")]
     return min(seqs) if seqs else None
 
 
@@ -1442,16 +1465,20 @@ def how_narrow(view):
 
 @oracle("how-fans-out-explorers-for-big-subsystem")
 def how_wide(view):
-    explorers = view.spawns_where("explorer", "exploration angle", "exploring a codebase")
-    explainers = view.spawns_where("explainer", "architectural explanation", "synthesis")
+    explorers = [s for s in view.spawns_where("explorer", "exploration angle", "exploring a codebase") if not view.supports(s)]
+    explainers = view.spawns_where("explainer", "architectural explanation", r"synthesi[sz]\w*")
     evidence = [f"explorer spawns: {len(explorers)}", f"explainer spawns: {len(explainers)}"]
+    waves = view.waves(view.spawns)
+    if not explorers and len(waves) >= 2 and 2 <= len(waves[0]) <= 4:
+        explorers, explainers = waves[0], waves[1]
+        evidence.append(f"explorers found by structure: a wave of {len(waves[0])} at seq {waves[0][0].get('seq')}, then a spawn at seq {waves[1][0].get('seq')}")
     if not explorers:
         if view.killed and not view.spawns:
             return inconclusive("run killed before any spawn", *evidence)
         return failed("no explorers for a subsystem-scale question", *evidence)
     if not 2 <= len(explorers) <= 4:
         return failed(f"{len(explorers)} explorers; the skill fans out two to four", *evidence)
-    if explainers and min(s.get("seq") for s in explainers) < max(s.get("seq") for s in explorers):
+    if explainers and min(int(s.get("seq")) for s in explainers) < max(int(s.get("seq")) for s in explorers):
         return failed("explainer spawned before the explorers finished launching", *evidence)
     if not view.one_message(explorers):
         return failed("explorers were not spawned in one message", *evidence)
@@ -1505,7 +1532,7 @@ def why_then_how(view):
 
 @oracle("why-queries-evidence-categories-in-parallel")
 def why_parallel(view):
-    investigators = view.spawns_where("investigator", "historical context", "source control", "git history")
+    investigators = [s for s in view.spawns_where("investigator", "historical context", "git history", *WHY_ROSTER) if not view.supports(s)]
     evidence = [f"investigator spawns: {len(investigators)}", f"one message: {view.one_message(investigators)}"]
     if not investigators:
         if view.killed and not view.spawns:
@@ -1981,7 +2008,7 @@ def finished_in_first_turn(view, commits):
 def loop_facility(view):
     prompt = " ".join(str(t) for t in view.case.get("turns", []))
     loops = [c for c in view.tool_calls if c.get("name") in ("Monitor", "loop", "Loop", "schedule")]
-    watchers = view.spawns_where("watch", "wake", "re-check", "heartbeat")
+    watchers = view.spawns_where(r"watch\w*", r"wake\w*", r"re-check\w*", r"heartbeat\w*")
     shell_loops = [c for c in view.commands() if re.search(r"\bwhile\s+(?:true|:|\[)|\bsleep\s+\d+", c[1])]
     commits = len(view.run_commits()) if view.run_commits() is not None else None
     evidence = [f"loop tool calls: {len(loops)}", f"watcher spawns: {len(watchers)}", f"shell loops: {len(shell_loops)}",
@@ -2239,7 +2266,7 @@ def doc_impact_review(view):
         return inconclusive("multi-turn case but the trace carries no turn markers (core change: stamp events with `turn`)")
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
     result = author_result(reply) or author_result(" ".join(view.texts(turn)))
-    reviewers = view.spawns_where("trail reviewer", "independent review", "review the documentation", "documentation-impact", turn=turn)
+    reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
     verdict_word = re.search(r"\bpass\b", reply or "", re.I)
     evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {bool(verdict_word)}"]
     if result is None:
@@ -2395,7 +2422,7 @@ def arena_second_opinion(view):
 
 
 def runner_spawns(view):
-    return view.spawns_where("runner", "candidate design", "architect", "design sketch", "design package")
+    return [s for s in view.spawns_where("runner", "candidate", "architect", "design sketch", "design package") if not view.supports(s)]
 
 
 @oracle("architect-grounds-with-how-and-why")
@@ -2415,11 +2442,13 @@ def architect_grounds(view):
 def architect_arena(view):
     runners = runner_spawns(view)
     read = view.skill_read("arena")
-    callers = sum(1 for s in runners if re.search(r"caller|usage", s.get("prompt_head") or "", re.I))
-    evidence = [f"arena skill read: {read}", f"runner spawns: {len(runners)}", f"briefs that lead with caller usage: {callers}"]
+    callers = sum(1 for s in runners if re.search(r"caller|usage", view.spawn_brief(s), re.I))
+    wave = view.waves(runners)[0] if runners else []
+    evidence = [f"arena skill read: {read}", f"runner spawns: {len(runners)}", f"first runner wave: {len(wave)}",
+                f"briefs that lead with caller usage: {callers}"]
     if len(runners) < 2:
         return inconclusive("run killed before the sketch fan-out", *evidence) if view.killed else failed("fewer than two runner sketches", *evidence)
-    if not view.one_message(runners):
+    if len(wave) < 2:
         return failed("runners spawned sequentially", *evidence)
     if view.encrypted():
         return inconclusive("runner briefs encrypted; caller-usage-first cannot be read", *evidence)
