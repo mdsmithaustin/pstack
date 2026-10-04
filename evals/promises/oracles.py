@@ -18,7 +18,8 @@ SHA = re.compile(r"\b[0-9a-f]{7,40}\b")
 SKIP_MARK = re.compile(r"skipped:\s*(?!<reason>)\S", re.I)
 
 READ_TOOLS = {"Read": ("file_path",), "read_file": ("target_file", "path", "file_path"),
-              "view_file": ("path", "file_path"), "skill_view": ("name",), "view": ("path",)}
+              "view_file": ("path", "file_path"), "skill_view": ("name",), "Skill": ("skill",), "view": ("path",)}
+SKILL_LOAD_TOOLS = {"skill_view", "Skill"}
 SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
                "run_terminal_command": "command", "shell": "command", "bash": "command"}
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
@@ -365,7 +366,7 @@ class View:
                 for field in READ_TOOLS[name]:
                     value = given.get(field)
                     if isinstance(value, str) and value:
-                        rel = f"{value}/SKILL.md" if name == "skill_view" else skill_rel(value)
+                        rel = f"{value.lstrip('/').split(':')[-1]}/SKILL.md" if name in SKILL_LOAD_TOOLS else skill_rel(value)
                         if rel:
                             out.append((call.get("seq"), rel, self.read_returned(call)))
                         break
@@ -1800,8 +1801,7 @@ def project_files(view):
 @oracle("deslop-cleans-code-slop")
 def deslop_cleans(view):
     expect = view.case.get("expect") or {}
-    loaded = "deslop/SKILL.md" in view.lead_reads() or any(
-        c.get("name") == "Skill" and (c.get("input") or {}).get("skill") == "deslop" for c in view.tool_calls)
+    loaded = "deslop/SKILL.md" in view.lead_reads()
     evidence = [f"deslop skill read by the lead: {loaded}"]
     if not (view.project and view.project.is_dir()):
         return inconclusive("no project to inspect; this pass is graded on the tree, not the reply", *evidence)

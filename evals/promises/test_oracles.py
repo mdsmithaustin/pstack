@@ -1319,6 +1319,33 @@ class OracleFalseVerdicts(unittest.TestCase):
         self.assertEqual(grade("poteto-mode-sticky", minimal(events=events, harness="grok"), case)["verdict"], FAIL)
 
 
+def skill_call(seq, name, ok=True, args=""):
+    return [{"seq": seq, "kind": "tool_call", "name": "Skill", "input": {"skill": name, "args": args}, "id": f"s{seq}"},
+            {"seq": seq + 1, "kind": "tool_result", "name": "Skill", "ok": ok, "output_head": f"Launching skill: {name}", "id": f"s{seq}"}]
+
+
+class SkillToolLoads(unittest.TestCase):
+    def test_skill_tool_loads_order_why_then_how(self):
+        trace = minimal(events=skill_call(1, "why", args="why is the retry limit five?") + bash(3, "git log")
+                        + [text(11, "I've finished the why part. Next I'm loading the how skill.")] + skill_call(12, "how"),
+                        final_reply="Why: five covers the rebuild. How: ingest calls retry().")
+        result = grade("why-then-how-composition", trace, load_case("why-then-how-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"], ["first how evidence at seq 12", "first why evidence at seq 1"])
+
+    def test_a_narrow_why_skill_load_is_teach_evidence(self):
+        trace = minimal(events=skill_call(9, "why", args="Narrow scope: why did commit 23aa153 change this?") + bash(11, "git show 23aa153"),
+                        final_reply="```mermaid\ngraph LR\na-->b\n```")
+        result = grade("poteto-teach-runs-how-and-why", trace, load_case("teach-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("why evidence at seq 9", result["evidence"])
+
+    def test_a_refused_skill_load_is_not_a_read(self):
+        trace = minimal(events=skill_call(1, "why", ok=False) + skill_call(12, "how"), final_reply="done")
+        result = grade("why-then-how-composition", trace, load_case("why-then-how-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
