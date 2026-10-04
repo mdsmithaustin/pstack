@@ -1,6 +1,8 @@
 import json
 import hashlib
 import os
+import platform
+import subprocess
 import tempfile
 import unittest
 import uuid
@@ -261,6 +263,146 @@ class PrivateEvidence(unittest.TestCase):
         with self.assertRaises(OSError):
             claude_code._stream_rows(self.root, 0)
         self.assertEqual(outside.read_text(), "outside unchanged")
+
+
+class PreparedHarvest(unittest.TestCase):
+    def prepare_run(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        case = {"id": "x", "fixture": "tally", "turns": ["first", "second"]}
+        self.run = live.Run(self.root, "claude-code", case, "0" * 40, 60)
+        self.run.project.mkdir(parents=True)
+        binary = self.root / "native.bin"
+        binary.write_bytes(b"test executable identity")
+        runtime = claude_code.HostRuntime(binary, "test", self.root / "outside-home", "test-user", (), (),
+                                          ((binary, hashlib.sha256(binary.read_bytes()).hexdigest()),),
+                                          "/usr/bin:/bin", "/bin/sh")
+        self.state = claude_code._bind_paths(self.run, runtime)
+        self.native = self.state.paths.config / "projects" / "slug"
+        self.native.mkdir(parents=True)
+        self.lead = self.native / f"{self.state.session}.jsonl"
+        self.lead.write_text("")
+
+    def launch(self, blocks, result=None, exit_code=0, timed_out=False):
+        index = len(self.run._claude_state.records)
+
+        def execute(argv, cwd, env, timeout_s, stream, stderr):
+            self.assertEqual(cwd, self.run.project)
+            self.assertEqual(env["CLAUDE_CONFIG_DIR"], str(self.state.paths.config))
+            self.assertEqual(argv[:2], ("/usr/bin/sandbox-exec", "-p"))
+            self.assertEqual(argv[3:11], (str(self.state.runtime.binary), "-p", "--output-format", "stream-json",
+                                        "--verbose", "--setting-sources", "project", "--strict-mcp-config"))
+            self.assertEqual(argv[11:15], ("--mcp-config", '{"mcpServers":{}}', "--permission-mode", "bypassPermissions"))
+            self.assertEqual(argv[15:17], ("--session-id" if index == 0 else "--resume", self.state.session))
+            with self.lead.open("a") as lead:
+                for row in ({"type": "user", "message": {"content": self.run.case["turns"][index]}},
+                            {"type": "assistant", "message": {"model": "lead-model", "content": blocks}}):
+                    lead.write(json.dumps(row) + "\n")
+            stream.write_text(json.dumps(result) + "\n" if result is not None else "")
+            stderr.write_text("")
+            return {"argv": list(argv), "exit_code": exit_code, "timed_out": timed_out, "duration_s": 1.0}
+
+        with patch.object(live, "execute", side_effect=execute):
+            record = claude_code.turn(self.run, self.run.case["turns"][index], index)
+        self.assertEqual(record["session_id"], self.state.session)
+        self.run.turns = [{"session_id": "untrusted", "argv": [], "exit_code": 99}]
+
+    def test_foreground_command_data_keeps_prepared_and_replayed_evidence_complete(self):
+        for command in ("printf '%s\\n' 'A&B'", r"echo \&", "echo ok 2>&1", "echo ok >&2", "echo ok &>/dev/null"):
+            with self.subTest(command=command):
+                self.prepare_run()
+                self.launch([{"type": "tool_use", "id": "bash", "name": "Bash", "input": {"command": command}},
+                             {"type": "text", "text": "native final"}],
+                            {"type": "result", "subtype": "success", "result": "completed foreground"})
+                trace = claude_code.harvest(self.run)
+                self.assertEqual(trace["final_reply"], "completed foreground")
+                self.assertEqual(trace["events"][1]["input"], {"command": command})
+                self.assertEqual(trace["x_evidence_complete"], True)
+                self.assertEqual(trace["x_turn_exit_codes"], [0])
+                self.assertEqual(len(trace["transcript_paths"]), 1)
+                self.assertEqual(Path(trace["transcript_paths"][0]).read_bytes(), self.lead.read_bytes())
+                replay = live.Run(self.root, "claude-code", self.run.case, "0" * 40, 60)
+                replay.turns = list(self.run._claude_state.records)
+                self.assertEqual(claude_code.harvest(replay), trace)
+
+    def test_missing_or_error_result_and_timeout_keep_observed_events_incomplete(self):
+        for result, exit_code, timed_out in ((None, 0, False),
+                ({"type": "result", "subtype": "error", "result": "native error"}, 1, False),
+                ({"type": "result", "subtype": "success", "result": "native result"}, 0, True)):
+            with self.subTest(result=result, exit_code=exit_code, timed_out=timed_out):
+                self.prepare_run()
+                self.launch([{"type": "text", "text": "observed final"}], result, exit_code, timed_out)
+                trace = claude_code.harvest(self.run)
+                self.assertEqual(trace["events"][-1]["text"], "observed final")
+                self.assertEqual(trace["x_evidence_complete"], False)
+                self.assertEqual(trace["x_timed_out"], timed_out)
+                self.assertEqual(trace["x_turn_exit_codes"], [exit_code])
+
+    def test_child_evidence_and_native_background_flags_control_completion(self):
+        for tool in ("Agent", "Task", "Bash"):
+            for background in (False, True):
+                with self.subTest(tool=tool, background=background):
+                    self.prepare_run()
+                    self.launch([{"type": "tool_use", "id": "child", "name": tool, "input": {
+                        "command": "echo ok", "prompt": "child prompt", "run_in_background": background}}],
+                        {"type": "result", "subtype": "success", "result": "lead completed"})
+                    missing = claude_code.harvest(self.run)
+                    self.assertEqual(missing["final_reply"], "lead completed")
+                    self.assertEqual(missing["x_evidence_complete"], tool == "Bash" and not background)
+                    if tool != "Bash":
+                        children = self.native / self.state.session / "subagents"
+                        children.mkdir(parents=True)
+                        (children / "agent-child.meta.json").write_text(json.dumps({"toolUseId": "child", "agentType": "poteto-agent"}))
+                        (children / "agent-child.jsonl").write_text(json.dumps({"type": "assistant", "message": {
+                            "model": "child-model", "content": [{"type": "text", "text": "persona: poteto-agent\nChild completed."}]}}) + "\n")
+                        complete = claude_code.harvest(self.run)
+                        self.assertEqual(complete["spawns"][0]["observed"], {"models": ["child-model"], "efforts": []})
+                        self.assertEqual(complete["x_evidence_complete"], not background)
+
+    def test_resume_retains_first_snapshot_and_requires_each_native_result(self):
+        self.prepare_run()
+        self.launch([{"type": "text", "text": "first native"}],
+                    {"type": "result", "subtype": "success", "result": "first result"})
+        first = claude_code.harvest(self.run)
+        retained = Path(first["transcript_paths"][0]).read_bytes()
+        self.launch([{"type": "text", "text": "second native"}])
+        second = claude_code.harvest(self.run)
+        self.assertEqual(first["x_evidence_complete"], True)
+        self.assertEqual(second["x_evidence_complete"], False)
+        self.assertEqual(second["final_reply"], "second native")
+        self.assertEqual([e["turn"] for e in second["events"]], [0, 0, 1, 1])
+        self.assertEqual(Path(first["transcript_paths"][0]).read_bytes(), retained)
+        self.assertNotEqual(first["x_evidence_snapshot"], second["x_evidence_snapshot"])
+
+    def test_missing_native_lead_or_projects_aborts_public_harvest(self):
+        self.prepare_run()
+        self.launch([{"type": "text", "text": "observed final"}],
+                    {"type": "result", "subtype": "success", "result": "native result"})
+        self.lead.unlink()
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "found 0"):
+            claude_code.harvest(self.run)
+        self.native.rmdir()
+        self.native.parent.rmdir()
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "unsafe directory"):
+            claude_code.harvest(self.run)
+        self.assertEqual(list(self.state.paths.transcripts.iterdir()), [])
+
+
+@unittest.skipUnless((platform.system(), platform.release(), platform.machine(), str(Path.home())) ==
+                     ("Darwin", "25.6.0", "arm64", "/Users/msmith1"), "requires the measured Claude runtime")
+class NativeGit(unittest.TestCase):
+    def test_confined_path_resolves_native_git_without_the_selection_shim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            run = live.Run(root, "claude-code", {"fixture": "tally"}, "0" * 40, 60)
+            run.project.mkdir(parents=True)
+            state = claude_code._bind_paths(run, claude_code._host_runtime())
+            done = subprocess.run(["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0),
+                                   "/bin/sh", "-c", "command -v git"], cwd=run.project,
+                                  env=claude_code.child_env(run), capture_output=True, text=True, timeout=10)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(done.stdout, "/Library/Developer/CommandLineTools/usr/bin/git\n")
 
 
 if __name__ == "__main__":
