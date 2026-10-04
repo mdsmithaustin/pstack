@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -18,7 +19,8 @@ SHA = re.compile(r"\b[0-9a-f]{7,40}\b")
 SKIP_MARK = re.compile(r"skipped:\s*(?!<reason>)\S", re.I)
 
 READ_TOOLS = {"Read": ("file_path",), "read_file": ("target_file", "path", "file_path"),
-              "view_file": ("path", "file_path"), "skill_view": ("name",), "view": ("path",)}
+              "view_file": ("path", "file_path"), "skill_view": ("name",), "Skill": ("skill",), "view": ("path",)}
+SKILL_LOAD_TOOLS = {"skill_view", "Skill"}
 SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
                "run_terminal_command": "command", "shell": "command", "bash": "command"}
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
@@ -47,6 +49,16 @@ HOW_SECTIONS = ("overview", "key concepts", "how it works", "where things live",
 BUCKETS = ("act on", "consider", "noted", "dismissed")
 STOP = {"the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "it", "its", "this", "that",
         "with", "per", "as", "be", "by", "at", "from", "over", "into", "if", "then", "run", "use"}
+JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
+SYNTH_ROLE = re.compile(r"(?<![a-z])synthes(?:is|i[sz](?:e|es|ing))\b|(?<!separate )(?<![a-z])synthesi[sz]ers?\b")
+READ_ONLY_BRIEF = re.compile(r"read[- ]only|(?:do not|don't|never) (?:edit|write|modify|change|touch)(?: or (?:edit|write|modify|change))? (?:any )?(?:files|anything)"
+                             r"|make no (?:edits|changes)")
+EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\b(?:you|job is|task is) to\s+)\s*(?:[-*]\s+|\d+[.)]\s+)?"
+                        r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
+                        r"edit|replace|insert|append|apply|move)\b")
+REPLY_HEAD = 300
+WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
+              "error ?/ ?exception tracking", "product analytics")
 QUESTION_CUES = ("should i", "do you want", "would you like", "let me know", "shall i", "want me to",
                  "can you confirm", "which approach", "please confirm", "may i")
 
@@ -216,6 +228,11 @@ def skill_rel(path):
     return hits[-1] if hits else None
 
 
+def skill_load(name):
+    namespace, _, bare = name.lstrip("/").rpartition(":")
+    return f"{bare}/SKILL.md" if namespace in ("", "pstack") else None
+
+
 ASSIGNMENT = re.compile(r"(?:^|[;&|\s])([A-Za-z_][A-Za-z0-9_]*)=([^\s;&|$`'\"]+)")
 
 
@@ -365,7 +382,7 @@ class View:
                 for field in READ_TOOLS[name]:
                     value = given.get(field)
                     if isinstance(value, str) and value:
-                        rel = f"{value}/SKILL.md" if name == "skill_view" else skill_rel(value)
+                        rel = skill_load(value) if name in SKILL_LOAD_TOOLS else skill_rel(value)
                         if rel:
                             out.append((call.get("seq"), rel, self.read_returned(call)))
                         break
@@ -484,16 +501,29 @@ class View:
             return True
         return Path(path).resolve().is_relative_to(self.project.resolve())
 
+    def tree_rel(self, path):
+        path = path.strip("\"'")
+        if not self.project:
+            return path
+        full = (Path(path) if path.startswith("/") else self.project / path).resolve()
+        roots = sorted({Path(w).resolve() for w in self.worktrees() or []} | {self.project.resolve()}, key=lambda r: len(str(r)), reverse=True)
+        return next((str(full.relative_to(r)) for r in roots if full.is_relative_to(r)), path)
+
+    def project_rel(self, path):
+        if self.project and path.startswith("/") and self.inside_project(path):
+            return str(Path(path).resolve().relative_to(self.project.resolve()))
+        return path
+
     def classify(self, path):
         path = path.strip("\"'")
         if CACHE_PATH.search(path):
             return "scratch"
-        rel = path
-        if self.project and path.startswith(str(self.project)):
-            rel = path[len(str(self.project)):].lstrip("/")
+        rel = self.project_rel(path)
+        inside = rel != path
         if rel.startswith(PRIVATE_PREFIXES) or "/skills/" in path:
             return "private"
-        if path.startswith(SCRATCH_PREFIXES + ("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) or rel.startswith(("tmp/", "scratch", "repro", "verify", "baseline")):
+        if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) \
+                or rel.startswith(("tmp/", "scratch", "repro", "verify", "baseline")):
             return "scratch"
         if any(tag in rel for tag in LOG_NAMES):
             return "log"
@@ -525,20 +555,43 @@ class View:
                 hits.append(text.strip()[-200:])
         return hits
 
-    def spawn_text(self, spawn):
+    def spawn_text(self, spawn, reply=True):
         call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
         given = (call or {}).get("input") or {}
         extra = [str(given.get(k) or "") for k in ("description", "task_name", "name")] if isinstance(given, dict) else []
-        return " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra).lower()
+        reply = str(spawn.get("x_child_first_reply") or "")[:REPLY_HEAD] if reply else ""
+        return " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra + [reply]).lower()
 
-    def spawns_where(self, *needles, turn=None):
+    def spawn_brief(self, spawn):
+        call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
+        given = (call or {}).get("input") or {}
+        tasks = given.get("tasks") if isinstance(given.get("tasks"), list) else None
+        siblings = [s for s in self.spawns if s.get("seq") == spawn.get("seq")]
+        if tasks and len(tasks) == len(siblings):
+            given = tasks[next(i for i, s in enumerate(siblings) if s is spawn)]
+        return (spawn.get("prompt_head") or "") + " " + json.dumps(given)
+
+    def explores(self, spawn):
+        brief = self.spawn_brief(spawn).lower()
+        brief = brief.replace("\\n", "\n")
+        return bool(READ_ONLY_BRIEF.search(brief)) and not EDIT_ORDER.search(brief)
+
+    def spawns_where(self, *needles, turn=None, reply=True):
+        pattern = re.compile("|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles))
+        return [s for s in self.spawns
+                if (turn is None or self.turn_of(s.get("seq")) == turn) and pattern.search(self.spawn_text(s, reply))]
+
+    def supports(self, spawn):
+        text = self.spawn_text(spawn)
+        return bool(JUDGE_ROLE.search(text) or SYNTH_ROLE.search(text))
+
+    def waves(self, spawns):
         out = []
-        for spawn in self.spawns:
-            if turn is not None and self.turn_of(spawn.get("seq")) != turn:
-                continue
-            text = self.spawn_text(spawn)
-            if any(n.lower() in text for n in needles):
-                out.append(spawn)
+        for spawn in sorted(spawns, key=lambda s: s.get("seq") or 0):
+            if out and self.one_message(out[-1] + [spawn]):
+                out[-1].append(spawn)
+            else:
+                out.append([spawn])
         return out
 
     def encrypted(self):
@@ -703,18 +756,50 @@ def is_write_target(target):
     return "$" not in target and not re.fullmatch(r"\{\}[+;\\]*", target)
 
 
+def cd_into(segment, base):
+    words = segment.strip().split()
+    if words[:1] != ["cd"] or len(words) < 2:
+        return None
+    target = words[1].strip("\"'")
+    return target if target.startswith("/") or not base else f"{base}/{target}"
+
+
+def under(base, target):
+    return target if not base or target.startswith(("/", "$", "~")) else f"{base}/{target}"
+
+
+def walk_segments(command):
+    base, outer = "", []
+    for segment, masked in shell_segments(command):
+        opening = re.match(r"\s*(\(*)", masked)
+        outer += [base] * len(opening.group(1))
+        segment, masked = segment[opening.end():], masked[opening.end():]
+        closing = re.search(r"(\)*)\s*$", masked)
+        shut = min(len(closing.group(1)), len(outer))
+        if shut:
+            end = closing.end(1) - shut
+            segment, masked = segment[:end], masked[:end]
+        moved = cd_into(segment, base)
+        if moved is not None:
+            base = moved
+        else:
+            yield segment, masked, base
+        for _ in range(shut):
+            base = outer.pop()
+
+
 def shell_writes(command):
     out = []
-    for segment, masked in shell_segments(strip_heredocs(command)):
+    for segment, masked, base in walk_segments(expand_assignments(strip_heredocs(command))):
         found = [m for pattern in (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
-                                   r"\bsed\s+-i[^\s]*\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
+                                   r"\bsed\s+-i[^\s]*(?:\s+(?:''|\"\"))?\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
                                    r"\b(?:rm|git rm)\s+(?:-\w+\s+)*([^\s;&|]+)",
                                    r"\bmv\s+(?:-\w+\s+)*\S+\s+([^\s;&|]+)")
                  for m in re.finditer(pattern, masked)]
         for match in found:
             target = segment[match.start(1):match.end(1)].strip("\"'")
             if is_write_target(target):
-                out.append(target)
+                out.append(under(base, target))
     return out
 
 
@@ -725,20 +810,18 @@ PYTHON_BOUND_WRITE = re.compile(r"(\w+)\.(?:write_text|write_bytes)\(")
 PYTHON_OPEN_WRITE = re.compile(r"\bopen\(\s*(['\"])([^'\"\n]+)\1\s*,\s*(['\"])([^'\"\n]*)\3")
 
 
-def python_sources(command):
-    sources = [body for header, body in heredoc_bodies(command) if PYTHON_HEADER.search(header)]
-    rest = strip_heredocs(command)
-    return sources + ([rest] if PYTHON_HEADER.search(rest) else [])
-
-
 def python_writes(command):
-    out = []
-    for source in python_sources(command):
+    out, bodies = [], [body for _, body in heredoc_bodies(command)]
+    for segment, _, base in walk_segments(expand_assignments(strip_heredocs(command))):
+        body = bodies.pop(0) if HEREDOC.search(segment) and bodies else None
+        if not PYTHON_HEADER.search(segment):
+            continue
+        source = segment if body is None else body
         found = [(m.start(), m.group(2)) for m in PYTHON_DIRECT_WRITE.finditer(source)]
         bound = {m.group(1): m.group(3) for m in PYTHON_BOUND_PATH.finditer(source)}
         found += [(m.start(), bound[m.group(1)]) for m in PYTHON_BOUND_WRITE.finditer(source) if m.group(1) in bound]
         found += [(m.start(), m.group(2)) for m in PYTHON_OPEN_WRITE.finditer(source) if re.search(r"[wax]", m.group(4))]
-        out += [path for _, path in sorted(found)]
+        out += [under(base, path) for _, path in sorted(found)]
     return out
 
 
@@ -1210,8 +1293,6 @@ def design_fan_out(view):
         signals.append("read architect/references/runner-prompt.md to brief runners")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
-    if runners and judge_spawns(view):
-        signals.append("a design judge beside the runners")
     attempted = sum(len(DESIGN_BRIEF.findall(json.dumps(c.get("input") or {}))) for c in view.tool_calls
                     if c.get("name") in SPAWN_TOOL_NAMES)
     if not runners and attempted >= 2:
@@ -1358,6 +1439,9 @@ def steering_redirects(view):
         return inconclusive("multi-turn case but the trace carries no turn markers (core change: stamp events with `turn`)")
     turn = len(turns) - 1
     edits = view.source_edits(turn)
+    kept = view.changed_since_base()
+    if kept is not None:
+        edits = [e for e in edits if view.tree_rel(e[1]) in kept]
     reply = view.reply_of_turn(turn)
     evidence = [f"source edits after the correction: {[e[1] for e in edits][:4]}", f"reply head: {reply[:160]!r}"]
     if edits:
@@ -1375,7 +1459,7 @@ def repro_first(view):
     evidence = [f"repro commands: {len(repros)} (first at seq {repros[0][0] if repros else None})",
                 f"first source edit at seq {edits[0][0] if edits else None}"]
     if not edits:
-        delegated = view.spawns_where("bug-fix", "fix", "implement") or any(repros and repros[0][0] < seq for seq in view.code_delegate_seqs())
+        delegated = view.spawns_where("bug-fix", r"fix\w*", r"implement\w*") or any(repros and repros[0][0] < seq for seq in view.code_delegate_seqs())
         if delegated and repros:
             return passed(*evidence, "fix delegated; the lead reproduced before spawning")
         return inconclusive("no source edit by the lead" + (" (run killed)" if view.killed else ""), *evidence)
@@ -1424,7 +1508,7 @@ def why_evidence(view):
     seq = view.read_seq("why/SKILL.md")
     if seq is not None:
         seqs.append(seq)
-    seqs += [s.get("seq") for s in view.spawns_where("investigator", "synthesizer", "historical context", "source control", "git history")]
+    seqs += [s.get("seq") for s in view.spawns_where("investigator", "synthesizer", "historical context", "source[- ]control", "git history")]
     return min(seqs) if seqs else None
 
 
@@ -1441,12 +1525,20 @@ def how_narrow(view):
 
 @oracle("how-fans-out-explorers-for-big-subsystem")
 def how_wide(view):
-    explorers = view.spawns_where("explorer", "exploration angle", "exploring a codebase")
-    explainers = view.spawns_where("explainer", "architectural explanation", "synthesis")
+    explorers = [s for s in view.spawns_where("explorer", "exploration angle", "exploring a codebase") if not view.supports(s)]
+    explainers = view.spawns_where("explainer", "architectural explanation", r"synthesi[sz]\w*")
     evidence = [f"explorer spawns: {len(explorers)}", f"explainer spawns: {len(explainers)}"]
+    waves = view.waves(view.spawns)
+    if not explorers and len(waves) >= 2 and 2 <= len(waves[0]) <= 4 and (all(s.get("x_prompt_encrypted") for s in waves[0]) or all(view.explores(s) and not view.supports(s) for s in waves[0])):
+        explorers, explainers = waves[0], waves[1]
+        evidence.append(f"explorers found by structure: a wave of {len(waves[0])} at seq {waves[0][0].get('seq')}, then a spawn at seq {waves[1][0].get('seq')}")
     if not explorers:
         if view.killed and not view.spawns:
             return inconclusive("run killed before any spawn", *evidence)
+        if view.spawns and all(s.get("x_prompt_encrypted") for s in view.spawns):
+            if any(2 <= len(wave) <= 4 for wave in waves[:-1]):
+                return inconclusive("every brief is sealed; a later wave of two to four spawns could be the explorers, but their roles cannot be read", *evidence)
+            return failed("every brief is sealed and no wave of two to four spawns has a later spawn", *evidence)
         return failed("no explorers for a subsystem-scale question", *evidence)
     if not 2 <= len(explorers) <= 4:
         return failed(f"{len(explorers)} explorers; the skill fans out two to four", *evidence)
@@ -1504,7 +1596,7 @@ def why_then_how(view):
 
 @oracle("why-queries-evidence-categories-in-parallel")
 def why_parallel(view):
-    investigators = view.spawns_where("investigator", "historical context", "source control", "git history")
+    investigators = [s for s in view.spawns_where("investigator", "historical context", "git history", *WHY_ROSTER) if not view.supports(s)]
     evidence = [f"investigator spawns: {len(investigators)}", f"one message: {view.one_message(investigators)}"]
     if not investigators:
         if view.killed and not view.spawns:
@@ -1550,13 +1642,17 @@ def why_null(view):
     return failed("reply does not report the absent evidence categories as null results", *evidence)
 
 
+SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*sources?(?:\s+(?:searched|consulted|checked|coverage))?\**\s*(?::|$)"
+                             r"|\bsources\s+(?:consulted|searched|checked)\b")
+
+
 @oracle("how-why-reports-name-sources-searched")
 def sources_named(view):
     gate = completion_gate(view)
     if gate:
         return gate
     low = view.final_reply.lower()
-    section = re.search(r"sources (?:consulted|searched|checked)|### sources|\*\*sources", low)
+    section = SOURCES_SECTION.search(low)
     git = re.search(r"\bgit\b|commit", low)
     evidence = [f"sources section: {bool(section)}", f"git named: {bool(git)}"]
     return passed(*evidence) if section and git else failed("reply has no sources section naming what was searched", *evidence)
@@ -1800,8 +1896,7 @@ def project_files(view):
 @oracle("deslop-cleans-code-slop")
 def deslop_cleans(view):
     expect = view.case.get("expect") or {}
-    loaded = "deslop/SKILL.md" in view.lead_reads() or any(
-        c.get("name") == "Skill" and (c.get("input") or {}).get("skill") == "deslop" for c in view.tool_calls)
+    loaded = "deslop/SKILL.md" in view.lead_reads()
     evidence = [f"deslop skill read by the lead: {loaded}"]
     if not (view.project and view.project.is_dir()):
         return inconclusive("no project to inspect; this pass is graded on the tree, not the reply", *evidence)
@@ -1981,7 +2076,7 @@ def finished_in_first_turn(view, commits):
 def loop_facility(view):
     prompt = " ".join(str(t) for t in view.case.get("turns", []))
     loops = [c for c in view.tool_calls if c.get("name") in ("Monitor", "loop", "Loop", "schedule")]
-    watchers = view.spawns_where("watch", "wake", "re-check", "heartbeat")
+    watchers = view.spawns_where(r"watch\w*", r"wake\w*", r"re-check\w*", r"heartbeat\w*")
     shell_loops = [c for c in view.commands() if re.search(r"\bwhile\s+(?:true|:|\[)|\bsleep\s+\d+", c[1])]
     commits = len(view.run_commits()) if view.run_commits() is not None else None
     evidence = [f"loop tool calls: {len(loops)}", f"watcher spawns: {len(watchers)}", f"shell loops: {len(shell_loops)}",
@@ -2082,6 +2177,27 @@ def attention_section(view):
     return passed(*evidence) if reviewed else failed("Attention section lacks the `reviewed by <model>@<effort>` line", *evidence)
 
 
+def blank_heredocs(command):
+    out, end = [], None
+    for line in command.split("\n"):
+        if end is not None:
+            out.append(" " * len(line))
+            end = None if line.strip() == end else end
+            continue
+        out.append(line)
+        match = HEREDOC.search(line)
+        end = match.group(2) if match else None
+    return "\n".join(out)
+
+
+def runs_after_write(command, path):
+    name = re.escape(Path(path).name)
+    cue = re.search(r"(?:>>?|\btee\b|\bsed\s+-i|\bopen\(|write_text|\.write\()[^;&|\n]{0,80}?" + name, command)
+    written = cue.start() if cue else command.find(Path(path).name)
+    runs = [m.start() for m in re.finditer(r"unittest|pytest|npm test|node .*test", blank_heredocs(command))]
+    return written >= 0 and any(start > written for start in runs)
+
+
 @oracle("poteto-tdd-failing-test-first")
 def tdd_first(view):
     tests = [e for e in view.edits() if e[2] == "test"]
@@ -2089,8 +2205,10 @@ def tdd_first(view):
     runs = [(seq, c, ok, head) for seq, c, ok, head in view.commands() if re.search(r"unittest|pytest|test_|npm test|node .*test", c)]
     failing = [r for r in runs if r[2] is False or re.search(r"\bFAIL|Error|failures=\d*[1-9]|✗|not ok", r[3])]
     green = [r for r in runs if r[2] is not False and re.search(r"\bOK\b|passed|ok\b", r[3]) and not re.search(r"FAIL|Error", r[3])]
+    after_fix = [g for g in green if sources and (g[0] > sources[0][0] or (g[0] == sources[0][0] and all(
+        runs_after_write(g[1], s[1]) for s in sources if s[0] == g[0])))]
     evidence = [f"test edits: {[e[1] for e in tests][:2]}", f"source edits: {[e[1] for e in sources][:2]}",
-                f"failing runs: {len(failing)}, green runs after a source edit: {len([g for g in green if sources and g[0] > sources[0][0]])}"]
+                f"failing runs: {len(failing)}, green runs after a source edit: {len(after_fix)}"]
     if not tests:
         if view.spawns and not sources:
             return inconclusive("work delegated; the delegate's test-first order is not visible", *evidence)
@@ -2101,7 +2219,7 @@ def tdd_first(view):
         return failed("source edited before the test", *evidence)
     if not any(f[0] > tests[0][0] and f[0] < sources[0][0] for f in failing):
         return failed("no failing run between writing the test and the fix", *evidence)
-    if not any(g[0] > sources[0][0] for g in green):
+    if not after_fix:
         return inconclusive("failing test first and fix on top, but no green rerun visible", *evidence)
     return passed(*evidence)
 
@@ -2215,6 +2333,16 @@ def author_result(text):
     return None
 
 
+LABELED_RESULT = re.compile(r"\bresult\b\W{0,6}independent review (?:is )?(not )?required", re.I)
+
+
+def turn_author_result(view, turn, reply):
+    inputs = " ".join(json.dumps(c.get("input") or {}) for c in view.tool_calls if turn is None or view.turn_of(c.get("seq")) == turn)
+    labeled = LABELED_RESULT.search(inputs.replace("\\n", " "))
+    recorded = ("not required" if labeled.group(1) else "required") if labeled else None
+    return author_result(reply) or author_result(" ".join(view.texts(turn))) or recorded
+
+
 @oracle("poteto-runs-documentation-impact-before-completion")
 def doc_impact_before_completion(view):
     turn = 0 if len(view.case.get("turns", [])) > 1 else None
@@ -2223,13 +2351,22 @@ def doc_impact_before_completion(view):
     reads = [(seq, rel) for seq, rel in view.event_reads() if rel.startswith("documentation-impact/") and (turn is None or view.turn_of(seq) == turn)]
     read_any = bool(reads) or view.skill_read("documentation-impact")
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
-    result = author_result(reply) or author_result(" ".join(view.texts(turn)))
-    evidence = [f"documentation-impact read in the change turn: {bool(reads)} (anywhere: {read_any})", f"author result in reply: {result}"]
+    result = turn_author_result(view, turn, reply)
+    evidence = [f"documentation-impact read in the change turn: {bool(reads)} (anywhere: {read_any})", f"author result in the reply or work record: {result}"]
     if not read_any:
         return inconclusive("run killed before completion", *evidence) if view.killed else failed("documentation-impact never ran before completion", *evidence)
     if not result:
         return failed("completion reply carries no author result", *evidence) if reply else inconclusive("no completion reply", *evidence)
     return passed(*evidence)
+
+
+VERDICT_NEGATION = re.compile(r"\b(?:not|never|cannot|unable|fail(?:ed|s)?|without)\b|n't\b", re.I)
+
+
+def negated_verdict(reply, match):
+    word = list(re.finditer(r"\bpass(?:ed)?\b", match.group(0), re.I))[-1]
+    clause = re.split(r"[.,;:!?\n]|\b(?:then|and|but)\b", reply[:match.start() + word.start()], flags=re.I)[-1]
+    return bool(VERDICT_NEGATION.search(" ".join(clause.split()[-4:])))
 
 
 @oracle("documentation-impact-independent-review-pass-required")
@@ -2238,9 +2375,10 @@ def doc_impact_review(view):
     if turn is not None and not view.has_turns:
         return inconclusive("multi-turn case but the trace carries no turn markers (core change: stamp events with `turn`)")
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
-    result = author_result(reply) or author_result(" ".join(view.texts(turn)))
-    reviewers = view.spawns_where("trail reviewer", "independent review", "review the documentation", "documentation-impact", turn=turn)
-    verdict_word = re.search(r"\bpass\b", reply or "", re.I)
+    result = turn_author_result(view, turn, reply)
+    reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
+    verdict_word = next((m for m in re.finditer(r"\bpass\b|\breview\b[^.\n]{0,40}\bpassed\b", reply or "", re.I)
+                         if not negated_verdict(reply, m)), None)
     evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {bool(verdict_word)}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)
@@ -2273,11 +2411,11 @@ def doc_impact_modes(view):
 
 
 def candidate_spawns(view):
-    return [s for s in view.spawns if not re.search(r"judge|cross-judge|score|rubric", view.spawn_text(s))]
+    return [s for s in view.spawns if not re.search(r"judge|cross-judge|score|rubric", view.spawn_text(s, reply=False))]
 
 
 def judge_spawns(view):
-    return [s for s in view.spawns if re.search(r"judge|cross-judge|rubric", view.spawn_text(s))]
+    return [s for s in view.spawns if re.search(r"judge|cross-judge|rubric", view.spawn_text(s, reply=False))]
 
 
 @oracle("arena-candidate-count-adjustable")
@@ -2292,45 +2430,93 @@ def arena_count(view):
     return passed(*evidence) if len(candidates) == want else failed(f"{len(candidates)} candidates, not {want}", *evidence)
 
 
+ARM_DIR = re.compile(r"(?:worktree|candidate|arm|attempt)", re.I)
+
+
+def arm_dirs(command):
+    dirs, base = set(), ""
+    for segment in re.split(r"&&|\|\||[;|\n]", expand_assignments(strip_heredocs(command))):
+        moved = cd_into(segment, base)
+        if moved is not None:
+            base = moved
+            continue
+        words = segment.split()
+        if words[:1] == ["mkdir"]:
+            targets = [w.strip("\"'") for w in words[1:] if not w.startswith("-")]
+            targets = [t for t in targets if ARM_DIR.search(t.rstrip("/").rsplit("/", 1)[-1])]
+        elif words[:3] == ["git", "worktree", "add"]:
+            rest = words[3:]
+            while rest and rest[0].startswith("-"):
+                rest = rest[2:] if rest[0] in ("-b", "-B") else rest[1:]
+            targets = [w.strip("\"'") for w in rest[:1]]
+        else:
+            targets = []
+        dirs |= {os.path.normpath(under(base, t)) for t in targets}
+    return dirs
+
+
 @oracle("arena-candidates-own-worktrees")
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
-    adds = [c for c in view.commands() if re.search(r"git worktree add|mkdir -p .*(?:candidate|arm|attempt)", c[1])]
-    paths = set()
-    for s in candidates:
-        for match in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", s.get("prompt_head") or "", re.I):
-            paths.add(match)
-    evidence = [f"worktree/dir setup commands: {len(adds)}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
+    made = len(set().union(*(arm_dirs(c[1]) for c in view.commands() if c[2] is not False)))
+    paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
+    evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
     if view.encrypted():
-        return inconclusive("briefs encrypted; worktree assignment unreadable", *evidence) if not adds else passed(*evidence)
-    if len(paths) >= len(candidates) or len(adds) >= len(candidates) or len(view.worktrees() or []) > len(candidates):
+        enough = made >= len(candidates) or len(view.worktrees() or []) > len(candidates)
+        return passed(*evidence) if enough else inconclusive("briefs encrypted, and fewer candidate directories than candidates", *evidence)
+    if len(paths) >= len(candidates) or made >= len(candidates) or len(view.worktrees() or []) > len(candidates):
         return passed(*evidence)
     return failed("candidates do not each get their own worktree or directory", *evidence)
+
+
+PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on) (?:candidate|arm) [\w-]+")
+
+
+def picked(low):
+    for match in PICKED.finditer(low):
+        clause = re.split(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b", low[:match.start()])[-1]
+        if not re.search(r"\b(?:no|not|none|never|neither|nor)\b", " ".join(clause.split()[-6:])):
+            return True
+    return False
 
 
 @oracle("arena-fans-out-and-grafts")
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
+    base = "base" in low or picked(low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
-                f"reply names a base: {'base' in low}, grafts: {'graft' in low}, verification: {'verif' in low}"]
+                f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
         return inconclusive("run killed before the fan-out", *evidence) if view.killed else failed("fewer than two candidates", *evidence)
     if not view.one_message(candidates):
         return failed("candidates spawned sequentially", *evidence)
     if not view.final_reply:
         return inconclusive("no synthesis reply" + (" (run killed)" if view.killed else ""), *evidence)
-    if "base" in low and ("graft" in low or "converge" in low or "consensus" in low):
+    if base and ("graft" in low or "converge" in low or "consensus" in low):
         return passed(*evidence)
     return failed("reply does not name the base and the grafts", *evidence)
+
+
+MODEL_VENDORS = {"claude", "gpt", "grok", "gemini"}
+MODEL_SUFFIXES = {"build"}
+
+
+def model_tier(model):
+    tokens = [t for t in re.split(r"[-._]", (model or "").lower()) if t and t not in MODEL_SUFFIXES]
+    return tuple(t for t in tokens if not t.isdigit() and t not in MODEL_VENDORS) or tuple(tokens)
+
+
+def same_model(spawned, lead):
+    return model_tier(spawned) == model_tier(lead)
 
 
 @oracle("arena-readonly-cross-judge")
 def arena_judge(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
-    evidence = [f"judge spawns: {len(judges)}", f"candidate models: {sorted({s.get('model') for s in candidates if s.get('model')})}",
+    evidence = [f"judge spawns: {len(judges)}", f"lead model: {view.model}", f"candidate models: {sorted({s.get('model') for s in candidates if s.get('model')})}",
                 f"judge models: {[s.get('model') for s in judges]}"]
     if not judges:
         if view.encrypted():
@@ -2341,33 +2527,52 @@ def arena_judge(view):
     evidence.append(f"judge brief marked read-only: {readonly}")
     if judge.get("seq", 0) < max(s.get("seq", 0) for s in candidates):
         return failed("judge spawned before the candidates", *evidence)
-    cand_models = {s.get("model") for s in candidates if s.get("model")}
+    others = [s.get("model") for s in view.spawns if s.get("model") and not same_model(s["model"], view.model)]
     failures = []
-    if judge.get("model") and judge["model"] in cand_models and len(cand_models) > 1:
-        failures.append("judge shares a candidate model although the candidates spanned several")
+    judge_model = judge.get("model") or view.model
+    if judge_model and view.model and same_model(judge_model, view.model) and others:
+        failures.append("judge runs on the lead's model although the run used another")
     if judge.get("prompt_head") and not readonly:
         failures.append("judge brief is not read-only")
-    return failed(failures, *evidence) if failures else passed(*evidence)
+    if failures:
+        return failed(failures, *evidence)
+    if not view.model:
+        return inconclusive("the lead's model is unknown, so the judge's model cannot be compared with it", *evidence)
+    return passed(*evidence)
+
+
+ASSIGNED_OUTPUT = re.compile(r"\b(?:write|save|put|record|output:?)\b(?:(?!\b(?:read|see|from)\b)[^.\n]){0,60}?([\w-]+(?:\.[\w-]+)*\.md)\b", re.I)
+
+
+def rationale_pattern(view, candidates):
+    named = {m.lower() for s in candidates for m in ASSIGNED_OUTPUT.findall(view.spawn_brief(s))} - {"readme.md"}
+    return re.compile("|".join([r"rationale", r"design[-_ ]?notes"] + [re.escape(n) for n in sorted(named)]), re.I)
 
 
 @oracle("arena-lead-reads-rationales-and-base")
 def arena_lead_reads(view):
-    judges = judge_spawns(view)
-    after = max((s.get("seq", 0) for s in judges), default=0)
+    candidates, judges = candidate_spawns(view), judge_spawns(view)
+    after = max((s.get("seq") or 0 for s in candidates), default=0)
     reads = []
     for call in view.tool_calls:
-        if call.get("seq", 0) <= after:
+        if call.get("seq", 0) <= after or call.get("name") in EDIT_TOOLS:
             continue
         given = call.get("input") or {}
-        for field in PATH_FIELDS:
-            if isinstance(given.get(field), str):
-                reads.append(given[field])
         if call.get("name") in SHELL_TOOLS:
-            reads += shell_paths(str(given.get(SHELL_TOOLS[call["name"]]) or ""))
-    rationales = [p for p in reads if re.search(r"rationale|synthesis", p, re.I)]
+            command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
+            written = {os.path.normpath(w) for w in shell_writes(command) + python_writes(command)}
+            for token in resolved_shell_paths(strip_heredocs(command)):
+                if ASSIGNMENT.fullmatch(" " + token):
+                    continue
+                paths = re.findall(r"['\"]([^'\"]*[/.][^'\"]*)['\"]", token) if "(" in token else [token]
+                reads += [p for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
+        else:
+            reads += [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
+    named = rationale_pattern(view, candidates)
+    rationales = [p for p in reads if named.search(p) and not skill_rel(p)]
     others = [p for p in reads if p not in rationales and not skill_rel(p)]
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
-    evidence = [f"rationale files read after the judge: {len(rationales)}", f"other candidate files read: {len(others)}"]
+    evidence = [f"rationale files read after the last candidate spawn: {len(rationales)}", f"other candidate files read: {len(others)}"]
     if not judges:
         return inconclusive("no judge spawn to anchor the read phase", *evidence)
     if len(rationales) >= want and others:
@@ -2395,7 +2600,10 @@ def arena_second_opinion(view):
 
 
 def runner_spawns(view):
-    return view.spawns_where("runner", "candidate design", "architect", "design sketch", "design package")
+    needles = ["runner", "candidate design", "design candidate", "architect", "design sketch", "design package"]
+    if view.skill_read("arena") or view.skill_read("architect"):
+        needles.append("candidate")
+    return [s for s in view.spawns_where(*needles, reply=False) if not view.supports(s)]
 
 
 @oracle("architect-grounds-with-how-and-why")
@@ -2415,11 +2623,13 @@ def architect_grounds(view):
 def architect_arena(view):
     runners = runner_spawns(view)
     read = view.skill_read("arena")
-    callers = sum(1 for s in runners if re.search(r"caller|usage", s.get("prompt_head") or "", re.I))
-    evidence = [f"arena skill read: {read}", f"runner spawns: {len(runners)}", f"briefs that lead with caller usage: {callers}"]
+    callers = sum(1 for s in runners if re.search(r"caller|usage", view.spawn_brief(s), re.I))
+    wave = view.waves(runners)[0] if runners else []
+    evidence = [f"arena skill read: {read}", f"runner spawns: {len(runners)}", f"first runner wave: {len(wave)}",
+                f"briefs that lead with caller usage: {callers}"]
     if len(runners) < 2:
         return inconclusive("run killed before the sketch fan-out", *evidence) if view.killed else failed("fewer than two runner sketches", *evidence)
-    if not view.one_message(runners):
+    if len(wave) < 2:
         return failed("runners spawned sequentially", *evidence)
     if view.encrypted():
         return inconclusive("runner briefs encrypted; caller-usage-first cannot be read", *evidence)
@@ -2444,10 +2654,11 @@ def architect_sketch_first(view):
 @oracle("architect-checkpoint-opt-in")
 def architect_checkpoint(view):
     sources = view.source_edits()
+    tree = sorted(p for p in view.changed_since_base() or () if view.classify(p) == "source")
     low = view.final_reply.lower()
     pause = bool(re.search(r"sign-off|approve|before implementing|proceed\?|shall i implement|waiting", low))
-    evidence = [f"source edits: {[e[1] for e in sources][:3]}", f"reply pauses for sign-off: {pause}"]
-    if sources:
+    evidence = [f"source edits: {[e[1] for e in sources][:3]}", f"project source changed since the fixture: {tree[:3]}", f"reply pauses for sign-off: {pause}"]
+    if sources or tree:
         return failed("checkpoint requested but implementation started", *evidence)
     if not view.final_reply:
         return inconclusive("no final reply" + (" (run killed)" if view.killed else ""), *evidence)

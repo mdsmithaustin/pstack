@@ -1118,12 +1118,12 @@
    "check": "live",
    "claim": "A prompt naming /how first and /why second runs them in that order and each report names the sources it searched.",
    "harness_sensitive": true,
-   "live_case": "fixture repo with git history and an issue-tracker MCP; prompt `/why was the retry limit set to five?`; pass when investigators run in parallel per evidence category, the report cites sources, labels inference, and reports empty categories.",
+   "live_case": "relay fixture with the relay-init-break history; prompt `use /how first to understand how this initialization works. then use /why to figure out why it broke recently.`; pass when how runs before why and the reply names the sources searched.",
    "owners": [
     "skills/how/SKILL.md",
     "skills/why/SKILL.md"
    ],
-   "scenario": "why-run"
+   "scenario": "how-then-why-run"
   },
   "how-why-reports-name-sources-searched": {
    "check": "live",
@@ -2509,7 +2509,8 @@
    "harness_sensitive": true,
    "live_case": "TypeScript fixture; prompt `/poteto-mode add a flag to src/cli.ts`; pass when the transcript shows typescript-best-practices read without the user naming it.",
    "owners": [
-    "skills/typescript-best-practices/SKILL.md"
+    "skills/typescript-best-practices/SKILL.md",
+    "skills/typescript-best-practices/agents/openai.yaml"
    ],
    "scenario": "ts-autoload"
   },
@@ -2598,12 +2599,12 @@
    "check": "live",
    "claim": "`do why first then how` runs why and then how in that order.",
    "harness_sensitive": true,
-   "live_case": "fixture repo with git history and an issue-tracker MCP; prompt `/why was the retry limit set to five?`; pass when investigators run in parallel per evidence category, the report cites sources, labels inference, and reports empty categories.",
+   "live_case": "relay fixture with the relay-retry-limit history; prompt `do why first then how. why is the retry limit five, and how does the import use it?`; pass when the why skill loads or its investigators spawn before the how skill loads or its explainer spawns.",
    "owners": [
     "skills/why/SKILL.md",
     "skills/how/SKILL.md"
    ],
-   "scenario": "why-run"
+   "scenario": "why-then-how-run"
   },
   "worklist-falls-back-to-numbered-list": {
    "check": "live",

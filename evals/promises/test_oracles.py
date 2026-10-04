@@ -589,21 +589,36 @@ class InterrogateSwarmArena(unittest.TestCase):
         self.assertEqual(grade("arena-candidate-count-adjustable", three, case)["verdict"], FAIL)
         self.assertEqual(grade("arena-lead-reads-rationales-and-base", trace, case)["verdict"], FAIL)
 
-    def test_arena_judge_sharing_a_candidate_model_fails_when_candidates_span_models(self):
-        case = load_case("arena-run")
-        models = ["opus", "fable", "opus", "fable", "opus"]
+    def judged_by(self, lead, models, judge_model):
         candidates = [{"seq": i, "tool": "Agent", "persona": "poteto-agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/relay-key/candidate-{i}"}
                       for i, m in enumerate(models, 1)]
-        events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, 6)]
-        reply = "Base: candidate 3. Grafts: the hashing from candidate 1. Verified with the import run."
+        events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, len(models) + 1)]
+        judge = {"seq": 9, "tool": "Agent", "persona": None, "model": judge_model, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
+        trace = minimal(events=events, spawns=candidates + [judge], final_reply="Base: candidate 3. Grafts: the hashing from candidate 1.")
+        trace["model"] = lead
+        return grade("arena-readonly-cross-judge", trace, load_case("arena-run"))
 
-        def judged_by(model):
-            judge = {"seq": 9, "tool": "Agent", "persona": None, "model": model, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
-            return minimal(events=events, spawns=candidates + [judge], final_reply=reply)
+    def test_a_judge_on_another_tier_than_the_lead_passes_even_when_it_shares_a_candidate_model(self):
+        result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], "fable")
+        self.assertEqual(result["verdict"], PASS, result)
+        codex = self.judged_by("gpt-6.1-sol", ["gpt-6.1-sol", "gpt-6.1-sol", "gpt-6-luna", "gpt-6.1-sol", "gpt-6.1-sol"], "gpt-6-luna")
+        self.assertEqual(codex["verdict"], PASS, codex)
 
-        shared = grade("arena-readonly-cross-judge", judged_by("opus"), case)
-        self.assertEqual(shared["verdict"], FAIL, shared)
-        self.assertEqual(grade("arena-readonly-cross-judge", judged_by("sonnet"), case)["verdict"], PASS)
+    def test_a_judge_on_the_leads_model_fails_when_the_run_used_another(self):
+        result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], "opus")
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["failures"], ["judge runs on the lead's model although the run used another"])
+
+    def test_a_judge_on_the_leads_model_passes_when_no_other_model_was_used(self):
+        result = self.judged_by("gpt-5.6-sol", ["gpt-5.6-sol"] * 5, "gpt-5.6-sol")
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_judge_with_no_model_inherits_the_leads_and_fails_when_the_run_used_another(self):
+        result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], None)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_grok_build_is_the_same_tier_as_grok(self):
+        self.assertTrue(oracles.same_model("grok-4.7", "grok-4.7-build"))
 
     def test_two_reviewers_with_one_label_are_not_differentiated_arms(self):
         case = load_case("interrogate-run")
@@ -659,6 +674,39 @@ class SmallSkills(unittest.TestCase):
         self.assertEqual(grade("poteto-tdd-failing-test-first", good, case)["verdict"], PASS)
         no_red = minimal(events=[edit(0, "/w/tests/test_export.py"), edit(1, "/w/rollup/export.py")] + bash(2, "python3 -m unittest", head="OK"))
         self.assertEqual(grade("poteto-tdd-failing-test-first", no_red, case)["verdict"], FAIL)
+
+    def test_a_rerun_between_two_writes_in_one_command_does_not_cover_the_second(self):
+        case = load_case("tdd-run")
+        trace = minimal(events=[edit(0, "/w/tests/test_export.py")] + bash(1, "python3 -m unittest discover -s tests", ok=False, head="FAIL: test_limit")
+                        + bash(3, "echo x > rollup/export.py; python3 -m unittest discover -s tests; echo y > rollup/load.py", head="OK"))
+        self.assertNotEqual(grade("poteto-tdd-failing-test-first", trace, case)["verdict"], PASS)
+
+    def review_verdict(self, line):
+        case = load_case("doc-impact-run")
+        trace = minimal(events=[dict(text(1, f"Done. Author result: independent review required. {line}"), turn=0),
+                                dict(text(3, "Review mode run."), turn=1)],
+                        spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+        return grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"]
+
+    def test_a_negation_in_an_earlier_sentence_does_not_void_a_pass(self):
+        for line in ("No findings. The review passed.", "No files edited. Pass.", "There were no blockers; the review passed."):
+            self.assertEqual(self.review_verdict(line), PASS, line)
+
+    def test_a_failed_review_then_a_passed_re_review_is_a_pass(self):
+        for line in ("The first review failed, then the re-review passed.", "The first review failed; the second passed.",
+                     "The review did not find any issues and passed."):
+            self.assertEqual(self.review_verdict(line), PASS, line)
+
+    def test_cannot_and_failed_to_pass_are_not_a_pass(self):
+        for line in ("The review cannot pass until the README changes.", "The review failed to pass.", "The reviewer was unable to pass it."):
+            self.assertNotEqual(self.review_verdict(line), PASS, line)
+
+    def test_a_negated_review_verdict_is_not_a_pass(self):
+        case = load_case("doc-impact-run")
+        trace = minimal(events=[dict(text(1, "Done. Author result: independent review required. The independent review has not passed."), turn=0),
+                                dict(text(3, "Review mode run."), turn=1)],
+                        spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+        self.assertNotEqual(grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"], PASS)
 
     def test_ts_autoload(self):
         case = load_case("ts-autoload")
@@ -1319,6 +1367,1016 @@ class OracleFalseVerdicts(unittest.TestCase):
         self.assertEqual(grade("poteto-mode-sticky", minimal(events=events, harness="grok"), case)["verdict"], FAIL)
 
 
+def skill_call(seq, name, ok=True, args=""):
+    return [{"seq": seq, "kind": "tool_call", "name": "Skill", "input": {"skill": name, "args": args}, "id": f"s{seq}"},
+            {"seq": seq + 1, "kind": "tool_result", "name": "Skill", "ok": ok, "output_head": f"Launching skill: {name}", "id": f"s{seq}"}]
+
+
+class SkillToolLoads(unittest.TestCase):
+    def test_skill_tool_loads_order_why_then_how(self):
+        trace = minimal(events=skill_call(1, "why", args="why is the retry limit five?") + bash(3, "git log")
+                        + [text(11, "I've finished the why part. Next I'm loading the how skill.")] + skill_call(12, "how"),
+                        final_reply="Why: five covers the rebuild. How: ingest calls retry().")
+        result = grade("why-then-how-composition", trace, load_case("why-then-how-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"], ["first how evidence at seq 12", "first why evidence at seq 1"])
+
+    def test_a_narrow_why_skill_load_is_teach_evidence(self):
+        trace = minimal(events=skill_call(9, "why", args="Narrow scope: why did commit 23aa153 change this?") + bash(11, "git show 23aa153"),
+                        final_reply="```mermaid\ngraph LR\na-->b\n```")
+        result = grade("poteto-teach-runs-how-and-why", trace, load_case("teach-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("why evidence at seq 9", result["evidence"])
+
+    def test_a_refused_skill_load_is_not_a_read(self):
+        trace = minimal(events=skill_call(1, "why", ok=False) + skill_call(12, "how"), final_reply="done")
+        result = grade("why-then-how-composition", trace, load_case("why-then-how-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+def codex_spawn(seq, task, reply, model="gpt-6.1-sol"):
+    events = [{"seq": seq, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": task, "model": model, "message": "gAAAAABqwbhN"}},
+              {"seq": seq + 1, "kind": "tool_call", "name": "SubAgentActivity", "input": {"kind": "started", "agent_path": f"/root/{task}"}},
+              {"seq": seq + 2, "kind": "tool_result", "name": "spawn_agent", "ok": True, "output_head": f"{{\"task_name\":\"/root/{task}\"}}"}]
+    spawn = {"seq": seq, "tool": "spawn_agent", "model": model, "prompt_head": None, "x_prompt_encrypted": True, "x_child_first_reply": reply}
+    return events, spawn
+
+
+def delegate(seq, head, reply=""):
+    return {"seq": seq, "tool": "delegate_task", "prompt_head": head, "x_child_first_reply": reply}
+
+
+class SpawnIdentity(unittest.TestCase):
+    def test_codex_investigators_are_named_by_their_first_reply(self):
+        events, spawns = [], []
+        for seq, task, reply in ((29, "retry_history", "### Source\n\nSource control and tracked repository files. Read-only."),
+                                 (32, "retry_issues", "### Source\n\nIssue / ticket tracker through GitHub MCP, read-only."),
+                                 (35, "retry_docs", "### Source\n\nLong-form documents through Pages MCP. Read-only."),
+                                 (59, "retry_synthesis", "Five was chosen to cover the partner mirror's nightly rebuild.\n\n[Direct] Commit 401725e")):
+            more, spawn = codex_spawn(seq, task, reply)
+            events += more
+            spawns.append(spawn)
+        events.insert(9, {"seq": 40, "kind": "tool_call", "name": "wait_agent", "input": {}})
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][:2], ["investigator spawns: 3", "one message: True"])
+
+    def test_a_hyphenated_source_control_investigator_counts_and_the_synthesizer_does_not(self):
+        spawns = [delegate(55, "Investigate source-control evidence for why the retry limit was raised to five."),
+                  delegate(67, "Synthesize a confidence-calibrated answer from the supplied investigation.")]
+        events = [{"seq": 55, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(60, "The history is in."),
+                  {"seq": 67, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, harness="hermes"), load_case("why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+    def test_a_synthesizer_that_names_investigators_is_not_one(self):
+        spawns = [{"seq": 60, "tool": "spawn_subagent", "prompt_head": "You are investigating the historical context and motivation behind a piece of code. "
+                   "A separate synthesizer combines your findings with other investigators' into a final answer."},
+                  {"seq": 68, "tool": "spawn_subagent", "prompt_head": "You are answering a \"why\" question about a piece of code by synthesizing findings from investigators."}]
+        events = [{"seq": 60, "kind": "tool_call", "name": "spawn_subagent", "input": {}}, text(66, "The source-control search is in."),
+                  {"seq": 68, "kind": "tool_call", "name": "spawn_subagent", "input": {}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, harness="grok"), load_case("why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+    def test_architecture_is_not_architect_and_the_cross_judge_is_not_a_runner(self):
+        spawns = [delegate(89, "Investigate source-control and in-repo rationale for the current import architecture. Read-only."),
+                  *[delegate(107, f"Produce caller-first candidate {c}: a deep import architecture. Read-only: do not edit files.") for c in "ABC"],
+                  delegate(123, "Cross-judge the three import-pipeline architecture candidates against the caller-first rubric."),
+                  delegate(125, "Synthesize the final caller-first import-pipeline design from the arena outcome.")]
+        events = [read(80, "arena/SKILL.md"), {"seq": 89, "kind": "tool_call", "name": "delegate_task", "input": {}},
+                  {"seq": 95, "kind": "tool_call", "name": "read_file", "input": {"path": "/w/relay/ingest.py"}},
+                  {"seq": 107, "kind": "tool_call", "name": "delegate_task", "input": {}},
+                  {"seq": 110, "kind": "tool_call", "name": "terminal", "input": {"command": "ls /tmp"}},
+                  {"seq": 123, "kind": "tool_call", "name": "delegate_task", "input": {}},
+                  {"seq": 125, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("architect-runs-arena-for-sketches", minimal(events=events, spawns=spawns, harness="hermes"), load_case("architect-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("runner spawns: 3", result["evidence"])
+
+    def test_a_later_extra_runner_keeps_the_first_wave_and_the_full_brief_carries_callers(self):
+        brief = "You are an architect runner (role: `architect runners`, arm {n}). READ-ONLY on the repo."
+        full = brief + " ... the user said: i care most about how callers use it. Write usage first."
+        calls = {n: {"seq": seq, "kind": "tool_call", "name": "Agent", "input": {"description": f"Architect runner {n}", "prompt": full.format(n=n)}}
+                 for n, seq in ((1, 21), (2, 23), (3, 25), (4, 39))}
+        spawns = [{"seq": c["seq"], "tool": "Agent", "prompt_head": brief.format(n=n)} for n, c in calls.items()]
+        spawns.append({"seq": 45, "tool": "Agent", "prompt_head": "You are the arena cross-judge (role: `arena cross-judge pool`). READ-ONLY. Four candidate designs are at /tmp/architect-relay."})
+        events = [read(5, "arena/SKILL.md"), calls[1], calls[2], calls[3], text(27, "All three sketch runners are working in parallel."),
+                  text(38, "These three differ only in policy details, so I'm spawning a fourth runner."), calls[4],
+                  {"seq": 45, "kind": "tool_call", "name": "Agent", "input": {"description": "Arena cross-judge (fable)"}}]
+        result = grade("architect-runs-arena-for-sketches", minimal(events=events, spawns=spawns), load_case("architect-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("briefs that lead with caller usage: 4", result["evidence"])
+
+    def test_sequential_runners_still_fail(self):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": "You are an architect runner. Write caller usage first."} for s in (21, 30)]
+        events = [read(5, "arena/SKILL.md"), {"seq": 21, "kind": "tool_call", "name": "Agent", "input": {}}, text(25, "First one is running."),
+                  {"seq": 30, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("architect-runs-arena-for-sketches", minimal(events=events, spawns=spawns), load_case("architect-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_encrypted_candidate_runners_cannot_show_caller_usage(self):
+        events, spawns = [], []
+        for seq, task in ((92, "candidate_one_call"), (95, "candidate_prepared"), (98, "candidate_importer")):
+            more, spawn = codex_spawn(seq, task, "")
+            events += more
+            spawns.append(spawn)
+        trace = minimal(events=[read(5, "arena/SKILL.md")] + events, spawns=spawns, harness="codex")
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("runner spawns: 3", result["evidence"])
+
+
+class FanOutStructure(unittest.TestCase):
+    def test_encrypted_explorers_are_known_by_a_parallel_wave_then_a_lone_spawn(self):
+        events, spawns = [], []
+        for seq, task, reply in ((22, "ingest_shape", "I'm tracing the CLI, ingest, and shape code."),
+                                 (25, "render_publish", "I'll trace the render and publish code and report to the agent preparing the explanation."),
+                                 (42, "pipeline_explanation", "bin/kiln converts a notes file into one file per tag.")):
+            more, spawn = codex_spawn(seq, task, reply)
+            events += more
+            spawns.append(spawn)
+        events[6:6] = [{"seq": 30, "kind": "tool_call", "name": "wait_agent", "input": {}}, text(38, "The CLI runs four stages.")]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="codex"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("explorers found by structure: a wave of 2 at seq 22, then a spawn at seq 42", result["evidence"])
+
+    def test_paraphrased_explorers_in_one_delegate_call_then_a_synthesizer(self):
+        spawns = [delegate(27, "Trace the complete ingest-to-publish pipeline. Return factual findings with file paths. Read-only: do not edit or write files."),
+                  delegate(27, "Audit the verification evidence for the full pipeline. Do not modify anything."),
+                  delegate(41, "Synthesize a direct answer stating whether the full pipeline works.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "Both reports are in."),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_readable_wave_of_judges_is_not_explorers(self):
+        spawns = [delegate(27, "Read-only. You are a judge. Score the two designs against the rubric."),
+                  delegate(27, "Read-only. You are a judge. Score the two designs for risk."),
+                  delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "Both scores are in."),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_one_explainer_alone_is_still_no_fan_out(self):
+        spawns = [{"seq": 9, "tool": "Agent", "prompt_head": "Read-only. You are writing an architectural explanation for a senior engineer."}]
+        events = [{"seq": 9, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, final_reply="x"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_paraphrased_spawns_one_at_a_time_are_not_a_fan_out(self):
+        spawns = [delegate(27, "Trace the ingest stage."), delegate(31, "Trace the render stage."), delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(29, "One is out."),
+                  {"seq": 31, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "Both are in."),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class ArenaLeadReads(unittest.TestCase):
+    def test_brief_named_design_notes_read_in_a_loop_and_after_the_judge_count(self):
+        brief = "You're working in the relay repo. Settle the cache key format. Write `DESIGN_NOTES.md` with your reasoning."
+        calls = [{"seq": seq, "kind": "tool_call", "name": "Agent", "input": {"description": f"Cache key design {c}", "prompt": brief}}
+                 for seq, c in zip((7, 9, 11, 13, 15), "ABCDE")]
+        spawns = [{"seq": c["seq"], "tool": "Agent", "model": "opus", "prompt_head": brief} for c in calls]
+        spawns.append({"seq": 26, "tool": "Agent", "model": "fable", "prompt_head": "READ-ONLY. You are judging five independent implementations against the rubric."})
+        loop = 'W="$PWD/.claude/worktrees"; for x in a1:A a2:B a3:C a4:D; do id=${x%%:*}; cat "$W/agent-$id/DESIGN_NOTES.md"; done'
+        events = (calls + bash(22, loop) + [{"seq": 26, "kind": "tool_call", "name": "Agent", "input": {}}]
+                  + bash(28, 'cat "$PWD/.claude/worktrees/agent-a5/DESIGN_NOTES.md"')
+                  + bash(30, 'cd "$PWD/.claude/worktrees/agent-a5"; cat relay/cache.py; cat tests/test_cache.py')
+                  + [{"seq": 55, "kind": "tool_call", "name": "Write", "input": {"file_path": "/tmp/arena-cache-key/SYNTHESIS.md", "content": "x"}}])
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 5")
+
+    def test_the_leads_own_writes_are_not_rationale_reads(self):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": "Candidate: write rationale.md in /tmp/k/c{s}"} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = ([{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2, 3, 4, 5, 9)]
+                  + [{"seq": 20, "kind": "tool_call", "name": "Write", "input": {"file_path": f"/tmp/k/c{n}/rationale.md"}} for n in range(1, 6)]
+                  + bash(30, "cat > /tmp/k/rationale-summary.md <<'EOF'\nsummary\nEOF") + bash(32, "cat /tmp/k/c1/relay/cache.py"))
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+    def test_encrypted_candidates_with_design_notes_read_one_by_one(self):
+        events, spawns = [], []
+        for seq, task in ((40, "cedar"), (43, "maple"), (46, "birch"), (80, "elm"), (103, "ash"), (140, "cross_judge")):
+            more, spawn = codex_spawn(seq, task, "")
+            events += more
+            spawns.append(spawn)
+        for n, label in enumerate(("maple", "cedar", "birch", "elm", "ash")):
+            events += [{"seq": 144 + 2 * n, "kind": "tool_call", "name": "exec_command", "input": {"cmd": f"cat /tmp/relay-keys/{label}/design-notes.md"}}]
+        events += [{"seq": 156, "kind": "tool_call", "name": "exec_command", "input": {"cmd": "cat /tmp/relay-keys/cedar/relay/cache.py /tmp/relay-keys/cedar/README.md"}}]
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns, harness="codex"), load_case("arena-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+
+class ReplyWording(unittest.TestCase):
+    def test_a_source_coverage_list_is_a_sources_section(self):
+        reply = ("The caller adjustment was omitted in 3f2a1c9.\n\nSource coverage:\n\n- Git: reviewed all four commits, diffs, blame.\n"
+                 "- Issues: repository identity is unavailable.\n- Team chat: no matching tool available.")
+        result = grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("how-then-why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        bare = grade("how-why-reports-name-sources-searched", minimal(final_reply="The source of the bug is in git commit 3f2a1c9."), load_case("how-then-why-run"))
+        self.assertEqual(bare["verdict"], FAIL, bare)
+
+    def arena(self, reply):
+        candidates = [{"seq": 43, "tool": "delegate_task", "prompt_head": f"Design one candidate {n}. Write under /tmp/k/candidate-{n}/"} for n in range(1, 6)]
+        judge = {"seq": 49, "tool": "delegate_task", "prompt_head": "Independently cross-judge all five candidates. Read-only."}
+        events = [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {}}, {"seq": 49, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        return grade("arena-fans-out-and-grafts", minimal(events=events, spawns=candidates + [judge], final_reply=reply, harness="hermes"), load_case("arena-run"))
+
+    def test_a_selected_candidate_with_grafts_names_the_base(self):
+        result = self.arena("Arena result\n- Candidate 1 was selected, with strict type validation grafted from candidate 2.\n- Verified: 8 unit tests passed.")
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_an_earlier_negation_in_the_sentence_does_not_cancel_a_pick(self):
+        for line in ("Candidate 2 was not selected, but candidate 1 was selected, with retries grafted from candidate 3.",
+                     "We did not hesitate; candidate 1 was selected, with retries grafted from candidate 3.",
+                     "Neither run converged; candidate 1 was selected anyway, with retries grafted from candidate 3."):
+            result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
+            self.assertEqual(result["verdict"], PASS, (line, result))
+
+    def test_a_coordinated_negation_is_not_a_pick(self):
+        for line in ("Neither candidate 1 nor candidate 2 was selected, and no graft was applied.",
+                     "It was not the case that candidate 1 was selected, and no graft was applied."):
+            result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
+            self.assertEqual(result["verdict"], FAIL, (line, result))
+
+    def test_a_negation_before_and_does_not_cancel_the_pick_after_it(self):
+        result = self.arena("Arena result\n- No clear winner and candidate 1 was selected, with retries grafted from candidate 3.\n- Verified: 8 unit tests passed.")
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_negation_earlier_in_a_run_on_clause_does_not_cancel_a_pick(self):
+        for line in ("I could not decide between them so candidate 1 was selected, with retries grafted from candidate 3.",
+                     "Candidate 2 was not selected because it failed so candidate 1 was selected, with retries grafted from candidate 3.",
+                     "The cross-judge did not agree with me so candidate 1 was selected, with retries grafted from candidate 3."):
+            result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
+            self.assertEqual(result["verdict"], PASS, (line, result))
+
+    def test_a_negated_selection_is_not_a_base(self):
+        result = self.arena("Arena result\n- No candidate 1 was selected and no graft was applied.\n- Verified: 8 unit tests passed.")
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_grafts_without_a_pick_still_fail(self):
+        result = self.arena("Arena result\n- Strict type validation grafted from candidate 2.\n- Verified: 8 unit tests passed.")
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class ArenaWorktrees(unittest.TestCase):
+    GOAL = "Design and implement one candidate for a durable cache-key format. Produce an isolated candidate artifact."
+
+    def hermes_arena(self, setup, with_paths=True, ok=True):
+        def task(n):
+            where = f" Write exactly these files under /w/tmp/arena-cache-key/candidate-{n}/: cache.py, rationale.md." if with_paths else ""
+            return {"goal": self.GOAL, "context": "Repository root: /w/relay. Inspect README.md and relay/cache.py." + where}
+        events = bash(35, setup, ok=ok) + [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(n) for n in range(1, 5)]}},
+                                     {"seq": 45, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(5)]}}]
+        spawns = [{"seq": 43, "tool": "delegate_task", "prompt_head": self.GOAL} for _ in range(4)] + [{"seq": 45, "tool": "delegate_task", "prompt_head": self.GOAL}]
+        return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, harness="hermes"), load_case("arena-run"))
+
+    def test_a_failed_mkdir_makes_no_candidate_dirs(self):
+        dirs = " ".join(f"/w/tmp/arena-cache-key/candidate-{n}" for n in range(1, 6))
+        result = self.hermes_arena(f"mkdir -p {dirs}", with_paths=False, ok=False)
+        self.assertNotEqual(result["verdict"], PASS, result)
+
+    def test_one_mkdir_of_five_candidate_dirs_gives_each_its_own(self):
+        dirs = " ".join(f'"$TMPDIR/arena-cache-key/candidate-{n}"' for n in range(1, 6))
+        result = self.hermes_arena(f'python3 -m unittest discover -s tests && mkdir -p {dirs} "$TMPDIR/arena-cache-key/judge"', with_paths=False)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("candidate directories created: 5", result["evidence"])
+
+    def test_output_paths_past_the_prompt_head_count(self):
+        result = self.hermes_arena("ls", with_paths=True)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("distinct output paths named in briefs: 5", result["evidence"])
+
+    def test_one_shared_directory_still_fails(self):
+        result = self.hermes_arena('mkdir -p "$TMPDIR/arena-cache-key/candidates"', with_paths=False)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class AuthorResultInWorkRecord(unittest.TestCase):
+    def doc_turns(self, record):
+        events = in_turn(0, [{"seq": 0, "kind": "user", "text": "add --json"}, read(7, "documentation-impact/SKILL.md"), record,
+                             text(127, "Added --json. The docs review returned pass.")])
+        events += in_turn(1, [{"seq": 130, "kind": "user", "text": "review the docs"}, read(131, "documentation-impact/SKILL.md"), text(133, "pass")])
+        return minimal(events=events, harness="hermes")
+
+    def test_an_author_result_kept_in_the_worklist_counts(self):
+        todo = {"seq": 125, "kind": "tool_call", "name": "todo_list", "input": {"todos": [
+            {"content": "Run documentation-impact in author mode. Author result: independent review required. Same-model trail review: pass.", "status": "completed"}]}}
+        result = grade("poteto-runs-documentation-impact-before-completion", self.doc_turns(todo), load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_an_author_record_written_by_the_lead_counts(self):
+        record = {"seq": 174, "kind": "tool_call", "name": "exec_command", "input": {"cmd":
+                  "python3 - <<'PY'\nrecord = {'mode': 'author', 'result': 'independent review required', 'reason': 'README changed.'}\nPY"}}
+        result = grade("poteto-runs-documentation-impact-before-completion", self.doc_turns(record), load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def review_turn(self, reply):
+        todo = {"seq": 125, "kind": "tool_call", "name": "todo_list", "input": {"todos": [{"content": "Author result: independent review required."}]}}
+        trace = self.doc_turns(todo)
+        trace["events"] = ([e for e in trace["events"] if e.get("seq") != 127]
+                           + [{"seq": 117, "turn": 0, "kind": "tool_call", "name": "delegate_task", "input": {}}, dict(text(127, reply), turn=0)])
+        trace["spawns"] = [{"seq": 117, "turn": 0, "tool": "delegate_task", "prompt_head": "Run the independent review under documentation-impact review mode."}]
+        return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))
+
+    def test_a_review_reported_as_passed_is_a_pass_verdict(self):
+        result = self.review_turn("Verification.\n- All 4 tests passed.\n- The independent documentation review passed with no findings.")
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_passing_tests_are_not_the_reviews_verdict(self):
+        result = self.review_turn("Verification.\n- All 4 tests passed.\n- The docs are updated.")
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_plan_to_get_any_required_review_is_not_an_author_result(self):
+        todo = {"seq": 40, "kind": "tool_call", "name": "todo_list", "input": {"todos": [
+            {"content": "Run documentation-impact in author mode and obtain any required independent review.", "status": "pending"}]}}
+        result = grade("poteto-runs-documentation-impact-before-completion", self.doc_turns(todo), load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class ProjectRelativePaths(unittest.TestCase):
+    def project(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return make_repo(tmp.name, 1, {"relay/feed.py": "x = 0\n", "README.md": "relay\n"})
+
+    def test_a_test_file_inside_a_project_under_tmp_is_a_test(self):
+        project = self.project()
+        view = oracles.View(minimal(), load_case("tdd-run"), project)
+        self.assertEqual(view.classify(f"{project}/tests/test_main.py"), "test")
+        self.assertEqual(view.classify("/private/tmp/elsewhere/tests/test_main.py"), "scratch")
+
+    def test_a_green_run_in_the_same_command_after_the_fix_counts(self):
+        project = self.project()
+        fix_and_run = "cat > rollup/__main__.py <<'EOF'\nimport argparse\nEOF\npython3 -m unittest discover -s tests -v 2>&1 | tail -8"
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main 2>&1 | tail -25", head="FAIL: test_limit_exports_only_first_n_rows\nFAILED (failures=2)")
+                  + bash(13, fix_and_run, head="test_limit ... ok\nRan 3 tests\n\nOK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_test_run_before_the_write_in_one_command_is_not_the_green_rerun(self):
+        project = self.project()
+        run_then_fix = "python3 -m unittest discover -s tests 2>&1 | tail -3; cat > rollup/__main__.py <<'EOF'\nimport argparse\nEOF"
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main", head="FAIL: test_limit\nFAILED (failures=1)")
+                  + bash(13, run_then_fix, head="Ran 3 tests\n\nOK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_writes_after_cd_into_a_scratch_sketch_are_not_project_edits(self):
+        project = self.project()
+        sketch = f"{project.parent}/tmp/arena-relay/synthesis/sketch"
+        events = (bash(54, f"cd {sketch}/relay && python3 - <<'EOF'\nimport pathlib\np = pathlib.Path(\"_formats.py\"); s = p.read_text()\np.write_text(s)\nEOF")
+                  + bash(56, f"cd {sketch} && sed -i '' \"s/start with a dot/not . or ../\" README.md && grep -n name README.md")
+                  + bash(58, f"cd {sketch} && python3 - <<'EOF'\nimport pathlib\npathlib.Path(\"relay/summarize.py\").write_text(\"x\")\nEOF")
+                  + bash(68, "git status --short && echo clean", head="clean"))
+        reply = "I've stopped before implementing anything. git status is clean again. Approve the design and I'll implement it."
+        result = grade("architect-checkpoint-opt-in", minimal(events=events, final_reply=reply), load_case("architect-checkpoint-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_project_source_edit_still_breaks_the_checkpoint(self):
+        project = self.project()
+        events = bash(54, f"cd {project} && sed -i '' \"s/x = 0/x = 1/\" relay/feed.py")
+        result = grade("architect-checkpoint-opt-in", minimal(events=events, final_reply="Approve the design?"), load_case("architect-checkpoint-run"), project)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class SteerRevert(unittest.TestCase):
+    def steer(self, keep_change):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/export.py": "start = 0\n", "tests/test_export.py": "x = 0\n"})
+        if keep_change:
+            (project / "rollup" / "export.py").write_text("start = 1\n")
+        patch = "*** Begin Patch\n*** Update File: rollup/export.py\n@@\n-    start = 0\n*** End Patch"
+        events = (in_turn(0, [{"seq": 0, "kind": "user", "text": "repro first."}, edit(10, f"{project}/rollup/export.py"), text(117, "Fixed.")])
+                  + in_turn(1, [{"seq": 118, "kind": "user", "text": "i said the goal is to repro. i did not ask for a fix yet."},
+                                {"seq": 121, "kind": "tool_call", "name": "patch", "input": {"mode": "patch", "patch": patch}},
+                                {"seq": 122, "kind": "tool_result", "name": "patch", "ok": True, "output_head": "{\"success\": true}"},
+                                text(127, "I reverted the fix and regression test. The working tree is clean.")]))
+        return grade("steering-prompt-redirects-run", minimal(events=events, harness="hermes"), load_case("steer-repro-run"), project)
+
+    def test_a_revert_to_the_fixture_is_the_redirect(self):
+        result = self.steer(keep_change=False)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_an_edit_that_leaves_source_changed_still_fails(self):
+        result = self.steer(keep_change=True)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class HowWideFallbackGate(unittest.TestCase):
+    def test_a_readable_wave_of_implementers_is_not_an_explorer_fan_out(self):
+        spawns = [delegate(27, "Implement the CSV parser change. Edit src/parse.py and write tests."),
+                  delegate(27, "Implement the exporter change. Edit src/export.py."), delegate(41, "Write the release notes.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_read_only_briefs_that_ask_for_a_fix_are_not_explorers(self):
+        spawns = [delegate(27, "Read-only first, then fix the parser bug in src/parse.py."), delegate(27, "Do not modify tests. Implement the exporter change."),
+                  delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_each_batched_task_needs_its_own_read_only_marker(self):
+        tasks = [{"goal": "Trace the ingest stage.", "context": "Read-only: do not edit or write files."}, {"goal": "Trace the render stage.", "context": "Report what you find."}]
+        spawns = [delegate(27, "Trace the ingest stage."), delegate(27, "Trace the render stage."), delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": tasks}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {"goal": "Write the answer."}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_synthesizer_that_names_explorers_is_not_one(self):
+        explorers = [{"seq": 1, "tool": "Agent", "prompt_head": "You are exploring a codebase. Read-only."} for _ in range(2)]
+        explorers[1] = dict(explorers[1], seq=2)
+        writer = {"seq": 9, "tool": "Agent", "prompt_head": "Synthesize the two explorer reports into an architectural explanation."}
+        events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}},
+                  text(5, "Both are back."), {"seq": 9, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=explorers + [writer], final_reply="x"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+
+class DesignJudgeSignal(unittest.TestCase):
+    def lone_judge(self, head, events=()):
+        spawn = {"seq": 5, "tool": "Agent", "prompt_head": head, "description": "review judge"}
+        return minimal(events=list(events) + [{"seq": 5, "kind": "tool_call", "name": "Agent", "input": {"description": "review judge"}}],
+                       spawns=[spawn], final_reply="done")
+
+    def test_a_lone_review_judge_is_not_the_architect_fan_out(self):
+        trace = self.lone_judge("You are a judge. Review this diff against the rubric: design, naming, tests.")
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_lone_review_judge_does_not_break_the_design_ladder(self):
+        result = grade("design-ladder-spares-small-changes", self.lone_judge("judge: design quality"), load_case("feature-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_lone_judge_after_an_arena_load_is_not_the_fan_out(self):
+        trace = self.lone_judge("Judge this diff against the rubric.", [read(1, "arena/SKILL.md")])
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_lone_judge_naming_three_sketches_is_not_the_fan_out(self):
+        for head in ("You are a judge. Score the three sketches against the rubric: naming, tests.",
+                     "You are a judge. Judge whether the two designs in the doc still match the rubric."):
+            result = grade("poteto-mode-triggers-architect-on-boundary-crossing", self.lone_judge(head), load_case("feature-boundary-run"))
+            self.assertEqual(result["verdict"], FAIL, (head, result))
+            self.assertEqual(grade("design-ladder-spares-small-changes", self.lone_judge(head), load_case("feature-run"))["verdict"], PASS)
+
+    def test_two_design_sketches_then_a_judge_are_the_fan_out(self):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": f"Design sketch {s} for the --json output."} for s in (2, 3)]
+        spawns.append({"seq": 5, "tool": "Agent", "prompt_head": "You are the cross-judge. Score the design sketches against the rubric."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (2, 3)] + [text(4, "Both are back."),
+                  {"seq": 5, "kind": "tool_call", "name": "Agent", "input": {}}]
+        trace = minimal(events=events, spawns=spawns, final_reply="done")
+        self.assertEqual(grade("design-ladder-spares-small-changes", trace, load_case("feature-run"))["verdict"], FAIL)
+        self.assertEqual(grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, load_case("feature-boundary-run"))["verdict"], PASS)
+
+
+class CandidateNeedle(unittest.TestCase):
+    def test_release_candidates_are_not_design_runners(self):
+        spawns = [{"seq": 5, "tool": "Agent", "prompt_head": "Check release candidate 1 build", "description": "rc1"},
+                  {"seq": 6, "tool": "Agent", "prompt_head": "Check release candidate 2 build", "description": "rc2"}]
+        events = [{"seq": 5, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 6, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=spawns, final_reply="done"),
+                       load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def codex_candidates(self, loaded):
+        events, spawns = [], []
+        for seq, task in ((92, "candidate_one_call"), (95, "candidate_prepared"), (98, "candidate_importer")):
+            more, spawn = codex_spawn(seq, task, "")
+            events += more
+            spawns.append(spawn)
+        reads = [read(5, f"{loaded}/SKILL.md")] if loaded else []
+        return grade("architect-runs-arena-for-sketches", minimal(events=reads + events, spawns=spawns, harness="codex"), load_case("architect-run"))
+
+    def test_candidate_task_names_count_after_architect_loads(self):
+        result = self.codex_candidates("architect")
+        self.assertIn("runner spawns: 3", result["evidence"])
+
+    def test_candidate_task_names_alone_are_not_runners(self):
+        result = self.codex_candidates(None)
+        self.assertIn("runner spawns: 0", result["evidence"])
+
+
+class SynthesizerNoun(unittest.TestCase):
+    def test_a_synthesizer_named_by_noun_is_not_an_investigator(self):
+        spawns = [{"seq": 10, "tool": "Agent", "prompt_head": "Source control investigator: search git history for why the retry limit is five. Read-only.",
+                   "description": "git history investigator"},
+                  {"seq": 20, "tool": "Agent", "prompt_head": "Role: synthesizer. Combine the investigators' reports into one answer.", "description": "synthesizer"}]
+        events = [{"seq": 10, "kind": "tool_call", "name": "Agent", "input": {"description": "git history investigator"}}, text(15, "waiting"),
+                  {"seq": 20, "kind": "tool_call", "name": "Agent", "input": {"description": "synthesizer"}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, final_reply="x"), load_case("why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+    def test_a_synthesis_task_is_not_an_investigator(self):
+        spawns = [{"seq": 10, "tool": "Agent", "prompt_head": "Investigate source control for the retry limit.", "task_name": "retry_history"},
+                  {"seq": 20, "tool": "Agent", "prompt_head": "Write the synthesis of the git history findings.", "task_name": "retry_synthesis"}]
+        events = [{"seq": 10, "kind": "tool_call", "name": "Agent", "input": {}}, text(15, "waiting"), {"seq": 20, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, final_reply="x"), load_case("why-run"))
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+
+class UntestedHunks(unittest.TestCase):
+    def project(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return make_repo(tmp.name, 1, {"relay/feed.py": "x = 0\n", "README.md": "relay\n"})
+
+    def test_a_source_change_in_the_tree_breaks_the_checkpoint_without_a_lead_edit(self):
+        project = self.project()
+        (project / "relay" / "feed.py").write_text("x = 1\n")
+        spawn = {"seq": 3, "tool": "Agent", "prompt_head": "Apply the design."}
+        trace = minimal(events=[{"seq": 3, "kind": "tool_call", "name": "Agent", "input": {}}], spawns=[spawn], final_reply="Approve the design?")
+        result = grade("architect-checkpoint-opt-in", trace, load_case("architect-checkpoint-run"), project)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_shell_write_after_cd_out_of_the_project_is_not_a_project_edit(self):
+        project = self.project()
+        trace = minimal(events=bash(1, "cd /private/tmp/sketch && echo 'x = 2' > relay/feed.py"), final_reply="Read only.")
+        result = grade("interrogate-read-only-when-asked", trace, load_case("interrogate-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+        inside = minimal(events=bash(1, f"cd {project} && echo 'x = 2' > relay/feed.py"), final_reply="Read only.")
+        self.assertEqual(grade("interrogate-read-only-when-asked", inside, load_case("interrogate-run"), project)["verdict"], FAIL)
+
+    def test_sed_with_an_empty_backup_suffix_edits_the_named_file(self):
+        project = self.project()
+        trace = minimal(events=bash(1, "sed -i '' \"s/relay/Relay/\" README.md"), final_reply="Approve the design before I implement?")
+        view = oracles.View(trace, load_case("architect-checkpoint-run"), project)
+        self.assertEqual([e[1:] for e in view.edits()], [("README.md", "doc")])
+        self.assertEqual(grade("architect-checkpoint-opt-in", trace, load_case("architect-checkpoint-run"), project)["verdict"], PASS)
+
+    def test_a_hyphenated_source_control_spawn_is_why_evidence(self):
+        spawns = [{"seq": 5, "tool": "delegate_task", "prompt_head": "Investigate source-control history for the init change."}]
+        trace = minimal(events=[read(1, "how/SKILL.md"), {"seq": 5, "kind": "tool_call", "name": "delegate_task", "input": {}}],
+                        spawns=spawns, final_reply="Sources consulted: git log")
+        result = grade("how-then-why-sequence-honored", trace, load_case("how-then-why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_watcher_spawn_is_a_loop_facility(self):
+        spawn = {"seq": 4, "tool": "Agent", "prompt_head": "Start a watcher for the migration build."}
+        trace = minimal(events=[{"seq": 4, "kind": "tool_call", "name": "Agent", "input": {}}], spawns=[spawn], final_reply="x")
+        result = grade("autonomous-run-uses-loop-facility", trace, load_case("overnight-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_fixing_delegate_after_the_repro_is_a_delegated_fix(self):
+        spawn = {"seq": 4, "tool": "Agent", "prompt_head": "Fixing the export retry: resume at the first unaccepted row."}
+        trace = minimal(events=bash(1, "ROLLUP_BUSY_AFTER=2 python3 -m rollup data/orders.csv out.csv") + [{"seq": 4, "kind": "tool_call", "name": "Agent", "input": {}}],
+                        spawns=[spawn])
+        result = grade("bug-fix-reproduces-before-fixing", trace, load_case("bug-fix-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_an_independent_reviewer_spawn_is_the_docs_review(self):
+        events = [dict(text(1, "Author result: independent review required."), turn=0), {"seq": 2, "turn": 0, "kind": "tool_call", "name": "Agent", "input": {}},
+                  dict(text(3, "The docs review returned pass."), turn=0), dict(text(4, "pass"), turn=1)]
+        spawn = {"seq": 2, "turn": 0, "tool": "Agent", "prompt_head": "You are an independent reviewer of the README change."}
+        result = grade("documentation-impact-independent-review-pass-required", minimal(events=events, spawns=[spawn]), load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+
+class ArenaDistinctDirectories(unittest.TestCase):
+    def arena_candidates(self, setup, sealed=False):
+        spawns, events = [], []
+        for n, seq in enumerate((10, 11, 12, 13, 14), 1):
+            head = None if sealed else f"Candidate {n}: design the cache key. Write to /tmp/arena/shared"
+            spawns.append({"seq": seq, "tool": "Agent", "prompt_head": head, "x_prompt_encrypted": sealed, "description": "cand"})
+            events.append({"seq": seq, "kind": "tool_call", "name": "Agent", "input": {"description": "cand"}})
+        trace = minimal(events=bash(5, setup) + events, spawns=spawns, final_reply="x", harness="codex" if sealed else "claude-code")
+        return grade("arena-candidates-own-worktrees", trace, load_case("arena-run"))
+
+    def test_one_directory_made_five_times_is_one_directory(self):
+        result = self.arena_candidates("\n".join(["mkdir -p /tmp/candidate-1"] * 5))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertIn("candidate directories created: 1", result["evidence"])
+
+    def test_encrypted_candidates_sharing_one_directory_are_inconclusive(self):
+        result = self.arena_candidates("mkdir -p /tmp/candidate-1", sealed=True)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_encrypted_candidates_with_a_directory_each_pass(self):
+        made = "D=/tmp/arena; " + " && ".join(f"mkdir -p $D/candidate-{n}" for n in range(1, 6))
+        result = self.arena_candidates(made, sealed=True)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("candidate directories created: 5", result["evidence"])
+
+    def test_named_git_worktrees_each_count_once(self):
+        added = "\n".join(f"git worktree add --detach /tmp/relay-keys/{n} HEAD" for n in ("cedar", "maple", "birch", "elm", "ash"))
+        result = self.arena_candidates(added, sealed=True)
+        self.assertEqual(result["verdict"], PASS, result)
+        again = self.arena_candidates("\n".join(["git worktree add --detach /tmp/relay-keys/cedar HEAD"] * 5), sealed=True)
+        self.assertEqual(again["verdict"], INCONCLUSIVE, again)
+
+
+class WritesThroughVariables(unittest.TestCase):
+    def test_a_write_through_a_shell_variable_is_not_a_rationale_read(self):
+        brief = "Write `DESIGN_NOTES.md` with your reasoning."
+        calls = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"description": f"cand {c}", "prompt": brief}} for s, c in zip((7, 9, 11, 13, 15), "ABCDE")]
+        spawns = [{"seq": c["seq"], "tool": "Agent", "model": "opus", "prompt_head": brief} for c in calls]
+        spawns.append({"seq": 26, "tool": "Agent", "model": "fable", "prompt_head": "READ-ONLY. You are judging five implementations against the rubric."})
+        events = calls + [{"seq": 26, "kind": "tool_call", "name": "Agent", "input": {}}]
+        for n, seq in enumerate(range(30, 40, 2)):
+            events += bash(seq, f'R=/tmp/w/cand-{n}/DESIGN_NOTES.md; cat > "$R" <<EOF\nnotes\nEOF')
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events + bash(50, "cat /tmp/w/x/notes.txt"), spawns=spawns, final_reply="x"),
+                       load_case("arena-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+
+class ReadOnlyWave(unittest.TestCase):
+    def wave(self, heads, sealed=()):
+        spawns = [dict(delegate(27, h), x_prompt_encrypted=n in sealed) for n, h in enumerate(heads)] + [delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+
+    def test_writers_that_spare_one_file_are_not_read_only(self):
+        result = self.wave(["Add a --json flag to src/cli.py and update the parser. Do not modify the README.",
+                            "Refactor src/export.py to share the formatter. Do not modify tests."])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_sparing_one_file_is_not_a_read_only_marker(self):
+        result = self.wave(["Trace the ingest stage. Do not modify the README.", "Trace the render stage. Do not modify tests."])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_read_only_briefs_that_also_say_change_are_not_read_only(self):
+        result = self.wave(["Read-only: do not edit or write files. Trace ingest.", "Do not modify any files. Then change the render docstring."])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_one_sealed_spawn_does_not_vouch_for_a_readable_wave(self):
+        result = self.wave(["Trace the ingest stage and report.", "Trace the render stage and report."], sealed=(0,))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_wave_of_explicit_read_only_tracers_passes(self):
+        result = self.wave(["Trace the ingest stage. Read-only: do not edit or write files.", "Audit the tests. Do not modify anything."])
+        self.assertEqual(result["verdict"], PASS, result)
+
+
+class JudgeAfterExplorers(unittest.TestCase):
+    def test_explorers_then_a_design_worded_reviewer_are_not_the_fan_out(self):
+        spawns = [{"seq": 5, "tool": "Agent", "prompt_head": "Explorer: trace the CLI. Read-only.", "description": "explorer 1"},
+                  {"seq": 6, "tool": "Agent", "prompt_head": "Explorer: trace the store. Read-only.", "description": "explorer 2"},
+                  {"seq": 20, "tool": "Agent", "prompt_head": "You are a judge. Judge whether the implementation matches the design and the rubric.", "description": "review judge"}]
+        events = [{"seq": s["seq"], "kind": "tool_call", "name": "Agent", "input": {"description": s["description"]}} for s in spawns]
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=spawns, final_reply="done"), load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class EditOrders(unittest.TestCase):
+    def wave(self, contexts):
+        tasks = [{"goal": "Trace one stage.", "context": c} for c in contexts]
+        spawns = [delegate(27, "Trace one stage.") for _ in contexts] + [delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": tasks}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {"goal": "Write the answer."}}]
+        return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+
+    def test_an_edit_order_on_its_own_line_counts(self):
+        result = self.wave(["Read-only: do not edit or write files.\n- Fix the parser.", "Read-only: do not edit or write files."])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_more_edit_verbs_disqualify_a_read_only_brief(self):
+        for order in ("Modify src/parse.py to accept CSV.", "Rewrite src/export.py to stream.", "Patch src/export.py.",
+                      "We need you to add a --json flag in src/cli.py.", "Your job is to patch src/export.py.",
+                      "Replace the parser.", "Insert a guard in src/cli.py.", "Apply the diff to src/x.py.", "Append a test to tests/t.py."):
+            result = self.wave(["Read-only: do not edit or write files. " + order, "Read-only: do not edit or write files. Trace the store."])
+            self.assertEqual(result["verdict"], FAIL, (order, result))
+
+    def test_tracing_briefs_still_explore(self):
+        result = self.wave(["Read-only: do not edit or write files. Trace the CLI.\n- Report components.", "Do not modify anything. Audit the tests."])
+        self.assertEqual(result["verdict"], PASS, result)
+
+
+class ArmDirectoryResolution(unittest.TestCase):
+    def arena(self, commands):
+        spawns, events = [], []
+        for n, seq in enumerate((10, 11, 12, 13, 14), 1):
+            spawns.append({"seq": seq, "tool": "Agent", "prompt_head": f"Candidate {n}: design the cache key.", "description": "cand"})
+            events.append({"seq": seq, "kind": "tool_call", "name": "Agent", "input": {"description": "cand"}})
+        setup = [e for n, command in enumerate(commands) for e in bash(2 * n, command)]
+        return grade("arena-candidates-own-worktrees", minimal(events=setup + events, spawns=spawns, final_reply="x"), load_case("arena-run"))
+
+    def test_one_directory_made_in_five_commands_is_one_directory(self):
+        result = self.arena(["mkdir -p /tmp/arena/candidate-1"] * 5)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_spellings_of_one_directory_are_one_directory(self):
+        result = self.arena(["mkdir -p /tmp/arena/candidate-1 /tmp/arena/candidate-1/ /tmp/arena/./candidate-1 /tmp/arena/x/../candidate-1 /tmp/arena//candidate-1"])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_relative_directories_resolve_against_cd(self):
+        result = self.arena([" && ".join(f"cd /tmp/{d} && mkdir -p candidate-1" for d in "abcde")])
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_variable_and_its_value_name_one_directory(self):
+        result = self.arena(["D=/tmp/arena; mkdir -p $D/candidate-1 " + " ".join(f"/tmp/arena/candidate-{n}" for n in range(1, 5))])
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertIn("candidate directories created: 4", result["evidence"])
+
+    def test_a_new_branch_name_is_not_the_worktree_path(self):
+        self.assertEqual(oracles.arm_dirs("git worktree add -b cand-1 /tmp/k/cedar HEAD"), {"/tmp/k/cedar"})
+        self.assertEqual(oracles.arm_dirs("git worktree add -B cand-2 /tmp/k/maple"), {"/tmp/k/maple"})
+
+
+class AssignedRationaleNames(unittest.TestCase):
+    def lead_reads(self, brief, reads):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        events += [e for n, command in enumerate(reads) for e in bash(20 + 2 * n, command)]
+        return grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+
+    def test_a_shared_input_the_brief_names_is_not_a_rationale(self):
+        result = self.lead_reads("Read `REQUIREMENTS.md` first. Write `rationale.md` in your directory.",
+                                 ["cat /tmp/k/REQUIREMENTS.md"] * 5 + ["cat /tmp/k/c1/relay/cache.py"])
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+    def test_a_write_order_that_reads_an_input_first_names_only_its_output(self):
+        result = self.lead_reads("Write your notes after you read `REQUIREMENTS.md`; save them to `rationale.md`.",
+                                 ["cat /tmp/k/REQUIREMENTS.md"] * 5 + ["cat /tmp/k/c1/relay/cache.py"])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_an_output_file_the_brief_assigns_is_a_rationale(self):
+        result = self.lead_reads("Read `REQUIREMENTS.md` first. Save your reasoning to `decision-log.md`.",
+                                 [f"cat /tmp/k/c{n}/decision-log.md" for n in range(1, 6)] + ["cat /tmp/k/c1/relay/cache.py"])
+        self.assertEqual(result["verdict"], PASS, result)
+
+
+class HeredocRerun(unittest.TestCase):
+    def test_a_green_rerun_after_a_python_heredoc_fix_counts(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/__main__.py": "x = 0\n"})
+        fix = "python3 - <<'EOF'\nopen('rollup/__main__.py', 'w').write('x = 1\\n')\nEOF\npython3 -m unittest discover -s tests -v 2>&1 | tail -3"
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main", head="FAIL: test_limit\nFAILED (failures=1)")
+                  + bash(13, fix, head="Ran 3 tests\n\nOK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_heredoc_body_that_mentions_unittest_is_not_a_test_run(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/__main__.py": "x = 0\n"})
+        fix = "python3 - <<'EOF'\nopen('rollup/__main__.py', 'w').write('x = 1\\n')\nimport unittest\nEOF"
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main", head="FAIL: test_limit\nFAILED (failures=1)")
+                  + bash(13, fix, head="OK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+
+class ModelAliasSymmetry(unittest.TestCase):
+    def test_a_short_alias_lead_and_a_full_slug_judge_are_one_model(self):
+        for lead, judge in (("opus", "claude-opus-5-5"), ("claude-opus-5-5", "opus")):
+            candidates = [{"seq": i, "tool": "Agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/k/candidate-{i}"}
+                          for i, m in enumerate(["fable", "sonnet", "fable"], 1)]
+            judge_spawn = {"seq": 9, "tool": "Agent", "model": judge, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
+            events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in (1, 2, 3)]
+            trace = minimal(events=events, spawns=candidates + [judge_spawn], final_reply="Base: candidate 1.")
+            trace["model"] = lead
+            result = grade("arena-readonly-cross-judge", trace, load_case("arena-run"))
+            self.assertEqual(result["verdict"], FAIL, (lead, judge, result))
+
+
+class PythonCwdPerInvocation(unittest.TestCase):
+    def project(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return make_repo(tmp.name, 1, {"relay/feed.py": "x = 0\n"})
+
+    def test_a_python_write_after_cd_into_an_assigned_directory_resolves_there(self):
+        command = "D=/tmp/sketch; cd $D; python3 -c \"open('x.py','w').write('1')\""
+        self.assertEqual(oracles.python_writes(command), ["/tmp/sketch/x.py"])
+
+    def test_a_second_python_heredoc_writes_where_its_own_cd_points(self):
+        project = self.project()
+        command = (f"cd /tmp/sketch && python3 - <<'EOF'\nopen('a.py', 'w').write('x')\nEOF\n"
+                   f"cd {project} && python3 - <<'EOF'\nopen('relay/feed.py', 'w').write('y')\nEOF")
+        result = grade("interrogate-read-only-when-asked", minimal(events=bash(1, command), final_reply="Read only."), load_case("interrogate-run"), project)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_second_inline_python_writes_where_its_own_cd_points(self):
+        project = self.project()
+        command = (f"cd /tmp/sketch && python3 -c \"open('a.py','w').write('x')\"; "
+                   f"cd {project} && python3 -c \"open('relay/feed.py','w').write('y')\"")
+        result = grade("interrogate-read-only-when-asked", minimal(events=bash(1, command), final_reply="Read only."), load_case("interrogate-run"), project)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class PythonWritesAreNotReads(unittest.TestCase):
+    def test_an_inline_python_write_is_not_a_rationale_read(self):
+        brief = "Write `rationale.md` in your directory."
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        for n in range(1, 6):
+            events += bash(18 + 2 * n, f"python3 -c \"open('/tmp/c{n}/rationale.md','w').write('x')\"")
+        events += bash(40, "cat /tmp/c1/relay/cache.py")
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+    def test_a_read_through_a_variable_counts_once(self):
+        brief = "Write `rationale.md` in your directory."
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        for n in range(1, 4):
+            events += bash(18 + 2 * n, f'R=/tmp/c{n}/rationale.md; cat "$R"')
+        events += bash(40, "cat /tmp/c1/relay/cache.py")
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 3")
+
+
+class SealedUnmatchedFanOut(unittest.TestCase):
+    def sealed(self, seqs, texts):
+        events, spawns = [], []
+        for seq in seqs:
+            more, spawn = codex_spawn(seq, f"task_{seq}", "")
+            events += more
+            spawns.append(spawn)
+        for seq, body in texts:
+            events.append(text(seq, body))
+        events.sort(key=lambda e: e["seq"])
+        return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="codex"), load_case("how-wide-run"))
+
+    def test_one_sealed_spawn_fails(self):
+        result = self.sealed([22], [])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_sealed_wave_with_no_later_spawn_fails(self):
+        result = self.sealed([22, 25], [])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_sealed_spawns_sent_one_at_a_time_fail(self):
+        result = self.sealed([10, 20, 30], [(15, "waiting"), (25, "waiting")])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_five_sealed_spawns_in_one_wave_fail(self):
+        result = self.sealed([10, 11, 12, 13, 14, 30], [(20, "waiting")])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_later_sealed_wave_that_could_be_explorers_is_inconclusive(self):
+        result = self.sealed([10, 20, 21, 40], [(15, "waiting"), (30, "waiting")])
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_one_readable_explainer_still_fails(self):
+        spawns = [{"seq": 9, "tool": "Agent", "prompt_head": "Read-only. You are writing an architectural explanation."}]
+        events = [{"seq": 9, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, final_reply="x"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class RationaleReadPaths(unittest.TestCase):
+    def arena_reads(self, commands, brief="Write `design-notes.md` with your reasoning."):
+        calls = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"description": f"cand {c}", "prompt": brief}} for s, c in zip((7, 9, 11, 13, 15), "ABCDE")]
+        spawns = [{"seq": c["seq"], "tool": "Agent", "model": "opus", "prompt_head": brief} for c in calls]
+        spawns.append({"seq": 26, "tool": "Agent", "model": "fable", "prompt_head": "READ-ONLY. You are judging five implementations against the rubric."})
+        events = calls + [{"seq": 26, "kind": "tool_call", "name": "Agent", "input": {}}]
+        for n, command in enumerate(commands):
+            events += bash(30 + 2 * n, command)
+        return grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns, final_reply="x"), load_case("arena-run"))
+
+    def test_f1_a_write_target_inside_a_read_name_does_not_drop_the_read(self):
+        result = self.arena_reads([f"cat /tmp/w/c{n}/design-notes.md > notes.md" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(result["verdict"], PASS, result)
+        same_name = self.arena_reads([f"cat /tmp/w/c{n}/design-notes.md >> /tmp/w/design-notes.md" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(same_name["verdict"], PASS, same_name)
+
+    def test_f1_an_unspaced_redirect_is_a_write_not_a_read(self):
+        result = self.arena_reads([f"echo x >/tmp/w/c{n}/design-notes.md" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_f1_a_python_read_of_a_rationale_counts_and_its_write_does_not(self):
+        reads = self.arena_reads([f"python3 -c \"print(open('/tmp/w/c{n}/design-notes.md').read())\"" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(reads["verdict"], PASS, reads)
+        writes = self.arena_reads([f"python3 -c \"open('/tmp/w/c{n}/design-notes.md','w').write('x')\"" for n in range(5)] + ["cat relay/cache.py"])
+        self.assertEqual(writes["verdict"], FAIL, writes)
+
+
+class RoleEvidence(unittest.TestCase):
+    def sealed(self, seq, reply, task="t", model="gpt-6.1-sol"):
+        return {"seq": seq, "tool": "spawn_agent", "model": model, "prompt_head": None, "x_prompt_encrypted": True, "x_child_first_reply": reply, "task_name": task}
+
+    def test_f3_a_first_reply_that_cites_the_architect_design_is_not_a_runner(self):
+        spawns = [self.sealed(10, "I'll implement the change following the architect design."), self.sealed(10, "I'll write tests following the architect design.")]
+        events = [{"seq": 10, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": "t"}}]
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=spawns, harness="codex", final_reply="done"),
+                       load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_f7_a_candidate_that_mentions_the_rubric_is_not_a_judge(self):
+        spawns = [self.sealed(10 + n, "I'll design to the rubric and score my own approach.") for n in range(5)]
+        events = [{"seq": s["seq"], "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": "t"}} for s in spawns]
+        result = grade("arena-candidate-count-adjustable", minimal(events=events, spawns=spawns, harness="codex"), load_case("arena-run"))
+        self.assertIn("candidate spawns: 5 (wanted 5)", result["evidence"])
+        self.assertIn("judge spawns: 0", result["evidence"])
+
+
+class StatedAuthorResult(unittest.TestCase):
+    def doc_turn(self, events):
+        trace_events = (in_turn(0, [{"seq": 0, "kind": "user", "text": "add --json"}] + events + [text(50, "Done.")])
+                        + in_turn(1, [{"seq": 60, "kind": "user", "text": "review"}, text(61, "x")]))
+        return grade("poteto-runs-documentation-impact-before-completion", minimal(events=trace_events, final_reply="x"), load_case("doc-impact-run"))
+
+    def test_f4_a_plan_item_naming_the_phrase_is_not_an_author_result(self):
+        todo = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [{"content": "Decide whether independent review required, then run it"}]}}
+        result = self.doc_turn([read(1, "documentation-impact/SKILL.md"), todo])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_f4_a_grep_of_the_skill_text_is_not_an_author_result(self):
+        result = self.doc_turn([read(1, "documentation-impact/SKILL.md")] + bash(3, "grep -n 'independent review required' skills/documentation-impact/SKILL.md"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class WorktreeRelativeEdits(unittest.TestCase):
+    def steer(self, path_of, worktree=False):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/export.py": "start = 0\n", "tests/test_export.py": "x = 0\n"})
+        changed = project / "rollup" / "export.py"
+        if worktree:
+            tree = project / ".worktrees" / "fix"
+            subprocess.run(["git", "-C", str(project), "worktree", "add", "-q", "-b", "fixbranch", str(tree)], check=True, capture_output=True)
+            changed = tree / "rollup" / "export.py"
+        changed.write_text("start = 1\n")
+        events = (in_turn(0, [{"seq": 0, "kind": "user", "text": "repro first."}, text(117, "Fixed.")])
+                  + in_turn(1, [{"seq": 118, "kind": "user", "text": "i said the goal is to repro."}, edit(121, path_of(changed)), text(127, "Reverted.")]))
+        return grade("steering-prompt-redirects-run", minimal(events=events), load_case("steer-repro-run"), project)
+
+    def test_f6_a_dot_slash_edit_that_stays_changed_still_fails(self):
+        self.assertEqual(self.steer(lambda p: "./rollup/export.py")["verdict"], FAIL)
+        self.assertEqual(self.steer(lambda p: "rollup//export.py")["verdict"], FAIL)
+
+    def test_f6_a_kept_edit_in_a_worktree_inside_the_project_still_fails(self):
+        self.assertEqual(self.steer(str, worktree=True)["verdict"], FAIL)
+
+
+class SourcesLabel(unittest.TestCase):
+    def test_f8_a_sources_label_counts_and_a_coverage_sentence_does_not(self):
+        case = load_case("why-run")
+        for reply, want in (("Sources coverage of the test suite is 80% and git shows nothing.", FAIL),
+                            ("I searched git history. Sources: git log, README.", PASS),
+                            ("The source coverage report is attached; commit 12d7ece raised it.", FAIL),
+                            ("Commit 12d7ece.\n\nSource coverage:\n- Git: all commits.", PASS),
+                            ("Commit 12d7ece. Sources consulted: git log.", PASS),
+                            ("Commit 12d7ece.\n### Sources\n- git log", PASS)):
+            self.assertEqual(grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), case)["verdict"], want, reply)
+
+
+class ModelTiers(unittest.TestCase):
+    def judged(self, judge, lead, models):
+        spawns = [{"seq": 10 + n, "tool": "Agent", "model": m, "prompt_head": "Candidate design"} for n, m in enumerate(models)]
+        spawns.append({"seq": 30, "tool": "Agent", "model": judge, "prompt_head": "READ-ONLY. You are the judge scoring candidates against the rubric."})
+        trace = minimal(events=[{"seq": s["seq"], "kind": "tool_call", "name": "Agent", "input": {}} for s in spawns], spawns=spawns)
+        trace["model"] = lead
+        return grade("arena-readonly-cross-judge", trace, load_case("arena-run"))
+
+    def test_f9_an_unknown_lead_model_is_inconclusive(self):
+        self.assertEqual(self.judged("opus", None, ["opus", "sonnet"])["verdict"], INCONCLUSIVE)
+
+    def test_f9_another_version_of_the_leads_tier_is_the_same_tier(self):
+        self.assertEqual(self.judged("claude-opus-4-1", "claude-opus-5-5", ["opus", "sonnet", "sonnet"])["verdict"], FAIL)
+        self.assertEqual(self.judged("gpt-6-luna", "gpt-6.1-sol", ["gpt-6.1-sol", "gpt-6-luna"])["verdict"], PASS)
+
+
+class SkillNamespaces(unittest.TestCase):
+    def test_f10_a_foreign_namespace_skill_is_not_a_pstack_load(self):
+        events = [{"seq": 1, "kind": "tool_call", "name": "Skill", "input": {"skill": "acme:how"}, "id": "s1"},
+                  {"seq": 2, "kind": "tool_result", "name": "Skill", "ok": True, "output_head": "Launching skill: acme:how", "id": "s1"},
+                  {"seq": 3, "kind": "tool_call", "name": "Skill", "input": {"skill": "pstack:why"}, "id": "s3"},
+                  {"seq": 4, "kind": "tool_result", "name": "Skill", "ok": True, "output_head": "Launching skill: pstack:why", "id": "s3"}]
+        view = oracles.View(minimal(events=events), load_case("why-then-how-run"), None)
+        self.assertEqual(view.lead_reads(), ["why/SKILL.md"])
+
+
+class SubshellWrites(unittest.TestCase):
+    def test_f11_a_write_inside_a_subshell_resolves_against_its_cd(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"relay/feed.py": "x = 0\n"})
+        scratch = minimal(events=bash(1, "(cd /tmp/s && echo hi > a.txt)"), final_reply="Read only.")
+        self.assertEqual(grade("interrogate-read-only-when-asked", scratch, load_case("interrogate-run"), project)["verdict"], PASS)
+        after = minimal(events=bash(1, "(cd /tmp/s && echo hi > a.txt); echo x > relay/feed.py"), final_reply="Read only.")
+        self.assertEqual(grade("interrogate-read-only-when-asked", after, load_case("interrogate-run"), project)["verdict"], FAIL)
+        self.assertEqual(oracles.python_writes("(cd /tmp/s && python3 - <<'EOF'\nopen('a.py','w').write('x')\nEOF\n)"), ["/tmp/s/a.py"])
+        self.assertEqual(oracles.shell_writes("(cd /tmp/s && echo hi > a.txt)"), ["/tmp/s/a.txt"])
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
@@ -1391,5 +2449,16 @@ def install_checks():
     return {check.promise for check in install.CHECKS}
 
 
+class GreenRerun(unittest.TestCase):
+    def test_a_rerun_after_the_fix_counts_when_a_check_also_ran_before_it(self):
+        command = "python3 -m unittest discover -s tests; echo x > rollup/export.py; python3 -m unittest discover -s tests"
+        self.assertTrue(oracles.runs_after_write(command, "rollup/export.py"))
+
+    def test_a_read_before_the_run_is_not_the_write(self):
+        command = "cat rollup/export.py; python3 -m unittest discover -s tests; echo x > rollup/export.py"
+        self.assertFalse(oracles.runs_after_write(command, "rollup/export.py"))
+
+
 if __name__ == "__main__":
     unittest.main()
+
