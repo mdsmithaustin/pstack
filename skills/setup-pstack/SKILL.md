@@ -40,14 +40,14 @@ poteto-mode keeps its worklist in the harness's structured task tool when that t
 
 ### 0c. Check Codex subagents
 
-On Codex, pstack spawns every role through `spawn_agent`, which the `multi_agent` feature provides. Run this check when this skill runs on Codex or the user also runs pstack there. Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`. Report the effective state in the `multi_agent` row. The command applies every config layer and `-c` flag, so read its row rather than the config files. The feature is stable and on by default as of Codex 0.160.0, so the row reads `false` only when a layer turns it off. When it is off, recommend these lines in `config.toml` under `$CODEX_HOME` or `~/.codex/`, or `codex features enable multi_agent`, which writes them:
+On Codex, pstack spawns every role through `spawn_agent`, which the `multi_agent` feature provides. Run this check when this skill runs on Codex or the user also runs pstack there. Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`. Report the effective state in the `multi_agent` row. Spawning works when that row or the `multi_agent_v2` row reads `true`, because v2 also provides `spawn_agent`. The command applies every config layer and `-c` flag, so read its rows rather than the config files. When `codex` is not on PATH, as when this skill runs from another CLI, report the check as unverified. The feature is stable and on by default as of Codex 0.160.0, so the row reads `false` only when a layer turns it off. When both rows read `false`, recommend these lines in `config.toml` under `$CODEX_HOME` or `~/.codex/`, or `codex features enable multi_agent`, which writes them:
 
 ```toml
 [features]
 multi_agent = true
 ```
 
-Edit a file only after the user says yes, and keep every other key. A trusted project's `.codex/config.toml` that sets it to false still wins, so name that file if it holds the key. The change applies from the next session. While the feature is off, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent.
+Edit a file only after the user says yes, and keep every other key. A trusted project's `.codex/config.toml` that sets it to false still wins, so name that file if it holds the key. The change applies from the next session. While both are off, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent.
 
 ### 1. Detect available models and efforts
 
