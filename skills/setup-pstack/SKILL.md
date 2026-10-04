@@ -50,6 +50,7 @@ On Codex, pstack spawns roles natively through `spawn_agent`. As of Codex 0.160.
 Native spawning is on for new sessions when `multi_agent_v2` reads `true`, or when `multi_agent` reads `true` and the winning `[agents]` `enabled` value is not `false`. When it is off, recommend the smallest change that turns it on, and name the file that holds the blocking key:
 
 - `[agents]` `enabled = false` is set: delete that line, or set it to `true`.
+- Both blockers apply: fixing one alone leaves spawning off. Recommend both changes, or `multi_agent_v2 = true` under `[features]`, which overrides the `[agents]` key on its own.
 - Both feature rows read `false`: add these lines, or run `codex features enable multi_agent`, which writes them:
 
 ```toml
