@@ -74,7 +74,8 @@ class _OwnerFixture(unittest.TestCase):
         self.auth.mkdir()
         (self.auth / "auth.json").write_text("{}")
         (self.auth / "config.yaml").write_text("model:\n  provider: fixture\n  default: fixture-model\n")
-        self.run = live.Run(self.root, "hermes", {"id": "owned", "fixture": "p", "turns": ["go", "again"]}, "pin", 10)
+        case = {"id": "owned", "fixture": "p", **getattr(self, "case", {"turns": ["go", "again"]})}
+        self.run = live.Run(self.root, "hermes", case, "pin", 10)
         self.script = self.base / "docker_fixture.py"
         self.script.write_text('''import json, pathlib, sys
 args = json.loads(sys.argv[1])
@@ -108,7 +109,7 @@ else:
         hermes.prepare(self.run)
         self.owner = self.run._hermes_evidence
         self.addCleanup(self.owner.close)
-        self.run.turns.append(hermes.turn(self.run, "go", 0))
+        self.run.turns.append(hermes.turn(self.run, self.run.case["turns"][0], 0))
 
     def database(self):
         path = hermes.profile(self.run) / "state.db"
@@ -289,6 +290,123 @@ os._exit(0)
         incomplete = self.custody.HermesEvidence.replay(self.custody.ReplayBinding(moved, pair.run_id, second["x_acquisition"]), self.base)
         self.addCleanup(incomplete.close)
         self.assertIn("pair-incomplete", hermes.build_trace(incomplete.read())["x_harvest_error"])
+
+
+class AcquisitionReplayControls(_OwnerFixture):
+    case = {"entry": "how", "turns": ["first", "/how prepared second"]}
+
+    def setUp(self):
+        import itertools
+        from unittest import mock
+        from harnesses import hermes_evidence as custody
+        clock = mock.patch.object(custody, "time", SimpleNamespace(monotonic=lambda: next(self.ticks)))
+        self.ticks = itertools.count(0, 2)
+        clock.start()
+        self.addCleanup(clock.stop)
+        super().setUp()
+
+    def temporal_pair(self):
+        import itertools
+        import shutil
+        from test_hermes import tool_call
+        self.note = str(self.project / "note.txt")
+        (self.project / "note.txt").write_text("first note")
+        db = HermesDatabase(hermes.profile(self.run) / "state.db")
+        db.session("root")
+        db.session("kid", parent="root", started=1, model="child-model")
+        db.con.execute("update sessions set cwd=?", (str(self.project),))
+        db.message("root", "user", "first")
+        db.message("root", "assistant", calls=[tool_call("read-1", "terminal", command="cat note.txt")])
+        db.message("root", "tool", '{"exit_code":0}', call_id="read-1", tool_name="terminal")
+        db.message("root", "assistant", calls=[tool_call("todo-1", "todo_list", todos=[{"content": "inspect", "status": "completed"}])])
+        db.message("root", "tool", '{"todos":[{"content":"inspect","status":"completed"}]}', call_id="todo-1", tool_name="todo_list")
+        db.message("root", "assistant", calls=[tool_call("delegate-1", "delegate_task", goal="inspect child", context="poteto-agent")])
+        db.message("root", "tool", '{"results":[]}', call_id="delegate-1", tool_name="delegate_task")
+        db.message("kid", "user", "inspect child")
+        db.message("kid", "assistant", "persona: poteto-agent\nchild reply")
+        db.message("root", "assistant", "first reply")
+        db.con.commit()
+        self.first = hermes.harvest(self.run)
+        (self.project / "note.txt").rename(self.base / "preserved-note.txt")
+        (self.project / "note.txt").mkdir()
+        self.ticks = itertools.count(100, 3)
+        self.script.write_text(self.script.read_text() + '\nif "--resume" in args: sys.exit(7)\n')
+        self.run.turns.append(hermes.turn(self.run, "/why actual second", 1))
+        db.message("root", "user", "actual second")
+        db.message("root", "assistant", "second reply")
+        db.done()
+        self.second = hermes.harvest(self.run)
+        state = hermes.profile(self.run) / "state.db"
+        state.rename(state.with_name("preserved-state.db"))
+        self.third = hermes.harvest(self.run)
+        (self.root / "verdict.json").write_bytes(b'{"original":"unchanged temporal grade"}\n')
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "pair"))
+        self.moved = self.base / "moved"
+        shutil.copytree(pair.root, self.moved)
+        self.root.rename(self.base / "preserved-original-run")
+        self.owner.private_root.rename(self.base / "preserved-original-evidence")
+        self.run_id = pair.run_id
+        return pair
+
+    def replay(self, acquisition, pair=None):
+        owner = self.custody.HermesEvidence.replay(
+            self.custody.ReplayBinding(pair or self.moved, self.run_id, acquisition), self.base)
+        self.addCleanup(owner.close)
+        return owner
+
+    def assert_first(self, trace):
+        self.assertNotIn("x_harvest_error", trace, trace.get("x_harvest_error"))
+        self.assertEqual((trace["duration_s"], trace["exit_code"]), (2.0, 0))
+        self.assertEqual(trace["x_turn_argvs"], [["hermes", "chat", "-Q", "--query=first", "--format", "stream-json",
+            "--reasoning", "high", "-t", "delegation,file,skills,terminal,todo", "--yolo", "--run-budget", "30", "-s", "how"]])
+        self.assertEqual(trace["x_turn_entries"], [{"turn": 0, "skill": "how", "entry": "injected"}])
+        self.assertEqual(trace["files_read"], [self.note])
+        self.assertEqual(trace["x_path_evidence"], [{"requested": "note.txt", "cwd": str(self.project),
+            "spelling": self.note, "disposition": "fixture-request", "reason": None, "kind": "regular"}])
+        self.assertEqual(trace["events"], [
+            {"seq": 0, "turn": 0, "kind": "user", "text": "first"},
+            {"seq": 1, "turn": 0, "kind": "tool_call", "name": "terminal", "input": {"command": "cat note.txt"}, "id": "read-1"},
+            {"seq": 2, "turn": 0, "kind": "tool_result", "name": "terminal", "ok": True, "output_head": '{"exit_code":0}', "id": "read-1"},
+            {"seq": 3, "turn": 0, "kind": "tool_call", "name": "todo_list", "input": {"todos": [{"content": "inspect", "status": "completed"}]}, "id": "todo-1"},
+            {"seq": 4, "turn": 0, "kind": "tool_result", "name": "todo_list", "ok": True, "output_head": '{"todos":[{"content":"inspect","status":"completed"}]}', "id": "todo-1"},
+            {"seq": 5, "turn": 0, "kind": "tool_call", "name": "delegate_task", "input": {"goal": "inspect child", "context": "poteto-agent"}, "id": "delegate-1"},
+            {"seq": 6, "turn": 0, "kind": "tool_result", "name": "delegate_task", "ok": True, "output_head": '{"results":[]}', "id": "delegate-1"},
+            {"seq": 7, "turn": 0, "kind": "text", "text": "first reply"}])
+        self.assertEqual(trace["worklist"], [{"seq": 4, "turn": 0, "carrier": "todo_list", "items": [{"text": "inspect", "state": "completed"}]}])
+        self.assertEqual(trace["spawns"], [{"seq": 5, "turn": 0, "tool": "delegate_task", "persona": "poteto-agent",
+            "model": "child-model", "effort": "high", "prompt_head": "inspect child\npoteto-agent",
+            "x_child_first_reply": "persona: poteto-agent\nchild reply", "x_persona_line": "poteto-agent",
+            "x_child_session": "kid", "x_child_match": "goal"}])
+        self.assertEqual(trace["final_reply"], "first reply")
+
+    def test_earlier_acquisition_keeps_its_turn_prefix_and_fixture_inventory(self):
+        self.temporal_pair()
+        self.assert_first(self.first)
+        actual = hermes.build_trace(self.replay(self.first["x_acquisition"]).read())
+        self.assert_first(actual)
+
+    def test_actual_entry_skill_survives_prepared_case_and_public_record_mutation(self):
+        self.database()
+        captured = self.owner.read()
+        self.run.case["entry"] = "why"
+        self.run.case["turns"] = ["/why poisoned", "/why wrong plan"]
+        self.run.turns[0]["hermes_argv"].append("poison")
+        self.assertEqual(hermes.harvest(self.run)["x_turn_entries"], [{"turn": 0, "skill": "how", "entry": "injected"}])
+        self.assertEqual(hermes.build_trace(captured)["x_turn_entries"], [{"turn": 0, "skill": "how", "entry": "injected"}])
+
+    def test_later_acquisition_uses_actual_second_skill_and_second_user_boundary(self):
+        self.temporal_pair()
+        actual = hermes.build_trace(self.replay(self.second["x_acquisition"]).read())
+        self.assertEqual((actual["duration_s"], actual["exit_code"]), (5.0, 7))
+        self.assertEqual(actual["x_turn_entries"], [{"turn": 0, "skill": "how", "entry": "injected"},
+            {"turn": 1, "skill": "why", "entry": "not-observed"}])
+        self.assertEqual(actual["events"][-2:], [{"seq": 8, "turn": 1, "kind": "user", "text": "actual second"},
+            {"seq": 9, "turn": 1, "kind": "text", "text": "second reply"}])
+        self.assertEqual(actual["x_turn_argvs"][1], ["hermes", "chat", "-Q", "--query=actual second", "--format", "stream-json",
+            "--reasoning", "high", "-t", "delegation,file,skills,terminal,todo", "--yolo", "--run-budget", "30", "-s", "how", "-s", "why", "--resume", "root"])
+        self.assertEqual(actual["files_read"], [])
+        self.assertEqual(actual["x_path_evidence"][0]["kind"], "directory")
+        self.assertEqual(actual["final_reply"], "second reply")
 
 
 class NativeFtsControls(_OwnerFixture):
