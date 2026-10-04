@@ -2076,6 +2076,10 @@ class PythonCwdPerInvocation(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         return make_repo(tmp.name, 1, {"relay/feed.py": "x = 0\n"})
 
+    def test_a_python_write_after_cd_into_an_assigned_directory_resolves_there(self):
+        command = "D=/tmp/sketch; cd $D; python3 -c \"open('x.py','w').write('1')\""
+        self.assertEqual(oracles.python_writes(command), ["/tmp/sketch/x.py"])
+
     def test_a_second_python_heredoc_writes_where_its_own_cd_points(self):
         project = self.project()
         command = (f"cd /tmp/sketch && python3 - <<'EOF'\nopen('a.py', 'w').write('x')\nEOF\n"

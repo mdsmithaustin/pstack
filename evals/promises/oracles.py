@@ -812,7 +812,7 @@ PYTHON_OPEN_WRITE = re.compile(r"\bopen\(\s*(['\"])([^'\"\n]+)\1\s*,\s*(['\"])([
 
 def python_writes(command):
     out, bodies = [], [body for _, body in heredoc_bodies(command)]
-    for segment, _, base in walk_segments(strip_heredocs(command)):
+    for segment, _, base in walk_segments(expand_assignments(strip_heredocs(command))):
         body = bodies.pop(0) if HEREDOC.search(segment) and bodies else None
         if not PYTHON_HEADER.search(segment):
             continue
