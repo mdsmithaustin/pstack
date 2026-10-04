@@ -2693,7 +2693,7 @@
   },
   "setup-checks-codex-multi-agent": {
    "check": "live",
-   "claim": "On Codex, setup-pstack checks the live tool list for spawn_agent, reads the multi_agent and multi_agent_v2 rows from `codex features list` and the `[agents] enabled` key from the config layers, and recommends the smallest change that turns native spawning on, editing only after a yes.",
+   "claim": "On Codex, setup-pstack checks the live tool list for spawn_agent, reads the multi_agent and multi_agent_v2 rows from `codex features list` and, best effort, the `[agents] enabled` key from the user and trusted-project config. It names the blocking setting and edits only after a yes, and reports a launch flag or an unreadable layer instead of guessing.",
    "harness_sensitive": true,
    "live_case": "setup-run on Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript reports native spawning off despite the multi_agent row reading true, names that key, and does not edit before a yes.",
    "owners": [
@@ -8278,6 +8278,24 @@
     "port"
    ],
    "text": "On Codex it also checks that native subagent spawning is on, because without it pstack runs each role through a `codex exec` subprocess or inline, and an inline review is not independent.",
+   "class": "promise",
+   "promise": "setup-checks-codex-multi-agent"
+  },
+  "d2e7ab40152e": {
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "When a config file turns spawning off, setup names the setting and edits it only with your yes.",
+   "class": "promise",
+   "promise": "setup-checks-codex-multi-agent"
+  },
+  "4d95df3175f8": {
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "When a launch flag or a layer it cannot read is the cause, it says so instead.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }
