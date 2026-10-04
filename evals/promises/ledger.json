@@ -8290,12 +8290,12 @@
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   },
-  "003add5cdc95": {
+  "7177ab579608": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "When a Codex session shows spawning is missing and a config file holds a key that could cause it, setup names that key as a possible cause and edits it only with your yes.",
+   "text": "When a Codex session shows spawning is missing and a config file holds a key that could cause it, setup names that key as a possible cause and may offer to change it, editing only with your yes.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }
