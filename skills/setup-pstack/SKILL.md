@@ -40,25 +40,32 @@ poteto-mode keeps its worklist in the harness's structured task tool when that t
 
 ### 0c. Check Codex subagents
 
-On Codex, pstack spawns roles natively through `spawn_agent`. As of Codex 0.160.0, a new session gets `spawn_agent` when the `multi_agent` or `multi_agent_v2` feature is on, and `multi_agent` is on by default. The config key `[agents]` `enabled = false` turns `multi_agent` off without changing its feature row, and only `multi_agent_v2` overrides it. Run this check when this skill runs on Codex or the user also runs pstack there.
+On Codex, pstack spawns roles natively through `spawn_agent`. When the tool is unavailable, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent. Run this check when this skill runs on Codex or the user also runs pstack there.
 
-- When this skill runs inside a Codex session, check the live tool list first. If `spawn_agent` is missing, native spawning is off for this session, whatever the config says. The cause can be a config layer, a `-c` flag the session started with, or the selected model, which can disable multi-agent on its own. Unless a config file shows the blocking key, report these as the causes you cannot rule out, not as a diagnosis.
-- Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`. Report the `multi_agent` and `multi_agent_v2` rows. They show the state the config layers give a new session, but not flags a running session was started with.
-- `codex features list` does not report `[agents]` `enabled`, and no stable CLI command resolves its effective value. Read the key from `config.toml` under `$CODEX_HOME` or `~/.codex/` and from the project's `.codex/config.toml` when the project is trusted. A trusted project's file wins over the user's. Codex also loads system, selected-profile, and managed layers, which can override both, so this read is best effort. When any of those layers exists, or the files disagree with the live tool list, report the `[agents]` result as unverified and trust the live tool list.
-- When `codex` is not on PATH, as when this skill runs from another CLI, report the check as unverified.
+Whether a session has `spawn_agent` depends on more than config. As of Codex 0.160.0 it also depends on the selected model's own multi-agent setting, launch flags, spawn depth, and config layers this skill cannot read. So config can only show signals, and only a Codex session shows the answer.
 
-The config allows native spawning for new sessions when `multi_agent_v2` reads `true`, or when `multi_agent` reads `true` and the winning `[agents]` `enabled` value is not `false`. The selected model can still disable it, so without the live tool list report "config allows native spawning", not "on". When the config blocks it, recommend the smallest change that turns it on, and name the file that holds the blocking key:
+- **Inside a Codex session**, the answer is whether `spawn_agent` is callable. When the session defers tools behind a tool search, search for it before calling it missing. If it is missing, list the causes you cannot rule out:
+  - a config key
+  - a `-c` flag the session started with
+  - the selected model
+  - spawn depth
+  - a config layer you cannot read
 
-- `[agents]` `enabled = false` is set: delete that line, or set it to `true`.
-- Both blockers apply: fixing one alone leaves spawning off. Recommend both changes, or `multi_agent_v2 = true` under `[features]`, which overrides the `[agents]` key on its own.
-- Both feature rows read `false`: add these lines, or run `codex features enable multi_agent`, which writes them:
+  Do not pick one without evidence.
+- **The config signals.** Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`, and report the `multi_agent` and `multi_agent_v2` rows. Then read `[agents]` `enabled` from `config.toml` under `$CODEX_HOME` or `~/.codex/`, and from the project's `.codex/config.toml` when the project is trusted, because `codex features list` does not report it. Report these as signals, not as a verdict on spawning.
+- **When `codex` is not on PATH**, as when this skill runs from another CLI, report the check as unverified.
+
+Offer an edit only for a blocking key that a config file actually shows:
+
+- `[agents]` `enabled = false` in a file you read: offer to delete that line or set it to `true`. On Codex 0.160.0 this key removes `spawn_agent` even while the `multi_agent` row reads `true`.
+- `spawn_agent` is confirmed missing in a session and both feature rows read `false`: offer these lines, or `codex features enable multi_agent`, which writes them to the user config only. A trusted project's `.codex/config.toml` that sets the feature false still wins, so name that file instead when it holds the key.
 
 ```toml
 [features]
 multi_agent = true
 ```
 
-Edit a file only after the user says yes, and keep every other key. The change applies from the next session. When only the session's launch flags turn spawning off, name the wrapper or command that passes them instead. While native spawning is off, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent.
+Edit a file only after the user says yes, and keep every other key. The change applies from the next session. Without a session to confirm, report the signals and say spawning is unverified.
 
 ### 1. Detect available models and efforts
 

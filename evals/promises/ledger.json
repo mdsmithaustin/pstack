@@ -2693,9 +2693,9 @@
   },
   "setup-checks-codex-multi-agent": {
    "check": "live",
-   "claim": "On Codex, setup-pstack checks the live tool list for spawn_agent, reads the multi_agent and multi_agent_v2 rows from `codex features list` and, best effort, the `[agents] enabled` key from the user and trusted-project config. It names a blocking config key and edits only after a yes. When it cannot attribute a missing spawn_agent to config, it lists the causes it cannot rule out (a launch flag, the selected model, an unreadable config layer).",
+   "claim": "On Codex, setup-pstack treats a live session's callable spawn_agent as the answer and config as signals: it reports the multi_agent and multi_agent_v2 rows and the `[agents] enabled` key, offers an edit only for a blocking key a config file shows and only after a yes, and otherwise reports what it saw and the causes it cannot rule out.",
    "harness_sensitive": true,
-   "live_case": "setup-run on Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript reports native spawning off despite the multi_agent row reading true, names that key, and does not edit before a yes.",
+   "live_case": "setup-run on Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript reports spawn_agent missing, names that key from the config file, and does not edit before a yes.",
    "owners": [
     "skills/setup-pstack/SKILL.md"
    ],
@@ -8272,30 +8272,30 @@
    ],
    "text": "```text\n/no-comments the diff\n```"
   },
-  "343e43250a0f": {
+  "ae455157a458": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "On Codex it also checks that native subagent spawning is on, because without it pstack runs each role through a `codex exec` subprocess or inline, and an inline review is not independent.",
+   "text": "On Codex it also checks whether native subagent spawning is available, because without it pstack runs each role through a `codex exec` subprocess or inline, and an inline review is not independent.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   },
-  "d2e7ab40152e": {
+  "518a9416b697": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "When a config file turns spawning off, setup names the setting and edits it only with your yes.",
+   "text": "When a config file shows the key that blocks it, setup names the key and edits it only with your yes.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   },
-  "f89a34495d2a": {
+  "4b84fcd1e65d": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "Otherwise it lists the causes it cannot rule out: a launch flag, the selected model, or a config layer it cannot read.",
+   "text": "Otherwise it reports what it saw and the causes it cannot rule out.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }
