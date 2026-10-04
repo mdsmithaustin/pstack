@@ -2450,7 +2450,8 @@ def arena_grafts(view):
 
 def same_model(spawned, lead):
     spawned, lead = (spawned or "").lower(), (lead or "").lower()
-    return spawned == lead or ("-" not in spawned and spawned in re.split(r"[-.]", lead))
+    alias = lambda short, slug: "-" not in short and short in re.split(r"[-.]", slug)
+    return spawned == lead or alias(spawned, lead) or alias(lead, spawned)
 
 
 @oracle("arena-readonly-cross-judge")

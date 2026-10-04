@@ -2057,6 +2057,19 @@ class HeredocRerun(unittest.TestCase):
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)
 
 
+class ModelAliasSymmetry(unittest.TestCase):
+    def test_a_short_alias_lead_and_a_full_slug_judge_are_one_model(self):
+        for lead, judge in (("opus", "claude-opus-5-5"), ("claude-opus-5-5", "opus")):
+            candidates = [{"seq": i, "tool": "Agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/k/candidate-{i}"}
+                          for i, m in enumerate(["fable", "sonnet", "fable"], 1)]
+            judge_spawn = {"seq": 9, "tool": "Agent", "model": judge, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
+            events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in (1, 2, 3)]
+            trace = minimal(events=events, spawns=candidates + [judge_spawn], final_reply="Base: candidate 1.")
+            trace["model"] = lead
+            result = grade("arena-readonly-cross-judge", trace, load_case("arena-run"))
+            self.assertEqual(result["verdict"], FAIL, (lead, judge, result))
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
