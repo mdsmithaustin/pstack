@@ -47,7 +47,7 @@ On Codex, pstack spawns roles natively through `spawn_agent`. As of Codex 0.160.
 - `codex features list` does not report `[agents]` `enabled`, so read that key from `config.toml` under `$CODEX_HOME` or `~/.codex/`, and from the project's `.codex/config.toml` when the project is trusted. A trusted project's file wins.
 - When `codex` is not on PATH, as when this skill runs from another CLI, report the check as unverified.
 
-Native spawning is on for new sessions when `multi_agent_v2` reads `true`, or when `multi_agent` reads `true` and no layer sets `[agents]` `enabled = false`. When it is off, recommend the smallest change that turns it on, and name the file that holds the blocking key:
+Native spawning is on for new sessions when `multi_agent_v2` reads `true`, or when `multi_agent` reads `true` and the winning `[agents]` `enabled` value is not `false`. When it is off, recommend the smallest change that turns it on, and name the file that holds the blocking key:
 
 - `[agents]` `enabled = false` is set: delete that line, or set it to `true`.
 - Both feature rows read `false`: add these lines, or run `codex features enable multi_agent`, which writes them:

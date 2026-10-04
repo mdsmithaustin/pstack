@@ -8272,12 +8272,12 @@
    ],
    "text": "```text\n/no-comments the diff\n```"
   },
-  "9d0b49aec21c": {
+  "343e43250a0f": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "On Codex it also checks that native subagent spawning is on, which pstack's native spawns need.",
+   "text": "On Codex it also checks that native subagent spawning is on, because without it pstack runs each role through a `codex exec` subprocess or inline, and an inline review is not independent.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }
