@@ -83,6 +83,10 @@ async function makeGitStack(directory: string): Promise<{
   const repo = join(directory, "repo");
   await mkdir(repo);
   git({ repo, args: ["init", "--initial-branch=main"] });
+  git({
+    repo,
+    args: ["remote", "add", "origin", "https://github.com/personal/project.git"],
+  });
   git({ repo, args: ["config", "user.name", "Orch Test"] });
   git({ repo, args: ["config", "user.email", "orch@example.com"] });
   await writeFile(join(repo, "main.txt"), "main\n");
@@ -178,15 +182,19 @@ async function withFakeGithub<T>({
   directory,
   operation,
   output,
+  upstreamOutput = output,
 }: {
   directory: string;
   operation: () => Promise<T>;
   output: string;
+  upstreamOutput?: string;
 }): Promise<T> {
   const bin = join(directory, "github-bin");
   const outputPath = join(directory, "github-output.json");
   await mkdir(bin);
   await writeFile(outputPath, output);
+  const upstreamPath = join(directory, "upstream-output.json");
+  await writeFile(upstreamPath, upstreamOutput);
   const gh = join(bin, "gh");
   await writeFile(
     gh,
@@ -198,6 +206,9 @@ if [ "$(pwd -P)" != "${realpathSync(join(directory, "repo"))}" ]; then
 fi
 case "$*" in
   "pr list --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
+    cat "${upstreamPath}"
+    ;;
+  "pr list --repo https://github.com/personal/project.git --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
     cat "${outputPath}"
     ;;
   *)
@@ -636,6 +647,151 @@ describe("Store", () => {
         ).rejects.toThrow(
           "frontier pin mismatch: missing from GitHub: 12; extra in GitHub: 13"
         );
+      },
+    });
+  });
+
+  it("resolves a personal fork through the CLI despite upstream history and GH_REPO", async () => {
+    const directory = await makeDirectory();
+    const stack = await makeGitStack(directory);
+    const storeDirectory = join(directory, "store");
+    const rows = [
+      {
+        number: 10,
+        state: "MERGED",
+        headRefName: "stack/merged",
+        headRefOid: stack.mergedSha,
+        baseRefName: "main",
+        isCrossRepository: false,
+      },
+      {
+        number: 13,
+        state: "CLOSED",
+        headRefName: "stack/closed",
+        headRefOid: stack.closedSha,
+        baseRefName: "stack/merged",
+        isCrossRepository: false,
+      },
+      {
+        number: 11,
+        state: "OPEN",
+        headRefName: "stack/open",
+        headRefOid: stack.openSha,
+        baseRefName: "stack/closed",
+        isCrossRepository: false,
+      },
+    ];
+    git({
+      repo: stack.repo,
+      args: ["remote", "add", "upstream", "https://github.com/upstream/project.git"],
+    });
+    git({ repo: stack.repo, args: ["config", "remote.upstream.gh-resolved", "base"] });
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify(rows),
+      upstreamOutput: JSON.stringify(
+        Array.from({ length: 1000 }, (_, index) => ({
+          ...rows[0],
+          number: index + 100,
+          headRefName: `upstream/${index}`,
+        }))
+      ),
+      operation: async () => {
+        const env = { ...process.env, GH_REPO: "unrelated/project" };
+        expect(runCli(["--store", storeDirectory, "init"], env).code).toBe(0);
+        const result = runCli(
+          ["--store", storeDirectory, "frontier", "set", "--repo", stack.repo],
+          env
+        );
+        expect(result).toEqual({
+          code: 0,
+          stdout: `${JSON.stringify({
+            generation: 1,
+            prs: [
+              {
+                pr: 10,
+                branches: "stack/merged",
+                sha: stack.mergedSha,
+                state: "MERGED",
+              },
+              {
+                pr: 13,
+                branches: "stack/closed",
+                sha: stack.closedSha,
+                state: "CLOSED",
+              },
+              {
+                pr: 11,
+                branches: "stack/open",
+                sha: stack.openSha,
+                state: "OPEN",
+              },
+            ],
+            lowestUnmerged: 11,
+          })}\n`,
+          stderr: "",
+        });
+        expect(
+          JSON.parse(await readFile(join(storeDirectory, "frontier.json"), "utf8"))
+        ).toEqual(JSON.parse(result.stdout));
+      },
+    });
+  });
+
+  it("rejects incomplete origin history even when upstream history is small", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const selected = {
+      number: 11,
+      state: "OPEN",
+      headRefName: "stack/open",
+      headRefOid: stack.openSha,
+      baseRefName: "main",
+      isCrossRepository: false,
+    };
+    const rows = Array.from({ length: 999 }, (_, index) => ({
+      ...selected,
+      number: index + 100,
+      headRefName: `unrelated/${index}`,
+    }));
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([selected, ...rows]),
+      upstreamOutput: JSON.stringify([selected]),
+      operation: async () => {
+        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+          "gh pr list reached its 1000 PR limit"
+        );
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+      },
+    });
+  });
+
+  it("resolves origin history below the limit", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const selected = {
+      number: 11,
+      state: "OPEN",
+      headRefName: "stack/open",
+      headRefOid: stack.openSha,
+      baseRefName: "main",
+      isCrossRepository: false,
+    };
+    const rows = Array.from({ length: 998 }, (_, index) => ({
+      ...selected,
+      number: index + 100,
+      headRefName: `unrelated/${index}`,
+    }));
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([selected, ...rows]),
+      operation: async () => {
+        expect(await store.frontier.set({ repo: stack.repo })).toEqual({
+          generation: 1,
+          prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
+          lowestUnmerged: 11,
+        });
       },
     });
   });
