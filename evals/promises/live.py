@@ -189,7 +189,6 @@ def split_entry(case, text, index):
 
 
 def fixture_lock(fixture):
-    """Agents write literal /tmp paths named after the project, so one fixture runs once at a time per host."""
     handle = open(Path(tempfile.gettempdir()) / f"pstack-live-{fixture}.lock", "w")
     fcntl.flock(handle, fcntl.LOCK_EX)
     return handle
