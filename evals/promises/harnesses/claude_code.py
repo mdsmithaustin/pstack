@@ -68,6 +68,7 @@ def turn(run, text, index):
         pin = ["--resume", session]
         move_session(run.root / "transcripts", store(), session)
     argv = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--setting-sources", "project",
+            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
             "--permission-mode", "bypassPermissions", *pin]
     effort = run.case.get("effort", DEFAULT_EFFORT)
     if effort:
