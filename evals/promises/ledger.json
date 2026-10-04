@@ -2692,22 +2692,14 @@
    "scenario": "route-autonomous-run"
   },
   "setup-checks-codex-multi-agent": {
-   "check": "static",
-   "claim": "On Codex, setup-pstack reads the effective multi_agent feature state from `codex features list` and recommends `[features]` `multi_agent = true` when it is off.",
-   "evidence": [
-    {
-     "file": "skills/setup-pstack/SKILL.md",
-     "quote": "Report the effective state in the `multi_agent` row."
-    },
-    {
-     "file": "skills/setup-pstack/SKILL.md",
-     "quote": "multi_agent = true"
-    }
-   ],
-   "harness_sensitive": false,
+   "check": "live",
+   "claim": "On Codex, setup-pstack checks the live tool list for spawn_agent, reads the multi_agent and multi_agent_v2 rows from `codex features list`, and recommends `[features]` `multi_agent = true` only when native spawning is off, editing only after a yes.",
+   "harness_sensitive": true,
+   "live_case": "setup-run on Codex: fresh CODEX_HOME with multi_agent set false; pass when the transcript reports native spawning off and recommends the two lines without writing them before a yes.",
    "owners": [
     "skills/setup-pstack/SKILL.md"
-   ]
+   ],
+   "scenario": "setup-run"
   }
  },
  "units": {
@@ -8280,12 +8272,12 @@
    ],
    "text": "```text\n/no-comments the diff\n```"
   },
-  "86b865ad2b70": {
+  "3e784e40d1b4": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "On Codex it also checks the `multi_agent` feature, which every pstack spawn needs.",
+   "text": "On Codex it also checks the `multi_agent` feature, which pstack's native subagent spawns need.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }

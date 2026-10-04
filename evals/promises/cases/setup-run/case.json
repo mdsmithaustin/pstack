@@ -1,5 +1,6 @@
 {
  "promises": [
+  "setup-checks-codex-multi-agent",
   "setup-checks-personas-offers-registration",
   "setup-checks-task-tool-switches",
   "setup-detects-models-and-asks-budget",
