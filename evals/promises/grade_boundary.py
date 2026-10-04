@@ -1,4 +1,5 @@
 import errno
+import fcntl
 import hashlib
 import hmac
 import json
@@ -274,13 +275,17 @@ class _Controller:
         info = os.fstat(self.root.fd)
         if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise GradeRefused("unknown_authorization", "controller directory is not private")
+        fcntl.flock(self.root.fd, fcntl.LOCK_EX)
         try:
-            key = self.root.read("key.json")
-        except FileNotFoundError:
-            if not create:
-                raise GradeRefused("unknown_authorization", "controller has no issuer key")
-            key = _json({"identity": self.root.identity(), "key": os.urandom(32).hex()})
-            self.root.write("key.json", key)
+            try:
+                key = self.root.read("key.json")
+            except FileNotFoundError:
+                if not create:
+                    raise GradeRefused("unknown_authorization", "controller has no issuer key")
+                key = _json({"identity": self.root.identity(), "key": os.urandom(32).hex()})
+                self.root.write("key.json", key)
+        finally:
+            fcntl.flock(self.root.fd, fcntl.LOCK_UN)
         issuer = json.loads(key)
         if issuer["identity"] != self.root.identity():
             raise GradeRefused("unknown_authorization", "controller directory was relocated")
@@ -638,6 +643,8 @@ def grade(authorization):
                     raise GradeRefused("input_changed", name)
             if "prior_verdict_digest" in state and hashlib.sha256(raw.read("verdict.json")).hexdigest() != state["prior_verdict_digest"]:
                 raise GradeRefused("input_changed", "retained raw verdict changed")
+        except FileNotFoundError as error:
+            raise GradeRefused("input_changed", error) from error
         finally:
             raw.close()
         output = _Root.open(state["output"]["path"], state["output"]["identity"])
@@ -648,7 +655,13 @@ def grade(authorization):
         trees = _approved_trees(state)
         private = _Root.open(state["private"]["path"], state["private"]["identity"])
         try:
-            private.files()
+            for name in ("code", "references", "fallback"):
+                protected = _Root.open(private.path / name)
+                try:
+                    protected.files()
+                finally:
+                    protected.close()
+            private.verify()
         finally:
             private.close()
         skills = Path(state["private"]["path"]) / "fallback" / "skills"
