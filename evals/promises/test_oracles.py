@@ -2240,6 +2240,18 @@ class WorktreeRelativeEdits(unittest.TestCase):
         self.assertEqual(self.steer(str, worktree=True)["verdict"], FAIL)
 
 
+class SourcesLabel(unittest.TestCase):
+    def test_f8_a_sources_label_counts_and_a_coverage_sentence_does_not(self):
+        case = load_case("why-run")
+        for reply, want in (("Sources coverage of the test suite is 80% and git shows nothing.", FAIL),
+                            ("I searched git history. Sources: git log, README.", PASS),
+                            ("The source coverage report is attached; commit 12d7ece raised it.", FAIL),
+                            ("Commit 12d7ece.\n\nSource coverage:\n- Git: all commits.", PASS),
+                            ("Commit 12d7ece. Sources consulted: git log.", PASS),
+                            ("Commit 12d7ece.\n### Sources\n- git log", PASS)):
+            self.assertEqual(grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), case)["verdict"], want, reply)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

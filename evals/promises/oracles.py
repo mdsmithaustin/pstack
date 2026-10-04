@@ -1624,13 +1624,17 @@ def why_null(view):
     return failed("reply does not report the absent evidence categories as null results", *evidence)
 
 
+SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*sources?(?:\s+(?:searched|consulted|checked|coverage))?\**\s*(?::|$)"
+                             r"|\bsources\s+(?:consulted|searched|checked)\b")
+
+
 @oracle("how-why-reports-name-sources-searched")
 def sources_named(view):
     gate = completion_gate(view)
     if gate:
         return gate
     low = view.final_reply.lower()
-    section = re.search(r"sources (?:consulted|searched|checked)|sources? coverage|### sources|\*\*sources", low)
+    section = SOURCES_SECTION.search(low)
     git = re.search(r"\bgit\b|commit", low)
     evidence = [f"sources section: {bool(section)}", f"git named: {bool(git)}"]
     return passed(*evidence) if section and git else failed("reply has no sources section naming what was searched", *evidence)
