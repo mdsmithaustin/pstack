@@ -2201,6 +2201,22 @@ class RoleEvidence(unittest.TestCase):
         self.assertIn("judge spawns: 0", result["evidence"])
 
 
+class StatedAuthorResult(unittest.TestCase):
+    def doc_turn(self, events):
+        trace_events = (in_turn(0, [{"seq": 0, "kind": "user", "text": "add --json"}] + events + [text(50, "Done.")])
+                        + in_turn(1, [{"seq": 60, "kind": "user", "text": "review"}, text(61, "x")]))
+        return grade("poteto-runs-documentation-impact-before-completion", minimal(events=trace_events, final_reply="x"), load_case("doc-impact-run"))
+
+    def test_f4_a_plan_item_naming_the_phrase_is_not_an_author_result(self):
+        todo = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [{"content": "Decide whether independent review required, then run it"}]}}
+        result = self.doc_turn([read(1, "documentation-impact/SKILL.md"), todo])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_f4_a_grep_of_the_skill_text_is_not_an_author_result(self):
+        result = self.doc_turn([read(1, "documentation-impact/SKILL.md")] + bash(3, "grep -n 'independent review required' skills/documentation-impact/SKILL.md"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

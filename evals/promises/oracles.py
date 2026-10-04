@@ -2301,9 +2301,14 @@ def author_result(text):
     return None
 
 
+LABELED_RESULT = re.compile(r"\bresult\b\W{0,6}independent review (?:is )?(not )?required", re.I)
+
+
 def turn_author_result(view, turn, reply):
-    inputs = [json.dumps(c.get("input") or {}) for c in view.tool_calls if turn is None or view.turn_of(c.get("seq")) == turn]
-    return author_result(reply) or author_result(" ".join(view.texts(turn))) or author_result(" ".join(inputs).replace("\\n", " "))
+    inputs = " ".join(json.dumps(c.get("input") or {}) for c in view.tool_calls if turn is None or view.turn_of(c.get("seq")) == turn)
+    labeled = LABELED_RESULT.search(inputs.replace("\\n", " "))
+    recorded = ("not required" if labeled.group(1) else "required") if labeled else None
+    return author_result(reply) or author_result(" ".join(view.texts(turn))) or recorded
 
 
 @oracle("poteto-runs-documentation-impact-before-completion")
