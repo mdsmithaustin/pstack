@@ -2693,7 +2693,7 @@
   },
   "setup-checks-codex-multi-agent": {
    "check": "live",
-   "claim": "On Codex, setup-pstack checks the live tool list for spawn_agent, reads the multi_agent and multi_agent_v2 rows from `codex features list` and, best effort, the `[agents] enabled` key from the user and trusted-project config. It names the blocking setting and edits only after a yes, and reports a launch flag or an unreadable layer instead of guessing.",
+   "claim": "On Codex, setup-pstack checks the live tool list for spawn_agent, reads the multi_agent and multi_agent_v2 rows from `codex features list` and, best effort, the `[agents] enabled` key from the user and trusted-project config. It names a blocking config key and edits only after a yes. When it cannot attribute a missing spawn_agent to config, it lists the causes it cannot rule out (a launch flag, the selected model, an unreadable config layer).",
    "harness_sensitive": true,
    "live_case": "setup-run on Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript reports native spawning off despite the multi_agent row reading true, names that key, and does not edit before a yes.",
    "owners": [
@@ -8290,12 +8290,12 @@
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   },
-  "688f1e94ab33": {
+  "f89a34495d2a": {
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "When a launch flag, the selected model, or a layer it cannot read is the cause, it says so instead.",
+   "text": "Otherwise it lists the causes it cannot rule out: a launch flag, the selected model, or a config layer it cannot read.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
   }
