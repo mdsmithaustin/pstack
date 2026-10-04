@@ -1264,6 +1264,20 @@ function githubPullRequest(value: unknown): GithubPullRequest {
 }
 
 function githubFrontier(repo: string): readonly FrontierPr[] {
+  let repository: string;
+  try {
+    repository = execFileSync("git", ["remote", "get-url", "origin"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch (error) {
+    throw new UserError(
+      `git remote get-url origin failed: ${errorMessage(error)}; GitHub frontier discovery requires an origin remote`
+    );
+  }
+
   let raw: string;
   try {
     const { GH_REPO: _ignoredRepo, ...env } = process.env;
@@ -1272,6 +1286,8 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
       [
         "pr",
         "list",
+        "--repo",
+        repository,
         "--state",
         "all",
         "--limit",
@@ -1306,7 +1322,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   }
   if (decoded.length === 1000) {
     throw new UserError(
-      "gh pr list reached its 1000 PR limit; reduce repository history, or pass --graphite for a stack Graphite tracks, before resolving the frontier"
+      "gh pr list reached its 1000 PR limit; cannot prove complete repository history; pass --graphite for a stack Graphite tracks before resolving the frontier"
     );
   }
 
