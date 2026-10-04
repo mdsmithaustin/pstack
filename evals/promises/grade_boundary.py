@@ -116,6 +116,10 @@ class _Root:
             if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
                 raise GradeRefused("unsafe_object", self.path / rel)
             return info
+        except OSError as error:
+            if error.errno == errno.ENOENT:
+                raise FileNotFoundError(self.path / rel) from error
+            raise GradeRefused("unsafe_link", self.path / rel) from error
         finally:
             os.close(fd)
 
@@ -171,7 +175,10 @@ class _Root:
                 else:
                     raise GradeRefused("unsafe_object", self.path / rel)
 
-        walk(self.fd, Path("."))
+        try:
+            walk(self.fd, Path("."))
+        except OSError as error:
+            raise GradeRefused("unsafe_link", self.path) from error
         self.verify()
         return found
 
@@ -185,25 +192,28 @@ class _Root:
         except FileNotFoundError:
             pass
         temporary = f".{name}-{uuid.uuid4().hex}"
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=self.fd)
         try:
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-            self.verify()
+            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=self.fd)
             try:
-                if not stat.S_ISREG(self.info(name).st_mode):
-                    raise GradeRefused("output_unsafe", self.path / name)
-            except FileNotFoundError:
-                pass
-            os.rename(temporary, name, src_dir_fd=self.fd, dst_dir_fd=self.fd)
-            os.fsync(self.fd)
-        finally:
-            try:
-                os.unlink(temporary, dir_fd=self.fd)
-            except FileNotFoundError:
-                pass
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(data)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                self.verify()
+                try:
+                    if not stat.S_ISREG(self.info(name).st_mode):
+                        raise GradeRefused("output_unsafe", self.path / name)
+                except FileNotFoundError:
+                    pass
+                os.rename(temporary, name, src_dir_fd=self.fd, dst_dir_fd=self.fd)
+                os.fsync(self.fd)
+            finally:
+                try:
+                    os.unlink(temporary, dir_fd=self.fd)
+                except FileNotFoundError:
+                    pass
+        except OSError as error:
+            raise GradeRefused("output_unsafe", self.path / name) from error
 
 
 def _json(value):
@@ -469,6 +479,8 @@ def _runtime():
 
 
 def _git_path(text, base):
+    if "\x00" in text:
+        raise GradeRefused("unapproved_git", "worktree path contains a NUL byte")
     path = Path(text.strip())
     return Path(os.path.abspath(path if path.is_absolute() else base / path))
 
@@ -526,6 +538,8 @@ def _approved_trees(state):
         return list(approved.values())
     except FileNotFoundError as error:
         raise GradeRefused("unapproved_git", f"missing worktree metadata: {error}") from error
+    except UnicodeDecodeError as error:
+        raise GradeRefused("unapproved_git", f"invalid UTF-8 worktree metadata: {error}") from error
     finally:
         if common:
             common.close()
