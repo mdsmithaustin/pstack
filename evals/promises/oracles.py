@@ -2479,7 +2479,7 @@ def arena_lead_reads(view):
         given = call.get("input") or {}
         if call.get("name") in SHELL_TOOLS:
             command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
-            written = {w.strip("\"'") for w in shell_writes(command)}
+            written = set(shell_writes(command))
             reads += [p for p in resolved_shell_paths(strip_heredocs(command))
                       if p.strip("\"'") not in written and not ASSIGNMENT.fullmatch(" " + p)]
         else:

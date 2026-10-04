@@ -1977,6 +1977,37 @@ class EditOrders(unittest.TestCase):
         self.assertEqual(result["verdict"], PASS, result)
 
 
+class ArmDirectoryResolution(unittest.TestCase):
+    def arena(self, commands):
+        spawns, events = [], []
+        for n, seq in enumerate((10, 11, 12, 13, 14), 1):
+            spawns.append({"seq": seq, "tool": "Agent", "prompt_head": f"Candidate {n}: design the cache key.", "description": "cand"})
+            events.append({"seq": seq, "kind": "tool_call", "name": "Agent", "input": {"description": "cand"}})
+        setup = [e for n, command in enumerate(commands) for e in bash(2 * n, command)]
+        return grade("arena-candidates-own-worktrees", minimal(events=setup + events, spawns=spawns, final_reply="x"), load_case("arena-run"))
+
+    def test_one_directory_made_in_five_commands_is_one_directory(self):
+        result = self.arena(["mkdir -p /tmp/arena/candidate-1"] * 5)
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_spellings_of_one_directory_are_one_directory(self):
+        result = self.arena(["mkdir -p /tmp/arena/candidate-1 /tmp/arena/candidate-1/ /tmp/arena/./candidate-1 /tmp/arena/x/../candidate-1 /tmp/arena//candidate-1"])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_relative_directories_resolve_against_cd(self):
+        result = self.arena([" && ".join(f"cd /tmp/{d} && mkdir -p candidate-1" for d in "abcde")])
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_variable_and_its_value_name_one_directory(self):
+        result = self.arena(["D=/tmp/arena; mkdir -p $D/candidate-1 " + " ".join(f"/tmp/arena/candidate-{n}" for n in range(1, 5))])
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertIn("candidate directories created: 4", result["evidence"])
+
+    def test_a_new_branch_name_is_not_the_worktree_path(self):
+        self.assertEqual(oracles.arm_dirs("git worktree add -b cand-1 /tmp/k/cedar HEAD"), {"/tmp/k/cedar"})
+        self.assertEqual(oracles.arm_dirs("git worktree add -B cand-2 /tmp/k/maple"), {"/tmp/k/maple"})
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
