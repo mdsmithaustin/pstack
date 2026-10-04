@@ -1854,9 +1854,11 @@ def encoding_landed(changes, constraint, reply=""):
         if ENCODING_FILE.search(path) and any(n in added.lower() for n in needles):
             return path
     explained = [a for w in words if re.search(rf"\b{re.escape(w)}\b", reply.lower()) for a in CONSTRAINT_ALIASES.get(w, ())]
+    subjects = [w for w in words if w not in CONSTRAINT_ALIASES]
     for path, added in sorted(changes.items()):
-        if path.endswith(".py") and any(n in added.lower() for n in explained):
-            return f"runtime: {path}"
+        for line in added.lower().splitlines() if path.endswith(".py") else ():
+            if any(n in line for n in explained) and any(re.search(rf"\b{re.escape(w)}\b", line) for w in subjects):
+                return f"runtime: {path}"
     return None
 
 

@@ -277,6 +277,8 @@ class RuntimeEncoding(unittest.TestCase):
         self.assertIsNone(oracles.encoding_landed({"rollup/export.py": "    return row"}, constraint, "Done."))
         self.assertIsNone(oracles.encoding_landed({"rollup/export.py": "    sink = get_sink()"}, constraint,
                                                   "Sink.append still enforces the trailing newline"))
+        self.assertIsNone(oracles.encoding_landed({"rollup/export.py": '    audit.write("done\\n")'}, constraint,
+                                                  "Sink.append enforces the trailing newline"))
 
 
 class BoundaryGuard(unittest.TestCase):
