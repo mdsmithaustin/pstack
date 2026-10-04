@@ -1463,7 +1463,7 @@ class FanOutStructure(unittest.TestCase):
         self.assertIn("explorers found by structure: a wave of 2 at seq 22, then a spawn at seq 42", result["evidence"])
 
     def test_paraphrased_explorers_in_one_delegate_call_then_a_synthesizer(self):
-        spawns = [delegate(27, "Trace the complete ingest-to-publish pipeline. Return factual findings with file paths."),
+        spawns = [delegate(27, "Trace the complete ingest-to-publish pipeline. Return factual findings with file paths. Read-only: do not edit or write files."),
                   delegate(27, "Audit the verification evidence for the full pipeline. Do not modify anything."),
                   delegate(41, "Synthesize a direct answer stating whether the full pipeline works.")]
         events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "Both reports are in."),
@@ -1689,6 +1689,41 @@ class SteerRevert(unittest.TestCase):
     def test_an_edit_that_leaves_source_changed_still_fails(self):
         result = self.steer(keep_change=True)
         self.assertEqual(result["verdict"], FAIL, result)
+
+
+class HowWideFallbackGate(unittest.TestCase):
+    def test_a_readable_wave_of_implementers_is_not_an_explorer_fan_out(self):
+        spawns = [delegate(27, "Implement the CSV parser change. Edit src/parse.py and write tests."),
+                  delegate(27, "Implement the exporter change. Edit src/export.py."), delegate(41, "Write the release notes.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_read_only_briefs_that_ask_for_a_fix_are_not_explorers(self):
+        spawns = [delegate(27, "Read-only first, then fix the parser bug in src/parse.py."), delegate(27, "Do not modify tests. Implement the exporter change."),
+                  delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_each_batched_task_needs_its_own_read_only_marker(self):
+        tasks = [{"goal": "Trace the ingest stage.", "context": "Read-only: do not edit or write files."}, {"goal": "Trace the render stage.", "context": "Report what you find."}]
+        spawns = [delegate(27, "Trace the ingest stage."), delegate(27, "Trace the render stage."), delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": tasks}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {"goal": "Write the answer."}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_synthesizer_that_names_explorers_is_not_one(self):
+        explorers = [{"seq": 1, "tool": "Agent", "prompt_head": "You are exploring a codebase. Read-only."} for _ in range(2)]
+        explorers[1] = dict(explorers[1], seq=2)
+        writer = {"seq": 9, "tool": "Agent", "prompt_head": "Synthesize the two explorer reports into an architectural explanation."}
+        events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}},
+                  text(5, "Both are back."), {"seq": 9, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=explorers + [writer], final_reply="x"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], PASS, result)
 
 
 class CaseHygiene(unittest.TestCase):

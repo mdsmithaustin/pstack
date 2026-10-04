@@ -50,6 +50,8 @@ STOP = {"the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "it"
         "with", "per", "as", "be", "by", "at", "from", "over", "into", "if", "then", "run", "use"}
 JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
 SYNTH_ROLE = re.compile(r"\bsynthesi[sz](?:e|es|ing)\b")
+READ_ONLY_BRIEF = re.compile(r"read[- ]only|do not (?:edit|write|modify|change)|don't (?:edit|write|modify)")
+WRITES_CODE = re.compile(r"\bimplement(?:s|ing)?\b|\bfix(?:es|ing)?\b|write (?:the )?code")
 REPLY_HEAD = 300
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -546,8 +548,15 @@ class View:
     def spawn_brief(self, spawn):
         call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
         given = (call or {}).get("input") or {}
-        head = spawn.get("prompt_head") or ""
-        return head + " " + json.dumps(given)
+        tasks = given.get("tasks") if isinstance(given.get("tasks"), list) else None
+        siblings = [s for s in self.spawns if s.get("seq") == spawn.get("seq")]
+        if tasks and len(tasks) == len(siblings):
+            given = tasks[next(i for i, s in enumerate(siblings) if s is spawn)]
+        return (spawn.get("prompt_head") or "") + " " + json.dumps(given)
+
+    def explores(self, spawn):
+        brief = self.spawn_brief(spawn).lower()
+        return bool(READ_ONLY_BRIEF.search(brief)) and not WRITES_CODE.search(brief)
 
     def spawns_where(self, *needles, turn=None):
         pattern = re.compile("|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles))
@@ -1499,7 +1508,7 @@ def how_wide(view):
     explainers = view.spawns_where("explainer", "architectural explanation", r"synthesi[sz]\w*")
     evidence = [f"explorer spawns: {len(explorers)}", f"explainer spawns: {len(explainers)}"]
     waves = view.waves(view.spawns)
-    if not explorers and len(waves) >= 2 and 2 <= len(waves[0]) <= 4:
+    if not explorers and len(waves) >= 2 and 2 <= len(waves[0]) <= 4 and (view.encrypted() or all(view.explores(s) for s in waves[0])):
         explorers, explainers = waves[0], waves[1]
         evidence.append(f"explorers found by structure: a wave of {len(waves[0])} at seq {waves[0][0].get('seq')}, then a spawn at seq {waves[1][0].get('seq')}")
     if not explorers:
@@ -2376,8 +2385,7 @@ def arm_dirs_made(command):
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
     made = sum(arm_dirs_made(c[1]) for c in view.commands())
-    briefs = {str(s.get("seq")): view.spawn_brief(s) for s in candidates}
-    paths = {m.rstrip("/") for brief in briefs.values() for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
+    paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
     evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
