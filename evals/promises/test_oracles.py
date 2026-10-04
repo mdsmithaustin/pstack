@@ -617,6 +617,9 @@ class InterrogateSwarmArena(unittest.TestCase):
         result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], None)
         self.assertEqual(result["verdict"], FAIL, result)
 
+    def test_grok_build_is_the_same_tier_as_grok(self):
+        self.assertTrue(oracles.same_model("grok-4.7", "grok-4.7-build"))
+
     def test_two_reviewers_with_one_label_are_not_differentiated_arms(self):
         case = load_case("interrogate-run")
         events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}}]
@@ -1565,6 +1568,13 @@ class ReplyWording(unittest.TestCase):
         result = self.arena("Arena result\n- No clear winner and candidate 1 was selected, with retries grafted from candidate 3.\n- Verified: 8 unit tests passed.")
         self.assertEqual(result["verdict"], PASS, result)
 
+    def test_a_negation_earlier_in_a_run_on_clause_does_not_cancel_a_pick(self):
+        for line in ("I could not decide between them so candidate 1 was selected, with retries grafted from candidate 3.",
+                     "Candidate 2 was not selected because it failed so candidate 1 was selected, with retries grafted from candidate 3.",
+                     "The cross-judge did not agree with me so candidate 1 was selected, with retries grafted from candidate 3."):
+            result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
+            self.assertEqual(result["verdict"], PASS, (line, result))
+
     def test_a_negated_selection_is_not_a_base(self):
         result = self.arena("Arena result\n- No candidate 1 was selected and no graft was applied.\n- Verified: 8 unit tests passed.")
         self.assertEqual(result["verdict"], FAIL, result)
@@ -2392,11 +2402,16 @@ def install_checks():
     return {check.promise for check in install.CHECKS}
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class GreenRerun(unittest.TestCase):
     def test_a_rerun_after_the_fix_counts_when_a_check_also_ran_before_it(self):
         command = "python3 -m unittest discover -s tests; echo x > rollup/export.py; python3 -m unittest discover -s tests"
         self.assertTrue(oracles.runs_after_write(command, "rollup/export.py"))
+
+    def test_a_read_before_the_run_is_not_the_write(self):
+        command = "cat rollup/export.py; python3 -m unittest discover -s tests; echo x > rollup/export.py"
+        self.assertFalse(oracles.runs_after_write(command, "rollup/export.py"))
+
+
+if __name__ == "__main__":
+    unittest.main()
+

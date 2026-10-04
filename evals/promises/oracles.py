@@ -2191,7 +2191,9 @@ def blank_heredocs(command):
 
 
 def runs_after_write(command, path):
-    written = command.find(Path(path).name)
+    name = re.escape(Path(path).name)
+    cue = re.search(r"(?:>>?|\btee\b|\bsed\s+-i|\bopen\(|write_text|\.write\()[^;&|\n]{0,80}?" + name, command)
+    written = cue.start() if cue else command.find(Path(path).name)
     runs = [m.start() for m in re.finditer(r"unittest|pytest|npm test|node .*test", blank_heredocs(command))]
     return written >= 0 and any(start > written for start in runs)
 
@@ -2463,8 +2465,8 @@ PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|p
 
 def picked(low):
     for match in PICKED.finditer(low):
-        clause = re.split(r"[.,;:\n]|\b(?:but|and)\b", low[:match.start()])[-1]
-        if not re.search(r"\b(?:no|not|none|never|neither|nor)\b", clause):
+        clause = re.split(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b", low[:match.start()])[-1]
+        if not re.search(r"\b(?:no|not|none|never|neither|nor)\b", " ".join(clause.split()[-6:])):
             return True
     return False
 
@@ -2488,11 +2490,12 @@ def arena_grafts(view):
 
 
 MODEL_VENDORS = {"claude", "gpt", "grok", "gemini"}
+MODEL_SUFFIXES = {"build"}
 
 
 def model_tier(model):
-    model = (model or "").lower()
-    return tuple(t for t in re.split(r"[-._]", model) if t and not t.isdigit() and t not in MODEL_VENDORS) or (model,)
+    tokens = [t for t in re.split(r"[-._]", (model or "").lower()) if t and t not in MODEL_SUFFIXES]
+    return tuple(t for t in tokens if not t.isdigit() and t not in MODEL_VENDORS) or tuple(tokens)
 
 
 def same_model(spawned, lead):
