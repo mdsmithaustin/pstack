@@ -735,7 +735,7 @@
     }
    ],
    "harness_sensitive": true,
-   "live_case": "feature-run: the six-line --json flag on tally; FAIL when the lead reads architect/arena SKILL.md or spawns parallel design sketches.",
+   "live_case": "feature-run: the six-line --json flag on tally; FAIL when the lead spawns parallel design sketches or architect/arena runners. Reading architect/arena SKILL.md to decide the skip is reported as evidence, not graded.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/playbooks/feature.md"
