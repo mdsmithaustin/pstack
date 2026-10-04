@@ -2461,10 +2461,16 @@ def arena_grafts(view):
     return failed("reply does not name the base and the grafts", *evidence)
 
 
+MODEL_VENDORS = {"claude", "gpt", "grok", "gemini"}
+
+
+def model_tier(model):
+    model = (model or "").lower()
+    return tuple(t for t in re.split(r"[-._]", model) if t and not t.isdigit() and t not in MODEL_VENDORS) or (model,)
+
+
 def same_model(spawned, lead):
-    spawned, lead = (spawned or "").lower(), (lead or "").lower()
-    alias = lambda short, slug: "-" not in short and short in re.split(r"[-.]", slug)
-    return spawned == lead or alias(spawned, lead) or alias(lead, spawned)
+    return model_tier(spawned) == model_tier(lead)
 
 
 @oracle("arena-readonly-cross-judge")
@@ -2487,7 +2493,11 @@ def arena_judge(view):
         failures.append("judge runs on the lead's model although the run used another")
     if judge.get("prompt_head") and not readonly:
         failures.append("judge brief is not read-only")
-    return failed(failures, *evidence) if failures else passed(*evidence)
+    if failures:
+        return failed(failures, *evidence)
+    if not view.model:
+        return inconclusive("the lead's model is unknown, so the judge's model cannot be compared with it", *evidence)
+    return passed(*evidence)
 
 
 ASSIGNED_OUTPUT = re.compile(r"\b(?:write|save|put|record|output:?)\b(?:(?!\b(?:read|see|from)\b)[^.\n]){0,60}?([\w-]+(?:\.[\w-]+)*\.md)\b", re.I)

@@ -2252,6 +2252,22 @@ class SourcesLabel(unittest.TestCase):
             self.assertEqual(grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), case)["verdict"], want, reply)
 
 
+class ModelTiers(unittest.TestCase):
+    def judged(self, judge, lead, models):
+        spawns = [{"seq": 10 + n, "tool": "Agent", "model": m, "prompt_head": "Candidate design"} for n, m in enumerate(models)]
+        spawns.append({"seq": 30, "tool": "Agent", "model": judge, "prompt_head": "READ-ONLY. You are the judge scoring candidates against the rubric."})
+        trace = minimal(events=[{"seq": s["seq"], "kind": "tool_call", "name": "Agent", "input": {}} for s in spawns], spawns=spawns)
+        trace["model"] = lead
+        return grade("arena-readonly-cross-judge", trace, load_case("arena-run"))
+
+    def test_f9_an_unknown_lead_model_is_inconclusive(self):
+        self.assertEqual(self.judged("opus", None, ["opus", "sonnet"])["verdict"], INCONCLUSIVE)
+
+    def test_f9_another_version_of_the_leads_tier_is_the_same_tier(self):
+        self.assertEqual(self.judged("claude-opus-4-1", "claude-opus-5-5", ["opus", "sonnet", "sonnet"])["verdict"], FAIL)
+        self.assertEqual(self.judged("gpt-6-luna", "gpt-6.1-sol", ["gpt-6.1-sol", "gpt-6-luna"])["verdict"], PASS)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
