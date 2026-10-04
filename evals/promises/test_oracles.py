@@ -1855,6 +1855,39 @@ class UntestedHunks(unittest.TestCase):
         self.assertEqual(result["verdict"], PASS, result)
 
 
+class ArenaDistinctDirectories(unittest.TestCase):
+    def arena_candidates(self, setup, sealed=False):
+        spawns, events = [], []
+        for n, seq in enumerate((10, 11, 12, 13, 14), 1):
+            head = None if sealed else f"Candidate {n}: design the cache key. Write to /tmp/arena/shared"
+            spawns.append({"seq": seq, "tool": "Agent", "prompt_head": head, "x_prompt_encrypted": sealed, "description": "cand"})
+            events.append({"seq": seq, "kind": "tool_call", "name": "Agent", "input": {"description": "cand"}})
+        trace = minimal(events=bash(5, setup) + events, spawns=spawns, final_reply="x", harness="codex" if sealed else "claude-code")
+        return grade("arena-candidates-own-worktrees", trace, load_case("arena-run"))
+
+    def test_one_directory_made_five_times_is_one_directory(self):
+        result = self.arena_candidates("\n".join(["mkdir -p /tmp/candidate-1"] * 5))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertIn("candidate directories created: 1", result["evidence"])
+
+    def test_encrypted_candidates_sharing_one_directory_are_inconclusive(self):
+        result = self.arena_candidates("mkdir -p /tmp/candidate-1", sealed=True)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_encrypted_candidates_with_a_directory_each_pass(self):
+        made = "D=/tmp/arena; " + " && ".join(f"mkdir -p $D/candidate-{n}" for n in range(1, 6))
+        result = self.arena_candidates(made, sealed=True)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("candidate directories created: 5", result["evidence"])
+
+    def test_named_git_worktrees_each_count_once(self):
+        added = "\n".join(f"git worktree add --detach /tmp/relay-keys/{n} HEAD" for n in ("cedar", "maple", "birch", "elm", "ash"))
+        result = self.arena_candidates(added, sealed=True)
+        self.assertEqual(result["verdict"], PASS, result)
+        again = self.arena_candidates("\n".join(["git worktree add --detach /tmp/relay-keys/cedar HEAD"] * 5), sealed=True)
+        self.assertEqual(again["verdict"], INCONCLUSIVE, again)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))

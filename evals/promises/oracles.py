@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -2376,24 +2377,39 @@ def arena_count(view):
 ARM_DIR = re.compile(r"(?:worktree|candidate|arm|attempt)", re.I)
 
 
-def arm_dirs_made(command):
-    made = len(re.findall(r"git worktree add", command))
-    for segment in re.split(r"&&|\|\||[;|\n]", command):
-        words = shell_paths(segment) if re.match(r"\s*mkdir\b", segment) else []
-        made += sum(1 for w in words if ARM_DIR.search(w.rsplit("/", 1)[-1]))
-    return made
+def arm_dirs(command):
+    dirs, base = set(), ""
+    for segment in re.split(r"&&|\|\||[;|\n]", expand_assignments(strip_heredocs(command))):
+        moved = cd_into(segment, base)
+        if moved is not None:
+            base = moved
+            continue
+        words = segment.split()
+        if words[:1] == ["mkdir"]:
+            targets = [w.strip("\"'") for w in words[1:] if not w.startswith("-")]
+            targets = [t for t in targets if ARM_DIR.search(t.rstrip("/").rsplit("/", 1)[-1])]
+        elif words[:3] == ["git", "worktree", "add"]:
+            rest = words[3:]
+            while rest and rest[0].startswith("-"):
+                rest = rest[2:] if rest[0] in ("-b", "-B") else rest[1:]
+            targets = [w.strip("\"'") for w in rest[:1]]
+        else:
+            targets = []
+        dirs |= {os.path.normpath(under(base, t)) for t in targets}
+    return dirs
 
 
 @oracle("arena-candidates-own-worktrees")
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
-    made = sum(arm_dirs_made(c[1]) for c in view.commands())
+    made = len(set().union(*(arm_dirs(c[1]) for c in view.commands())))
     paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
     evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
     if view.encrypted():
-        return inconclusive("briefs encrypted; worktree assignment unreadable", *evidence) if not made else passed(*evidence)
+        enough = made >= len(candidates) or len(view.worktrees() or []) > len(candidates)
+        return passed(*evidence) if enough else inconclusive("briefs encrypted, and fewer candidate directories than candidates", *evidence)
     if len(paths) >= len(candidates) or made >= len(candidates) or len(view.worktrees() or []) > len(candidates):
         return passed(*evidence)
     return failed("candidates do not each get their own worktree or directory", *evidence)
