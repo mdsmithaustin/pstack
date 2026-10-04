@@ -76,7 +76,7 @@ def prepare(run):
 def config_flags(run):
     project = run.project
     plan = str(run.case.get("env", {}).get("todo_tools") is not False).lower()
-    return ["-c", f'model="{MODEL}"', "-c", f'model_reasoning_effort="{EFFORT}"',
+    return ["--disable", "apps", "-c", f'model="{MODEL}"', "-c", f'model_reasoning_effort="{EFFORT}"',
             "-c", 'approval_policy="never"', "-c", 'sandbox_mode="workspace-write"',
             "-c", f"tools.update_plan.enabled={plan}",
             "-c", f'projects={{"{project}"={{trust_level="trusted"}}}}',
