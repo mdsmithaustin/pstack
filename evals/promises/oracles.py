@@ -2192,8 +2192,8 @@ def blank_heredocs(command):
 
 def runs_after_write(command, path):
     written = command.find(Path(path).name)
-    run = re.search(r"unittest|pytest|npm test|node .*test", blank_heredocs(command))
-    return written >= 0 and run is not None and written < run.start()
+    runs = [m.start() for m in re.finditer(r"unittest|pytest|npm test|node .*test", blank_heredocs(command))]
+    return written >= 0 and any(start > written for start in runs)
 
 
 @oracle("poteto-tdd-failing-test-first")
@@ -2463,8 +2463,8 @@ PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|p
 
 def picked(low):
     for match in PICKED.finditer(low):
-        clause = re.split(r"[.,;:\n]|\bbut\b", low[:match.start()])[-1]
-        if not re.search(r"\b(?:no|not|none|never|neither)\b", " ".join(clause.split()[-3:])):
+        clause = re.split(r"[.,;:\n]|\b(?:but|and)\b", low[:match.start()])[-1]
+        if not re.search(r"\b(?:no|not|none|never|neither|nor)\b", clause):
             return True
     return False
 
@@ -2515,7 +2515,8 @@ def arena_judge(view):
         return failed("judge spawned before the candidates", *evidence)
     others = [s.get("model") for s in view.spawns if s.get("model") and not same_model(s["model"], view.model)]
     failures = []
-    if judge.get("model") and same_model(judge["model"], view.model) and others:
+    judge_model = judge.get("model") or view.model
+    if judge_model and view.model and same_model(judge_model, view.model) and others:
         failures.append("judge runs on the lead's model although the run used another")
     if judge.get("prompt_head") and not readonly:
         failures.append("judge brief is not read-only")

@@ -613,6 +613,10 @@ class InterrogateSwarmArena(unittest.TestCase):
         result = self.judged_by("gpt-5.6-sol", ["gpt-5.6-sol"] * 5, "gpt-5.6-sol")
         self.assertEqual(result["verdict"], PASS, result)
 
+    def test_a_judge_with_no_model_inherits_the_leads_and_fails_when_the_run_used_another(self):
+        result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], None)
+        self.assertEqual(result["verdict"], FAIL, result)
+
     def test_two_reviewers_with_one_label_are_not_differentiated_arms(self):
         case = load_case("interrogate-run")
         events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}}]
@@ -1551,6 +1555,16 @@ class ReplyWording(unittest.TestCase):
             result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
             self.assertEqual(result["verdict"], PASS, (line, result))
 
+    def test_a_coordinated_negation_is_not_a_pick(self):
+        for line in ("Neither candidate 1 nor candidate 2 was selected, and no graft was applied.",
+                     "It was not the case that candidate 1 was selected, and no graft was applied."):
+            result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
+            self.assertEqual(result["verdict"], FAIL, (line, result))
+
+    def test_a_negation_before_and_does_not_cancel_the_pick_after_it(self):
+        result = self.arena("Arena result\n- No clear winner and candidate 1 was selected, with retries grafted from candidate 3.\n- Verified: 8 unit tests passed.")
+        self.assertEqual(result["verdict"], PASS, result)
+
     def test_a_negated_selection_is_not_a_base(self):
         result = self.arena("Arena result\n- No candidate 1 was selected and no graft was applied.\n- Verified: 8 unit tests passed.")
         self.assertEqual(result["verdict"], FAIL, result)
@@ -2380,3 +2394,9 @@ def install_checks():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GreenRerun(unittest.TestCase):
+    def test_a_rerun_after_the_fix_counts_when_a_check_also_ran_before_it(self):
+        command = "python3 -m unittest discover -s tests; echo x > rollup/export.py; python3 -m unittest discover -s tests"
+        self.assertTrue(oracles.runs_after_write(command, "rollup/export.py"))
