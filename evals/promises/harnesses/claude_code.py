@@ -81,12 +81,13 @@ CLAUDE_BINARY = Path("/Users/msmith1/.local/share/claude/versions/2.1.289")
 CLAUDE_SHA256 = "03d66745e3bb69ec727d66023696f3820bc0a00a8a5ba725eb6706d0c67cbe69"
 PYTHON_ROOT = Path("/Users/msmith1/.local/share/mise/installs/python/3.14.7")
 NODE_ROOT = Path("/Users/msmith1/.local/share/mise/installs/node/24.20.0")
+GIT_ROOT = Path("/Library/Developer/CommandLineTools")
 RG_BINARY = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path/rg")
 PINNED_TOOLS = (
     (PYTHON_ROOT / "bin/python3.14", "1bfa9a829d950ecd4870a3d7a6826eb57edb4aa93f69d07cd3bb21e9fcc6d439"),
     (NODE_ROOT / "bin/node", "9d050fd455b56426e25d4d603c7c501cbb2630348e836cf221dcce748e90588a"),
     (RG_BINARY, "ee0025a8dcfb3bef627328c5fb57b56967dcdfc3ed713e3825dfaba1da2e579a"),
-    (Path("/usr/bin/git"), "b8763cf250e607a778bb4603cecb5b90338814d0a3dfcba0d57b1de242f610e9"),
+    (GIT_ROOT / "usr/bin/git", "a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7"),
 )
 SYSTEM_TOOLS = tuple(Path("/bin") / n for n in ("sh", "bash", "zsh", "cat", "cp", "mv", "rm", "mkdir", "ls", "pwd", "chmod")) + tuple(
     Path("/usr/bin") / n for n in ("security", "uname", "sw_vers", "sed", "awk", "grep", "head", "tail", "wc", "find", "xargs", "env", "diff", "sort", "touch", "true", "false", "tee", "tr"))
@@ -119,10 +120,11 @@ def _host_runtime():
             "Darwin", "25.6.0", "arm64", "/Users/msmith1", "msmith1"):
         raise IsolationUnavailable("Claude filesystem isolation supports only the measured Darwin 25.6.0 arm64 runtime")
     home = Path(account.pw_dir)
-    files = (CLAUDE_BINARY, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, *(Path(p) for p in (
+    files = (CLAUDE_BINARY, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
         "/", "/usr/share/icu/icudt78l.dat", "/dev/null", "/dev/random", "/dev/urandom", "/private/etc/hosts",
         "/private/var/run/resolv.conf", "/private/var/db/timezone/zoneinfo/America/Denver")))
-    trees = (PYTHON_ROOT, NODE_ROOT, Path("/System/Library"), Path("/usr/lib"), home / "Library/Keychains")
+    trees = (PYTHON_ROOT, NODE_ROOT, GIT_ROOT / "usr/libexec/git-core", GIT_ROOT / "usr/share/git-core/templates",
+             Path("/System/Library"), Path("/usr/lib"), home / "Library/Keychains")
     pins = ((CLAUDE_BINARY, CLAUDE_SHA256), *PINNED_TOOLS)
     for path, digest in pins:
         if path.is_symlink() or _digest(path) != digest:
@@ -130,7 +132,7 @@ def _host_runtime():
     if not Path("/usr/bin/sandbox-exec").is_file() or any(not path.exists() for path in (*files, *trees)):
         raise IsolationUnavailable("measured Seatbelt runtime dependencies are missing")
     return HostRuntime(CLAUDE_BINARY, "2.1.289", home, account.pw_name, files, trees, pins,
-                       f"{PYTHON_ROOT}/bin:{NODE_ROOT}/bin:{RG_BINARY.parent}:/usr/bin:/bin", "/bin/bash")
+                       f"{PYTHON_ROOT}/bin:{NODE_ROOT}/bin:{RG_BINARY.parent}:{GIT_ROOT}/usr/bin:/usr/bin:/bin", "/bin/bash")
 
 
 def _bind_paths(run, runtime):
@@ -774,6 +776,5 @@ def harvest(run):
         "x_evidence_complete": bool(turns) and all(not t["timed_out"] and t["exit_code"] == 0 for t in turns)
             and all(r.get("subtype") == "success" for r in results)
             and all(s["observed"] is not None for s in spawn_rows)
-            and not any(e["kind"] == "tool_call" and (e["input"].get("run_in_background") or
-                e["name"] == "Bash" and re.search(r"(?<!&)&(?!&)", e["input"].get("command", ""))) for e in events),
+            and not any(e["kind"] == "tool_call" and e["input"].get("run_in_background") for e in events),
     }

@@ -328,7 +328,8 @@ class PreparedHarvest(unittest.TestCase):
 
     def test_missing_or_error_result_and_timeout_keep_observed_events_incomplete(self):
         for result, exit_code, timed_out in ((None, 0, False),
-                ({"type": "result", "subtype": "error", "result": "native error"}, 1, False),
+                ({"type": "result", "subtype": "error", "result": "native error"}, 0, False),
+                ({"type": "result", "subtype": "success", "result": "native result"}, 1, False),
                 ({"type": "result", "subtype": "success", "result": "native result"}, 0, True)):
             with self.subTest(result=result, exit_code=exit_code, timed_out=timed_out):
                 self.prepare_run()
@@ -354,6 +355,9 @@ class PreparedHarvest(unittest.TestCase):
                         children = self.native / self.state.session / "subagents"
                         children.mkdir(parents=True)
                         (children / "agent-child.meta.json").write_text(json.dumps({"toolUseId": "child", "agentType": "poteto-agent"}))
+                        metadata_only = claude_code.harvest(self.run)
+                        self.assertEqual(metadata_only["spawns"][0]["subagent_type"], "poteto-agent")
+                        self.assertEqual(metadata_only["x_evidence_complete"], False)
                         (children / "agent-child.jsonl").write_text(json.dumps({"type": "assistant", "message": {
                             "model": "child-model", "content": [{"type": "text", "text": "persona: poteto-agent\nChild completed."}]}}) + "\n")
                         complete = claude_code.harvest(self.run)
