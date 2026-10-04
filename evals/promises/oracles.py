@@ -52,6 +52,7 @@ JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
 SYNTH_ROLE = re.compile(r"\bsynthesi[sz](?:e|es|ing)\b")
 READ_ONLY_BRIEF = re.compile(r"read[- ]only|do not (?:edit|write|modify|change)|don't (?:edit|write|modify)")
 WRITES_CODE = re.compile(r"\bimplement(?:s|ing)?\b|\bfix(?:es|ing)?\b|write (?:the )?code")
+COUNTED_DESIGNS = re.compile(r"\b(?:two|three|four|five|six|[2-9])\b[^.]{0,40}?\b(?:candidates|sketches|designs)\b")
 REPLY_HEAD = 300
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -1270,7 +1271,9 @@ def design_fan_out(view):
         signals.append("read architect/references/runner-prompt.md to brief runners")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
-    if any(re.search(r"design|sketch|architect", view.spawn_text(j)) for j in judge_spawns(view)):
+    loaded = view.skill_read("arena") or view.skill_read("architect")
+    if any(loaded or len(runners) >= 2 or (re.search(r"design|sketch|architect", view.spawn_text(j)) and COUNTED_DESIGNS.search(view.spawn_text(j)))
+           for j in judge_spawns(view)):
         signals.append("a judge scoring design candidates")
     attempted = sum(len(DESIGN_BRIEF.findall(json.dumps(c.get("input") or {}))) for c in view.tool_calls
                     if c.get("name") in SPAWN_TOOL_NAMES)

@@ -1726,6 +1726,32 @@ class HowWideFallbackGate(unittest.TestCase):
         self.assertEqual(result["verdict"], PASS, result)
 
 
+class DesignJudgeSignal(unittest.TestCase):
+    def lone_judge(self, head, events=()):
+        spawn = {"seq": 5, "tool": "Agent", "prompt_head": head, "description": "review judge"}
+        return minimal(events=list(events) + [{"seq": 5, "kind": "tool_call", "name": "Agent", "input": {"description": "review judge"}}],
+                       spawns=[spawn], final_reply="done")
+
+    def test_a_lone_review_judge_is_not_the_architect_fan_out(self):
+        trace = self.lone_judge("You are a judge. Review this diff against the rubric: design, naming, tests.")
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_a_lone_review_judge_does_not_break_the_design_ladder(self):
+        result = grade("design-ladder-spares-small-changes", self.lone_judge("judge: design quality"), load_case("feature-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_judge_after_an_arena_load_is_the_fan_out(self):
+        trace = self.lone_judge("You are the read-only cross-judge. Score each against the rubric.", [read(1, "arena/SKILL.md")])
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_judge_scoring_three_design_candidates_is_the_fan_out(self):
+        trace = self.lone_judge("Cross-judge three tally --json design candidates and recommend the base plus grafts.")
+        result = grade("design-ladder-spares-small-changes", trace, load_case("feature-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
