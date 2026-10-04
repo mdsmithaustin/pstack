@@ -115,7 +115,7 @@ def forget_registry(session):
 
 def load_jsonl(path):
     rows = []
-    for line in Path(path).read_text(errors="replace").splitlines():
+    for line in Path(path).read_text(errors="replace").split("\n"):
         try:
             rows.append(json.loads(line))
         except ValueError:
