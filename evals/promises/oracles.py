@@ -2500,7 +2500,10 @@ def arena_second_opinion(view):
 
 
 def runner_spawns(view):
-    return [s for s in view.spawns_where("runner", "candidate", "architect", "design sketch", "design package") if not view.supports(s)]
+    needles = ["runner", "candidate design", "design candidate", "architect", "design sketch", "design package"]
+    if view.skill_read("arena") or view.skill_read("architect"):
+        needles.append("candidate")
+    return [s for s in view.spawns_where(*needles) if not view.supports(s)]
 
 
 @oracle("architect-grounds-with-how-and-why")

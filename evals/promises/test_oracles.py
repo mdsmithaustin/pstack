@@ -1752,6 +1752,33 @@ class DesignJudgeSignal(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class CandidateNeedle(unittest.TestCase):
+    def test_release_candidates_are_not_design_runners(self):
+        spawns = [{"seq": 5, "tool": "Agent", "prompt_head": "Check release candidate 1 build", "description": "rc1"},
+                  {"seq": 6, "tool": "Agent", "prompt_head": "Check release candidate 2 build", "description": "rc2"}]
+        events = [{"seq": 5, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 6, "kind": "tool_call", "name": "Agent", "input": {}}]
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=spawns, final_reply="done"),
+                       load_case("feature-boundary-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def codex_candidates(self, loaded):
+        events, spawns = [], []
+        for seq, task in ((92, "candidate_one_call"), (95, "candidate_prepared"), (98, "candidate_importer")):
+            more, spawn = codex_spawn(seq, task, "")
+            events += more
+            spawns.append(spawn)
+        reads = [read(5, f"{loaded}/SKILL.md")] if loaded else []
+        return grade("architect-runs-arena-for-sketches", minimal(events=reads + events, spawns=spawns, harness="codex"), load_case("architect-run"))
+
+    def test_candidate_task_names_count_after_architect_loads(self):
+        result = self.codex_candidates("architect")
+        self.assertIn("runner spawns: 3", result["evidence"])
+
+    def test_candidate_task_names_alone_are_not_runners(self):
+        result = self.codex_candidates(None)
+        self.assertIn("runner spawns: 0", result["evidence"])
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
