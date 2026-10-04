@@ -38,6 +38,35 @@ poteto-mode keeps its worklist in the harness's structured task tool when that t
 - **Hermes** has no known switch. Report nothing to change.
 - **Grok Build** ships its `todo_write` tool with no known switch. Report nothing to change.
 
+### 0c. Check Codex subagents
+
+On Codex, pstack spawns roles natively through `spawn_agent`. When the tool is unavailable, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent. Run this check when this skill runs on Codex or the user also runs pstack there.
+
+Whether a session has `spawn_agent` depends on more than config. As of Codex 0.160.0 it also depends on the selected model's own multi-agent setting, launch flags, spawn depth, and config layers this skill cannot read. So config can only show signals, and only a Codex session shows the answer.
+
+- **Inside a Codex session**, the answer is whether `spawn_agent` is callable. When the session defers tools behind a tool search, search for it before calling it missing. If it is missing, list the causes you cannot rule out:
+  - a config key
+  - a `-c` flag the session started with
+  - the selected model
+  - spawn depth
+  - a config layer you cannot read
+
+  Do not pick one without evidence.
+- **The config signals.** Run `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`, and report the `multi_agent` and `multi_agent_v2` rows. Then read `[agents]` `enabled` from `config.toml` under `$CODEX_HOME` or `~/.codex/`, and from the project's `.codex/config.toml` when the project is trusted, because `codex features list` does not report it. Report these as signals, not as a verdict on spawning.
+- **When `codex` is not on PATH**, as when this skill runs from another CLI or from an app-bundled Codex, report the config signals as unverified. A live session's answer still stands.
+
+A key in a file you read is a possible cause, not a proven one, because `multi_agent_v2` or a layer you cannot read can override it. Offer an edit only when a Codex session confirms `spawn_agent` is missing, and only for a possible cause a config file shows:
+
+- `[agents]` `enabled = false` in a file you read, while the `multi_agent_v2` row reads `false` and no readable file of higher precedence sets it `true` (a trusted project's file beats the user's): offer to delete that line or set it to `true`. When a readable layer overrides it, or the rows are unverified, report the key as unverified and offer nothing. On Codex 0.160.0 this key removes `spawn_agent` even while the `multi_agent` row reads `true`. With `multi_agent_v2` on, the key does not block spawning, so offer nothing for it.
+- Both feature rows read `false` and a file you read turns the feature off, as `[features]` `multi_agent = false`, a dotted `features.multi_agent = false`, or the legacy `[features]` `collab = false`: offer to set it to `true` in that file. With the key in the user config, `codex features enable multi_agent` fixes any of the three. When no file you read turns it off, the cause is a layer you cannot read, so name that instead of offering an edit.
+
+```toml
+[features]
+multi_agent = true
+```
+
+Edit a file only after the user says yes, and keep every other key. The change applies from the next session. Without a session to confirm, report the signals and any possible causes, say spawning is unverified, and offer no edit.
+
 ### 1. Detect available models and efforts
 
 Enumerate the model values your session's spawn mechanism accepts, and the reasoning-effort values it accepts per spawn (find the mechanism per the **pstack-harness** skill). On Claude Code, the per-spawn efforts are the levels whose `pstack-effort-<level>` agent the live catalog lists, and none when no effort agent is loaded. That is the dependable source. If your CLI also exposes a models API or command that lists the user's entitled models, such as `codex debug models` or `grok models`, prefer it for completeness. If you cannot detect any, ask the user to paste the slugs they have access to. Never write a real slug you have not confirmed is available. The aliases `inherit-parent` and `auto` are always valid even though they are not detected slugs.

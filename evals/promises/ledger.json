@@ -2690,6 +2690,16 @@
     "skills/figure-it-out/SKILL.md"
    ],
    "scenario": "route-autonomous-run"
+  },
+  "setup-checks-codex-multi-agent": {
+   "check": "live",
+   "claim": "On Codex, setup-pstack treats a live session's callable spawn_agent as the answer and config as signals: it reports the multi_agent and multi_agent_v2 rows and the `[agents] enabled` key as possible causes, offers an edit only when a session confirms spawn_agent is missing and only after a yes, and otherwise reports what it saw and the causes it cannot rule out.",
+   "harness_sensitive": true,
+   "live_case": "setup-run inside Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript confirms spawn_agent is missing in the session, names that key as a possible cause, and does not edit before a yes.",
+   "owners": [
+    "skills/setup-pstack/SKILL.md"
+   ],
+   "scenario": "setup-run"
   }
  },
  "units": {
@@ -8261,6 +8271,33 @@
     "port"
    ],
    "text": "```text\n/no-comments the diff\n```"
+  },
+  "ae455157a458": {
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "On Codex it also checks whether native subagent spawning is available, because without it pstack runs each role through a `codex exec` subprocess or inline, and an inline review is not independent.",
+   "class": "promise",
+   "promise": "setup-checks-codex-multi-agent"
+  },
+  "4b84fcd1e65d": {
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Otherwise it reports what it saw and the causes it cannot rule out.",
+   "class": "promise",
+   "promise": "setup-checks-codex-multi-agent"
+  },
+  "7177ab579608": {
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "When a Codex session shows spawning is missing and a config file holds a key that could cause it, setup names that key as a possible cause and may offer to change it, editing only with your yes.",
+   "class": "promise",
+   "promise": "setup-checks-codex-multi-agent"
   }
  }
 }
