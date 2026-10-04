@@ -26,6 +26,12 @@ MAX_BYTES = 128 * 1024 * 1024
 MAX_ENTRIES = 20000
 MAX_ROWS = 50000
 MAX_DEPTH = 64
+INTEGRITY_FTS_COLUMNS = {
+    "messages_fts_config": ("k", "v"),
+    "messages_fts_trigram_config": ("k", "v"),
+    "messages_fts_idx": ("segid", "term", "pgno"),
+    "messages_fts_trigram_idx": ("segid", "term", "pgno"),
+}
 PRELOAD_CHECK = """
 import json, sys
 sys.path.insert(0, "/opt/hermes")
@@ -721,9 +727,10 @@ class HermesEvidence:
                 budget -= 1
                 return budget <= 0
             con.set_progress_handler(progress, 1000)
-            con.set_authorizer(self._authorize)
+            con.set_authorizer(self._authorize_integrity)
             if con.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
                 raise EvidenceRefused("decode-failed", "database integrity check failed")
+            con.set_authorizer(self._authorize)
             con.row_factory = sqlite3.Row
             sessions = [dict(r) for r in con.execute("SELECT * FROM sessions ORDER BY started_at LIMIT ?", (MAX_ROWS + 1,))]
             messages = [dict(r) for r in con.execute("SELECT * FROM messages ORDER BY id LIMIT ?", (MAX_ROWS + 1,))]
@@ -747,7 +754,7 @@ class HermesEvidence:
                         args = json.loads(fn.get("arguments") or "{}")
                         if not isinstance(args, dict) or not isinstance(fn.get("name"), str):
                             raise EvidenceRefused("decode-failed", "invalid native tool arguments")
-                grouped.setdefault(message["session_id"], []).append(freeze(message))
+                grouped.setdefault(message["session_id"], []).append(freeze({key: message[key] for key in required}))
             records, ids = [], set()
             for session in sessions:
                 required = ("id", "parent_session_id", "model_config", "started_at", "model", "cwd")
@@ -761,13 +768,24 @@ class HermesEvidence:
                     raise EvidenceRefused("decode-failed", "model_config must be an object")
                 session["model_config"] = config
                 session["delegate_from"] = session["parent_session_id"] or config.get("_delegate_from")
-                for key in ("api_call_count", "input_tokens", "output_tokens", "cache_read_tokens"):
+                usage_fields = ("api_call_count", "input_tokens", "output_tokens", "cache_read_tokens")
+                for key in usage_fields:
                     if session.get(key) is not None and type(session[key]) is not int:
                         raise EvidenceRefused("decode-failed", "invalid native usage counter")
+                session = {key: session[key] for key in (*required, *usage_fields, "delegate_from") if key in session}
                 records.append(SessionRecords(freeze(session), tuple(grouped.get(session["id"], ()))))
             return tuple(records)
         finally:
             con.close()
+
+    @staticmethod
+    def _authorize_integrity(action, first, second, database, trigger):
+        allowed = action == sqlite3.SQLITE_SELECT or (
+            action == sqlite3.SQLITE_READ and database == "main" and second in INTEGRITY_FTS_COLUMNS.get(first, ())) or (
+            action == sqlite3.SQLITE_PRAGMA and second is None and (
+                first == "quick_check" and database in (None, "main") or
+                first == "data_version" and database == "main"))
+        return sqlite3.SQLITE_OK if allowed and trigger is None else sqlite3.SQLITE_DENY
 
     @staticmethod
     def _authorize(action, first, second, database, trigger):
