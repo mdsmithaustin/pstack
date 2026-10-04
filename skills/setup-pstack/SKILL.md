@@ -58,7 +58,7 @@ Whether a session has `spawn_agent` depends on more than config. As of Codex 0.1
 A key in a file you read is a possible cause, not a proven one, because `multi_agent_v2` or a layer you cannot read can override it. Offer an edit only when a Codex session confirms `spawn_agent` is missing, and only for a possible cause a config file shows:
 
 - `[agents]` `enabled = false` in a file you read, while the `multi_agent_v2` row reads `false`: offer to delete that line or set it to `true`. On Codex 0.160.0 this key removes `spawn_agent` even while the `multi_agent` row reads `true`. With `multi_agent_v2` on, the key does not block spawning, so offer nothing for it.
-- Both feature rows read `false` and a file you read sets `multi_agent = false`: offer to set it to `true` in that file. With the key in the user config, `codex features enable multi_agent` writes the same lines. When no file you read sets it, the cause is a launch flag or a layer you cannot read, so name those instead of offering an edit.
+- Both feature rows read `false` and a file you read turns the feature off, as `[features]` `multi_agent = false`, a dotted `features.multi_agent = false`, or the legacy `[features]` `collab = false`: offer to set it to `true` in that file. With the key in the user config, `codex features enable multi_agent` fixes any of the three. When no file you read turns it off, the cause is a layer you cannot read, so name that instead of offering an edit.
 
 ```toml
 [features]
