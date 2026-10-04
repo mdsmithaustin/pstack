@@ -1847,12 +1847,18 @@ def added_since_base(view):
     return changes
 
 
-def encoding_landed(changes, constraint):
+def encoding_landed(changes, constraint, reply=""):
     words = [t for t in content_tokens(constraint) if t not in ("not", "remove")]
     needles = words + [a for w in words for a in CONSTRAINT_ALIASES.get(w, ())]
     for path, added in sorted(changes.items()):
         if ENCODING_FILE.search(path) and any(n in added.lower() for n in needles):
             return path
+    explained = [a for w in words if re.search(rf"\b{re.escape(w)}\b", reply.lower()) for a in CONSTRAINT_ALIASES.get(w, ())]
+    subjects = [w for w in words if w not in CONSTRAINT_ALIASES]
+    for path, added in sorted(changes.items()):
+        for line in added.lower().splitlines() if path.endswith(".py") else ():
+            if any(n in line for n in explained) and any(re.search(rf"\b{re.escape(w)}\b", line) for w in subjects):
+                return f"runtime: {path}"
     return None
 
 
@@ -1872,7 +1878,7 @@ def comment_sicko(view):
         gone = [c for c in expect.get("gone", []) if c in texts]
         survived = [c for c in expect.get("kept", []) if c in texts]
         changes = added_since_base(view) or {}
-        encoded = {c: encoding_landed(changes, c) for c in expect.get("kept", []) if c not in survived}
+        encoded = {c: encoding_landed(changes, c, view.final_reply) for c in expect.get("kept", []) if c not in survived}
         evidence.append(f"narrating comments still present: {gone}; constraint comments still present: {survived}; encodings landed: {encoded}")
         if gone:
             return failed(f"narrating comments survived: {gone}", *evidence)

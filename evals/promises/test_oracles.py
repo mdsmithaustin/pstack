@@ -265,6 +265,22 @@ class SteerByDelegate(unittest.TestCase):
         self.assertEqual(grade("principle-name-steers-agent", trace, case)["verdict"], PASS)
 
 
+class RuntimeEncoding(unittest.TestCase):
+    def test_a_runtime_change_the_reply_explains_encodes_the_constraint(self):
+        constraint = "do not remove: the sink needs a trailing newline on every row"
+        changes = {"rollup/sink.py": '        self.handle.write(row + "\\n")'}
+        self.assertEqual(oracles.encoding_landed(changes, constraint, "Sink.append now adds the trailing newline itself"),
+                         "runtime: rollup/sink.py")
+        self.assertIsNone(oracles.encoding_landed(changes, constraint, "removed 20 comments"))
+        self.assertIsNone(oracles.encoding_landed({"rollup/sink.py": "    for row in rows:"}, constraint,
+                                                  "every comment is gone"))
+        self.assertIsNone(oracles.encoding_landed({"rollup/export.py": "    return row"}, constraint, "Done."))
+        self.assertIsNone(oracles.encoding_landed({"rollup/export.py": "    sink = get_sink()"}, constraint,
+                                                  "Sink.append still enforces the trailing newline"))
+        self.assertIsNone(oracles.encoding_landed({"rollup/export.py": '    audit.write("done\\n")'}, constraint,
+                                                  "Sink.append enforces the trailing newline"))
+
+
 class BoundaryGuard(unittest.TestCase):
     def test_a_cross_module_feature_needs_the_architect_step(self):
         case = load_case("feature-boundary-run")

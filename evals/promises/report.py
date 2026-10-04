@@ -34,7 +34,7 @@ def render(out, upstream=None):
     book = ledger.load()
     cells = collect(out)
     pids = sorted({pid for pid, _ in cells})
-    flags = ledger.owners_report(book, upstream, pids) if upstream else {}
+    flags = ledger.owners_report(book, upstream, [p for p in pids if p in book["promises"]]) if upstream else {}
     lines = ["| promise | " + " | ".join(HARNESSES) + " | upstream |", "|---" * (len(HARNESSES) + 2) + "|"]
     for pid in pids:
         row = [cell(cells.get((pid, h), [])) for h in HARNESSES]
@@ -42,6 +42,8 @@ def render(out, upstream=None):
         flag = ""
         if failed and pid in flags:
             flag = "possibly upstream" if flags[pid]["possibly_upstream"] else "port"
+        elif pid not in book["promises"]:
+            flag = "retired"
         lines.append(f"| `{pid}` | " + " | ".join(row) + f" | {flag} |")
     totals = collections.Counter(v for results in cells.values() for v, _ in results)
     lines.append("")
