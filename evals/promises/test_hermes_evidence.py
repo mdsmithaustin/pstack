@@ -322,6 +322,26 @@ class NativeFtsControls(_OwnerFixture):
     def test_native_fts_tables_harvest_ordinary_messages_without_changing_raw_bytes(self):
         self.assert_preserved_harvest(self.database(), "native owned reply")
 
+    def test_native_display_identity_blob_is_not_a_trace_field(self):
+        import sqlite3
+        path = self.database()
+        with sqlite3.connect(path) as con:
+            con.execute("alter table messages add column display_identity blob")
+            con.execute("update messages set display_identity=?", (b"\x00\xffnative display identity",))
+        con.close()
+        self.assert_preserved_harvest(path, "native owned reply")
+
+    def test_blob_in_trace_content_still_refuses_harvest(self):
+        import sqlite3
+        path = self.database()
+        with sqlite3.connect(path) as con:
+            con.execute("update messages set content=? where role='assistant'", (b"invalid trace content",))
+        con.close()
+        trace = hermes.harvest(self.run)
+        self.assertIn("invalid native message values", trace["x_harvest_error"])
+        self.assertEqual(trace["final_reply"], "")
+        self.assertEqual(trace["events"], [])
+
     def test_native_fts_tables_include_the_reply_committed_only_in_wal(self):
         import sqlite3
         import subprocess
