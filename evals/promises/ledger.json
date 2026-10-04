@@ -727,11 +727,11 @@
   },
   "design-ladder-spares-small-changes": {
    "check": "live",
-   "claim": "A change that stays inside one function, sent through /poteto-mode, runs no architect or arena design fan-out.",
+   "claim": "A change that stays inside one function and has one clear shape, sent through /poteto-mode, runs no architect or arena design fan-out.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "A small, self-contained change, such as a flag handled inside one function, keeps this step with `skipped: <reason>`."
+     "quote": "A small, self-contained change keeps this step with `skipped: <reason>`."
     }
    ],
    "harness_sensitive": true,
@@ -1704,7 +1704,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "2. `architect` for parallel design exploration when the change crosses a function boundary."
+     "quote": "2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes."
     }
    ],
    "harness_sensitive": false,
