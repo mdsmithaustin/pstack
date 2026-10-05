@@ -142,6 +142,8 @@ Run `python3 -m unittest discover -s tools -p 'test_subagents.py'` with Python 3
 
 Upstream removes instructions it judges a single lead model no longer needs. The port runs on Codex too, so a cut whose evidence covers only that model waits until the port checks it on a GPT lead. The port takes a cut without that check only when the rule survives in the same file or in poteto-mode, or when upstream's A/B already covered a GPT model.
 
+Upstream #496 evaluated its performance-mantra rewrite on Opus only. The port takes the seven ordered mantras and their stop rule, but retains trace-signal admission, deletion proof through `how`, cache invalidation, redundancy headroom, and interactive-path measurement in `skills/poteto-mode/playbooks/perf-issue.md`. Keep these safeguards on sync until GPT-lead behavioral evidence supports their removal. Hillclimb still borrows only the mantra order.
+
 Upstream #414 (70b2dc8, 15 cuts) and #419 (b0b9c7a) justified their lead-side cuts with Opus 5.5 runs only. The port checked them on 2026-09-27 and took all of them:
 
 - 14 of #414's cuts, plus #419's poteto-tdd, never-block, and outcome-oriented cuts, keep their rule in the same file or in poteto-mode, so the text settles them.
