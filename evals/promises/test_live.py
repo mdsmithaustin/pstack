@@ -215,6 +215,9 @@ class HermesRetention(unittest.TestCase):
             db.message("root", "user", "go")
             db.message("root", "assistant", "owned CLI reply")
             db.done()
+            link = hermes.profile(run) / "lsp/bin/pyright-langserver"
+            link.parent.mkdir(parents=True)
+            os.symlink(b"../lib/node_modules/pyright/langserver.js", os.fsencode(link))
             return record
         output = io.StringIO()
         with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(hermes, "turn", turn), redirect_stdout(output):
@@ -227,6 +230,10 @@ class HermesRetention(unittest.TestCase):
         self.assertEqual((pair / "run/verdict.json").read_bytes(), (root / "verdict.json").read_bytes())
         manifest = json.loads((pair / "pair.json").read_text())
         self.assertEqual(manifest["absent_run_records"], [])
+        link_member = "run/hroot/profiles/probe/lsp/bin/pyright-langserver"
+        target = b"../lib/node_modules/pyright/langserver.js"
+        self.assertEqual(os.readlink(os.fsencode(pair / link_member)), target)
+        self.assertEqual(manifest["symlinks"], {link_member: {"target_hex": target.hex()}})
         self.assertTrue(any(k.startswith("hermes-evidence/captures/") for k in manifest["members"]))
         self.assertEqual(owners[0].private_root.parent, retained)
         self.assertEqual(owners[0]._dirs, [])

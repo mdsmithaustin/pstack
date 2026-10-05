@@ -129,6 +129,7 @@ the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/po
 | [`/setup-pstack`](./skills/setup-pstack/SKILL.md) | you want to pick which models pstack uses per role. detects your models and writes a config rule. |
 | [`/pstack-harness`](./skills/pstack-harness/SKILL.md) | (port addition) maps spawning, per-subagent models, parallelism, and transcript access to claude code, codex, hermes, and grok build. the fan-out skills read it when a mechanic differs by CLI. |
 | [`/reflect`](./skills/reflect/SKILL.md) | a long task landed and you want the recipe captured as a skill edit. |
+| [`/correct`](./skills/correct/SKILL.md) | you keep correcting agents for the same mistakes. mines history for mistake classes, fixes each at the highest level that works (architecture, then types, lint, and ci, then tests, with docs last), and keeps a table pairing each rule with what enforces it. |
 | [`/poteto-teach`](./skills/poteto-teach/SKILL.md) | you want to actually understand a change or subsystem, not just have it summarized. runs how + why and weaves one plain explanation, built up diagram by diagram. |
 | [`/poteto-tdd`](./skills/poteto-tdd/SKILL.md) | you're fixing a bug and there's a cheap local test path. write the failing test first, then the fix. |
 | [`/benchmark-checklist`](./skills/benchmark-checklist/SKILL.md) | you ran a benchmark or measured a speedup or regression. vets the number (limiter, tuning, errors, repeat runs, end-to-end relevance) before you report or act on it. |
@@ -191,6 +192,7 @@ deslop:            deslop it before i commit
 unslop:            can we unslop and tighten the new changes?
 reflect:           /reflect that took too long. capture what we learned so the next run doesn't
                    repeat it.
+correct:           /correct
 show-me-your-work: /show-me-your-work keep a decision trail i can review when i'm back.
 automate-me:       /automate-me
 ```
@@ -331,7 +333,7 @@ Pinning the runner does not make those two commands complete. Neither resolves `
 
 `skill-audit` is stricter than CI on one point. CI skips `audit-manifest` for a manifest with no cases, and the task audits every manifest it finds, so an empty manifest fails locally and passes in CI. Nothing in this repository has one today.
 
-`skill-lint` is not a superset of the fenced list above. It runs the frontmatter and content checkers without the trigger declaration corpus, so it reports `55 skills, 0 errors` where the fenced command adds `trigger declaration coverage`.
+`skill-lint` is not a superset of the fenced list above. It runs the frontmatter and content checkers without the trigger declaration corpus. The fenced frontmatter command also verifies trigger declaration coverage.
 
 `skill-trigger <skill>` and `skill-run <skill>` spend model budget on your own logins and never run in CI. Both default their output to `<skill>/eval-runs/`, inside the skills tree. A git install never sees it, because `.gitignore` covers it, but an install from a local working tree copies that directory like any other, which is what the repository-root `evals/` tree prevents. Pass `OUT` to write under `evals/` instead.
 

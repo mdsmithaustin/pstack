@@ -7,6 +7,7 @@
     {"skill":"benchmark-checklist","example_request":"Is this speedup real?","description_contains":["Vet a perf measurement"],"implicit_allowed":false},
     {"skill":"blast-radius","example_request":"What could this change break?","description_contains":["Find what a change"],"implicit_allowed":false},
     {"skill":"bro","example_request":"Restate that plainly.","description_contains":["Restate the last"],"implicit_allowed":false},
+    {"skill":"correct","example_request":"Stop agents repeating this mistake.","description_contains":["mistakes agents keep repeating"],"implicit_allowed":false},
     {"skill":"create-verification-skill","example_request":"Create a verification skill.","description_contains":["Generate a project-local"],"implicit_allowed":false},
     {"skill":"deslop","example_request":"deslop it","description_contains":["deslop it","before any commit"],"implicit_allowed":true},
     {"skill":"documentation-impact","example_request":"Does this change need documentation updates?","description_contains":["Check documentation impact"],"implicit_allowed":true},
