@@ -724,13 +724,6 @@ class SmallSkills(unittest.TestCase):
                         spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
         self.assertNotEqual(grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"], PASS)
 
-    def test_ts_autoload(self):
-        case = load_case("ts-autoload")
-        loaded = minimal(events=[edit(0, "/w/src/cli.ts"), read(1, "typescript-best-practices/SKILL.md")])
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", loaded, case)["verdict"], PASS)
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", minimal(events=[edit(0, "/w/src/cli.ts")]), case)["verdict"], FAIL)
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", minimal(exit_code=-9), case)["verdict"], INCONCLUSIVE)
-
     def test_technical_writing_mode_first(self):
         case = load_case("technical-writing-run")
         good = minimal(final_reply="Mode: how-to. Then sentence by sentence:\n- `Relay — a fast importer` splits two thoughts.")

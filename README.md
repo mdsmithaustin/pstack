@@ -29,7 +29,7 @@ two steps:
 1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md) to check the bundled personas, optionally register native agents, pick a reasoning budget, and choose which models you want.
 2. use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) whenever you're doing anything that requires rigor.
 
-new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs.
+new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs. stuck, or unsure which skill fits? ask [`/poteto-help`](./skills/poteto-help/SKILL.md).
 
 that's it. the other skills are situational; the mode skill uses them for you as needed. out of the box the mode splits work by model strength (using claude code's subagent model aliases): code delegates (feature, refactoring, bug fix, perf, hillclimb) go to sonnet, while the hardest changes, prose, and judgment go to opus. the default panel is fable / opus / sonnet. on codex the same aliases translate to gpt-6 models (sol at max for fable, sol at xhigh for opus, sol at high for sonnet, luna for haiku) with a reasoning-effort floor of high, and sol runs as gpt-6.1-sol wherever codex lists it; on hermes everything runs on your session model, and on grok build every alias runs as grok-4.7 at your session effort. on claude code, subagents run at your session effort unless a role line writes one, such as `opus@xhigh`, and `/setup-pstack` has registered pstack's effort agents. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) changes any of it.
 
@@ -116,6 +116,7 @@ the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/po
 | skill | use it when |
 |---|---|
 | [`/poteto-mode`](./skills/poteto-mode/SKILL.md) | default entry point for any non-trivial task. |
+| [`/poteto-help`](./skills/poteto-help/SKILL.md) | you're new to pstack, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. also loads on its own when you ask how to use pstack. |
 | [`/how`](./skills/how/SKILL.md) | you want a walkthrough of how a subsystem works. |
 | [`/why`](./skills/why/SKILL.md) | you want to know why something was built this way. discovers available MCPs at run time and queries each evidence category in parallel (source control, issue tracker, long-form docs, real-time chat, infra observability, error tracking, analytics warehouse). |
 | [`/recall`](./skills/recall/SKILL.md) | you're starting or resuming work and want your recent context on a topic rebuilt from your own chat history and the shared record, handed back as a tight current-state brief. |
@@ -195,6 +196,7 @@ reflect:           /reflect that took too long. capture what we learned so the n
 correct:           /correct
 show-me-your-work: /show-me-your-work keep a decision trail i can review when i'm back.
 automate-me:       /automate-me
+help:              /poteto-help which skill should i use to review this branch?
 ```
 
 </details>

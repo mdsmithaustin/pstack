@@ -1002,7 +1002,7 @@
   },
   "guide-named-skills-exist": {
    "check": "static",
-   "claim": "Every skill the guide names with a slash resolves to skills/<name>/SKILL.md in the port (how, why, poteto-teach, recall, architect, arena, swarm, interrogate, poteto-tdd, unslop, no-comments, blast-radius, create-verification-skill, maintain-verification-skill, documentation-impact, show-me-your-work, figure-it-out, automate-me, reflect, technical-writing, bro, setup-pstack, typescript-best-practices).",
+   "claim": "Every skill the guide names with a slash resolves to skills/<name>/SKILL.md in the port (how, why, poteto-teach, recall, architect, arena, swarm, interrogate, poteto-tdd, unslop, no-comments, blast-radius, create-verification-skill, maintain-verification-skill, documentation-impact, show-me-your-work, figure-it-out, automate-me, reflect, technical-writing, bro, setup-pstack, poteto-help, typescript-best-practices).",
    "harness_sensitive": false,
    "owners": [
     "skills/how/SKILL.md",
@@ -1027,6 +1027,7 @@
     "skills/technical-writing/SKILL.md",
     "skills/bro/SKILL.md",
     "skills/setup-pstack/SKILL.md",
+    "skills/poteto-help/SKILL.md",
     "skills/typescript-best-practices/SKILL.md"
    ]
   },
@@ -2509,17 +2510,6 @@
     "skills/poteto-mode/SKILL.md"
    ]
   },
-  "typescript-rules-auto-load-on-ts-files": {
-   "check": "live",
-   "claim": "typescript-best-practices loads whenever the agent touches a .ts or .tsx file without the user invoking it.",
-   "harness_sensitive": true,
-   "live_case": "TypeScript fixture; prompt `/poteto-mode add a flag to src/cli.ts`; pass when the transcript shows typescript-best-practices read without the user naming it.",
-   "owners": [
-    "skills/typescript-best-practices/SKILL.md",
-    "skills/typescript-best-practices/agents/openai.yaml"
-   ],
-   "scenario": "ts-autoload"
-  },
   "unslop-takes-target-and-rules": {
    "check": "live",
    "claim": "/unslop with a target and extra rules edits that target by those rules and reads terse prompts.",
@@ -2708,6 +2698,47 @@
     "skills/setup-pstack/SKILL.md"
    ],
    "scenario": "setup-run"
+  },
+  "typescript-rules-load-by-name": {
+   "check": "static",
+   "claim": "typescript-best-practices is gated against model invocation on every harness that honors the gate (disable-model-invocation in SKILL.md, allow_implicit_invocation: false for Codex), so the user loads it by typing /typescript-best-practices.",
+   "evidence": [
+    {
+     "file": "skills/typescript-best-practices/SKILL.md",
+     "quote": "disable-model-invocation: true"
+    },
+    {
+     "file": "skills/typescript-best-practices/agents/openai.yaml",
+     "quote": "allow_implicit_invocation: false"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/typescript-best-practices/SKILL.md",
+    "skills/typescript-best-practices/agents/openai.yaml"
+   ]
+  },
+  "poteto-help-finds-need-and-routes": {
+   "check": "static",
+   "claim": "/poteto-help infers what the user is trying to do, asks one multiple-choice question when that stays unclear, and routes the answer to the skill or guide page that owns it.",
+   "evidence": [
+    {
+     "file": "skills/poteto-help/SKILL.md",
+     "quote": "Infer the need from the message and the conversation."
+    },
+    {
+     "file": "skills/poteto-help/SKILL.md",
+     "quote": "If the need is still unclear, ask one multiple-choice question with these options, then answer only the section they pick:"
+    },
+    {
+     "file": "skills/poteto-help/SKILL.md",
+     "quote": "This file maps questions to the skills and guide pages that hold the answers."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-help/SKILL.md"
+   ]
   }
  },
  "units": {
@@ -3265,7 +3296,6 @@
    "file": "01-setup.md",
    "promise": "poteto-mode-sticky",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "`/poteto-mode` is sticky."
@@ -5367,7 +5397,6 @@
    "file": "01-setup.md",
    "promise": "poteto-mode-sticky",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "It stays on for the conversation until you opt out by saying so."
@@ -5769,16 +5798,6 @@
     "port"
    ],
    "text": "Prompts worth copying, then the mistakes everyone makes once."
-  },
-  "8fa5eb3c4e65": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "typescript-rules-auto-load-on-ts-files",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[`typescript-best-practices`](../../skills/typescript-best-practices/SKILL.md) has no slash command in your workflow."
   },
   "8fb4bee99a14": {
    "class": "promise",
@@ -6891,7 +6910,6 @@
    "file": "02-poteto-mode.md",
    "promise": "poteto-mode-sticky",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "Short works because the mode is sticky and the playbook holds the structure."
@@ -7304,16 +7322,6 @@
     "port"
    ],
    "text": "You rarely need more words."
-  },
-  "d0d8649226ba": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "typescript-rules-auto-load-on-ts-files",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It loads whenever the agent touches a `.ts` or `.tsx` file and turns the type-system principles into concrete rules: discriminated unions, `unknown` at boundaries, exhaustive variants, schema-derived types."
   },
   "d12943b3cae9": {
    "class": "promise",
@@ -8306,6 +8314,115 @@
    "text": "When a Codex session shows spawning is missing and a config file holds a key that could cause it, setup names that key as a possible cause and may offer to change it, editing only with your yes.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
+  },
+  "dd8e15e16e6c": {
+   "class": "substituted",
+   "file": "01-setup.md",
+   "ported_as": [
+    "1841b9684cfc",
+    "7ca833ffe63f"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "To keep `/poteto-mode` on for the whole chat, pick it from the `/` menu with Option+Enter (Mac) or Alt+Enter (Windows) instead of Enter."
+  },
+  "77a3cc02293e": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "That makes it a [Custom Mode](https://cursor.com/docs/skills), which stays in context on every turn until you exit it."
+  },
+  "dab649d29033": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Custom Modes are available in the Agents Window and the CLI."
+  },
+  "06d87253a45e": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Plain Enter attaches the skill to one message, and it fades as the chat moves on."
+  },
+  "f4c94ee7fe28": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[Set up pstack](./01-setup.md#run-your-first-task) shows how to start one."
+  },
+  "5453f5abe591": {
+   "class": "substituted",
+   "file": "02-poteto-mode.md",
+   "ported_as": [
+    "bedaf31dca04"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "Short works because the playbook holds the structure, and a Custom Mode keeps `/poteto-mode` in context on every turn."
+  },
+  "bc04aa842f29": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`typescript-best-practices`](../../skills/typescript-best-practices/SKILL.md) turns the type-system principles into concrete rules: discriminated unions, `unknown` at boundaries, exhaustive variants, schema-derived types."
+  },
+  "13c0ad2855ea": {
+   "class": "substituted",
+   "file": "05-build-and-clean.md",
+   "ported_as": [
+    "1cbce876149e"
+   ],
+   "promise": "typescript-rules-load-by-name",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It doesn't load on its own, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
+  },
+  "1cbce876149e": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "typescript-rules-load-by-name",
+   "sources": [
+    "port"
+   ],
+   "text": "It's gated against loading on its own, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
+  },
+  "48112dd24616": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When you're stuck, or can't tell which skill fits, ask [`/poteto-help`](../../skills/poteto-help/SKILL.md)."
+  },
+  "fb1bdf113d57": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-finds-need-and-routes",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It finds out what you're trying to do and points you at the right page or skill."
   }
  }
 }

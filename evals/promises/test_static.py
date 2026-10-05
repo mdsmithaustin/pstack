@@ -70,6 +70,7 @@ GUIDE_SLASH_SKILLS = {
     "poteto-tdd", "deslop", "unslop", "no-comments", "blast-radius", "create-verification-skill",
     "maintain-verification-skill", "documentation-impact", "show-me-your-work", "figure-it-out",
     "automate-me", "reflect", "technical-writing", "bro", "setup-pstack", "poteto-mode",
+    "poteto-help", "typescript-best-practices",
 }
 GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | {"typescript-best-practices"} | set(PRINCIPLE_RULES)
 GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack"}

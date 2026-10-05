@@ -2302,22 +2302,6 @@ def bro(view):
     return inconclusive("shorter, but still carries code spans; plainness needs a judge", *evidence, needs_judge=True, excerpt=after[:1500])
 
 
-@oracle("typescript-rules-auto-load-on-ts-files")
-def ts_autoload(view):
-    prompt = " ".join(str(t) for t in view.case.get("turns", []))
-    if "typescript-best-practices" in prompt:
-        return inconclusive("prompt names the skill; auto-load not exercised")
-    touched = [e for e in view.edits() if e[1].endswith((".ts", ".tsx"))] + \
-        [(seq, rel) for seq, rel in view.event_reads() if rel.endswith((".ts", ".tsx"))]
-    loaded = view.skill_read("typescript-best-practices")
-    evidence = [f".ts files touched by the lead: {len(touched)}", f"skill loaded (lead or delegate): {loaded}"]
-    if loaded:
-        return passed(*evidence)
-    if not touched and not view.spawns:
-        return inconclusive("no .ts file touched" + (" (run killed)" if view.killed else ""), *evidence)
-    return failed("a .ts file was touched without loading typescript-best-practices", *evidence)
-
-
 @oracle("blast-radius-finds-breakage")
 def blast_finds(view):
     gate = completion_gate(view)
