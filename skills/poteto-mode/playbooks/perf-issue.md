@@ -14,7 +14,7 @@ For sustained improvement against a metric rather than a one-off fix, use the Hi
    4. Do it later.
    5. Do it when they're not looking. When moving work away from the interactive moment, measure the interactive path, not total work done.
    6. Do it concurrently. Before duplicating work to take the fastest result, require a trace that shows the wait dominates and the system has headroom.
-   7. Do it cheaper.
+   7. Do it cheaper. Add an indirection hop only when it removes more from the critical path than it adds.
 
    When an earlier mantra meets the target, stop.
 3. Plan the fix from the trace. If it crosses a function boundary, `architect` first. Delegate implementation to a subagent on the `perf-issue` role, resolved per **Spawn a role** in the **pstack-harness** skill. Review the diff. Capture a post-fix trace.
