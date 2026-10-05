@@ -50,7 +50,7 @@ python3 -m unittest discover -s evals/promises -p 'test_*.py'
 python3 evals/promises/install.py --out /tmp/pstack-install
 ```
 
-Treat a nonzero unittest exit or zero tests run as a verification failure. The native parent-grading cases must all run on the reviewed host. They explicitly skip on other platforms. CI's Ubuntu promise suite covers the controller guards, unsupported-platform refusal, and pure oracle contracts. It does not prove native grader confinement. The existing macOS `worktree-audit` job covers the cleanup script and does not run the parent-grading boundary tests. The `merge-gate` tests skip without `bun`. The `worktree-audit` test skips off macOS or without `rg` and `jq`.
+Treat a nonzero unittest exit or zero tests run as a verification failure. The native parent-grading cases must all run on the reviewed host. They explicitly skip on other platforms. CI's Ubuntu promise suite covers the controller guards, unsupported-platform refusal, and pure oracle contracts. It does not prove native grader confinement. The Ubuntu `worktree-audit` job covers the cleanup script and does not run the parent-grading boundary tests. The `merge-gate` tests skip without `bun`. The `worktree-audit` script requires `python3`, `rg`, and `jq` on Linux and macOS. Its test skips without `rg` and `jq`.
 
 On the reviewed native host, run the suite with `/Users/msmith1/.local/share/mise/installs/python/3.14.7/bin/python3.14` in place of `python3`. The fsmonitor control executes the test runner's `sys.executable` under the grading policy, which grants that pinned interpreter.
 
