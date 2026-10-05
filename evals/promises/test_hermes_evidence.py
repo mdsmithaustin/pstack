@@ -123,6 +123,37 @@ else:
 
 
 class NativeOwnerControls(_OwnerFixture):
+    def test_native_lsp_link_survives_export_relocation_replay_and_reexport(self):
+        import os
+        import shutil
+        self.database()
+        trace = hermes.harvest(self.run)
+        link = hermes.profile(self.run) / "lsp/bin/pyright-langserver"
+        link.parent.mkdir(parents=True)
+        target = b"../lib/node_modules/pyright/langserver.js"
+        os.symlink(target, os.fsencode(link))
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "link-pair"))
+        member = "run/" + str(link.relative_to(self.root))
+        self.assertEqual(os.readlink(os.fsencode(pair.root / member)), target)
+        moved = self.base / "moved-link-pair"
+        shutil.copytree(pair.root, moved, symlinks=True)
+        self.root.rename(self.base / "preserved-link-run")
+        self.owner.private_root.rename(self.base / "preserved-link-evidence")
+        replay = self.custody.HermesEvidence.replay(
+            self.custody.ReplayBinding(moved, pair.run_id, trace["x_acquisition"]), self.base)
+        self.addCleanup(replay.close)
+        self.assertEqual(hermes.build_trace(replay.read())["final_reply"], "native owned reply")
+        reexport = replay.retain_pair(self.custody.OwnedExport(self.base / "reexported-link-pair"))
+        self.assertEqual(os.readlink(os.fsencode(reexport.root / member)), target)
+        original = json.loads((pair.root / "pair.json").read_text())
+        copied = json.loads((reexport.root / "pair.json").read_text())
+        self.assertEqual(original["symlinks"], copied["symlinks"])
+        self.assertEqual(copied["acquisitions"][:len(original["acquisitions"])], original["acquisitions"])
+        for name in original["members"]:
+            if name == "hermes-evidence/binding.json":
+                continue
+            self.assertEqual((pair.root / name).read_bytes(), (reexport.root / name).read_bytes(), name)
+
     def test_literal_regex_end_anchors_do_not_make_harvest_unavailable(self):
         from test_hermes import tool_call
         (self.project / "note.txt").write_text("note")
