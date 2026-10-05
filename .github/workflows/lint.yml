@@ -77,7 +77,7 @@ jobs:
         working-directory: skills/poteto-mode/scripts
         run: bun run typecheck
   worktree-audit:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,7 +86,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install rg and jq for worktree-audit.sh
-        run: brew install ripgrep jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep jq
       - name: Guide promise worktree-cleanup-classifies-worktrees
         working-directory: evals/promises
         run: |

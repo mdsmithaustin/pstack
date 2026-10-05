@@ -20,8 +20,9 @@ PYTHON_ROOT = Path("/Users/msmith1/.local/share/mise/installs/python/3.14.7")
 PYTHON = PYTHON_ROOT / "bin/python3.14"
 GIT_ROOT = Path("/Library/Developer/CommandLineTools")
 GIT = GIT_ROOT / "usr/bin/git"
-PINS = ((PYTHON, "1bfa9a829d950ecd4870a3d7a6826eb57edb4aa93f69d07cd3bb21e9fcc6d439"),
-        (GIT, "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae"))
+PINS = ((PYTHON, ("1bfa9a829d950ecd4870a3d7a6826eb57edb4aa93f69d07cd3bb21e9fcc6d439",)),
+        (GIT, ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
+               "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae")))
 SYSTEM_FILES = tuple(Path(p) for p in ("/", "/dev/null", "/dev/random", "/dev/urandom",
     "/usr/share/icu/icudt78l.dat", "/private/var/db/timezone/zoneinfo/America/Denver",
     "/bin/sh", "/bin/bash", "/bin/cat", "/bin/sleep", "/usr/bin/env", "/usr/bin/true", "/usr/bin/false"))
@@ -472,7 +473,7 @@ def _runtime():
     if (platform.system(), platform.release(), platform.machine()) != ("Darwin", "25.6.0", "arm64"):
         raise GradeRefused("boundary_unavailable", "only the reviewed Darwin 25.6.0 arm64 runtime is supported")
     for path, expected in PINS:
-        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() not in expected:
             raise GradeRefused("boundary_unavailable", f"runtime fingerprint changed: {path}")
     if not Path("/usr/bin/sandbox-exec").is_file() or any(not p.exists() for p in (*SYSTEM_FILES, *SYSTEM_TREES)):
         raise GradeRefused("boundary_unavailable", "reviewed native runtime files are unavailable")

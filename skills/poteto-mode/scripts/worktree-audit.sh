@@ -5,7 +5,8 @@
 # deletes anything; deletion stays a human-gated step in the playbook.
 #
 # Usage: worktree-audit.sh [repo-path]   (defaults to the current repo)
-set -u
+# Requires python3, rg, and jq.
+set -uo pipefail
 
 repo="${1:-$(git rev-parse --show-toplevel 2>/dev/null)}"
 [ -z "$repo" ] && { echo "not in a git repo; pass a repo path" >&2; exit 1; }
@@ -19,6 +20,7 @@ git fetch origin main --quiet 2>/dev/null || echo "warn: could not fetch origin/
 
 # PR state by branch, fetched once. Empty if gh is unavailable.
 prs=$(mktemp)
+trap 'rm -f "$prs"' EXIT
 gh pr list --author "@me" --state all --limit 1000 \
 	--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
 
@@ -47,7 +49,7 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt;
 	# Distinguish real WIP (tracked edits) from disposable untracked scratch.
 	porcelain=$(git -C "$wt" status --porcelain 2>/dev/null)
 	if [ -z "$porcelain" ]; then dirty=clean
-	elif printf '%s\n' "$porcelain" | grep -qv '^??'; then
+	elif grep -qv '^??' <<< "$porcelain"; then
 		dirty="wip:$(printf '%s\n' "$porcelain" | grep -cv '^??')"
 	else dirty="scratch:$(printf '%s\n' "$porcelain" | grep -c '^??')"; fi
 
@@ -65,14 +67,29 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt;
 
 	# Most recent chat whose transcript operated in this worktree. Match path
 	# followed by "/" or a quote so glint-482 does not match glint-482-r37.
-	last="-"; last_ts=0
+	last="-"; recent=no
 	if [ -d "$transcripts" ]; then
-		f=$(rg -l -e "${wt}/" -e "${wt}\"" "$transcripts" 2>/dev/null \
-			| xargs stat -f '%m %N' 2>/dev/null | sort -rn | head -1)
-		if [ -n "$f" ]; then last_ts=$(echo "$f" | awk '{print $1}')
-			last=$(date -r "$last_ts" '+%Y-%m-%d' 2>/dev/null); fi
+		matches=$(rg -l -e "${wt}/" -e "${wt}\"" "$transcripts" 2>/dev/null || :)
+		chat=$(printf '%s\n' "$matches" | python3 -c '
+import datetime
+import os
+import sys
+
+last_ts = 0
+for path in sys.stdin.read().splitlines():
+    if not path:
+        continue
+    try:
+        mtime = os.stat(path).st_mtime
+    except FileNotFoundError:
+        continue
+    last_ts = max(last_ts, int(mtime))
+last = datetime.datetime.fromtimestamp(last_ts).strftime("%Y-%m-%d") if last_ts > 0 else "-"
+recent = last_ts > 0 and int((int(sys.argv[1]) - last_ts) / 86400) <= 4
+print(last, "yes" if recent else "no", sep="\t")
+' "$now") || exit $?
+		IFS=$'\t' read -r last recent <<< "$chat"
 	fi
-	recent=$([ "$last_ts" -gt 0 ] 2>/dev/null && [ $(( (now - last_ts) / 86400 )) -le 4 ] && echo yes || echo no)
 
 	case "$dirty" in wip:*) bucket=hold-wip ;; *)
 		case "$pr" in *OPEN*) bucket=hold-open-pr ;; *)
@@ -84,6 +101,4 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt;
 
 	printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
 		"$size" "$age" "$merged" "$dirty" "$remote" "$pr" "$last" "$bucket" "$wt"
-done | sort -t$'\t' -k1,1 -rh
-
-rm -f "$prs"
+done | sort -t$'\t' -k1,1 -rh || exit $?

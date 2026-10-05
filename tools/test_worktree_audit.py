@@ -19,7 +19,6 @@ def _have(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
-@unittest.skipUnless(sys.platform == "darwin", "worktree-audit.sh uses BSD stat and date")
 @unittest.skipUnless(_have("rg"), "worktree-audit.sh shells out to rg to read transcripts")
 @unittest.skipUnless(_have("jq"), "worktree-audit.sh shells out to jq to read PR state")
 class WorktreeAuditTranscriptSlugTest(unittest.TestCase):

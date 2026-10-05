@@ -232,12 +232,12 @@ class TestStaticPromises(unittest.TestCase):
 
 
 class TestCiCoverage(unittest.TestCase):
-    def test_a_macos_job_runs_the_worktree_audit_promise_and_fails_when_it_skips(self):
+    def test_an_ubuntu_job_runs_the_worktree_audit_promise_and_fails_when_it_skips(self):
         text = (ROOT / ".github" / "workflows" / "lint.yml").read_text(encoding="utf-8")
         jobs = re.split(r"^  (?=[\w-]+:\n    )", text.split("\njobs:\n", 1)[1], flags=re.M)
-        macos = [j for j in jobs if re.search(r"^    runs-on: macos-[\w.-]+$", j, re.M)]
-        runner = [j for j in macos if "test_scripts.WorktreeAuditPromises" in j]
-        self.assertEqual(len(runner), 1, "no macOS job runs test_scripts.WorktreeAuditPromises")
+        ubuntu = [j for j in jobs if re.search(r"^    runs-on: ubuntu-[\w.-]+$", j, re.M)]
+        runner = [j for j in ubuntu if "test_scripts.WorktreeAuditPromises" in j]
+        self.assertEqual(len(runner), 1, "no Ubuntu job runs test_scripts.WorktreeAuditPromises")
         self.assertIn("test_worktree_cleanup_classifies_worktrees", runner[0])
         self.assertIn("grep -q", runner[0])
         self.assertIn(r"\.\.\. ok$", runner[0])

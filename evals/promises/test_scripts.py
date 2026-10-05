@@ -761,7 +761,6 @@ class BabysitWatcherPromises(GitHubSandbox):
                 self.assertEqual(verdict["kind"], "READY")
 
 
-@unittest.skipUnless(sys.platform == "darwin", "worktree-audit.sh uses BSD stat and date")
 @unittest.skipUnless(shutil.which("rg") and shutil.which("jq"), "worktree-audit.sh shells out to rg and jq")
 class WorktreeAuditPromises(FakeGhSandbox):
     def test_worktree_cleanup_classifies_worktrees(self):
@@ -781,7 +780,10 @@ class WorktreeAuditPromises(FakeGhSandbox):
             return path
 
         add("wt-merged", "merged-br")
-        (add("wt-wip", "wip-br") / "README.md").write_text("edited, not committed\n")
+        wip = add("wt-wip", "wip-br")
+        (wip / "README.md").write_text("edited, not committed\n")
+        for index in range(4096):
+            (wip / f"generated-{index:04d}.tmp").touch()
         (add("wt-scratch", "scratch-br") / "notes.tmp").write_text("scratch\n")
         for name, branch in (("wt-unmerged", "unmerged-br"), ("wt-openpr", "openpr-br")):
             path = add(name, branch)
@@ -814,13 +816,70 @@ class WorktreeAuditPromises(FakeGhSandbox):
                 "wt-openpr": ("no", "clean", "no-remote", "#9/OPEN", "-", "hold-open-pr"),
                 "wt-chat": ("YES", "clean", "no-remote", "-", today, "verify-recent-chat"),
             },
+            result.stdout,
         )
+
+        from datetime import datetime, timedelta, timezone
+
+        transcript = transcripts / "session.jsonl"
+        newest = transcripts / "newest.jsonl"
+        newest.write_text(json.dumps({"cwd": f"{chat}/"}) + "\n")
+        os.utime(transcript, (946684800, 946684800))
+        os.utime(newest, (946778400, 946778400))
+        local_env = dict(self.env, TZ="EST5")
+        result = self.run_cmd(["bash", AUDIT_SH], cwd=repo, env=local_env, expect=0)
+        row = next(line.split("\t") for line in result.stdout.splitlines()[1:] if line.endswith(str(chat)))
+        self.assertEqual(row[6:8], ["2000-01-01", "safe"])
+
+        now = int(datetime.now().timestamp())
+        for age, bucket in ((4.5, "verify-recent-chat"), (5, "safe")):
+            with self.subTest(chat_age_days=age):
+                timestamp = now - int(age * 86400)
+                os.utime(newest, (timestamp, timestamp))
+                result = self.run_cmd(["bash", AUDIT_SH], cwd=repo, env=local_env, expect=0)
+                row = next(line.split("\t") for line in result.stdout.splitlines()[1:] if line.endswith(str(chat)))
+                local_date = datetime.fromtimestamp(timestamp, timezone(timedelta(hours=-5))).strftime("%Y-%m-%d")
+                self.assertEqual(row[6:8], [local_date, bucket])
+
+        os.utime(newest, (946778400, 946778400))
+        real_rg = shutil.which("rg")
+        rg_wrapper = self.bin / "rg"
+        for deleted, expected in (
+            (("vanishing.jsonl",), ["2000-01-01", "safe"]),
+            (("session.jsonl", "newest.jsonl", "vanishing.jsonl"), ["-", "safe"]),
+        ):
+            with self.subTest(vanished_transcripts=deleted):
+                vanishing = transcripts / "vanishing.jsonl"
+                vanishing.write_text(json.dumps({"cwd": f"{chat}/"}) + "\n")
+                os.utime(vanishing, (now, now))
+                rg_wrapper.write_text(
+                    f"#!{sys.executable}\n"
+                    "import subprocess, sys\n"
+                    "from pathlib import Path\n"
+                    f"result = subprocess.run([{real_rg!r}, *sys.argv[1:]], capture_output=True, text=True)\n"
+                    "for line in result.stdout.splitlines():\n"
+                    f"    if Path(line).name in {deleted!r}: Path(line).unlink()\n"
+                    "sys.stdout.write(result.stdout)\n"
+                    "sys.stderr.write(result.stderr)\n"
+                    "sys.exit(result.returncode)\n"
+                )
+                rg_wrapper.chmod(0o755)
+                result = self.run_cmd(["bash", AUDIT_SH], cwd=repo, env=local_env, expect=0)
+                row = next(line.split("\t") for line in result.stdout.splitlines()[1:] if line.endswith(str(chat)))
+                self.assertEqual(row[6:8], expected)
+
         self.assertEqual(self.git("worktree", "list", "--porcelain", cwd=repo), listing_before)
         self.assertEqual(self.git("branch", "--list", cwd=repo), branches_before)
         self.assertEqual((self.tmp / "wt-wip" / "README.md").read_text(), "edited, not committed\n")
         self.assertEqual((self.tmp / "wt-scratch" / "notes.tmp").read_text(), "scratch\n")
         for name in rows:
             self.assertTrue((self.tmp / name).is_dir(), f"{name} was deleted")
+
+        failing_python = self.bin / "python3"
+        failing_python.write_text("#!/bin/sh\necho 'timestamp interpreter failed' >&2\nexit 17\n")
+        failing_python.chmod(0o755)
+        result = self.run_cmd(["bash", AUDIT_SH], cwd=repo, expect=17)
+        self.assertIn("timestamp interpreter failed", result.stderr)
 
 
 if __name__ == "__main__":

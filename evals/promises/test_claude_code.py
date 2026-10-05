@@ -8,7 +8,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import live
 from harnesses import claude_code
@@ -524,6 +524,30 @@ class NativeFilesystem(unittest.TestCase):
                                 self.assertEqual(inside.read_bytes(), b"replacement\n")
 
 
+class RuntimeAdmission(unittest.TestCase):
+    def test_both_supported_git_digests_become_the_selected_fingerprint(self):
+        git = Path("/Library/Developer/CommandLineTools/usr/bin/git")
+        fingerprints = {path: digests[0] for path, digests in claude_code.PINNED_TOOLS}
+        fingerprints[claude_code.CLAUDE_BINARY] = claude_code.CLAUDE_SHA256
+        account = Mock(pw_dir="/Users/msmith1", pw_name="msmith1")
+        self.addCleanup(claude_code._host_runtime.cache_clear)
+        for digest in ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
+                       "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae"):
+            with self.subTest(digest=digest):
+                claude_code._host_runtime.cache_clear()
+                fingerprints[git] = digest
+                with patch.object(claude_code.platform, "system", return_value="Darwin"), \
+                        patch.object(claude_code.platform, "release", return_value="25.6.0"), \
+                        patch.object(claude_code.platform, "machine", return_value="arm64"), \
+                        patch.object(claude_code.pwd, "getpwuid", return_value=account), \
+                        patch.object(Path, "is_symlink", return_value=False), \
+                        patch.object(Path, "is_file", return_value=True), \
+                        patch.object(Path, "exists", return_value=True), \
+                        patch.object(claude_code, "_digest", side_effect=fingerprints.__getitem__):
+                    runtime = claude_code._host_runtime()
+                self.assertEqual(dict(runtime.fingerprints)[git], digest)
+
+
 @unittest.skipUnless((platform.system(), platform.release(), platform.machine(), str(Path.home())) ==
                      ("Darwin", "25.6.0", "arm64", "/Users/msmith1"), "requires the measured Claude runtime")
 class NativeGit(unittest.TestCase):
@@ -538,6 +562,28 @@ class NativeGit(unittest.TestCase):
                                   env=claude_code.child_env(run), capture_output=True, text=True, timeout=10)
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertEqual(done.stdout, "/Library/Developer/CommandLineTools/usr/bin/git\n")
+            for args, expected in ((["init", "--quiet"], ""), (["status", "--porcelain"], "")):
+                done = subprocess.run(["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0),
+                                       "/bin/sh", "-c", 'exec git "$@"', "sh", *args], cwd=run.project,
+                                      env=claude_code.child_env(run), capture_output=True, text=True, timeout=10)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout, expected)
+            self.assertTrue((run.project / ".git" / "HEAD").is_file())
+
+    def test_prepared_runtime_rejects_a_different_supported_git_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": "tally"}, "0" * 40, 60)
+            run.project.mkdir(parents=True)
+            state = claude_code._bind_paths(run, claude_code._host_runtime())
+            git = claude_code.GIT_ROOT / "usr/bin/git"
+            measured = hashlib.sha256(git.read_bytes()).hexdigest()
+            self.assertEqual(dict(state.runtime.fingerprints)[git], measured)
+            alternatives = dict(claude_code.PINNED_TOOLS)[git]
+            other = next(digest for digest in alternatives if digest != measured)
+            digest = claude_code._digest
+            with patch.object(claude_code, "_digest", side_effect=lambda path: other if path == git else digest(path)):
+                with self.assertRaisesRegex(claude_code.IsolationUnavailable, "supported executable changed"):
+                    claude_code.child_env(run)
 
 
 if __name__ == "__main__":
