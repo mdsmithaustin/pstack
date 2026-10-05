@@ -137,6 +137,7 @@ class NativeOwnerControls(_OwnerFixture):
         self.assertEqual(os.readlink(os.fsencode(pair.root / member)), target)
         moved = self.base / "moved-link-pair"
         shutil.copytree(pair.root, moved, symlinks=True)
+        self.assertEqual(os.readlink(os.fsencode(moved / member)), target)
         self.root.rename(self.base / "preserved-link-run")
         self.owner.private_root.rename(self.base / "preserved-link-evidence")
         replay = self.custody.HermesEvidence.replay(
@@ -147,12 +148,68 @@ class NativeOwnerControls(_OwnerFixture):
         self.assertEqual(os.readlink(os.fsencode(reexport.root / member)), target)
         original = json.loads((pair.root / "pair.json").read_text())
         copied = json.loads((reexport.root / "pair.json").read_text())
+        self.assertEqual(original["symlinks"], {member: {"target_hex": target.hex()}})
         self.assertEqual(original["symlinks"], copied["symlinks"])
         self.assertEqual(copied["acquisitions"][:len(original["acquisitions"])], original["acquisitions"])
         for name in original["members"]:
             if name == "hermes-evidence/binding.json":
                 continue
             self.assertEqual((pair.root / name).read_bytes(), (reexport.root / name).read_bytes(), name)
+
+    def test_run_link_targets_remain_opaque_bytes(self):
+        import os
+        import shutil
+        self.database()
+        trace = hermes.harvest(self.run)
+        outside = self.base / "link-targets"
+        outside.mkdir()
+        (outside / "sentinel.txt").write_bytes(b"target contents stay outside the pair\n")
+        links = hermes.profile(self.run) / "lsp/bin"
+        links.mkdir(parents=True)
+        targets = {
+            "absolute-file": os.fsencode(outside / "sentinel.txt"),
+            "absolute-dangling": os.fsencode(self.base / "missing/pyright-langserver"),
+            "directory": os.fsencode(outside),
+            "dangling": b"../missing/langserver.js",
+            "non-utf8": b"../lib/\xff-langserver.js",
+        }
+        for name, target in targets.items():
+            os.symlink(target, os.fsencode(links / name))
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "opaque-link-pair"))
+        manifest = json.loads((pair.root / "pair.json").read_text())
+        expected = {"run/" + str((links / name).relative_to(self.root)): target for name, target in targets.items()}
+        self.assertEqual(manifest["symlinks"], {member: {"target_hex": target.hex()} for member, target in expected.items()})
+        self.assertFalse(any(member.startswith(link + "/") for member in manifest["members"] for link in expected))
+        self.assertTrue(all(set(receipt) == {"size", "sha256"} for receipt in manifest["members"].values()))
+        moved = self.base / "moved-opaque-link-pair"
+        shutil.copytree(pair.root, moved, symlinks=True)
+        self.root.rename(self.base / "preserved-opaque-run")
+        self.owner.private_root.rename(self.base / "preserved-opaque-evidence")
+        replay = self.custody.HermesEvidence.replay(
+            self.custody.ReplayBinding(moved, pair.run_id, trace["x_acquisition"]), self.base)
+        self.addCleanup(replay.close)
+        self.assertEqual(hermes.build_trace(replay.read())["final_reply"], "native owned reply")
+        reexport = replay.retain_pair(self.custody.OwnedExport(self.base / "reexported-opaque-link-pair"))
+        for root in (pair.root, moved, reexport.root):
+            for member, target in expected.items():
+                self.assertEqual(os.readlink(os.fsencode(root / member)), target)
+        self.assertEqual((outside / "sentinel.txt").read_bytes(), b"target contents stay outside the pair\n")
+
+    def test_changed_run_link_target_refuses_replay(self):
+        import os
+        self.database()
+        trace = hermes.harvest(self.run)
+        link = hermes.profile(self.run) / "lsp/bin/pyright-langserver"
+        link.parent.mkdir(parents=True)
+        link.symlink_to("../lib/pyright.js")
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "changed-link-pair"))
+        saved = pair.root / "run" / link.relative_to(self.root)
+        saved.rename(self.base / "preserved-link")
+        os.symlink(b"../lib/changed.js", os.fsencode(saved))
+        replay = self.custody.HermesEvidence.replay(
+            self.custody.ReplayBinding(pair.root, pair.run_id, trace["x_acquisition"]), self.base)
+        self.addCleanup(replay.close)
+        self.assertIn("pair symlink catalog mismatch", hermes.build_trace(replay.read())["x_harvest_error"])
 
     def test_literal_regex_end_anchors_do_not_make_harvest_unavailable(self):
         from test_hermes import tool_call
@@ -478,6 +535,7 @@ os._exit(0)
         (self.root / "verdict.json").write_bytes(b'{"original":"unchanged"}\n')
         pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "pair"))
         manifest = json.loads((pair.root / "pair.json").read_text())
+        self.assertNotIn("symlinks", manifest)
         self.assertEqual(manifest["acquisitions"], [first["x_acquisition"], second["x_acquisition"], third["x_acquisition"]])
         self.assertIn("run/verdict.json", manifest["members"])
         self.assertTrue(any(k.startswith("hermes-evidence/captures/") for k in manifest["members"]))
