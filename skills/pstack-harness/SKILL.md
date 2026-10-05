@@ -11,12 +11,16 @@ pstack skills describe delegation abstractly: "spawn a subagent on model X", "la
 
 When a pstack workflow uses a `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, or `PROJECT_ROOT` command, read the [portable resource path contract](references/portable-paths.md) in full. These commands run bundled scripts, address installed resources, read fresh pstack trunk, or read a consumer control skill. Resolve only the roots that the next command needs. Keep the exact command forms in generated plans and restore the recorded roots across owners, delegates, wake-ups, and later ticks.
 
+## Preserve roles across handoffs
+
+Carry delegation roles into plans, checkpoints, and handoffs. Record the resolved harness, model, and effort as execution observations. Preserve a specific-model override with its original explicit human request. Model names in defaults, examples, past runs, or agent-written summaries do not establish such a request. If the source is unavailable, report the uncertainty instead of attributing the model choice to the human. A direct human model request still takes precedence.
+
 ## Spawn a role
 
 Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona. Build each spawn in this order.
 
 1. **Name the role and the persona.** The skill or playbook step names the role. A spawn whose skill names no role uses `default`. A `subagent_type` of `poteto-agent` or `comment-sicko` in skill text names a persona, and `general-purpose` names none. Neither one picks the model or the effort.
-2. **Resolve the role.** Run the resolver once per task, and again after the config changes:
+2. **Resolve the role.** Run the resolver once per task, and again after the harness or config changes:
 
    ```sh
    python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|grok|hermes> [<role>...]

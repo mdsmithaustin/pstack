@@ -2026,11 +2026,11 @@
   },
   "session-pickup-treats-trail-authoritative": {
    "check": "static",
-   "claim": "Session pickup reads the prior trail as authoritative, reconstructs branch state and decisions, names the resume point, and does not redo completed work.",
+   "claim": "Session pickup reads the prior trail for completed work and decisions, reconstructs branch state, names the resume point, and does not redo completed work.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/session-pickup.md",
-     "quote": "The prior trail is authoritative input. Resist the bias to re-derive it."
+     "quote": "The prior trail records completed work and decisions."
     },
     {
      "file": "skills/poteto-mode/playbooks/session-pickup.md",
@@ -3604,8 +3604,7 @@
    "file": "03-understand.md",
    "promise": "session-pickup-treats-trail-authoritative",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "The [Session pickup playbook](../../skills/poteto-mode/playbooks/session-pickup.md) treats the prior trail as authoritative."
   },
@@ -8306,6 +8305,15 @@
    "text": "When a Codex session shows spawning is missing and a config file holds a key that could cause it, setup names that key as a possible cause and may offer to change it, editing only with your yes.",
    "class": "promise",
    "promise": "setup-checks-codex-multi-agent"
+  },
+  "abf9b0a3b2ff": {
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "session-pickup-treats-trail-authoritative",
+   "sources": [
+    "port"
+   ],
+   "text": "The [Session pickup playbook](../../skills/poteto-mode/playbooks/session-pickup.md) reads the prior trail for completed work and decisions."
   }
  }
 }
