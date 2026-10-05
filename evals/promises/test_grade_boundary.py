@@ -880,7 +880,7 @@ class NativeParentBoundary(BoundaryFixtures):
 
     def test_unavailable_native_launch_and_changed_runtime_refuse_without_verdict(self):
         authority = self.authority()
-        with mock.patch("grade_boundary.PINS", ((Path("/usr/bin/false"), "0" * 64),)):
+        with mock.patch("grade_boundary.PINS", ((Path("/usr/bin/false"), ("0" * 64,)),)):
             with self.assertRaisesRegex(GradeRefused, "fingerprint changed"):
                 live.grade(authority)
         with mock.patch("grade_boundary.subprocess.Popen", side_effect=OSError("native launch unavailable")):

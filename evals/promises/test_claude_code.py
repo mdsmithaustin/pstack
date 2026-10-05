@@ -538,6 +538,28 @@ class NativeGit(unittest.TestCase):
                                   env=claude_code.child_env(run), capture_output=True, text=True, timeout=10)
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertEqual(done.stdout, "/Library/Developer/CommandLineTools/usr/bin/git\n")
+            for args, expected in ((["init", "--quiet"], ""), (["status", "--porcelain"], "")):
+                done = subprocess.run(["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0),
+                                       "/bin/sh", "-c", 'exec git "$@"', "sh", *args], cwd=run.project,
+                                      env=claude_code.child_env(run), capture_output=True, text=True, timeout=10)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.assertEqual(done.stdout, expected)
+            self.assertTrue((run.project / ".git" / "HEAD").is_file())
+
+    def test_prepared_runtime_rejects_a_different_supported_git_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": "tally"}, "0" * 40, 60)
+            run.project.mkdir(parents=True)
+            state = claude_code._bind_paths(run, claude_code._host_runtime())
+            git = claude_code.GIT_ROOT / "usr/bin/git"
+            measured = hashlib.sha256(git.read_bytes()).hexdigest()
+            self.assertEqual(dict(state.runtime.fingerprints)[git], measured)
+            alternatives = dict(claude_code.PINNED_TOOLS)[git]
+            other = next(digest for digest in alternatives if digest != measured)
+            digest = claude_code._digest
+            with patch.object(claude_code, "_digest", side_effect=lambda path: other if path == git else digest(path)):
+                with self.assertRaisesRegex(claude_code.IsolationUnavailable, "supported executable changed"):
+                    claude_code.child_env(run)
 
 
 if __name__ == "__main__":
