@@ -2026,15 +2026,11 @@
   },
   "session-pickup-treats-trail-authoritative": {
    "check": "static",
-   "claim": "Session pickup reads the prior trail for completed work and decisions, restores delegation roles through pstack-harness, names the resume point, and does not redo completed work.",
+   "claim": "Session pickup reads the prior trail for completed work and decisions, reconstructs branch state, names the resume point, and does not redo completed work.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/session-pickup.md",
      "quote": "The prior trail records completed work and decisions."
-    },
-    {
-     "file": "skills/poteto-mode/playbooks/session-pickup.md",
-     "quote": "Restore delegation roles per [Preserve roles across handoffs](../../pstack-harness/SKILL.md#preserve-roles-across-handoffs)."
     },
     {
      "file": "skills/poteto-mode/playbooks/session-pickup.md",
