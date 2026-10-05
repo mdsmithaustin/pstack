@@ -841,6 +841,33 @@ class WorktreeAuditPromises(FakeGhSandbox):
                 local_date = datetime.fromtimestamp(timestamp, timezone(timedelta(hours=-5))).strftime("%Y-%m-%d")
                 self.assertEqual(row[6:8], [local_date, bucket])
 
+        os.utime(newest, (946778400, 946778400))
+        real_rg = shutil.which("rg")
+        rg_wrapper = self.bin / "rg"
+        for deleted, expected in (
+            (("vanishing.jsonl",), ["2000-01-01", "safe"]),
+            (("session.jsonl", "newest.jsonl", "vanishing.jsonl"), ["-", "safe"]),
+        ):
+            with self.subTest(vanished_transcripts=deleted):
+                vanishing = transcripts / "vanishing.jsonl"
+                vanishing.write_text(json.dumps({"cwd": f"{chat}/"}) + "\n")
+                os.utime(vanishing, (now, now))
+                rg_wrapper.write_text(
+                    f"#!{sys.executable}\n"
+                    "import subprocess, sys\n"
+                    "from pathlib import Path\n"
+                    f"result = subprocess.run([{real_rg!r}, *sys.argv[1:]], capture_output=True, text=True)\n"
+                    "for line in result.stdout.splitlines():\n"
+                    f"    if Path(line).name in {deleted!r}: Path(line).unlink()\n"
+                    "sys.stdout.write(result.stdout)\n"
+                    "sys.stderr.write(result.stderr)\n"
+                    "sys.exit(result.returncode)\n"
+                )
+                rg_wrapper.chmod(0o755)
+                result = self.run_cmd(["bash", AUDIT_SH], cwd=repo, env=local_env, expect=0)
+                row = next(line.split("\t") for line in result.stdout.splitlines()[1:] if line.endswith(str(chat)))
+                self.assertEqual(row[6:8], expected)
+
         self.assertEqual(self.git("worktree", "list", "--porcelain", cwd=repo), listing_before)
         self.assertEqual(self.git("branch", "--list", cwd=repo), branches_before)
         self.assertEqual((self.tmp / "wt-wip" / "README.md").read_text(), "edited, not committed\n")
