@@ -141,6 +141,19 @@ class SourceStamp:
 
 
 @dataclass(frozen=True)
+class _Symlink:
+    source: SourceStamp
+    target: bytes
+
+
+@dataclass(frozen=True)
+class _Tree:
+    files: dict[tuple[str, ...], SourceStamp]
+    directories: dict[tuple[str, ...], tuple[int, int]]
+    symlinks: dict[tuple[str, ...], _Symlink]
+
+
+@dataclass(frozen=True)
 class PresentBytes:
     member: str
     size: int
@@ -296,6 +309,25 @@ def _name(value):
         raise EvidenceRefused("path-refused", f"single member name required: {value!r}")
 
 
+def _pair_symlinks(manifest):
+    catalog = manifest.get("symlinks", {})
+    if not isinstance(catalog, dict):
+        raise EvidenceRefused("pair-incomplete", "invalid symlink catalog")
+    targets = {}
+    for member, descriptor in catalog.items():
+        parts = _components(member)
+        if len(parts) < 2 or parts[0] != "run" or member in manifest["members"] or member in manifest["directories"]:
+            raise EvidenceRefused("pair-incomplete", f"invalid symlink member: {member}")
+        if not isinstance(descriptor, dict) or set(descriptor) != {"target_hex"} or not isinstance(descriptor["target_hex"], str):
+            raise EvidenceRefused("pair-incomplete", f"invalid symlink descriptor: {member}")
+        encoded = descriptor["target_hex"]
+        target = bytes.fromhex(encoded)
+        if target.hex() != encoded or not target or b"\0" in target or len(target) > MAX_BYTES:
+            raise EvidenceRefused("pair-incomplete", f"invalid symlink target: {member}")
+        targets[parts] = target
+    return targets
+
+
 def _session_id(data):
     for line in data.decode("utf-8", "replace").splitlines():
         if line.startswith("{"):
@@ -435,6 +467,19 @@ class HermesEvidence:
             if stamp is not None and _stamp(os.stat(parts[-1], dir_fd=directory.fd, follow_symlinks=False)) != stamp:
                 raise EvidenceRefused("source-changed", f"observed file changed: {parts}")
             return data
+
+    def _member_link(self, root, parts, expected=None, directories=None):
+        with self._descendant(root, parts[:-1], observed=directories) as directory:
+            info = os.stat(parts[-1], dir_fd=directory.fd, follow_symlinks=False)
+            if not stat.S_ISLNK(info.st_mode) or info.st_dev != directory.identity[0]:
+                raise EvidenceRefused("path-refused", f"symlink required: {parts}")
+            target = os.readlink(os.fsencode(parts[-1]), dir_fd=directory.fd)
+            if len(target) > MAX_BYTES:
+                raise EvidenceRefused("resource-limit", f"symlink target exceeds byte limit: {parts}")
+            link = _Symlink(_stamp(info), target)
+            if _stamp(os.stat(parts[-1], dir_fd=directory.fd, follow_symlinks=False)) != link.source or expected is not None and link != expected:
+                raise EvidenceRefused("source-changed", f"observed symlink changed: {parts}")
+            return link
 
     def _member_write(self, root, parts, data, create=False):
         with self._descendant(root, parts[:-1], create=create) as directory:
@@ -906,13 +951,13 @@ class HermesEvidence:
             os.close(directory.fd)
         self._dirs = []
 
-    def _tree(self, directory, prefix=()):
-        files, directories = {}, {}
+    def _tree(self, directory, prefix=(), *, symlinks_under=None):
+        files, directories, symlinks = {}, {}, {}
         def visit(current, parts):
             if len(parts) > MAX_DEPTH:
                 raise EvidenceRefused("resource-limit", "export depth limit exceeded")
             for name in sorted(os.listdir(current.fd)):
-                if len(files) + len(directories) >= MAX_ENTRIES:
+                if len(files) + len(directories) + len(symlinks) >= MAX_ENTRIES:
                     raise EvidenceRefused("resource-limit", "export entry limit exceeded")
                 member = parts + (name,)
                 info = os.stat(name, dir_fd=current.fd, follow_symlinks=False)
@@ -920,12 +965,14 @@ class HermesEvidence:
                     with self._descendant(current, (name,)) as child:
                         directories[member] = child.identity
                         visit(child, member)
+                elif stat.S_ISLNK(info.st_mode) and symlinks_under is not None and member[:len(symlinks_under)] == symlinks_under:
+                    symlinks[member] = self._member_link(current, (name,))
                 else:
                     fd, stamp = self._open(current, name)
                     os.close(fd)
                     files[member] = stamp
         visit(directory, prefix)
-        return files, directories
+        return _Tree(files, directories, symlinks)
 
     def retain_pair(self, export: OwnedExport):
         with self._scoped():
@@ -936,7 +983,8 @@ class HermesEvidence:
             self._check()
             if self._retention_error:
                 raise EvidenceRefused("pair-incomplete", self._retention_error)
-            private_files, private_directories = self._tree(self._private)
+            private_tree = self._tree(self._private)
+            private_files, private_directories = private_tree.files, private_tree.directories
             if {"/".join(p) for p in private_files} != set(self._catalog):
                 raise EvidenceRefused("pair-incomplete", "private catalog membership mismatch")
             contexts = {}
@@ -953,7 +1001,8 @@ class HermesEvidence:
             pair = self._mkdir(parent, destination.name)
             run_dest = self._mkdir(pair, "run")
             evidence_dest = self._mkdir(pair, "hermes-evidence")
-            files, directories = self._tree(self._root)
+            run_tree = self._tree(self._root, symlinks_under=())
+            files, directories = run_tree.files, run_tree.directories
             for parts in directories:
                 with self._descendant(run_dest, parts, create=True):
                     pass
@@ -962,6 +1011,12 @@ class HermesEvidence:
                 data = self._member_bytes(self._root, parts, stamp, directories)
                 self._member_write(run_dest, parts, data)
                 catalog["run/" + "/".join(parts)] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+            symlinks = {}
+            for parts, expected in run_tree.symlinks.items():
+                link = self._member_link(self._root, parts, expected, directories)
+                with self._descendant(run_dest, parts[:-1]) as directory:
+                    os.symlink(link.target, os.fsencode(parts[-1]), dir_fd=directory.fd)
+                symlinks["run/" + "/".join(parts)] = {"target_hex": link.target.hex()}
             evidence_dirs = set(private_directories)
             for parts in sorted(evidence_dirs, key=lambda p: (len(p), p)):
                 with self._descendant(evidence_dest, parts, create=True):
@@ -973,11 +1028,14 @@ class HermesEvidence:
                     raise EvidenceRefused("source-changed", f"private catalog changed: {member}")
                 self._member_write(evidence_dest, parts, data)
                 catalog["hermes-evidence/" + member] = expected
-            if self._tree(self._root) != (files, directories) or self._tree(self._private) != (private_files, private_directories):
+            if self._tree(self._root, symlinks_under=()) != run_tree or self._tree(self._private) != private_tree:
                 raise EvidenceRefused("source-changed", "export source membership or identities changed")
-            copied, copied_directories = self._tree(pair)
+            copied_tree = self._tree(pair, symlinks_under=("run",))
+            copied, copied_directories = copied_tree.files, copied_tree.directories
             if {"/".join(p) for p in copied} != set(catalog):
                 raise EvidenceRefused("source-changed", "export destination membership changed")
+            if {"/".join(p): {"target_hex": link.target.hex()} for p, link in copied_tree.symlinks.items()} != symlinks:
+                raise EvidenceRefused("source-changed", "export destination symlinks changed")
             expected_directories = {("run",), ("hermes-evidence",)} | {
                 ("run", *parts) for parts in directories} | {("hermes-evidence", *parts) for parts in evidence_dirs}
             if set(copied_directories) != expected_directories:
@@ -987,6 +1045,8 @@ class HermesEvidence:
                 data = self._member_bytes(pair, parts, copied[parts], copied_directories)
                 if {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} != expected:
                     raise EvidenceRefused("source-changed", f"export destination changed: {member}")
+            for parts, link in copied_tree.symlinks.items():
+                self._member_link(pair, parts, link, copied_directories)
             self._check()
             manifest = {"schema_version": 2, "run_id": self.binding.run_id,
                 "original_root": str(self.binding.root), "original_fixture": self._original_fixture,
@@ -996,6 +1056,8 @@ class HermesEvidence:
                 "members": catalog, "directories": ["run", "hermes-evidence", *("run/" + "/".join(p) for p in directories),
                                                       *("hermes-evidence/" + "/".join(p) for p in sorted(evidence_dirs))],
                 "absent_run_records": [name for name in ("run.json", "trace.json", "verdict.json") if "run/" + name not in catalog]}
+            if symlinks:
+                manifest["symlinks"] = symlinks
             def read_json(member):
                 if member not in catalog:
                     raise ValueError(f"uncataloged association: {member}")
@@ -1030,7 +1092,9 @@ class HermesEvidence:
             owner._selected_id = binding.acquisition_id
             try:
                 expected_members = manifest["members"]
-                files, directories = reader._tree(pair)
+                expected_symlinks = _pair_symlinks(manifest)
+                pair_tree = reader._tree(pair, symlinks_under=("run",))
+                files, directories = pair_tree.files, pair_tree.directories
                 for member, expected in expected_members.items():
                     parts = _components(member)
                     if parts[0] not in ("run", "hermes-evidence"):
@@ -1042,6 +1106,8 @@ class HermesEvidence:
                     raise EvidenceRefused("pair-incomplete", "pair membership mismatch")
                 if {"/".join(p) for p in directories} != set(manifest["directories"]):
                     raise EvidenceRefused("pair-incomplete", "pair directory membership mismatch")
+                if {parts: link.target for parts, link in pair_tree.symlinks.items()} != expected_symlinks:
+                    raise EvidenceRefused("pair-incomplete", "pair symlink catalog mismatch")
                 def read_json(member):
                     if member not in expected_members:
                         raise ValueError(f"uncataloged association: {member}")
@@ -1062,13 +1128,15 @@ class HermesEvidence:
                     imported = owner._member_bytes(owner._private, relative)
                     if {"size": len(imported), "sha256": hashlib.sha256(imported).hexdigest()} != expected:
                         raise EvidenceRefused("pair-incomplete", f"imported catalog mismatch: {member}")
-                if reader._tree(pair) != (files, directories):
+                if reader._tree(pair, symlinks_under=("run",)) != pair_tree:
                     raise EvidenceRefused("pair-incomplete", "pair membership or identities changed during import")
                 for member, expected in expected_members.items():
                     parts = _components(member)
                     data = reader._member_bytes(pair, parts, files[parts], directories)
                     if {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} != expected:
                         raise EvidenceRefused("pair-incomplete", f"catalog changed after import: {member}")
+                for parts, link in pair_tree.symlinks.items():
+                    reader._member_link(pair, parts, link, directories)
                 if json.loads(reader._member_bytes(pair, ("pair.json",), files[("pair.json",)]), object_pairs_hook=_unique_object) != manifest:
                     raise EvidenceRefused("pair-incomplete", "pair manifest changed during import")
                 owner._write(owner._private, "imported-pair-" + uuid.uuid4().hex + ".json", reader._bytes(pair, "pair.json"))
