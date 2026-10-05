@@ -79,14 +79,18 @@ def _classify_path(path, cwd, fixture, shell=False):
     inventory = {entry.components: entry.kind for entry in fixture.entries}
     root = fixture.original_spelling.rstrip("/")
     def components(value, patterns=False):
-        if not isinstance(value, str) or any(c in value for c in ("~", "$", "`", "\x00")) or (
-                not patterns and any(c in value for c in ("*", "?"))):
+        if not isinstance(value, str):
             return None
         if value == root:
             return []
-        if value.startswith(root + "/"):
-            return value[len(root) + 1:].split("/")
-        return None
+        if not value.startswith(root + "/"):
+            return None
+        value = value[len(root) + 1:]
+        if any(c in value for c in ("~", "`", "\x00")) or (
+                "$" in value and not (patterns and value.endswith("$") and value.count("$") == 1)) or (
+                not patterns and any(c in value for c in ("*", "?"))):
+            return None
+        return value.split("/")
     def walk(parts, stack, operand=False):
         for index, part in enumerate(parts):
             if part in ("", "."):
