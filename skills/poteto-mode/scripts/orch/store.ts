@@ -13,6 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { parseRemote } from "../watch-pr/remote.ts";
 
 const UNIT_HEADER = "id\ttrack\tstate\tbranch\tpr\tsha\tbrief";
 const LEDGER_HEADER = "pr\tsha\tverdict\tevidence\tverifier\tts";
@@ -1264,6 +1265,31 @@ function githubPullRequest(value: unknown): GithubPullRequest {
 }
 
 function githubFrontier(repo: string): readonly FrontierPr[] {
+  let repository: string;
+  try {
+    repository = execFileSync("git", ["remote", "get-url", "origin"], {
+      cwd: repo,
+      encoding: "utf8",
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch (error) {
+    throw new UserError(
+      `git remote get-url origin failed: ${errorMessage(error)}; GitHub frontier discovery requires an origin remote`
+    );
+  }
+  if (repository.length === 0) {
+    throw new UserError(
+      "GitHub frontier discovery requires a nonempty origin URL"
+    );
+  }
+  const identity = parseRemote(repository);
+  if (identity === null) {
+    throw new UserError(
+      "GitHub frontier discovery requires a supported credential-free origin URL"
+    );
+  }
+
   let raw: string;
   try {
     const { GH_REPO: _ignoredRepo, ...env } = process.env;
@@ -1272,6 +1298,8 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
       [
         "pr",
         "list",
+        "--repo",
+        `${identity.host}/${identity.owner}/${identity.repo}`,
         "--state",
         "all",
         "--limit",
@@ -1306,7 +1334,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   }
   if (decoded.length === 1000) {
     throw new UserError(
-      "gh pr list reached its 1000 PR limit; reduce repository history, or pass --graphite for a stack Graphite tracks, before resolving the frontier"
+      "gh pr list reached its 1000 PR limit; cannot prove complete repository history; pass --graphite for a stack Graphite tracks before resolving the frontier"
     );
   }
 
