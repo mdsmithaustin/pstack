@@ -72,17 +72,22 @@ def parse_json(text):
 
 
 def classify_path(path, cwd, fixture):
+    return _classify_path(path, cwd, fixture)
+
+
+def _classify_path(path, cwd, fixture, shell=False):
     inventory = {entry.components: entry.kind for entry in fixture.entries}
     root = fixture.original_spelling.rstrip("/")
-    def components(value):
-        if not isinstance(value, str) or any(c in value for c in ("~", "$", "`", "*", "?", "\x00")):
+    def components(value, patterns=False):
+        if not isinstance(value, str) or any(c in value for c in ("~", "$", "`", "\x00")) or (
+                not patterns and any(c in value for c in ("*", "?"))):
             return None
         if value == root:
             return []
         if value.startswith(root + "/"):
             return value[len(root) + 1:].split("/")
         return None
-    def walk(parts, stack):
+    def walk(parts, stack, operand=False):
         for index, part in enumerate(parts):
             if part in ("", "."):
                 continue
@@ -91,11 +96,15 @@ def classify_path(path, cwd, fixture):
                     return None, "escape"
                 stack.pop()
                 continue
+            if operand and any(c in part for c in ("*", "?")):
+                return None, "unavailable-prefix" if ".." in parts[index + 1:] else "filtered"
             stack.append(part)
             kind = inventory.get(tuple(stack), "missing")
             if kind in ("symlink", "hardlink", "special", "unavailable"):
                 return None, kind
             if index < len(parts) - 1 and kind != "directory":
+                if operand and kind == "missing" and ".." not in parts[index + 1:]:
+                    return None, "filtered"
                 return None, "unavailable-prefix"
         return stack, inventory.get(tuple(stack), "directory" if not stack else "missing")
     base = components(cwd)
@@ -105,10 +114,12 @@ def classify_path(path, cwd, fixture):
     if stack is None or kind != "directory":
         return {"requested": path, "cwd": cwd, "spelling": None, "disposition": "unavailable", "reason": "refused-cwd"}
     absolute = isinstance(path, str) and path.startswith("/")
-    parts = components(path) if absolute else components(root + "/" + path) if isinstance(path, str) else None
+    parts = components(path, shell) if absolute else components(root + "/" + path, shell) if isinstance(path, str) else None
     if parts is None:
         return {"requested": path, "cwd": cwd, "spelling": None, "disposition": "unavailable", "reason": "outside-or-uninterpreted"}
-    stack, kind = walk(parts, [] if absolute else stack)
+    stack, kind = walk(parts, [] if absolute else stack, shell)
+    if shell and kind in ("filtered", "missing"):
+        return None
     return {"requested": path, "cwd": cwd, "spelling": root + ("/" + "/".join(stack) if stack else "") if stack is not None else None,
             "disposition": "unavailable" if stack is None else "fixture-missing" if kind == "missing" else "fixture-request",
             "reason": kind if stack is None else None, "kind": kind}
@@ -117,7 +128,9 @@ def classify_path(path, cwd, fixture):
 def tool_reads(name, args, result, cwd, fixture, evidence):
     found = []
     def classify(path, base, shell=False):
-        record = classify_path(path, base, fixture)
+        record = _classify_path(path, base, fixture, shell)
+        if record is None:
+            return None
         evidence.append(record)
         if record["disposition"] in ("fixture-request", "fixture-missing") and (not shell or record["kind"] == "regular"):
             found.append(record["spelling"])

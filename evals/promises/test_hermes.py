@@ -65,6 +65,30 @@ def bind_legacy(run, cleanup):
 
 
 class HermesDelegates(unittest.TestCase):
+    def test_ordinary_shell_operands_in_root_and_child_keep_trace_conclusive(self):
+        project = self.run_.project
+        (project / "src").mkdir()
+        (project / "src/a.py").write_text("owned source")
+        (project / "note.txt").write_text("owned note")
+        self.delegate(["child goal"], [{"task_index": 0}])
+        self.child("kid", 1, "child goal", "child-model", (0, 0, 0, 0))
+        self.db.con.execute("update sessions set cwd=?", (str(project),))
+        for sid, call_id, command in [("root", "grep", 'grep -rn "foo.*bar" src/'),
+                                      ("root", "glob", "cat src/*.py"),
+                                      ("root", "sed", 'sed -i "s/foo/bar/" note.txt'),
+                                      ("kid", "missing", "grep -n x docs/missing.md")]:
+            self.db.message(sid, "assistant", calls=[tool_call(call_id, "terminal", command=command)])
+            self.db.message(sid, "tool", '{"exit_code":0}', call_id=call_id)
+        self.db.message("root", "assistant", "ordinary commands complete")
+        trace = self.harvest()
+        self.assertNotIn("x_harvest_error", trace)
+        self.assertEqual(trace["files_read"], [str(project / "note.txt")])
+        self.assertEqual(trace["final_reply"], "ordinary commands complete")
+        self.assertEqual([(e["kind"], e["id"]) for e in trace["events"] if e["kind"].startswith("tool")], [
+            ("tool_call", "c1"), ("tool_result", "c1"), ("tool_call", "grep"), ("tool_result", "grep"),
+            ("tool_call", "glob"), ("tool_result", "glob"), ("tool_call", "sed"), ("tool_result", "sed")])
+        self.assertEqual(trace["spawns"][0]["x_child_first_reply"], "reply from kid")
+
     def setUp(self):
         self.root = owned_directory(self, "pstack-hermes-test-")
         (self.root / "w" / "p").mkdir(parents=True)

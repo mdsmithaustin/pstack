@@ -123,6 +123,60 @@ else:
 
 
 class NativeOwnerControls(_OwnerFixture):
+    def test_attempt_setup_and_export_publication_errors_release_handles(self):
+        import os
+        from unittest import mock
+        self.database()
+        baseline = len(os.listdir("/dev/fd"))
+        mkdir = self.owner._mkdir
+        def fail_work(parent, name):
+            directory = mkdir(parent, name)
+            if name == "work":
+                raise OSError("owned attempt setup failure")
+            return directory
+        with mock.patch.object(self.owner, "_mkdir", fail_work), self.assertRaisesRegex(OSError, "owned attempt setup failure"):
+            self.owner.read()
+        self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+        self.assertEqual(hermes.harvest(self.run)["final_reply"], "native owned reply")
+        write = self.owner._write
+        def fail_manifest(directory, name, data):
+            if name == "pair.json":
+                raise OSError("owned manifest publication failure")
+            return write(directory, name, data)
+        destination = self.base / "failed-pair"
+        with mock.patch.object(self.owner, "_write", fail_manifest), self.assertRaisesRegex(self.custody.RetentionUnavailable, "owned manifest publication failure"):
+            self.owner.retain_pair(self.custody.OwnedExport(destination))
+        self.assertFalse((destination / "pair.json").exists())
+        self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+        self.assertEqual(hermes.harvest(self.run)["final_reply"], "native owned reply")
+
+    def test_replaced_descendant_between_scan_and_copy_refuses_export(self):
+        import os
+        from unittest import mock
+        self.database()
+        directory = self.project / "bucket"
+        directory.mkdir()
+        (directory / "note.txt").write_text("owned descendant marker")
+        hermes.harvest(self.run)
+        baseline = len(os.listdir("/dev/fd"))
+        read = self.owner._member_bytes
+        changed = False
+        def replace(root, parts, *args):
+            nonlocal changed
+            if root is self.owner._root and parts == ("w", "p", "bucket", "note.txt") and not changed:
+                changed = True
+                directory.rename(self.base / "preserved-bucket")
+                directory.mkdir()
+                (directory / "note.txt").write_text("owned descendant marker")
+            return read(root, parts, *args)
+        destination = self.base / "replaced-pair"
+        with mock.patch.object(self.owner, "_member_bytes", replace), self.assertRaisesRegex(self.custody.RetentionUnavailable, "observed directory replaced"):
+            self.owner.retain_pair(self.custody.OwnedExport(destination))
+        self.assertFalse((destination / "pair.json").exists())
+        self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+        self.assertEqual((self.base / "preserved-bucket/note.txt").read_text(), "owned descendant marker")
+        self.assertEqual(hermes.harvest(self.run)["final_reply"], "native owned reply")
+
     def test_wide_fixture_reads_exports_and_replays_at_256_descriptors(self):
         import os
         import resource
@@ -212,6 +266,20 @@ class NativeOwnerControls(_OwnerFixture):
         self.assertEqual((raw / "state.db-wal").read_bytes(), wal)
         pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "tail-pair"))
         self.assertEqual((pair.root / "hermes-evidence/acquisitions" / trace["x_acquisition"] / "raw/state.db-wal").read_bytes(), wal)
+        corrupted = bytearray(wal)
+        corrupted[56] ^= 1
+        with self.assertRaisesRegex(self.custody.EvidenceRefused, "frame checksum"):
+            self.owner._validate_wal(main, bytes(corrupted))
+        with self.assertRaisesRegex(self.custody.EvidenceRefused, "frame length"):
+            self.owner._validate_wal(main, wal[:-1])
+        foreign_first = bytearray(wal)
+        foreign_first[40:48] = old[16:24]
+        with self.assertRaisesRegex(self.custody.EvidenceRefused, "no committed prefix"):
+            self.owner._validate_wal(main, bytes(foreign_first))
+        mixed_tail = bytearray(wal)
+        mixed_tail[-512 - 16:-512 - 8] = wal[16:24]
+        with self.assertRaisesRegex(self.custody.EvidenceRefused, "mixes generations"):
+            self.owner._validate_wal(main, bytes(mixed_tail))
 
     def test_private_captures_and_first_resume_survive_mutable_legacy_records(self):
         outside = self.base / "outside"
@@ -1000,6 +1068,27 @@ class InventoryInference(unittest.TestCase):
 
 
 class EvidenceRefusalControls(_OwnerFixture):
+    def test_wal_page_sizes_validate_before_frame_arithmetic(self):
+        import struct
+        def headers(db_page, wal_page):
+            main = bytearray(100)
+            main[:16] = b"SQLite format 3\x00"
+            main[16:18] = db_page.to_bytes(2, "big")
+            header = struct.pack(">IIIIII", 0x377f0682, 3007000, wal_page, 0, 0, 0)
+            a = b = 0
+            words = struct.unpack("<6I", header)
+            for index in range(0, 6, 2):
+                a = (a + words[index] + b) & 0xffffffff
+                b = (b + words[index + 1] + a) & 0xffffffff
+            return bytes(main), header + struct.pack(">II", a, b)
+        for db_page, wal_page in [(512, 512), (1, 65536)]:
+            self.owner._validate_wal(*headers(db_page, wal_page))
+        for db_page, wal_page in [(0, 512), (3, 3), (511, 511), (513, 513), (65535, 65535),
+                                  (512, 0), (512, 3), (512, 65537), (512, 1024)]:
+            with self.subTest(db_page=db_page, wal_page=wal_page), self.assertRaises(self.custody.EvidenceRefused) as refused:
+                self.owner._validate_wal(*headers(db_page, wal_page))
+            self.assertEqual(refused.exception.reason, "decode-failed")
+
     def test_malformed_page_size_retains_incomplete_attempt(self):
         import struct
         main = bytearray(100)

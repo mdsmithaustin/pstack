@@ -13,6 +13,7 @@ import subprocess
 import time
 import uuid
 from dataclasses import asdict, dataclass
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -388,16 +389,62 @@ class HermesEvidence:
         os.mkdir(name, mode=0o700, dir_fd=parent.fd)
         return self._walk(parent, (name,))
 
+    @contextmanager
+    def _scoped(self):
+        start = len(self._dirs)
+        try:
+            yield
+        finally:
+            directories = self._dirs[start:]
+            del self._dirs[start:]
+            for directory in reversed(directories):
+                os.close(directory.fd)
+
+    @staticmethod
+    def _check_directory(directory):
+        if _identity(os.fstat(directory.fd)) != directory.identity:
+            raise EvidenceRefused("identity-changed", f"detached directory: {directory.path}")
+        if directory.parent is not None:
+            info = os.stat(directory.name, dir_fd=directory.parent, follow_symlinks=False)
+            if not stat.S_ISDIR(info.st_mode) or _identity(info) != directory.identity:
+                raise EvidenceRefused("identity-changed", f"replaced directory: {directory.path}")
+
+    @contextmanager
+    def _descendant(self, root, parts, create=False, observed=None):
+        start = len(self._dirs)
+        with self._scoped():
+            directory = root
+            for index, name in enumerate(parts):
+                if create:
+                    try:
+                        os.mkdir(name, mode=0o700, dir_fd=directory.fd)
+                    except FileExistsError:
+                        pass
+                directory = self._walk(directory, (name,))
+                if observed is not None and directory.identity != observed[parts[:index + 1]]:
+                    raise EvidenceRefused("source-changed", f"observed directory replaced: {directory.path}")
+            yield directory
+            for held in (root, *self._dirs[start:]):
+                self._check_directory(held)
+
+    def _member_bytes(self, root, parts, stamp=None, directories=None):
+        with self._descendant(root, parts[:-1], observed=directories) as directory:
+            if stamp is not None and _stamp(os.stat(parts[-1], dir_fd=directory.fd, follow_symlinks=False)) != stamp:
+                raise EvidenceRefused("source-changed", f"observed file replaced: {parts}")
+            data = self._bytes(directory, parts[-1])
+            if stamp is not None and _stamp(os.stat(parts[-1], dir_fd=directory.fd, follow_symlinks=False)) != stamp:
+                raise EvidenceRefused("source-changed", f"observed file changed: {parts}")
+            return data
+
+    def _member_write(self, root, parts, data, create=False):
+        with self._descendant(root, parts[:-1], create=create) as directory:
+            self._write(directory, parts[-1], data)
+
     def _check(self, private_only=False):
         for directory in self._dirs:
             if private_only and not (directory.path.is_relative_to(self.private_root) or self.private_root.is_relative_to(directory.path)):
                 continue
-            if _identity(os.fstat(directory.fd)) != directory.identity:
-                raise EvidenceRefused("identity-changed", f"detached directory: {directory.path}")
-            if directory.parent is not None:
-                info = os.stat(directory.name, dir_fd=directory.parent, follow_symlinks=False)
-                if not stat.S_ISDIR(info.st_mode) or _identity(info) != directory.identity:
-                    raise EvidenceRefused("identity-changed", f"replaced directory: {directory.path}")
+            self._check_directory(directory)
         if private_only:
             return
         for directory, name, identity in self._setup_files:
@@ -454,8 +501,7 @@ class HermesEvidence:
 
     def _save(self, member, value):
         parts = _components(member)
-        directory = self._walk(self._private, parts[:-1])
-        self._write(directory, parts[-1], (json.dumps(value, indent=2) + "\n").encode())
+        self._member_write(self._private, parts, (json.dumps(value, indent=2) + "\n").encode())
 
     def _capture(self, argv, timeout_s):
         self._check(private_only=True)
@@ -617,7 +663,8 @@ class HermesEvidence:
                 parts = prefix + (name,)
                 entries.append(FixtureEntry(parts, kind))
                 if kind == "directory":
-                    visit(self._walk(directory, (name,)), parts)
+                    with self._descendant(directory, (name,)) as child:
+                        visit(child, parts)
         visit(self._fixture, ())
         return FixtureInventory(self._original_fixture, tuple(entries))
 
@@ -626,6 +673,10 @@ class HermesEvidence:
         return getattr(self, "_fixture_spelling", str(self.binding.project))
 
     def read(self):
+        with self._scoped():
+            return self._read()
+
+    def _read(self):
         aid = uuid.uuid4().hex
         selected = self._selected_context
         meta = selected.meta if selected else self._meta if self._selected_id is None else None
@@ -739,6 +790,8 @@ class HermesEvidence:
         magic, version, page = struct.unpack(">III", wal[:12])
         db_page = int.from_bytes(main[16:18], "big")
         db_page = 65536 if db_page == 1 else db_page
+        if any(size < 512 or size > 65536 or size & (size - 1) for size in (page, db_page)):
+            raise EvidenceRefused("decode-failed", "WAL or database page size is invalid")
         if magic not in (0x377f0682, 0x377f0683) or version != 3007000 or page != db_page or (len(wal) - 32) % (page + 24):
             raise EvidenceRefused("decode-failed", "WAL header or frame length is invalid")
         order = "<" if magic == 0x377f0682 else ">"
@@ -752,11 +805,20 @@ class HermesEvidence:
         sums = checksum(wal[:24], (0, 0))
         if sums != struct.unpack(">II", wal[24:32]):
             raise EvidenceRefused("decode-failed", "WAL header checksum mismatch")
+        committed = False
         for offset in range(32, len(wal), page + 24):
             frame = wal[offset:offset + page + 24]
+            if frame[8:16] != wal[16:24]:
+                tail_salt = frame[8:16]
+                if not committed or any(wal[position + 8:position + 16] != tail_salt
+                                        for position in range(offset, len(wal), page + 24)):
+                    raise EvidenceRefused("decode-failed", "WAL stale tail has no committed prefix or mixes generations")
+                # SQLite ignores the old generation after a committed restart prefix.
+                return
             sums = checksum(frame[:8] + frame[24:], sums)
-            if frame[8:16] != wal[16:24] or sums != struct.unpack(">II", frame[16:24]):
+            if sums != struct.unpack(">II", frame[16:24]):
                 raise EvidenceRefused("decode-failed", "WAL frame checksum mismatch")
+            committed |= bool(int.from_bytes(frame[4:8], "big"))
 
     def _decode(self, work):
         con = sqlite3.connect((work.path / "state.db").as_uri() + "?mode=rw", uri=True)
@@ -845,7 +907,7 @@ class HermesEvidence:
         self._dirs = []
 
     def _tree(self, directory, prefix=()):
-        files, directories = [], []
+        files, directories = {}, {}
         def visit(current, parts):
             if len(parts) > MAX_DEPTH:
                 raise EvidenceRefused("resource-limit", "export depth limit exceeded")
@@ -855,23 +917,27 @@ class HermesEvidence:
                 member = parts + (name,)
                 info = os.stat(name, dir_fd=current.fd, follow_symlinks=False)
                 if stat.S_ISDIR(info.st_mode):
-                    child = self._walk(current, (name,))
-                    directories.append(member)
-                    visit(child, member)
+                    with self._descendant(current, (name,)) as child:
+                        directories[member] = child.identity
+                        visit(child, member)
                 else:
                     fd, stamp = self._open(current, name)
                     os.close(fd)
-                    files.append((member, current, name, stamp))
+                    files[member] = stamp
         visit(directory, prefix)
         return files, directories
 
     def retain_pair(self, export: OwnedExport):
+        with self._scoped():
+            return self._retain_pair(export)
+
+    def _retain_pair(self, export):
         try:
             self._check()
             if self._retention_error:
                 raise EvidenceRefused("pair-incomplete", self._retention_error)
             private_files, private_directories = self._tree(self._private)
-            if {"/".join(p) for p, _, _, _ in private_files} != set(self._catalog):
+            if {"/".join(p) for p in private_files} != set(self._catalog):
                 raise EvidenceRefused("pair-incomplete", "private catalog membership mismatch")
             contexts = {}
             for aid in self._attempts:
@@ -889,24 +955,38 @@ class HermesEvidence:
             evidence_dest = self._mkdir(pair, "hermes-evidence")
             files, directories = self._tree(self._root)
             for parts in directories:
-                self._mkdir(self._walk(run_dest, parts[:-1]), parts[-1])
+                with self._descendant(run_dest, parts, create=True):
+                    pass
             catalog = {}
-            for parts, source, name, stamp in files:
-                data = self._bytes(source, name)
-                if _stamp(os.stat(name, dir_fd=source.fd, follow_symlinks=False)) != stamp:
-                    raise EvidenceRefused("source-changed", f"export source changed: {parts}")
-                self._write(self._walk(run_dest, parts[:-1]), parts[-1], data)
+            for parts, stamp in files.items():
+                data = self._member_bytes(self._root, parts, stamp, directories)
+                self._member_write(run_dest, parts, data)
                 catalog["run/" + "/".join(parts)] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
             evidence_dirs = set(private_directories)
             for parts in sorted(evidence_dirs, key=lambda p: (len(p), p)):
-                self._mkdir(self._walk(evidence_dest, parts[:-1]), parts[-1])
+                with self._descendant(evidence_dest, parts, create=True):
+                    pass
             for member, expected in self._catalog.items():
                 parts = _components(member)
-                data = self._bytes(self._walk(self._private, parts[:-1]), parts[-1])
+                data = self._member_bytes(self._private, parts, private_files[parts], private_directories)
                 if {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} != expected:
                     raise EvidenceRefused("source-changed", f"private catalog changed: {member}")
-                self._write(self._walk(evidence_dest, parts[:-1]), parts[-1], data)
+                self._member_write(evidence_dest, parts, data)
                 catalog["hermes-evidence/" + member] = expected
+            if self._tree(self._root) != (files, directories) or self._tree(self._private) != (private_files, private_directories):
+                raise EvidenceRefused("source-changed", "export source membership or identities changed")
+            copied, copied_directories = self._tree(pair)
+            if {"/".join(p) for p in copied} != set(catalog):
+                raise EvidenceRefused("source-changed", "export destination membership changed")
+            expected_directories = {("run",), ("hermes-evidence",)} | {
+                ("run", *parts) for parts in directories} | {("hermes-evidence", *parts) for parts in evidence_dirs}
+            if set(copied_directories) != expected_directories:
+                raise EvidenceRefused("source-changed", "export destination directory membership changed")
+            for member, expected in catalog.items():
+                parts = _components(member)
+                data = self._member_bytes(pair, parts, copied[parts], copied_directories)
+                if {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} != expected:
+                    raise EvidenceRefused("source-changed", f"export destination changed: {member}")
             self._check()
             manifest = {"schema_version": 2, "run_id": self.binding.run_id,
                 "original_root": str(self.binding.root), "original_fixture": self._original_fixture,
@@ -920,7 +1000,7 @@ class HermesEvidence:
                 if member not in catalog:
                     raise ValueError(f"uncataloged association: {member}")
                 parts = _components(member)
-                return json.loads(self._bytes(self._walk(pair, parts[:-1]), parts[-1]), object_pairs_hook=_unique_object)
+                return json.loads(self._member_bytes(pair, parts, copied[parts], copied_directories), object_pairs_hook=_unique_object)
             _validate_attempts(manifest, read_json)
             self._write(pair, "pair.json", (json.dumps(manifest, indent=2) + "\n").encode())
             return RetainedPair(destination, self.binding.run_id, tuple(self._attempts))
@@ -950,15 +1030,15 @@ class HermesEvidence:
             owner._selected_id = binding.acquisition_id
             try:
                 expected_members = manifest["members"]
+                files, directories = reader._tree(pair)
                 for member, expected in expected_members.items():
                     parts = _components(member)
                     if parts[0] not in ("run", "hermes-evidence"):
                         raise EvidenceRefused("pair-incomplete", "unknown pair namespace")
-                    data = reader._bytes(reader._walk(pair, parts[:-1]), parts[-1])
+                    data = reader._member_bytes(pair, parts, files[parts], directories)
                     if {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} != expected:
                         raise EvidenceRefused("pair-incomplete", f"catalog mismatch: {member}")
-                files, directories = reader._tree(pair)
-                if {"/".join(p) for p, _, _, _ in files} != set(expected_members) | {"pair.json"}:
+                if {"/".join(p) for p in files} != set(expected_members) | {"pair.json"}:
                     raise EvidenceRefused("pair-incomplete", "pair membership mismatch")
                 if {"/".join(p) for p in directories} != set(manifest["directories"]):
                     raise EvidenceRefused("pair-incomplete", "pair directory membership mismatch")
@@ -966,7 +1046,7 @@ class HermesEvidence:
                     if member not in expected_members:
                         raise ValueError(f"uncataloged association: {member}")
                     parts = _components(member)
-                    return json.loads(reader._bytes(reader._walk(pair, parts[:-1]), parts[-1]), object_pairs_hook=_unique_object)
+                    return json.loads(reader._member_bytes(pair, parts, files[parts], directories), object_pairs_hook=_unique_object)
                 meta, turns, contexts, results, descriptors = _validate_attempts(manifest, read_json)
                 for member, expected in expected_members.items():
                     parts = _components(member)
@@ -975,16 +1055,22 @@ class HermesEvidence:
                     relative = parts[1:]
                     if relative == ("binding.json",):
                         relative = ("imported-binding-" + uuid.uuid4().hex + ".json",)
-                    target = owner._private
-                    for name in relative[:-1]:
-                        try:
-                            target = owner._mkdir(target, name)
-                        except FileExistsError:
-                            target = owner._walk(target, (name,))
-                    data = reader._bytes(reader._walk(pair, parts[:-1]), parts[-1])
+                    data = reader._member_bytes(pair, parts, files[parts], directories)
                     if {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} != expected:
                         raise EvidenceRefused("pair-incomplete", f"catalog changed during import: {member}")
-                    owner._write(target, relative[-1], data)
+                    owner._member_write(owner._private, relative, data, create=True)
+                    imported = owner._member_bytes(owner._private, relative)
+                    if {"size": len(imported), "sha256": hashlib.sha256(imported).hexdigest()} != expected:
+                        raise EvidenceRefused("pair-incomplete", f"imported catalog mismatch: {member}")
+                if reader._tree(pair) != (files, directories):
+                    raise EvidenceRefused("pair-incomplete", "pair membership or identities changed during import")
+                for member, expected in expected_members.items():
+                    parts = _components(member)
+                    data = reader._member_bytes(pair, parts, files[parts], directories)
+                    if {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()} != expected:
+                        raise EvidenceRefused("pair-incomplete", f"catalog changed after import: {member}")
+                if json.loads(reader._member_bytes(pair, ("pair.json",), files[("pair.json",)]), object_pairs_hook=_unique_object) != manifest:
+                    raise EvidenceRefused("pair-incomplete", "pair manifest changed during import")
                 owner._write(owner._private, "imported-pair-" + uuid.uuid4().hex + ".json", reader._bytes(pair, "pair.json"))
                 owner._attempts = list(manifest["acquisitions"])
                 owner._contexts = dict(descriptors)
