@@ -189,5 +189,103 @@ class MakeProject(unittest.TestCase):
         self.assertEqual(base[0], git("rev-list", "--max-parents=0", "HEAD").strip())
 
 
+@unittest.skipUnless((platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64"),
+                     "canonical grading requires the reviewed Darwin runtime")
+class HermesRetention(unittest.TestCase):
+    def test_actual_cli_keeps_private_custody_and_exports_final_grades(self):
+        from test_hermes_evidence import _OwnerFixture
+        from harnesses import hermes
+        from test_hermes import HermesDatabase
+        fixture = _OwnerFixture()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        out = fixture.base / "cli-runs"
+        retained = fixture.base / "retained"
+        case = live.load_case("principle-steer-run")
+        case["turns"] = ["go"]
+        case["entry"] = None
+        original_turn = hermes.turn
+        owners = []
+        def turn(run, text, index):
+            record = original_turn(run, text, index)
+            owners.append(run._hermes_evidence)
+            db = HermesDatabase(hermes.profile(run) / "state.db")
+            db.session("root")
+            db.con.execute("update sessions set cwd=?", (str(run.project),))
+            db.message("root", "user", "go")
+            db.message("root", "assistant", "owned CLI reply")
+            db.done()
+            return record
+        output = io.StringIO()
+        with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(hermes, "turn", turn), redirect_stdout(output):
+            result = live.main(["run", "--harness", "hermes", "--case", case["id"], "--out", str(out), "--hermes-retain-out", str(retained)])
+        self.assertEqual(result, 0)
+        screen = json.loads(output.getvalue())
+        pair = Path(screen["hermes_pair"])
+        root = Path(screen["run"])
+        self.assertEqual(json.loads((pair / "run/trace.json").read_text())["final_reply"], "owned CLI reply")
+        self.assertEqual((pair / "run/verdict.json").read_bytes(), (root / "verdict.json").read_bytes())
+        manifest = json.loads((pair / "pair.json").read_text())
+        self.assertEqual(manifest["absent_run_records"], [])
+        self.assertTrue(any(k.startswith("hermes-evidence/captures/") for k in manifest["members"]))
+        self.assertEqual(owners[0].private_root.parent, retained)
+        self.assertEqual(owners[0]._dirs, [])
+
+    def test_cli_retains_preparation_exception_without_success_output(self):
+        from test_hermes_evidence import _OwnerFixture
+        from harnesses import hermes
+        fixture = _OwnerFixture()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        original_prepare = hermes.prepare
+        error = RuntimeError("owned preparation exception")
+        def prepare(run):
+            original_prepare(run)
+            raise error
+        output = io.StringIO()
+        retained = fixture.base / "retained-failure"
+        with mock.patch.object(hermes, "prepare", prepare), redirect_stdout(output):
+            with self.assertRaises(RuntimeError) as raised:
+                live.main(["run", "--harness", "hermes", "--case", "principle-steer-run", "--out", str(fixture.base / "failures"),
+                           "--hermes-retain-out", str(retained)])
+        self.assertIs(raised.exception, error)
+        self.assertEqual(output.getvalue(), "")
+        pairs = list(retained.glob("pair-*"))
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(json.loads((pairs[0] / "pair.json").read_text())["absent_run_records"], ["run.json", "trace.json", "verdict.json"])
+        self.assertIn("Hermes exception evidence retained", " ".join(error.__notes__))
+
+    def test_other_adapters_reject_the_hermes_retention_flag(self):
+        with self.assertRaisesRegex(ValueError, "requires --harness hermes"):
+            live.run_case("codex", "principle-steer-run", "HEAD", Path("/unused"), 0, Path("/unused-retention"))
+
+    def test_export_failure_cannot_print_a_successful_screen_record(self):
+        from test_hermes_evidence import _OwnerFixture
+        from harnesses import hermes
+        from harnesses.hermes_evidence import RetentionUnavailable
+        fixture = _OwnerFixture()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        prepare = hermes.prepare
+        retained = fixture.base / "retained-collision"
+        owners = []
+        def collide(run):
+            prepare(run)
+            owner = run._hermes_evidence
+            owners.append(owner)
+            (retained / ("pair-" + owner.binding.run_id)).mkdir()
+        case = live.load_case("principle-steer-run")
+        case["turns"] = ["go"]
+        case["entry"] = None
+        output = io.StringIO()
+        with mock.patch.object(hermes, "prepare", collide), mock.patch.object(live, "load_case", return_value=case), redirect_stdout(output):
+            with self.assertRaisesRegex(RetentionUnavailable, "private evidence remains"):
+                live.main(["run", "--harness", "hermes", "--case", case["id"], "--out", str(fixture.base / "collision-runs"),
+                           "--hermes-retain-out", str(retained)])
+        self.assertEqual(output.getvalue(), "")
+        self.assertTrue((owners[0].private_root / "meta.json").is_file())
+        self.assertEqual(owners[0]._dirs, [])
+
+
 if __name__ == "__main__":
     unittest.main()
