@@ -780,7 +780,10 @@ class WorktreeAuditPromises(FakeGhSandbox):
             return path
 
         add("wt-merged", "merged-br")
-        (add("wt-wip", "wip-br") / "README.md").write_text("edited, not committed\n")
+        wip = add("wt-wip", "wip-br")
+        (wip / "README.md").write_text("edited, not committed\n")
+        for index in range(4096):
+            (wip / f"generated-{index:04d}.tmp").touch()
         (add("wt-scratch", "scratch-br") / "notes.tmp").write_text("scratch\n")
         for name, branch in (("wt-unmerged", "unmerged-br"), ("wt-openpr", "openpr-br")):
             path = add(name, branch)
@@ -813,6 +816,7 @@ class WorktreeAuditPromises(FakeGhSandbox):
                 "wt-openpr": ("no", "clean", "no-remote", "#9/OPEN", "-", "hold-open-pr"),
                 "wt-chat": ("YES", "clean", "no-remote", "-", today, "verify-recent-chat"),
             },
+            result.stdout,
         )
 
         from datetime import datetime, timedelta, timezone

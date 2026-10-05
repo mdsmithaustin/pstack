@@ -49,7 +49,7 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt;
 	# Distinguish real WIP (tracked edits) from disposable untracked scratch.
 	porcelain=$(git -C "$wt" status --porcelain 2>/dev/null)
 	if [ -z "$porcelain" ]; then dirty=clean
-	elif printf '%s\n' "$porcelain" | grep -qv '^??'; then
+	elif grep -qv '^??' <<< "$porcelain"; then
 		dirty="wip:$(printf '%s\n' "$porcelain" | grep -cv '^??')"
 	else dirty="scratch:$(printf '%s\n' "$porcelain" | grep -c '^??')"; fi
 
