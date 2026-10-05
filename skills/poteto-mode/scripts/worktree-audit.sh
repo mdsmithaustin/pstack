@@ -75,7 +75,15 @@ import datetime
 import os
 import sys
 
-last_ts = max((int(os.stat(path).st_mtime) for path in sys.stdin.read().splitlines() if path), default=0)
+last_ts = 0
+for path in sys.stdin.read().splitlines():
+    if not path:
+        continue
+    try:
+        mtime = os.stat(path).st_mtime
+    except FileNotFoundError:
+        continue
+    last_ts = max(last_ts, int(mtime))
 last = datetime.datetime.fromtimestamp(last_ts).strftime("%Y-%m-%d") if last_ts > 0 else "-"
 recent = last_ts > 0 and int((int(sys.argv[1]) - last_ts) / 86400) <= 4
 print(last, "yes" if recent else "no", sep="\t")
