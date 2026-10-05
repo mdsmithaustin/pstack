@@ -123,6 +123,96 @@ else:
 
 
 class NativeOwnerControls(_OwnerFixture):
+    def test_wide_fixture_reads_exports_and_replays_at_256_descriptors(self):
+        import os
+        import resource
+        self.database()
+        for index in range(300):
+            directory = self.project / f"part-{index:03d}"
+            directory.mkdir()
+            (directory / "note.txt").write_text("owned width marker")
+        baseline = len(os.listdir("/dev/fd"))
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (256, hard))
+        try:
+            for index in range(2):
+                trace = hermes.harvest(self.run)
+                self.assertEqual(trace["final_reply"], "native owned reply")
+                self.assertNotIn("x_harvest_error", trace)
+                self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+                pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / f"wide-pair-{index}"))
+                self.assertEqual((pair.root / "run/w/p/part-299/note.txt").read_text(), "owned width marker")
+                self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+                replay = self.custody.HermesEvidence.replay(
+                    self.custody.ReplayBinding(pair.root, pair.run_id, trace["x_acquisition"]), self.base)
+                try:
+                    self.assertEqual(hermes.build_trace(replay.read())["final_reply"], "native owned reply")
+                finally:
+                    replay.close()
+                self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+        finally:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+    def test_descendant_handles_close_after_depth_refusal_and_decode_error(self):
+        import os
+        from unittest import mock
+        self.database()
+        directory = self.project
+        for _ in range(64):
+            directory /= "d"
+            directory.mkdir()
+        (directory / "note.txt").write_text("owned depth marker")
+        baseline = len(os.listdir("/dev/fd"))
+        self.assertEqual(hermes.harvest(self.run)["final_reply"], "native owned reply")
+        self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+        (directory / "too-deep").mkdir()
+        trace = hermes.harvest(self.run)
+        self.assertIn("resource-limit", trace["x_harvest_error"])
+        self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+        with mock.patch.object(self.owner, "_decode", side_effect=ValueError("owned decode failure")):
+            self.assertIn("owned decode failure", hermes.harvest(self.run)["x_harvest_error"])
+        self.assertEqual(len(os.listdir("/dev/fd")), baseline)
+        self.owner.close()
+        self.owner.close()
+
+    def test_restarted_wal_keeps_stale_tail_and_committed_reply(self):
+        import sqlite3
+        from test_hermes import SESSION_COLUMNS, MESSAGE_COLUMNS
+        path = hermes.profile(self.run) / "state.db"
+        con = sqlite3.connect(path)
+        self.addCleanup(con.close)
+        con.execute("pragma page_size=512")
+        self.assertEqual(con.execute("pragma journal_mode=wal").fetchone(), ("wal",))
+        con.execute("pragma wal_autocheckpoint=0")
+        con.execute(f"create table sessions ({SESSION_COLUMNS})")
+        con.execute(f"create table messages ({MESSAGE_COLUMNS})")
+        con.execute("insert into sessions values ('root',null,'{}',1,'fixture',?,0,0,0,0)", (str(self.project),))
+        con.executemany("insert into messages(session_id,role,content) values ('root','assistant',?)", [("x" * 400,)] * 40)
+        con.commit()
+        wal_path = path.with_name("state.db-wal")
+        old = wal_path.read_bytes()
+        self.assertEqual(con.execute("pragma wal_checkpoint(restart)").fetchone()[0], 0)
+        con.execute("update messages set content='fresh' where id=40")
+        con.commit()
+        main, wal = path.read_bytes(), wal_path.read_bytes()
+        self.assertEqual(len(wal), len(old))
+        self.assertNotEqual(wal[16:24], old[16:24])
+        control = self.base / "sqlite-control.db"
+        control.write_bytes(main)
+        control.with_name("sqlite-control.db-wal").write_bytes(wal)
+        with sqlite3.connect(control) as reader:
+            self.assertEqual(reader.execute("select count(*), (select content from messages where id=40) from messages").fetchone(), (40, "fresh"))
+            self.assertEqual(reader.execute("pragma quick_check").fetchall(), [("ok",)])
+        reader.close()
+        trace = hermes.harvest(self.run)
+        self.assertEqual(trace["final_reply"], "fresh")
+        self.assertNotIn("x_harvest_error", trace)
+        raw = self.owner.private_root / "acquisitions" / trace["x_acquisition"] / "raw"
+        self.assertEqual((raw / "state.db").read_bytes(), main)
+        self.assertEqual((raw / "state.db-wal").read_bytes(), wal)
+        pair = self.owner.retain_pair(self.custody.OwnedExport(self.base / "tail-pair"))
+        self.assertEqual((pair.root / "hermes-evidence/acquisitions" / trace["x_acquisition"] / "raw/state.db-wal").read_bytes(), wal)
+
     def test_private_captures_and_first_resume_survive_mutable_legacy_records(self):
         outside = self.base / "outside"
         outside.write_text("owned canary")
@@ -857,6 +947,29 @@ os._exit(0)
 
 
 class InventoryInference(unittest.TestCase):
+    def test_ordinary_shell_operands_are_filtered_but_unsafe_prefixes_refuse(self):
+        from harnesses.hermes_evidence import FixtureEntry, FixtureInventory
+        fixture = FixtureInventory("/fixture", tuple(FixtureEntry(parts, kind) for parts, kind in [
+            (("src",), "directory"), (("src", "a.py"), "regular"), (("note.txt",), "regular"),
+            (("file",), "regular"), (("link",), "symlink"), (("hard",), "hardlink"),
+            (("socket",), "special"), (("gone",), "unavailable")]))
+        for command, expected in [( 'grep -rn "foo.*bar" src/', []), ("cat src/*.py", []),
+                                  ('sed -i "s/foo/bar/" note.txt', ["/fixture/note.txt"]),
+                                  ("grep -n x docs/missing.md", [])]:
+            with self.subTest(command=command):
+                evidence = []
+                self.assertEqual(hermes.tool_reads("terminal", {"command": command}, {}, "/fixture", fixture, evidence), expected)
+                self.assertEqual([r for r in evidence if r["disposition"] == "unavailable"], [])
+        for path in ("missing/../note.txt", "file/../note.txt", "link/*.py", "hard/*.py", "socket/*.py",
+                     "gone/*.py", "missing/../*.py", "/outside/*.py", "~/note.txt", "$(pwd)/note.txt", "../note.txt"):
+            with self.subTest(path=path):
+                evidence = []
+                hermes.tool_reads("terminal", {"command": "cat " + path}, {}, "/fixture", fixture, evidence)
+                self.assertEqual(evidence[0]["disposition"], "unavailable")
+        evidence = []
+        self.assertEqual(hermes.tool_reads("read_file", {"path": "missing.py"}, {}, "/fixture", fixture, evidence), ["/fixture/missing.py"])
+        self.assertEqual(evidence[0]["disposition"], "fixture-missing")
+
     def test_prefixes_are_checked_before_dot_cancellation_without_host_queries(self):
         import os
         from unittest import mock
@@ -887,6 +1000,30 @@ class InventoryInference(unittest.TestCase):
 
 
 class EvidenceRefusalControls(_OwnerFixture):
+    def test_malformed_page_size_retains_incomplete_attempt(self):
+        import struct
+        main = bytearray(100)
+        main[:16] = b"SQLite format 3\x00"
+        main[16:18] = (3).to_bytes(2, "big")
+        header = struct.pack(">IIIIII", 0x377f0682, 3007000, 3, 0, 0, 0)
+        a = b = 0
+        words = struct.unpack("<6I", header)
+        for index in range(0, 6, 2):
+            a = (a + words[index] + b) & 0xffffffff
+            b = (b + words[index + 1] + a) & 0xffffffff
+        wal = header + struct.pack(">II", a, b) + bytes(27)
+        profile = hermes.profile(self.run)
+        (profile / "state.db").write_bytes(main)
+        (profile / "state.db-wal").write_bytes(wal)
+        trace = hermes.harvest(self.run)
+        self.assertIn("decode-failed", trace["x_harvest_error"])
+        self.assertEqual(trace["events"], [])
+        attempt = self.owner.private_root / "acquisitions" / trace["x_acquisition"]
+        self.assertEqual((attempt / "raw/state.db").read_bytes(), bytes(main))
+        self.assertEqual((attempt / "raw/state.db-wal").read_bytes(), wal)
+        self.assertEqual(json.loads((attempt / "result.json").read_text())["reason"], "decode-failed")
+        self.assertEqual(json.loads((attempt / "context.json").read_text())["kind"], "incomplete")
+
     def test_required_schema_missing_root_and_bad_json_are_incomplete(self):
         import sqlite3
         import oracles
