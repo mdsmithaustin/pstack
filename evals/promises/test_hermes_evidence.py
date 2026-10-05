@@ -123,6 +123,28 @@ else:
 
 
 class NativeOwnerControls(_OwnerFixture):
+    def test_literal_regex_end_anchors_do_not_make_harvest_unavailable(self):
+        from test_hermes import tool_call
+        (self.project / "note.txt").write_text("note")
+        (self.project / "src").mkdir()
+        (self.project / "src" / "a.py").write_text("def example():\n    pass\n")
+        db = HermesDatabase(hermes.profile(self.run) / "state.db")
+        db.session("root")
+        db.con.execute("update sessions set cwd=?", (str(self.project),))
+        db.message("root", "user", "inspect source")
+        for index, command in enumerate((r'grep -n "\.py$" note.txt', r'ls src | grep "\.py$"',
+                                         'grep -E "^def .*:$" src/a.py')):
+            call_id = f"read-{index}"
+            db.message("root", "assistant", calls=[tool_call(call_id, "terminal", command=command)])
+            db.message("root", "tool", '{"exit_code":0}', call_id=call_id, tool_name="terminal")
+        db.message("root", "assistant", "inspected source")
+        db.done()
+        trace = hermes.harvest(self.run)
+        self.assertNotIn("x_harvest_error", trace, trace.get("x_harvest_error"))
+        self.assertEqual(trace["files_read"], [str(self.project / "note.txt"), str(self.project / "src" / "a.py")])
+        self.assertEqual(len(trace["events"]), 8)
+        self.assertEqual(trace["final_reply"], "inspected source")
+
     def test_attempt_setup_and_export_publication_errors_release_handles(self):
         import os
         from unittest import mock
@@ -1015,6 +1037,41 @@ os._exit(0)
 
 
 class InventoryInference(unittest.TestCase):
+    def test_trusted_fixture_root_is_literal_but_candidate_suffixes_still_refuse(self):
+        from harnesses.hermes_evidence import FixtureEntry, FixtureInventory
+        root = "/fixture/root$with~literal*?`chars"
+        fixture = FixtureInventory(root, tuple(FixtureEntry(parts, kind) for parts, kind in [
+            (("note.txt",), "regular"), (("docs",), "directory"), (("docs", "note.txt"), "regular")]))
+        for path, cwd, expected in [("note.txt", root, root + "/note.txt"),
+                                    (root + "/note.txt", root, root + "/note.txt"),
+                                    ("note.txt", root + "/docs", root + "/docs/note.txt")]:
+            with self.subTest(path=path, cwd=cwd):
+                self.assertEqual(hermes.classify_path(path, cwd, fixture), {"requested": path, "cwd": cwd,
+                    "spelling": expected, "disposition": "fixture-request", "reason": None, "kind": "regular"})
+        evidence = []
+        self.assertEqual(hermes.tool_reads("terminal", {"command": "cat note.txt"}, {}, root, fixture, evidence), [root + "/note.txt"])
+        self.assertEqual(evidence[0]["disposition"], "fixture-request")
+        for suffix in ("$HOME/note.txt", "note.txt$", "~/note.txt", "`pwd`/note.txt", "*.txt", "?.txt"):
+            with self.subTest(suffix=suffix):
+                self.assertEqual(hermes.classify_path(suffix, root, fixture)["disposition"], "unavailable")
+                self.assertEqual(hermes.classify_path(root + "/" + suffix, root, fixture)["disposition"], "unavailable")
+                self.assertEqual(hermes.classify_path("note.txt", root + "/" + suffix, fixture)["disposition"], "unavailable")
+        self.assertEqual(hermes.classify_path(root + "-other/note.txt", root, fixture)["disposition"], "unavailable")
+        self.assertEqual(hermes.classify_path("note.txt", root + "-other", fixture)["disposition"], "unavailable")
+
+    def test_literal_regex_end_anchors_keep_only_inventoried_file_reads(self):
+        from harnesses.hermes_evidence import FixtureEntry, FixtureInventory
+        fixture = FixtureInventory("/fixture", tuple(FixtureEntry(parts, kind) for parts, kind in [
+            (("src",), "directory"), (("src", "a.py"), "regular"), (("note.txt",), "regular")]))
+        for command, expected in [(r'grep -n "\.py$" note.txt', ["/fixture/note.txt"]),
+                                  (r'ls src | grep "\.py$"', []),
+                                  ('grep -E "^def .*:$" src/a.py', ["/fixture/src/a.py"])]:
+            with self.subTest(command=command):
+                evidence = []
+                self.assertEqual(hermes.tool_reads("terminal", {"command": command}, {}, "/fixture", fixture, evidence), expected)
+                self.assertEqual(evidence, [{"requested": path.removeprefix("/fixture/"), "cwd": "/fixture",
+                    "spelling": path, "disposition": "fixture-request", "reason": None, "kind": "regular"} for path in expected])
+
     def test_ordinary_shell_operands_are_filtered_but_unsafe_prefixes_refuse(self):
         from harnesses.hermes_evidence import FixtureEntry, FixtureInventory
         fixture = FixtureInventory("/fixture", tuple(FixtureEntry(parts, kind) for parts, kind in [
@@ -1029,7 +1086,10 @@ class InventoryInference(unittest.TestCase):
                 self.assertEqual(hermes.tool_reads("terminal", {"command": command}, {}, "/fixture", fixture, evidence), expected)
                 self.assertEqual([r for r in evidence if r["disposition"] == "unavailable"], [])
         for path in ("missing/../note.txt", "file/../note.txt", "link/*.py", "hard/*.py", "socket/*.py",
-                     "gone/*.py", "missing/../*.py", "/outside/*.py", "~/note.txt", "$(pwd)/note.txt", "../note.txt"):
+                     "gone/*.py", "missing/../*.py", "/outside/*.py", "~/note.txt", "$(pwd)/note.txt", "../note.txt",
+                     "$HOME/note.txt", "${HOME}/note.txt", "$$/note.txt", "$1/note.txt", "$?/note.txt",
+                     "`pwd`/note.txt", "foo~.py", "$HOME/*.py$", "note.txt$$", "$foo.py$", "link/.py$",
+                     "hard/.py$", "socket/.py$", "gone/.py$", "missing/../.py$", "/outside/.py$"):
             with self.subTest(path=path):
                 evidence = []
                 hermes.tool_reads("terminal", {"command": "cat " + path}, {}, "/fixture", fixture, evidence)
