@@ -87,7 +87,7 @@ PINNED_TOOLS = (
     (PYTHON_ROOT / "bin/python3.14", "1bfa9a829d950ecd4870a3d7a6826eb57edb4aa93f69d07cd3bb21e9fcc6d439"),
     (NODE_ROOT / "bin/node", "9d050fd455b56426e25d4d603c7c501cbb2630348e836cf221dcce748e90588a"),
     (RG_BINARY, "ee0025a8dcfb3bef627328c5fb57b56967dcdfc3ed713e3825dfaba1da2e579a"),
-    (GIT_ROOT / "usr/bin/git", "a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7"),
+    (GIT_ROOT / "usr/bin/git", "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae"),
 )
 SYSTEM_TOOLS = tuple(Path("/bin") / n for n in ("sh", "bash", "zsh", "cat", "cp", "mv", "rm", "mkdir", "ls", "pwd", "chmod")) + tuple(
     Path("/usr/bin") / n for n in ("security", "uname", "sw_vers", "sed", "awk", "grep", "head", "tail", "wc", "find", "xargs", "env", "diff", "sort", "touch", "true", "false", "tee", "tr"))
