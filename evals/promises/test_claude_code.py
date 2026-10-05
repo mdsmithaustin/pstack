@@ -8,7 +8,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import live
 from harnesses import claude_code
@@ -522,6 +522,30 @@ class NativeFilesystem(unittest.TestCase):
                                 self.assertEqual((current.st_dev, current.st_ino),
                                                  (replacement_identity.st_dev, replacement_identity.st_ino))
                                 self.assertEqual(inside.read_bytes(), b"replacement\n")
+
+
+class RuntimeAdmission(unittest.TestCase):
+    def test_both_supported_git_digests_become_the_selected_fingerprint(self):
+        git = Path("/Library/Developer/CommandLineTools/usr/bin/git")
+        fingerprints = {path: digests[0] for path, digests in claude_code.PINNED_TOOLS}
+        fingerprints[claude_code.CLAUDE_BINARY] = claude_code.CLAUDE_SHA256
+        account = Mock(pw_dir="/Users/msmith1", pw_name="msmith1")
+        self.addCleanup(claude_code._host_runtime.cache_clear)
+        for digest in ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
+                       "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae"):
+            with self.subTest(digest=digest):
+                claude_code._host_runtime.cache_clear()
+                fingerprints[git] = digest
+                with patch.object(claude_code.platform, "system", return_value="Darwin"), \
+                        patch.object(claude_code.platform, "release", return_value="25.6.0"), \
+                        patch.object(claude_code.platform, "machine", return_value="arm64"), \
+                        patch.object(claude_code.pwd, "getpwuid", return_value=account), \
+                        patch.object(Path, "is_symlink", return_value=False), \
+                        patch.object(Path, "is_file", return_value=True), \
+                        patch.object(Path, "exists", return_value=True), \
+                        patch.object(claude_code, "_digest", side_effect=fingerprints.__getitem__):
+                    runtime = claude_code._host_runtime()
+                self.assertEqual(dict(runtime.fingerprints)[git], digest)
 
 
 @unittest.skipUnless((platform.system(), platform.release(), platform.machine(), str(Path.home())) ==

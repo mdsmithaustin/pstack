@@ -12,9 +12,33 @@ from unittest import mock
 
 import live
 import oracles
+import grade_boundary
 from grade_boundary import GradeRefused, _Root, _Controller, _authorize_fixture, _authorize_retained, _before_turns, _seal
 
 NATIVE = (platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64")
+
+
+class RuntimeAdmission(unittest.TestCase):
+    def test_both_supported_git_digests_pass_and_unknown_digest_is_refused(self):
+        git = Path("/Library/Developer/CommandLineTools/usr/bin/git")
+        pins = tuple(pin for pin in grade_boundary.PINS if pin[0] == git)
+        with mock.patch.object(grade_boundary, "PINS", pins), \
+                mock.patch.object(grade_boundary.platform, "system", return_value="Darwin"), \
+                mock.patch.object(grade_boundary.platform, "release", return_value="25.6.0"), \
+                mock.patch.object(grade_boundary.platform, "machine", return_value="arm64"), \
+                mock.patch.object(Path, "is_symlink", return_value=False), \
+                mock.patch.object(Path, "is_file", return_value=True), \
+                mock.patch.object(Path, "exists", return_value=True), \
+                mock.patch.object(Path, "read_bytes", return_value=b"mock Git executable"), \
+                mock.patch.object(grade_boundary.hashlib, "sha256") as hashed:
+            for digest in ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
+                           "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae"):
+                with self.subTest(digest=digest):
+                    hashed.return_value.hexdigest.return_value = digest
+                    self.assertIsNone(grade_boundary._runtime())
+            hashed.return_value.hexdigest.return_value = "0" * 64
+            with self.assertRaisesRegex(GradeRefused, "runtime fingerprint changed"):
+                grade_boundary._runtime()
 
 
 class BoundaryFixtures(unittest.TestCase):
