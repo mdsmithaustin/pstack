@@ -1227,9 +1227,16 @@ extractor is the awk program that `tools/test_playbook_shape.py` mirrors, and
 `PORTING.md` ("Playbook rules sit where the worklist extractor reaches them")
 says why the lead line lives there. When the line opens with a bold lead, it
 has two identities: the lead's first clause and, if prose follows the bold
-span, that prose's first clause. A line with no bold lead has one, its first
-clause. Each is cut to five words, as a step's identity is. Bug fix's line
-gives "you own this task" and "delegate investigation and the fix".
+span, that prose's first clause. Punctuation between the bold span and that
+prose is skipped, and a part with no words gives no identity, since an empty
+identity would match every worklist. A line with no bold lead has one, its
+first clause. Each identity is cut at its first punctuation mark and at five
+words. A step's identity is cut the same way only when the step has no bold
+heading. A bold heading is kept whole. The trailing identity is required
+because the verbatim-worklist contract (`skills/poteto-mode/SKILL.md`,
+Playbooks) copies the opening prose, and that prose can carry a rule (Bug fix's
+delegate sentence) or a scope (Refactoring's "Distinct from Feature"). Bug fix's
+line gives "you own this task" and "delegate investigation and the fix".
 `worklist.opening` holds the identities and whether the worklist carries all of
 them. A run that copies every step but drops the lead, or keeps the lead and
 drops the delegate sentence, fails item 0 while it still lists every step.
@@ -1243,12 +1250,12 @@ item that keeps those clauses passes.
 `worklist.opening` is `null`, and the run leaves the stage's denominator, when
 no playbook matched, when the matched playbook's text is not in the mounted
 tree, when the playbook has no numbered steps, as Opening a PR has none, or
-when no prose precedes step 1. Index-shaped playbooks are the ones whose
-printed prose includes "Read this playbook in full." (`INDEX_SHAPED` in
-`tools/test_playbook_shape.py`: Orchestrate, Multi-phase-plan, and Opening a
-PR). That sentence is never an identity. Orchestrate and Multi-phase-plan open
-with a bold lead, and a test pins that no shipped playbook opens with the
-sentence.
+when no prose precedes step 1. Index-shaped playbooks are the ones with a
+printed line that starts with "Read this playbook in full." (`line.startswith`
+on `SENTINEL`, and `INDEX_SHAPED` in `tools/test_playbook_shape.py`:
+Orchestrate, Multi-phase-plan, and Opening a PR). That sentence is never an
+identity. Orchestrate and Multi-phase-plan open with a bold lead, and a test
+pins that no identity of any shipped playbook starts with the sentence.
 
 The stages are "worklist present via a valid carrier", "every playbook step
 listed", "playbook opening prose listed", and "step pointers preserved

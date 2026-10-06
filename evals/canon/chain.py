@@ -1056,17 +1056,21 @@ def playbook_opening(text):
     """The identities of a playbook's opening prose, from the first line the
     extractor prints before step 1. A bold lead gives its first clause and, when
     prose follows the bold span, that prose's first clause too, because the
-    prose can carry a rule the lead does not (Bug fix's "Delegate
-    investigation"). A line with no bold lead gives its first clause. Each is
-    five words at most, like a step's identity. None when no prose precedes
-    step 1."""
+    verbatim-worklist contract copies the whole opening line, and the prose
+    can carry a rule (Bug fix's "Delegate investigation") or a scope
+    (Refactoring's "Distinct from Feature"). Punctuation between the bold
+    span and that prose is skipped, and a part that yields no words gives no
+    identity, because an empty identity matches every worklist. A line with no
+    bold lead gives its first clause. Each is five words at most. None when no
+    prose precedes step 1 or the line has no words."""
     for line in text.splitlines():
         if re.match(r"^\d+\.\s", line):
             return None
         if line.strip() and not line.startswith("#"):
             lead = re.match(r"\*\*(.+?)\*\*(.*)", line)
             parts = lead.groups() if lead else (line,)
-            return tuple(first_clause(normalize(part)) for part in parts if normalize(part))
+            identities = (first_clause(normalize(part).lstrip(" .,;:!?-")) for part in parts)
+            return tuple(filter(None, identities)) or None
     return None
 
 

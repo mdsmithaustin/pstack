@@ -1052,6 +1052,23 @@ class PlaybookOpeningTests(unittest.TestCase):
     def test_steps_with_nothing_before_them_have_no_opening(self):
         self.assertEqual([chain.playbook_opening(FEATURE), chain.playbook_opening("Lead.\n" + FEATURE)], [None, ("lead",)])
 
+    def test_punctuation_outside_the_bold_span_is_skipped_before_the_trailing_clause(self):
+        self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (". Delegate the fix.", ": delegate the fix.", " Delegate the fix.")],
+                         [("you own x", "delegate the fix")] * 3)
+
+    def test_a_bold_lead_followed_only_by_punctuation_has_no_empty_identity(self):
+        self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (".", ":", " . ")], [("you own x",)] * 3)
+
+    def test_a_worklist_without_the_trailing_clause_fails_item_zero_when_punctuation_trails_the_bold_span(self):
+        text = "**You own X**. Delegate the fix.\n" + FEATURE
+        trace = lambda item: chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md"),
+                                                 chain.Event(1, "main", "worklist", text=f"{item}\n" + "\n".join(numbered_steps(text)))])
+        kept = [shipped_stages(trace(item), "sessions-by-tag", "poteto-mode/playbooks/feature.md", {"feature": text})["worklist"]["opening"]
+                for item in ("You own X.", "You own X. Delegate the fix.")]
+
+        self.assertEqual(kept, [{"identities": ["you own x", "delegate the fix"], "kept": False},
+                                {"identities": ["you own x", "delegate the fix"], "kept": True}])
+
     def test_curly_quotes_fold_to_ascii_on_both_sides(self):
         self.assertEqual([chain.normalize("The skill\u2019s \u201cvoice\u201d"), chain.normalize("The skill's \"voice\"")],
                          ["the skill's \"voice\"", "the skill's \"voice\""])
@@ -1060,7 +1077,8 @@ class PlaybookOpeningTests(unittest.TestCase):
         names = sorted(path.stem for path in (SKILLS / "poteto-mode" / "playbooks").glob("*.md"))
         openings = {name: chain.playbook_opening(playbook_text(name)) for name in names}
 
-        self.assertEqual([name for name, opening in openings.items() if not opening or opening[0].startswith("read this playbook")], [])
+        self.assertEqual([name for name, opening in openings.items()
+                          if not opening or any(identity.startswith("read this playbook") for identity in opening)], [])
 
 
 class WorklistOpeningTests(unittest.TestCase):
