@@ -1,3 +1,4 @@
+import roleContract from "./role-contract.json";
 import {
   UserError,
   parseVerdict,
@@ -50,10 +51,13 @@ export interface WriteIntent {
 }
 export interface SavedDecision extends AckDecision, WriteIntent {}
 export type Authority = "worker" | "verifier";
+declare const panelArm: unique symbol;
+export type NumericPanelArm = number & { readonly [panelArm]: true };
+
 export interface AttemptSlot {
   readonly unit: string;
   readonly role: string;
-  readonly arm: string;
+  readonly arm: NumericPanelArm;
   readonly authority: Authority;
 }
 export interface Resolution {
@@ -148,15 +152,28 @@ export function parseObservation(value: unknown): Observation {
       throw new UserError("observation kind must be native, cli, or unknown");
   }
 }
+function isNumericPanelArm(value: unknown): value is NumericPanelArm {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
+}
+function parseArm(role: string, value: unknown): NumericPanelArm {
+  if (!isNumericPanelArm(value))
+    throw new UserError("arm must be a positive one-based integer");
+  if (roleContract.panelRoles.includes(role)) return value;
+  if (!roleContract.singleRoles.includes(role))
+    throw new UserError("unknown delegation role");
+  if (value !== 1) throw new UserError("single-value roles require arm 1");
+  return value;
+}
 export function parseBeginAttempt(value: unknown): BeginAttempt {
   const row = record(value);
   const resolution = record(row.resolution);
+  const role = text(row.role);
   if (row.authority !== "worker" && row.authority !== "verifier")
     throw new UserError("authority must be worker or verifier");
   return {
     unit: text(row.unit),
-    role: text(row.role),
-    arm: text(row.arm),
+    role,
+    arm: parseArm(role, row.arm),
     authority: row.authority,
     requestId: text(row.requestId),
     ...(row.replace === undefined ? {} : { replace: safeId(row.replace) }),

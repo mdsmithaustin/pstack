@@ -59,7 +59,7 @@ A drain killed between rename and mkdir recovers on the next affected command. S
 {
 	"unit": "u1",
 	"role": "feature",
-	"arm": "sol",
+	"arm": 1,
 	"authority": "worker",
 	"requestId": "u1-worker-1",
 	"brief": "briefs/u1.md",
@@ -72,7 +72,7 @@ A drain killed between rename and mkdir recovers on the next affected command. S
 }
 ```
 
-Resolve the actual role and exact panel arm through the current resolver before writing the request. Save its concrete resolution. A repeated identical request id returns the same attempt. A different request with that id exits 1. To replace a slot, include `"replace":"<current-attempt-id>"`. A missing or stale predecessor exits 1. Slots use unit, role, arm, and authority, so worker and verifier attempts coexist. `attempt list` includes prior attempts. An attempt is current when no successor names it in `replace`.
+Resolve the actual role and exact panel arm through the current resolver before writing the request. Save its concrete resolution. `arm` is a positive one-based JSON integer. Single-value roles require arm 1. Panel roles retain their exact ordinal. Model aliases are not arm identifiers. The portable `role-contract.json` catalog derives from setup-pstack's canonical `ROLES` and `PANEL_ROLES`, with source parity checked by the tools suite. A repeated identical request id returns the same attempt. A different request with that id exits 1. To replace a slot, include `"replace":"<current-attempt-id>"`. A missing or stale predecessor exits 1. Slots use unit, role, arm, and authority, so worker and verifier attempts coexist. `attempt list` includes prior attempts. An attempt is current when no successor names it in `replace`.
 
 `attempt observe <id> --file observation.json` records one available observation:
 

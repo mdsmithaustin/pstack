@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -272,11 +272,12 @@ async function begin(
   requestId: string,
   authority = "worker",
   replace?: string,
+  role = authority === "worker" ? "feature" : "trail reviewer",
 ) {
   const path = await input(dir, `${requestId}.json`, {
     unit: "u",
-    role: authority === "worker" ? "feature" : "trail reviewer",
-    arm: "sol",
+    role,
+    arm: 1,
     authority,
     requestId,
     brief: "brief.md",
@@ -762,12 +763,12 @@ describe("CLI slot and pending invariants", () => {
   });
   it("keeps exact resolution and independent panel arms and rejects a foreign unit", async () => {
     const { dir, run } = await fixture();
-    const first = await begin(dir, run, "first");
+    const first = await begin(dir, run, "first", "worker", undefined, "arena runners");
     const request = JSON.parse(await readFile(first.path, "utf8"));
     const other = await input(dir, "other.json", {
       ...request,
       requestId: "other",
-      arm: "astra",
+      arm: 2,
       resolution: { harness: "codex", model: "gpt-6-astra", effort: "high" },
     });
     const result = run("attempt", "begin", "--file", other);
@@ -775,8 +776,8 @@ describe("CLI slot and pending invariants", () => {
     const second = JSON.parse(result.out);
     expect(second).toMatchObject({
       unit: "u",
-      role: "feature",
-      arm: "astra",
+      role: "arena runners",
+      arm: 2,
       authority: "worker",
       resolution: { harness: "codex", model: "gpt-6-astra", effort: "high" },
     });
@@ -1143,4 +1144,67 @@ describe("CLI terminal disposition text", () => {
     expect(run("unit", "set", "u", "--state", "late", "--attempt", worker.id).code).toBe(1);
     expect(JSON.parse(run("unit", "get", "u").out).state).toBe("pending");
   });
+});
+
+
+describe("CLI bot core regressions", () => {
+  it("round trips numeric saved role arms through the existing destination resolver", async () => {
+    const { dir, run } = await fixture();
+    const config = join(dir, ".agents");
+    await mkdir(config);
+    await writeFile(join(config, "pstack-models.md"), "## codex\nfeature: gpt-6.1-sol@xhigh\narena runners: gpt-6.1-sol@xhigh,gpt-6-astra@high\n");
+    const contexts = await input(dir, "contexts.json", {});
+    for (const [role, arm, authority, model, effort] of [
+      ["feature", 1, "worker", "gpt-6.1-sol", "xhigh"],
+      ["arena runners", 1, "worker", "gpt-6.1-sol", "xhigh"],
+      ["arena runners", 2, "worker", "gpt-6-astra", "high"],
+      ["arena runners", 2, "verifier", "gpt-6-astra", "high"],
+    ] as const) {
+      const path = await input(dir, `numeric-${role}-${arm}-${authority}.json`, {
+        unit: "u", role, arm, authority, requestId: `${role}-${arm}-${authority}`,
+        brief: "brief.md", checkout: dir, resolution: { harness: "codex", model, effort },
+      });
+      const result = run("attempt", "begin", "--file", path);
+      expect(result.code).toBe(0);
+      expect(run("attempt", "begin", "--file", path).out).toBe(result.out);
+      const saved = JSON.parse(run("attempt", "list").out).find((row: { requestId: string }) => row.requestId === `${role}-${arm}-${authority}`);
+      expect(saved).toMatchObject({ role, arm, authority });
+      const resolver = Bun.spawnSync(["python3", join(import.meta.dir, "../../../../../skills/setup-pstack/scripts/resolve-resume.py"),
+        "--source", "claude-code", "--role", saved.role, "--arm", String(saved.arm),
+        "--project", dir, "--user-file", join(dir, "absent-user"), "--contexts", contexts],
+        { env: { ...process.env, CODEX_HOME: join(dir, "absent-catalog"), PYTHONDONTWRITEBYTECODE: "1" } });
+      expect(resolver.exitCode).toBe(1);
+      const candidate = JSON.parse(resolver.stdout.toString()).candidates[0];
+      expect(candidate.resolution).toEqual({ role, arm, model, effort, source: "workspace ## codex" });
+      expect(candidate.eligible).toBe(false);
+      expect(candidate.reason).toBe("destination availability, route or version is unobserved");
+    }
+    expect(JSON.parse(run("attempt", "list").out)).toHaveLength(4);
+  });
+  for (const arm of [0, -1, 1.5, "sol", "1", "nonnumeric"]) {
+    it(`rejects invalid saved numeric arm ${JSON.stringify(arm)}`, async () => {
+      const { dir, run } = await fixture();
+      const path = await input(dir, "invalid.json", {
+        unit: "u", role: "arena runners", arm, authority: "worker", requestId: "invalid",
+        brief: "brief.md", checkout: dir, resolution: { harness: "codex", model: "gpt-6.1-sol", effort: "xhigh" },
+      });
+      expect(run("attempt", "begin", "--file", path).code).toBe(1);
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([]);
+      const valid = await input(dir, "valid.json", { ...JSON.parse(await readFile(path, "utf8")), arm: 1 });
+      expect(run("attempt", "begin", "--file", valid).code).toBe(0);
+      expect(JSON.parse(run("attempt", "list").out)[0].arm).toBe(1);
+    });
+  }
+  it("rejects arm 2 for a canonical non-panel role", async () => {
+    const { dir, run } = await fixture();
+    const path = await input(dir, "single.json", {
+      unit: "u", role: "feature", arm: 2, authority: "worker", requestId: "single",
+      brief: "brief.md", checkout: dir, resolution: { harness: "codex", model: "gpt-6.1-sol", effort: "xhigh" },
+    });
+    expect(run("attempt", "begin", "--file", path).code).toBe(1);
+    await input(dir, "single.json", { ...JSON.parse(await readFile(path, "utf8")), arm: 1 });
+    expect(run("attempt", "begin", "--file", path).code).toBe(0);
+    expect(JSON.parse(run("attempt", "list").out)[0].arm).toBe(1);
+  });
+
 });
