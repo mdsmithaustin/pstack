@@ -271,7 +271,9 @@ class HiddenTailTests(unittest.TestCase):
                                 ("expect(screen.queryByText(TAIL)).toBeNull();", "expect(screen.getByText(TAIL)).toBeTruthy();"),
                                 ("expect(bubble).not.toHaveTextContent(TAIL);", "expect(await screen.findByText(TAIL)).toBeInTheDocument();"),
                                 ("expect(bubble.textContent).not.toContain(TAIL);", "expect(bubble.textContent).toContain(TAIL);"),
-                                ('expect(bubble).not.toHaveTextContent("the end");', "expect(bubble).toHaveTextContent('the end');")):
+                                ('expect(bubble).not.toHaveTextContent("the end");', "expect(bubble).toHaveTextContent('the end');"),
+                                ("expect(bubble).not.toHaveTextContent(/it's the end/);", "expect(bubble).toHaveTextContent(/it's the end/);"),
+                                (r'expect(bubble).not.toHaveTextContent("say \"hi\" now");', """expect(bubble).toHaveTextContent('say "hi" now');""")):
             with self.subTest(absent):
                 self.assertEqual(self.failures(absent, present), [])
 
