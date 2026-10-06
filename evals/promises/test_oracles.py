@@ -3083,6 +3083,9 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         own = self.candidates_then_status("?? decisions.tsv\n?? .worktrees/\n?? .arena/\n?? scratch_notes.md\n?? .claude/")
         self.assertEqual(own["verdict"], PASS, own)
 
+    def test_copilot_a_collapsed_untracked_package_is_a_candidate_write(self):
+        self.assertEqual(self.candidates_then_status("?? newpkg/")["verdict"], FAIL)
+
     def test_swarm_ownership_past_the_prompt_head_counts(self):
         packages = ("ingest", "shape", "render", "publish")
         prompts = {p: "Goal: run one package's check script and report the result.\n" + "Repo: /w/kiln. Record the SHA first. " * 8
