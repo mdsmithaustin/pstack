@@ -49,6 +49,20 @@ class HarvestCustodyRegression(unittest.TestCase):
         self.assertEqual(outside.read_bytes(), b"owned-outside-write-canary\n")
         self.assertEqual(trace["final_reply"], "owned native reply")
 
+    def test_non_string_tool_arguments_are_retained_incomplete(self):
+        db = HermesDatabase(hermes.profile(self.run) / "state.db")
+        db.session("root")
+        db.message("root", "user", "go")
+        db.message("root", "assistant", "owned native reply",
+                   calls=[{"id": "c1", "function": {"name": "read_file", "arguments": {"path": "x"}}}])
+        db.done()
+        trace = hermes.harvest(self.run)
+        self.assertEqual(trace["x_harvest_error"],
+                         "decode-failed: TypeError: the JSON object must be str, bytes or bytearray, not dict")
+        self.assertEqual(trace["events"], [])
+        result = self.run._hermes_evidence.private_root / "acquisitions" / trace["x_acquisition"] / "result.json"
+        self.assertEqual(json.loads(result.read_text())["reason"], "decode-failed")
+
     def test_missing_main_cannot_reuse_previous_acquisition(self):
         path = self.database()
         self.assertEqual(hermes.harvest(self.run)["final_reply"], "owned native reply")
