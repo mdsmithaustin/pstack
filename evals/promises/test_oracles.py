@@ -3011,8 +3011,11 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         self.assertEqual(self.judged("inherit", "claude-opus-5-5", ["opus", "sonnet"]), FAIL)
         self.assertEqual(self.judged("opus", "claude-opus-5-5", ["inherit", "inherit"]), PASS)
 
-    def test_n7_two_tierless_slugs_compare_whole(self):
+    def test_n7_tierless_slugs_match_whole_or_by_vendor(self):
         self.assertEqual(self.judged("claude", "claude", ["gpt-6"]), FAIL)
+        self.assertEqual(self.judged("grok-4.7", "grok-4.7-build", ["gpt-6"]), FAIL)
+        self.assertEqual(self.judged("gpt-6", "gpt-6.1", ["gpt-6.1"]), INCONCLUSIVE)
+        self.assertEqual(self.judged("gpt-6", "claude", ["claude"]), PASS)
 
     def test_a_labelled_first_reply_names_a_sealed_investigator(self):
         spawns = [self.sealed(10, "Source investigated: local Git history, README, and source comments.")]
