@@ -52,7 +52,7 @@ When you're back, ask for the run in review form:
 /show-me-your-work catch me up on what you did last night
 ```
 
-Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review, labeled as one, when it allows none), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny. Read that section first, then the log rows it points at. You're auditing decisions, not re-reading the whole night.
+Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review when it allows none, labeled as one in the verdict and the reply), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny. Read that section first, then the log rows it points at. You're auditing decisions, not re-reading the whole night.
 
 ## When the night holds a queue, not a task
 
