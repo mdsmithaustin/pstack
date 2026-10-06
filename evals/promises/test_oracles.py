@@ -3002,6 +3002,9 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
             self.assertEqual(self.arena(line), FAIL, line)
         self.assertEqual(self.arena("Candidate 1 is the base; retries were grafted from candidate 3."), PASS)
 
+    def test_copilot_a_negated_base_names_no_base(self):
+        self.assertEqual(self.arena("No base was selected; retries were grafted from candidate 3."), FAIL)
+
     def test_n10_a_negation_anywhere_in_the_picks_clause_cancels_it(self):
         for line in ("It was not at any point in the long review the case that candidate 1 was selected, with retries grafted from candidate 3.",
                      "Nobody picked candidate 1, and retries were grafted from candidate 3.",
