@@ -886,8 +886,8 @@ def segment_writes(command):
         if body is not None:
             saved.update({os.path.normpath(under(base, t)): PATCH_TARGET.findall(body) for t in shell})
         if PATCH_COMMAND.search(masked):
-            inputs = [saved.get(os.path.normpath(under(base, word.strip("\"'"))), []) for word in re.findall(r"[^\s<>|]+", segment)]
-            shell += PATCH_TARGET.findall(body or segment) or [path for paths in inputs for path in paths]
+            shell += PATCH_TARGET.findall(body or segment) or [path for word in re.findall(r"[^\s<>|]+", segment)
+                                                              for path in saved.get(os.path.normpath(under(base, word.strip("\"'"))), [])]
         python = python_targets(segment if body is None else body) if PYTHON_HEADER.search(segment) else []
         yield segment, [under(base, t) for t in shell if is_write_target(t)], [under(base, t) for t in python]
 
