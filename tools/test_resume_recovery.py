@@ -1,4 +1,3 @@
-"""Include the model-free recovery oracle in the existing tools CI suite."""
 from pathlib import Path
 
 
