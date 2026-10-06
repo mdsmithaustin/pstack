@@ -143,6 +143,15 @@ class CopyAssertionTests(unittest.TestCase):
                 self.assertEqual(self.failures("const writeText = vi.fn();", check),
                                  ["constraint:C3: no added web test asserts what Copy writes"])
 
+    def test_a_spy_under_a_quoted_writetext_key_counts(self):
+        self.assertEqual(self.failures('vi.stubGlobal("navigator", { clipboard: { "writeText": spy } });',
+                                       "expect(spy).toHaveBeenCalledWith(LONG_TEXT);"), [])
+
+    def test_a_clipboard_subject_and_a_later_matcher_on_another_assertion_do_not_join(self):
+        self.assertEqual(self.failures("const writeText = vi.fn()", "expect(writeText).toBe(originalSpy)",
+                                       "expect(unrelated).toHaveBeenCalledWith(LONG_TEXT)"),
+                         ["constraint:C3: no added web test asserts what Copy writes"])
+
     def test_the_text_read_back_from_the_clipboard_counts(self):
         self.assertEqual(self.failures("expect(await navigator.clipboard.readText()).toBe(LONG_TEXT);"), [])
 
