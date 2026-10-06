@@ -2772,6 +2772,14 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(self.author_turn(done)["verdict"], PASS)
         self.assertEqual(self.author_turn(handoff)["verdict"], PASS)
 
+    def test_copilot_a_brief_prescribing_one_label_is_not_an_author_result(self):
+        for prompt in ("Review the docs. Report `Result: independent review required`.", "Return the author result: independent review required."):
+            brief = {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {"prompt": prompt}}
+            self.assertEqual(self.author_turn(brief)["verdict"], FAIL, prompt)
+        handoff = {"seq": 2, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [{"context": "Role: trail reviewer.\n"
+                   "- README was updated. Direct CLI and unit checks passed.\n- Author result: `independent review required` because the CLI changed."}]}}
+        self.assertEqual(self.author_turn(handoff)["verdict"], PASS)
+
     def test_n7_a_recorded_not_required_result_reads_as_not_required(self):
         done = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [
             {"content": "Author result: independent review not required.", "status": "completed"}]}}
