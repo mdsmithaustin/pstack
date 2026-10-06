@@ -825,9 +825,11 @@ def walk_segments(command):
 
 AT_COMMAND = r"^\s*(?:(?:do|then|else|sudo)\s+)?"
 LAST_ARG = r"(?:[^\s<>]+\s+)+([^\s<>]+)\s*(?:\d?>.*)?$"
+REMOVE_TARGET = r"\b(?:rm|git rm)\s+(?:-\w+\s+)*([^\s;&|]+)"
+MAKE_DIR = r"\bmkdir\s+(?:-\w+\s+)*([^\s;&|]+)"
 WRITE_TARGETS = (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
                  r"\bsed\s+-i[^\s]*(?:\s+(?:''|\"\"))?\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
-                 r"\b(?:rm|git rm)\s+(?:-\w+\s+)*([^\s;&|]+)",
+                 REMOVE_TARGET,
                  r"\bmv\s+(?:-\w+\s+)*\S+\s+([^\s;&|]+)",
                  AT_COMMAND + r"(?:cp|install)\s+" + LAST_ARG,
                  AT_COMMAND + r"perl\s+(?=(?:\S+\s+)*?-\w*i)" + LAST_ARG,
@@ -874,11 +876,13 @@ def python_targets(source):
 
 
 def segment_writes(command):
-    patched, bodies = PATCH_TARGET.findall(command), [body for _, body in heredoc_bodies(command)]
+    patched, bodies, made = PATCH_TARGET.findall(command), [body for _, body in heredoc_bodies(command)], set()
     for segment, masked, base in walk_segments(expand_assignments(uncommented(strip_heredocs(command)))):
         body = bodies.pop(0) if HEREDOC.search(segment) and bodies else None
-        found = [m for pattern in WRITE_TARGETS for m in re.finditer(pattern, masked)]
-        shell = [segment[m.start(1):m.end(1)].strip("\"'") for m in found] + (patched if PATCH_COMMAND.search(masked) else [])
+        found = [(pattern, segment[m.start(1):m.end(1)].strip("\"'")) for pattern in (MAKE_DIR, *WRITE_TARGETS) for m in re.finditer(pattern, masked)]
+        made |= {os.path.normpath(under(base, t)) for pattern, t in found if pattern == MAKE_DIR}
+        shell = [t for pattern, t in found if pattern != MAKE_DIR and not (pattern == REMOVE_TARGET and os.path.normpath(under(base, t)) in made)]
+        shell += patched if PATCH_COMMAND.search(masked) else []
         python = python_targets(segment if body is None else body) if PYTHON_HEADER.search(segment) else []
         yield segment, [under(base, t) for t in shell if is_write_target(t)], [under(base, t) for t in python]
 
