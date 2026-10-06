@@ -387,7 +387,7 @@ def copy_session(session_dir, destination):
     target = destination / session_dir.parent.name / session_dir.name
     copied = []
     for name in SESSION_FILES:
-        if (session_dir / name).is_file():
+        if (session_dir / name).exists(follow_symlinks=False):
             copy_file(session_dir / name, target / name)
             copied.append(str(target / name))
     for meta in sorted(session_dir.glob("subagents/*/meta.json")):
