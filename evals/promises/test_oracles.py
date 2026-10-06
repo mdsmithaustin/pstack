@@ -2630,6 +2630,10 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(oracles.shell_writes("x=$(cd /tmp/s && echo hi > a.txt); echo x > b.txt"), ["/tmp/s/a.txt", "b.txt"])
         self.assertEqual(oracles.shell_writes("echo $(cd /tmp/s && pwd) > where.txt"), ["where.txt"])
 
+    def test_copilot_a_quoted_command_substitution_scopes_its_writes(self):
+        self.assertEqual(oracles.shell_writes('echo "$(cd /tmp/s && echo hi > a.txt)" > b.txt'), ["/tmp/s/a.txt", "b.txt"])
+        self.assertEqual(oracles.shell_writes('echo "\\$(cd /tmp/s && echo hi > a.txt)"; echo \'$(echo > c.txt)\''), [])
+
     def test_n5_spaced_nested_subshells_scope_their_writes(self):
         self.assertEqual(oracles.shell_writes("( (cd /tmp/s && echo hi > a.txt) ; echo x > b.txt)"), ["/tmp/s/a.txt", "b.txt"])
 
