@@ -1,11 +1,9 @@
 import roleContract from "./role-contract.json";
+import { UserError, parseVerdict, type Verdict } from "./validation.ts";
 import {
-  UserError,
-  parseVerdict,
   type InboxPointer,
   type Unit,
   type LedgerEntry,
-  type Verdict,
 } from "./store.ts";
 
 export interface Event {

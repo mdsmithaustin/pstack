@@ -38,17 +38,14 @@ import {
   type SavedDecision,
   type WriteIntent,
 } from "./recovery.ts";
+import { UserError, parseVerdict, verdictOrNull, type Verdict } from "./validation.ts";
+
+export { UserError, parseVerdict } from "./validation.ts";
+export type { Verdict } from "./validation.ts";
 
 const UNIT_HEADER = "id\ttrack\tstate\tbranch\tpr\tsha\tbrief";
 const LEDGER_HEADER = "pr\tsha\tverdict\tevidence\tverifier\tts";
 const LOCK_FILE = ".orch.lock";
-
-export type Verdict =
-  | "live-ui-verified"
-  | "unit-test-verified"
-  | "type-check-only"
-  | "verifier-blocked"
-  | "verifier-failed";
 
 export interface Unit {
   readonly id: string;
@@ -278,7 +275,6 @@ export interface NotFoundOutput {
   readonly json: unknown;
 }
 
-export class UserError extends Error {}
 export class UsageError extends UserError {}
 export class NotFoundError extends UserError {
   public constructor(
@@ -313,19 +309,6 @@ function isUnknownArray(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
 
-function verdictOrNull(value: string): Verdict | null {
-  switch (value) {
-    case "live-ui-verified":
-    case "unit-test-verified":
-    case "type-check-only":
-    case "verifier-blocked":
-    case "verifier-failed":
-      return value;
-    default:
-      return null;
-  }
-}
-
 function frontierPrStateOrNull(value: unknown): FrontierPrState | null {
   switch (value) {
     case "OPEN":
@@ -335,16 +318,6 @@ function frontierPrStateOrNull(value: unknown): FrontierPrState | null {
     default:
       return null;
   }
-}
-
-export function parseVerdict(value: string): Verdict {
-  const verdict = verdictOrNull(value);
-  if (verdict === null) {
-    throw new UserError(
-      "verdict must be live-ui-verified, unit-test-verified, type-check-only, verifier-blocked, or verifier-failed"
-    );
-  }
-  return verdict;
 }
 
 function cleanCell(value: string): string {
