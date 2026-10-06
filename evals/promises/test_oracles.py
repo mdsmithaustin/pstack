@@ -2963,6 +2963,9 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
     def test_n7_sources_searched_mid_sentence_is_a_sources_section(self):
         self.assertEqual(self.sources("Commit 12d7ece raised it. I listed the sources searched below, git log first."), PASS)
 
+    def test_copilot_a_negated_sources_searched_is_no_sources_section(self):
+        self.assertEqual(self.sources("Commit 12d7ece raised it. No sources searched in git."), FAIL)
+
     def judged(self, judge, lead, models):
         spawns = [{"seq": 10 + n, "tool": "Agent", "model": m, "prompt_head": "Candidate design"} for n, m in enumerate(models)]
         spawns.append({"seq": 30, "tool": "Agent", "model": judge, "prompt_head": "READ-ONLY. You are the judge scoring candidates against the rubric."})
