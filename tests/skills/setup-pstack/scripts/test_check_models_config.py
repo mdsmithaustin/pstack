@@ -1041,6 +1041,43 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
             },
         )
 
+    def test_a_full_claude_id_stays_a_real_slug_on_hermes(self):
+        user = "## hermes\ntrail reviewer: claude-opus-5-5@xhigh\nswarm workers: claude-sonnet-5@high\n"
+        self.assertEqual(
+            self.reviewer("hermes", "claude-opus-5-5@xhigh", user=user),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "claude-opus-5-5", "effort": "xhigh",
+                "source": "user ## hermes",
+                "notes": [
+                    "trail reviewer matched work model claude-opus-5-5; "
+                    "the config allows no other model in its family, so this is a same-model review"
+                ],
+                "step": "same-model",
+            },
+        )
+
+    def test_a_work_model_outside_the_families_is_same_model_even_when_the_config_allows_others(self):
+        user = "## codex\ntrail reviewer: gpt-5.6-sol@high\nfeature: gpt-6-astra@high\n"
+        arm = self.reviewer("codex", "gpt-5.6-sol@high", user=user, codex_catalog=STEP_CATALOG)
+        self.assertEqual(
+            arm,
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-5.6-sol", "effort": "xhigh",
+                "source": "user ## codex",
+                "notes": [
+                    "trail reviewer matched work model gpt-5.6-sol; "
+                    "the config allows no other model in its family, so this is a same-model review"
+                ],
+                "step": "same-model",
+            },
+        )
+
+    def test_an_unmapped_claude_id_on_claude_code_is_unusable_and_prints_unchanged(self):
+        self.assertEqual(
+            self.reviewer("claude-code", "claude-foo@high"),
+            {"role": "trail reviewer", "arm": 1, "model": "opus", "effort": "xhigh", "source": "user flat"},
+        )
+
     def test_a_moved_arm_drops_the_notes_that_described_the_old_model(self):
         arm = self.reviewer("codex", "gpt-6-sol@xhigh", codex_catalog=catalog_json("gpt-6-sol", "gpt-6-astra", "gpt-6-luna"))
         self.assertEqual(

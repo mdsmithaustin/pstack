@@ -433,14 +433,18 @@ def _load_layer_file(path: Path) -> tuple[dict, list[tuple[int, str, str]]]:
 
 def _work_model(value: str) -> tuple[str, str | None]:
     model, at, effort = value.partition("@")
-    full_id = re.fullmatch(r"claude-([a-z]+)(?:-.*)?", model)
-    if full_id and full_id[1] in CLAUDE_ALIASES:
-        model = full_id[1]
-    if not _is_valid_model_name(model):
-        raise argparse.ArgumentTypeError(f"invalid model name {model!r}")
     if at and effort not in (*EFFORT_ORDER, INHERIT):
         raise argparse.ArgumentTypeError(f"unknown effort {effort!r}")
     return model, effort if at else None
+
+
+def _claude_alias_of(model: str, harness: str) -> str:
+    cli = CLIS[harness]
+    full_id = re.fullmatch(r"claude-([a-z]+)(?:-.*)?", model)
+    alias = full_id[1] if full_id else model
+    if alias in CLAUDE_ALIASES and (cli.native_aliases or alias in cli.translation):
+        return alias
+    return model
 
 
 def _resolve_main(argv: list[str]) -> int:
@@ -452,6 +456,11 @@ def _resolve_main(argv: list[str]) -> int:
     parser.add_argument("--work-model", type=_work_model, metavar="MODEL[@EFFORT]")
     parser.add_argument("roles", nargs="*", metavar="ROLE")
     args = parser.parse_args(argv)
+    if args.work_model:
+        work_name, work_written_effort = args.work_model
+        work_name = _claude_alias_of(work_name, args.harness)
+        if not _is_valid_model_name(work_name):
+            parser.error(f"argument --work-model: invalid model name {work_name!r}")
 
     unknown = [r for r in args.roles if r not in ROLES]
     if unknown:
@@ -476,7 +485,7 @@ def _resolve_main(argv: list[str]) -> int:
     catalog = CLIS[args.harness].catalog
     listed = listed_models(catalog) if catalog else NO_CATALOG
     if args.work_model:
-        work_model, work_effort, _ = _resolve_model(*args.work_model, args.harness)
+        work_model, work_effort, _ = _resolve_model(work_name, work_written_effort, args.harness)
         allowed = frozenset(
             arm.model for role in ROLES for arm in resolve_role(role, args.harness, layers, listed)
         ) - {INHERIT}
