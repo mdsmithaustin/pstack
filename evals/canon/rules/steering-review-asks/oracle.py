@@ -626,7 +626,8 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 COPY_MATCHER = r"\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\()"
 COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + COPY_MATCHER)
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
-CLIPBOARD_SPY = re.compile(r"""(?:writeText|copyText)\s*:\s*(\w+)\b(?!\s*[.(])|(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;]*?["'](?:writeText|copyText)["']""")
+CLIPBOARD_SPY = re.compile(r"""(?:writeText|copyText)\s*:\s*(\w+)\b(?!\s*[.(])"""
+                           r"""|(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;]*?["'](?:writeText|copyText)["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
 ARGUMENT = re.compile(r"""(?:"[^"]*"|'[^']*'|`[^`]*`|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
@@ -649,7 +650,7 @@ def asserts_copied_value(source):
 
 def asserted_values(pattern, lines):
     """The first argument of each assertion pattern finds, whitespace
-    normalized and unquoted, so TAIL, "tail" and 'tail' compare by value."""
+    normalized and unquoted, so "the end" and 'the end' compare equal."""
     values = set()
     for line in lines:
         for found in pattern.finditer(line):
@@ -762,7 +763,8 @@ def shipped_issues():
 
 def prose(issue):
     """The whitespace-normalized sentences of one parsed issue, whatever its
-    shape. A record with no string of four words keeps its longest string."""
+    shape. A record with no string of four or more words keeps its longest
+    string."""
     if isinstance(issue, str):
         return [" ".join(issue.split())] if issue.split() else []
     return record_prose(issue) or sorted(record_prose(issue, words=1), key=len)[-1:]
@@ -924,8 +926,8 @@ def check_known_issues(answer, workspace):
 # that skips first never reaches. So the functional set drives the Windows skip
 # through the update tail, build_update_products, calls the helper directly at
 # both its pack and swap call sites, and runs the PR's dropped POSIX-still-packs
-# test, with the host faked. The repo forbids that fake in its
-# own tests (C3), not here.
+# test, with the host faked. The repo forbids that fake in its own tests (C3),
+# not here.
 DESKTOP_SKIP_PR_TESTS = r'''
 
 def _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, *, also_posix):
