@@ -2402,10 +2402,27 @@ def author_result(text):
 LABELED_RESULT = re.compile(r"\bresult\b\W{0,6}independent review (?:is )?(not )?required", re.I)
 
 
+def unplanned(value):
+    if isinstance(value, list):
+        return [unplanned(v) for v in value if not (isinstance(v, dict) and v.get("status") == "pending")]
+    if isinstance(value, dict):
+        return {k: unplanned(v) for k, v in value.items()}
+    return value
+
+
+def recorded_result(call):
+    name, given = call.get("name"), call.get("input") or {}
+    if name in SHELL_TOOLS:
+        text = re.sub(r"\b(?:grep|rg)\b[^\n;&|]*", " ", str(given.get(SHELL_TOOLS[name]) or ""))
+    else:
+        text = json.dumps(unplanned(given)).replace("\\n", " ")
+    found = {"not required" if m.group(1) else "required" for m in LABELED_RESULT.finditer(text)}
+    return found.pop() if len(found) == 1 else None
+
+
 def turn_author_result(view, turn, reply):
-    inputs = " ".join(json.dumps(c.get("input") or {}) for c in view.tool_calls if turn is None or view.turn_of(c.get("seq")) == turn)
-    labeled = LABELED_RESULT.search(inputs.replace("\\n", " "))
-    recorded = ("not required" if labeled.group(1) else "required") if labeled else None
+    calls = [c for c in view.tool_calls if turn is None or view.turn_of(c.get("seq")) == turn]
+    recorded = next(filter(None, map(recorded_result, calls)), None)
     return author_result(reply) or author_result(" ".join(view.texts(turn))) or recorded
 
 
