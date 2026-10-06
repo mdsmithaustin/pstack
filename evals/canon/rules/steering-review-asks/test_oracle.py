@@ -240,9 +240,13 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(copied):
                 self.assertEqual(self.failures(*stub, *copied, "});"), [self.PRESENT])
 
-    def test_a_variable_declared_after_a_semicolonless_spy_is_not_a_clipboard_capture(self):
-        self.assertEqual(self.failures("const writeText = vi.fn()", "const bubble = renderPrompt()",
-                                       "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(TAIL)"), [])
+    def test_a_variable_assigned_after_a_semicolonless_spy_is_not_a_clipboard_capture(self):
+        for after in (["const writeText = vi.fn()", "const bubble = renderPrompt()"],
+                      ["const writeText = vi.fn()", "bubble = renderPrompt()"],
+                      ["const writeText = vi.fn()", "beforeEach(() => {", "  bubble = renderPrompt()", "})"],
+                      ['vi.stubGlobal("navigator", { clipboard: { writeText } })', "beforeEach(() => {", "  bubble = renderPrompt()", "})"]):
+            with self.subTest(after):
+                self.assertEqual(self.failures(*after, "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(TAIL)"), [])
 
     def test_a_payload_captured_in_each_stub_form_is_not_the_rendered_text(self):
         for stub, name in (("writeText: vi.fn((text) => written.push(text)) } })", "written"),
