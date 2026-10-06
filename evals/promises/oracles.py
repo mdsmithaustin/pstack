@@ -529,12 +529,11 @@ class View:
         return out
 
     def inside_project(self, path):
-        if not path.startswith("/") or not self.project:
+        if not self.project:
             return True
-        return Path(path).resolve().is_relative_to(self.project.resolve())
+        return (self.project / path).resolve().is_relative_to(self.project.resolve())
 
     def tree_rel(self, path):
-        path = path.strip("\"'")
         if not self.project:
             return path
         full = (Path(path) if path.startswith("/") else self.project / path).resolve()
@@ -555,11 +554,11 @@ class View:
         if rel.startswith(PRIVATE_PREFIXES) or "/skills/" in path:
             return "private"
         if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) \
-                or rel.startswith(("tmp/", "scratch", "repro", "verify", "baseline")):
+                or re.match(r"tmp/|(?:scratch\w*|repro|verify|baseline)[/_\-\d]", rel):
             return "scratch"
         if any(tag in rel for tag in LOG_NAMES):
             return "log"
-        if "test" in rel.lower():
+        if re.search(r"(?:^|/)test(?:s|data|ing)?(?:[/_.]|$)|[_.-]tests?[_./]|\.spec\.", rel.lower()):
             return "test"
         if rel.endswith((".md", ".rst")) or rel.lower().startswith("readme"):
             return "doc"
@@ -804,35 +803,42 @@ def under(base, target):
 def walk_segments(command):
     base, outer = "", []
     for segment, masked in shell_segments(command):
-        opening = re.match(r"\s*(\(*)", masked)
-        outer += [base] * len(opening.group(1))
-        segment, masked = segment[opening.end():], masked[opening.end():]
-        closing = re.search(r"(\)*)\s*$", masked)
-        shut = min(len(closing.group(1)), len(outer))
-        if shut:
-            end = closing.end(1) - shut
-            segment, masked = segment[:end], masked[:end]
-        moved = cd_into(segment, base)
-        if moved is not None:
-            base = moved
-        else:
-            yield segment, masked, base
-        for _ in range(shut):
-            base = outer.pop()
+        start = 0
+        for paren in [*re.finditer(r"[()]", masked), None]:
+            end = paren.start() if paren else len(masked)
+            piece = segment[start:end]
+            yield piece, masked[start:end], base
+            base = cd_into(piece, base) or base
+            if paren and paren.group() == "(":
+                outer.append(base)
+            elif paren and outer:
+                base = outer.pop()
+            start = end + 1
+
+
+AT_COMMAND = r"^\s*(?:(?:do|then|else|sudo)\s+)?"
+LAST_ARG = r"(?:[^\s<>]+\s+)+([^\s<>]+)\s*(?:\d?>.*)?$"
+WRITE_TARGETS = (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
+                 r"\bsed\s+-i[^\s]*(?:\s+(?:''|\"\"))?\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
+                 r"\b(?:rm|git rm)\s+(?:-\w+\s+)*([^\s;&|]+)",
+                 r"\bmv\s+(?:-\w+\s+)*\S+\s+([^\s;&|]+)",
+                 AT_COMMAND + r"(?:cp|install)\s+" + LAST_ARG,
+                 AT_COMMAND + r"perl\s+(?=(?:\S+\s+)*?-\w*i)" + LAST_ARG,
+                 AT_COMMAND + r"ed\s+(?:-\S+\s+)*([^\s<>]+)",
+                 r"\bdd\s[^<>]*?\bof=([^\s<>]+)")
+PATCH_COMMAND = re.compile(r"\bgit\s+apply\b(?!.*\s--(?:check|stat|numstat|summary)\b)|" + AT_COMMAND + r"patch\b(?!.*\s--dry-run\b)")
+PATCH_TARGET = re.compile(r"(?m)^\+\+\+ (?:b/)?(\S+)")
 
 
 def shell_writes(command):
     out = []
+    patched = PATCH_TARGET.findall(command)
     for segment, masked, base in walk_segments(expand_assignments(strip_heredocs(command))):
-        found = [m for pattern in (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
-                                   r"\bsed\s+-i[^\s]*(?:\s+(?:''|\"\"))?\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
-                                   r"\b(?:rm|git rm)\s+(?:-\w+\s+)*([^\s;&|]+)",
-                                   r"\bmv\s+(?:-\w+\s+)*\S+\s+([^\s;&|]+)")
-                 for m in re.finditer(pattern, masked)]
-        for match in found:
-            target = segment[match.start(1):match.end(1)].strip("\"'")
-            if is_write_target(target):
-                out.append(under(base, target))
+        found = [m for pattern in WRITE_TARGETS for m in re.finditer(pattern, masked)]
+        targets = [segment[m.start(1):m.end(1)].strip("\"'") for m in found]
+        if PATCH_COMMAND.search(masked):
+            targets += patched
+        out += [under(base, target) for target in targets if is_write_target(target)]
     return out
 
 
