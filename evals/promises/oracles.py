@@ -896,7 +896,7 @@ def segment_writes(command):
             saved.update({os.path.normpath(under(base, t)): patch_targets(body) for t in shell})
         if PATCH_COMMAND.search(masked):
             shell += patch_targets(body or segment) or [path for word in re.findall(r"[^\s<>|]+", segment)
-                                                              for path in saved.get(os.path.normpath(under(base, word.strip("\"'"))), [])]
+                                                        for path in saved.get(os.path.normpath(under(base, word.strip("\"'"))), [])]
         python = python_targets(segment if body is None else body) if PYTHON_HEADER.search(segment) else []
         yield segment, [under(base, t) for t in shell if is_write_target(t)], [under(base, t) for t in python]
 
@@ -1764,8 +1764,8 @@ CLAUSE_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|thou
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody)\b|n't\b")
 
 
-def negated(low, start):
-    return bool(CLAUSE_NEGATION.search(CLAUSE_SPLIT.split(low[:start])[-1]))
+def affirmed(pattern, low):
+    return any(not CLAUSE_NEGATION.search(CLAUSE_SPLIT.split(low[:m.start()])[-1]) for m in re.finditer(pattern, low))
 
 
 @oracle("how-why-reports-name-sources-searched")
@@ -1774,7 +1774,7 @@ def sources_named(view):
     if gate:
         return gate
     low = view.final_reply.lower()
-    section = SOURCES_SECTION.search(low) or any(not negated(low, m.start()) for m in SOURCES_LISTED.finditer(low))
+    section = SOURCES_SECTION.search(low) or affirmed(SOURCES_LISTED, low)
     git = re.search(r"\bgit\b|commit", low)
     evidence = [f"sources section: {bool(section)}", f"git named: {bool(git)}"]
     return passed(*evidence) if section and git else failed("reply has no sources section naming what was searched", *evidence)
@@ -2650,15 +2650,11 @@ def arena_worktrees(view):
 PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on) (?:candidate|arm) [\w-]+")
 
 
-def picked(low):
-    return any(not negated(low, m.start()) for m in PICKED.finditer(low))
-
-
 @oracle("arena-fans-out-and-grafts")
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = any(not negated(low, m.start()) for m in re.finditer(r"\bbase\b", low)) or picked(low)
+    base = affirmed(r"\bbase\b", low) or affirmed(PICKED, low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
@@ -2836,7 +2832,7 @@ def architect_checkpoint(view):
     sources = view.source_edits()
     tree = sorted(p for p in view.changed_since_base() or () if view.classify(p) == "source")
     low = view.final_reply.lower()
-    pause = any(not negated(low, m.start()) for m in re.finditer(r"sign-off|\bapprove\b|before implementing|proceed\?|shall i implement|waiting (?:for|on) (?:you|your)\b", low))
+    pause = affirmed(r"sign-off|\bapprove\b|before implementing|proceed\?|shall i implement|waiting (?:for|on) (?:you|your)\b", low)
     evidence = [f"source edits: {[e[1] for e in sources][:3]}", f"project source changed since the fixture: {tree[:3]}", f"reply pauses for sign-off: {pause}"]
     if sources or tree:
         return failed("checkpoint requested but implementation started", *evidence)
