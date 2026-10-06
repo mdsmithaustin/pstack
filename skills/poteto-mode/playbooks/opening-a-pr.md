@@ -40,7 +40,7 @@ In a gated repository, the gate owns every write to the push target and every PR
 - Never create or retarget the PR with a forge CLI or a built-in PR tool.
 - Never rebase a published branch by hand. While a run or its CI monitor is live, it rebases on conflict, so leave the branch to it. After a terminal outcome, or once the monitor has stopped, restack or retarget with `no-mistakes rerun --base-branch <new-base>`.
 - Push work-in-progress snapshots only to `refs/pstack/wip/<branch>` on origin. When the repository's AGENTS.md, CLAUDE.md, or CONTRIBUTING names a branch or ref convention for agent work, use that convention. When the remote rejects the ref, keep snapshots local and record why. Do not retry under another name. Delete the snapshot ref after the PR merges.
-- Before any local commit on a published branch, read `branch_sync` and follow its `next_action`. Commit only when it allows a commit.
+- Before any local commit or `rerun` on a published branch, read `branch_sync` and follow its `next_action`. Commit only when it allows a commit.
 - Relay an `ask-user` finding verbatim to the user, or from a subagent to its parent. Pass `--yes` only when the user's grant names no-mistakes.
 - When `no-mistakes doctor` fails or the gate cannot run, stop and report. Publish around the gate only when the user said "bypass no-mistakes" in this session.
 - After each run, check the pipeline's PR title against **Titles** and correct it with the forge. The squash body comes from `merge-gate --body-file` in `playbooks/shipping.md`.
