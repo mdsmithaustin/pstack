@@ -633,7 +633,9 @@ SPY_AS_WRITETEXT = re.compile(r"""clipboard["']?\s*[:,]\s*\{(?:\s*value\s*:\s*\{
 SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;,]*\bclipboard\s*,\s*["']writeText["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(")
-ARGUMENT = re.compile(r"""(?:"[^"]*"|'[^']*'|`[^`]*`|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
+STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
+REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
+ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 
 
 def clipboard_spies(source):
@@ -653,7 +655,7 @@ def assertions(source):
 
 
 def unquoted(value):
-    return value[1:-1] if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'`" else value
+    return re.sub(r"\\(.)", r"\1", value[1:-1]) if re.fullmatch(STRING, value) else value
 
 
 def asserts_copied_value(source):
