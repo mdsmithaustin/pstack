@@ -2924,6 +2924,12 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         result = grade("why-queries-evidence-categories-in-parallel", minimal(events=self.spawned(sourced), spawns=sourced, harness="codex"), load_case("why-run"))
         self.assertEqual(result["evidence"][0], "investigator spawns: 1")
 
+    def test_copilot_a_status_label_does_not_carry_its_body_into_the_role(self):
+        for reply in ("Update: pushing to source control after the edits.", "### Update: pushing to source control after the edits."):
+            spawns = [self.sealed(10, reply)]
+            result = grade("why-queries-evidence-categories-in-parallel", minimal(events=self.spawned(spawns), spawns=spawns, harness="codex"), load_case("why-run"))
+            self.assertEqual(result["verdict"], FAIL, reply)
+
     def test_an_unlabelled_first_reply_still_names_a_sealed_reviewer(self):
         reviewer = self.sealed(5, "persona: poteto-agent\nI'm using poteto-mode and documentation-impact to review the CLI and its docs.", "docs_review")
         events = [dict(e, turn=0) for e in self.spawned([reviewer])] + [dict(text(7, "Done. Author result: independent review required. Review: pass."), turn=0),
