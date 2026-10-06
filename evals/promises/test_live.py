@@ -42,6 +42,10 @@ class ChatWorklist(unittest.TestCase):
         self.assertEqual([i["state"] for i in live.chat_worklist("1. Read source (done: inspected)\n2. Run check (done: passed)")],
                          ["completed", "completed"])
 
+    def test_parentheses_inside_a_state_explanation_parse(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("1. Fix parser (done: checked parse())\n2. Run tests (done: 3 cases (all passed))")],
+                         ["completed", "completed"])
+
     def test_emphasized_done_and_blocked_annotations_parse(self):
         reply = ("4. Delegate code-writing on the `feature` role. *(done: commit `3f31bec`, reviewed by me)*\n"
                  "8. Opening a PR. *(blocked: `git remote -v` is empty)*")
