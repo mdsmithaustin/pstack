@@ -90,6 +90,7 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
 REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*[Ss]ources?\s*\n+[^\n]*|#{1,6}[^\n]+|[A-Za-z][\w /-]{0,30}:[^\n]*)")
+LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -596,7 +597,9 @@ class View:
         extra = [str(given.get(k) or "") for k in ("description", "task_name", "name")] if isinstance(given, dict) else []
         said = str(spawn.get("x_child_first_reply") or "")
         if reply == "label":
-            said = label.group(0) if (label := REPLY_LABEL.match(said)) else ""
+            label = REPLY_LABEL.match(said)
+            name = label.group(0).partition(":")[0] if label else ""
+            said = label.group(0) if label and LABEL_KEEPS_BODY.search(name) else name
         text = " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra
                         + [said[:REPLY_HEAD] if reply else ""]).lower()
         return LEAD_ROLE.sub("", text)
