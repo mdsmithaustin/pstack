@@ -2764,7 +2764,7 @@ def arena_lead_reads(view):
     named = rationale_pattern(view, candidates)
     rationale_reads = [(p, copy) for p, copy in reads if named.search(p) and not skill_rel(p)]
     others = [p for p, _ in reads if not named.search(p) and not skill_rel(p)]
-    # Copies of one unresolved path inside a command come from an unrolled loop and can name different files.
+    # An unrolled loop repeats one unresolved path inside a command, and each copy can name a different file.
     rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'")) for p, copy in rationale_reads}
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
     evidence = [f"rationale files read after the last candidate spawn: {len(rationales)}", f"other candidate files read: {len(others)}"]
