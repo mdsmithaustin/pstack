@@ -2876,7 +2876,8 @@ class Issue133WritesAndReruns(unittest.TestCase):
         case = load_case("bug-fix-run")
         cannot = bash(10, "python3 -m rollup data/orders.csv /tmp/out.csv", ok=False, head="ModuleNotFoundError: No module named 'rollup'")
         for later, want in (("echo 'python3 check.py'", FAIL), ('bash -c "python3 /tmp/check.py"', INCONCLUSIVE),
-                            ('python3 "/tmp/a b/check.py"', INCONCLUSIVE), ('echo "$(python3 check.py)"', INCONCLUSIVE)):
+                            ('python3 "/tmp/a b/check.py"', INCONCLUSIVE), ('echo "$(python3 check.py)"', INCONCLUSIVE),
+                            ("python3 -u /tmp/rollup-retry-check.py", INCONCLUSIVE), ("bash -e ./verify.sh", INCONCLUSIVE)):
             result = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=cannot + bash(20, later), final_reply="Fixed and verified."), case)
             self.assertEqual(result["verdict"], want, later)
 
