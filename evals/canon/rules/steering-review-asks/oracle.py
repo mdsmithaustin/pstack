@@ -915,8 +915,9 @@ def check_known_issues(answer, workspace):
 # unrelated main changes. Its Windows tests skip on a Linux host and call
 # _stop_desktop_processes_locking_build under a Desktop ancestor, which a build
 # that skips first never reaches. So the functional set drives the Windows skip
-# through the update tail, build_update_products, and runs the PR's dropped
-# POSIX-still-packs test, with the host faked. The repo forbids that fake in its
+# through the update tail, build_update_products, calls the helper directly at
+# both its pack and swap call sites, and runs the PR's dropped POSIX-still-packs
+# test, with the host faked. The repo forbids that fake in its
 # own tests (C3), not here.
 DESKTOP_SKIP_PR_TESTS = r'''
 
@@ -1045,6 +1046,12 @@ def test_windows_update_tail_under_its_own_desktop_finishes_without_stopping_it(
             windows_tree.live_exe.read_text(encoding="utf-8"), leftovers) == ([], [], "old", ["package.json", "release"])
 
 
+@pytest.mark.parametrize("also_posix", [False, True], ids=["pack", "swap"])
+def test_windows_stop_spares_its_own_desktop_and_stops_an_unrelated_one(windows_tree, also_posix):
+    stopped = main_desktop._stop_desktop_processes_locking_build(windows_tree.desktop_dir, also_posix=also_posix)
+    assert (stopped, windows_tree.stopped) == ([UNRELATED], [UNRELATED])
+
+
 def test_posix_packaged_build_under_its_desktop_still_packs(windows_tree, monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     # Promotion fails without a real packed app; only whether it packed matters.
@@ -1119,6 +1126,7 @@ def check_desktop_skip(answer, workspace):
     return graded(workspace, "hermes-8afaab3703e3", {pr_tests: DESKTOP_SKIP_PR_TESTS, checks: DESKTOP_SKIP_CHECKS}, {
         f"{pr_tests}::test_posix_swap_spares_the_desktop_driving_this_update": "functional",
         f"{checks}::test_windows_update_tail_under_its_own_desktop_finishes_without_stopping_it": "functional",
+        f"{checks}::test_windows_stop_spares_its_own_desktop_and_stops_an_unrelated_one": "functional",
         f"{checks}::test_posix_packaged_build_under_its_desktop_still_packs": "functional",
         f"{checks}::test_hermes_desktop_reopens_the_app_it_did_not_rebuild": "constraint:C2",
     }, {"hermes_cli/main_desktop.py": 61, "tests/hermes_cli/test_gui_command.py": 46, "website/docs/getting-started/updating.md": 1},
