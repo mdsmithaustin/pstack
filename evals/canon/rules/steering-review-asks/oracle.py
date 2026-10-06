@@ -627,7 +627,7 @@ CALLED_WITH = r"\s*\.toHaveBeen(?:Last|Nth)?CalledWith\("
 PAYLOAD_MATCHER = r"\s*\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
 COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + f"(?:{CALLED_WITH}|{PAYLOAD_MATCHER})")
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
-SPY_AS_WRITETEXT = re.compile(r"clipboard[^;]*?\bwriteText\s*:\s*(\w+)\b(?!\s*[.(])")
+SPY_AS_WRITETEXT = re.compile(r"""clipboard["']?\s*[:,]\s*\{(?:\s*value\s*:\s*\{)?[^{}]*?\bwriteText\s*:\s*(\w+)\b(?!\s*[.(])""")
 SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;,]*\bclipboard\s*,\s*["']writeText["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
