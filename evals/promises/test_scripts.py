@@ -196,6 +196,8 @@ if argv[:2] == ["api", "graphql"]:
             "reviews": {"totalCount": len(state["reviews"])},
             "comments": {"totalCount": len(state["comments"]), "nodes": state["comments"]},
         }}}})
+    if "query MergeGateQueue" in query:
+        out({"data": {"repository": {"mergeQueue": {"id": "MQ_1"} if state.get("merge_queue") else None}}})
 sys.stderr.write("fake gh: unsupported call %r\n" % (argv,))
 sys.exit(99)
 '''
@@ -309,6 +311,7 @@ class GitHubSandbox(FakeGhSandbox):
             "reviews": [],
             "review_requests": [],
             "comments": [self.verdict_comment()],
+            "merge_queue": False,
         }
 
     def bot_review(self, body=COPILOT_FINDING_BODY, url=REVIEW_URL):
@@ -685,6 +688,7 @@ class MergeGatePromises(GitHubSandbox):
             "the PR is not mergeable": (
                 lambda st: st["pr"].update(mergeable="CONFLICTING", mergeStateStatus="DIRTY"), ["mergeability"]),
             "no verdict was posted": (lambda st: st.update(comments=[]), ["verdict", "head", "patch-id"]),
+            "the base branch uses a merge queue": (lambda st: st.update(merge_queue=True), ["merge-queue"]),
         }
         for label, (break_it, failed) in refusals.items():
             with self.subTest(label):
@@ -717,9 +721,10 @@ class MergeGatePromises(GitHubSandbox):
         self.state["rollup"] = "FAILURE"
         self.state["reviews"] = [self.bot_review()]
         self.state["threads"] = [self.unresolved_thread()]
+        self.state["merge_queue"] = True
         result = self.merge_gate()
         self.assertEqual(result.returncode, 10, result.stdout + result.stderr)
-        every_gate = ["verdict", "head", "patch-id", "checks", "review-bodies", "threads", "mergeability", "draft"]
+        every_gate = ["verdict", "head", "patch-id", "checks", "review-bodies", "threads", "mergeability", "draft", "merge-queue"]
         self.assertEqual(self.failed_gates(result), ("REFUSED", every_gate))
         self.assertEqual(self.merge_calls(), [])
         pretty = self.merge_gate("--pretty")
