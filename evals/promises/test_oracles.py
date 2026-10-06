@@ -2872,7 +2872,9 @@ class Issue133WritesAndReruns(unittest.TestCase):
 
     def test_copilot_a_negated_approval_is_not_a_pause(self):
         case = load_case("architect-checkpoint-run")
-        for reply in ("The architect did not approve the design.", "The architect didn't approve the design."):
+        for reply in ("The architect did not approve the design.", "The architect didn't approve the design.",
+                      "The architect cannot approve the design.", "The architect refused to approve the design.",
+                      "The architect declined to approve the design.", "The architect was unable to approve the design."):
             self.assertEqual(grade("architect-checkpoint-opt-in", minimal(final_reply=reply), case)["verdict"], INCONCLUSIVE, reply)
 
     def test_f16_reading_the_runner_prompt_alone_is_not_a_fan_out(self):
