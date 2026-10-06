@@ -1669,11 +1669,15 @@ without it and says so in `oracle.py`. `hermes-known-issues` builds every
 fixture from the `known_issues` the agent's own `plugin-catalog/hindsight.yaml`
 declares, and C9 counts each parsed issue's text in the CLI output.
 `hermes-desktop-skip` checks the Windows skip through the update tail,
-`source_build.build_update_products`. `omnigent-task-notify` K1 parses a
+`source_build.build_update_products`, and calls
+`_stop_desktop_processes_locking_build` on a faked Windows host at its pack and
+swap call sites, so an early skip alone does not pass. `omnigent-task-notify` K1 parses a
 notification with the bridge, POSTs it as the forwarder does, and reads
 `is_meta` from the stored item, so the flag may be set in the bridge or the
 route. A static check reads only the lines the diff adds, and applies only
-where the ask is about the agent's own tests. The oracle skips an ask that is
+where the ask is about the agent's own tests. It never credits a line of a
+Python file that does not parse, though a `sys.platform` patch there still
+fails C3. The oracle skips an ask that is
 taste. The case's `expected_behavior` ends with a "Not graded" line that
 names it.
 
