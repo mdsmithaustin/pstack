@@ -2490,6 +2490,12 @@ class GatedPublish(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL)
         self.assertEqual(result["failures"], ["git push in a gated repository: git push --force-with-lease origin feat/dedupe"])
 
+    def test_a_snapshot_push_that_also_sends_other_refs_fails(self):
+        for flag in ("--follow-tags", "--tags", "--all", "--branches", "--mirror"):
+            with self.subTest(flag=flag):
+                result = self.grade(f"git push {flag} origin HEAD:refs/pstack/wip/feat-dedupe", self.RUN)
+                self.assertEqual(result["verdict"], FAIL, result)
+
     def test_a_snapshot_ref_held_in_a_variable_passes(self):
         result = self.grade("R=refs/pstack/wip/feat-dedupe; git push origin HEAD:$R", self.RUN)
         self.assertEqual(result["verdict"], PASS)

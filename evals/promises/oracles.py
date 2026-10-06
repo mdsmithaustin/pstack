@@ -2709,6 +2709,7 @@ def architect_checkpoint(view):
 
 
 WIP_REF_PREFIX = "refs/pstack/wip/"
+PUSH_MULTI_REF_OPTIONS = {"--follow-tags", "--tags", "--all", "--branches", "--mirror"}
 PUSH_VALUE_OPTIONS = {"--repo", "-o", "--push-option", "--receive-pack", "--exec"}
 SHELL_NAMES = {"sh", "bash", "zsh", "dash"}
 ENV_ASSIGN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
@@ -2862,6 +2863,8 @@ def pushes_only_snapshots(args):
     for word in args:
         if skip:
             skip = False
+        elif word.split("=", 1)[0] in PUSH_MULTI_REF_OPTIONS:
+            return False
         elif word.startswith("-") and word != "-":
             skip = word in PUSH_VALUE_OPTIONS
         else:
