@@ -1330,7 +1330,7 @@
   },
   "merge-gate-refuses-until-gates-hold": {
    "check": "script",
-   "claim": "merge-gate merges only when the latest verdict block matches the PR's current head and patch-id, every check passed, every bot review body is acknowledged, threads are resolved, and the PR is mergeable; otherwise it exits 10 with nothing merged.",
+   "claim": "merge-gate merges only when the latest verdict block matches the PR's current head and patch-id, every check passed, every bot review body is acknowledged, threads are resolved, the PR is mergeable, and its base branch has no merge queue; otherwise it exits 10 with nothing merged.",
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/scripts/watch-pr/merge-gate",
@@ -2990,6 +2990,15 @@
     "port"
    ],
    "text": "Before handing it over, the generator proves the skill once end to end: launch, doctor check, drive one feature, capture evidence, clean up."
+  },
+  "0bced356d9d3": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "merge-gate-refuses-until-gates-hold",
+   "sources": [
+    "port"
+   ],
+   "text": "It also refuses when the base branch has a merge queue, because the queue would land the PR without rerunning these checks, so the lead asks you before overriding."
   },
   "0c4fcaa38974": {
    "class": "promise",

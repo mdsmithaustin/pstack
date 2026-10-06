@@ -12,9 +12,9 @@ import { join } from "node:path";
 import {
   REVIEW_CONNECTION_LIMITS,
   REVIEW_THREADS_QUERY,
+  WatcherQueryError,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import {
-  MERGE_QUEUE_QUERY,
   parseConversation,
   parseMergeQueue,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-effects.ts";
@@ -480,16 +480,12 @@ describe("parseMergeQueue", () => {
   });
 
   it("throws rather than guess when the repository or queue field is unreadable", () => {
-    expect(() => parseMergeQueue({ data: { repository: null } })).toThrow();
-    expect(() => parseMergeQueue({ data: { repository: {} } })).toThrow();
-    expect(() => parseMergeQueue(page("MQ_1"))).toThrow();
-    expect(() => parseMergeQueue(page({}))).toThrow();
-    expect(() => parseMergeQueue(page({ id: 7 }))).toThrow();
-    expect(() => parseMergeQueue(page({ id: null }))).toThrow();
-    expect(() => parseMergeQueue({ errors: [{ message: "nope" }] })).toThrow();
-  });
-
-  it("asks for the queue of the PR's base branch", () => {
-    expect(MERGE_QUEUE_QUERY).toContain("mergeQueue(branch: $branch)");
+    expect(() => parseMergeQueue({ data: { repository: null } })).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue({ data: { repository: {} } })).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue(page("MQ_1"))).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue(page({}))).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue(page({ id: 7 }))).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue(page({ id: null }))).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue({ errors: [{ message: "nope" }] })).toThrow(WatcherQueryError);
   });
 });

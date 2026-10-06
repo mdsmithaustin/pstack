@@ -200,6 +200,8 @@ describe("merge-gate", () => {
       expect(body?.split("\n")[0]).toBe("merge-gate override: owner accepts the queue");
       expect(body).toContain("- merge-queue: main uses a merge queue");
       expect(mergeCalls(result.port)).toHaveLength(1);
+      const kinds = result.port.calls.map((call) => call.kind);
+      expect(kinds.indexOf("comment")).toBeLessThan(kinds.indexOf("merge"));
       expect(parsed(result.stdout)).toMatchObject({
         kind: "QUEUED",
         override: "owner accepts the queue",
