@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { Dirent } from "node:fs";
 import {
   access,
   mkdir,
@@ -14,6 +13,27 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseRemote } from "../watch-pr/remote.ts";
+import {
+  currentAttempts,
+  parseAckDecisions,
+  parseAttempt,
+  parseBeginAttempt,
+  parseObservation,
+  parseRequirements,
+  parseSavedDecision,
+  safeId,
+  sameSlot,
+  type AckDecision,
+  type Attempt,
+  type Batch,
+  type BeginAttempt,
+  type Closeout,
+  type Event,
+  type Observation,
+  type Receipt,
+  type Requirement,
+  type SavedDecision,
+} from "./recovery.ts";
 
 const UNIT_HEADER = "id\ttrack\tstate\tbranch\tpr\tsha\tbrief";
 const LEDGER_HEADER = "pr\tsha\tverdict\tevidence\tverifier\tts";
@@ -51,6 +71,7 @@ export interface InboxPointer {
   readonly unit: string;
   readonly status: string;
   readonly report: string;
+  readonly attempt?: string;
 }
 
 export interface InboxPushResult {
@@ -122,6 +143,7 @@ export interface AddUnitParams {
 }
 
 export interface SetUnitParams {
+  readonly attempt?: string;
   readonly id: string;
   readonly state: string;
   readonly branch?: string;
@@ -135,6 +157,7 @@ export interface ListUnitsParams {
 }
 
 export interface RecordLedgerParams {
+  readonly attempt?: string;
   readonly pr: number;
   readonly sha: string;
   readonly verdict: Verdict;
@@ -148,6 +171,7 @@ export interface CheckLedgerParams {
 }
 
 export interface PushInboxParams {
+  readonly attempt?: string;
   readonly agent: string;
   readonly unit: string;
   readonly status: string;
@@ -200,8 +224,26 @@ export interface Store {
   readonly inbox: {
     readonly push: (params: PushInboxParams) => Promise<InboxPushResult>;
     readonly drain: () => Promise<readonly InboxPointer[]>;
+    readonly claim: () => Promise<Batch>;
+    readonly receipts: () => Promise<readonly Receipt[]>;
+    readonly ack: (
+      batch: string,
+      decisions: readonly AckDecision[],
+    ) => Promise<Batch>;
     readonly peek: () => Promise<readonly InboxPointer[]>;
     readonly count: () => Promise<number>;
+  };
+  readonly attempts: {
+    readonly begin: (params: BeginAttempt) => Promise<Attempt>;
+    readonly observe: (
+      id: string,
+      observation: Observation,
+    ) => Promise<Attempt>;
+    readonly list: () => Promise<readonly Attempt[]>;
+    readonly finish: (id: string, reason: string) => Promise<Attempt>;
+  };
+  readonly requirements: {
+    readonly check: (criteria: readonly Requirement[]) => Promise<Closeout>;
   };
   readonly gates: {
     readonly park: (params: ParkGateParams) => Promise<OpenGate>;
@@ -556,45 +598,232 @@ function pointerCells(pointer: InboxPointer): readonly string[] {
     pointer.unit,
     pointer.status,
     pointer.report,
+    ...(pointer.attempt === undefined ? [] : [pointer.attempt]),
   ];
 }
 
-async function readPointers(
-  directory: string
-): Promise<readonly InboxPointer[]> {
-  let entries: Dirent[];
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      throw new UserError(
-        `store is not initialized at ${dirname(directory)}; run orch init`
-      );
-    }
-    throw error;
-  }
-  const result: InboxPointer[] = [];
+async function readEvents(directory: string): Promise<readonly Event[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const result: Event[] = [];
   const files = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".tsv"))
     .sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of files) {
     const raw = (await readFile(join(directory, entry.name), "utf8")).replace(
       /\r?\n$/,
-      ""
+      "",
     );
     const row = raw.split("\t");
-    if (/[\r\n]/.test(raw) || row.length !== 5) {
+    if (/[\r\n]/.test(raw) || (row.length !== 5 && row.length !== 6)) {
       throw new UserError(`inbox pointer ${entry.name} is malformed`);
     }
     result.push({
-      ts: row[0] ?? "",
-      agent: row[1] ?? "",
-      unit: row[2] ?? "",
-      status: row[3] ?? "",
-      report: row[4] ?? "",
+      id: entry.name,
+      pointer: {
+        ts: row[0] ?? "",
+        agent: row[1] ?? "",
+        unit: row[2] ?? "",
+        status: row[3] ?? "",
+        report: row[4] ?? "",
+        ...(row.length === 6 ? { attempt: safeId(row[5]) } : {}),
+      },
     });
   }
   return result;
+}
+
+async function batchIds(store: string): Promise<readonly string[]> {
+  const directory = join(store, "inbox-batches");
+  if (!(await exists(directory))) return [];
+  return (await readdir(directory, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => safeId(entry.name))
+    .sort();
+}
+
+async function savedDecisions(
+  store: string,
+  batch: string,
+): Promise<readonly SavedDecision[]> {
+  const directory = join(store, "inbox-batches", safeId(batch), "decisions");
+  if (!(await exists(directory))) return [];
+  const files = (await readdir(directory))
+    .filter((name) => name.endsWith(".json"))
+    .sort();
+  return Promise.all(
+    files.map(async (name) =>
+      parseSavedDecision(
+        JSON.parse(await readFile(join(directory, name), "utf8")),
+      ),
+    ),
+  );
+}
+
+async function readBatch(
+  store: string,
+  id: string,
+  pending = false,
+): Promise<Batch> {
+  const directory = join(store, "inbox-batches", safeId(id));
+  if (!(await exists(directory)))
+    throw new NotFoundError(`batch ${id} not found`);
+  const completed = new Set(
+    (await savedDecisions(store, id))
+      .filter((decision) => decision.completed)
+      .map((decision) => decision.event),
+  );
+  const events = await readEvents(directory);
+  return {
+    id,
+    events: pending
+      ? events.filter((event) => !completed.has(event.id))
+      : events,
+  };
+}
+
+async function readAttempts(store: string): Promise<readonly Attempt[]> {
+  const path = join(store, "attempts.json");
+  if (!(await exists(path))) return [];
+  const rows: unknown = JSON.parse(await readFile(path, "utf8"));
+  if (!Array.isArray(rows))
+    throw new UserError("attempts.json must contain an array");
+  return rows.map(parseAttempt);
+}
+
+async function saveAttempt(store: string, attempt: Attempt): Promise<void> {
+  const rows = [...(await readAttempts(store))];
+  const index = rows.findIndex((row) => row.id === attempt.id);
+  if (index < 0) rows.push(attempt);
+  else rows[index] = attempt;
+  await atomicWrite(
+    join(store, "attempts.json"),
+    `${JSON.stringify(rows, null, 2)}\n`,
+  );
+}
+
+async function repairInbox(store: string): Promise<void> {
+  if (!(await exists(join(store, "units.tsv")))) return;
+  await mkdir(join(store, "inbox-batches"), { recursive: true });
+  for (const entry of await readdir(store, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.startsWith(".inbox-drain-")) {
+      await rename(
+        join(store, entry.name),
+        join(store, "inbox-batches", entry.name.slice(1)),
+      );
+    }
+  }
+  await mkdir(join(store, "inbox"), { recursive: true });
+  for (const batch of await batchIds(store)) {
+    for (const decision of await savedDecisions(store, batch)) {
+      if (decision.completed) continue;
+      await applyDecision(store, batch, decision);
+    }
+  }
+}
+
+async function applyDecision(
+  store: string,
+  batch: string,
+  decision: SavedDecision,
+): Promise<void> {
+  const { unit, ledger, attempt } = decision;
+  if (unit !== undefined) {
+    const rows = [...(await readUnits(store))];
+    const index = rows.findIndex((row) => row.id === unit.id);
+    if (index < 0) throw new UserError("acknowledgment unit disappeared");
+    rows[index] = unit;
+    await saveUnits(store, rows);
+  }
+  if (ledger !== undefined) {
+    const rows = [...(await readLedger(store))];
+    const index = rows.findIndex(
+      (row) =>
+        row.pr === ledger.pr && row.sha === ledger.sha,
+    );
+    if (index < 0) rows.push(ledger);
+    else rows[index] = ledger;
+    await saveLedger(store, rows);
+  }
+  if (attempt !== undefined) await saveAttempt(store, attempt);
+  await atomicWrite(
+    join(store, "inbox-batches", batch, "decisions", `${decision.event}.json`),
+    `${JSON.stringify({ ...decision, completed: true }, null, 2)}\n`,
+  );
+}
+
+async function mutationAuthority(
+  store: string,
+  unit: Unit | undefined,
+  attemptId?: string,
+): Promise<Attempt | undefined> {
+  const rows = await readAttempts(store);
+  if (attemptId === undefined) {
+    if (unit !== undefined && rows.some((row) => row.unit === unit.id))
+      throw new UserError(`tracked unit ${unit.id} requires an attempt`);
+    return undefined;
+  }
+  const id = safeId(attemptId);
+  const attempt = currentAttempts(rows).find((row) => row.id === id);
+  if (attempt === undefined) throw new UserError("stale or unknown attempt");
+  if (unit === undefined || attempt.unit !== unit.id)
+    throw new UserError("attempt is not bound to this unit");
+  if (attempt.target.pr !== unit.pr || attempt.target.sha !== unit.sha)
+    throw new UserError("attempt head changed");
+  return attempt;
+}
+
+function updatedUnit(old: Unit, params: SetUnitParams): Unit {
+  return {
+    ...old,
+    state: requiredCell(params.state, "state"),
+    branch:
+      params.branch === undefined
+        ? old.branch
+        : requiredCell(params.branch, "branch"),
+    pr:
+      params.pr === undefined
+        ? old.pr
+        : String(positiveInteger(params.pr, "PR")),
+    sha: params.sha === undefined ? old.sha : requiredCell(params.sha, "SHA"),
+  };
+}
+
+async function ledgerEffect(
+  store: string,
+  params: RecordLedgerParams,
+  unit?: Unit,
+  attempt?: Attempt,
+): Promise<LedgerEntry> {
+  const pr = String(positiveInteger(params.pr, "PR"));
+  const sha = requiredCell(params.sha, "SHA");
+  const boundUnits = (await readUnits(store)).filter((row) => row.pr === pr);
+  if (attempt === undefined) {
+    const tracked = await readAttempts(store);
+    if (boundUnits.some((row) => tracked.some((a) => a.unit === row.id)))
+      throw new UserError("tracked ledger mutation requires an attempt");
+  } else if (unit?.pr !== pr || unit.sha !== sha)
+    throw new UserError("verdict does not match the current unit PR/head");
+  const verifier =
+    attempt === undefined
+      ? params.verifier === undefined
+        ? ""
+        : requiredCell(params.verifier, "verifier")
+      : attempt.authority === "verifier"
+        ? attempt.id
+        : "";
+  const old = (await readLedger(store)).find(
+    (row) => row.pr === pr && row.sha === sha,
+  );
+  if (old !== undefined && old.verifier !== "" && verifier === "")
+    throw new UserError("worker cannot replace a verifier verdict");
+  return {
+    pr,
+    sha,
+    verdict: parseVerdict(params.verdict),
+    evidence: requiredCell(params.evidence, "evidence"),
+    verifier,
+    ts: new Date().toISOString(),
+  };
 }
 
 function renderGates(rows: readonly Gate[]): string {
@@ -1561,6 +1790,29 @@ export function openStore(
       );
     }
     await ensureLock();
+    await repairInbox(store);
+  };
+
+  const claim = async (): Promise<Batch> => {
+    await beginWrite();
+    for (const id of await batchIds(store)) {
+      const batch = await readBatch(store, id, true);
+      if (batch.events.length > 0) return batch;
+    }
+    const id = `batch-${randomUUID()}`;
+    await rename(join(store, "inbox"), join(store, "inbox-batches", id));
+    await mkdir(join(store, "inbox"), { recursive: true });
+    return readBatch(store, id, true);
+  };
+
+  const pendingEvents = async (): Promise<readonly Event[]> => {
+    const batches = await Promise.all(
+      (await batchIds(store)).map((id) => readBatch(store, id, true)),
+    );
+    return [
+      ...batches.flatMap((batch) => batch.events),
+      ...(await readEvents(join(store, "inbox"))),
+    ];
   };
 
   return {
@@ -1590,35 +1842,23 @@ export function openStore(
       set: async (params) => {
         await beginWrite();
         const id = requiredCell(params.id, "unit id");
-        const state = requiredCell(params.state, "state");
         const rows = [...(await readUnits(store))];
         const index = rows.findIndex((unit) => unit.id === id);
         const old = rows[index];
-        if (index < 0 || old === undefined) {
-          throw new NotFoundError(`unit ${id} not found`);
-        }
-        const row: Unit = {
-          ...old,
-          state,
-          branch:
-            params.branch === undefined
-              ? old.branch
-              : requiredCell(params.branch, "branch"),
-          pr:
-            params.pr === undefined
-              ? old.pr
-              : String(positiveInteger(params.pr, "PR")),
-          sha:
-            params.sha === undefined
-              ? old.sha
-              : requiredCell(params.sha, "SHA"),
-        };
+        if (old === undefined) throw new NotFoundError(`unit ${id} not found`);
+        const attempt = await mutationAuthority(store, old, params.attempt);
+        const row = updatedUnit(old, params);
         rows[index] = row;
         await saveUnits(store, rows);
+        if (attempt !== undefined)
+          await saveAttempt(store, {
+            ...attempt,
+            target: { pr: row.pr, sha: row.sha },
+          });
         return row;
       },
       get: async (id) => {
-        ensureOpen();
+        await beginWrite();
         const cleanId = requiredCell(id, "unit id");
         const row = (await readUnits(store)).find(
           (unit) => unit.id === cleanId
@@ -1629,7 +1869,7 @@ export function openStore(
         return row;
       },
       list: async (params = {}) => {
-        ensureOpen();
+        await beginWrite();
         const state =
           params.state === undefined
             ? undefined
@@ -1645,7 +1885,7 @@ export function openStore(
         );
       },
       counts: async () => {
-        ensureOpen();
+        await beginWrite();
         return countValues(
           (await readUnits(store)).map((unit) => unit.state)
         );
@@ -1654,18 +1894,17 @@ export function openStore(
     ledger: {
       record: async (params) => {
         await beginWrite();
-        const verdict = parseVerdict(params.verdict);
-        const row: LedgerEntry = {
-          pr: String(positiveInteger(params.pr, "PR")),
-          sha: requiredCell(params.sha, "SHA"),
-          verdict,
-          evidence: requiredCell(params.evidence, "evidence"),
-          verifier:
-            params.verifier === undefined
-              ? ""
-              : requiredCell(params.verifier, "verifier"),
-          ts: new Date().toISOString(),
-        };
+        const attempts = await readAttempts(store);
+        const bound =
+          params.attempt === undefined
+            ? undefined
+            : attempts.find((row) => row.id === params.attempt);
+        const unit =
+          bound === undefined
+            ? undefined
+            : (await readUnits(store)).find((row) => row.id === bound.unit);
+        const attempt = await mutationAuthority(store, unit, params.attempt);
+        const row = await ledgerEffect(store, params, unit, attempt);
         const rows = [...(await readLedger(store))];
         const index = rows.findIndex(
           (old) => old.pr === row.pr && old.sha === row.sha
@@ -1676,10 +1915,12 @@ export function openStore(
           rows[index] = row;
         }
         await saveLedger(store, rows);
+        if (attempt !== undefined)
+          await saveAttempt(store, { ...attempt, settled: row.ts });
         return row;
       },
       check: async (params) => {
-        ensureOpen();
+        await beginWrite();
         const pr = String(positiveInteger(params.pr, "PR"));
         const sha = requiredCell(params.sha, "SHA");
         const row = (await readLedger(store)).find(
@@ -1694,7 +1935,7 @@ export function openStore(
         return row;
       },
       summary: async () => {
-        ensureOpen();
+        await beginWrite();
         return countValues(
           (await readLedger(store)).map((row) => row.verdict)
         );
@@ -1702,7 +1943,8 @@ export function openStore(
     },
     inbox: {
       push: async (params) => {
-        await beginWrite();
+        ensureOpen();
+        await requiredFile(join(store, "units.tsv"));
         const pointer: InboxPointer = {
           ts: new Date().toISOString(),
           agent: requiredCell(params.agent, "agent"),
@@ -1712,44 +1954,249 @@ export function openStore(
             params.report === undefined
               ? ""
               : requiredCell(params.report, "report"),
+          ...(params.attempt === undefined
+            ? {}
+            : { attempt: safeId(params.attempt) }),
         };
-        const inbox = join(store, "inbox");
-        if (!(await exists(inbox))) {
-          throw new UserError(
-            `store is not initialized at ${store}; run orch init`
-          );
+        const filename = `${pointer.ts.replace(/[:.]/g, "-")}-${process.pid}-${randomUUID()}.tsv`;
+        const temporary = join(store, `.inbox-push-${randomUUID()}.tmp`);
+        await writeFile(
+          temporary,
+          `${pointerCells(pointer).map(cleanCell).join("\t")}\n`,
+          { flag: "wx" },
+        );
+        try {
+          while (true) {
+            try {
+              await rename(temporary, join(store, "inbox", filename));
+              break;
+            } catch (error) {
+              if (errorCode(error) !== "ENOENT") throw error;
+              await mkdir(join(store, "inbox"), { recursive: true });
+            }
+          }
+        } finally {
+          await rm(temporary, { force: true });
         }
-        const timestamp = pointer.ts.replace(/[:.]/g, "-");
-        const filename = `${timestamp}-${process.pid}-${randomUUID()}.tsv`;
-        const contents = `${pointerCells(pointer).map(cleanCell).join("\t")}\n`;
-        await atomicWrite(join(inbox, filename), contents);
         return { pointer, filename };
       },
-      drain: async () => {
+      drain: async () => (await claim()).events.map((event) => event.pointer),
+      claim,
+      receipts: async () => {
         await beginWrite();
-        const inbox = join(store, "inbox");
-        const rows = await readPointers(inbox);
-        const drained = join(
-          store,
-          `.inbox-drain-${process.pid}-${randomUUID()}`
+        return Promise.all(
+          (await batchIds(store)).map(async (id) => ({
+            ...(await readBatch(store, id)),
+            decisions: await savedDecisions(store, id),
+          })),
         );
-        await rename(inbox, drained);
-        try {
-          await mkdir(inbox);
-        } catch (error) {
-          await rename(drained, inbox);
-          throw error;
+      },
+      ack: async (batchId, input) => {
+        await beginWrite();
+        const batch = await readBatch(store, safeId(batchId));
+        const decisions = parseAckDecisions(input);
+        const saved = await savedDecisions(store, batch.id);
+        for (const decision of decisions) {
+          const prior = saved.find((row) => row.event === decision.event);
+          if (prior !== undefined) {
+            if (
+              JSON.stringify(prior.outcome) !== JSON.stringify(decision.outcome)
+            )
+              throw new UserError("conflicting acknowledgment");
+            continue;
+          }
+          const event = batch.events.find((row) => row.id === decision.event);
+          if (event === undefined)
+            throw new UserError(
+              `event ${decision.event} is not in batch ${batch.id}`,
+            );
+          let unit: Unit | undefined;
+          let ledger: LedgerEntry | undefined;
+          let attempt: Attempt | undefined;
+          if (decision.outcome.kind !== "discard") {
+            const old = (await readUnits(store)).find(
+              (row) => row.id === event.pointer.unit,
+            );
+            attempt = await mutationAuthority(
+              store,
+              old,
+              event.pointer.attempt,
+            );
+            if (decision.outcome.kind === "unit") {
+              if (old === undefined)
+                throw new NotFoundError(`unit ${event.pointer.unit} not found`);
+              unit = updatedUnit(old, { id: old.id, ...decision.outcome });
+              if (decision.outcome.ledger !== undefined)
+                ledger = await ledgerEffect(
+                  store,
+                  decision.outcome.ledger,
+                  unit,
+                  attempt,
+                );
+            } else
+              ledger = await ledgerEffect(
+                store,
+                decision.outcome,
+                old,
+                attempt,
+              );
+          }
+          const normalized: SavedDecision = {
+            ...decision,
+            ...(unit === undefined ? {} : { unit }),
+            ...(ledger === undefined ? {} : { ledger }),
+            ...(attempt === undefined
+              ? {}
+              : {
+                  attempt: {
+                    ...attempt,
+                    target:
+                      unit === undefined
+                        ? attempt.target
+                        : { pr: unit.pr, sha: unit.sha },
+                    settled: ledger?.ts ?? new Date().toISOString(),
+                  },
+                }),
+            completed: false,
+          };
+          const directory = join(store, "inbox-batches", batch.id, "decisions");
+          await mkdir(directory, { recursive: true });
+          await atomicWrite(
+            join(directory, `${decision.event}.json`),
+            `${JSON.stringify(normalized, null, 2)}\n`,
+          );
+          await applyDecision(store, batch.id, normalized);
         }
-        await rm(drained, { recursive: true, force: true });
-        return rows;
+        return readBatch(store, batch.id, true);
       },
       peek: async () => {
-        ensureOpen();
-        return readPointers(join(store, "inbox"));
+        await beginWrite();
+        return (await pendingEvents()).map((event) => event.pointer);
       },
       count: async () => {
-        ensureOpen();
-        return (await readPointers(join(store, "inbox"))).length;
+        await beginWrite();
+        return (await pendingEvents()).length;
+      },
+    },
+    attempts: {
+      begin: async (input) => {
+        await beginWrite();
+        const params = parseBeginAttempt(input);
+        const rows = await readAttempts(store);
+        const prior = rows.find((row) => row.requestId === params.requestId);
+        if (prior !== undefined) {
+          const {
+            id: _id,
+            target: _target,
+            observation: _observation,
+            settled: _settled,
+            ...request
+          } = prior;
+          if (JSON.stringify(request) !== JSON.stringify(params))
+            throw new UserError("conflicting attempt requestId");
+          return prior;
+        }
+        const unit = (await readUnits(store)).find(
+          (row) => row.id === params.unit,
+        );
+        if (unit === undefined)
+          throw new NotFoundError(`unit ${params.unit} not found`);
+        const current = currentAttempts(rows).find((row) =>
+          sameSlot(row, params),
+        );
+        if (params.replace !== current?.id)
+          throw new UserError("attempt predecessor changed");
+        const attempt: Attempt = {
+          ...params,
+          id: `attempt-${randomUUID()}`,
+          target: { pr: unit.pr, sha: unit.sha },
+          observation: { kind: "unknown" },
+          settled: null,
+        };
+        await saveAttempt(store, attempt);
+        return attempt;
+      },
+      observe: async (id, input) => {
+        await beginWrite();
+        const attempt = (await readAttempts(store)).find(
+          (row) => row.id === safeId(id),
+        );
+        if (attempt === undefined)
+          throw new NotFoundError(`attempt ${id} not found`);
+        const observation = parseObservation(input);
+        const row = { ...attempt, observation };
+        await saveAttempt(store, row);
+        return row;
+      },
+      list: async () => {
+        await beginWrite();
+        return readAttempts(store);
+      },
+      finish: async (id, reason) => {
+        await beginWrite();
+        const attempt = currentAttempts(await readAttempts(store)).find(
+          (row) => row.id === safeId(id),
+        );
+        if (attempt === undefined)
+          throw new UserError("stale or unknown attempt");
+        const row = {
+          ...attempt,
+          settled: attempt.settled ?? requiredLine(reason, "reason"),
+        };
+        await saveAttempt(store, row);
+        return row;
+      },
+    },
+    requirements: {
+      check: async (input) => {
+        await beginWrite();
+        const criteria = parseRequirements(input);
+        const units = await readUnits(store);
+        const ledger = await readLedger(store);
+        const failures: string[] = [];
+        for (const criterion of criteria) {
+          const unit = units.find((row) => row.id === criterion.unit);
+          if (unit === undefined) {
+            failures.push(`${criterion.id}: unit ${criterion.unit} not found`);
+            continue;
+          }
+          if (
+            criterion.states !== undefined &&
+            !criterion.states.includes(unit.state)
+          )
+            failures.push(
+              `${criterion.id}: state ${unit.state} does not satisfy requirement`,
+            );
+          if (criterion.ledger !== undefined) {
+            const expected = criterion.ledger;
+            const row = ledger.find(
+              (row) =>
+                row.pr === String(expected.pr) && row.sha === expected.sha,
+            );
+            if (
+              unit.pr !== String(expected.pr) ||
+              unit.sha !== expected.sha ||
+              row === undefined ||
+              !expected.verdicts.includes(row.verdict)
+            )
+              failures.push(
+                `${criterion.id}: current PR/head verdict does not satisfy requirement`,
+              );
+          }
+        }
+        const pending = (await pendingEvents()).length;
+        const attempts = currentAttempts(await readAttempts(store))
+          .filter((row) => row.settled === null)
+          .map((row) => row.id);
+        if (pending > 0) failures.push(`${pending} pending inbox events`);
+        if (attempts.length > 0)
+          failures.push(`${attempts.length} pending attempts`);
+        return {
+          ok: failures.length === 0,
+          failures,
+          pendingEvents: pending,
+          pendingAttempts: attempts,
+        };
       },
     },
     gates: {
