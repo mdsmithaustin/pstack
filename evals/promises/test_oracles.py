@@ -2666,6 +2666,13 @@ class Issue133WritesAndReruns(unittest.TestCase):
                               ("install -m 644 -t bin a.py", ["bin"]), ("cp -rt out notes/a.md", ["out"])):
             self.assertEqual(oracles.shell_writes(command), want, command)
 
+    def test_copilot_a_patch_writes_its_old_and_new_paths(self):
+        deletion = "--- a/rollup/old.py\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\nEOF"
+        rename = "--- a/rollup/old.py\n+++ b/rollup/new.py\n@@ -1 +1 @@\n--- x\n+y\nEOF"
+        self.assertEqual(oracles.shell_writes("git apply <<'EOF'\n" + deletion), ["rollup/old.py"])
+        self.assertEqual(oracles.shell_writes("git apply <<'EOF'\n" + rename), ["rollup/old.py", "rollup/new.py"])
+        self.assertEqual(oracles.shell_writes("git apply -R <<'EOF'\n" + rename), ["rollup/old.py", "rollup/new.py"])
+
     def test_copilot_each_patch_writes_only_its_own_body(self):
         def body(name):
             return f"--- a/{name}\n+++ b/{name}\n@@ -1 +1 @@\n-x\n+y\nEOF"
