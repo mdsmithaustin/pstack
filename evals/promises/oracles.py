@@ -842,7 +842,11 @@ WRITE_TARGETS = (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
                  AT_COMMAND + r"ed\s+(?:-\S+\s+)*([^\s<>]+)",
                  r"\bdd\s[^<>]*?\bof=([^\s<>]+)")
 PATCH_COMMAND = re.compile(r"\bgit\s+apply\b(?!.*\s--(?:check|stat|numstat|summary)\b)|" + AT_COMMAND + r"patch\b(?!.*\s--dry-run\b)")
-PATCH_TARGET = re.compile(r"(?m)^\+\+\+ (?:b/)?(\S+)")
+PATCH_PAIR = re.compile(r"(?m)^--- (?:a/)?(\S+)[^\n]*\n\+\+\+ (?:b/)?(\S+)")
+
+
+def patch_targets(body):
+    return list(dict.fromkeys(path for pair in PATCH_PAIR.findall(body) for path in pair))
 
 
 def uncommented(command):
@@ -889,9 +893,9 @@ def segment_writes(command):
         made |= {os.path.normpath(under(base, t)) for pattern, t in found if pattern == MAKE_DIR}
         shell = [t for pattern, t in found if pattern != MAKE_DIR and not (pattern == REMOVE_TARGET and os.path.normpath(under(base, t)) in made)]
         if body is not None:
-            saved.update({os.path.normpath(under(base, t)): PATCH_TARGET.findall(body) for t in shell})
+            saved.update({os.path.normpath(under(base, t)): patch_targets(body) for t in shell})
         if PATCH_COMMAND.search(masked):
-            shell += PATCH_TARGET.findall(body or segment) or [path for word in re.findall(r"[^\s<>|]+", segment)
+            shell += patch_targets(body or segment) or [path for word in re.findall(r"[^\s<>|]+", segment)
                                                               for path in saved.get(os.path.normpath(under(base, word.strip("\"'"))), [])]
         python = python_targets(segment if body is None else body) if PYTHON_HEADER.search(segment) else []
         yield segment, [under(base, t) for t in shell if is_write_target(t)], [under(base, t) for t in python]
