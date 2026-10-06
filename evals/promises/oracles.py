@@ -764,22 +764,28 @@ def heredoc_bodies(command):
 
 
 def mask_quoted(text):
-    masked, quote, escaped = [], None, False
-    for char in text:
-        if quote is None:
-            quote = char if char in "'\"" else None
-            masked.append(char)
-        elif escaped:
-            escaped = False
-            masked.append("_")
-        elif char == "\\" and quote == '"':
-            escaped = True
-            masked.append("_")
-        elif char == quote:
-            quote = None
-            masked.append(char)
+    masked, stack, i = [], [], 0
+    while i < len(text):
+        char, quote = text[i], stack[-1] if stack and stack[-1] != "(" else None
+        if quote == '"' and (char == "\\" or text.startswith("$(", i)):
+            if char == "$":
+                stack.append("(")
+            masked.append("$(" if char == "$" else "_" * len(text[i:i + 2]))
+            i += 2
+            continue
+        if quote:
+            if char == quote:
+                stack.pop()
+            masked.append(char if char == quote else "_")
         else:
-            masked.append("_")
+            if char in "'\"":
+                stack.append(char)
+            elif char == "(" and stack:
+                stack.append("(")
+            elif char == ")" and stack:
+                stack.pop()
+            masked.append(char)
+        i += 1
     return "".join(masked)
 
 
