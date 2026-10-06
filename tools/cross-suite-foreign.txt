@@ -31,3 +31,5 @@ loop-runner
 research-loop
 # GSD (any gsd-* skill)
 prefix:gsd-
+# no-mistakes (kunchenguid/no-mistakes)
+no-mistakes
