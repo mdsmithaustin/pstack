@@ -1072,10 +1072,77 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
             },
         )
 
-    def test_an_unmapped_claude_id_on_claude_code_is_unusable_and_prints_unchanged(self):
+    def rejected(self, harness, work_model, user=OPERATOR_FILE):
+        with tempfile.TemporaryDirectory() as tmp:
+            user_file = Path(tmp) / "user-models.md"
+            user_file.write_text(user, encoding="utf-8")
+            return run_script(
+                ["--resolve", "--harness", harness, "--project", tmp, "--user-file", str(user_file),
+                 "--work-model", work_model, "trail reviewer"],
+            )
+
+    def test_a_claude_code_work_model_that_is_not_an_alias_or_a_claude_id_is_a_usage_error(self):
+        for work_model, named in (
+            ("claude-foo@high", "claude-foo"),
+            ("claude-3-opus-20240229@xhigh", "claude-3-opus-20240229"),
+            ("claude-nova-6@xhigh", "claude-nova-6"),
+            ("opus[1m]@xhigh", "opus[1m]"),
+        ):
+            with self.subTest(work_model=work_model):
+                result = self.rejected("claude-code", work_model)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(repr(named), result.stderr)
+
+    def test_a_claude_code_usage_error_says_which_models_claude_code_takes(self):
+        result = self.rejected("claude-code", "claude-nova-6@xhigh")
+        self.assertIn(
+            "argument --work-model: 'claude-nova-6' is not a Claude Code model; "
+            "use an alias (fable, opus, sonnet, haiku) or a claude-<alias>-... ID",
+            result.stderr,
+        )
+
+    def test_full_claude_ids_with_a_date_or_context_suffix_step_down_on_claude_code(self):
+        for work_model in ("claude-opus-5-5", "claude-opus-4-1-20250805", "claude-opus-5-5[1m]"):
+            with self.subTest(work_model=work_model):
+                self.assertEqual(
+                    self.reviewer("claude-code", f"{work_model}@xhigh"),
+                    {
+                        "role": "trail reviewer", "arm": 1, "model": "sonnet", "effort": "xhigh", "source": "user flat",
+                        "notes": ["trail reviewer matched work model opus; stepped down to sonnet"], "step": "down",
+                    },
+                )
+
+    def test_inherit_parent_and_auto_work_models_print_the_reviewer_unchanged_with_no_note(self):
+        hermes_user = "## hermes\ntrail reviewer: model-a@high\n"
+        for harness, work_model, user, expected in (
+            ("claude-code", "inherit-parent@high", OPERATOR_FILE, {"model": "opus", "effort": "xhigh", "source": "user flat"}),
+            ("claude-code", "auto", OPERATOR_FILE, {"model": "opus", "effort": "xhigh", "source": "user flat"}),
+            ("hermes", "inherit-parent", hermes_user, {"model": "model-a", "effort": "high", "source": "user ## hermes"}),
+        ):
+            with self.subTest(harness=harness, work_model=work_model):
+                self.assertEqual(
+                    self.reviewer(harness, work_model, user=user),
+                    {"role": "trail reviewer", "arm": 1, **expected},
+                )
+
+    def test_a_work_model_hermes_cannot_use_adds_a_note_and_applies_no_step(self):
+        user = "## hermes\ntrail reviewer: model-a@high\n"
         self.assertEqual(
-            self.reviewer("claude-code", "claude-foo@high"),
-            {"role": "trail reviewer", "arm": 1, "model": "opus", "effort": "xhigh", "source": "user flat"},
+            self.reviewer("hermes", "opus@xhigh", user=user),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "model-a", "effort": "high", "source": "user ## hermes",
+                "notes": ["work model opus is not usable on hermes; no step applied"],
+            },
+        )
+
+    def test_an_arbitrary_work_model_slug_on_codex_prints_with_no_error_and_no_note(self):
+        self.assertEqual(
+            self.reviewer("codex", "gpt-9-zeta@high"),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6.1-sol", "effort": "xhigh",
+                "source": "user ## codex",
+            },
         )
 
     def test_a_moved_arm_drops_the_notes_that_described_the_old_model(self):

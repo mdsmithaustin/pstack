@@ -461,6 +461,11 @@ def _resolve_main(argv: list[str]) -> int:
         work_name = _claude_alias_of(work_name, args.harness)
         if not _is_valid_model_name(work_name):
             parser.error(f"argument --work-model: invalid model name {work_name!r}")
+        if CLIS[args.harness].native_aliases and work_name not in CLAUDE_ALIASES | OTHER_ALIASES:
+            parser.error(
+                f"argument --work-model: {work_name!r} is not a Claude Code model; "
+                "use an alias (fable, opus, sonnet, haiku) or a claude-<alias>-... ID"
+            )
 
     unknown = [r for r in args.roles if r not in ROLES]
     if unknown:
@@ -485,7 +490,8 @@ def _resolve_main(argv: list[str]) -> int:
     catalog = CLIS[args.harness].catalog
     listed = listed_models(catalog) if catalog else NO_CATALOG
     if args.work_model:
-        work_model, work_effort, _ = _resolve_model(work_name, work_written_effort, args.harness)
+        work_model, work_effort, work_notes = _resolve_model(work_name, work_written_effort, args.harness)
+        unusable = [f"work model {note}; no step applied" for note in work_notes if work_model == INHERIT]
         allowed = frozenset(
             arm.model for role in ROLES for arm in resolve_role(role, args.harness, layers, listed)
         ) - {INHERIT}
@@ -493,6 +499,7 @@ def _resolve_main(argv: list[str]) -> int:
         for arm in resolve_role(role, args.harness, layers, listed):
             if args.work_model and role == "trail reviewer":
                 arm = step_reviewer(arm, work_model, work_effort, args.harness, allowed, listed)
+                arm = arm._replace(notes=(*arm.notes, *unusable))
             print(arm.to_json())
     return 0
 
