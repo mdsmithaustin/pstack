@@ -626,17 +626,23 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 COPY_MATCHER = r"\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\()"
 COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + COPY_MATCHER)
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
-CLIPBOARD_SPY = re.compile(r"""(?:writeText|copyText)\s*:\s*(\w+)\b(?!\s*[.(])"""
-                           r"""|(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;]*?["'](?:writeText|copyText)["']""")
+SPY_AS_WRITETEXT = re.compile(r"(?:writeText|copyText)\s*:\s*(\w+)\b(?!\s*[.(])")
+SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;]*?["'](?:writeText|copyText)["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
 ARGUMENT = re.compile(r"""(?:"[^"]*"|'[^']*'|`[^`]*`|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 
 
 def clipboard_names(source):
-    """Names that hold what Copy writes: a variable the clipboard stub fills,
-    or a spy installed as writeText."""
-    return set(CAPTURED_BY_STUB.findall(source)) | {name for pair in CLIPBOARD_SPY.findall(source) for name in pair if name}
+    return {name for pattern in (CAPTURED_BY_STUB, SPY_AS_WRITETEXT, SPY_ON_WRITETEXT) for name in pattern.findall(source)}
+
+
+def asserts_on_clipboard(line, names):
+    return COPIED_VALUE.search(line) or any(re.search(rf"expect\(\s*{re.escape(name)}\b", line) for name in names)
+
+
+def unquoted(value):
+    return value[1:-1] if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'`" else value
 
 
 def asserts_copied_value(source):
@@ -649,14 +655,10 @@ def asserts_copied_value(source):
 
 
 def asserted_values(pattern, lines):
-    """The first argument of each assertion pattern finds, whitespace
-    normalized and unquoted, so "the end" and 'the end' compare equal."""
-    values = set()
-    for line in lines:
-        for found in pattern.finditer(line):
-            value = " ".join(ARGUMENT.match(line, found.end()).group().split())
-            values.add(value[1:-1] if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'`" else value)
-    return values
+    """The first argument of each assertion pattern finds, so "the end" and
+    'the end' compare equal."""
+    return {unquoted(" ".join(ARGUMENT.match(line, found.end()).group().split()))
+            for line in lines for found in pattern.finditer(line)}
 
 
 def tests_assert_hidden_text_and_copy(added):
@@ -667,8 +669,7 @@ def tests_assert_hidden_text_and_copy(added):
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     names = clipboard_names(source)
-    rendered = [line for line in lines
-                if not COPIED_VALUE.search(line) and not any(re.search(rf"expect\(\s*{re.escape(name)}\b", line) for name in names)]
+    rendered = [line for line in lines if not asserts_on_clipboard(line, names)]
     absent = asserted_values(ABSENT, lines)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
@@ -881,10 +882,9 @@ def test_dashboard_result_fits_the_plugins_manage_contract(installs):
 def own_tests_pin_the_live_entry(workspace):
     """The reviewer asked to drop a test that pins the live hindsight entry,
     which the re-pin that fixes the trap will change. So the agent's own test
-    files run again with that entry restored. A restored result that is not
-    passed pinned it, unless the edited run already had that label not
-    passed. A label the edited run lacks, such as a collection error or a
-    new parameter, counts."""
+    files run again with that entry restored, and a result there that is not
+    passed pinned it. A label the edited run lacks, such as a collection
+    error, counts; one the edited run already had not passed does not."""
     entry = "plugin-catalog/hindsight.yaml"
     changed = apply_diff(workspace.checkout, workspace.diff)
     own = sorted(path for path, data in changed.items() if data is not None and path.startswith("tests/")
@@ -894,7 +894,7 @@ def own_tests_pin_the_live_entry(workspace):
     edited = project_test_results("hermes-8afaab3703e3", workspace.checkout, changed, own)
     restored = project_test_results("hermes-8afaab3703e3", workspace.checkout, {**changed, entry: (workspace.checkout / entry).read_bytes()}, own)
     return [f"constraint:C6: {test} {status} with {entry} restored" for test, status in restored.items()
-            if status != "passed" and edited.get(test, "passed") == "passed"]
+            if status != "passed" and edited.get(test) in (None, "passed")]
 
 
 def check_known_issues(answer, workspace):
