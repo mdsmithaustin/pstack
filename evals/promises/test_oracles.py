@@ -2653,6 +2653,12 @@ class Issue133WritesAndReruns(unittest.TestCase):
                               ("pip install requests", []), ("java -cp lib/a.jar Main", []), ("perl -ne 'print' x.py", [])):
             self.assertEqual(oracles.shell_writes(command), want, command)
 
+    def test_copilot_perl_in_place_writes_every_file_operand(self):
+        for command, want in (("perl -pi -e 's/a/b/' a.py b.py", ["a.py", "b.py"]),
+                              ("perl -i -pe 's/a b/c/' -e 's/d/e/' src/a.py \"my notes.md\" 2>/dev/null", ["src/a.py", "my notes.md"]),
+                              ("perl -pi fix.pl x.py", ["x.py"])):
+            self.assertEqual(oracles.shell_writes(command), want, command)
+
     def test_f13_a_patch_writes_the_files_it_names(self):
         body = "--- a/rollup/export.py\n+++ b/rollup/export.py\n@@ -1 +1 @@\n-x\n+y\nEOF"
         self.assertEqual(oracles.shell_writes("git apply <<'EOF'\n" + body), ["rollup/export.py"])
