@@ -872,8 +872,10 @@ def test_dashboard_result_fits_the_plugins_manage_contract(installs):
 def own_tests_pin_the_live_entry(workspace):
     """The reviewer asked to drop a test that pins the live hindsight entry,
     which the re-pin that fixes the trap will change. So the agent's own test
-    files run again with that entry restored; a test that passed and now
-    fails pinned it."""
+    files run again with that entry restored. A restored result that is not
+    passed pinned it, unless the edited run already had that label not
+    passed. A label the edited run lacks, such as a collection error or a
+    new parameter, counts."""
     entry = "plugin-catalog/hindsight.yaml"
     changed = apply_diff(workspace.checkout, workspace.diff)
     own = sorted(path for path, data in changed.items() if data is not None and path.startswith("tests/")
@@ -882,8 +884,8 @@ def own_tests_pin_the_live_entry(workspace):
         return []
     edited = project_test_results("hermes-8afaab3703e3", workspace.checkout, changed, own)
     restored = project_test_results("hermes-8afaab3703e3", workspace.checkout, {**changed, entry: (workspace.checkout / entry).read_bytes()}, own)
-    return [f"constraint:C6: {test} passes only with the edited {entry}" for test, status in restored.items()
-            if status == "failed" and edited.get(test) == "passed"]
+    return [f"constraint:C6: {test} {status} with {entry} restored" for test, status in restored.items()
+            if status != "passed" and edited.get(test, "passed") == "passed"]
 
 
 def check_known_issues(answer, workspace):
