@@ -195,7 +195,7 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         self.assertIn("Claude Code cannot use none or ultra, so it runs `trail reviewer` at the session effort", notices)
 
     def test_grok_section_rejects_ultra(self):
-        text = "## grok\ntrail reviewer: grok-4.7-build-fast@ultra\n"
+        text = "## grok\ntrail reviewer: grok-4.6@ultra\n"
         sections, findings = cmc.parse(text)
         self.assertEqual(
             errors_of(findings),
@@ -204,7 +204,7 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         self.assertNotIn("trail reviewer", sections["grok"])
 
     def test_grok_section_rejects_max_and_none(self):
-        for model, effort in (("grok-4.7-build-fast", "max"), ("grok-4.6", "none")):
+        for model, effort in (("grok-4.6", "max"), ("grok-4.6", "none")):
             with self.subTest(effort=effort):
                 sections, findings = cmc.parse(f"## grok\ntrail reviewer: {model}@{effort}\n")
                 self.assertEqual(
@@ -224,6 +224,14 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
             errors_of(findings),
             [(2, "error", "effort 'max' not supported by model 'grok-4.7'")],
         )
+
+    def test_grok_build_fast_rejects_max(self):
+        sections, findings = cmc.parse("## grok\ntrail reviewer: grok-4.7-build-fast@max\n")
+        self.assertEqual(
+            errors_of(findings),
+            [(2, "error", "effort 'max' not supported by model 'grok-4.7-build-fast'")],
+        )
+        self.assertNotIn("trail reviewer", sections["grok"])
 
     def test_codex_section_is_unaffected(self):
         text = "## codex\ntrail reviewer: gpt-6-sol@ultra\n"
@@ -353,7 +361,7 @@ def run_script(args, codex_catalog=None):
 
 
 class ResolveRunner:
-    def resolve(self, harness, *roles, user=None, workspace=None, codex_catalog=None):
+    def resolve(self, harness, *roles, user=None, workspace=None, codex_catalog=None, work_model=None):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "project"
             project.mkdir()
@@ -366,7 +374,8 @@ class ResolveRunner:
             result = run_script(
                 [
                     "--resolve", "--harness", harness,
-                    "--project", str(project), "--user-file", str(user_file), *roles,
+                    "--project", str(project), "--user-file", str(user_file),
+                    *(["--work-model", work_model] if work_model else []), *roles,
                 ],
                 codex_catalog,
             )
@@ -783,6 +792,205 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
         self.assertEqual((arm.model, arm.effort), ("gpt-6.1-sol", "high"))
         [arm] = cmc.resolve_role("feature", "codex", layers)
         self.assertEqual((arm.model, arm.notes), ("gpt-6-sol", ()))
+
+
+OPERATOR_FILE = """feature, refactoring: sonnet@high
+bug-fix, perf-issue, hillclimb: opus@high
+judgment and prose, hardest tasks, reflect judgment, reflect divergent, reflect synthesizer: opus@xhigh
+how explorer, why investigators: sonnet@medium
+how explainer, why synthesizer, reflect tooling: opus@high
+arena runners, architect runners: opus@xhigh, opus@xhigh, sonnet@high
+arena cross-judge pool, interrogate reviewers: opus@xhigh, opus@high, sonnet@high
+swarm workers: sonnet@high
+trail reviewer: opus@xhigh
+default: inherit-parent
+
+## codex
+feature, refactoring, hillclimb, judgment and prose, how explainer, why synthesizer, reflect tooling, swarm workers: gpt-6.1-sol@high
+bug-fix, perf-issue, hardest tasks, reflect judgment, reflect synthesizer, reflect divergent: gpt-6.1-sol@xhigh
+how explorer, why investigators: gpt-6.1-sol@medium
+arena runners, architect runners, interrogate reviewers: gpt-6.1-sol@xhigh, gpt-6.1-sol@xhigh, gpt-6.1-sol@high
+arena cross-judge pool: gpt-6-astra@high, gpt-6.1-sol@xhigh
+trail reviewer: gpt-6.1-sol@xhigh
+default: inherit-parent
+
+## grok
+feature, refactoring, bug-fix, perf-issue, hillclimb, judgment and prose, how explainer, why synthesizer, reflect tooling: grok-4.7@high
+reflect judgment, reflect divergent, reflect synthesizer, swarm workers, trail reviewer: grok-4.7@high
+hardest tasks: grok-4.7@xhigh
+how explorer, why investigators: grok-4.7@medium
+arena runners, architect runners, arena cross-judge pool, interrogate reviewers: grok-4.7@high, grok-4.7@xhigh, grok-4.7@high
+default: inherit-parent
+"""
+
+STEP_CATALOG = catalog_json("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna")
+
+
+class TrailReviewerStep(ResolveRunner, unittest.TestCase):
+    def reviewer(self, harness, work_model, user=OPERATOR_FILE, codex_catalog=None):
+        [arm] = self.resolve(harness, "trail reviewer", user=user, codex_catalog=codex_catalog, work_model=work_model)
+        return arm
+
+    def test_claude_steps_down_when_the_config_never_names_a_higher_tier(self):
+        self.assertEqual(
+            self.reviewer("claude-code", "opus@xhigh"),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "sonnet", "effort": "xhigh", "source": "user flat",
+                "notes": ["trail reviewer matched work model opus; stepped down to sonnet"], "step": "down",
+            },
+        )
+
+    def test_codex_steps_up_across_releases_of_one_tier(self):
+        self.assertEqual(
+            self.reviewer("codex", "gpt-6.1-sol@xhigh", codex_catalog=STEP_CATALOG),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
+                "notes": ["trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra"], "step": "up",
+            },
+        )
+
+    def test_either_release_of_the_work_tier_counts_as_the_same_model(self):
+        arm = self.reviewer("codex", "gpt-6-sol@xhigh", codex_catalog=STEP_CATALOG)
+        self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("gpt-6-astra", "high", "up"))
+        self.assertEqual(arm["notes"], ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"])
+
+    def test_grok_with_one_model_in_the_config_is_a_same_model_review(self):
+        self.assertEqual(
+            self.reviewer("grok", "grok-4.7@high"),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "grok-4.7", "effort": "xhigh", "source": "user ## grok",
+                "notes": [
+                    "trail reviewer matched work model grok-4.7; "
+                    "the config allows no other model in its family, so this is a same-model review"
+                ],
+                "step": "same-model",
+            },
+        )
+
+    def test_grok_steps_down_to_the_build_variant_when_the_config_names_it(self):
+        user = "## grok\ntrail reviewer: grok-4.7@high\nswarm workers: grok-4.7-build-fast@medium\n"
+        self.assertEqual(
+            self.reviewer("grok", "grok-4.7@high", user=user),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "grok-4.7-build-fast", "effort": "xhigh",
+                "source": "user ## grok",
+                "notes": ["trail reviewer matched work model grok-4.7; stepped down to grok-4.7-build-fast"],
+                "step": "down",
+            },
+        )
+
+    def test_grok_build_variant_work_steps_up_to_grok_4_7(self):
+        user = "## grok\ntrail reviewer: grok-4.7-build-fast@high\nswarm workers: grok-4.7@medium\n"
+        arm = self.reviewer("grok", "grok-4.7-build-fast@xhigh", user=user)
+        self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("grok-4.7", "high", "up"))
+
+    def test_shipped_defaults_allow_fable_so_claude_steps_up(self):
+        self.assertEqual(
+            self.reviewer("claude-code", "opus@xhigh", user=None),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "fable", "effort": "high", "source": "skill default",
+                "notes": ["trail reviewer matched work model opus; stepped up to fable"], "step": "up",
+            },
+        )
+
+    def test_shipped_grok_defaults_hold_one_model_so_the_review_is_same_model(self):
+        self.assertEqual(
+            self.reviewer("grok", "grok-4.7@high", user=None),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "grok-4.7", "effort": "xhigh", "source": "skill default",
+                "notes": [
+                    "opus translated to grok-4.7",
+                    "trail reviewer matched work model grok-4.7; "
+                    "the config allows no other model in its family, so this is a same-model review",
+                ],
+                "step": "same-model",
+            },
+        )
+
+    def test_no_collision_prints_the_arm_unchanged(self):
+        self.assertEqual(
+            self.reviewer("claude-code", "sonnet@high"),
+            {"role": "trail reviewer", "arm": 1, "model": "opus", "effort": "xhigh", "source": "user flat"},
+        )
+
+    def test_an_explicit_reviewer_that_differs_stands_as_written(self):
+        user = OPERATOR_FILE.replace("trail reviewer: opus@xhigh", "trail reviewer: haiku@low")
+        self.assertEqual(
+            self.reviewer("claude-code", "opus@xhigh", user=user),
+            {"role": "trail reviewer", "arm": 1, "model": "haiku", "effort": "low", "source": "user flat"},
+        )
+
+    def test_an_inherited_reviewer_is_left_alone(self):
+        user = OPERATOR_FILE.replace("trail reviewer: opus@xhigh", "trail reviewer: inherit-parent")
+        arm = self.reviewer("claude-code", "opus@xhigh", user=user)
+        self.assertEqual((arm["model"], arm["effort"], "step" in arm), (cmc.INHERIT, cmc.INHERIT, False))
+
+    def test_a_step_down_from_xhigh_stays_at_xhigh(self):
+        arm = self.reviewer("claude-code", "opus@xhigh")
+        self.assertEqual((arm["model"], arm["effort"]), ("sonnet", "xhigh"))
+
+    def test_a_step_down_from_max_never_yields_max(self):
+        arm = self.reviewer("claude-code", "opus@max")
+        self.assertEqual((arm["model"], arm["effort"]), ("sonnet", "xhigh"))
+
+    def test_a_step_up_from_max_lands_on_xhigh(self):
+        arm = self.reviewer("claude-code", "opus@max", user=None)
+        self.assertEqual((arm["model"], arm["effort"]), ("fable", "xhigh"))
+
+    def test_a_step_up_never_lowers_effort_below_high(self):
+        arm = self.reviewer("claude-code", "opus@low", user=None)
+        self.assertEqual((arm["model"], arm["effort"]), ("fable", "high"))
+
+    def test_a_missing_work_effort_offsets_the_reviewers_own_effort(self):
+        user = OPERATOR_FILE.replace("trail reviewer: opus@xhigh", "trail reviewer: opus@medium")
+        arm = self.reviewer("claude-code", "opus", user=user)
+        self.assertEqual((arm["model"], arm["effort"]), ("sonnet", "high"))
+
+    def test_an_inherited_work_effort_offsets_the_reviewers_own_effort(self):
+        user = OPERATOR_FILE.replace("trail reviewer: opus@xhigh", "trail reviewer: opus@medium")
+        arm = self.reviewer("claude-code", "opus@inherit-parent", user=user)
+        self.assertEqual((arm["model"], arm["effort"]), ("sonnet", "high"))
+
+    def test_no_effort_anywhere_keeps_the_session_effort(self):
+        arm = self.reviewer("claude-code", "opus", user=None)
+        self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("fable", cmc.INHERIT, "up"))
+
+    def test_a_claude_alias_work_model_translates_on_codex(self):
+        user = "## codex\ntrail reviewer: gpt-6-sol@high\nswarm workers: gpt-6-astra@high\n"
+        arm = self.reviewer("codex", "opus", user=user, codex_catalog=STEP_CATALOG)
+        self.assertEqual(
+            (arm["model"], arm["effort"], arm["step"], arm["notes"][-1]),
+            (
+                "gpt-6-astra", "high", "up",
+                "trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra",
+            ),
+        )
+
+    def test_a_tier_the_config_leaves_out_is_not_a_candidate(self):
+        user = "## codex\ntrail reviewer: gpt-6-sol@high\n"
+        arm = self.reviewer("codex", "opus", user=user, codex_catalog=STEP_CATALOG)
+        self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("gpt-6-luna", "xhigh", "down"))
+
+    def test_the_target_effort_drops_to_the_highest_level_the_catalog_offers(self):
+        catalog = catalog_json("gpt-6.1-sol", ("gpt-6-astra", "list", ("low", "medium")), "gpt-6-sol", "gpt-6-luna")
+        arm = self.reviewer("codex", "gpt-6.1-sol@xhigh", codex_catalog=catalog)
+        self.assertEqual((arm["model"], arm["effort"]), ("gpt-6-astra", "medium"))
+
+    def test_other_roles_print_unchanged(self):
+        self.assertEqual(
+            self.resolve("claude-code", "feature", "trail reviewer", user=OPERATOR_FILE, work_model="opus@xhigh")[0],
+            self.resolve("claude-code", "feature", user=OPERATOR_FILE)[0],
+        )
+
+    def test_a_work_model_with_an_unknown_effort_is_a_usage_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = run_script(
+                ["--resolve", "--harness", "claude-code", "--project", tmp, "--user-file", f"{tmp}/none.md",
+                 "--work-model", "opus@turbo", "trail reviewer"],
+            )
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("unknown effort 'turbo'", result.stderr)
 
 
 class ListedModels(unittest.TestCase):
