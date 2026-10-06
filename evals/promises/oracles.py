@@ -2692,9 +2692,13 @@ def model_tier(model):
 
 def same_model(spawned, lead):
     (tier, whole), (lead_tier, lead_whole) = model_tier(lead if spawned == "inherit" else spawned), model_tier(lead)
-    if bool(tier) != bool(lead_tier):
-        return None
-    return tier == lead_tier if tier else whole == lead_whole
+    if tier and lead_tier:
+        return tier == lead_tier
+    if whole == lead_whole:
+        return True
+    if whole[:1] != lead_whole[:1] and {*whole[:1], *lead_whole[:1]} <= MODEL_VENDORS:
+        return False
+    return None
 
 
 @oracle("arena-readonly-cross-judge")
