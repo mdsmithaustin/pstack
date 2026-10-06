@@ -617,32 +617,55 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 });
 '''
 
-PAYLOAD_MATCHER = r"\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
-COPIED_VALUE = re.compile(
-    r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|" + PAYLOAD_MATCHER + ")")
+COPY_MATCHER = r"\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\()"
+COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + COPY_MATCHER)
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
-ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?:[^()]|\([^()]*\))*\)\)\.(toBeNull|not\.toBeInTheDocument)")
+CLIPBOARD_SPY = re.compile(r"""(?:writeText|copyText)\s*:\s*(\w+)\b(?!\s*[.(])|(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;]*?["'](?:writeText|copyText)["']""")
+ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
+ARGUMENT = re.compile(r"""(?:"[^"]*"|'[^']*'|`[^`]*`|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
+
+
+def clipboard_names(source):
+    """Names that hold what Copy writes: a variable the clipboard stub fills,
+    or a spy installed as writeText."""
+    return set(CAPTURED_BY_STUB.findall(source)) | {name for pair in CLIPBOARD_SPY.findall(source) for name in pair if name}
 
 
 def asserts_copied_value(source):
-    """An expectation on the clipboard spy's arguments, or on a variable the
-    clipboard stub fills. A stub, or a bare toHaveBeenCalled, checks nothing
-    about what Copy writes."""
+    """An expectation on the clipboard spy's arguments, or on a variable or
+    spy that holds what Copy writes. A stub, or a bare toHaveBeenCalled,
+    checks nothing about what Copy writes."""
     if COPIED_VALUE.search(source):
         return True
-    captured = set(CAPTURED_BY_STUB.findall(source))
-    return any(re.search(rf"expect\(\s*{re.escape(name)}\b[^;]*?\)\s*" + PAYLOAD_MATCHER, source) for name in captured)
+    return any(re.search(rf"expect\(\s*{re.escape(name)}\b[^;]*?\)" + COPY_MATCHER, source) for name in clipboard_names(source))
+
+
+def asserted_values(pattern, lines):
+    """The first argument of each assertion pattern finds, whitespace
+    normalized and unquoted, so TAIL, "tail" and 'tail' compare by value."""
+    values = set()
+    for line in lines:
+        for found in pattern.finditer(line):
+            value = " ".join(ARGUMENT.match(line, found.end()).group().split())
+            values.add(value[1:-1] if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'`" else value)
+    return values
 
 
 def tests_assert_hidden_text_and_copy(added):
     """The reviewer asked for tests of the collapsed text and the Copy payload,
     not only the button labels. A regex over the added web test lines is a
-    proxy, so it looks only for each kind of assertion somewhere."""
+    proxy: some value must be asserted absent and the same value present in
+    the rendered text, and the Copy payload must be asserted."""
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
-    missing = [what for what, found in (("what Copy writes", asserts_copied_value("\n".join(lines))),
-                                        ("that hidden prompt text is absent", any(ABSENT.search(line) for line in lines)),
-                                        ("that prompt text is present", any(PRESENT.search(line) for line in lines)))
+    source = "\n".join(lines)
+    names = clipboard_names(source)
+    rendered = [line for line in lines
+                if not COPIED_VALUE.search(line) and not any(re.search(rf"expect\(\s*{re.escape(name)}\b", line) for name in names)]
+    absent = asserted_values(ABSENT, lines)
+    missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
+                                        ("that hidden prompt text is absent", absent),
+                                        ("that hidden prompt text is present", absent & asserted_values(PRESENT, rendered)))
                if not found]
     return [f"constraint:C3: no added web test asserts {what}" for what in missing]
 
