@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -409,7 +410,8 @@ def step_reviewer(
         if step == "same-model" else f"stepped {step} to {model}"
     )
     note = f"trail reviewer matched work model {work_model}; {result}"
-    return reviewer._replace(model=model, effort=effort, notes=(*reviewer.notes, note), step=step)
+    notes = (*reviewer.notes, note) if step == "same-model" else (note,)
+    return reviewer._replace(model=model, effort=effort, notes=notes, step=step)
 
 
 def build_layers(harness: str, workspace: dict, user: dict, skill_default: dict) -> list[Layer]:
@@ -431,6 +433,9 @@ def _load_layer_file(path: Path) -> tuple[dict, list[tuple[int, str, str]]]:
 
 def _work_model(value: str) -> tuple[str, str | None]:
     model, at, effort = value.partition("@")
+    full_id = re.fullmatch(r"claude-([a-z]+)(?:-.*)?", model)
+    if full_id and full_id[1] in CLAUDE_ALIASES:
+        model = full_id[1]
     if not _is_valid_model_name(model):
         raise argparse.ArgumentTypeError(f"invalid model name {model!r}")
     if at and effort not in (*EFFORT_ORDER, INHERIT):

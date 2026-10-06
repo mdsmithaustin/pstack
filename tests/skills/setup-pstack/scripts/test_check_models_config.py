@@ -977,9 +977,80 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
         self.assertEqual((arm["model"], arm["effort"]), ("gpt-6-astra", "medium"))
 
     def test_other_roles_print_unchanged(self):
+        [feature, _] = self.resolve(
+            "claude-code", "feature", "trail reviewer", user=OPERATOR_FILE, work_model="sonnet@high",
+        )
         self.assertEqual(
-            self.resolve("claude-code", "feature", "trail reviewer", user=OPERATOR_FILE, work_model="opus@xhigh")[0],
-            self.resolve("claude-code", "feature", user=OPERATOR_FILE)[0],
+            feature, {"role": "feature", "arm": 1, "model": "sonnet", "effort": "high", "source": "user flat"},
+        )
+
+    def test_no_roles_still_steps_the_trail_reviewer_line(self):
+        arms = self.resolve("claude-code", user=OPERATOR_FILE, work_model="opus@xhigh")
+        [reviewer] = [a for a in arms if a["role"] == "trail reviewer"]
+        self.assertEqual(
+            reviewer,
+            {
+                "role": "trail reviewer", "arm": 1, "model": "sonnet", "effort": "xhigh", "source": "user flat",
+                "notes": ["trail reviewer matched work model opus; stepped down to sonnet"], "step": "down",
+            },
+        )
+        self.assertEqual({a['role'] for a in arms}, set(cmc.ROLES))
+
+    def test_a_full_claude_model_id_maps_to_its_alias_on_claude_code(self):
+        self.assertEqual(
+            self.reviewer("claude-code", "claude-opus-5-5@xhigh"),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "sonnet", "effort": "xhigh", "source": "user flat",
+                "notes": ["trail reviewer matched work model opus; stepped down to sonnet"], "step": "down",
+            },
+        )
+
+    def test_every_full_claude_id_shape_maps_to_its_alias(self):
+        for work_model, alias, expected in (
+            ("claude-haiku-4-5-20251001@high", "haiku", ("sonnet", "high", "up")),
+            ("claude-sonnet-5-5@high", "sonnet", ("opus", "high", "up")),
+            ("claude-fable-5-1@high", "fable", ("opus", "xhigh", "down")),
+        ):
+            with self.subTest(work_model=work_model):
+                arm = self.reviewer("claude-code", work_model, user=f"trail reviewer: {alias}@high\n")
+                self.assertEqual((arm["model"], arm["effort"], arm["step"]), expected)
+                self.assertEqual(
+                    arm["notes"],
+                    [f"trail reviewer matched work model {alias}; stepped {expected[2]} to {expected[0]}"],
+                )
+
+    def test_a_full_claude_model_id_maps_to_its_alias_on_codex(self):
+        user = "## codex\ntrail reviewer: gpt-6-sol@high\nswarm workers: gpt-6-astra@high\n"
+        arm = self.reviewer("codex", "claude-opus-5-5", user=user, codex_catalog=STEP_CATALOG)
+        self.assertEqual(
+            arm,
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
+                "notes": ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], "step": "up",
+            },
+        )
+
+    def test_a_moved_arm_drops_the_notes_that_described_the_old_model(self):
+        arm = self.reviewer("codex", "gpt-6-sol@xhigh", codex_catalog=catalog_json("gpt-6-sol", "gpt-6-astra", "gpt-6-luna"))
+        self.assertEqual(
+            arm["notes"], ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"],
+        )
+
+    def test_hermes_with_a_distinct_work_model_prints_unchanged(self):
+        user = "## hermes\ntrail reviewer: model-a@high\nfeature: model-b@high\n"
+        self.assertEqual(
+            self.reviewer("hermes", "model-b@high", user=user),
+            {"role": "trail reviewer", "arm": 1, "model": "model-a", "effort": "high", "source": "user ## hermes"},
+        )
+
+    def test_hermes_with_an_inherited_reviewer_prints_unchanged_with_no_step(self):
+        user = "## hermes\ntrail reviewer: inherit-parent\nfeature: model-b@high\n"
+        self.assertEqual(
+            self.reviewer("hermes", "model-b@high", user=user),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "inherit-parent", "effort": "inherit-parent",
+                "source": "user ## hermes",
+            },
         )
 
     def test_a_work_model_with_an_unknown_effort_is_a_usage_error(self):
