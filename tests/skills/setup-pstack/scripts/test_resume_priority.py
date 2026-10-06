@@ -32,6 +32,8 @@ class ResumePriority(unittest.TestCase):
 
     def test_invalid_directives_fail_lint_and_real_resolver(self):
         cases = {
+            '#resume-priority: codex=hermes': 'malformed',
+            '#  resume-priority: codex=hermes': 'malformed',
             '# resume-priority codex=hermes': 'malformed',
             '# resume-priority: codex=': 'malformed',
             '# resume-priority: codex=hermes,': 'unknown',

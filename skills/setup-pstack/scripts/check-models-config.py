@@ -281,7 +281,7 @@ def parse_resume_priority(text: str) -> tuple[dict[str, tuple[str, ...]], list[t
     seen = set()
     for i in range(body_start, len(lines)):
         line = lines[i].strip()
-        if not line.startswith("# resume-priority"):
+        if not re.match(r"#\s*resume-priority\b", line):
             continue
         match = re.fullmatch(r"# resume-priority: ([a-z-]+)=([a-z,-]+)", line)
         if not match:

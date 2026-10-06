@@ -33,3 +33,47 @@ Priority does not change role resolution, dispatch preference, permission settin
 4. **Alias translation.** On Codex and Grok Build a Claude alias translates instead of inheriting. Codex maps `fable` to `gpt-6-sol@max`, `opus` to `gpt-6-sol@xhigh`, `sonnet` to `gpt-6-sol@high`, and `haiku` to `gpt-6-luna@high`, and the translated effort applies only when the line wrote none. Grok Build maps every alias to `grok-4.7`, its one model tier today, and keeps the line's own effort. Hermes has no translation, so an alias there is `inherit-parent`.
 5. **Effort policy.** A line without a usable effort runs at the session effort on Claude Code and Grok Build. On Codex and Hermes a spawn that names a model and no effort gets that model's default effort, so the policy fills it: `xhigh` for `hardest tasks`, `judgment and prose`, `bug-fix`, `perf-issue`, `hillclimb`, `how explainer`, `why synthesizer`, `reflect judgment`, `reflect divergent`, `reflect synthesizer`, `arena cross-judge pool`, `architect runners`, and `trail reviewer`, and `high` for every other role. A line whose model is `inherit-parent` gets no fill, because a full-history fork inherits the parent's effort. Nothing in the policy produces `max` or `ultra`. Those come only from a written suffix, the translation of `fable`, or an explicit escalation in the task.
 6. **Codex's model list.** On Codex the resolver reads the model list Codex keeps at `$CODEX_HOME/models_cache.json`, the catalog `codex debug models` prints. `spawn_agent` accepts only the efforts that list gives a model, so the resolver drops any other effort with a note and the effort policy fills it. When the list lacks the policy's floor too, the arm runs at the model's highest listed effort below the floor, or at its lowest listed effort when none is below, with a note. A `gpt-6-<tier>` or `gpt-6.1-<tier>` model runs as the newest of the two that the list carries with the line's effort among its levels, so the written effort drops only when neither release takes it. After an effort fill, the same pick runs with the filled effort. So `gpt-6-sol@high` runs as `gpt-6.1-sol@high`, and `gpt-6.1-luna` runs as `gpt-6-luna` on an account that lacks it. Without a readable list the lint's table decides the efforts and the model stays as written. A note names each swap.
+
+## Resolve recovery candidates
+
+`resolve-resume.py` is a read-only path for the saved role and one-based panel
+arm. It calls the existing `resolve_role` with the current destination's
+layers and model catalog. It preserves the full resolved source and notes.
+It does not launch, change settings, or consume a retry.
+
+```sh
+python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/resolve-resume.py" \
+  --source claude-code --role feature --arm 1 --project "${PROJECT_ROOT:?}" \
+  --contexts /absolute/path/to/observed-contexts.json \
+  --oracle "${PSTACK_SOURCE_ROOT:?}/evals/resume-recovery/oracle.py"
+```
+
+Failure signal for eligibility is exit 1. Invalid arguments, configuration,
+or context input exit 2. Exit 0 means at least one candidate is eligible.
+The result has a `priority` object and ordered `candidates`. Each candidate
+has `harness`, exact `resolution`, observed `route` and `version`, retained
+`eval_receipt`, `eligible`, and a denial `reason` when ineligible.
+
+`--contexts` names an operator-owned JSON object keyed by destination
+harness. Each value records `available`, `route`, `version`,
+`permission_context`, and an absolute `eval_run` directory. The current
+Codex CLI context uses route `codex-cli`, its observed CLI version, and the
+screen's scoped permission context. The resolver probes the installed
+Codex CLI version again. Missing observations deny eligibility.
+
+`--oracle` names the trusted current oracle from the source checkout.
+Omitting it denies eligibility. The oracle reruns against retained raw
+execution provenance and fixture outputs. A changed suite, fixture, oracle,
+resolution, source, notes, route, version, or relevant permission context
+invalidates the evidence. A saved receipt alone is insufficient. The
+receipt retains observed invocation and evidence hashes, not an agent's
+self-reported pass boolean. The run directory and oracle share the existing
+trusted local operator boundary. Hashes detect changed evidence and do not
+provide execution attestation against a malicious local operator.
+
+The source checkout's `evals/resume-recovery/README.md` contains runnable
+preparation, interruption, recovery, refusal, and grading instructions.
+Installed skill packages omit the eval corpus. The current oracle supports
+Codex CLI evidence. Other routes remain ineligible until their observed
+provenance has an independent oracle. Keep explicit human model overrides,
+native delegation preference, CLI fallback, and existing retry limits.

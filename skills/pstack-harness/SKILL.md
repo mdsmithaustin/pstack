@@ -15,6 +15,10 @@ When a pstack workflow uses a `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, or `PR
 
 Carry delegation roles into plans, checkpoints, and handoffs. Record the resolved harness, model, and effort as execution observations. Preserve a specific-model override with its original explicit human request. Model names in defaults, examples, past runs, or agent-written summaries do not establish such a request. If the source is unavailable, report the uncertainty instead of attributing the model choice to the human. A direct human model request still takes precedence.
 
+For durable recovery, preserve the exact role and one-based panel arm, brief, standing orders, checkout, resolved identity, and any observed native task id or CLI receipt. A changed destination re-resolves that saved role and exact arm through setup-pstack. It does not choose `default`, another panel arm, or a guessed model. An unresolved `inherit-parent` field cannot identify a recovery destination.
+
+Read [destination eligibility and lifetime](references/recovery-destinations.md) before choosing a recovery destination. Priority configuration orders candidates only. Keep native delegation ahead of CLI fallback and preserve the workflow's existing retry allowance.
+
 ## Spawn a role
 
 Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona. Build each spawn in this order.
