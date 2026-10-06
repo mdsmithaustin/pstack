@@ -84,10 +84,12 @@ JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
 SYNTH_ROLE = re.compile(r"(?<![a-z])synthes(?:is|i[sz](?:e|es|ing))\b|(?<!separate )(?<![a-z])synthesi[sz]ers?\b")
 READ_ONLY_BRIEF = re.compile(r"read[- ]only|(?:do not|don't|never) (?:edit|write|modify|change|touch)(?: or (?:edit|write|modify|change))? (?:any )?(?:files|anything)"
                              r"|make no (?:edits|changes)")
-EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\b(?:you|job is|task is) to\s+)\s*(?:[-*]\s+|\d+[.)]\s+)?"
+EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\b(?:you|job is|task is) to\s+)\s*(?:[-*]\s+|\d+[.)]\s+)?(?:please\s+)?"
                         r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
+REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}[^\n]+\n+[^\n]*|[A-Za-z][\w /-]{0,30}:[^\n]*)")
+LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
 QUESTION_CUES = ("should i", "do you want", "would you like", "let me know", "shall i", "want me to",
@@ -591,8 +593,12 @@ class View:
         call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
         given = (call or {}).get("input") or {}
         extra = [str(given.get(k) or "") for k in ("description", "task_name", "name")] if isinstance(given, dict) else []
-        reply = str(spawn.get("x_child_first_reply") or "")[:REPLY_HEAD] if reply else ""
-        return " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra + [reply]).lower()
+        said = str(spawn.get("x_child_first_reply") or "")
+        if reply == "label":
+            said = label.group(0) if (label := REPLY_LABEL.match(said)) else ""
+        text = " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra
+                        + [said[:REPLY_HEAD] if reply else ""]).lower()
+        return LEAD_ROLE.sub("", text)
 
     def spawn_brief(self, spawn):
         call = next((c for c in self.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
@@ -614,7 +620,7 @@ class View:
                 if (turn is None or self.turn_of(s.get("seq")) == turn) and pattern.search(self.spawn_text(s, reply))]
 
     def supports(self, spawn):
-        text = self.spawn_text(spawn)
+        text = self.spawn_text(spawn, reply=False)
         return bool(JUDGE_ROLE.search(text) or SYNTH_ROLE.search(text))
 
     def waves(self, spawns):
@@ -1600,7 +1606,7 @@ def why_evidence(view):
 
 @oracle("how-narrow-question-no-explorers")
 def how_narrow(view):
-    explorers = view.spawns_where("explorer", "exploration angle", "exploring a codebase")
+    explorers = view.spawns_where("explorer", "exploration angle", "exploring a codebase", reply="label")
     evidence = [f"explorer spawns: {len(explorers)}", f"total spawns: {len(view.spawns)}"]
     if explorers:
         return failed(f"{len(explorers)} explorer(s) spawned for a narrow question", *evidence)
@@ -1611,7 +1617,7 @@ def how_narrow(view):
 
 @oracle("how-fans-out-explorers-for-big-subsystem")
 def how_wide(view):
-    explorers = [s for s in view.spawns_where("explorer", "exploration angle", "exploring a codebase") if not view.supports(s)]
+    explorers = [s for s in view.spawns_where("explorer", "exploration angle", "exploring a codebase", reply="label") if not view.supports(s)]
     explainers = view.spawns_where("explainer", "architectural explanation", r"synthesi[sz]\w*")
     evidence = [f"explorer spawns: {len(explorers)}", f"explainer spawns: {len(explainers)}"]
     waves = view.waves(view.spawns)
@@ -1682,7 +1688,7 @@ def why_then_how(view):
 
 @oracle("why-queries-evidence-categories-in-parallel")
 def why_parallel(view):
-    investigators = [s for s in view.spawns_where("investigator", "historical context", "git history", *WHY_ROSTER) if not view.supports(s)]
+    investigators = [s for s in view.spawns_where("investigator", "historical context", "git history", *WHY_ROSTER, reply="label") if not view.supports(s)]
     evidence = [f"investigator spawns: {len(investigators)}", f"one message: {view.one_message(investigators)}"]
     if not investigators:
         if view.killed and not view.spawns:
@@ -1728,7 +1734,7 @@ def why_null(view):
     return failed("reply does not report the absent evidence categories as null results", *evidence)
 
 
-SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*sources?(?:\s+(?:searched|consulted|checked|coverage))?\**\s*(?::|$)"
+SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+(?:searched|consulted|checked|coverage))\**\s*(?::|$)"
                              r"|\bsources\s+(?:consulted|searched|checked)\b")
 
 
@@ -1858,7 +1864,7 @@ def swarm_fanout(view):
         return failed(f"{len(workers)} workers for {len(packages)} packages", *evidence)
     if view.encrypted():
         return inconclusive("worker briefs are encrypted; the package-to-worker mapping cannot be read", *evidence)
-    owners = {p: [s.get("seq") for s in workers if p in (s.get("prompt_head") or "").lower()] for p in packages}
+    owners = {p: [s.get("seq") for s in workers if p in view.spawn_brief(s).lower()] for p in packages}
     evidence.append(f"package owners: {owners}")
     if any(len(v) != 1 for v in owners.values()):
         return failed("packages are not each named by exactly one worker brief", *evidence)
@@ -2469,13 +2475,19 @@ def doc_impact_before_completion(view):
     return passed(*evidence)
 
 
-VERDICT_NEGATION = re.compile(r"\b(?:not|never|cannot|unable|fail(?:ed|s)?|without)\b|n't\b", re.I)
+VERDICT_NEGATION = re.compile(r"\b(?:not|never|cannot|unable|fail(?:ed|s)?|without|refus(?:e|ed|es)|would|unlikely)\b|n't\b", re.I)
+VERDICT_SUBJECT = re.compile(r"\breview(?:er)?s?\b|\bit\b", re.I)
 
 
 def negated_verdict(reply, match):
     word = list(re.finditer(r"\bpass(?:ed)?\b", match.group(0), re.I))[-1]
-    clause = re.split(r"[.,;:!?\n]|\b(?:then|and|but)\b", reply[:match.start() + word.start()], flags=re.I)[-1]
-    return bool(VERDICT_NEGATION.search(" ".join(clause.split()[-4:])))
+    clause = re.split(r"[.;:!?\n]|\b(?:then|and|but)\b", reply[:match.start() + word.start()], flags=re.I)[-1]
+    subject = list(VERDICT_SUBJECT.finditer(clause))
+    if not subject:
+        bare = word.start() == 0
+        return bool(clause.strip()) if bare else bool(VERDICT_NEGATION.search(clause))
+    before = " ".join(clause[:subject[-1].start()].split()[-2:])
+    return bool(VERDICT_NEGATION.search(clause[subject[-1].start():]) or re.search(r"\b(?:no|neither)\b", before, re.I))
 
 
 @oracle("documentation-impact-independent-review-pass-required")
@@ -2564,6 +2576,24 @@ def arm_dirs(command):
     return dirs
 
 
+GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?[MADRC][MADRC ]?\s+\S|^\s*(?:modified|deleted|new file):\s')
+
+
+def parent_written(view, candidates):
+    start = max(s.get("seq") or 0 for s in candidates)
+    end = min((s.get("seq") or 0 for s in view.spawns if (s.get("seq") or 0) > start), default=float("inf"))
+    first_edit = min((e[0] for e in view.project_edits()), default=float("inf"))
+    for call in view.tool_calls:
+        seq, given = call.get("seq") or 0, call.get("input") or {}
+        if call.get("name") not in SHELL_TOOLS or not start < seq < min(end, first_edit):
+            continue
+        command = str(given.get(SHELL_TOOLS[call["name"]]) or "").strip()
+        if command.startswith("git status") and (given.get("workdir") or given.get("cwd")) in (None, view.trace.get("cwd")):
+            if GIT_DIRTY.search(((view.results_for(call) or {}).get("output_head") or "").replace("\\n", "\n")):
+                return seq
+    return None
+
+
 @oracle("arena-candidates-own-worktrees")
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
@@ -2572,6 +2602,9 @@ def arena_worktrees(view):
     evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
+    written = parent_written(view, candidates)
+    if written is not None:
+        return failed(f"the parent checkout changed under the candidates (git status at seq {written}, before any lead edit)", *evidence)
     if view.encrypted():
         enough = made >= len(candidates) or len(view.worktrees() or []) > len(candidates)
         return passed(*evidence) if enough else inconclusive("briefs encrypted, and fewer candidate directories than candidates", *evidence)
@@ -2586,7 +2619,7 @@ PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|p
 def picked(low):
     for match in PICKED.finditer(low):
         clause = re.split(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b", low[:match.start()])[-1]
-        if not re.search(r"\b(?:no|not|none|never|neither|nor)\b", " ".join(clause.split()[-6:])):
+        if not re.search(r"\b(?:no|not|none|never|neither|nor|nobody)\b", clause):
             return True
     return False
 
@@ -2595,7 +2628,7 @@ def picked(low):
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = "base" in low or picked(low)
+    base = bool(re.search(r"\bbase\b", low)) or picked(low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
@@ -2615,11 +2648,14 @@ MODEL_SUFFIXES = {"build"}
 
 def model_tier(model):
     tokens = [t for t in re.split(r"[-._]", (model or "").lower()) if t and t not in MODEL_SUFFIXES]
-    return tuple(t for t in tokens if not t.isdigit() and t not in MODEL_VENDORS) or tuple(tokens)
+    return tuple(t for t in tokens if not t.isdigit() and t not in MODEL_VENDORS), tuple(tokens)
 
 
 def same_model(spawned, lead):
-    return model_tier(spawned) == model_tier(lead)
+    (tier, whole), (lead_tier, lead_whole) = model_tier(lead if spawned == "inherit" else spawned), model_tier(lead)
+    if bool(tier) != bool(lead_tier):
+        return None
+    return tier == lead_tier if tier else whole == lead_whole
 
 
 @oracle("arena-readonly-cross-judge")
@@ -2636,10 +2672,11 @@ def arena_judge(view):
     evidence.append(f"judge brief marked read-only: {readonly}")
     if judge.get("seq", 0) < max(s.get("seq", 0) for s in candidates):
         return failed("judge spawned before the candidates", *evidence)
-    others = [s.get("model") for s in view.spawns if s.get("model") and not same_model(s["model"], view.model)]
-    failures = []
     judge_model = judge.get("model") or view.model
-    if judge_model and view.model and same_model(judge_model, view.model) and others:
+    judge_same = same_model(judge_model, view.model)
+    spawned_same = [same_model(s["model"], view.model) for s in view.spawns if s.get("model") and s is not judge]
+    failures = []
+    if view.model and judge_same and False in spawned_same:
         failures.append("judge runs on the lead's model although the run used another")
     if judge.get("prompt_head") and not readonly:
         failures.append("judge brief is not read-only")
@@ -2647,10 +2684,12 @@ def arena_judge(view):
         return failed(failures, *evidence)
     if not view.model:
         return inconclusive("the lead's model is unknown, so the judge's model cannot be compared with it", *evidence)
+    if judge_same is None or (judge_same and None in spawned_same):
+        return inconclusive("a model slug names no tier, so the judge's model cannot be compared with the lead's", *evidence)
     return passed(*evidence)
 
 
-ASSIGNED_OUTPUT = re.compile(r"\b(?:write|save|put|record|output:?)\b(?:(?!\b(?:read|see|from)\b)[^.\n]){0,60}?([\w-]+(?:\.[\w-]+)*\.md)\b", re.I)
+ASSIGNED_OUTPUT = re.compile(r"\b(?:write|save|put|record|output:?)\b(?:(?!\b(?:read|see|from)\b)[^.\n]){0,60}?([\w-]+(?:\.[\w-]+)*\.(?:md|txt))\b", re.I)
 
 
 def rationale_pattern(view, candidates):
@@ -2678,8 +2717,10 @@ def arena_lead_reads(view):
         else:
             reads += [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
     named = rationale_pattern(view, candidates)
-    rationales = [p for p in reads if named.search(p) and not skill_rel(p)]
-    others = [p for p in reads if p not in rationales and not skill_rel(p)]
+    rationale_reads = [p for p in reads if named.search(p) and not skill_rel(p)]
+    others = [p for p in reads if p not in rationale_reads and not skill_rel(p)]
+    # A path that still holds a shell variable can name a different file on each read, so it is not merged.
+    rationales = {n if "$" in p else os.path.normpath(p.strip("\"'")) for n, p in enumerate(rationale_reads)}
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
     evidence = [f"rationale files read after the last candidate spawn: {len(rationales)}", f"other candidate files read: {len(others)}"]
     if not judges:
