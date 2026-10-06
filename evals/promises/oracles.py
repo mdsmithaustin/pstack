@@ -829,13 +829,15 @@ def walk_segments(command):
 
 AT_COMMAND = r"^\s*(?:(?:do|then|else|sudo)\s+)?"
 LAST_ARG = r"(?:[^\s<>]+\s+)+([^\s<>]+)\s*(?:\d?>.*)?$"
+TARGET_DIR = r"\s(?:-[A-Za-z]*t\s+|--target-directory[=\s]\s*)"
 REMOVE_TARGET = r"\b(?:rm|git rm)\s+(?:-\w+\s+)*([^\s;&|]+)"
 MAKE_DIR = r"\bmkdir\s+(?:-\w+\s+)*([^\s;&|]+)"
 WRITE_TARGETS = (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
                  r"\bsed\s+-i[^\s]*(?:\s+(?:''|\"\"))?\s+(?:-e\s+)?(?:'[^']*'|\"[^\"]*\"|\S+)\s+(\S+)",
                  REMOVE_TARGET,
                  r"\bmv\s+(?:-\w+\s+)*\S+\s+([^\s;&|]+)",
-                 AT_COMMAND + r"(?:cp|install)\s+" + LAST_ARG,
+                 AT_COMMAND + r"(?:cp|install)(?!.*" + TARGET_DIR + r")\s+" + LAST_ARG,
+                 AT_COMMAND + r"(?:cp|install)(?=\s).*?" + TARGET_DIR + r"([^\s<>]+)",
                  AT_COMMAND + r"perl\s+(?=(?:\S+\s+)*?-\w*i)" + LAST_ARG,
                  AT_COMMAND + r"ed\s+(?:-\S+\s+)*([^\s<>]+)",
                  r"\bdd\s[^<>]*?\bof=([^\s<>]+)")
