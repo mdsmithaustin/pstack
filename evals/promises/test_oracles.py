@@ -3084,13 +3084,13 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
                      "The review failed then passed.", "The review was not quick but passed."):
             self.assertEqual(self.review_verdict(line), PASS, line)
 
-    def candidates_then_status(self, status):
+    def candidates_then_status(self, status, events=(), spawns=()):
         def task(n):
             return {"goal": "Design one cache-key candidate.", "context": f"Write only under /w/tmp/arena/candidate-{n}/: cache.py, rationale.md."}
-        events = [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(n) for n in range(1, 6)]}}]
+        events = [*events, {"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(n) for n in range(1, 6)]}}]
         events += [{"seq": 45, "kind": "tool_call", "name": "terminal", "input": {"command": "git status --short", "workdir": "/w/relay"}},
                    {"seq": 46, "kind": "tool_result", "name": "terminal", "ok": True, "output_head": json.dumps({"output": status, "exit_code": 0})}]
-        spawns = [{"seq": 43, "tool": "delegate_task", "prompt_head": "Design one cache-key candidate."} for _ in range(5)]
+        spawns = [*spawns, *({"seq": 43, "tool": "delegate_task", "prompt_head": "Design one cache-key candidate."} for _ in range(5))]
         return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, harness="hermes", cwd="/w/relay"), load_case("arena-run"))
 
     def test_a_candidate_write_into_the_parent_checkout_is_not_its_own_worktree(self):
@@ -3103,6 +3103,16 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         for status in ("?? relay/key_format.py", "UU relay/cache.py", "DU tests/test_cache.py"):
             self.assertEqual(self.candidates_then_status(status)["verdict"], FAIL, status)
         own = self.candidates_then_status("?? decisions.tsv\n?? .worktrees/\n?? .arena/\n?? scratch_notes.md\n?? .claude/")
+        self.assertEqual(own["verdict"], PASS, own)
+
+    def test_copilot_the_status_window_runs_from_the_candidates_to_the_next_lead_edit(self):
+        lead_edit = {"seq": 40, "kind": "tool_call", "name": "Edit", "input": {"file_path": "/w/relay/relay/cache.py"}}
+        judge = {"seq": 44, "tool": "delegate_task", "prompt_head": "Read-only cross-judge of the five candidates."}
+        edited_first = self.candidates_then_status(" M relay/cache.py", events=[lead_edit])
+        self.assertEqual(edited_first["verdict"], FAIL, edited_first)
+        judged = self.candidates_then_status(" M relay/cache.py", events=[{"seq": 44, "kind": "tool_call", "name": "delegate_task", "input": {}}], spawns=[judge])
+        self.assertEqual(judged["verdict"], FAIL, judged)
+        own =self.candidates_then_status(" M relay/cache.py", events=[dict(lead_edit, seq=44)])
         self.assertEqual(own["verdict"], PASS, own)
 
     def test_copilot_a_collapsed_untracked_package_is_a_candidate_write(self):
