@@ -623,16 +623,17 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 });
 '''
 
-CALLED_WITH = r"\s*\.toHaveBeen(?:Last|Nth)?CalledWith\("
+CALLED_WITH = r"\s*\.toHaveBeen(?:Last|Nth)?CalledWith\((?!\s*\))"
 PAYLOAD_MATCHER = r"\s*\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
 COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + CALLED_WITH
                           + r"|expect\([^;]*?(?:(?:writeText|copyText)\.mock\.|readText\()[^;]*?\)" + PAYLOAD_MATCHER)
-CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)\s*(?:[:=]\s*(?:(?:vi|jest)\.fn\(\s*)?(?:async\s*)?(?:function\s*)?\([^)]*\)\s*(?:=>\s*)?"
-                              r"|\([^)]*\)\s*(?=\{))(?:\{[^}]*?\b)?(\w+)(?:\.push\(|\s*=(?![=>]))")
+CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)\s*(?:(?:[:=]\s*(?:(?:vi|jest)\.fn\(\s*(?:\)\.mockImplementation\(\s*)?)?|[\"']\s*\)\.mockImplementation\(\s*)"
+                              r"(?:async\s*)?(?:function\s*)?\([^)]*\)\s*(?:=>\s*)?|\([^)]*\)\s*(?=\{))"
+                              r"(?:\{[^}]*?\b|void\s+|Promise\.resolve\(\s*)?(\w+)(?:\.push\(|\s*=(?![=>]))")
 SPY_AS_WRITETEXT = re.compile(r"""clipboard["']?\s*[:,]\s*\{(?:\s*value\s*:\s*\{)?[^{}]*?\bwriteText["']?\s*:\s*(\w+)\b(?!\s*[.(])""")
 SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;,]*\bclipboard\s*,\s*["']writeText["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
-PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
+PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(")
 ARGUMENT = re.compile(r"""(?:"[^"]*"|'[^']*'|`[^`]*`|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 
 
@@ -649,17 +650,8 @@ def asserts_on_clipboard(statement, names):
 
 
 def statements(source):
-    """source cut at each ;, and at each line end that closes every ( or
-    follows a {, unless the next line continues a chain with ., so one
-    assertion split across lines stays whole."""
-    pieces, start, depth = [], 0, 0
-    for at, char in enumerate(source):
-        depth += (char == "(") - (char == ")")
-        if char == ";" or char == "\n" and not re.match(r"[ \t]*\.", source[at + 1:]) and (
-                depth <= 0 or source[start:at].rstrip().endswith("{")):
-            pieces.append(source[start:at + 1])
-            start, depth = at + 1, 0
-    return [*pieces, source[start:]]
+    """source cut before each expect(, so each assertion is read alone."""
+    return re.split(r"(?=\bexpect\()", source)
 
 
 def unquoted(value):
