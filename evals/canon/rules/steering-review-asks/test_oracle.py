@@ -192,6 +192,10 @@ class CopyAssertionTests(unittest.TestCase):
     def test_the_text_read_back_from_the_clipboard_counts(self):
         self.assertEqual(self.failures("expect(await navigator.clipboard.readText()).toBe(LONG_TEXT);"), [])
 
+    def test_text_read_back_from_something_other_than_the_clipboard_does_not_count(self):
+        self.assertEqual(self.failures("expect(editor.readText()).toBe(LONG_TEXT);"),
+                         ["constraint:C3: no added web test asserts what Copy writes"])
+
     def test_a_clipboard_spy_call_argument_compared_to_the_prompt_counts(self):
         self.assertEqual(self.failures(
             'const copied = vi.spyOn(navigator.clipboard, "writeText");',
@@ -248,7 +252,8 @@ class HiddenTailTests(unittest.TestCase):
                       ["const writeText = vi.fn()", "bubble = renderPrompt()"],
                       ["const writeText = vi.fn()", "beforeEach(() => {", "  bubble = renderPrompt()", "})"],
                       ['vi.stubGlobal("navigator", { clipboard: { writeText } })', "beforeEach(() => {", "  bubble = renderPrompt()", "})"],
-                      ['const writeText = vi.fn(() => log(":-("))', "bubble = renderPrompt()"]):
+                      ['const writeText = vi.fn(() => log(":-("))', "bubble = renderPrompt()"],
+                      ['it("writeText receives the full prompt", () => {', "  bubble = renderPrompt()"]):
             with self.subTest(after):
                 self.assertEqual(self.failures(*after, "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(TAIL)"), [])
 
