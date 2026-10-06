@@ -119,9 +119,18 @@ class CopyAssertionTests(unittest.TestCase):
         ('vi.spyOn(navigator.clipboard, "writeText")\n  .mockImplementation(async (t) => { written = t })', "expect(written).toBe(LONG_TEXT)"),
         ("Object.assign(navigator.clipboard, {\n  writeText: (t) =>\n    written.push(t),\n})", "expect(written).toEqual([LONG_TEXT])"),
         ("Object.assign(navigator.clipboard, {\n  writeText:\n    vi.fn((t) => { written = t }),\n})", "expect(written).toBe(LONG_TEXT)"),
+        ("Object.assign(navigator.clipboard, {\r\n  writeText: (t) =>\r\n    written.push(t),\r\n})", "expect(written).toEqual([LONG_TEXT])"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn<\n(text: string) => Promise<void>\n>(async (t) => { written = t }) } });",
+         "expect(written).toBe(LONG_TEXT);"),
+        ("it('copies', () => {\n  expect(screen.getByText(/don't/i)).toBeInTheDocument()\n"
+         "  Object.assign(navigator, { clipboard: { writeText: vi.fn((t) => { written = t }) } })",
+         "  expect(written).toBe(LONG_TEXT)\n})\nit('collapses', () => {})"),
+        ("", "expect((navigator.clipboard.writeText as jest.Mock).mock.calls[0][0]).toBe(LONG_TEXT);"),
+        ("", "expect(vi.mocked(navigator.clipboard.writeText).mock.lastCall).toEqual([LONG_TEXT]);"),
+        ("", "expect(jest.mocked(writeText).mock.calls[0]).toEqual([LONG_TEXT]);"),
     )
 
-    def test_a_payload_captured_in_each_stub_form_and_compared_counts(self):
+    def test_each_payload_check_trunk_credits_counts(self):
         for stub, compared in self.CAPTURE_FORMS:
             with self.subTest(stub):
                 self.assertEqual(self.failures(stub, compared), [])
