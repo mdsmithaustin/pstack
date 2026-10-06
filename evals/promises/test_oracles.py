@@ -2738,6 +2738,10 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(self.tdd(bash(14, "git status --short  # rerun unittest next", head="Looks ok")), INCONCLUSIVE)
         self.assertEqual(self.tdd(bash(14, "python3 -m unittest -v tests.test_main", head="test_limit (tests.test_main.T) ... ok")), PASS)
 
+    def test_copilot_a_bare_ok_is_not_a_green_rerun(self):
+        self.assertEqual(self.tdd(bash(14, "python3 -m unittest tests.test_main >/dev/null 2>&1; echo ok", head="ok")), INCONCLUSIVE)
+        self.assertEqual(self.tdd(bash(14, "python3 -m pytest -p tap tests/test_main.py", head="ok 1 tests/test_main.py::test_limit")), PASS)
+
     def test_f15_a_comment_is_not_a_delegates_green_run(self):
         spawn = {"seq": 3, "tool": "Agent", "persona": "poteto-agent", "prompt_head": "Implement the retry fix"}
         events = ([{"seq": 3, "kind": "tool_call", "name": "Agent", "input": {}}]
