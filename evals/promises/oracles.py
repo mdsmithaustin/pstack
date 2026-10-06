@@ -1583,7 +1583,7 @@ def repro_first(view):
     return failed("no reproduction command before editing source", *evidence)
 
 
-GREEN = re.compile(r"\bOK\b|passed|\.\.\. ok\b|^ok\b", re.M)
+GREEN = re.compile(r"\bOK\b|passed|\.\.\. ok\b|^ok \d+\b", re.M)
 
 
 @oracle("bug-fix-uses-poteto-tdd-when-cheap")
