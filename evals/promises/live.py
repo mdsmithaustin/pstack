@@ -71,7 +71,7 @@ CHAT_MARKS = {"[x]": "completed", "[X]": "completed", "✅": "completed", "[~]":
 CHAT_STATE_WORD = r"(completed?|done|in[ _-]progress|pending|not started|blocked)"
 CHAT_EDGE_WORD = re.compile(rf"^[\s*_(\[]*{CHAT_STATE_WORD}\b[\s*_)\]]*[.:,-]?"
                             rf"|[\s(*_\[-]+{CHAT_STATE_WORD}[\s*_)\].]*$"
-                            rf"|\({CHAT_STATE_WORD}:[^()]*\)[\s*_.]*$", re.I)
+                            rf"|\({CHAT_STATE_WORD}:.*\)[\s*_.]*$", re.I)
 CHAT_SKIP = re.compile(r"\bskipped\b:?\s*(.*)", re.I)
 
 
