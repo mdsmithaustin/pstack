@@ -2658,7 +2658,7 @@ def picked(low):
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = bool(re.search(r"\bbase\b", low)) or picked(low)
+    base = any(not negated(low, m.start()) for m in re.finditer(r"\bbase\b", low)) or picked(low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
