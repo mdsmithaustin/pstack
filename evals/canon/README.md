@@ -1219,20 +1219,40 @@ its opening bold heading or else its first clause cut to five words, and
 pointers, the bold or backticked skill names in the step and the indented
 lines under it. An item keeps a pointer it names bare or with its `principle-`
 prefix. `worklist.steps` records per step whether some item keeps the
-identity and which pointers that item keeps. `worklist.opening` scores item 0.
-The matched playbook's opening prose is the first line the worklist extractor
-prints before step 1, its bold lead or else a sentence. Its identity is that
-line's first clause, cut to five words as a step's is. `worklist.opening`
-holds that identity and whether the worklist, in a tool call or a message,
-names it, so a run that copies every step and drops the lead line fails item 0
-while it still lists every step. It is `null` when the playbook has no numbered steps, as Opening a
-PR has none, or no prose before step 1. The "Read this playbook in full."
-sentence that index-shaped playbooks print is never the identity, because a
-bold lead opens the two that have steps. The check shows the opening
-is carried, not that every sentence after the lead is. The stages are
-"worklist present via a valid carrier", "every playbook step listed",
-"playbook opening prose listed", and "step pointers preserved (fraction)", a
-mean over runs. `verbatim_fraction` stays in the JSONL.
+identity and which pointers that item keeps.
+
+`worklist.opening` scores item 0, the matched playbook's opening prose. That
+prose is the first line the worklist extractor prints before step 1. The
+extractor is the awk program that `tools/test_playbook_shape.py` mirrors, and
+`PORTING.md` ("Playbook rules sit where the worklist extractor reaches them")
+says why the lead line lives there. When the line opens with a bold lead, it
+has two identities: the lead's first clause and, if prose follows the bold
+span, that prose's first clause. A line with no bold lead has one, its first
+clause. Each is cut to five words, as a step's identity is. Bug fix's line
+gives "you own this task" and "delegate investigation and the fix".
+`worklist.opening` holds the identities and whether the worklist carries all of
+them. A run that copies every step but drops the lead, or keeps the lead and
+drops the delegate sentence, fails item 0 while it still lists every step.
+
+The check is presence anywhere in the worklist text, not position. The text is
+the one `verbatim_fraction` reads, the tool-call text when the lead made any
+worklist tool call and otherwise the list-like messages. The check covers the
+first clauses of the lead line, not every sentence of the opening. A reworded
+item that keeps those clauses passes.
+
+`worklist.opening` is `null`, and the run leaves the stage's denominator, when
+no playbook matched, when the matched playbook's text is not in the mounted
+tree, when the playbook has no numbered steps, as Opening a PR has none, or
+when no prose precedes step 1. Index-shaped playbooks are the ones whose
+printed prose includes "Read this playbook in full." (`INDEX_SHAPED` in
+`tools/test_playbook_shape.py`: Orchestrate, Multi-phase-plan, and Opening a
+PR). That sentence is never an identity. Orchestrate and Multi-phase-plan open
+with a bold lead, and a test pins that no shipped playbook opens with the
+sentence.
+
+The stages are "worklist present via a valid carrier", "every playbook step
+listed", "playbook opening prose listed", and "step pointers preserved
+(fraction)", a mean over runs. `verbatim_fraction` stays in the JSONL.
 
 **Delegate roles.** A routed skill may prescribe its delegates' role, and
 poteto-mode defers to it, so those delegates are not persona misses. `PRESCRIBED`

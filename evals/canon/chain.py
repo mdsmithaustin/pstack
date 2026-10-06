@@ -990,8 +990,11 @@ def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
     return attach(trace, children, lead_clock(trace, lead) if lead else None)
 
 
+CURLY = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"'})
+
+
 def normalize(text):
-    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text.translate(CURLY))
     text = re.sub(r"[*`_]", "", text).lower()
     return re.sub(r"\s+", " ", text).strip()
 
@@ -1050,15 +1053,20 @@ def step_specs(text, skill_names):
 
 
 def playbook_opening(text):
-    """The identity of a playbook's opening prose: the first clause of the
-    first line the extractor prints before step 1, five words at most, like a
-    step's identity. The line is the bold lead or else a sentence, and the
-    first clause is the same either way. None when no prose precedes step 1."""
+    """The identities of a playbook's opening prose, from the first line the
+    extractor prints before step 1. A bold lead gives its first clause and, when
+    prose follows the bold span, that prose's first clause too, because the
+    prose can carry a rule the lead does not (Bug fix's "Delegate
+    investigation"). A line with no bold lead gives its first clause. Each is
+    five words at most, like a step's identity. None when no prose precedes
+    step 1."""
     for line in text.splitlines():
         if re.match(r"^\d+\.\s", line):
             return None
         if line.strip() and not line.startswith("#"):
-            return first_clause(normalize(line))
+            lead = re.match(r"\*\*(.+?)\*\*(.*)", line)
+            parts = lead.groups() if lead else (line,)
+            return tuple(first_clause(normalize(part)) for part in parts if normalize(part))
     return None
 
 
@@ -1346,7 +1354,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
             "carrier": carrier,
             "tool_rejected": rejected,
             "valid_carrier": valid_carrier(carrier, trace.worklist_tool_offered, rejected),
-            "opening": {"identity": opening, "kept": opening in blob} if opening else None,
+            "opening": {"identities": list(opening), "kept": all(identity in blob for identity in opening)} if opening else None,
             "steps": fidelity,
             "steps_listed": sum(step["listed"] for step in fidelity) if fidelity else None,
             "steps_total": len(fidelity) if fidelity else None,
