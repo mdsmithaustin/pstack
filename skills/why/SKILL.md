@@ -52,6 +52,8 @@ Pull PR bodies and discussion via `gh` for any substantive commits:
 gh pr view <number> --json title,body,author,createdAt,mergedAt,labels,closingIssuesReferences,comments,reviews
 ```
 
+If `gh` is missing, unauthenticated, or the query fails, mark those PRs unread in the code anchor and name the gap in Sources Consulted.
+
 Capture this as seed context (file paths, symbols, commits, PR numbers, linked ticket IDs). Pass it to the investigators.
 
 ## Step 3. Spawn Parallel Investigators (default posture)

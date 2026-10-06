@@ -628,21 +628,30 @@ class PersonaInstallerPromises(Sandbox):
     def test_setup_detects_stale_personas(self):
         import hashlib
 
-        self.subagents(SUBAGENTS, "install", "--harness", "claude-code", "--project", self.project, expect=0)
-        path = self.project / ".claude" / "agents" / "poteto-agent.md"
-        current = path.read_bytes()
-        prefix = current[: current.rindex(b"<!-- pstack-generated")]
-        older = prefix.replace(b"Read the `poteto-mode` skill", b"Read the poteto-mode skill, older wording")
-        self.assertNotEqual(older, prefix)
-        digest = hashlib.sha256(older).hexdigest()
-        path.write_bytes(older + f"<!-- pstack-generated:v1:poteto-agent:{digest} -->\n".encode())
-        checked = self.subagents(SUBAGENTS, "check", "--harness", "claude-code", "--project", self.project, expect=1)
-        report = json.loads(checked.stdout)
-        self.assertEqual({row["id"]: row["native_file"] for row in report["roles"]}, {"poteto-agent": "outdated-generated", "comment-sicko": "current"})
-        refreshed = self.subagents(SUBAGENTS, "install", "--harness", "claude-code", "--project", self.project, expect=0)
-        by_id = {row["id"]: (row["action"], row["native_file"]) for row in json.loads(refreshed.stdout)["roles"]}
-        self.assertEqual(by_id, {"poteto-agent": ("installed", "current"), "comment-sicko": ("unchanged", "current")})
-        self.assertEqual(path.read_bytes(), current)
+        def native(command, expect):
+            result = self.subagents(SUBAGENTS, command, "--harness", "claude-code", "--project", self.project, expect=expect)
+            report = json.loads(result.stdout)
+            return report["roles"] + report["efforts"]
+
+        def age(agent_id, wording):
+            path = self.project / ".claude" / "agents" / f"{agent_id}.md"
+            current = path.read_bytes()
+            prefix = current[: current.rindex(b"<!-- pstack-generated")]
+            older = prefix.replace(wording, wording + b", older wording")
+            self.assertNotEqual(older, prefix)
+            digest = hashlib.sha256(older).hexdigest()
+            path.write_bytes(older + f"<!-- pstack-generated:v1:{agent_id}:{digest} -->\n".encode())
+            return path, current
+
+        native("install", 0)
+        persona, persona_bytes = age("poteto-agent", b"Read the `poteto-mode` skill")
+        effort, effort_bytes = age("pstack-effort-high", b"Work the task")
+        stale = {row["id"]: row["native_file"] for row in native("check", 1) if row["native_file"] != "current"}
+        self.assertEqual(stale, {"poteto-agent": "outdated-generated", "pstack-effort-high": "outdated-generated"})
+        refreshed = native("install", 0)
+        self.assertEqual({row["id"] for row in refreshed if row["action"] == "installed"}, {"poteto-agent", "pstack-effort-high"})
+        self.assertEqual({row["native_file"] for row in refreshed}, {"current"})
+        self.assertEqual((persona.read_bytes(), effort.read_bytes()), (persona_bytes, effort_bytes))
         setup = (SKILLS / "setup-pstack/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("Offer the reference's `install` for that CLI and scope when a row reports `outdated-generated`.", setup)
 
