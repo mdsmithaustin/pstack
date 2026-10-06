@@ -177,6 +177,14 @@ class WindowsTestTests(unittest.TestCase):
             'monkeypatch.setattr(main_desktop.sys, "platform", "win32")',
         ), [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
 
+    def test_a_module_qualified_platform_patch_is_caught(self):
+        for patch in ('patch("hermes_cli.main_desktop.sys.platform", "win32")',
+                      "monkeypatch.setattr('hermes_cli.main_desktop.sys.platform', 'win32')",
+                      'mock.patch.object(main_desktop.sys, "platform", "win32")'):
+            with self.subTest(patch):
+                self.assertEqual(self.failures('@pytest.mark.platforms("windows")', patch),
+                                 [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
+
 
 def new_file(path, content):
     """(diff, files) for a file that a diff adds whole."""
