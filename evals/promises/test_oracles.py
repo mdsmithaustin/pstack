@@ -3057,6 +3057,13 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
         self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 1")
 
+    def test_copilot_one_unresolved_path_read_by_separate_commands_is_one_read(self):
+        brief, base = "Write `rationale.md` in your directory.", "cat /tmp/k/c1/relay/cache.py"
+        repeated = self.lead_reads(brief, ['cat "$d/rationale.md"'] * 5 + [base])
+        self.assertEqual((repeated["verdict"], repeated["evidence"][0]), (FAIL, "rationale files read after the last candidate spawn: 1"))
+        looped = self.lead_reads(brief, ['for x in a:1 b:2 c:3 d:4 e:5; do id=${x%%:*}; cat "/tmp/k/$id/rationale.md"; done', base])
+        self.assertEqual((looped["verdict"], looped["evidence"][0]), (PASS, "rationale files read after the last candidate spawn: 5"))
+
     def test_an_assigned_text_rationale_counts(self):
         result = self.lead_reads("Save your reasoning to `decision.txt`.", [f"cat /tmp/k/c{n}/decision.txt" for n in range(1, 6)] + ["cat /tmp/k/c1/relay/cache.py"])
         self.assertEqual(result["verdict"], PASS, result)
