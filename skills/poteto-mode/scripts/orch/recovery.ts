@@ -65,12 +65,26 @@ export interface Resolution {
   readonly model: ConcreteExecutionIdentity;
   readonly effort: ConcreteExecutionIdentity;
 }
+export interface CanonicalResolvedArm {
+  readonly role: string;
+  readonly arm: NumericPanelArm;
+  readonly model: string;
+  readonly effort: string;
+  readonly source: string;
+  readonly notes?: readonly string[];
+  readonly step?: "up" | "down" | "same-model";
+}
+export interface ResolutionContext {
+  readonly workModel: string | null;
+  readonly resolvedArm: CanonicalResolvedArm;
+}
 export interface BeginAttempt extends AttemptSlot {
   readonly requestId: string;
   readonly replace?: string;
   readonly brief: string;
   readonly checkout: string;
   readonly resolution: Resolution;
+  readonly resolutionContext?: ResolutionContext;
 }
 export type Observation =
   | { readonly kind: "native"; readonly identity: string }
@@ -173,16 +187,47 @@ function concreteIdentity(value: unknown): ConcreteExecutionIdentity {
     throw new UserError("execution identity must be concrete");
   return identity;
 }
+function parseResolutionContext(
+  value: unknown,
+  role: string,
+  arm: NumericPanelArm,
+): ResolutionContext {
+  const row = record(value);
+  if (row.workModel !== null && typeof row.workModel !== "string")
+    throw new UserError("resolutionContext workModel must be a string or null");
+  const resolved = record(row.resolvedArm);
+  if (resolved.role !== role || resolved.arm !== arm)
+    throw new UserError("resolutionContext role and arm must match the attempt");
+  if (
+    resolved.step !== undefined && resolved.step !== "up" &&
+    resolved.step !== "down" && resolved.step !== "same-model"
+  )
+    throw new UserError("invalid canonical reviewer step");
+  return {
+    workModel: row.workModel,
+    resolvedArm: {
+      role,
+      arm,
+      model: text(resolved.model),
+      effort: text(resolved.effort),
+      source: text(resolved.source),
+      ...(resolved.notes === undefined ? {} : { notes: array(resolved.notes).map(text) }),
+      ...(resolved.step === undefined ? {} : { step: resolved.step }),
+    },
+  };
+}
 export function parseBeginAttempt(value: unknown): BeginAttempt {
   const row = record(value);
   const resolution = record(row.resolution);
   const role = text(row.role);
   if (row.authority !== "worker" && row.authority !== "verifier")
     throw new UserError("authority must be worker or verifier");
+  const unit = text(row.unit);
+  const arm = parseArm(role, row.arm);
   return {
-    unit: text(row.unit),
+    unit,
     role,
-    arm: parseArm(role, row.arm),
+    arm,
     authority: row.authority,
     requestId: text(row.requestId),
     ...(row.replace === undefined ? {} : { replace: safeId(row.replace) }),
@@ -193,6 +238,9 @@ export function parseBeginAttempt(value: unknown): BeginAttempt {
       model: concreteIdentity(resolution.model),
       effort: concreteIdentity(resolution.effort),
     },
+    ...(row.resolutionContext === undefined
+      ? {}
+      : { resolutionContext: parseResolutionContext(row.resolutionContext, role, arm) }),
   };
 }
 export function parseAttempt(value: unknown): Attempt {

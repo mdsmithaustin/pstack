@@ -85,6 +85,150 @@ describe("CLI recovery", () => {
   });
 });
 
+describe("CLI reviewer context retention", () => {
+  const context = {
+    workModel: "gpt-6-sol@medium",
+    resolvedArm: {
+      role: "trail reviewer", arm: 1, model: "gpt-6-sol", effort: "high", source: "user ## codex",
+      notes: ["gpt-6.1-sol runs as gpt-6-sol, the newest release this Codex lists with effort high", "trail reviewer matched work model gpt-6-sol; the config allows no other model in its family, so this is a same-model review"],
+      step: "same-model",
+    },
+  };
+  it("keeps immutable context through observation, direct replay, rebind, finish and replacement", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "old").code).toBe(0);
+    const first = await begin(dir, run, "review-context", "worker", undefined, "trail reviewer", context);
+    expect(first.attempt).toMatchObject({ resolutionContext: context, resolution: { harness: "codex", model: "gpt-6.1-sol", effort: "xhigh" } });
+    expect(Object.keys(first.attempt.resolutionContext.resolvedArm)).toEqual(["role", "arm", "model", "effort", "source", "notes", "step"]);
+    const observation = await input(dir, "observation.json", { kind: "native", identity: "reviewer-1" });
+    expect(JSON.parse(run("attempt", "observe", first.attempt.id, "--file", observation).out).resolutionContext).toEqual(context);
+    await killAt(dir, "attempt", ["unit", "set", "u", "--state", "restacked", "--sha", "new", "--attempt", first.attempt.id]);
+    const rebound = JSON.parse(run("attempt", "list").out)[0];
+    expect(rebound).toMatchObject({ resolutionContext: context, target: { pr: "12", sha: "new" }, observation: { kind: "native", identity: "reviewer-1" }, settled: null });
+    expect(rebound.binding).not.toBe(first.attempt.binding);
+    expect(JSON.parse(run("attempt", "begin", "--file", first.path).out)).toEqual(rebound);
+    const original = JSON.parse(await readFile(first.path, "utf8"));
+    for (const changed of [
+      { ...context, workModel: "gpt-6-sol@inherit-parent" },
+      { ...context, resolvedArm: { ...context.resolvedArm, source: "workspace ## codex" } },
+      { ...context, resolvedArm: { ...context.resolvedArm, notes: [...context.resolvedArm.notes].reverse() } },
+      { ...context, resolvedArm: { ...context.resolvedArm, step: "down" } },
+      { ...context, resolvedArm: { ...context.resolvedArm, step: undefined } },
+    ]) {
+      const path = await input(dir, "conflict.json", { ...original, resolutionContext: changed });
+      const result = run("attempt", "begin", "--file", path);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("conflicting attempt requestId");
+      expect(JSON.parse(run("attempt", "list").out)[0]).toEqual(rebound);
+    }
+    expect(run("attempt", "finish", first.attempt.id, "--reason", "inspected").code).toBe(0);
+    const finished = JSON.parse(run("attempt", "begin", "--file", first.path).out);
+    expect(finished).toMatchObject({ resolutionContext: context, settled: { kind: "finished", reason: "inspected" } });
+    const changed = await input(dir, "conflict.json", { ...original, resolutionContext: { ...context, workModel: null } });
+    expect(run("attempt", "begin", "--file", changed).err).toContain("conflicting attempt requestId");
+    const replacementContext = { ...context, resolvedArm: { ...context.resolvedArm, source: "workspace ## codex" } };
+    const second = await begin(dir, run, "replacement-context", "worker", first.attempt.id, "trail reviewer", replacementContext);
+    expect(JSON.parse(run("attempt", "list").out)).toEqual([finished, second.attempt]);
+    expect(second.attempt.resolutionContext).toEqual(replacementContext);
+    expect(run("attempt", "begin", "--file", second.path).out).toBe(second.result.out);
+  });
+  it("replays context with direct verifier settlement and retains request identity", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+    const first = await begin(dir, run, "direct-review-context", "verifier", undefined, "trail reviewer", context);
+    await killAt(dir, "ledger", ["ledger", "record", "12", "head", "unit-test-verified", "--evidence", "proof", "--attempt", first.attempt.id]);
+    const saved = JSON.parse(run("attempt", "list").out)[0];
+    expect(saved).toMatchObject({ resolutionContext: context, settled: { kind: "accepted" }, target: { pr: "12", sha: "head" }, binding: first.attempt.binding });
+    expect(JSON.parse(run("ledger", "check", "12", "head").out)).toMatchObject({ verdict: "unit-test-verified", evidence: "proof" });
+    expect(JSON.parse(run("attempt", "begin", "--file", first.path).out)).toEqual(saved);
+    const changed = await input(dir, "conflict.json", { ...JSON.parse(await readFile(first.path, "utf8")), resolutionContext: { ...context, workModel: "gpt-6-sol" } });
+    expect(run("attempt", "begin", "--file", changed).err).toContain("conflicting attempt requestId");
+  });
+  for (const point of ["decision", "attempt"] as const) {
+    it(`replays acknowledgment context at ${point} while preserving completion token and head rules`, async () => {
+      const { dir, run } = await fixture();
+      expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+      const first = await begin(dir, run, "ack-review-context", "verifier", undefined, "trail reviewer", context);
+      expect(run("inbox", "push", "verifier", "u", "passed", ...completionArgs(first.attempt, { pr: "12", sha: "head" })).code).toBe(0);
+      const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+      const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "verdict", pr: 12, sha: "head", verdict: "unit-test-verified", evidence: "proof" } }]);
+      await killAt(dir, point, ["inbox", "ack", batch.id, "--file", path]);
+      const saved = JSON.parse(run("attempt", "list").out)[0];
+      expect(saved).toMatchObject({ resolutionContext: context, settled: { kind: "accepted" }, binding: first.attempt.binding });
+      expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+      expect(JSON.parse(run("inbox", "receipts").out)[0].decisions[0].attempt.resolutionContext).toEqual(context);
+      expect(run("unit", "set", "u", "--state", "restacked", "--sha", "new", "--attempt", saved.id).code).toBe(0);
+      const rebound = JSON.parse(run("attempt", "list").out)[0];
+      expect(rebound.resolutionContext).toEqual(context);
+      expect(JSON.parse(run("attempt", "begin", "--file", first.path).out)).toEqual(rebound);
+      for (const completion of [completionArgs(first.attempt, { pr: "12", sha: "new" }), completionArgs(rebound, { pr: "12", sha: "head" })]) {
+        expect(run("inbox", "push", "verifier", "u", "late", ...completion).code).toBe(0);
+        const pending = JSON.parse(run("inbox", "drain", "--receipt").out);
+        const late = await input(dir, "late.json", [{ event: pending.events[0].id, outcome: { kind: "verdict", pr: 12, sha: "new", verdict: "unit-test-verified", evidence: "stale" } }]);
+        expect(run("inbox", "ack", pending.id, "--file", late).code).toBe(1);
+        await input(dir, "late.json", [{ event: pending.events[0].id, outcome: { kind: "discard", reason: "stale completion" } }]);
+        expect(run("inbox", "ack", pending.id, "--file", late).code).toBe(0);
+      }
+      expect(run("ledger", "check", "12", "new").code).toBe(2);
+      expect(run("attempt", "finish", saved.id, "--reason", "inspected").code).toBe(0);
+      expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+      expect(JSON.parse(run("attempt", "begin", "--file", first.path).out)).toMatchObject({ resolutionContext: context, settled: { kind: "finished", reason: "inspected" } });
+      const changed = await input(dir, "conflict.json", { ...JSON.parse(await readFile(first.path, "utf8")), resolutionContext: { ...context, workModel: null } });
+      expect(run("attempt", "begin", "--file", changed).err).toContain("conflicting attempt requestId");
+    });
+  }
+  it("preserves optional field presence and known null without equating canonical and executed identity", async () => {
+    const { dir, run } = await fixture();
+    const knownNull = { workModel: null, resolvedArm: { role: "trail reviewer", arm: 1, model: "inherit-parent", effort: "inherit-parent", source: "user flat" } };
+    const first = await begin(dir, run, "known-null-context", "verifier", undefined, "trail reviewer", knownNull);
+    const saved = JSON.parse(run("attempt", "list").out)[0];
+    expect(saved.resolutionContext).toEqual(knownNull);
+    expect(Object.keys(saved.resolutionContext.resolvedArm)).toEqual(["role", "arm", "model", "effort", "source"]);
+    const original = JSON.parse(await readFile(first.path, "utf8"));
+    const withNotes = { ...knownNull, resolvedArm: { ...knownNull.resolvedArm, notes: [] } };
+    const conflict = await input(dir, "presence.json", { ...original, resolutionContext: withNotes });
+    expect(run("attempt", "begin", "--file", conflict).err).toContain("conflicting attempt requestId");
+    const second = await begin(dir, run, "present-notes-context", "verifier", first.attempt.id, "trail reviewer", withNotes);
+    expect(second.attempt.resolutionContext).toEqual(withNotes);
+    const reordered = await input(dir, "reordered.json", { ...JSON.parse(await readFile(second.path, "utf8")), resolutionContext: { resolvedArm: { notes: [], source: "user flat", effort: "inherit-parent", model: "inherit-parent", arm: 1, role: "trail reviewer" }, workModel: null } });
+    expect(run("attempt", "begin", "--file", reordered).out).toBe(second.result.out);
+  });
+  it("rejects malformed partial pairs and mismatched slots before allocation", async () => {
+    const { dir, run } = await fixture();
+    const legacy = await begin(dir, run, "legacy-context", "verifier");
+    const request = JSON.parse(await readFile(legacy.path, "utf8"));
+    for (const value of [null, { workModel: null }, { resolvedArm: context.resolvedArm }, { ...context, workModel: false },
+      { ...context, resolvedArm: { ...context.resolvedArm, role: "feature" } },
+      { ...context, resolvedArm: { ...context.resolvedArm, arm: 2 } },
+      { ...context, resolvedArm: { ...context.resolvedArm, notes: ["first", 2] } },
+      { ...context, resolvedArm: { ...context.resolvedArm, step: "sideways" } }]) {
+      const path = await input(dir, "malformed.json", { ...request, requestId: "new-context", replace: legacy.attempt.id, resolutionContext: value });
+      expect(run("attempt", "begin", "--file", path).code).toBe(1);
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([legacy.attempt]);
+    }
+    const valid = await begin(dir, run, "new-context", "verifier", legacy.attempt.id, "trail reviewer", context);
+    expect(valid.attempt.resolutionContext).toEqual(context);
+  });
+  it("reads legacy absence and accepts its bound completion without enriching the request", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+    const legacy = await begin(dir, run, "legacy-reviewer", "verifier");
+    expect(JSON.parse(run("attempt", "list").out)[0]).toEqual(legacy.attempt);
+    expect(Object.hasOwn(legacy.attempt, "resolutionContext")).toBe(false);
+    expect(run("inbox", "push", "verifier", "u", "passed", ...completionArgs(legacy.attempt, { pr: "12", sha: "head" })).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "verdict", pr: 12, sha: "head", verdict: "unit-test-verified", evidence: "old bound report" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+    expect(JSON.parse(run("ledger", "check", "12", "head").out)).toMatchObject({ verdict: "unit-test-verified", evidence: "old bound report" });
+    const saved = JSON.parse(run("attempt", "begin", "--file", legacy.path).out);
+    expect(saved).toMatchObject({ id: legacy.attempt.id, binding: legacy.attempt.binding, settled: { kind: "accepted" } });
+    expect(Object.hasOwn(saved, "resolutionContext")).toBe(false);
+    const changed = await input(dir, "enriched.json", { ...JSON.parse(await readFile(legacy.path, "utf8")), resolutionContext: context });
+    expect(run("attempt", "begin", "--file", changed).err).toContain("conflicting attempt requestId");
+    expect(JSON.parse(run("attempt", "list").out)[0]).toEqual(saved);
+  });
+});
+
 async function preload(
   dir: string,
   point: "claim" | "emission" | "unit" | "decision" | "attempt" | "ledger" | "complete" | "archive-before" | "archive" | "migration" | "migration-marker",
@@ -278,6 +422,7 @@ async function begin(
   authority = "worker",
   replace?: string,
   role = authority === "worker" ? "feature" : "trail reviewer",
+  resolutionContext?: unknown,
 ) {
   const path = await input(dir, `${requestId}.json`, {
     unit: "u",
@@ -289,6 +434,7 @@ async function begin(
     checkout: dir,
     resolution: { harness: "codex", model: "gpt-6.1-sol", effort: "xhigh" },
     ...(replace === undefined ? {} : { replace }),
+    ...(resolutionContext === undefined ? {} : { resolutionContext }),
   });
   const result = run("attempt", "begin", "--file", path);
   expect(result.code).toBe(0);
@@ -1274,6 +1420,54 @@ describe("CLI terminal disposition text", () => {
 
 
 describe("CLI bot core regressions", () => {
+  it("retains successful reviewer context from normal CLI through cold store to recovery CLI", async () => {
+    const { dir, run } = await fixture();
+    await mkdir(join(dir, ".agents"));
+    await writeFile(join(dir, ".agents", "pstack-models.md"),
+      "## claude-code\ntrail reviewer: opus@high\n## codex\ntrail reviewer: gpt-6.1-sol@high\nfeature: gpt-6-astra@high\n");
+    const setup = join(import.meta.dir, "../../../../../skills/setup-pstack/scripts");
+    const python = process.env.PSTACK_TEST_PYTHON ?? "python3";
+    const environment = { ...process.env, CODEX_HOME: join(dir, "absent-catalog"), PYTHONDONTWRITEBYTECODE: "1" };
+    const workModel = "claude-opus-5-5[1m]@xhigh";
+    const normal = (harness: string) => {
+      const result = Bun.spawnSync([python, join(setup, "check-models-config.py"), "--resolve", "--harness", harness,
+        "--project", dir, "--user-file", join(dir, "absent-user"), "--work-model", workModel, "trail reviewer"], { env: environment });
+      expect(result.exitCode).toBe(0);
+      return JSON.parse(result.stdout.toString());
+    };
+    const sourceArm = normal("claude-code");
+    expect(sourceArm).toEqual({ role: "trail reviewer", arm: 1, model: "fable", effort: "high", source: "workspace ## claude-code",
+      notes: ["trail reviewer matched work model opus; stepped up to fable"], step: "up" });
+    const resolutionContext = { workModel, resolvedArm: sourceArm };
+    const path = await input(dir, "source-reviewer.json", {
+      unit: "u", role: sourceArm.role, arm: sourceArm.arm, authority: "verifier", requestId: "source-reviewer",
+      brief: "brief.md", checkout: dir, resolution: { harness: "claude-code", model: "claude-fable-5-1", effort: "high" }, resolutionContext,
+    });
+    const created = run("attempt", "begin", "--file", path);
+    expect(created.code).toBe(0);
+    expect(JSON.parse(created.out).resolutionContext).toEqual(resolutionContext);
+    const cold = run("attempt", "list");
+    expect(cold.code).toBe(0);
+    const saved = JSON.parse(cold.out)[0];
+    expect(saved.resolutionContext).toEqual(resolutionContext);
+    expect(JSON.parse(await readFile(join(dir, "attempts.json"), "utf8"))[0].resolutionContext).toEqual(resolutionContext);
+    expect(run("attempt", "begin", "--file", path).out).toBe(created.out);
+    const projection = await input(dir, "resolution-input.json", { workModel: saved.resolutionContext.workModel });
+    const contexts = await input(dir, "contexts.json", {});
+    const destination = { role: "trail reviewer", arm: 1, model: "gpt-6-astra", effort: "high", source: "workspace ## codex",
+      notes: ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], step: "up" };
+    expect(normal("codex")).toEqual(destination);
+    const recovery = Bun.spawnSync([python, join(setup, "resolve-resume.py"), "--source", saved.resolution.harness,
+      "--role", saved.role, "--arm", String(saved.arm), "--project", dir, "--user-file", join(dir, "absent-user"),
+      "--contexts", contexts, "--resolution-input", projection], { env: environment });
+    expect(recovery.exitCode).toBe(1);
+    expect(JSON.parse(recovery.stdout.toString())).toEqual({
+      priority: { source: "claude-code", destinations: ["codex"], configured_source: "default" },
+      candidates: [{ harness: "codex", resolution: destination, route: null, version: null, eval_receipt: null,
+        eligible: false, reason: "destination availability, route or version is unobserved" }],
+    });
+    expect(JSON.parse(run("attempt", "list").out)[0]).toEqual(saved);
+  });
   it("round trips numeric saved role arms through the existing destination resolver", async () => {
     const { dir, run } = await fixture();
     const config = join(dir, ".agents");

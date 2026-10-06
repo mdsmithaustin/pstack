@@ -52,7 +52,7 @@ When you're back, ask for the run in review form:
 /show-me-your-work catch me up on what you did last night
 ```
 
-Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, stepping down a tier if that matches the model that did the work, to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny. Read that section first, then the log rows it points at. You're auditing decisions, not re-reading the whole night.
+Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review, labeled as one, when it allows none), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny. Read that section first, then the log rows it points at. You're auditing decisions, not re-reading the whole night.
 
 ## When the night holds a queue, not a task
 
@@ -63,6 +63,8 @@ The contract above drives one task to one finish condition. Some nights hold mor
 ```text
 /poteto-mode full autopilot on this queue. each item is independent. i want them merged by morning.
 ```
+
+On a base branch with a merge queue, owners stop at merge-ready, and the final reply lists those PRs as open operator gates.
 
 [Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) runs the same owner loop but ships nothing. You wake up to one linear base-branch stack with a verifier's verdict on every link, and you review and land it yourself. Pick it over Autopilot-full when the changes are coupled, or when you want your own eyes on the work before anything merges:
 

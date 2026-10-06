@@ -36,6 +36,23 @@ class DestinationCandidate(NamedTuple):
     reason: str | None
 
 
+class ResolutionInput(NamedTuple):
+    work_model: str | None
+
+
+def read_resolution_input(path: Path) -> ResolutionInput:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if (not isinstance(value, dict) or set(value) != {"workModel"}
+            or value["workModel"] is not None and not isinstance(value["workModel"], str)):
+        raise ValueError("resolution input must be an object containing only workModel as a string or null")
+    if value["workModel"] is not None:
+        try:
+            models.work_model_argument(value["workModel"])
+        except argparse.ArgumentTypeError as error:
+            raise ValueError(f"argument --work-model: {error}") from error
+    return ResolutionInput(value["workModel"])
+
+
 def read_config(path: Path) -> tuple[dict, dict]:
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
     sections, findings = models.parse(text)
@@ -46,13 +63,17 @@ def read_config(path: Path) -> tuple[dict, dict]:
     return sections, priorities
 
 
-def candidate(harness: str, role: str, arm: int, layers: list, context: dict, oracle: Path | None) -> DestinationCandidate:
+def candidate(harness: str, role: str, arm: int, layers: list, context: dict, oracle: Path | None,
+              resolution_input: ResolutionInput | None = None) -> DestinationCandidate:
     route, version = context.get("route"), context.get("version")
     receipt = None
     resolution = None
     try:
+        if role == "trail reviewer" and resolution_input is None:
+            raise ValueError("saved reviewer resolution input is unknown")
         catalog = models.CLIS[harness].catalog
-        arms = models.resolve_role(role, harness, layers, models.listed_models(catalog) if catalog else models.NO_CATALOG)
+        arms = models.resolve_role(role, harness, layers, models.listed_models(catalog) if catalog else models.NO_CATALOG,
+                                   work_model=resolution_input.work_model if resolution_input is not None else None)
         if arm > len(arms):
             raise ValueError(f"saved arm {arm} does not exist")
         resolved = arms[arm - 1]
@@ -84,6 +105,8 @@ def candidate(harness: str, role: str, arm: int, layers: list, context: dict, or
         if receipt["suite"] != "pstack-resume-runner-v2":
             raise ValueError("unsupported eval suite")
         return DestinationCandidate(harness, resolution, route, version, receipt, True, None)
+    except models.WorkModelSyntaxError:
+        raise
     except (OSError, ValueError, KeyError, TypeError, LookupError, subprocess.TimeoutExpired) as error:
         return DestinationCandidate(harness, resolution, route, version, receipt, False, str(error))
 
@@ -97,10 +120,12 @@ def main() -> int:
     parser.add_argument("--user-file", type=Path, default=Path.home() / ".agents" / models.CONFIG_NAME)
     parser.add_argument("--contexts", type=Path, required=True, help="operator-observed destination contexts keyed by harness")
     parser.add_argument("--oracle", type=Path, help="trusted current resume-recovery oracle.py from the source checkout")
+    parser.add_argument("--resolution-input", type=Path, help="saved successful resolver input containing workModel as a string or null")
     args = parser.parse_args()
     if args.arm < 1 or (args.role not in models.PANEL_ROLES and args.arm != 1):
         parser.error("saved arm must be positive and single-value roles require arm 1")
     try:
+        resolution_input = read_resolution_input(args.resolution_input) if args.resolution_input is not None else None
         workspace, workspace_priority = read_config(args.project / ".agents" / models.CONFIG_NAME)
         user, user_priority = read_config(args.user_file)
         defaults, _ = models.parse(models.SKILL_DEFAULT_FILE.read_text(encoding="utf-8"))
@@ -110,7 +135,7 @@ def main() -> int:
         priority = models.resolve_priority(args.source, workspace_priority, user_priority)
         candidates = [candidate(destination, args.role, args.arm,
                                 models.build_layers(destination, workspace, user, defaults),
-                                contexts.get(destination, {}), args.oracle.resolve() if args.oracle else None)
+                                contexts.get(destination, {}), args.oracle.resolve() if args.oracle else None, resolution_input)
                       for destination in priority.destinations]
         print(json.dumps({"priority": priority._asdict(), "candidates": [item._asdict() for item in candidates]}))
         return 0 if any(item.eligible for item in candidates) else 1

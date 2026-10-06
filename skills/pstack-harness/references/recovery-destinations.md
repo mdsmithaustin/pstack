@@ -14,6 +14,22 @@ request into the destination brief. Use the current resolver for that exact
 role and arm. Respect the human request if it prevents a candidate's use.
 Never guess a role, use another arm, or guess the inherited model or effort.
 
+Retain the successful resolver's exact raw work-model argument and complete
+canonical arm as the attempt's optional `resolutionContext`. Keep actual
+execution identity in `resolution`. Substitution and inheritance can make
+those identities differ. A recorded null work input means the successful
+invocation omitted the flag. Absent historical context means unknown input.
+An unknown reviewer input denies recovery eligibility, while existing bound
+completions remain subject to their saved token and head rules.
+
+For destination resolution, copy source harness, role, and exact arm from
+the same saved attempt. Project its input into `{"workModel": <string-or-null>}`
+and pass that file through `--resolution-input`. Each destination recomputes
+the complete canonical arm with current configuration. The full result enters
+the existing five-key binding. A destination error never deletes the saved
+input or triggers a retry without it. A replacement keeps the original input
+and records its newly resolved destination arm under a new request id.
+
 A candidate needs a current actual destination eval for its concrete
 resolution and observed route context. The independent oracle checks brief
 and standing-order pickup, scoped execution and file publication, completion

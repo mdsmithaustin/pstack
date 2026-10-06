@@ -239,6 +239,25 @@
    ],
    "scenario": "overnight-run"
   },
+  "autopilot-full-merge-queue-stops-at-merge-ready": {
+   "check": "static",
+   "claim": "On a base branch with a merge queue, Autopilot-full owners stop at merge-ready and the final reply lists those PRs as open operator gates.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/autopilot-full.md",
+     "quote": "When `merge-gate` refuses because the base branch has a merge queue, the owner stops at merge-ready and the root reports an open operator gate."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/autopilot-full.md",
+     "quote": "Countersigns granted and why. Open operator gates."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/autopilot-full.md",
+    "skills/poteto-mode/scripts/watch-pr/merge-gate"
+   ]
+  },
   "autopilot-full-owner-never-merges-own-verdict": {
    "check": "static",
    "claim": "No Autopilot-full owner merges on its own verdict; only a clean swarm verdict on the patch that merges authorizes the merge.",
@@ -1328,9 +1347,29 @@
     "skills/poteto-mode/scripts/watch-pr/merge-gate-render.ts"
    ]
   },
+  "merge-gate-override-needs-user-approval": {
+   "check": "static",
+   "claim": "Shipping passes merge-gate `--override` only when the user approves landing over a failed gate, for every failed gate including a merge queue, and an Autopilot-full full-autonomy grant never counts as that approval.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/shipping.md",
+     "quote": "Pass `--override \"<reason>\"` only when the user approves landing over a failed gate."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/autopilot-full.md",
+     "quote": "The grant never approves `--override` for any refused gate."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/autopilot-full.md",
+    "skills/poteto-mode/playbooks/shipping.md",
+    "skills/poteto-mode/scripts/watch-pr/merge-gate"
+   ]
+  },
   "merge-gate-refuses-until-gates-hold": {
    "check": "script",
-   "claim": "merge-gate merges only when the latest verdict block matches the PR's current head and patch-id, every check passed, every bot review body is acknowledged, threads are resolved, and the PR is mergeable; otherwise it exits 10 with nothing merged.",
+   "claim": "merge-gate merges only when the latest verdict block matches the PR's current head and patch-id, every check passed, every bot review body is acknowledged, threads are resolved, the PR is mergeable, and its base branch has no merge queue; otherwise it exits 10 with nothing merged.",
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/scripts/watch-pr/merge-gate",
@@ -2308,7 +2347,7 @@
   },
   "show-me-your-work-spawns-trail-reviewer": {
    "check": "live",
-   "claim": "Before summarizing a run, show-me-your-work spawns a reviewer on the configured trail reviewer model, stepped down a tier if it matches the working model.",
+   "claim": "Before summarizing a run, show-me-your-work spawns a reviewer on the configured trail reviewer model, or, if that matches the working model, on another allowed model in the working model's family, or as a labeled same-model review when none is allowed.",
    "harness_sensitive": true,
    "live_case": "tally fixture; prompt the overnight contract from 07-overnight.md with `/loop until done`; pass when figure-it-out designs phases before code, decisions.tsv fills one row per iteration, no permission question is asked, and `/show-me-your-work catch me up` spawns a trail reviewer and ends with an Attention section.",
    "owners": [
@@ -2422,7 +2461,7 @@
   },
   "swarm-judging-worker-uses-trail-reviewer": {
    "check": "static",
-   "claim": "A swarm worker that reads and judges a diff spawns on the `trail reviewer` role, stepped down a tier when it matches the author's model.",
+   "claim": "A swarm worker that reads and judges a diff spawns on the `trail reviewer` role, on another allowed model in the author's model family when the configured one matches the author's model, or as a labeled same-model review when none is allowed.",
    "evidence": [
     {
      "file": "skills/swarm/SKILL.md",
@@ -2430,11 +2469,11 @@
     },
     {
      "file": "skills/swarm/SKILL.md",
-     "quote": "Before you spawn it, find the model that wrote the work, because **Spawn a role** steps this role down a tier when it resolves to that model."
+     "quote": "Before you spawn it, find the model that wrote the work, because **Spawn a role** passes it as `--work-model` and the resolver picks a different model in the work model's family for this role when the config allows one."
     },
     {
      "file": "skills/pstack-harness/SKILL.md",
-     "quote": "When `trail reviewer` resolves to the model that did the work, step down one tier in the same family"
+     "quote": "pass `--work-model <model>@<effort>` with the model and effort that did the work, and use the printed arm."
     }
    ],
    "harness_sensitive": false,
@@ -2859,7 +2898,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "a0de97277834"
+    "18a28e982169"
    ],
    "promise": "show-me-your-work-spawns-trail-reviewer",
    "sources": [
@@ -3002,6 +3041,36 @@
     "port"
    ],
    "text": "Before handing it over, the generator proves the skill once end to end: launch, doctor check, drive one feature, capture evidence, clean up."
+  },
+  "925332aad252": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "port"
+   ],
+   "promise": "merge-gate-refuses-until-gates-hold",
+   "text": "It also refuses when the base branch has a merge queue, because the queue would land the PR later without rechecking the verdict or the bot reviews."
+  },
+  "44a7e275956d": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "autopilot-full-merge-queue-stops-at-merge-ready",
+   "sources": [
+    "port"
+   ],
+   "text": "On a base branch with a merge queue, owners stop at merge-ready, and the final reply lists those PRs as open operator gates."
+  },
+  "7a704c1352d8": {
+   "also": [
+    "merge-gate-refuses-until-gates-hold"
+   ],
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "port"
+   ],
+   "promise": "merge-gate-override-needs-user-approval",
+   "text": "The lead asks you before it overrides any refusal."
   },
   "0c4fcaa38974": {
    "class": "promise",
@@ -6127,7 +6196,7 @@
    ],
    "text": "The model rule applies to new sessions."
   },
-  "a0de97277834": {
+  "18a28e982169": {
    "also": [
     "show-me-your-work-review-ends-with-attention"
    ],
@@ -6137,7 +6206,7 @@
    "sources": [
     "port"
    ],
-   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, stepping down a tier if that matches the model that did the work, to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
+   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review, labeled as one, when it allows none), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
   },
   "a13ebff18c90": {
    "class": "context",

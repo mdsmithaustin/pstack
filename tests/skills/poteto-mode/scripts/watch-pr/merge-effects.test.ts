@@ -12,8 +12,12 @@ import { join } from "node:path";
 import {
   REVIEW_CONNECTION_LIMITS,
   REVIEW_THREADS_QUERY,
+  WatcherQueryError,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
-import { parseConversation } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-effects.ts";
+import {
+  parseConversation,
+  parseMergeQueue,
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-effects.ts";
 
 const SOURCE_DIR = join(
   import.meta.dir,
@@ -300,6 +304,51 @@ describe("GhGitMergePort gh commands", () => {
     );
   });
 
+  it("reads the merge queue of the base branch through GraphQL", () => {
+    withFakeGh(
+      `printf '%s\\n' '{"data":{"repository":{"mergeQueue":{"id":"MQ_1"}}}}'`,
+      (path, argv) => {
+        const out = runPort(
+          process.cwd(),
+          `console.log(JSON.stringify({ queued: await port.usesMergeQueue(context, "release/2") }));`,
+          path
+        );
+        expect(out).toEqual({ queued: true });
+        const sent = argv();
+        expect(sent.slice(0, 4)).toEqual(["---", "api", "graphql", "-f"]);
+        expect(sent.join("\n")).toContain("mergeQueue(branch: $branch)");
+        expect(sent).toContain("branch=release/2");
+        expect(sent).toContain("owner=o");
+        expect(sent).toContain("repo=r");
+      }
+    );
+  });
+
+  it("reports no queue when the branch has none", () => {
+    withFakeGh(
+      `printf '%s\\n' '{"data":{"repository":{"mergeQueue":null}}}'`,
+      (path) => {
+        const out = runPort(
+          process.cwd(),
+          `console.log(JSON.stringify({ queued: await port.usesMergeQueue(context, "main") }));`,
+          path
+        );
+        expect(out).toEqual({ queued: false });
+      }
+    );
+  });
+
+  it("fails closed when the queue read fails", () => {
+    withFakeGh(`echo 'HTTP 502' >&2; exit 1`, (path) => {
+      const out = runPort(
+        process.cwd(),
+        `await port.usesMergeQueue(context, "main");`,
+        path
+      );
+      expect(out.error).toContain("HTTP 502");
+    });
+  });
+
   it("posts the comment body verbatim", () => {
     withFakeGh("", (path, argv) => {
       runPort(
@@ -419,5 +468,24 @@ describe("parseConversation", () => {
         },
       ],
     });
+  });
+});
+
+describe("parseMergeQueue", () => {
+  const page = (mergeQueue: unknown) => ({ data: { repository: { mergeQueue } } });
+
+  it("is true when the branch has a queue and false when it has none", () => {
+    expect(parseMergeQueue(page({ id: "MQ_1" }))).toBe(true);
+    expect(parseMergeQueue(page(null))).toBe(false);
+  });
+
+  it("throws rather than guess when the repository or queue field is unreadable", () => {
+    expect(() => parseMergeQueue({ data: { repository: null } })).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue({ data: { repository: {} } })).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue(page("MQ_1"))).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue(page({}))).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue(page({ id: 7 }))).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue(page({ id: null }))).toThrow(WatcherQueryError);
+    expect(() => parseMergeQueue({ errors: [{ message: "nope" }] })).toThrow(WatcherQueryError);
   });
 });

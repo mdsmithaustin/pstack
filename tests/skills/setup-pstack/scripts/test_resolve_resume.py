@@ -10,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / 'skills/setup-pstack/scripts/resolve-resume.py'
+NORMAL_SCRIPT = SCRIPT.with_name('check-models-config.py')
 ORACLE = ROOT / 'evals/resume-recovery/oracle.py'
 sys.path.insert(0, str(ORACLE.parent))
 import oracle
@@ -269,6 +270,205 @@ class ResumeCli(unittest.TestCase):
         write_json(self.contexts, contexts)
         data = self.resolve('--oracle', str(ORACLE))
         self.assertEqual(data['candidates'][0]['reason'], 'eval_run must be an absolute retained evidence path')
+
+    def normal(self, harness, role, work_model, expected_status=0):
+        result = subprocess.run([sys.executable, str(NORMAL_SCRIPT), '--resolve', '--harness', harness,
+                                 '--project', str(self.project), '--user-file', str(self.user),
+                                 *(['--work-model', work_model] if work_model is not None else []), role],
+                                env=self.environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, expected_status, result.stderr + result.stdout)
+        return [json.loads(line) for line in result.stdout.splitlines()] if result.stdout else result.stderr
+
+    def saved_input(self, work_model):
+        path = self.root / 'resolution-input.json'
+        write_json(path, {'workModel': work_model})
+        return ['--resolution-input', str(path)]
+
+    def test_real_cli_reviewer_resolution_parity(self):
+        catalog = Path(self.environment['CODEX_HOME']) / 'models_cache.json'
+        catalog.parent.mkdir()
+        write_json(catalog, {'models': [
+            {'slug': slug, 'supported_reasoning_levels': [{'effort': level} for level in levels]}
+            for slug, levels in [('gpt-6.1-sol', ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']),
+                                 ('gpt-6-sol', ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']),
+                                 ('gpt-6-astra', ['high']), ('gpt-6-luna', ['low', 'medium', 'high', 'xhigh', 'max'])]
+        ]})
+        for harness, config, work, expected in [
+            ('codex', 'trail reviewer: gpt-6.1-sol@high\nfeature: gpt-6-astra@high\n', 'gpt-6.1-sol@high',
+             {'model': 'gpt-6-astra', 'effort': 'high', 'notes': ['trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra'], 'step': 'up'}),
+            ('codex', 'trail reviewer: gpt-6-astra@high\n', 'gpt-6-astra@xhigh',
+             {'model': 'gpt-6.1-sol', 'effort': 'xhigh', 'notes': ['trail reviewer matched work model gpt-6-astra; stepped down to gpt-6.1-sol'], 'step': 'down'}),
+            ('codex', 'trail reviewer: gpt-5.6-sol@high\n', 'gpt-5.6-sol@high',
+             {'model': 'gpt-5.6-sol', 'effort': 'xhigh', 'notes': ['trail reviewer matched work model gpt-5.6-sol; the config allows no other model in its family, so this is a same-model review'], 'step': 'same-model'}),
+            ('codex', 'trail reviewer: gpt-6.1-sol@high\n', 'gpt-6-luna@high',
+             {'model': 'gpt-6.1-sol', 'effort': 'high'}),
+            ('codex', 'trail reviewer: inherit-parent\n', 'gpt-6.1-sol@high',
+             {'model': 'inherit-parent', 'effort': 'inherit-parent'}),
+            ('codex', 'trail reviewer: gpt-6.1-sol@xhigh\nfeature: gpt-6-astra@high\n', 'gpt-6.1-sol',
+             {'model': 'gpt-6-astra', 'effort': 'high', 'notes': ['trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra'], 'step': 'up'}),
+            ('codex', 'trail reviewer: gpt-6.1-sol@xhigh\nfeature: gpt-6-astra@high\n', 'gpt-6.1-sol@inherit-parent',
+             {'model': 'gpt-6-astra', 'effort': 'high', 'notes': ['trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra'], 'step': 'up'}),
+            ('codex', 'trail reviewer: gpt-6-sol@high\nfeature: gpt-6-astra@high\n', 'opus',
+             {'model': 'gpt-6-astra', 'effort': 'high', 'notes': ['trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra'], 'step': 'up'}),
+            ('codex', 'trail reviewer: gpt-6-sol@high\nfeature: gpt-6-astra@high\n', 'claude-opus-5-5[1m]@max',
+             {'model': 'gpt-6-astra', 'effort': 'high', 'notes': ['trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra'], 'step': 'up'}),
+            ('hermes', 'trail reviewer: actual-model@high\n', 'opus@xhigh',
+             {'model': 'actual-model', 'effort': 'high', 'notes': ['work model opus is not usable on hermes; no step applied']}),
+            ('hermes', 'trail reviewer: opus@high\n', 'opus@xhigh',
+             {'model': 'inherit-parent', 'effort': 'high', 'notes': ['opus is not usable on hermes', 'work model opus is not usable on hermes; no step applied']}),
+            ('hermes', 'trail reviewer: claude-opus-5-5@high\n', 'claude-opus-5-5@high',
+             {'model': 'claude-opus-5-5', 'effort': 'xhigh', 'notes': ['trail reviewer matched work model claude-opus-5-5; the config allows no other model in its family, so this is a same-model review'], 'step': 'same-model'}),
+            ('claude-code', 'trail reviewer: fable@high\n', 'claude-fable-5-1@high',
+             {'model': 'opus', 'effort': 'xhigh', 'notes': ['trail reviewer matched work model fable; stepped down to opus'], 'step': 'down'}),
+            ('claude-code', 'trail reviewer: sonnet\n', 'sonnet@inherit-parent',
+             {'model': 'opus', 'effort': 'inherit-parent', 'notes': ['trail reviewer matched work model sonnet; stepped up to opus'], 'step': 'up'}),
+            ('grok', 'trail reviewer: grok-4.7@high\n', 'opus@xhigh',
+             {'model': 'grok-4.7', 'effort': 'xhigh', 'notes': ['trail reviewer matched work model grok-4.7; the config allows no other model in its family, so this is a same-model review'], 'step': 'same-model'}),
+            ('codex', 'trail reviewer: gpt-6.1-sol@high\n', 'auto',
+             {'model': 'gpt-6.1-sol', 'effort': 'high'}),
+            ('codex', 'trail reviewer: gpt-6.1-sol@high\n', 'inherit-parent@high',
+             {'model': 'gpt-6.1-sol', 'effort': 'high'}),
+            ('codex', 'trail reviewer: gpt-6.1-sol@high\n', 'gpt-9-zeta@high',
+             {'model': 'gpt-6.1-sol', 'effort': 'high'}),
+        ]:
+            with self.subTest(harness=harness, work=work):
+                source = 'hermes' if harness == 'grok' else 'grok'
+                self.config.write_text(f'# resume-priority: {source}={harness}\n## {harness}\n{config}')
+                expected = {'role': 'trail reviewer', 'arm': 1, **expected, 'source': f'workspace ## {harness}'}
+                self.assertEqual(self.normal(harness, 'trail reviewer', work), [expected])
+                actual = self.resolve('--source', source, '--role', 'trail reviewer', *self.saved_input(work))['candidates'][0]
+                self.assertEqual(actual, {'harness': harness, 'resolution': expected, 'route': None, 'version': None,
+                                          'eval_receipt': None, 'eligible': False,
+                                          'reason': 'destination identity is not concrete' if 'inherit-parent' in (expected['model'], expected['effort'])
+                                          else 'destination availability, route or version is unobserved'})
+
+    def test_unknown_reviewer_input_is_distinct_from_successful_omission(self):
+        self.config.write_text('## codex\ntrail reviewer: gpt-6.1-sol@high\n')
+        missing = self.resolve('--role', 'trail reviewer')['candidates'][0]
+        self.assertEqual(missing, {'harness': 'codex', 'resolution': None, 'route': None, 'version': None,
+                                   'eval_receipt': None, 'eligible': False, 'reason': 'saved reviewer resolution input is unknown'})
+        expected = {'role': 'trail reviewer', 'arm': 1, 'model': 'gpt-6.1-sol', 'effort': 'high', 'source': 'workspace ## codex'}
+        self.assertEqual(self.normal('codex', 'trail reviewer', None), [expected])
+        known = self.resolve('--role', 'trail reviewer', *self.saved_input(None))['candidates'][0]
+        self.assertEqual(known['resolution'], expected)
+        self.assertEqual(known['reason'], 'destination availability, route or version is unobserved')
+
+    def test_feature_and_panel_resolution_remain_exact_with_saved_input(self):
+        for role, arm, model, effort in [('feature', 1, 'gpt-6.1-sol', 'high'),
+                                         ('arena runners', 1, 'gpt-6-sol', 'max'),
+                                         ('arena runners', 2, 'gpt-6-luna', 'high')]:
+            with self.subTest(role=role, arm=arm):
+                expected = {'role': role, 'arm': arm, 'model': model, 'effort': effort, 'source': 'workspace ## codex'}
+                for work in ('absent', 'gpt-6-sol@high', None):
+                    extra = [] if work == 'absent' else self.saved_input(work)
+                    actual = self.resolve('--role', role, '--arm', str(arm), *extra)['candidates'][0]
+                    self.assertEqual(actual['resolution'], expected)
+                    self.assertEqual(actual['reason'], 'destination availability, route or version is unobserved')
+                self.assertEqual(self.normal('codex', role, 'gpt-6-sol@high')[arm - 1], expected)
+
+    def test_invalid_destination_input_denies_without_retry_and_preserves_priority(self):
+        self.config.write_text('# resume-priority: grok=claude-code,codex\n## claude-code\ntrail reviewer: opus@high\n## codex\ntrail reviewer: gpt-6.1-sol@high\nfeature: gpt-6-astra@high\n')
+        for work, reason in [('gpt-6.1-sol@high', "argument --work-model: 'gpt-6.1-sol' is not a Claude Code model; use an alias (fable, opus, sonnet, haiku) or a claude-<alias>-... ID"),
+                              ('opus[1m]@high', "argument --work-model: invalid model name 'opus[1m]'")]:
+            with self.subTest(work=work):
+                self.assertIn(reason, self.normal('claude-code', 'trail reviewer', work, expected_status=2))
+                data = self.resolve('--source', 'grok', '--role', 'trail reviewer', *self.saved_input(work))
+                self.assertEqual([item['harness'] for item in data['candidates']], ['claude-code', 'codex'])
+                self.assertEqual(data['candidates'][0]['resolution'], None)
+                self.assertEqual(data['candidates'][0]['reason'], reason)
+                self.assertFalse(data['candidates'][0]['eligible'])
+                if work.startswith('gpt-'):
+                    self.assertEqual(data['candidates'][1]['resolution'], {
+                        'role': 'trail reviewer', 'arm': 1, 'model': 'gpt-6-astra', 'effort': 'high', 'source': 'workspace ## codex',
+                        'notes': ['trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra'], 'step': 'up'})
+
+    def test_malformed_saved_input_is_a_cli_error(self):
+        path = self.root / 'resolution-input.json'
+        for value in ([], {}, {'workModel': 4}, {'workModel': False}, {'workModel': 'opus@turbo'}, {'workModel': None, 'resolvedArm': {}}):
+            with self.subTest(value=value):
+                write_json(path, value)
+                result = self.resolve('--resolution-input', str(path), expected_status=2)
+                self.assertIn('resolution input' if value != {'workModel': 'opus@turbo'} else "unknown effort 'turbo'", result)
+        path.write_text('{')
+        self.assertIn('Expecting property name', self.resolve('--resolution-input', str(path), expected_status=2))
+        path.unlink()
+        self.assertIn('No such file', self.resolve('--resolution-input', str(path), expected_status=2))
+
+    def test_input_grammar_is_checked_even_without_destination_candidates(self):
+        self.assertEqual(self.resolve('--source', 'grok', '--role', 'trail reviewer', *self.saved_input(None)),
+                         {'priority': {'source': 'grok', 'destinations': [], 'configured_source': 'default'}, 'candidates': []})
+        result = self.resolve('--source', 'grok', '--role', 'trail reviewer', *self.saved_input('opus@turbo'), expected_status=2)
+        self.assertEqual(result, "argument --work-model: unknown effort 'turbo'\n")
+
+    def test_reviewer_resolver_unit_stub_compares_complete_five_key_binding(self):
+        self.config.write_text('## codex\ntrail reviewer: gpt-6.1-sol@high\nfeature: gpt-6-astra@high\n')
+        expected = {'role': 'trail reviewer', 'arm': 1, 'model': 'gpt-6-astra', 'effort': 'high', 'source': 'workspace ## codex',
+                    'notes': ['trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra'], 'step': 'up'}
+        self.assertEqual(self.normal('codex', 'trail reviewer', 'gpt-6.1-sol@high'), [expected])
+        self.binding['resolution'] = expected
+        run = self.resolver_unit_stub_run()
+        extra = ['--role', 'trail reviewer', '--oracle', str(self.stub), *self.saved_input('gpt-6.1-sol@high')]
+        candidate = self.resolve(*extra, expected_status=0)['candidates'][0]
+        self.assertEqual(candidate['resolution'], expected)
+        self.assertEqual(candidate['eval_receipt']['binding'], self.binding)
+        self.assertEqual(sorted(candidate['eval_receipt']['binding']), ['harness', 'permission_context', 'resolution', 'route', 'version'])
+        original = json.loads((run / 'receipt.json').read_text())
+        for field, value in [('notes', []), ('source', 'user ## codex'), ('step', 'down'), ('step', None), ('notes', None)]:
+            with self.subTest(field=field, value=value):
+                receipt = copy.deepcopy(original)
+                if value is None:
+                    del receipt['binding']['resolution'][field]
+                else:
+                    receipt['binding']['resolution'][field] = value
+                write_json(run / 'receipt.json', receipt)
+                write_json(run / 'resolver-unit-authority.json', receipt)
+                denied = self.resolve(*extra)['candidates'][0]
+                self.assertEqual(denied['resolution'], expected)
+                self.assertEqual(denied['reason'], 'eval binding does not match exact current resolution or route context')
+        write_json(run / 'receipt.json', original)
+        write_json(run / 'resolver-unit-authority.json', original)
+        changed_work = self.resolve('--role', 'trail reviewer', '--oracle', str(self.stub), *self.saved_input('gpt-6-luna@high'))['candidates'][0]
+        self.assertEqual(changed_work['resolution'], {'role': 'trail reviewer', 'arm': 1, 'model': 'gpt-6.1-sol', 'effort': 'high', 'source': 'workspace ## codex'})
+        self.assertEqual(changed_work['reason'], 'eval binding does not match exact current resolution or route context')
+
+    def test_matching_unstepped_stub_cannot_supply_unknown_reviewer_input(self):
+        self.config.write_text('## codex\ntrail reviewer: gpt-6.1-sol@high\n')
+        self.binding['resolution'] = {'role': 'trail reviewer', 'arm': 1, 'model': 'gpt-6.1-sol', 'effort': 'high', 'source': 'workspace ## codex'}
+        self.resolver_unit_stub_run()
+        missing = self.resolve('--role', 'trail reviewer', '--oracle', str(self.stub))['candidates'][0]
+        self.assertIsNone(missing['resolution'])
+        self.assertIsNone(missing['eval_receipt'])
+        self.assertEqual(missing['reason'], 'saved reviewer resolution input is unknown')
+        known = self.resolve('--role', 'trail reviewer', '--oracle', str(self.stub), *self.saved_input(None), expected_status=0)['candidates'][0]
+        self.assertEqual(known['resolution'], self.binding['resolution'])
+        self.assertEqual(known['eval_receipt']['observed'], {'resolver_unit_stub': True})
+
+    def test_known_null_records_successful_normal_caller_fallback(self):
+        self.config.write_text('## claude-code\ntrail reviewer: opus@high\n')
+        self.assertIn('is not a Claude Code model', self.normal('claude-code', 'trail reviewer', 'gpt-6.1-sol@high', expected_status=2))
+        expected = {'role': 'trail reviewer', 'arm': 1, 'model': 'opus', 'effort': 'high', 'source': 'workspace ## claude-code'}
+        self.assertEqual(self.normal('claude-code', 'trail reviewer', None), [expected])
+        known = self.resolve('--source', 'codex', '--role', 'trail reviewer', *self.saved_input(None))['candidates'][0]
+        self.assertEqual(known['resolution'], expected)
+        self.assertEqual(known['reason'], 'destination availability, route or version is unobserved')
+
+    def test_invalid_supplied_work_is_validated_for_feature_and_panel(self):
+        self.config.write_text('## claude-code\nfeature: sonnet@high\narena runners: opus@high,sonnet@high\n')
+        reason = "argument --work-model: 'gpt-6.1-sol' is not a Claude Code model; use an alias (fable, opus, sonnet, haiku) or a claude-<alias>-... ID"
+        for role, arm in [('feature', 1), ('arena runners', 2)]:
+            with self.subTest(role=role, arm=arm):
+                self.assertIn(reason, self.normal('claude-code', role, 'gpt-6.1-sol@high', expected_status=2))
+                candidate = self.resolve('--source', 'codex', '--role', role, '--arm', str(arm), *self.saved_input('gpt-6.1-sol@high'))['candidates'][0]
+                self.assertEqual(candidate['resolution'], None)
+                self.assertEqual(candidate['reason'], reason)
+                self.assertFalse(candidate['eligible'])
+        self.config.write_text('# resume-priority: codex=hermes\n## hermes\ntrail reviewer: actual-model@high\n')
+        work = 'claude-opus-5-5[1m]@high'
+        reason = "argument --work-model: invalid model name 'claude-opus-5-5[1m]'"
+        self.assertIn(reason, self.normal('hermes', 'trail reviewer', work, expected_status=2))
+        candidate = self.resolve('--source', 'codex', '--role', 'trail reviewer', *self.saved_input(work))['candidates'][0]
+        self.assertEqual(candidate['reason'], reason)
+        self.assertEqual(candidate['resolution'], None)
 
 
 if __name__ == '__main__':
