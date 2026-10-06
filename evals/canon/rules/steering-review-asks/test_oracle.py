@@ -111,6 +111,25 @@ class CopyAssertionTests(unittest.TestCase):
             "expect(copied).toHaveBeenLastCalledWith(LONG_TEXT);",
         ), [])
 
+    def test_a_writetext_spy_outside_the_clipboard_does_not_count(self):
+        self.assertEqual(self.failures(
+            "const spy = vi.fn();",
+            "const editor = { writeText: spy };",
+            "expect(spy).toHaveBeenCalledWith(LONG_TEXT);",
+        ), ["constraint:C3: no added web test asserts what Copy writes"])
+
+    def test_an_identity_check_on_a_clipboard_spy_does_not_assert_the_payload(self):
+        self.assertEqual(self.failures(
+            'const copied = vi.spyOn(navigator.clipboard, "writeText");',
+            "expect(copied).toBe(originalSpy);",
+        ), ["constraint:C3: no added web test asserts what Copy writes"])
+
+    def test_a_clipboard_spy_call_argument_compared_to_the_prompt_counts(self):
+        self.assertEqual(self.failures(
+            'const copied = vi.spyOn(navigator.clipboard, "writeText");',
+            "expect(copied.mock.calls[0][0]).toBe(LONG_TEXT);",
+        ), [])
+
     def test_a_spy_installed_under_another_name_with_a_bare_called_check_does_not_count(self):
         self.assertEqual(self.failures(
             "const spy = vi.fn();",
@@ -140,6 +159,19 @@ class HiddenTailTests(unittest.TestCase):
             "expect(written[0]).toContain(TAIL);",
         ), [self.PRESENT])
 
+    def test_the_tail_absent_from_the_copied_payload_is_not_hidden_text(self):
+        self.assertEqual(self.failures(
+            "const written: string[] = [];",
+            "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });",
+            "expect(written).not.toContain(TAIL);",
+            "expect(bubble).toHaveTextContent(TAIL);",
+        ), ["constraint:C3: no added web test asserts that hidden prompt text is absent", self.PRESENT])
+
+    def test_multiline_assertions_compare_their_values(self):
+        absent = ["expect(bubble).not.toHaveTextContent(", "  TAIL,", ");"]
+        self.assertEqual(self.failures(*absent, "expect(bubble).toHaveTextContent(", "  SHORT_TEXT,", ");"), [self.PRESENT])
+        self.assertEqual(self.failures(*absent, "expect(bubble).toHaveTextContent(", "  TAIL", ");"), [])
+
     def test_the_same_value_absent_then_present_counts_across_assertion_forms(self):
         for absent, present in (("expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent( TAIL );"),
                                 ("expect(screen.queryByText(TAIL)).toBeNull();", "expect(screen.getByText(TAIL)).toBeTruthy();"),
@@ -168,6 +200,9 @@ class KnownIssueProseTests(unittest.TestCase):
     def test_a_structured_record_keeps_prose_and_drops_short_metadata(self):
         self.assertEqual(self.prose({"kind": "embedded", "severity": "high", "summary": "Embedded mode loops on this pin."}),
                          ["Embedded mode loops on this pin."])
+
+    def test_a_record_whose_prose_is_short_prefers_more_words_to_a_longer_label(self):
+        self.assertEqual(self.prose({"kind": "unsupported-platform", "summary": "Install loops."}), ["Install loops."])
 
     def test_a_record_whose_prose_is_short_keeps_its_longest_string(self):
         self.assertEqual(self.prose({"kind": "embedded", "severity": "high", "summary": "Embedded mode loops."}),
