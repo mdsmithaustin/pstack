@@ -1328,6 +1328,21 @@
     "skills/poteto-mode/scripts/watch-pr/merge-gate-render.ts"
    ]
   },
+  "merge-gate-override-needs-user-approval": {
+   "check": "static",
+   "claim": "Shipping passes merge-gate `--override` only when the user approves landing over a failed gate, for every failed gate including a merge queue.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/shipping.md",
+     "quote": "Pass `--override \"<reason>\"` only when the user approves landing over a failed gate."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/shipping.md",
+    "skills/poteto-mode/scripts/watch-pr/merge-gate"
+   ]
+  },
   "merge-gate-refuses-until-gates-hold": {
    "check": "script",
    "claim": "merge-gate merges only when the latest verdict block matches the PR's current head and patch-id, every check passed, every bot review body is acknowledged, threads are resolved, the PR is mergeable, and its base branch has no merge queue; otherwise it exits 10 with nothing merged.",
@@ -2991,14 +3006,26 @@
    ],
    "text": "Before handing it over, the generator proves the skill once end to end: launch, doctor check, drive one feature, capture evidence, clean up."
   },
-  "0bced356d9d3": {
+  "925332aad252": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
-   "promise": "merge-gate-refuses-until-gates-hold",
    "sources": [
     "port"
    ],
-   "text": "It also refuses when the base branch has a merge queue, because the queue would land the PR without rerunning these checks, so the lead asks you before overriding."
+   "promise": "merge-gate-refuses-until-gates-hold",
+   "text": "It also refuses when the base branch has a merge queue, because the queue would land the PR later without rechecking the verdict or the bot reviews."
+  },
+  "7a704c1352d8": {
+   "also": [
+    "merge-gate-refuses-until-gates-hold"
+   ],
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "port"
+   ],
+   "promise": "merge-gate-override-needs-user-approval",
+   "text": "The lead asks you before it overrides any refusal."
   },
   "0c4fcaa38974": {
    "class": "promise",
