@@ -88,7 +88,7 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
                         r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
-REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}[^\n]+\n+[^\n]*|[A-Za-z][\w /-]{0,30}:[^\n]*)")
+REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*[Ss]ources?\s*\n+[^\n]*|#{1,6}[^\n]+|[A-Za-z][\w /-]{0,30}:[^\n]*)")
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
