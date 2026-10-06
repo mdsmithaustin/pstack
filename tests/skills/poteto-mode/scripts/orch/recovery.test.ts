@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -87,7 +87,7 @@ describe("CLI recovery", () => {
 
 async function preload(
   dir: string,
-  point: "claim" | "emission" | "unit" | "decision",
+  point: "claim" | "emission" | "unit" | "decision" | "attempt" | "ledger",
   pause = false,
 ) {
   const marker = join(dir, "fault-marker");
@@ -106,10 +106,12 @@ async function stop() {
 }
 mock.module("node:fs/promises", () => ({ ...fs,
   rename: async (from, to) => {
+    if (${JSON.stringify(point)} === "attempt" && String(to).endsWith("/attempts.json")) await stop();
     await fs.rename(from, to);
     if (String(from).endsWith("/inbox")) claimed = true;
     if (${JSON.stringify(point)} === "claim" && String(from).endsWith("/inbox")) await stop();
     if (${JSON.stringify(point)} === "unit" && String(to).endsWith("/units.tsv")) await stop();
+    if (${JSON.stringify(point)} === "ledger" && String(to).endsWith("/ledger.tsv")) await stop();
     if (${JSON.stringify(point)} === "decision" && String(to).includes("/decisions/") && String(to).endsWith(".json")) await stop();
   },
   mkdir: async (path, options) => {
@@ -132,7 +134,7 @@ async function waitFor(path: string) {
 }
 async function killAt(
   dir: string,
-  point: "claim" | "emission" | "unit" | "decision",
+  point: "claim" | "emission" | "unit" | "decision" | "attempt" | "ledger",
   args: string[],
 ) {
   const hook = await preload(dir, point);
@@ -798,4 +800,43 @@ describe("CLI slot and pending invariants", () => {
     expect(JSON.parse(run("unit", "get", "foreign").out).state).toBe("pending");
     expect(JSON.parse(run("unit", "get", "u").out).state).toBe("second arm");
   });
+});
+
+
+describe("CLI core review regressions", () => {
+  for (const point of ["unit", "attempt"] as const) {
+    it(`replays a direct head update interrupted at ${point}`, async () => {
+      const { dir, run } = await fixture();
+      expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "old").code).toBe(0);
+      const worker = (await begin(dir, run, "worker")).attempt;
+      await killAt(dir, point, ["unit", "set", "u", "--state", "restacked", "--sha", "new", "--attempt", worker.id]);
+      const saved = JSON.parse(run("attempt", "list").out)[0];
+      expect(saved.target).toEqual({ pr: "12", sha: "new" });
+      expect(run("unit", "set", "u", "--state", "continued", "--attempt", worker.id).code).toBe(0);
+      expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "continued", sha: "new" });
+    });
+  }
+  it("replays direct ledger settlement after its rename", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+    const verifier = (await begin(dir, run, "verifier", "verifier")).attempt;
+    await killAt(dir, "ledger", ["ledger", "record", "12", "head", "unit-test-verified", "--evidence", "proof", "--attempt", verifier.id]);
+    expect(JSON.parse(run("ledger", "check", "12", "head").out).verdict).toBe("unit-test-verified");
+    expect(JSON.parse(run("attempt", "list").out)[0].settled).not.toBeNull();
+    const criteria = await input(dir, "requirements.json", [{ id: "verified", unit: "u", ledger: { pr: 12, sha: "head", verdicts: ["unit-test-verified"] } }]);
+    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
+  });
+  for (const mode of ["legacy", "receipt", "compact"] as const) {
+    it(`keeps repeated empty ${mode} drains bounded`, async () => {
+      const { dir, run } = await fixture();
+      for (let i = 0; i < 3; i++) {
+        const result = mode === "compact" ? Bun.spawnSync([process.execPath, script, "--store", dir, "inbox", "drain"]) : run("inbox", "drain", ...(mode === "receipt" ? ["--receipt"] : []));
+        expect("exitCode" in result ? result.exitCode : result.code).toBe(0);
+        expect(await readdir(join(dir, "inbox-batches"))).toEqual([]);
+        if ("out" in result) expect(JSON.parse(result.out)).toEqual(mode === "receipt" ? null : []);
+      }
+      expect(run("inbox", "push", "worker", "u", "done").code).toBe(0);
+      expect(JSON.parse(run("inbox", "drain", "--receipt").out).events[0].pointer.status).toBe("done");
+    });
+  }
 });

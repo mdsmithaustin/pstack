@@ -427,6 +427,7 @@ describe("Store", () => {
     expect(await store.inbox.drain()).toHaveLength(2);
     expect(await store.inbox.count()).toBe(2);
     const batch = await store.inbox.claim();
+    if (batch === null) throw new Error("expected the retained batch");
     await store.inbox.ack(
       batch.id,
       batch.events.map((event) => ({

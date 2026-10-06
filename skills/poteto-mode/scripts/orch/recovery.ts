@@ -42,12 +42,13 @@ export interface AckDecision {
 export interface Receipt extends Batch {
   readonly decisions: readonly SavedDecision[];
 }
-export interface SavedDecision extends AckDecision {
+export interface WriteIntent {
   readonly unit?: Unit;
   readonly ledger?: LedgerEntry;
   readonly attempt?: Attempt;
   readonly completed: boolean;
 }
+export interface SavedDecision extends AckDecision, WriteIntent {}
 export type Authority = "worker" | "verifier";
 export interface AttemptSlot {
   readonly unit: string;
@@ -222,11 +223,10 @@ export function parseAckDecisions(value: unknown): readonly AckDecision[] {
     throw new UserError("duplicate event decision");
   return decisions;
 }
-export function parseSavedDecision(value: unknown): SavedDecision {
+export function parseWriteIntent(value: unknown): WriteIntent {
   const row = record(value);
-  const decision = parseAckDecisions([row])[0];
-  if (decision === undefined || typeof row.completed !== "boolean")
-    throw new UserError("invalid saved decision");
+  if (typeof row.completed !== "boolean")
+    throw new UserError("invalid saved write intent");
   let unit: Unit | undefined;
   if (row.unit !== undefined) {
     const u = record(row.unit);
@@ -262,7 +262,6 @@ export function parseSavedDecision(value: unknown): SavedDecision {
     };
   }
   return {
-    ...decision,
     ...(unit === undefined ? {} : { unit }),
     ...(ledger === undefined ? {} : { ledger }),
     ...(row.attempt === undefined
@@ -270,6 +269,11 @@ export function parseSavedDecision(value: unknown): SavedDecision {
       : { attempt: parseAttempt(row.attempt) }),
     completed: row.completed,
   };
+}
+export function parseSavedDecision(value: unknown): SavedDecision {
+  const decision = parseAckDecisions([value])[0];
+  if (decision === undefined) throw new UserError("invalid saved decision");
+  return { ...decision, ...parseWriteIntent(value) };
 }
 export function parseRequirements(value: unknown): readonly Requirement[] {
   const rows = array(value).map((value) => {

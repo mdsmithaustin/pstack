@@ -6,7 +6,7 @@
 
 `units.tsv` and `ledger.tsv` remain canonical. Unit states are caller-defined strings. Existing stores and five-column inbox pointers remain readable. A tracked pointer adds an attempt id as its sixth column.
 
-Every drain retains its completion files in `inbox-batches/<batch-id>/`. The legacy `--json inbox drain` still emits a pointer array. `inbox receipts` exposes retained events and completed decisions for those deliveries. Draining no longer reduces `inbox count`. Count and peek include every event without a completed acknowledgment.
+Every nonempty drain retains its completion files in `inbox-batches/<batch-id>/`. An empty `inbox drain --receipt` returns `null` without creating a batch. The legacy `--json inbox drain` emits a pointer array and returns `[]` when empty. `inbox receipts` exposes retained events and completed decisions for those deliveries. Draining no longer reduces `inbox count`. Count and peek include every event without a completed acknowledgment.
 
 The canonical commands are:
 
@@ -46,6 +46,8 @@ A receipt has `id` and `events`. Each event has its stable filename `id` and `po
 A standalone verdict uses `kind`, `pr`, `sha`, `verdict`, `evidence`, and optional `verifier`. An explicit discard uses `{"kind":"discard","reason":"reviewed duplicate"}`. Discard does not settle an attempt. A coordinator can explicitly settle an abandoned current attempt with `attempt finish` after inspecting evidence.
 
 Acknowledgment applies only the named events. The store saves normalized effects and timestamps before changing TSV rows or attempts, then marks the decision complete last. A later affected read or write repairs an interrupted decision under the existing store lock. Identical retries preserve the saved effects. A different outcome for an acknowledged event exits 1. Earlier decisions in the same call may already have completed when a later decision fails. Pending events remain countable and replayable.
+
+Direct unit updates and ledger records use the same normalized write-intent effects. The store replays pending `write-intents/` entries before later affected operations. A unit row and its attempt head binding converge after interruption. A ledger row and its attempt settlement also converge. Completed direct intents are removed. TSV files remain authoritative, and consumed inbox receipts remain inspectable.
 
 A drain killed between rename and mkdir recovers on the next affected command. Surviving `.inbox-drain-*` directories from an older CLI are adopted as retained batches. Completions already deleted by an older CLI cannot be recovered. Keep completed receipts as the run's evidence. This CLI has no automatic retention cleanup.
 

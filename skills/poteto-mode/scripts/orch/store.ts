@@ -21,6 +21,7 @@ import {
   parseObservation,
   parseRequirements,
   parseSavedDecision,
+  parseWriteIntent,
   safeId,
   sameSlot,
   type AckDecision,
@@ -33,6 +34,7 @@ import {
   type Receipt,
   type Requirement,
   type SavedDecision,
+  type WriteIntent,
 } from "./recovery.ts";
 
 const UNIT_HEADER = "id\ttrack\tstate\tbranch\tpr\tsha\tbrief";
@@ -224,7 +226,7 @@ export interface Store {
   readonly inbox: {
     readonly push: (params: PushInboxParams) => Promise<InboxPushResult>;
     readonly drain: () => Promise<readonly InboxPointer[]>;
-    readonly claim: () => Promise<Batch>;
+    readonly claim: () => Promise<Batch | null>;
     readonly receipts: () => Promise<readonly Receipt[]>;
     readonly ack: (
       batch: string,
@@ -703,6 +705,18 @@ async function saveAttempt(store: string, attempt: Attempt): Promise<void> {
 
 async function repairInbox(store: string): Promise<void> {
   if (!(await exists(join(store, "units.tsv")))) return;
+  const journal = join(store, "write-intents");
+  if (await exists(journal)) {
+    const names = (await readdir(journal))
+      .filter((name) => name.endsWith(".json"))
+      .sort();
+    for (const name of names) {
+      const path = join(journal, name);
+      const intent = parseWriteIntent(JSON.parse(await readFile(path, "utf8")));
+      if (!intent.completed) await applyWriteIntent(store, path, intent);
+      await unlink(path);
+    }
+  }
   await mkdir(join(store, "inbox-batches"), { recursive: true });
   for (const entry of await readdir(store, { withFileTypes: true })) {
     if (entry.isDirectory() && entry.name.startsWith(".inbox-drain-")) {
@@ -716,21 +730,42 @@ async function repairInbox(store: string): Promise<void> {
   for (const batch of await batchIds(store)) {
     for (const decision of await savedDecisions(store, batch)) {
       if (decision.completed) continue;
-      await applyDecision(store, batch, decision);
+      await applyWriteIntent(
+        store,
+        decisionPath(store, batch, decision.event),
+        decision,
+      );
     }
   }
 }
 
-async function applyDecision(
+function decisionPath(store: string, batch: string, event: string): string {
+  return join(store, "inbox-batches", batch, "decisions", `${event}.json`);
+}
+
+async function writeIntent(
   store: string,
-  batch: string,
-  decision: SavedDecision,
+  effects: Omit<WriteIntent, "completed">,
+): Promise<void> {
+  const directory = join(store, "write-intents");
+  await mkdir(directory, { recursive: true });
+  const path = join(directory, `${randomUUID()}.json`);
+  const intent = { ...effects, completed: false };
+  await atomicWrite(path, `${JSON.stringify(intent, null, 2)}\n`);
+  await applyWriteIntent(store, path, intent);
+  await unlink(path);
+}
+
+async function applyWriteIntent(
+  store: string,
+  path: string,
+  decision: WriteIntent,
 ): Promise<void> {
   const { unit, ledger, attempt } = decision;
   if (unit !== undefined) {
     const rows = [...(await readUnits(store))];
     const index = rows.findIndex((row) => row.id === unit.id);
-    if (index < 0) throw new UserError("acknowledgment unit disappeared");
+    if (index < 0) throw new UserError("write intent unit disappeared");
     rows[index] = unit;
     await saveUnits(store, rows);
   }
@@ -746,7 +781,7 @@ async function applyDecision(
   }
   if (attempt !== undefined) await saveAttempt(store, attempt);
   await atomicWrite(
-    join(store, "inbox-batches", batch, "decisions", `${decision.event}.json`),
+    path,
     `${JSON.stringify({ ...decision, completed: true }, null, 2)}\n`,
   );
 }
@@ -1793,12 +1828,13 @@ export function openStore(
     await repairInbox(store);
   };
 
-  const claim = async (): Promise<Batch> => {
+  const claim = async (): Promise<Batch | null> => {
     await beginWrite();
     for (const id of await batchIds(store)) {
       const batch = await readBatch(store, id, true);
       if (batch.events.length > 0) return batch;
     }
+    if ((await readEvents(join(store, "inbox"))).length === 0) return null;
     const id = `batch-${randomUUID()}`;
     await rename(join(store, "inbox"), join(store, "inbox-batches", id));
     await mkdir(join(store, "inbox"), { recursive: true });
@@ -1842,19 +1878,19 @@ export function openStore(
       set: async (params) => {
         await beginWrite();
         const id = requiredCell(params.id, "unit id");
-        const rows = [...(await readUnits(store))];
-        const index = rows.findIndex((unit) => unit.id === id);
-        const old = rows[index];
+        const old = (await readUnits(store)).find((unit) => unit.id === id);
         if (old === undefined) throw new NotFoundError(`unit ${id} not found`);
         const attempt = await mutationAuthority(store, old, params.attempt);
         const row = updatedUnit(old, params);
-        rows[index] = row;
-        await saveUnits(store, rows);
-        if (attempt !== undefined)
-          await saveAttempt(store, {
-            ...attempt,
-            target: { pr: row.pr, sha: row.sha },
-          });
+        await writeIntent(store, {
+          unit: row,
+          ...(attempt === undefined
+            ? {}
+            : { attempt: {
+                ...attempt,
+                target: { pr: row.pr, sha: row.sha },
+              } }),
+        });
         return row;
       },
       get: async (id) => {
@@ -1905,18 +1941,12 @@ export function openStore(
             : (await readUnits(store)).find((row) => row.id === bound.unit);
         const attempt = await mutationAuthority(store, unit, params.attempt);
         const row = await ledgerEffect(store, params, unit, attempt);
-        const rows = [...(await readLedger(store))];
-        const index = rows.findIndex(
-          (old) => old.pr === row.pr && old.sha === row.sha
-        );
-        if (index < 0) {
-          rows.push(row);
-        } else {
-          rows[index] = row;
-        }
-        await saveLedger(store, rows);
-        if (attempt !== undefined)
-          await saveAttempt(store, { ...attempt, settled: row.ts });
+        await writeIntent(store, {
+          ledger: row,
+          ...(attempt === undefined
+            ? {}
+            : { attempt: { ...attempt, settled: row.ts } }),
+        });
         return row;
       },
       check: async (params) => {
@@ -1980,7 +2010,7 @@ export function openStore(
         }
         return { pointer, filename };
       },
-      drain: async () => (await claim()).events.map((event) => event.pointer),
+      drain: async () => (await claim())?.events.map((event) => event.pointer) ?? [],
       claim,
       receipts: async () => {
         await beginWrite();
@@ -2065,7 +2095,11 @@ export function openStore(
             join(directory, `${decision.event}.json`),
             `${JSON.stringify(normalized, null, 2)}\n`,
           );
-          await applyDecision(store, batch.id, normalized);
+          await applyWriteIntent(
+            store,
+            decisionPath(store, batch.id, decision.event),
+            normalized,
+          );
         }
         return readBatch(store, batch.id, true);
       },
