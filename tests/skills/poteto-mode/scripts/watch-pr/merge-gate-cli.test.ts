@@ -186,7 +186,7 @@ describe("merge-gate", () => {
     it("says why in pretty mode", async () => {
       const result = await run([...MERGE_ARGS, "--pretty"], queued);
       expect(result.stdout.join("")).toContain(
-        "FAIL merge-queue: main uses a merge queue: gh pr merge would only enqueue the PR, and the queue lands it without rerunning these gates"
+        "FAIL merge-queue: main uses a merge queue: gh pr merge would only enqueue the PR, and the queue would land it later without rechecking the verdict, the bot reviews, or the open threads"
       );
     });
 

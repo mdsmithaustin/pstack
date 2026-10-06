@@ -288,7 +288,7 @@ describe("evaluateGates", () => {
       });
       expect(failedNames(result)).toEqual(["merge-queue"]);
       expect(detailOf(result, "merge-queue")).toBe(
-        "release/2 uses a merge queue: gh pr merge would only enqueue the PR, and the queue lands it without rerunning these gates"
+        "release/2 uses a merge queue: gh pr merge would only enqueue the PR, and the queue would land it later without rechecking the verdict, the bot reviews, or the open threads"
       );
     });
 

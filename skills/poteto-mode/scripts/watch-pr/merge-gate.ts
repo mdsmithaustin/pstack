@@ -298,13 +298,14 @@ const draftGate = (isDraft: boolean): Outcome =>
   isDraft ? fail("PR is a draft") : pass("not a draft");
 
 /**
- * On a queue-enabled branch `gh pr merge` only enqueues the PR, and the queue
- * lands it later without rerunning any other gate.
+ * On a queue-enabled branch `gh pr merge` only enqueues the PR. The queue
+ * reruns required status checks, but it lands the PR later without rechecking
+ * the verdict, the bot reviews, or the open threads.
  */
 const mergeQueueGate = (base: string, queued: boolean): Outcome =>
   queued
     ? fail(
-        `${base} uses a merge queue: gh pr merge would only enqueue the PR, and the queue lands it without rerunning these gates`
+        `${base} uses a merge queue: gh pr merge would only enqueue the PR, and the queue would land it later without rechecking the verdict, the bot reviews, or the open threads`
       )
     : pass(`${base} has no merge queue`);
 
