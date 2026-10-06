@@ -2729,6 +2729,13 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(self.tdd(green), PASS)
         self.assertEqual(self.tdd(green + [{"seq": 16, "kind": "tool_call", "name": "Edit", "input": {"file_path": "rollup/__main__.py"}}]), INCONCLUSIVE)
 
+    def test_a_dir_the_command_made_and_removed_is_not_a_source_edit(self):
+        smoke = "T=./.smoke; mkdir -p $T; python3 -m rollup data/orders.csv $T/a.csv; rm -rf $T; git status --short"
+        self.assertEqual(oracles.shell_writes(smoke), [])
+        self.assertEqual(oracles.shell_writes("rm -rf build; mkdir -p build"), ["build"])
+        green = bash(14, "python3 -m unittest discover -s tests -v 2>&1 | tail -8", head="Ran 3 tests in 0.004s\n\nOK")
+        self.assertEqual(self.tdd(green + bash(20, smoke, head=" M rollup/__main__.py")), PASS)
+
     def test_an_artifact_run_later_in_the_writing_command_proves_it_works(self):
         case = load_case("bug-fix-run")
         restore = "cp /tmp/final/export.py rollup/export.py"
