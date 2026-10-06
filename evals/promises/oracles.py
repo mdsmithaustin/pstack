@@ -2446,6 +2446,7 @@ def author_result(text):
 
 
 LABELED_RESULT = re.compile(r"\bresult\b\W{0,6}independent review (?:is )?(not )?required", re.I)
+PRESCRIBED = re.compile(r"\b(?:report|return|reply|respond|answer|say|emit)\b(?!\s*:)", re.I)
 
 
 def unplanned(value):
@@ -2462,7 +2463,8 @@ def recorded_result(call):
         text = re.sub(r"\b(?:grep|rg)\b[^\n;&|]*", " ", str(given.get(SHELL_TOOLS[name]) or ""))
     else:
         text = json.dumps(unplanned(given)).replace("\\n", " ")
-    found = {"not required" if m.group(1) else "required" for m in LABELED_RESULT.finditer(text)}
+    found = {"not required" if m.group(1) else "required" for m in LABELED_RESULT.finditer(text)
+             if not PRESCRIBED.search(re.split(r"[.!?]\s", text[:m.start()])[-1])}
     return found.pop() if len(found) == 1 else None
 
 
