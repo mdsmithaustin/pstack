@@ -2682,6 +2682,60 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(edits("cd ../scratch && python3 -c \"open('x.py','w').write('1')\""), [])
         self.assertEqual(edits("cd rollup && python3 -c \"open('x.py','w').write('1')\""), [(1, "rollup/x.py", "source")])
 
+    def test_n15_a_path_write_text_call_is_the_write(self):
+        write = "python3 -c \"from pathlib import Path; Path('rollup/export.py').write_text('x')\""
+        self.assertFalse(oracles.runs_after_write(f"cat rollup/export.py; python3 -m unittest; {write}", "rollup/export.py"))
+        self.assertTrue(oracles.runs_after_write(f"{write}; python3 -m unittest", "rollup/export.py"))
+
+    def test_n15_each_write_form_orders_against_the_rerun(self):
+        for write in ("echo x | tee rollup/export.py", "sed -i 's/a/b/' rollup/export.py",
+                      "python3 -c \"open('rollup/export.py', 'w').write('x')\"", "cp /tmp/export.py rollup/export.py"):
+            self.assertTrue(oracles.runs_after_write(f"{write}; python3 -m unittest", "rollup/export.py"), write)
+            self.assertFalse(oracles.runs_after_write(f"python3 -m unittest; {write}", "rollup/export.py"), write)
+
+    def test_a_second_write_after_the_run_is_not_rerun(self):
+        self.assertFalse(oracles.runs_after_write("echo a > rollup/export.py; python3 -m unittest; echo b > rollup/export.py", "rollup/export.py"))
+        self.assertTrue(oracles.runs_after_write("echo a > rollup/export.py; echo b > rollup/export.py; python3 -m unittest", "rollup/export.py"))
+
+    def test_copilot_a_write_matches_its_own_path_not_its_basename(self):
+        command = "echo a > src/index.py; python3 -m unittest; echo b > lib/index.py"
+        self.assertTrue(oracles.runs_after_write(command, "src/index.py"))
+        self.assertFalse(oracles.runs_after_write(command, "lib/index.py"))
+        self.assertTrue(oracles.runs_after_write("cd /w && echo a > src/a.py && python3 -m pytest", "/w/src/a.py"))
+
+    def tdd(self, events):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/__main__.py": "x = 0\n"})
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main", ok=False, head="FAIL: test_limit\nFAILED (failures=1)")
+                  + [{"seq": 12, "kind": "tool_call", "name": "Edit", "input": {"file_path": f"{project}/rollup/__main__.py"}}] + events)
+        return grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)["verdict"]
+
+    def test_f15_a_comment_naming_a_test_runner_is_not_a_green_rerun(self):
+        self.assertEqual(self.tdd(bash(14, "git status --short  # rerun unittest next", head="Looks ok")), INCONCLUSIVE)
+        self.assertEqual(self.tdd(bash(14, "python3 -m unittest -v tests.test_main", head="test_limit (tests.test_main.T) ... ok")), PASS)
+
+    def test_f15_a_comment_is_not_a_delegates_green_run(self):
+        spawn = {"seq": 3, "tool": "Agent", "persona": "poteto-agent", "prompt_head": "Implement the retry fix"}
+        events = ([{"seq": 3, "kind": "tool_call", "name": "Agent", "input": {}}]
+                  + bash(5, "python3 -m unittest", ok=False, head="FAIL: test_retry")
+                  + bash(7, "git log --oneline -1  # unittest is green in the delegate", head="ok"))
+        result = grade("bug-fix-uses-poteto-tdd-when-cheap", minimal(events=events, spawns=[spawn]), load_case("bug-fix-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_copilot_the_rerun_must_follow_the_latest_source_edit(self):
+        green = bash(14, "python3 -m unittest tests.test_main", head="Ran 1 test\n\nOK")
+        self.assertEqual(self.tdd(green), PASS)
+        self.assertEqual(self.tdd(green + [{"seq": 16, "kind": "tool_call", "name": "Edit", "input": {"file_path": "rollup/__main__.py"}}]), INCONCLUSIVE)
+
+    def test_an_artifact_run_later_in_the_writing_command_proves_it_works(self):
+        case = load_case("bug-fix-run")
+        restore = "cp /tmp/final/export.py rollup/export.py"
+        run = "python3 -m rollup data/orders.csv /tmp/out.csv"
+        self.assertEqual(grade("prove-it-works-checks-real-artifact", minimal(events=bash(5, f"{restore}\n{run}")), case)["verdict"], PASS)
+        self.assertEqual(grade("prove-it-works-checks-real-artifact", minimal(events=bash(5, f"{run}\n{restore}"), final_reply="done"), case)["verdict"], FAIL)
+
 
 if __name__ == "__main__":
     unittest.main()
