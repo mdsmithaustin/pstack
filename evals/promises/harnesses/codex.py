@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import live
+from grade_boundary import copy_file
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/", ".codex/"]
@@ -355,11 +356,10 @@ def turn_entries(run, lead):
 
 
 def copy_into(sources, destination):
-    destination.mkdir(parents=True, exist_ok=True)
     copied = []
     for source in sources:
         target = destination / source.name
-        shutil.copy2(source, target)
+        copy_file(source, target)
         copied.append(str(target))
     return copied
 

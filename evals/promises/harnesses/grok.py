@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 
 import live
+from grade_boundary import copy_file
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/"]
@@ -384,17 +385,15 @@ def decoded_cwd(chat_path):
 
 def copy_session(session_dir, destination):
     target = destination / session_dir.parent.name / session_dir.name
-    target.mkdir(parents=True, exist_ok=True)
     copied = []
     for name in SESSION_FILES:
         if (session_dir / name).is_file():
-            shutil.copy2(session_dir / name, target / name)
+            copy_file(session_dir / name, target / name)
             copied.append(str(target / name))
     for meta in sorted(session_dir.glob("subagents/*/meta.json")):
-        out = target / "subagents" / meta.parent.name
-        out.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(meta, out / "meta.json")
-        copied.append(str(out / "meta.json"))
+        out = target / "subagents" / meta.parent.name / "meta.json"
+        copy_file(meta, out)
+        copied.append(str(out))
     return copied
 
 
