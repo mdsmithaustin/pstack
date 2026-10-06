@@ -34,7 +34,7 @@ export const MERGE_QUEUE_QUERY =
 export function parseMergeQueue(value: unknown): boolean {
   const queue = at(value, ["data", "repository", "mergeQueue"]);
   if (queue === null) return false;
-  record(queue, "repository.mergeQueue");
+  string(record(queue, "repository.mergeQueue").id, "repository.mergeQueue.id");
   return true;
 }
 

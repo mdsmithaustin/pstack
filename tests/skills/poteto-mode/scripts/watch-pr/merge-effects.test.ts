@@ -483,6 +483,9 @@ describe("parseMergeQueue", () => {
     expect(() => parseMergeQueue({ data: { repository: null } })).toThrow();
     expect(() => parseMergeQueue({ data: { repository: {} } })).toThrow();
     expect(() => parseMergeQueue(page("MQ_1"))).toThrow();
+    expect(() => parseMergeQueue(page({}))).toThrow();
+    expect(() => parseMergeQueue(page({ id: 7 }))).toThrow();
+    expect(() => parseMergeQueue(page({ id: null }))).toThrow();
     expect(() => parseMergeQueue({ errors: [{ message: "nope" }] })).toThrow();
   });
 
