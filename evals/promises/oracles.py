@@ -1324,7 +1324,7 @@ SCRIPT_RUN = re.compile(r"\b(?:python3?|node|bash|sh)\s+\S+\.(?:py|js|ts|sh)\b")
 def reply_inconclusive(view):
     pattern = artifact_regex(view)
     checks = [(seq, c, ok, head) for seq, c, ok, head in view.commands()
-              if pattern.search(plain(c)) or re.search(r"unittest|pytest|npm test|node .*\.ts", c) or SCRIPT_RUN.search(c)]
+              if (code := uncommented(c)) and (pattern.search(plain(code)) or re.search(r"unittest|pytest|npm test|node .*\.ts", code) or SCRIPT_RUN.search(code))]
     broken = [c for seq, c, ok, head in checks if ok is False and CANNOT_RUN.search(head) and not any(s > seq and o is not False for s, _, o, _ in checks)]
     evidence = [f"check commands: {len(checks)}, could not run and never ran later: {len(broken)}"]
     if not checks:
