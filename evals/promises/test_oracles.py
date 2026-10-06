@@ -2681,6 +2681,8 @@ class Issue133WritesAndReruns(unittest.TestCase):
             return oracles.View(minimal(events=bash(1, command)), {}, project).edits()
         self.assertEqual(edits("cd ../scratch && python3 -c \"open('x.py','w').write('1')\""), [])
         self.assertEqual(edits("cd rollup && python3 -c \"open('x.py','w').write('1')\""), [(1, "rollup/x.py", "source")])
+        self.assertEqual(edits("cd ../scratch && echo x > x.py"), [])
+        self.assertEqual(edits("cd rollup && echo x > x.py"), [(1, "rollup/x.py", "source")])
 
     def test_n15_a_path_write_text_call_is_the_write(self):
         write = "python3 -c \"from pathlib import Path; Path('rollup/export.py').write_text('x')\""
