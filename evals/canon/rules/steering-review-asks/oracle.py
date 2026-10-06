@@ -645,12 +645,11 @@ def clipboard_names(source):
     return set(CAPTURED_BY_STUB.findall(source)) | clipboard_spies(source)
 
 
-def asserts_on_clipboard(statement, names):
-    return COPIED_VALUE.search(statement) or any(re.search(rf"expect\(\s*{re.escape(name)}\b", statement) for name in names)
+def asserts_on_clipboard(assertion, names):
+    return COPIED_VALUE.search(assertion) or any(re.search(rf"expect\(\s*{re.escape(name)}\b", assertion) for name in names)
 
 
-def statements(source):
-    """source cut before each expect(, so each assertion is read alone."""
+def assertions(source):
     return re.split(r"(?=\bexpect\()", source)
 
 
@@ -661,12 +660,11 @@ def unquoted(value):
 def asserts_copied_value(source):
     """An expectation on the clipboard spy's arguments, or on a variable or
     spy that holds what Copy writes. A stub, a bare toHaveBeenCalled, or an
-    identity check on the spy checks nothing about what Copy writes. Each
-    assertion is read alone, so a matcher on the next one cannot complete it."""
+    identity check on the spy checks nothing about what Copy writes."""
     captured = [rf"expect\(\s*{re.escape(name)}\b[^;]*?\){PAYLOAD_MATCHER}" for name in CAPTURED_BY_STUB.findall(source)]
     spied = [rf"expect\(\s*{re.escape(name)}(?:\s*\){CALLED_WITH}|\.mock\.[^;]*?\){PAYLOAD_MATCHER})" for name in clipboard_spies(source)]
-    return any(COPIED_VALUE.search(statement) or any(re.search(pattern, statement) for pattern in (*captured, *spied))
-               for statement in statements(source))
+    return any(COPIED_VALUE.search(assertion) or any(re.search(pattern, assertion) for pattern in (*captured, *spied))
+               for assertion in assertions(source))
 
 
 def asserted_values(pattern, source):
@@ -684,7 +682,7 @@ def tests_assert_hidden_text_and_copy(added):
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     names = clipboard_names(source)
-    rendered = "".join(statement for statement in statements(source) if not asserts_on_clipboard(statement, names))
+    rendered = "".join(assertion for assertion in assertions(source) if not asserts_on_clipboard(assertion, names))
     absent = asserted_values(ABSENT, rendered)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
