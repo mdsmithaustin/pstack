@@ -876,13 +876,17 @@ def python_targets(source):
 
 
 def segment_writes(command):
-    patched, bodies, made = PATCH_TARGET.findall(command), [body for _, body in heredoc_bodies(command)], set()
+    bodies, made, saved = [body for _, body in heredoc_bodies(command)], set(), {}
     for segment, masked, base in walk_segments(expand_assignments(uncommented(strip_heredocs(command)))):
         body = bodies.pop(0) if HEREDOC.search(segment) and bodies else None
         found = [(pattern, segment[m.start(1):m.end(1)].strip("\"'")) for pattern in (MAKE_DIR, *WRITE_TARGETS) for m in re.finditer(pattern, masked)]
         made |= {os.path.normpath(under(base, t)) for pattern, t in found if pattern == MAKE_DIR}
         shell = [t for pattern, t in found if pattern != MAKE_DIR and not (pattern == REMOVE_TARGET and os.path.normpath(under(base, t)) in made)]
-        shell += patched if PATCH_COMMAND.search(masked) else []
+        if body is not None:
+            saved.update({os.path.normpath(under(base, t)): PATCH_TARGET.findall(body) for t in shell})
+        if PATCH_COMMAND.search(masked):
+            inputs = [saved.get(os.path.normpath(under(base, word.strip("\"'"))), []) for word in re.findall(r"[^\s<>|]+", segment)]
+            shell += PATCH_TARGET.findall(body or segment) or [path for paths in inputs for path in paths]
         python = python_targets(segment if body is None else body) if PYTHON_HEADER.search(segment) else []
         yield segment, [under(base, t) for t in shell if is_write_target(t)], [under(base, t) for t in python]
 
