@@ -3056,6 +3056,12 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         clean = self.candidates_then_status("")
         self.assertEqual(clean["verdict"], PASS, clean)
 
+    def test_copilot_an_untracked_or_unmerged_parent_file_is_a_candidate_write(self):
+        for status in ("?? relay/key_format.py", "UU relay/cache.py", "DU tests/test_cache.py"):
+            self.assertEqual(self.candidates_then_status(status)["verdict"], FAIL, status)
+        own = self.candidates_then_status("?? decisions.tsv\n?? .worktrees/\n?? .arena/\n?? scratch_notes.md\n?? .claude/")
+        self.assertEqual(own["verdict"], PASS, own)
+
     def test_swarm_ownership_past_the_prompt_head_counts(self):
         packages = ("ingest", "shape", "render", "publish")
         prompts = {p: "Goal: run one package's check script and report the result.\n" + "Repo: /w/kiln. Record the SHA first. " * 8
