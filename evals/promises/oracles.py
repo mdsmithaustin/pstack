@@ -2619,11 +2619,10 @@ GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?(?:[MADRCU][MADRCU ]?\s+\S|\?\? ([^\s"]+)
 
 def parent_written(view, candidates):
     start = max(s.get("seq") or 0 for s in candidates)
-    end = min((s.get("seq") or 0 for s in view.spawns if (s.get("seq") or 0) > start), default=float("inf"))
-    first_edit = min((e[0] for e in view.project_edits()), default=float("inf"))
+    end = min((e[0] for e in view.project_edits() if e[0] > start), default=float("inf"))
     for call in view.tool_calls:
         seq, given = call.get("seq") or 0, call.get("input") or {}
-        if call.get("name") not in SHELL_TOOLS or not start < seq < min(end, first_edit):
+        if call.get("name") not in SHELL_TOOLS or not start < seq < end:
             continue
         command = str(given.get(SHELL_TOOLS[call["name"]]) or "").strip()
         if command.startswith("git status") and (given.get("workdir") or given.get("cwd")) in (None, view.trace.get("cwd")):
