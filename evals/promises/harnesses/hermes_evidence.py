@@ -792,7 +792,7 @@ class HermesEvidence:
             acquisition = Acquisition(self.binding.run_id, aid, self._provenance, database, writers,
                                       tuple(k for k in self._catalog if k.startswith(f"acquisitions/{aid}/")))
             result = CompleteEvidence(meta, turns, acquisition, sessions, inventory, ())
-        except (OSError, ValueError, sqlite3.Error, EvidenceRefused, RecursionError) as exc:
+        except (OSError, ValueError, TypeError, sqlite3.Error, EvidenceRefused, RecursionError) as exc:
             reason = exc.reason if isinstance(exc, EvidenceRefused) else "decode-failed"
             result = IncompleteEvidence(self.binding.run_id, aid, reason, f"{type(exc).__name__}: {exc}", meta, turns, ())
         finally:
