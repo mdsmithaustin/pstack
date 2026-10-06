@@ -317,7 +317,7 @@ class PrincipleIndexTests(unittest.TestCase):
 def make_run(directory, agent, fixture, transcripts=True, tree=TREE, case="session-tree"):
     """A screen.py --out dir around one fixture: a stub mounted tree, the
     fixture's build.json or else one whose owner is the Feature playbook, the
-    fixture's trace and output.md in the run dir, its harvest in the parallel harvest tree,
+    fixture's trace in the run dir, its harvest in the parallel harvest tree,
     and its judge.json in the arm's work dir."""
     source = FIXTURES / fixture
     out = Path(directory) / "out"
@@ -1025,9 +1025,6 @@ class WorklistCarrierTests(unittest.TestCase):
 
 
 class FinalReplyTests(unittest.TestCase):
-    """A Claude run whose only list is its final reply, which recaps the
-    Feature steps. output.md holds the same reply, as every run writes it."""
-
     def test_a_final_reply_recap_is_not_the_worklist(self):
         worklist = analyze("claude-final-recap", "claude", transcripts=False)["worklist"]
 
