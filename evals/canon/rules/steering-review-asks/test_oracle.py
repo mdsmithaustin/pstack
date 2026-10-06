@@ -73,6 +73,12 @@ class CopyAssertionTests(unittest.TestCase):
             "expect(writeText).toHaveBeenCalledTimes(1);",
         ), ["constraint:C3: no added web test asserts what Copy writes"])
 
+    def test_a_called_with_check_that_passes_no_payload_does_not_count(self):
+        for check in ("expect(writeText).toHaveBeenCalledWith();", "expect(navigator.clipboard.writeText).toHaveBeenCalledWith( );"):
+            with self.subTest(check):
+                self.assertEqual(self.failures("const writeText = vi.fn();", check),
+                                 ["constraint:C3: no added web test asserts what Copy writes"])
+
     def test_a_spy_asserted_with_the_payload_counts(self):
         self.assertEqual(self.failures("const writeText = vi.fn();", "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);"), [])
 
@@ -88,6 +94,14 @@ class CopyAssertionTests(unittest.TestCase):
             "}) } });",
             "expect(written[0]).toBe(LONG_TEXT);",
         ), [])
+
+    def test_a_payload_captured_by_a_mock_implementation_or_a_wrapped_push_counts(self):
+        for stub in ("Object.assign(navigator, { clipboard: { writeText: vi.fn().mockImplementation(async (text: string) => { written = text; }) } });",
+                     'vi.spyOn(navigator.clipboard, "writeText").mockImplementation(async (text) => { written = text })',
+                     "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((t) => Promise.resolve(written.push(t))) } });",
+                     "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn(async (text: string) => void written.push(text)) } });"):
+            with self.subTest(stub):
+                self.assertEqual(self.failures(stub, "expect(written).toEqual([LONG_TEXT]);"), [])
 
     def test_a_captured_payload_that_is_never_compared_does_not_count(self):
         self.assertEqual(self.failures(
@@ -219,6 +233,10 @@ class HiddenTailTests(unittest.TestCase):
                                                "expect(bubble).not.toHaveTextContent(TAIL)", f"expect({name}).toContain(TAIL)"),
                                  [self.PRESENT])
 
+    def test_an_open_paren_inside_a_string_does_not_join_the_next_assertions(self):
+        self.assertEqual(self.failures('expect(bubble).not.toHaveTextContent("tail (end")', 'expect(bubble).toHaveTextContent("tail (end")',
+                                       "expect(writeText).toHaveBeenCalledWith(LONG_TEXT)"), [])
+
     def test_assertions_without_semicolons_still_count(self):
         self.assertEqual(self.failures('it("hides", () => {', "  expect(bubble).not.toHaveTextContent(TAIL)",
                                        "  expect(bubble).toHaveTextContent(TAIL)", "})"), [])
@@ -231,6 +249,7 @@ class HiddenTailTests(unittest.TestCase):
     def test_the_same_value_absent_then_present_counts_across_assertion_forms(self):
         for absent, present in (("expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent( TAIL );"),
                                 ("expect(screen.queryByText(TAIL)).toBeNull();", "expect(screen.getByText(TAIL)).toBeTruthy();"),
+                                ("expect(bubble).not.toHaveTextContent(TAIL);", "expect(await screen.findByText(TAIL)).toBeInTheDocument();"),
                                 ("expect(bubble.textContent).not.toContain(TAIL);", "expect(bubble.textContent).toContain(TAIL);"),
                                 ('expect(bubble).not.toHaveTextContent("the end");', "expect(bubble).toHaveTextContent('the end');")):
             with self.subTest(absent):
