@@ -527,7 +527,7 @@ class View:
                     out.append((call.get("seq"), path, self.classify(path)))
             elif name in SHELL_TOOLS:
                 command = str(given.get(SHELL_TOOLS[name]) or "")
-                for path in shell_writes(command) + [w for w in python_writes(command) if self.inside_project(w)]:
+                for path in [w for w in shell_writes(command) + python_writes(command) if self.inside_project(w)]:
                     out.append((call.get("seq"), path, self.classify(path)))
         return out
 
