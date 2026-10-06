@@ -2860,7 +2860,8 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         self.assertEqual(result["verdict"], PASS, result)
 
     def test_n1_runners_whose_first_replies_say_judge_or_synthesize_are_runners(self):
-        spawns = [self.sealed(10, "I'll judge which shape is simplest.", "runner_a"), self.sealed(10, "Sketching; I'll synthesize the caller's view.", "runner_b")]
+        spawns = [self.sealed(10, "Design runner: I'll judge which shape is simplest.", "runner_a"),
+                  self.sealed(10, "### Sketch\n\nI'll synthesize the caller's view.", "runner_b")]
         trace = minimal(events=[read(1, "arena/SKILL.md")] + self.spawned(spawns), spawns=spawns, harness="codex")
         result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
         self.assertIn("runner spawns: 2", result["evidence"])
@@ -2877,6 +2878,19 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
         self.assertEqual(result["verdict"], FAIL, result)
 
+    def test_n2_an_implementer_whose_first_reply_mentions_explorer_notes_is_no_narrow_question_explorer(self):
+        spawns = [self.sealed(10, "Implementing per the explorer notes in src/a.py.")]
+        result = grade("how-narrow-question-no-explorers", minimal(events=self.spawned(spawns), spawns=spawns, harness="codex", final_reply="x"), load_case("how-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_an_unlabelled_first_reply_still_names_a_sealed_reviewer(self):
+        reviewer = self.sealed(5, "persona: poteto-agent\nI'm using poteto-mode and documentation-impact to review the CLI and its docs.", "docs_review")
+        events = [dict(e, turn=0) for e in self.spawned([reviewer])] + [dict(text(7, "Done. Author result: independent review required. Review: pass."), turn=0),
+                                                                        dict(text(9, "Review mode run."), turn=1)]
+        result = grade("documentation-impact-independent-review-pass-required", minimal(events=events, spawns=[dict(reviewer, turn=0)], harness="codex"),
+                       load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
     def sources(self, reply):
         return grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))["verdict"]
 
@@ -2885,7 +2899,7 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         self.assertEqual(self.sources("Commit 12d7ece raised it.\n\nSources: git log, README."), PASS)
 
     def test_n7_a_source_label_must_start_a_sentence(self):
-        self.assertEqual(self.sources("Commit 12d7ece came from an open source: the upstream git mirror."), FAIL)
+        self.assertEqual(self.sources("Commit 12d7ece pulled from two open sources: the upstream git mirror and a fork."), FAIL)
 
     def test_n7_sources_searched_mid_sentence_is_a_sources_section(self):
         self.assertEqual(self.sources("Commit 12d7ece raised it. I listed the sources searched below, git log first."), PASS)
@@ -2905,6 +2919,14 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
     def test_n6_inherit_is_the_leads_model(self):
         self.assertEqual(self.judged("inherit", "claude-opus-5-5", ["opus", "sonnet"]), FAIL)
         self.assertEqual(self.judged("opus", "claude-opus-5-5", ["inherit", "inherit"]), PASS)
+
+    def test_n7_two_tierless_slugs_compare_whole(self):
+        self.assertEqual(self.judged("claude", "claude", ["gpt-6"]), FAIL)
+
+    def test_a_labelled_first_reply_names_a_sealed_investigator(self):
+        spawns = [self.sealed(10, "Source investigated: local Git history, README, and source comments.")]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=self.spawned(spawns), spawns=spawns, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
 
     def arena(self, line):
         candidates = [{"seq": 43, "tool": "delegate_task", "prompt_head": f"Design one candidate {n}. Write under /tmp/k/candidate-{n}/"} for n in range(1, 6)]
