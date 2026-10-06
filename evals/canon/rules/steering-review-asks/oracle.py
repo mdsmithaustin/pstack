@@ -629,7 +629,7 @@ COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?
                           + r"|expect\([^;]*?(?:(?:writeText|copyText)\.mock\.|readText\()[^;]*?\)" + PAYLOAD_MATCHER)
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)\s*(?:[:=]\s*(?:(?:vi|jest)\.fn\(\s*)?(?:async\s*)?(?:function\s*)?\([^)]*\)\s*(?:=>\s*)?"
                               r"|\([^)]*\)\s*(?=\{))(?:\{[^}]*?\b)?(\w+)(?:\.push\(|\s*=(?![=>]))")
-SPY_AS_WRITETEXT = re.compile(r"""clipboard["']?\s*[:,]\s*\{(?:\s*value\s*:\s*\{)?[^{}]*?\bwriteText\s*:\s*(\w+)\b(?!\s*[.(])""")
+SPY_AS_WRITETEXT = re.compile(r"""clipboard["']?\s*[:,]\s*\{(?:\s*value\s*:\s*\{)?[^{}]*?\bwriteText["']?\s*:\s*(\w+)\b(?!\s*[.(])""")
 SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;,]*\bclipboard\s*,\s*["']writeText["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
@@ -669,12 +669,12 @@ def unquoted(value):
 def asserts_copied_value(source):
     """An expectation on the clipboard spy's arguments, or on a variable or
     spy that holds what Copy writes. A stub, a bare toHaveBeenCalled, or an
-    identity check on the spy checks nothing about what Copy writes."""
-    if COPIED_VALUE.search(source):
-        return True
-    captured = (rf"expect\(\s*{re.escape(name)}\b[^;]*?\){PAYLOAD_MATCHER}" for name in CAPTURED_BY_STUB.findall(source))
-    spied = (rf"expect\(\s*{re.escape(name)}(?:\s*\){CALLED_WITH}|\.mock\.[^;]*?\){PAYLOAD_MATCHER})" for name in clipboard_spies(source))
-    return any(re.search(pattern, source) for pattern in (*captured, *spied))
+    identity check on the spy checks nothing about what Copy writes. Each
+    assertion is read alone, so a matcher on the next one cannot complete it."""
+    captured = [rf"expect\(\s*{re.escape(name)}\b[^;]*?\){PAYLOAD_MATCHER}" for name in CAPTURED_BY_STUB.findall(source)]
+    spied = [rf"expect\(\s*{re.escape(name)}(?:\s*\){CALLED_WITH}|\.mock\.[^;]*?\){PAYLOAD_MATCHER})" for name in clipboard_spies(source)]
+    return any(COPIED_VALUE.search(statement) or any(re.search(pattern, statement) for pattern in (*captured, *spied))
+               for statement in statements(source))
 
 
 def asserted_values(pattern, source):
