@@ -15,6 +15,7 @@ class OrchRoleContract(unittest.TestCase):
         spec.loader.exec_module(models)
         artifact = json.loads((ROOT / 'skills/poteto-mode/scripts/orch/role-contract.json').read_text())
         self.assertEqual(artifact, {
+            'harnesses': sorted(models.CLIS),
             'singleRoles': sorted(models.ROLES - models.PANEL_ROLES),
             'panelRoles': sorted(models.PANEL_ROLES),
             'unresolvedAliases': sorted(models.OTHER_ALIASES),

@@ -219,6 +219,9 @@ function parseResolutionContext(
 export function parseBeginAttempt(value: unknown): BeginAttempt {
   const row = record(value);
   const resolution = record(row.resolution);
+  const harness = text(resolution.harness);
+  if (!roleContract.harnesses.includes(harness))
+    throw new UserError("unknown execution harness");
   const role = text(row.role);
   if (row.authority !== "worker" && row.authority !== "verifier")
     throw new UserError("authority must be worker or verifier");
@@ -234,7 +237,7 @@ export function parseBeginAttempt(value: unknown): BeginAttempt {
     brief: text(row.brief),
     checkout: text(row.checkout),
     resolution: {
-      harness: text(resolution.harness),
+      harness,
       model: concreteIdentity(resolution.model),
       effort: concreteIdentity(resolution.effort),
     },

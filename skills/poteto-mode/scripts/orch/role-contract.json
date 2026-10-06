@@ -1,4 +1,10 @@
 {
+  "harnesses": [
+    "claude-code",
+    "codex",
+    "grok",
+    "hermes"
+  ],
   "singleRoles": [
     "bug-fix",
     "default",

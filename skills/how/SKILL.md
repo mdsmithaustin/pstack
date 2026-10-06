@@ -18,7 +18,7 @@ If the scope is ambiguous, state your interpretation and explore. The user can r
 
 When in doubt, take the simple path.
 
-If the repo has a GitNexus index (`.gitnexus/` exists), refresh it first — run `gitnexus analyze --index-only` once yourself before spawning anything (it is incremental and a no-op when up to date; never run it from parallel arms). Then seed exploration: `gitnexus query "<concept>"` for execution flows, `gitnexus context <symbol>` for callers/callees, `gitnexus trace <from> <to>` for the path between two symbols. Graph results choose where to read; the code itself remains the source of truth — the index reflects the last analyzed commit and never sees uncommitted edits. No index? Explore normally; after answering a complex question, you may suggest `gitnexus analyze` to the user once for repos worth exploring again.
+If the repo has a GitNexus index (`.gitnexus/` exists) and `gitnexus` is on `PATH`, refresh it first — run `gitnexus analyze --index-only` once yourself before spawning anything (it is incremental and a no-op when up to date; never run it from parallel arms). Then seed exploration: `gitnexus query "<concept>"` for execution flows, `gitnexus context <symbol>` for callers/callees, `gitnexus trace <from> <to>` for the path between two symbols. Graph results choose where to read; the code itself remains the source of truth — the index reflects the last analyzed commit and never sees uncommitted edits. Without the index or the CLI, explore normally. When the repo has no index but `gitnexus` is on `PATH`, after answering a complex question, you may suggest `gitnexus analyze` to the user once for repos worth exploring again.
 
 ## Step 2a. Explore (complex questions only)
 

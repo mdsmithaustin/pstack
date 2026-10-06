@@ -73,6 +73,8 @@ Babysit reports documentation readiness alongside forge status. A status-only re
 
 The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) works from a worktree, rebases the work into small ordered commits, cleans the diff, unslops the prose, and returns the PR link. Five narrow PRs beat one fat one, and stacked follow-ups beat a growing branch.
 
+When a repository gates pushes through [no-mistakes](https://kunchenguid.github.io/no-mistakes/), the agent publishes each branch and opens each PR through the no-mistakes pipeline, and restacks with `no-mistakes rerun` once a run ends. It pushes nothing else except work-in-progress snapshots under `refs/pstack/wip/`, or under the agent ref convention the repository names. When the gate is broken, it stops and reports. It pushes around the gate only after you say "bypass no-mistakes" in the session. An agent in a Docker sandbox commits and leaves the push to the host.
+
 ## Drive the PR to merge-ready with Babysit
 
 An open PR starts collecting blockers immediately. Checks fail, reviewers comment, trunk moves. Hand that churn to the [Babysit playbook](../../skills/poteto-mode/playbooks/babysit.md):

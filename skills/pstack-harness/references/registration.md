@@ -32,7 +32,7 @@ To inspect the same registration without writing:
 python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" check --harness codex --project "${PSTACK_AGENT_DESTINATION:?}"
 ```
 
-Failure signal: nonzero exit when either requested native file is missing, outdated, conflicting, or invalid.
+Failure signal: nonzero exit when any requested native file is missing, outdated, conflicting, or invalid. Claude Code uses `--harness claude-code`. For a user registration, use `--user` instead of `--project` and set `PSTACK_AGENT_DESTINATION` to the chosen absolute user home, as for install.
 
 Hermes supports `check --harness hermes` with an explicit project or user root, reporting ready payloads and unsupported native registration. It has no confirmed arbitrary custom-agent-file loader. `install --harness hermes` rejects the request without writing files. Supply the complete briefing through its delegation context instead. Grok Build has no `--harness grok` registration. It loads the Claude Code wrappers from `~/.claude/agents/` as agent types, but its spawn tool cannot name one, so a Grok delegate gets the complete briefing in its prompt.
 

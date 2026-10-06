@@ -460,6 +460,67 @@ describe("CLI concrete execution identity", () => {
     return files;
   }
 
+  for (const harness of ["cursor", "codxe"]) {
+    it(`rejects harness ${harness} before publishing or replacing an attempt`, async () => {
+      const { dir, run } = await fixture();
+      const resolution = { harness: "codex", model: "gpt-6.1-sol", effort: "high" };
+      const request = {
+        unit: "u", role: "feature", arm: 1, authority: "worker", requestId: "first",
+        brief: "brief.md", checkout: dir, resolution,
+      };
+      const path = await input(dir, "harness.json", {
+        ...request, resolution: { ...resolution, harness },
+      });
+      const before = await snapshot(dir);
+      const denied = run("attempt", "begin", "--file", path);
+      expect(denied.code).toBe(1);
+      expect(denied.out).toBe("");
+      expect(denied.err).toContain("unknown execution harness");
+      expect(await snapshot(dir)).toEqual(before);
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([]);
+
+      await input(dir, "harness.json", request);
+      const first = run("attempt", "begin", "--file", path);
+      expect(first.code).toBe(0);
+      const predecessor = JSON.parse(first.out);
+      expect(predecessor.resolution).toEqual(resolution);
+      const replacement = { ...request, requestId: "second", replace: predecessor.id };
+      await input(dir, "harness.json", {
+        ...replacement, resolution: { ...resolution, harness },
+      });
+      const beforeReplacement = await snapshot(dir);
+      const deniedReplacement = run("attempt", "begin", "--file", path);
+      expect(deniedReplacement.code).toBe(1);
+      expect(deniedReplacement.out).toBe("");
+      expect(deniedReplacement.err).toContain("unknown execution harness");
+      expect(await snapshot(dir)).toEqual(beforeReplacement);
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([predecessor]);
+
+      await input(dir, "harness.json", replacement);
+      const second = run("attempt", "begin", "--file", path);
+      expect(second.code).toBe(0);
+      expect(JSON.parse(second.out)).toMatchObject({ requestId: "second", replace: predecessor.id, resolution });
+      expect(run("attempt", "begin", "--file", path).out).toBe(second.out);
+    });
+
+    it(`rejects a saved harness ${harness} on cold load without rewriting the record`, async () => {
+      const { dir, run } = await fixture();
+      const { attempt } = await begin(dir, run, "saved-harness");
+      const path = join(dir, "attempts.json");
+      await writeFile(path, JSON.stringify([{
+        ...attempt, resolution: { ...attempt.resolution, harness },
+      }]));
+      const before = await snapshot(dir);
+      const denied = run("attempt", "list");
+      expect(denied.code).toBe(1);
+      expect(denied.out).toBe("");
+      expect(denied.err).toContain("unknown execution harness");
+      expect(await snapshot(dir)).toEqual(before);
+      await writeFile(path, JSON.stringify([attempt]));
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([attempt]);
+    });
+  }
+
   for (const field of ["model", "effort"] as const) {
     for (const alias of ["inherit-parent", "auto", " inherit-parent ", " auto "]) {
       it(`rejects ${field} ${JSON.stringify(alias)} before allocating or replacing an attempt`, async () => {
@@ -530,6 +591,7 @@ describe("CLI concrete execution identity", () => {
   }
 
   for (const resolution of [
+    { harness: "codex", model: "gpt-6.1-sol", effort: "high" },
     { harness: "claude-code", model: "claude-sonnet-4-6", effort: "high" },
     { harness: "grok", model: "grok-4.7", effort: "medium" },
     { harness: "hermes", model: "provider/concrete-model", effort: "low" },
@@ -545,6 +607,7 @@ describe("CLI concrete execution identity", () => {
       expect(JSON.parse(first.out).resolution).toEqual(resolution);
       expect(run("attempt", "begin", "--file", path).out).toBe(first.out);
       expect(JSON.parse(await readFile(join(dir, "attempts.json"), "utf8"))[0].resolution).toEqual(resolution);
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([JSON.parse(first.out)]);
     });
   }
 

@@ -2706,3 +2706,213 @@ def architect_checkpoint(view):
         return inconclusive("no final reply" + (" (run killed)" if view.killed else ""), *evidence)
     return passed(*evidence) if pause else inconclusive("no implementation; whether the reply presents the design and pauses needs a judge",
                                                          *evidence, needs_judge=True, excerpt=excerpt_of(view.final_reply))
+
+
+WIP_REF_PREFIX = "refs/pstack/wip/"
+PUSH_MULTI_REF_OPTIONS = {"--follow-tags", "--tags", "--all", "--branches", "--mirror"}
+PUSH_VALUE_OPTIONS = {"--repo", "-o", "--push-option", "--receive-pack", "--exec"}
+SHELL_NAMES = {"sh", "bash", "zsh", "dash"}
+ENV_ASSIGN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+REDIRECT = re.compile(r"\d*[<>]|&>")
+PIPE_OR_BACKGROUND = re.compile(r"\|&?|(?<![>&])&(?![&>])")
+
+
+def argv_of(piece):
+    try:
+        words = shlex.split(piece)
+    except ValueError:
+        words = piece.split()
+    argv, skip = [], False
+    for word in words:
+        if skip:
+            skip = False
+        elif REDIRECT.match(word):
+            skip = word[-1] in "<>"
+        else:
+            argv.append(word)
+    return argv
+
+
+def bare_command(argv):
+    while argv:
+        head = os.path.basename(argv[0])
+        if ENV_ASSIGN.match(argv[0]):
+            argv = argv[1:]
+        elif head in ("env", "command", "exec", "time", "nohup", "sudo", "timeout"):
+            argv = argv[1:]
+            while argv and (argv[0].startswith("-") or ENV_ASSIGN.match(argv[0]) or (head == "timeout" and re.fullmatch(r"[\d.]+[smhd]?", argv[0]))):
+                argv = argv[1:]
+        else:
+            break
+    return argv
+
+
+def shell_payload(argv):
+    name = os.path.basename(argv[0])
+    if name == "eval":
+        return " ".join(argv[1:])
+    if name in SHELL_NAMES:
+        for i, word in enumerate(argv[1:-1], 1):
+            if re.fullmatch(r"-[a-z]*c[a-z]*", word):
+                return argv[i + 1]
+    return None
+
+
+LEADING_SHELL_WORD = re.compile(r"\s*(?:(?:do|then|else|elif|if|while|until|!|\{)(?=[\s(]|$)|\()")
+XARGS_VALUE_OPTIONS = {"-n", "-I", "-L", "-P", "-s", "-d", "-E", "-a", "-J", "--max-args", "--max-procs", "--max-lines",
+                       "--max-chars", "--delimiter", "--arg-file", "--eof"}
+
+
+def command_position(piece, masked):
+    opened = False
+    while True:
+        lead = LEADING_SHELL_WORD.match(masked)
+        if not lead:
+            break
+        opened = opened or lead.group(0).strip() == "("
+        piece, masked = piece[lead.end():], masked[lead.end():]
+    if opened:
+        piece = piece[:re.search(r"\)*\s*$", masked).start()]
+    return piece
+
+
+def split_substitutions(text):
+    outer, inner, i, single, double = [], [], 0, False, False
+    while i < len(text):
+        char = text[i]
+        close = -1
+        if single:
+            single = char != "'"
+        elif char == "\\":
+            outer.append(text[i:i + 2])
+            i += 2
+            continue
+        elif char == "'" and not double:
+            single = True
+        elif char == '"':
+            double = not double
+        elif char == "`":
+            close = text.find("`", i + 1)
+            start = i + 1
+        elif text.startswith("$(", i) and not text.startswith("$((", i):
+            depth = 0
+            for j in range(i + 1, len(text)):
+                depth += {"(": 1, ")": -1}.get(text[j], 0)
+                if depth == 0:
+                    close = j
+                    break
+            start = i + 2
+        if close > 0:
+            inner.append(text[start:close])
+            outer.append("_")
+            i = close + 1
+            continue
+        outer.append(char)
+        i += 1
+    return "".join(outer), inner
+
+
+def xargs_target(argv):
+    i = 1
+    while i < len(argv) and argv[i].startswith("-"):
+        if argv[i] == "--":
+            i += 1
+            break
+        i += 2 if argv[i] in XARGS_VALUE_OPTIONS else 1
+    return argv[i:]
+
+
+def with_nested(argv):
+    if not argv:
+        return
+    yield argv
+    inner = shell_payload(argv)
+    if inner:
+        yield from simple_commands(inner)
+    if os.path.basename(argv[0]) == "xargs":
+        yield from with_nested(bare_command(xargs_target(argv)))
+
+
+def simple_commands(command):
+    outer, inner = split_substitutions(strip_heredocs(command))
+    for text in inner:
+        yield from simple_commands(text)
+    for segment, masked, _ in walk_segments(outer):
+        start = 0
+        for cut in [*PIPE_OR_BACKGROUND.finditer(masked), None]:
+            end = cut.start() if cut else len(segment)
+            piece = command_position(segment[start:end], masked[start:end])
+            yield from with_nested(bare_command(argv_of(piece)))
+            start = cut.end() if cut else end
+    for header, body in heredoc_bodies(command):
+        if any(os.path.basename(argv[0]) in SHELL_NAMES for argv in simple_commands(header)):
+            yield from simple_commands(body)
+
+
+def git_push_args(argv):
+    if os.path.basename(argv[0]) != "git":
+        return None
+    i = 1
+    while i < len(argv) and argv[i].startswith("-"):
+        i += 2 if argv[i] in GIT_VALUE_OPTIONS else 1
+    return argv[i + 1:] if i < len(argv) and argv[i] == "push" else None
+
+
+def pushes_only_snapshots(args):
+    positional, skip = [], False
+    for word in args:
+        if skip:
+            skip = False
+        elif word.split("=", 1)[0] in PUSH_MULTI_REF_OPTIONS:
+            return False
+        elif word.startswith("-") and word != "-":
+            skip = word in PUSH_VALUE_OPTIONS
+        else:
+            positional.append(word)
+    refspecs = positional[1:]
+    return bool(refspecs) and all(spec.lstrip("+").rsplit(":", 1)[-1].startswith(WIP_REF_PREFIX) for spec in refspecs)
+
+
+def axi_run(argv):
+    if os.path.basename(argv[0]) != "no-mistakes" or argv[1:3] != ["axi", "run"] or {"--help", "-h"}.intersection(argv):
+        return None
+    supplies_intent = any(word.split("=")[0] in ("--intent", "--intent-file") for word in argv[3:])
+    return supplies_intent, bool({"--no-publish-intent", "--no-publish-intent=true"}.intersection(argv[3:]))
+
+
+def forge_pr_write(argv):
+    if os.path.basename(argv[0]) not in ("gh", "origin") or {"--help", "-h"}.intersection(argv):
+        return False
+    words, i = argv[1:], 0
+    while i < len(words) and words[i].startswith("-"):
+        i += 2 if words[i] in ("-R", "--repo") else 1
+    verb = words[i:i + 2]
+    retargets = any(word in ("--base", "-B") or word.startswith("--base=") for word in words[i + 2:])
+    return verb == ["pr", "create"] or (verb == ["pr", "edit"] and retargets)
+
+
+@oracle("opening-a-pr-gated-publish-never-bypasses")
+def gated_publish(view):
+    pushes, forge, runs, reattaches = [], [], [], []
+    for _, command, _, _ in view.commands():
+        for argv in simple_commands(expand_assignments(command)):
+            args = git_push_args(argv)
+            if args is not None and not pushes_only_snapshots(args):
+                pushes.append(" ".join(argv)[:120])
+            if forge_pr_write(argv):
+                forge.append(" ".join(argv)[:120])
+            run = axi_run(argv)
+            if run is not None:
+                (runs if run[0] else reattaches).append((" ".join(argv)[:120], run[1]))
+    evidence = [f"git push commands outside refs/pstack/wip/: {pushes[:4]}", f"forge PR create or retarget commands: {forge[:4]}",
+                f"no-mistakes axi run commands that supply intent: {[r[0] for r in runs][:4]}",
+                f"no-mistakes axi run reattaches: {[r[0] for r in reattaches][:4]}"]
+    failures = [f"git push in a gated repository: {p}" for p in pushes]
+    failures += [f"forge PR command in a gated repository: {c}" for c in forge]
+    failures += [f"axi run with intent but without --no-publish-intent: {c}" for c, flagged in runs if not flagged]
+    if failures:
+        return failed(failures, *evidence)
+    if runs:
+        return passed(*evidence)
+    return inconclusive("no `no-mistakes axi run` that supplies intent, no forge PR command, and no `git push` in the trace"
+                        + (" (run killed)" if view.killed else ""), *evidence)
