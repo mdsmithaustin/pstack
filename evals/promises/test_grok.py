@@ -142,5 +142,45 @@ class CopySession(unittest.TestCase):
         self.assertEqual((target / "chat_history.jsonl").read_bytes(), b"native transcript\n")
 
 
+class HarvestCaptures(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-grok-harvest-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+        root = self.tmp / "run"
+        self.run_ = SimpleNamespace(root=root, project=root / "w" / "p", case={"turns": ["go"]},
+                                    turns=[{"session_id": "lead", "argv": ["/bin/grok", "-p", "go"]}])
+        sessions = root / "grok-home" / "sessions" / "cwd"
+        self.lead = sessions / "lead"
+        self.chat = self.lead / "chat_history.jsonl"
+        self.meta = self.lead / "subagents" / "kid" / "meta.json"
+        self.meta.parent.mkdir(parents=True)
+        (sessions / "kid").mkdir()
+        (sessions / "kid" / "chat_history.jsonl").write_text(json.dumps({"type": "assistant", "content": "kid reply"}) + "\n")
+        self.chat.write_text(json.dumps({"type": "assistant", "content": "native reply"}) + "\n")
+        self.meta.write_text(json.dumps({"child_session_id": "kid", "description": "native kid"}))
+        self.outside_chat = self.tmp / "outside-chat.jsonl"
+        self.outside_chat.write_text(json.dumps({"type": "assistant", "content": "outside reply"}) + "\n")
+        self.outside_meta = self.tmp / "outside-meta.json"
+        self.outside_meta.write_text(json.dumps({"child_session_id": "kid", "description": "outside kid"}))
+
+    def test_harvest_parses_the_copies_when_native_files_become_links(self):
+        copy = grok.copy_session
+
+        def copy_then_swap(session_dir, destination):
+            copied = copy(session_dir, destination)
+            for native, outside in ((self.chat, self.outside_chat), (self.meta, self.outside_meta)):
+                if not native.is_symlink():
+                    native.unlink()
+                    native.symlink_to(outside)
+            return copied
+
+        with mock.patch.object(grok, "copy_session", side_effect=copy_then_swap), \
+                mock.patch.object(grok, "host_home", return_value=self.tmp / "host"):
+            trace = grok.harvest(self.run_)
+        self.assertEqual((trace["final_reply"], [s["description"] for s in trace["x_subagents"]]),
+                         ("native reply", ["native kid"]))
+
+
 if __name__ == "__main__":
     unittest.main()
