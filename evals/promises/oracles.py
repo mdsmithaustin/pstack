@@ -2197,7 +2197,7 @@ def trail_reviewer(view):
         return failed("no trail reviewer spawned before the summary", *evidence)
     model = reviewers[0].get("model")
     if model and view.model and model.split("-")[0] in str(view.model):
-        evidence.append("reviewer shares the lead's model family; the resolver moves it off the working model when they match")
+        evidence.append("reviewer shares the lead's model family; the resolver moves it off the working model when they match and the config allows another")
     return passed(*evidence)
 
 
