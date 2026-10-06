@@ -2661,6 +2661,14 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(oracles.shell_writes("git apply --check <<'EOF'\n" + body), [])
         self.assertEqual(oracles.shell_writes("git apply fix.patch"), [])
 
+    def test_copilot_each_patch_writes_only_its_own_body(self):
+        def body(name):
+            return f"--- a/{name}\n+++ b/{name}\n@@ -1 +1 @@\n-x\n+y\nEOF"
+        command = "cd /a && git apply <<'EOF'\n" + body("x.py") + "\ncd /b && git apply <<'EOF'\n" + body("y.py")
+        self.assertEqual(oracles.shell_writes(command), ["/a/x.py", "/b/y.py"])
+        saved = "cat > /tmp/x.diff <<'EOF'\n" + body("x.py") + "\ncat > /tmp/y.diff <<'EOF'\n" + body("y.py") + "\ncd /b && patch -p1 < /tmp/y.diff"
+        self.assertEqual(oracles.shell_writes(saved), ["/tmp/x.diff", "/tmp/y.diff", "/b/y.py"])
+
     def test_f13_copies_into_rationale_paths_are_not_rationale_reads(self):
         brief = "Write `rationale.md` in your directory."
         spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
