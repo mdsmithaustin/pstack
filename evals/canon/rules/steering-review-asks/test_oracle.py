@@ -170,6 +170,41 @@ class KnownIssueProseTests(unittest.TestCase):
                          ["Embedded mode loops on this pin."])
 
 
+class LiveEntryPinTests(unittest.TestCase):
+    """C6: the agent's own tests still pass once the edited catalog entry is restored."""
+    ENTRY = "plugin-catalog/hindsight.yaml"
+    DIFF = (f"diff --git a/{ENTRY} b/{ENTRY}\n--- a/{ENTRY}\n+++ b/{ENTRY}\n@@ -1 +1 @@\n-sha: old\n+sha: new\n"
+            "diff --git a/tests/hermes_cli/test_own.py b/tests/hermes_cli/test_own.py\nnew file mode 100644\n"
+            "--- /dev/null\n+++ b/tests/hermes_cli/test_own.py\n@@ -0,0 +1 @@\n+def test_a(): pass\n")
+
+    def failures(self, edited, restored):
+        module = oracle()
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(module, "project_test_results", side_effect=[edited, restored]):
+            (Path(directory) / "plugin-catalog").mkdir()
+            (Path(directory) / self.ENTRY).write_text("sha: old\n")
+            return module.own_tests_pin_the_live_entry(Workspace(Path(directory), self.DIFF, None))
+
+    def test_a_test_that_skips_once_the_entry_is_restored_fails(self):
+        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a": "passed"},
+                                       {"tests.hermes_cli.test_own::test_a": "skipped"}),
+                         [f"constraint:C6: tests.hermes_cli.test_own::test_a skipped with {self.ENTRY} restored"])
+
+    def test_a_failure_under_a_label_the_edited_run_lacks_fails(self):
+        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a[new]": "passed"},
+                                       {"tests.hermes_cli.test_own::test_a[old]": "failed"}),
+                         [f"constraint:C6: tests.hermes_cli.test_own::test_a[old] failed with {self.ENTRY} restored"])
+
+    def test_a_collection_error_once_the_entry_is_restored_fails(self):
+        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a": "passed"},
+                                       {"tests.hermes_cli.test_own": "failed"}),
+                         [f"constraint:C6: tests.hermes_cli.test_own failed with {self.ENTRY} restored"])
+
+    def test_a_test_that_skips_or_fails_either_way_does_not_pin_the_entry(self):
+        both = {"tests.hermes_cli.test_own::test_windows": "skipped", "tests.hermes_cli.test_own::test_broken": "failed"}
+        self.assertEqual(self.failures(both, both), [])
+
+
 class WindowsTestTests(unittest.TestCase):
     """C3: Windows behaviour gets a @pytest.mark.platforms("windows") test and no sys.platform patch."""
     FILE = "tests/hermes_cli/test_gui_command.py"
@@ -363,7 +398,7 @@ class KnownIssuesTests(ReplayedPullRequest):
             f"constraint:C5: {checks}::test_validator_accepts_the_hindsight_entry failed",
             f"constraint:C8: {checks}::test_dashboard_result_fits_the_plugins_manage_contract failed",
             "constraint:C6: tests.hermes_cli.test_124037_catalog_known_issues_gate.TestCatalogParsing"
-            "::test_live_catalog_hindsight_declares_known_issues passes only with the edited plugin-catalog/hindsight.yaml",
+            "::test_live_catalog_hindsight_declares_known_issues failed with plugin-catalog/hindsight.yaml restored",
         ], {"outside_footprint": ["tests/hermes_cli/test_124037_catalog_known_issues_gate.py"], "added": 213, "merged_added": 130}))
 
 
