@@ -838,9 +838,11 @@ WRITE_TARGETS = (r"(?:>>?|\btee\s+(?:-a\s+)?)\s*([^\s;&|]+)",
                  r"\bmv\s+(?:-\w+\s+)*\S+\s+([^\s;&|]+)",
                  AT_COMMAND + r"(?:cp|install)(?!.*" + TARGET_DIR + r")\s+" + LAST_ARG,
                  AT_COMMAND + r"(?:cp|install)(?=\s).*?" + TARGET_DIR + r"([^\s<>]+)",
-                 AT_COMMAND + r"perl\s+(?=(?:\S+\s+)*?-\w*i)" + LAST_ARG,
+                 AT_COMMAND + r"perl\s+(?=(?:\S+\s+)*?-\w*i)(?:\S+\s+)*-\w*[eE]\s+\S+\s+([^<>]*[^\s<>])",
+                 AT_COMMAND + r"perl\s+(?=(?:\S+\s+)*?-\w*i)(?!.*\s-\w*[eE]\s)" + LAST_ARG,
                  AT_COMMAND + r"ed\s+(?:-\S+\s+)*([^\s<>]+)",
                  r"\bdd\s[^<>]*?\bof=([^\s<>]+)")
+WORD = re.compile(r"\S+")
 PATCH_COMMAND = re.compile(r"\bgit\s+apply\b(?!.*\s--(?:check|stat|numstat|summary)\b)|" + AT_COMMAND + r"patch\b(?!.*\s--dry-run\b)")
 PATCH_PAIR = re.compile(r"(?m)^--- (?:a/)?(\S+)[^\n]*\n\+\+\+ (?:b/)?(\S+)")
 
@@ -889,7 +891,8 @@ def segment_writes(command):
     bodies, made, saved = [body for _, body in heredoc_bodies(command)], set(), {}
     for segment, masked, base in walk_segments(expand_assignments(uncommented(strip_heredocs(command)))):
         body = bodies.pop(0) if HEREDOC.search(segment) and bodies else None
-        found = [(pattern, segment[m.start(1):m.end(1)].strip("\"'")) for pattern in (MAKE_DIR, *WRITE_TARGETS) for m in re.finditer(pattern, masked)]
+        found = [(pattern, segment[w.start():w.end()].strip("\"'")) for pattern in (MAKE_DIR, *WRITE_TARGETS)
+                 for m in re.finditer(pattern, masked) for w in WORD.finditer(masked, m.start(1), m.end(1))]
         made |= {os.path.normpath(under(base, t)) for pattern, t in found if pattern == MAKE_DIR}
         shell = [t for pattern, t in found if pattern != MAKE_DIR and not (pattern == REMOVE_TARGET and os.path.normpath(under(base, t)) in made)]
         if body is not None:
