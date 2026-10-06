@@ -6,7 +6,7 @@
 
 `units.tsv` and `ledger.tsv` remain canonical. Unit states are caller-defined strings. Existing stores and five-column inbox pointers remain readable. A legacy tracked pointer adds an attempt id as its sixth column. A bound completion adds the saved binding token, actual report PR, and actual report SHA as columns seven through nine. Missing PR or SHA metadata stays empty.
 
-Every nonempty drain retains its completion files in `inbox-batches/<batch-id>/`. An empty `inbox drain --receipt` returns `null` without creating a batch. The legacy `--json inbox drain` emits a pointer array and returns `[]` when empty. `inbox receipts` exposes retained events and completed decisions for those deliveries. Draining no longer reduces `inbox count`. Count and peek include every event without a completed acknowledgment.
+Every nonempty drain retains its completion files in `inbox-pending/<batch-id>/` until all events are acknowledged. Completed batches remain in `inbox-batches/<batch-id>/`. An empty `inbox drain --receipt` returns `null` without creating a batch. The legacy `--json inbox drain` emits a pointer array and returns `[]` when empty. `inbox receipts` exposes retained events and completed decisions for those deliveries. Draining no longer reduces `inbox count`. Count and peek include every event without a completed acknowledgment.
 
 The canonical commands are:
 
@@ -17,7 +17,7 @@ orch inbox ack <batch-id> --file decisions.json
 orch inbox receipts
 ```
 
-A receipt has `id` and `events`. Each event has its stable filename `id` and `pointer`. A later drain returns the pending events from a retained batch before claiming new arrivals. Arrivals during claim remain in the new inbox.
+A receipt has `id` and `events`. Each event has its stable filename `id` and `pointer`. A later drain returns the pending events from a claimed batch before claiming new arrivals. Arrivals during claim remain in the new inbox.
 
 `decisions.json` is an array. Each entry names an event id from that batch and one outcome. A unit outcome can also record its exact PR and head verdict in the same replayable decision:
 
@@ -49,7 +49,9 @@ Acknowledgment applies only the named events. The store saves normalized effects
 
 Direct unit updates and ledger records use the same normalized write-intent effects. The store replays pending `write-intents/` entries before later affected operations. A unit row and its attempt head binding converge after interruption. A ledger row and its attempt settlement also converge. Completed direct intents are removed. TSV files remain authoritative, and consumed inbox receipts remain inspectable.
 
-A drain killed between rename and mkdir recovers on the next affected command. Surviving `.inbox-drain-*` directories from an older CLI are adopted as retained batches. Completions already deleted by an older CLI cannot be recovered. Keep completed receipts as the run's evidence. This CLI has no automatic retention cleanup.
+Claims move the inbox atomically into `inbox-pending/`. Recovery, count, peek, and drain consult that pending collection. After all event decisions complete, the store atomically moves the batch to `inbox-batches/`. Routine operations do not read completed receipt history. `inbox receipts` inspects both collections, and acknowledgment by batch id still accepts identical historical retries after rebind or explicit finish.
+
+On the first affected command, the store scans older `inbox-batches/` directories once and moves unfinished batches into the pending collection. It writes `.inbox-pending-migrated` only after those moves. Interrupted migration, claim, and archival recover under the existing lock. Surviving `.inbox-drain-*` directories from an older CLI are adopted into the pending collection. Completions already deleted by an older CLI cannot be recovered. Keep completed receipts as the run's evidence. This CLI has no automatic retention cleanup.
 
 ## Optional durable attempts
 

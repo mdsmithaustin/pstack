@@ -652,8 +652,7 @@ async function readEvents(directory: string): Promise<readonly Event[]> {
   return result;
 }
 
-async function batchIds(store: string): Promise<readonly string[]> {
-  const directory = join(store, "inbox-batches");
+async function batchIds(directory: string): Promise<readonly string[]> {
   if (!(await exists(directory))) return [];
   return (await readdir(directory, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
@@ -661,11 +660,19 @@ async function batchIds(store: string): Promise<readonly string[]> {
     .sort();
 }
 
+async function batchDirectory(store: string, id: string): Promise<string> {
+  const pending = join(store, "inbox-pending", safeId(id));
+  if (await exists(pending)) return pending;
+  const retained = join(store, "inbox-batches", safeId(id));
+  if (await exists(retained)) return retained;
+  throw new NotFoundError(`batch ${id} not found`);
+}
+
 async function savedDecisions(
   store: string,
   batch: string,
 ): Promise<readonly SavedDecision[]> {
-  const directory = join(store, "inbox-batches", safeId(batch), "decisions");
+  const directory = join(await batchDirectory(store, batch), "decisions");
   if (!(await exists(directory))) return [];
   const files = (await readdir(directory))
     .filter((name) => name.endsWith(".json"))
@@ -684,9 +691,7 @@ async function readBatch(
   id: string,
   pending = false,
 ): Promise<Batch> {
-  const directory = join(store, "inbox-batches", safeId(id));
-  if (!(await exists(directory)))
-    throw new NotFoundError(`batch ${id} not found`);
+  const directory = await batchDirectory(store, id);
   const completed = new Set(
     (await savedDecisions(store, id))
       .filter((decision) => decision.completed)
@@ -721,7 +726,10 @@ async function saveAttempt(store: string, attempt: Attempt): Promise<void> {
   );
 }
 
-async function repairStore(store: string): Promise<void> {
+async function repairStore(
+  store: string,
+  pending: PendingBatchCollection,
+): Promise<void> {
   if (!(await exists(join(store, "units.tsv")))) return;
   const journal = join(store, "write-intents");
   if (await exists(journal)) {
@@ -735,30 +743,85 @@ async function repairStore(store: string): Promise<void> {
       await unlink(path);
     }
   }
-  await mkdir(join(store, "inbox-batches"), { recursive: true });
-  for (const entry of await readdir(store, { withFileTypes: true })) {
-    if (entry.isDirectory() && entry.name.startsWith(".inbox-drain-")) {
-      await rename(
-        join(store, entry.name),
-        join(store, "inbox-batches", entry.name.slice(1)),
-      );
+  await pending.repair();
+}
+
+class PendingBatchCollection {
+  constructor(private readonly store: string) {}
+
+  async ids(): Promise<readonly string[]> {
+    return batchIds(join(this.store, "inbox-pending"));
+  }
+
+  async repair(): Promise<void> {
+    const store = this.store;
+    await mkdir(join(store, "inbox-pending"), { recursive: true });
+    await mkdir(join(store, "inbox-batches"), { recursive: true });
+    for (const entry of await readdir(store, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith(".inbox-drain-"))
+        await rename(
+          join(store, entry.name),
+          join(store, "inbox-pending", entry.name.slice(1)),
+        );
+    }
+    const migrated = join(store, ".inbox-pending-migrated");
+    if (!(await exists(migrated))) {
+      for (const id of await batchIds(join(store, "inbox-batches"))) {
+        if ((await readBatch(store, id, true)).events.length > 0)
+          await rename(
+            join(store, "inbox-batches", id),
+            join(store, "inbox-pending", id),
+          );
+      }
+      await atomicWrite(migrated, "1\n");
+    }
+    await mkdir(join(store, "inbox"), { recursive: true });
+    for (const id of await this.ids()) {
+      for (const decision of await savedDecisions(store, id)) {
+        if (!decision.completed)
+          await applyWriteIntent(
+            store,
+            decisionPath(store, id, decision.event),
+            decision,
+          );
+      }
+      await this.retain(id);
     }
   }
-  await mkdir(join(store, "inbox"), { recursive: true });
-  for (const batch of await batchIds(store)) {
-    for (const decision of await savedDecisions(store, batch)) {
-      if (decision.completed) continue;
-      await applyWriteIntent(
-        store,
-        decisionPath(store, batch, decision.event),
-        decision,
+
+  async retain(id: string): Promise<void> {
+    if ((await readBatch(this.store, id, true)).events.length === 0)
+      await rename(
+        join(this.store, "inbox-pending", id),
+        join(this.store, "inbox-batches", id),
       );
+  }
+
+  async claim(): Promise<Batch | null> {
+    for (const id of await this.ids()) {
+      const batch = await readBatch(this.store, id, true);
+      if (batch.events.length > 0) return batch;
     }
+    if ((await readEvents(join(this.store, "inbox"))).length === 0) return null;
+    const id = `batch-${randomUUID()}`;
+    await rename(join(this.store, "inbox"), join(this.store, "inbox-pending", id));
+    await mkdir(join(this.store, "inbox"), { recursive: true });
+    return readBatch(this.store, id, true);
+  }
+
+  async events(): Promise<readonly Event[]> {
+    const batches = await Promise.all(
+      (await this.ids()).map((id) => readBatch(this.store, id, true)),
+    );
+    return [
+      ...batches.flatMap((batch) => batch.events),
+      ...(await readEvents(join(this.store, "inbox"))),
+    ];
   }
 }
 
 function decisionPath(store: string, batch: string, event: string): string {
-  return join(store, "inbox-batches", batch, "decisions", `${event}.json`);
+  return join(store, "inbox-pending", batch, "decisions", `${event}.json`);
 }
 
 async function writeIntent(
@@ -1835,6 +1898,7 @@ export function openStore(
   options: OpenStoreOptions = {}
 ): Store {
   const store = resolve(directory);
+  const pending = new PendingBatchCollection(store);
   let closed = false;
   let releaseLock: (() => Promise<void>) | null = null;
   let lockRequest: Promise<void> | null = null;
@@ -1871,30 +1935,12 @@ export function openStore(
       );
     }
     await ensureLock();
-    await repairStore(store);
+    await repairStore(store, pending);
   };
 
   const claim = async (): Promise<Batch | null> => {
     await beginWrite();
-    for (const id of await batchIds(store)) {
-      const batch = await readBatch(store, id, true);
-      if (batch.events.length > 0) return batch;
-    }
-    if ((await readEvents(join(store, "inbox"))).length === 0) return null;
-    const id = `batch-${randomUUID()}`;
-    await rename(join(store, "inbox"), join(store, "inbox-batches", id));
-    await mkdir(join(store, "inbox"), { recursive: true });
-    return readBatch(store, id, true);
-  };
-
-  const pendingEvents = async (): Promise<readonly Event[]> => {
-    const batches = await Promise.all(
-      (await batchIds(store)).map((id) => readBatch(store, id, true)),
-    );
-    return [
-      ...batches.flatMap((batch) => batch.events),
-      ...(await readEvents(join(store, "inbox"))),
-    ];
+    return pending.claim();
   };
 
   return {
@@ -2072,8 +2118,12 @@ export function openStore(
       claim,
       receipts: async () => {
         await beginWrite();
+        const ids = [
+          ...(await pending.ids()),
+          ...(await batchIds(join(store, "inbox-batches"))),
+        ].sort();
         return Promise.all(
-          (await batchIds(store)).map(async (id) => ({
+          ids.map(async (id) => ({
             ...(await readBatch(store, id)),
             decisions: await savedDecisions(store, id),
           })),
@@ -2153,7 +2203,7 @@ export function openStore(
                 }),
             completed: false,
           };
-          const directory = join(store, "inbox-batches", batch.id, "decisions");
+          const directory = join(store, "inbox-pending", batch.id, "decisions");
           await mkdir(directory, { recursive: true });
           await atomicWrite(
             decisionPath(store, batch.id, decision.event),
@@ -2165,15 +2215,17 @@ export function openStore(
             normalized,
           );
         }
-        return readBatch(store, batch.id, true);
+        const remaining = await readBatch(store, batch.id, true);
+        if ((await pending.ids()).includes(batch.id)) await pending.retain(batch.id);
+        return remaining;
       },
       peek: async () => {
         await beginWrite();
-        return (await pendingEvents()).map((event) => event.pointer);
+        return (await pending.events()).map((event) => event.pointer);
       },
       count: async () => {
         await beginWrite();
-        return (await pendingEvents()).length;
+        return (await pending.events()).length;
       },
     },
     attempts: {
@@ -2284,17 +2336,17 @@ export function openStore(
               );
           }
         }
-        const pending = (await pendingEvents()).length;
+        const pendingCount = (await pending.events()).length;
         const attempts = (await readAttempts(store))
           .filter((row) => row.settled === null)
           .map((row) => row.id);
-        if (pending > 0) failures.push(`${pending} pending inbox events`);
+        if (pendingCount > 0) failures.push(`${pendingCount} pending inbox events`);
         if (attempts.length > 0)
           failures.push(`${attempts.length} pending attempts`);
         return {
           ok: failures.length === 0,
           failures,
-          pendingEvents: pending,
+          pendingEvents: pendingCount,
           pendingAttempts: attempts,
         };
       },

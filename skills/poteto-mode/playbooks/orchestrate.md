@@ -30,7 +30,7 @@ Create the store at `.orchestrate/<project-slug>/` in the main checkout, outside
 - `briefs/` holds every unit's and every sub-coordinator's brief as a file. Before spawning a worker, create its worktree at `.worktrees/<unit-id>` in the main checkout, per **Spawn a subagent** in the **pstack-harness** skill, and write that absolute path into its brief. If a CLI's own isolation picks the path instead, the worker's first report gives it and the coordinator appends it. A respawn after a restart starts from that file.
 - `frontier.json` is the computed merge frontier, per Stack safety.
 - `ledger.tsv` is the verification ledger, per Verification.
-- `inbox/` holds new completion pointers. `inbox-batches/` retains claimed events and their replayable acknowledgment decisions. `attempts.json` records optional durable delegation attempts with independent worker and verifier slots. `write-intents/` holds pending direct unit and ledger effects for replay under the store lock. `gates.md` parks human gates (question, options, default on no answer).
+- `inbox/` holds new completion pointers. `inbox-pending/` holds claimed events and their replayable acknowledgment decisions until every event completes. `inbox-batches/` retains completed receipts. `attempts.json` records optional durable delegation attempts with independent worker and verifier slots. `write-intents/` holds pending direct unit and ledger effects for replay under the store lock. `gates.md` parks human gates (question, options, default on no answer).
 - `decisions.tsv` is the trail via the show-me-your-work skill.
 - `status.md` is derived from `units.tsv` and `ledger.tsv` at each drain, never hand-maintained. Regenerate it from the tables instead of narrating events into it.
 

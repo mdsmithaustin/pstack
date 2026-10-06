@@ -435,7 +435,7 @@ function createProgram(io: Io): Command {
           (result) => result.pointer
         )
     );
-  leaf(inbox, "drain", "claim retained inbox pointers")
+  leaf(inbox, "drain", "claim pending inbox pointers")
     .option("--peek", "read without claiming", false)
     .option("--receipt", "print batch and stable event ids as JSON", false)
     .action(async (options: InboxDrainOptions) => {
@@ -457,7 +457,7 @@ function createProgram(io: Io): Command {
         );
       }
     });
-  leaf(inbox, "receipts", "inspect retained deliveries").action(() =>
+  leaf(inbox, "receipts", "inspect pending and completed deliveries").action(() =>
     runStore(program, io, (store) => store.inbox.receipts(), JSON.stringify),
   );
   leaf(inbox, "ack <batch>", "apply per-event decisions")

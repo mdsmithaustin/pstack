@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -87,7 +87,7 @@ describe("CLI recovery", () => {
 
 async function preload(
   dir: string,
-  point: "claim" | "emission" | "unit" | "decision" | "attempt" | "ledger",
+  point: "claim" | "emission" | "unit" | "decision" | "attempt" | "ledger" | "complete" | "archive-before" | "archive" | "migration" | "migration-marker",
   pause = false,
 ) {
   const marker = join(dir, "fault-marker");
@@ -107,7 +107,12 @@ async function stop() {
 mock.module("node:fs/promises", () => ({ ...fs,
   rename: async (from, to) => {
     if (${JSON.stringify(point)} === "attempt" && String(to).endsWith("/attempts.json")) await stop();
+    if (${JSON.stringify(point)} === "archive-before" && String(from).includes("/inbox-pending/") && String(to).includes("/inbox-batches/")) await stop();
     await fs.rename(from, to);
+    if (${JSON.stringify(point)} === "archive" && String(from).includes("/inbox-pending/") && String(to).includes("/inbox-batches/")) await stop();
+    if (${JSON.stringify(point)} === "migration" && String(from).includes("/inbox-batches/") && String(to).includes("/inbox-pending/")) await stop();
+    if (${JSON.stringify(point)} === "migration-marker" && String(to).endsWith("/.inbox-pending-migrated")) await stop();
+    if (${JSON.stringify(point)} === "complete" && String(to).includes("/decisions/") && String(to).endsWith(".json") && JSON.parse(await fs.readFile(to, "utf8")).completed) await stop();
     if (String(from).endsWith("/inbox")) claimed = true;
     if (${JSON.stringify(point)} === "claim" && String(from).endsWith("/inbox")) await stop();
     if (${JSON.stringify(point)} === "unit" && String(to).endsWith("/units.tsv")) await stop();
@@ -134,7 +139,7 @@ async function waitFor(path: string) {
 }
 async function killAt(
   dir: string,
-  point: "claim" | "emission" | "unit" | "decision" | "attempt" | "ledger",
+  point: "claim" | "emission" | "unit" | "decision" | "attempt" | "ledger" | "complete" | "archive-before" | "archive" | "migration" | "migration-marker",
   args: string[],
 ) {
   const hook = await preload(dir, point);
@@ -1055,7 +1060,7 @@ describe("CLI immutable completion bindings", () => {
     const { dir, run } = await fixture();
     expect(run("inbox", "push", "legacy", "u", "done").code).toBe(0);
     const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
-    expect((await readFile(join(dir, "inbox-batches", batch.id, batch.events[0].id), "utf8")).replace(/\r?\n$/, "").split("\t")).toHaveLength(5);
+    expect((await readFile(join(dir, "inbox-pending", batch.id, batch.events[0].id), "utf8")).replace(/\r?\n$/, "").split("\t")).toHaveLength(5);
     const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "published" } }]);
     expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
     expect(JSON.parse(run("unit", "get", "u").out).state).toBe("published");
@@ -1167,7 +1172,7 @@ describe("CLI bot core regressions", () => {
       const result = run("attempt", "begin", "--file", path);
       expect(result.code).toBe(0);
       expect(run("attempt", "begin", "--file", path).out).toBe(result.out);
-      const saved = JSON.parse(run("attempt", "list").out).find((row: { requestId: string }) => row.requestId === `${role}-${arm}-${authority}`);
+      const saved = JSON.parse(await readFile(join(dir, "attempts.json"), "utf8")).find((row: { requestId: string }) => row.requestId === `${role}-${arm}-${authority}`);
       expect(saved).toMatchObject({ role, arm, authority });
       const resolver = Bun.spawnSync(["python3", join(import.meta.dir, "../../../../../skills/setup-pstack/scripts/resolve-resume.py"),
         "--source", "claude-code", "--role", saved.role, "--arm", String(saved.arm),
@@ -1206,5 +1211,199 @@ describe("CLI bot core regressions", () => {
     expect(run("attempt", "begin", "--file", path).code).toBe(0);
     expect(JSON.parse(run("attempt", "list").out)[0].arm).toBe(1);
   });
+  it("does not read completed history during routine real CLI operations", async () => {
+    const { dir, run } = await fixture();
+    const history: string[] = [join(dir, "inbox-batches")];
+    for (let i = 0; i < 5; i++) {
+      expect(run("inbox", "push", "worker", "u", `done-${i}`).code).toBe(0);
+      const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+      const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: `accepted-${i}` } }]);
+      expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+      history.push(join(dir, "inbox-batches", batch.id));
+    }
+    const hook = join(dir, "history-reads.ts");
+    await writeFile(hook, `
+import { mock } from "bun:test";
+import * as original from "node:fs/promises";
+const fs = { ...original };
+const history = ${JSON.stringify(history)};
+function check(path) {
+  if (history.some(root => String(path) === root || String(path).startsWith(root + "/"))) throw new Error("completed history read: " + path);
+}
+mock.module("node:fs/promises", () => ({ ...fs,
+  readFile: async (path, ...args) => { check(path); return fs.readFile(path, ...args); },
+  readdir: async (path, ...args) => { check(path); return fs.readdir(path, ...args); }
+}));
+`);
+    const guarded = (...args: string[]) => {
+      const result = Bun.spawnSync([process.execPath, "--preload", hook, script, "--store", dir, "--json", ...args]);
+      expect(result.stderr.toString()).not.toContain("completed history read");
+      expect(result.exitCode).toBe(0);
+      return JSON.parse(result.stdout.toString());
+    };
+    expect(guarded("inbox", "count")).toEqual({ count: 0 });
+    expect(guarded("inbox", "drain", "--peek")).toEqual([]);
+    expect(guarded("inbox", "drain", "--receipt")).toBeNull();
+    expect(guarded("unit", "get", "u").state).toBe("accepted-4");
+    expect(guarded("unit", "set", "u", "--state", "ready").state).toBe("ready");
+    const request = await input(dir, "worker.json", {
+      unit: "u", role: "feature", arm: 1, authority: "worker", requestId: "worker",
+      brief: "brief.md", checkout: dir, resolution: { harness: "codex", model: "gpt-6.1-sol", effort: "xhigh" },
+    });
+    const worker = guarded("attempt", "begin", "--file", request);
+    expect(worker).toMatchObject({ role: "feature", arm: 1 });
+    const observation = await input(dir, "observation.json", { kind: "unknown" });
+    expect(guarded("attempt", "observe", worker.id, "--file", observation).observation).toEqual({ kind: "unknown" });
+    expect(guarded("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head", "--attempt", worker.id)).toMatchObject({ pr: "12", sha: "head" });
+    expect(guarded("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "proof", "--attempt", worker.id).verdict).toBe("unit-test-verified");
+    expect(guarded("attempt", "finish", worker.id, "--reason", "confirmed complete").settled).toEqual({ kind: "finished", reason: "confirmed complete" });
+    expect(guarded("attempt", "list")[0].id).toBe(worker.id);
+    const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["ready"], ledger: { pr: 12, sha: "head", verdicts: ["unit-test-verified"] } }]);
+    expect(guarded("requirements", "check", "--file", criteria)).toEqual({ ok: true, failures: [], pendingEvents: 0, pendingAttempts: [] });
+    expect(run("inbox", "push", "new", "u", "waiting").code).toBe(0);
+    expect(run("inbox", "push", "later", "u", "waiting").code).toBe(0);
+    expect(guarded("inbox", "count")).toEqual({ count: 2 });
+    expect(guarded("inbox", "drain", "--peek")[0].agent).toBe("new");
+    const active = guarded("inbox", "drain", "--receipt");
+    expect(active.events[0].pointer.agent).toBe("new");
+    const ack = await input(dir, "active.json", [{ event: active.events[0].id, outcome: { kind: "discard", reason: "reviewed" } }]);
+    expect(guarded("inbox", "ack", active.id, "--file", ack)).toEqual({ id: active.id, events: [active.events[1]] });
+    expect(guarded("inbox", "count")).toEqual({ count: 1 });
+    expect(guarded("inbox", "drain", "--receipt")).toEqual({ id: active.id, events: [active.events[1]] });
+    const last = await input(dir, "last-active.json", [{ event: active.events[1].id, outcome: { kind: "discard", reason: "reviewed" } }]);
+    expect(guarded("inbox", "ack", active.id, "--file", last)).toEqual({ id: active.id, events: [] });
+    expect(guarded("inbox", "count")).toEqual({ count: 0 });
+    expect(guarded("inbox", "drain", "--receipt")).toBeNull();
+    const blocked = Bun.spawnSync([process.execPath, "--preload", hook, script, "--store", dir, "--json", "inbox", "receipts"]);
+    expect(blocked.exitCode).toBe(1);
+    expect(blocked.stderr.toString()).toContain("completed history read");
+    const receipts = JSON.parse(run("inbox", "receipts").out);
+    expect(receipts.filter((row: { decisions: unknown[] }) => row.decisions.length === 1)).toHaveLength(5);
+    expect(receipts.find((row: { id: string }) => row.id === active.id).decisions).toHaveLength(2);
+    expect(receipts).toHaveLength(6);
+  });
+});
 
+
+describe("CLI pending collection crash invariants", () => {
+  it("keeps a partial receipt pending when killed after decision completion", async () => {
+    const { dir, run } = await fixture();
+    expect(run("inbox", "push", "first", "u", "done").code).toBe(0);
+    expect(run("inbox", "push", "second", "u", "waiting").code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "accepted" } }]);
+    await killAt(dir, "complete", ["inbox", "ack", batch.id, "--file", path]);
+    expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 1 });
+    expect(JSON.parse(run("unit", "get", "u").out).state).toBe("accepted");
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+    const pending = JSON.parse(run("inbox", "drain", "--receipt").out);
+    expect(pending.id).toBe(batch.id);
+    expect(pending.events.map((row: { id: string }) => row.id)).toEqual([batch.events[1].id]);
+    expect(await readdir(join(dir, "inbox-pending"))).toEqual([batch.id]);
+    expect(await readdir(join(dir, "inbox-batches"))).toEqual([]);
+    const receipt = JSON.parse(run("inbox", "receipts").out)[0];
+    expect(receipt.events).toHaveLength(2);
+    expect(receipt.decisions).toMatchObject([{ event: batch.events[0].id, completed: true }]);
+  });
+  for (const point of ["complete", "archive-before", "archive"] as const) {
+    it(`retains a consumed receipt killed at ${point} and accepts a historical retry after finish`, async () => {
+      const { dir, run } = await fixture();
+      const worker = (await begin(dir, run, "worker")).attempt;
+      expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "head" })).code).toBe(0);
+      const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+      const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: {
+        kind: "unit", state: "published", pr: 12, sha: "head",
+        ledger: { kind: "verdict", pr: 12, sha: "head", verdict: "unit-test-verified", evidence: "proof" },
+      } }]);
+      await killAt(dir, point, ["inbox", "ack", batch.id, "--file", path]);
+      expect(run("inbox", "push", "arrival", "u", "waiting").code).toBe(0);
+      expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 1 });
+      expect(await readdir(join(dir, "inbox-pending"))).toEqual([]);
+      expect(await readdir(join(dir, "inbox-batches"))).toEqual([batch.id]);
+      expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "published", pr: "12", sha: "head" });
+      const ledger = run("ledger", "check", "12", "head").out;
+      expect(JSON.parse(ledger).verdict).toBe("unit-test-verified");
+      expect(run("unit", "set", "u", "--state", "merged", "--sha", "new", "--attempt", worker.id).code).toBe(0);
+      expect(run("attempt", "finish", worker.id, "--reason", "confirmed complete").code).toBe(0);
+      const attempts = run("attempt", "list").out;
+      expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+      expect(run("attempt", "list").out).toBe(attempts);
+      expect(run("ledger", "check", "12", "head").out).toBe(ledger);
+      expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "merged", sha: "new" });
+      expect(run("unit", "set", "u", "--state", "late", "--attempt", worker.id).code).toBe(1);
+      const receipt = JSON.parse(run("inbox", "receipts").out).find((row: { id: string }) => row.id === batch.id);
+      expect(receipt.events[0].pointer.completion.sha).toBe("head");
+      expect(receipt.decisions[0]).toMatchObject({ completed: true, unit: { state: "published" }, attempt: { settled: { kind: "accepted" } } });
+      expect(JSON.parse(run("inbox", "drain", "--receipt").out).events[0].pointer.agent).toBe("arrival");
+    });
+  }
+  it("recovers registered pending events and concurrent arrivals after SIGKILL during claim", async () => {
+    const { dir, run } = await fixture();
+    expect(run("inbox", "push", "first", "u", "done").code).toBe(0);
+    const hook = await preload(dir, "claim", true);
+    const child = Bun.spawn([process.execPath, "--preload", hook.path, script, "--store", dir, "--json", "inbox", "drain", "--receipt"], { stdout: "pipe", stderr: "pipe" });
+    try {
+      await waitFor(hook.marker);
+      expect(run("inbox", "push", "arrival", "u", "later").code).toBe(0);
+      child.kill("SIGKILL");
+      expect(await child.exited).not.toBe(0);
+      expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 2 });
+      const first = JSON.parse(run("inbox", "drain", "--receipt").out);
+      expect(first.events.map((row: { pointer: { agent: string } }) => row.pointer.agent)).toEqual(["first"]);
+      const path = await input(dir, "ack.json", [{ event: first.events[0].id, outcome: { kind: "discard", reason: "reviewed" } }]);
+      expect(run("inbox", "ack", first.id, "--file", path).code).toBe(0);
+      const second = JSON.parse(run("inbox", "drain", "--receipt").out);
+      expect(second.events.map((row: { pointer: { agent: string } }) => row.pointer.agent)).toEqual(["arrival"]);
+      expect(second.id).not.toBe(first.id);
+    } finally {
+      child.kill();
+      await child.exited;
+    }
+  });
+  for (const point of ["migration", "migration-marker"] as const) {
+    it(`replays unfinished legacy batch decisions after SIGKILL at ${point}`, async () => {
+      const { dir, run } = await fixture();
+      expect(run("inbox", "push", "history", "u", "old").code).toBe(0);
+      const historical = JSON.parse(run("inbox", "drain", "--receipt").out);
+      const historyAck = await input(dir, "history.json", [{ event: historical.events[0].id, outcome: { kind: "discard", reason: "retained" } }]);
+      expect(run("inbox", "ack", historical.id, "--file", historyAck).code).toBe(0);
+      expect(run("inbox", "push", "first", "u", "done").code).toBe(0);
+      expect(run("inbox", "push", "second", "u", "waiting").code).toBe(0);
+      const legacy = JSON.parse(run("inbox", "drain", "--receipt").out);
+      const path = await input(dir, "legacy.json", [{ event: legacy.events[0].id, outcome: { kind: "unit", state: "replayed" } }]);
+      await killAt(dir, "decision", ["inbox", "ack", legacy.id, "--file", path]);
+      await rename(join(dir, "inbox-pending", legacy.id), join(dir, "inbox-batches", legacy.id));
+      await rm(join(dir, ".inbox-pending-migrated"));
+      await rm(join(dir, "fault-marker"));
+      await killAt(dir, point, ["inbox", "count"]);
+      expect(run("inbox", "push", "arrival", "u", "later").code).toBe(0);
+      expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 2 });
+      expect(JSON.parse(run("unit", "get", "u").out).state).toBe("replayed");
+      expect(await readFile(join(dir, ".inbox-pending-migrated"), "utf8")).toBe("1\n");
+      const pending = JSON.parse(run("inbox", "drain", "--receipt").out);
+      expect(pending.id).toBe(legacy.id);
+      expect(pending.events.map((row: { id: string }) => row.id)).toEqual([legacy.events[1].id]);
+      expect(run("inbox", "ack", historical.id, "--file", historyAck).code).toBe(0);
+      expect(run("inbox", "ack", legacy.id, "--file", path).code).toBe(0);
+      const last = await input(dir, "last.json", [{ event: legacy.events[1].id, outcome: { kind: "discard", reason: "reviewed" } }]);
+      expect(run("inbox", "ack", legacy.id, "--file", last).code).toBe(0);
+      expect((await readdir(join(dir, "inbox-batches"))).sort()).toEqual([historical.id, legacy.id].sort());
+      const receipts = JSON.parse(run("inbox", "receipts").out);
+      expect(receipts.find((row: { id: string }) => row.id === legacy.id).decisions).toHaveLength(2);
+      expect(JSON.parse(run("inbox", "drain", "--receipt").out).events[0].pointer.agent).toBe("arrival");
+    });
+  }
+  it("adopts legacy renamed five-cell drains into the pending collection", async () => {
+    const { dir, run } = await fixture();
+    expect(run("inbox", "push", "legacy", "u", "done").code).toBe(0);
+    await rename(join(dir, "inbox"), join(dir, ".inbox-drain-legacy"));
+    expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 1 });
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    expect(batch.id).toBe("inbox-drain-legacy");
+    expect(batch.events[0].pointer.agent).toBe("legacy");
+    const path = await input(dir, "legacy.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "adopted" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+    expect(JSON.parse(run("unit", "get", "u").out).state).toBe("adopted");
+    expect(await readdir(join(dir, "inbox-batches"))).toEqual([batch.id]);
+  });
 });
