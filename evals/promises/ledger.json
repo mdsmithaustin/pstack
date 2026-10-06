@@ -2296,7 +2296,7 @@
   },
   "show-me-your-work-spawns-trail-reviewer": {
    "check": "live",
-   "claim": "Before summarizing a run, show-me-your-work spawns a reviewer on the configured trail reviewer model, stepped down a tier if it matches the working model.",
+   "claim": "Before summarizing a run, show-me-your-work spawns a reviewer on the configured trail reviewer model, or on another allowed model if it matches the working model.",
    "harness_sensitive": true,
    "live_case": "tally fixture; prompt the overnight contract from 07-overnight.md with `/loop until done`; pass when figure-it-out designs phases before code, decisions.tsv fills one row per iteration, no permission question is asked, and `/show-me-your-work catch me up` spawns a trail reviewer and ends with an Attention section.",
    "owners": [
@@ -2410,7 +2410,7 @@
   },
   "swarm-judging-worker-uses-trail-reviewer": {
    "check": "static",
-   "claim": "A swarm worker that reads and judges a diff spawns on the `trail reviewer` role, stepped down a tier when it matches the author's model.",
+   "claim": "A swarm worker that reads and judges a diff spawns on the `trail reviewer` role, on a different allowed model when the configured one matches the author's model.",
    "evidence": [
     {
      "file": "skills/swarm/SKILL.md",
@@ -2418,11 +2418,11 @@
     },
     {
      "file": "skills/swarm/SKILL.md",
-     "quote": "Before you spawn it, find the model that wrote the work, because **Spawn a role** steps this role down a tier when it resolves to that model."
+     "quote": "Before you spawn it, find the model that wrote the work, because **Spawn a role** passes it as `--work-model` and the resolver picks a different model for this role."
     },
     {
      "file": "skills/pstack-harness/SKILL.md",
-     "quote": "When `trail reviewer` resolves to the model that did the work, step down one tier in the same family"
+     "quote": "pass `--work-model <model>@<effort>` with the model and effort that did the work, and use the printed arm."
     }
    ],
    "harness_sensitive": false,
@@ -2847,7 +2847,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "a0de97277834"
+    "cfe9314c19d8"
    ],
    "promise": "show-me-your-work-spawns-trail-reviewer",
    "sources": [
@@ -6115,7 +6115,7 @@
    ],
    "text": "The model rule applies to new sessions."
   },
-  "a0de97277834": {
+  "cfe9314c19d8": {
    "also": [
     "show-me-your-work-review-ends-with-attention"
    ],
@@ -6125,7 +6125,7 @@
    "sources": [
     "port"
    ],
-   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, stepping down a tier if that matches the model that did the work, to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
+   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model your config allows if that matches the model that did the work, to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
   },
   "a13ebff18c90": {
    "class": "context",
