@@ -288,6 +288,16 @@ async function begin(
   expect(result.code).toBe(0);
   return { path, attempt: JSON.parse(result.out), result };
 }
+function completionArgs(
+  attempt: { id: string; binding: string },
+  head?: { pr: string; sha: string },
+): string[] {
+  return [
+    "--attempt", attempt.id,
+    "--binding", attempt.binding,
+    ...(head === undefined ? [] : ["--pr", head.pr, "--sha", head.sha]),
+  ];
+}
 describe("CLI attempt authority", () => {
   it("makes requestId idempotent and replacement compare-and-set", async () => {
     const { dir, run } = await fixture();
@@ -580,7 +590,7 @@ describe("CLI acknowledgment authority", () => {
     const verifier = (await begin(dir, run, "verifier", "verifier")).attempt;
     const apply = async (id: string, verdict: string) => {
       expect(
-        run("inbox", "push", "agent", "u", verdict, "--attempt", id).code,
+        run("inbox", "push", "agent", "u", verdict, ...completionArgs(id === verifier.id ? verifier : worker, { pr: "12", sha: "head" })).code,
       ).toBe(0);
       const result = run("inbox", "drain", "--receipt");
       expect(result.code).toBe(0);
@@ -648,7 +658,7 @@ describe("CLI acknowledgment authority", () => {
     const verifier = (await begin(dir, run, "verifier", "verifier")).attempt;
     const worker = (await begin(dir, run, "worker")).attempt;
     expect(
-      run("inbox", "push", "verifier", "u", "passed", "--attempt", verifier.id)
+      run("inbox", "push", "verifier", "u", "passed", ...completionArgs(verifier, { pr: "12", sha: "head" }))
         .code,
     ).toBe(0);
     expect(
@@ -686,7 +696,7 @@ describe("CLI acknowledgment authority", () => {
     const { dir, run } = await fixture();
     const worker = (await begin(dir, run, "worker")).attempt;
     expect(
-      run("inbox", "push", "worker", "u", "done", "--attempt", worker.id).code,
+      run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "head" })).code,
     ).toBe(0);
     const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
     const path = await input(dir, "ack.json", [
@@ -826,6 +836,54 @@ describe("CLI core review regressions", () => {
     const criteria = await input(dir, "requirements.json", [{ id: "verified", unit: "u", ledger: { pr: 12, sha: "head", verdicts: ["unit-test-verified"] } }]);
     expect(run("requirements", "check", "--file", criteria).code).toBe(0);
   });
+  for (const kind of ["unit", "verdict"] as const) {
+    it(`quarantines a legacy queued ${kind} result after rebinding its attempt`, async () => {
+      const { dir, run } = await fixture();
+      expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "old").code).toBe(0);
+      const worker = (await begin(dir, run, "worker")).attempt;
+      expect(run("inbox", "push", "worker", "u", "done", "--attempt", worker.id).code).toBe(0);
+      expect(run("unit", "set", "u", "--state", "restacked", "--sha", "new", "--attempt", worker.id).code).toBe(0);
+      const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+      const outcome = kind === "unit" ? { kind, state: "late" } : { kind, pr: 12, sha: "new", verdict: "unit-test-verified", evidence: "old report" };
+      const ack = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome }]);
+      expect(run("inbox", "ack", batch.id, "--file", ack).code).toBe(1);
+      expect(JSON.parse(run("unit", "get", "u").out).state).toBe("restacked");
+      expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 1 });
+    });
+  }
+  for (const operation of ["unit", "ledger", "ack-unit", "ack-verdict"] as const) {
+    it(`revokes ${operation} effects after explicit abandonment`, async () => {
+      const { dir, run } = await fixture();
+      expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+      const worker = (await begin(dir, run, "worker")).attempt;
+      expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "head" })).code).toBe(0);
+      expect(run("attempt", "finish", worker.id, "--reason", "abandoned").code).toBe(0);
+      let result;
+      if (operation === "unit") result = run("unit", "set", "u", "--state", "late", "--attempt", worker.id);
+      else if (operation === "ledger") result = run("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "late", "--attempt", worker.id);
+      else {
+        const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+        const outcome = operation === "ack-unit" ? { kind: "unit", state: "late" } : { kind: "verdict", pr: 12, sha: "head", verdict: "unit-test-verified", evidence: "late" };
+        const ack = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome }]);
+        result = run("inbox", "ack", batch.id, "--file", ack);
+      }
+      expect(result.code).toBe(1);
+      expect(result.err).toContain("explicitly finished");
+      expect(JSON.parse(run("unit", "get", "u").out).state).toBe("ready");
+      expect(run("ledger", "check", "12", "head").code).toBe(2);
+    });
+  }
+  for (const verdict of ["verifier-blocked", "verifier-failed"]) {
+    for (const mixed of [false, true]) {
+      it(`rejects ${verdict} ${mixed ? "mixed" : "single"} closeout criteria`, async () => {
+        const { dir, run } = await fixture();
+        expect(run("unit", "set", "u", "--state", "custom done", "--pr", "12", "--sha", "head").code).toBe(0);
+        expect(run("ledger", "record", "12", "head", verdict, "--evidence", "failure", "--verifier", "reviewer").code).toBe(0);
+        const criteria = await input(dir, "requirements.json", [{ id: "verified", unit: "u", ledger: { pr: 12, sha: "head", verdicts: mixed ? ["unit-test-verified", verdict] : [verdict] } }]);
+        expect(run("requirements", "check", "--file", criteria).code).toBe(1);
+      });
+    }
+  }
   for (const mode of ["legacy", "receipt", "compact"] as const) {
     it(`keeps repeated empty ${mode} drains bounded`, async () => {
       const { dir, run } = await fixture();
@@ -839,4 +897,250 @@ describe("CLI core review regressions", () => {
       expect(JSON.parse(run("inbox", "drain", "--receipt").out).events[0].pointer.status).toBe("done");
     });
   }
+  it("keeps an unknown predecessor in final reconciliation after its successor finishes", async () => {
+    const { dir, run } = await fixture();
+    const first = (await begin(dir, run, "first")).attempt;
+    const second = (await begin(dir, run, "second", "worker", first.id)).attempt;
+    expect(run("attempt", "finish", second.id, "--reason", "inspected").code).toBe(0);
+    const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["pending"] }]);
+    const check = run("requirements", "check", "--file", criteria);
+    expect(check.code).toBe(2);
+    expect(JSON.parse(check.out).pendingAttempts).toEqual([first.id]);
+  });
+  it("allows a known terminal disposition for a superseded attempt", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "pending", "--pr", "12", "--sha", "head").code).toBe(0);
+    const first = (await begin(dir, run, "first")).attempt;
+    const second = (await begin(dir, run, "second", "worker", first.id)).attempt;
+    expect(run("attempt", "finish", first.id, "--reason", "confirmed abandoned").code).toBe(0);
+    expect(run("unit", "set", "u", "--state", "old", "--attempt", first.id).code).toBe(1);
+    expect(run("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "old", "--attempt", first.id).code).toBe(1);
+    expect(run("attempt", "finish", second.id, "--reason", "inspected").code).toBe(0);
+    const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["pending"] }]);
+    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
+  });
+});
+
+
+describe("CLI immutable completion bindings", () => {
+  for (const kind of ["unit", "verdict"] as const) {
+    for (const timing of ["queued", "late"] as const) {
+      it(`rejects a ${timing} old-head ${kind} report on a rebound attempt`, async () => {
+        const { dir, run } = await fixture();
+        expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "old").code).toBe(0);
+        const worker = (await begin(dir, run, "worker")).attempt;
+        const publish = () => run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "old" }));
+        if (timing === "queued") expect(publish().code).toBe(0);
+        expect(run("unit", "set", "u", "--state", "restacked", "--sha", "new", "--attempt", worker.id).code).toBe(0);
+        if (timing === "late") expect(publish().code).toBe(0);
+        const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+        expect(batch.events[0].pointer.completion).toEqual({ binding: worker.binding, pr: "12", sha: "old" });
+        const outcome = kind === "unit" ? { kind, state: "late" } : { kind, pr: 12, sha: "new", verdict: "unit-test-verified", evidence: "old report" };
+        const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome }]);
+        const ack = run("inbox", "ack", batch.id, "--file", path);
+        expect(ack.code).toBe(1);
+        expect(ack.err).toContain("completion binding changed");
+        expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "restacked", sha: "new" });
+        expect(run("ledger", "check", "12", "new").code).toBe(2);
+        expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 1 });
+      });
+    }
+  }
+  it("checks the actual report head even when publication claims a current binding", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "old").code).toBe(0);
+    const worker = (await begin(dir, run, "worker")).attempt;
+    expect(run("unit", "set", "u", "--state", "restacked", "--sha", "new", "--attempt", worker.id).code).toBe(0);
+    const current = JSON.parse(run("attempt", "list").out)[0];
+    expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(current, { pr: "12", sha: "old" })).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "late" } }]);
+    const ack = run("inbox", "ack", batch.id, "--file", path);
+    expect(ack.code).toBe(1);
+    expect(ack.err).toContain("completion report head changed");
+    expect(JSON.parse(run("unit", "get", "u").out).state).toBe("restacked");
+  });
+  it("preserves currency when a unit returns to a previous head", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "old").code).toBe(0);
+    const worker = (await begin(dir, run, "worker")).attempt;
+    for (const sha of ["new", "old"]) expect(run("unit", "set", "u", "--state", "restacked", "--sha", sha, "--attempt", worker.id).code).toBe(0);
+    expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "old" })).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "late" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(1);
+    expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "restacked", sha: "old" });
+  });
+  it("accepts an initial worker report that introduces its PR and SHA", async () => {
+    const { dir, run } = await fixture();
+    const worker = (await begin(dir, run, "worker")).attempt;
+    expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "head" })).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "published", pr: 12, sha: "head", ledger: { kind: "verdict", pr: 12, sha: "head", verdict: "unit-test-verified", evidence: "proof" } } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+    expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "published", pr: "12", sha: "head" });
+    expect(JSON.parse(run("ledger", "check", "12", "head").out).verdict).toBe("unit-test-verified");
+    expect(JSON.parse(run("attempt", "list").out)[0].settled.kind).toBe("accepted");
+    expect(run("unit", "set", "u", "--state", "merged", "--attempt", worker.id).code).toBe(0);
+    expect(JSON.parse(run("attempt", "list").out)).toHaveLength(1);
+    expect(JSON.parse(run("unit", "get", "u").out).state).toBe("merged");
+  });
+  it("accepts a bound state-only worker completion without inventing a PR", async () => {
+    const { dir, run } = await fixture();
+    const worker = (await begin(dir, run, "worker")).attempt;
+    expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker)).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "arbitrary published state" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+    const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["arbitrary published state"] }]);
+    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
+    expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ pr: "", sha: "" });
+  });
+  it("rejects an initial outcome for a different report head", async () => {
+    const { dir, run } = await fixture();
+    const worker = (await begin(dir, run, "worker")).attempt;
+    expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "actual" })).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "wrong", pr: 12, sha: "other" } }]);
+    const ack = run("inbox", "ack", batch.id, "--file", path);
+    expect(ack.code).toBe(1);
+    expect(ack.err).toContain("does not match completion report head");
+    expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "pending", pr: "", sha: "" });
+  });
+  it("does not let a verifier completion introduce a different head", async () => {
+    const { dir, run } = await fixture();
+    const verifier = (await begin(dir, run, "verifier", "verifier")).attempt;
+    expect(run("inbox", "push", "verifier", "u", "done", ...completionArgs(verifier, { pr: "12", sha: "head" })).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "wrong", pr: 12, sha: "head" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(1);
+    expect(JSON.parse(run("unit", "get", "u").out).state).toBe("pending");
+  });
+  it("keeps a true duplicate acknowledgment valid after rebind and terminal finish", async () => {
+    const { dir, run } = await fixture();
+    const worker = (await begin(dir, run, "worker")).attempt;
+    expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "head" })).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "published", pr: 12, sha: "head" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+    expect(run("unit", "set", "u", "--state", "merged", "--sha", "new", "--attempt", worker.id).code).toBe(0);
+    expect(run("attempt", "finish", worker.id, "--reason", "confirmed complete").code).toBe(0);
+    const attempts = run("attempt", "list").out;
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+    expect(run("attempt", "list").out).toBe(attempts);
+    expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "merged", sha: "new" });
+    expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 0 });
+    expect(await readdir(join(dir, "inbox-batches"))).toEqual([batch.id]);
+    expect(JSON.parse(run("inbox", "drain", "--receipt").out)).toBeNull();
+    expect(await readdir(join(dir, "inbox-batches"))).toEqual([batch.id]);
+    expect(JSON.parse(run("inbox", "receipts").out)[0].events[0].id).toBe(batch.events[0].id);
+  });
+  it("quarantines new results when an accepted verifier is explicitly finished", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+    const verifier = (await begin(dir, run, "verifier", "verifier")).attempt;
+    expect(run("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "proof", "--attempt", verifier.id).code).toBe(0);
+    expect(run("unit", "set", "u", "--state", "merged", "--attempt", verifier.id).code).toBe(0);
+    expect(run("attempt", "finish", verifier.id, "--reason", "abandoned").code).toBe(0);
+    expect(JSON.parse(run("attempt", "list").out)[0].settled).toEqual({ kind: "finished", reason: "abandoned" });
+    expect(run("ledger", "record", "12", "head", "verifier-failed", "--evidence", "late", "--attempt", verifier.id).code).toBe(1);
+    expect(run("inbox", "push", "verifier", "u", "failed", ...completionArgs(verifier, { pr: "12", sha: "head" })).code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "verdict", pr: 12, sha: "head", verdict: "verifier-failed", evidence: "late" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(1);
+    expect(JSON.parse(run("ledger", "check", "12", "head").out).verdict).toBe("unit-test-verified");
+  });
+  it("keeps legacy five-cell untracked publication usable", async () => {
+    const { dir, run } = await fixture();
+    expect(run("inbox", "push", "legacy", "u", "done").code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    expect((await readFile(join(dir, "inbox-batches", batch.id, batch.events[0].id), "utf8")).replace(/\r?\n$/, "").split("\t")).toHaveLength(5);
+    const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "published" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+    expect(JSON.parse(run("unit", "get", "u").out).state).toBe("published");
+  });
+  for (const reason of ["abandoned", "2026-10-05T12:00:00.000Z"]) {
+    it(`does not infer accepted authority from legacy settlement ${reason}`, async () => {
+      const { dir, run } = await fixture();
+      const worker = (await begin(dir, run, "worker")).attempt;
+      const rows = JSON.parse(await readFile(join(dir, "attempts.json"), "utf8"));
+      rows[0].settled = reason;
+      delete rows[0].binding;
+      await writeFile(join(dir, "attempts.json"), JSON.stringify(rows));
+      expect(run("unit", "set", "u", "--state", "late", "--attempt", worker.id).code).toBe(1);
+      expect(JSON.parse(run("attempt", "list").out)[0].settled).toEqual({ kind: "finished", reason });
+      expect(JSON.parse(run("unit", "get", "u").out).state).toBe("pending");
+    });
+  }
+  for (const point of ["ledger", "attempt"] as const) {
+    it(`preserves verifier revisions after replay at ${point}`, async () => {
+      const { dir, run } = await fixture();
+      expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+      const verifier = (await begin(dir, run, "verifier", "verifier")).attempt;
+      await killAt(dir, point, ["ledger", "record", "12", "head", "unit-test-verified", "--evidence", "proof", "--attempt", verifier.id]);
+      expect(run("ledger", "record", "12", "head", "verifier-failed", "--evidence", "new failure", "--attempt", verifier.id).code).toBe(0);
+      expect(JSON.parse(run("ledger", "check", "12", "head").out)).toMatchObject({ verdict: "verifier-failed", evidence: "new failure" });
+      expect(run("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "fixed", "--attempt", verifier.id).code).toBe(0);
+      expect(JSON.parse(run("ledger", "check", "12", "head").out).evidence).toBe("fixed");
+    });
+  }
+});
+
+
+describe("CLI partial non-PR metadata", () => {
+  for (const field of ["sha", "pr"] as const) {
+    it(`accepts an initial worker's ${field} without requiring other head metadata`, async () => {
+      const { dir, run } = await fixture();
+      const worker = (await begin(dir, run, "worker")).attempt;
+      const value = field === "sha" ? "source" : "12";
+      expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker), `--${field}`, value).code).toBe(0);
+      const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+      const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "published", [field]: field === "pr" ? 12 : value } }]);
+      expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
+      const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["published"] }]);
+      expect(run("requirements", "check", "--file", criteria).code).toBe(0);
+      expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject(field === "sha" ? { pr: "", sha: "source" } : { pr: "12", sha: "" });
+    });
+  }
+});
+
+
+describe("CLI publication during head writes", () => {
+  it("preserves an old report published between the unit rename and binding write", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "old").code).toBe(0);
+    const worker = (await begin(dir, run, "worker")).attempt;
+    const hook = await preload(dir, "unit", true);
+    const child = Bun.spawn([process.execPath, "--preload", hook.path, script, "--store", dir, "--json", "unit", "set", "u", "--state", "restacked", "--sha", "new", "--attempt", worker.id], { stdout: "pipe", stderr: "pipe" });
+    try {
+      await waitFor(hook.marker);
+      expect(run("inbox", "push", "worker", "u", "done", ...completionArgs(worker, { pr: "12", sha: "old" })).code).toBe(0);
+      await writeFile(hook.release, "go");
+      expect(await child.exited).toBe(0);
+      const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+      const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "late" } }]);
+      const ack = run("inbox", "ack", batch.id, "--file", path);
+      expect(ack.code).toBe(1);
+      expect(ack.err).toContain("completion binding changed");
+      expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ state: "restacked", sha: "new" });
+      expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 1 });
+    } finally {
+      child.kill();
+      await child.exited;
+    }
+  });
+});
+
+
+describe("CLI terminal disposition text", () => {
+  it("keeps a tab in an explicit disposition readable without restoring effects", async () => {
+    const { dir, run } = await fixture();
+    const worker = (await begin(dir, run, "worker")).attempt;
+    expect(run("attempt", "finish", worker.id, "--reason", "abandoned\tinspected").code).toBe(0);
+    const result = run("attempt", "list");
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.out)[0].settled).toEqual({ kind: "finished", reason: "abandoned\tinspected" });
+    expect(run("unit", "set", "u", "--state", "late", "--attempt", worker.id).code).toBe(1);
+    expect(JSON.parse(run("unit", "get", "u").out).state).toBe("pending");
+  });
 });

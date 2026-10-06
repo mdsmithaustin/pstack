@@ -18,6 +18,7 @@ import {
   parseAckDecisions,
   parseAttempt,
   parseBeginAttempt,
+  parseCompletionBinding,
   parseObservation,
   parseRequirements,
   parseSavedDecision,
@@ -29,6 +30,7 @@ import {
   type Batch,
   type BeginAttempt,
   type Closeout,
+  type CompletionBinding,
   type Event,
   type Observation,
   type Receipt,
@@ -74,6 +76,7 @@ export interface InboxPointer {
   readonly status: string;
   readonly report: string;
   readonly attempt?: string;
+  readonly completion?: CompletionBinding;
 }
 
 export interface InboxPushResult {
@@ -174,6 +177,9 @@ export interface CheckLedgerParams {
 
 export interface PushInboxParams {
   readonly attempt?: string;
+  readonly binding?: string;
+  readonly pr?: number;
+  readonly sha?: string;
   readonly agent: string;
   readonly unit: string;
   readonly status: string;
@@ -601,6 +607,13 @@ function pointerCells(pointer: InboxPointer): readonly string[] {
     pointer.status,
     pointer.report,
     ...(pointer.attempt === undefined ? [] : [pointer.attempt]),
+    ...(pointer.completion === undefined
+      ? []
+      : [
+          pointer.completion.binding,
+          pointer.completion.pr,
+          pointer.completion.sha,
+        ]),
   ];
 }
 
@@ -616,7 +629,7 @@ async function readEvents(directory: string): Promise<readonly Event[]> {
       "",
     );
     const row = raw.split("\t");
-    if (/[\r\n]/.test(raw) || (row.length !== 5 && row.length !== 6)) {
+    if (/[\r\n]/.test(raw) || ![5, 6, 9].includes(row.length)) {
       throw new UserError(`inbox pointer ${entry.name} is malformed`);
     }
     result.push({
@@ -627,7 +640,12 @@ async function readEvents(directory: string): Promise<readonly Event[]> {
         unit: row[2] ?? "",
         status: row[3] ?? "",
         report: row[4] ?? "",
-        ...(row.length === 6 ? { attempt: safeId(row[5]) } : {}),
+        ...(row.length >= 6 ? { attempt: safeId(row[5]) } : {}),
+        ...(row.length === 9
+          ? { completion: parseCompletionBinding({
+              binding: row[6], pr: row[7], sha: row[8],
+            }) }
+          : {}),
       },
     });
   }
@@ -703,7 +721,7 @@ async function saveAttempt(store: string, attempt: Attempt): Promise<void> {
   );
 }
 
-async function repairInbox(store: string): Promise<void> {
+async function repairStore(store: string): Promise<void> {
   if (!(await exists(join(store, "units.tsv")))) return;
   const journal = join(store, "write-intents");
   if (await exists(journal)) {
@@ -759,9 +777,9 @@ async function writeIntent(
 async function applyWriteIntent(
   store: string,
   path: string,
-  decision: WriteIntent,
+  intent: WriteIntent,
 ): Promise<void> {
-  const { unit, ledger, attempt } = decision;
+  const { unit, ledger, attempt } = intent;
   if (unit !== undefined) {
     const rows = [...(await readUnits(store))];
     const index = rows.findIndex((row) => row.id === unit.id);
@@ -782,7 +800,7 @@ async function applyWriteIntent(
   if (attempt !== undefined) await saveAttempt(store, attempt);
   await atomicWrite(
     path,
-    `${JSON.stringify({ ...decision, completed: true }, null, 2)}\n`,
+    `${JSON.stringify({ ...intent, completed: true }, null, 2)}\n`,
   );
 }
 
@@ -800,11 +818,39 @@ async function mutationAuthority(
   const id = safeId(attemptId);
   const attempt = currentAttempts(rows).find((row) => row.id === id);
   if (attempt === undefined) throw new UserError("stale or unknown attempt");
+  if (attempt.settled?.kind === "finished")
+    throw new UserError("explicitly finished attempt cannot authorize effects");
   if (unit === undefined || attempt.unit !== unit.id)
     throw new UserError("attempt is not bound to this unit");
   if (attempt.target.pr !== unit.pr || attempt.target.sha !== unit.sha)
     throw new UserError("attempt head changed");
   return attempt;
+}
+
+function reboundAttempt(attempt: Attempt, unit: Unit): Attempt {
+  if (attempt.target.pr === unit.pr && attempt.target.sha === unit.sha)
+    return attempt;
+  return {
+    ...attempt,
+    binding: randomUUID(),
+    target: { pr: unit.pr, sha: unit.sha },
+  };
+}
+
+function completionBinding(pointer: InboxPointer, attempt: Attempt): CompletionBinding {
+  const completion = pointer.completion;
+  if (completion === undefined)
+    throw new UserError("unbound completion requires inspection or discard");
+  if (completion.binding !== attempt.binding)
+    throw new UserError("completion binding changed");
+  const introducingHead =
+    attempt.authority === "worker" &&
+    attempt.target.pr === "" && attempt.target.sha === "";
+  if (!introducingHead && (
+    completion.pr !== attempt.target.pr || completion.sha !== attempt.target.sha
+  ))
+    throw new UserError("completion report head changed");
+  return completion;
 }
 
 function updatedUnit(old: Unit, params: SetUnitParams): Unit {
@@ -1825,7 +1871,7 @@ export function openStore(
       );
     }
     await ensureLock();
-    await repairInbox(store);
+    await repairStore(store);
   };
 
   const claim = async (): Promise<Batch | null> => {
@@ -1886,10 +1932,7 @@ export function openStore(
           unit: row,
           ...(attempt === undefined
             ? {}
-            : { attempt: {
-                ...attempt,
-                target: { pr: row.pr, sha: row.sha },
-              } }),
+            : { attempt: reboundAttempt(attempt, row) }),
         });
         return row;
       },
@@ -1945,7 +1988,7 @@ export function openStore(
           ledger: row,
           ...(attempt === undefined
             ? {}
-            : { attempt: { ...attempt, settled: row.ts } }),
+            : { attempt: { ...attempt, settled: { kind: "accepted", at: row.ts } } }),
         });
         return row;
       },
@@ -1975,6 +2018,12 @@ export function openStore(
       push: async (params) => {
         ensureOpen();
         await requiredFile(join(store, "units.tsv"));
+        if (params.binding === undefined && (
+          params.pr !== undefined || params.sha !== undefined
+        ))
+          throw new UserError("claimed completion head requires a binding");
+        if (params.binding !== undefined && params.attempt === undefined)
+          throw new UserError("completion binding requires an attempt");
         const pointer: InboxPointer = {
           ts: new Date().toISOString(),
           agent: requiredCell(params.agent, "agent"),
@@ -1987,6 +2036,15 @@ export function openStore(
           ...(params.attempt === undefined
             ? {}
             : { attempt: safeId(params.attempt) }),
+          ...(params.binding === undefined
+            ? {}
+            : { completion: parseCompletionBinding({
+                binding: params.binding,
+                pr: params.pr === undefined
+                  ? "" : String(positiveInteger(params.pr, "PR")),
+                sha: params.sha === undefined
+                  ? "" : requiredCell(params.sha, "SHA"),
+              }) }),
         };
         const filename = `${pointer.ts.replace(/[:.]/g, "-")}-${process.pid}-${randomUUID()}.tsv`;
         const temporary = join(store, `.inbox-push-${randomUUID()}.tmp`);
@@ -2052,10 +2110,16 @@ export function openStore(
               old,
               event.pointer.attempt,
             );
+            const completion = attempt === undefined
+              ? undefined : completionBinding(event.pointer, attempt);
             if (decision.outcome.kind === "unit") {
               if (old === undefined)
                 throw new NotFoundError(`unit ${event.pointer.unit} not found`);
               unit = updatedUnit(old, { id: old.id, ...decision.outcome });
+              if (completion !== undefined && (
+                unit.pr !== completion.pr || unit.sha !== completion.sha
+              ))
+                throw new UserError("unit outcome does not match completion report head");
               if (decision.outcome.ledger !== undefined)
                 ledger = await ledgerEffect(
                   store,
@@ -2080,11 +2144,11 @@ export function openStore(
               : {
                   attempt: {
                     ...attempt,
-                    target:
-                      unit === undefined
-                        ? attempt.target
-                        : { pr: unit.pr, sha: unit.sha },
-                    settled: ledger?.ts ?? new Date().toISOString(),
+                    ...(unit === undefined ? {} : reboundAttempt(attempt, unit)),
+                    settled: {
+                      kind: "accepted",
+                      at: ledger?.ts ?? new Date().toISOString(),
+                    },
                   },
                 }),
             completed: false,
@@ -2092,7 +2156,7 @@ export function openStore(
           const directory = join(store, "inbox-batches", batch.id, "decisions");
           await mkdir(directory, { recursive: true });
           await atomicWrite(
-            join(directory, `${decision.event}.json`),
+            decisionPath(store, batch.id, decision.event),
             `${JSON.stringify(normalized, null, 2)}\n`,
           );
           await applyWriteIntent(
@@ -2121,6 +2185,7 @@ export function openStore(
         if (prior !== undefined) {
           const {
             id: _id,
+            binding: _binding,
             target: _target,
             observation: _observation,
             settled: _settled,
@@ -2143,6 +2208,7 @@ export function openStore(
         const attempt: Attempt = {
           ...params,
           id: `attempt-${randomUUID()}`,
+          binding: randomUUID(),
           target: { pr: unit.pr, sha: unit.sha },
           observation: { kind: "unknown" },
           settled: null,
@@ -2168,14 +2234,14 @@ export function openStore(
       },
       finish: async (id, reason) => {
         await beginWrite();
-        const attempt = currentAttempts(await readAttempts(store)).find(
+        const attempt = (await readAttempts(store)).find(
           (row) => row.id === safeId(id),
         );
         if (attempt === undefined)
           throw new UserError("stale or unknown attempt");
-        const row = {
+        const row: Attempt = {
           ...attempt,
-          settled: attempt.settled ?? requiredLine(reason, "reason"),
+          settled: { kind: "finished", reason: requiredLine(reason, "reason") },
         };
         await saveAttempt(store, row);
         return row;
@@ -2219,7 +2285,7 @@ export function openStore(
           }
         }
         const pending = (await pendingEvents()).length;
-        const attempts = currentAttempts(await readAttempts(store))
+        const attempts = (await readAttempts(store))
           .filter((row) => row.settled === null)
           .map((row) => row.id);
         if (pending > 0) failures.push(`${pending} pending inbox events`);

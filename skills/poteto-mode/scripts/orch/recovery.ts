@@ -72,11 +72,20 @@ export type Observation =
   | { readonly kind: "native"; readonly identity: string }
   | { readonly kind: "cli"; readonly receipt: string }
   | { readonly kind: "unknown" };
+export interface CompletionBinding {
+  readonly binding: string;
+  readonly pr: string;
+  readonly sha: string;
+}
+export type Settlement =
+  | { readonly kind: "accepted"; readonly at: string }
+  | { readonly kind: "finished"; readonly reason: string };
 export interface Attempt extends BeginAttempt {
   readonly id: string;
+  readonly binding: string;
   readonly target: { readonly pr: string; readonly sha: string };
   readonly observation: Observation;
-  readonly settled: string | null;
+  readonly settled: Settlement | null;
 }
 export interface Requirement {
   readonly id: string;
@@ -165,17 +174,43 @@ export function parseAttempt(value: unknown): Attempt {
   const target = record(row.target);
   if (
     typeof target.pr !== "string" ||
-    typeof target.sha !== "string" ||
-    !(row.settled === null || typeof row.settled === "string")
+    typeof target.sha !== "string"
   )
     throw new UserError("invalid saved attempt");
   return {
     ...parseBeginAttempt(row),
     id: safeId(row.id),
+    binding: row.binding === undefined ? safeId(row.id) : safeId(row.binding),
     target: { pr: target.pr, sha: target.sha },
     observation: parseObservation(row.observation),
-    settled: row.settled,
+    settled: parseSettlement(row.settled),
   };
+}
+function parseSettlement(value: unknown): Settlement | null {
+  if (value === null) return null;
+  if (typeof value === "string")
+    return { kind: "finished", reason: disposition(value) };
+  const row = record(value);
+  if (row.kind === "accepted") return { kind: "accepted", at: text(row.at) };
+  if (row.kind === "finished")
+    return { kind: "finished", reason: disposition(row.reason) };
+  throw new UserError("invalid attempt settlement");
+}
+function disposition(value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0 || /[\r\n]/.test(value))
+    throw new UserError("invalid terminal disposition");
+  return value;
+}
+export function parseCompletionBinding(value: unknown): CompletionBinding {
+  const row = record(value);
+  if (typeof row.pr !== "string" || typeof row.sha !== "string")
+    throw new UserError("invalid completion head");
+  if (row.pr !== "") {
+    if (!/^[1-9]\d*$/.test(row.pr)) throw new UserError("invalid completion PR");
+    integer(Number(row.pr));
+  }
+  if (row.sha !== "") text(row.sha);
+  return { binding: safeId(row.binding), pr: row.pr, sha: row.sha };
 }
 function parseVerdictOutcome(value: unknown): VerdictOutcome {
   const row = record(value);
@@ -291,6 +326,10 @@ export function parseRequirements(value: unknown): readonly Requirement[] {
               parseVerdict(text(value)),
             ),
           };
+    if (ledger?.verdicts.some(
+      (verdict) => verdict === "verifier-blocked" || verdict === "verifier-failed",
+    ))
+      throw new UserError("blocked or failed verifier verdicts cannot satisfy closeout");
     if (
       states?.length === 0 ||
       ledger?.verdicts.length === 0 ||

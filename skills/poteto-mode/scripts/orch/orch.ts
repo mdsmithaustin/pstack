@@ -72,6 +72,9 @@ interface LedgerRecordOptions {
 
 interface InboxPushOptions {
   readonly attempt?: string;
+  readonly binding?: string;
+  readonly pr?: number;
+  readonly sha?: string;
   readonly report?: string;
 }
 
@@ -403,6 +406,9 @@ function createProgram(io: Io): Command {
   leaf(inbox, "push <agent> <unit> <status>", "push an inbox pointer")
     .option("--report <path>", "report path")
     .option("--attempt <id>", "completion attempt")
+    .option("--binding <id>", "binding saved for this report")
+    .option("--pr <number>", "actual report PR", positiveInteger)
+    .option("--sha <sha>", "actual report head")
     .action(
       (
         agent: string,
@@ -420,6 +426,9 @@ function createProgram(io: Io): Command {
               status,
               report: options.report,
               attempt: options.attempt,
+              binding: options.binding,
+              pr: options.pr,
+              sha: options.sha,
             }),
           (result) =>
             `${result.pointer.unit}\t${result.pointer.status}\t${result.filename}`,
@@ -513,7 +522,7 @@ function createProgram(io: Io): Command {
   leaf(attempt, "list", "inspect current and prior attempts").action(() =>
     runStore(program, io, (store) => store.attempts.list(), JSON.stringify),
   );
-  leaf(attempt, "finish <id>", "explicitly settle a current attempt")
+  leaf(attempt, "finish <id>", "record a terminal disposition for any known attempt")
     .requiredOption("--reason <text>", "terminal disposition")
     .action((id: string, options: { reason: string }) =>
       runStore(
