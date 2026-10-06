@@ -2625,6 +2625,64 @@ class GatedPublish(unittest.TestCase):
         self.assertEqual(self.grade(flagged)["verdict"], PASS)
 
 
+class Issue133WritesAndReruns(unittest.TestCase):
+    def test_n5_a_cd_inside_command_substitution_scopes_its_writes(self):
+        self.assertEqual(oracles.shell_writes("x=$(cd /tmp/s && echo hi > a.txt); echo x > b.txt"), ["/tmp/s/a.txt", "b.txt"])
+        self.assertEqual(oracles.shell_writes("echo $(cd /tmp/s && pwd) > where.txt"), ["where.txt"])
+
+    def test_n5_spaced_nested_subshells_scope_their_writes(self):
+        self.assertEqual(oracles.shell_writes("( (cd /tmp/s && echo hi > a.txt) ; echo x > b.txt)"), ["/tmp/s/a.txt", "b.txt"])
+
+    def test_n7_a_redirect_on_cd_writes_in_the_directory_it_leaves(self):
+        self.assertEqual(oracles.shell_writes("cd /tmp/s > moved.log && echo x > a.txt"), ["moved.log", "/tmp/s/a.txt"])
+
+    def test_f12_scratch_and_test_names_need_a_word_boundary(self):
+        view = oracles.View(minimal(), {}, None)
+        names = ("verify.py", "scratch.py", "reprocess.py", "contest.py", "latest.py", "attestation.py",
+                 "verify_tally_json.py", "repro-retry.sh", "scratchpad/a.py", "tests/test_x.py", "pkg/x_test.go", "__tests__/a.js")
+        self.assertEqual({n: view.classify(n) for n in names},
+                         {"verify.py": "source", "scratch.py": "source", "reprocess.py": "source", "contest.py": "source",
+                          "latest.py": "source", "attestation.py": "source", "verify_tally_json.py": "scratch",
+                          "repro-retry.sh": "scratch", "scratchpad/a.py": "scratch", "tests/test_x.py": "test",
+                          "pkg/x_test.go": "test", "__tests__/a.js": "test"})
+
+    def test_f13_copy_install_perl_dd_and_ed_write_their_targets(self):
+        for command, want in (("cp a.py b.py", ["b.py"]), ("cp -r notes/a.md notes/b.md out/", ["out/"]),
+                              ("install -m 644 a.py bin/a.py", ["bin/a.py"]), ("perl -pi -e 's/a/b/' x.py", ["x.py"]),
+                              ("dd if=a.bin of=b.bin bs=1", ["b.bin"]), ("ed -s x.py <<'EOF'\n1d\nw\nEOF", ["x.py"]),
+                              ("pip install requests", []), ("java -cp lib/a.jar Main", []), ("perl -ne 'print' x.py", [])):
+            self.assertEqual(oracles.shell_writes(command), want, command)
+
+    def test_f13_a_patch_writes_the_files_it_names(self):
+        body = "--- a/rollup/export.py\n+++ b/rollup/export.py\n@@ -1 +1 @@\n-x\n+y\nEOF"
+        self.assertEqual(oracles.shell_writes("git apply <<'EOF'\n" + body), ["rollup/export.py"])
+        self.assertEqual(oracles.shell_writes("cat > /tmp/f.diff <<'EOF'\n" + body + "\ncd /w && patch -p1 < /tmp/f.diff"),
+                         ["/tmp/f.diff", "/w/rollup/export.py"])
+        self.assertEqual(oracles.shell_writes("git apply --check <<'EOF'\n" + body), [])
+        self.assertEqual(oracles.shell_writes("git apply fix.patch"), [])
+
+    def test_f13_copies_into_rationale_paths_are_not_rationale_reads(self):
+        brief = "Write `rationale.md` in your directory."
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        for n in range(1, 6):
+            events += bash(18 + 2 * n, f"cp /tmp/template.md /tmp/c{n}/rationale.md")
+        events += bash(40, "cat /tmp/c1/relay/cache.py")
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+    def test_copilot_a_relative_cd_out_of_the_project_is_not_a_project_edit(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/export.py": "x = 0\n"})
+        def edits(command):
+            return oracles.View(minimal(events=bash(1, command)), {}, project).edits()
+        self.assertEqual(edits("cd ../scratch && python3 -c \"open('x.py','w').write('1')\""), [])
+        self.assertEqual(edits("cd rollup && python3 -c \"open('x.py','w').write('1')\""), [(1, "rollup/x.py", "source")])
+
+
 if __name__ == "__main__":
     unittest.main()
 
