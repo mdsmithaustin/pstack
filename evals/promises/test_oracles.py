@@ -2894,6 +2894,17 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         result = grade("how-narrow-question-no-explorers", minimal(events=self.spawned(spawns), spawns=spawns, harness="codex", final_reply="x"), load_case("how-run"))
         self.assertEqual(result["verdict"], PASS, result)
 
+    def test_n2_a_heading_labels_only_itself_except_the_investigator_source(self):
+        spawns = [delegate(10, "Implement the parser change in src/a.py.", "### Update\nUsing the explorer notes, I implemented the parser."),
+                  delegate(10, "Implement the exporter change in src/b.py.", "### Update\nUsing the explorer notes, I implemented the exporter."),
+                  delegate(30, "Write the answer.")]
+        events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(20, "w"), {"seq": 30, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        sourced = [self.sealed(10, "### Source\nSource control: git log and blame on relay/cache.py.")]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=self.spawned(sourced), spawns=sourced, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
     def test_an_unlabelled_first_reply_still_names_a_sealed_reviewer(self):
         reviewer = self.sealed(5, "persona: poteto-agent\nI'm using poteto-mode and documentation-impact to review the CLI and its docs.", "docs_review")
         events = [dict(e, turn=0) for e in self.spawned([reviewer])] + [dict(text(7, "Done. Author result: independent review required. Review: pass."), turn=0),
