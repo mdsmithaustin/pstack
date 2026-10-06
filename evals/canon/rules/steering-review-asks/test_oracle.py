@@ -285,6 +285,12 @@ class HiddenTailTests(unittest.TestCase):
         self.assertEqual(self.failures('expect(bubble).not.toHaveTextContent("tail (end")', 'expect(bubble).toHaveTextContent("tail (end")',
                                        "expect(writeText).toHaveBeenCalledWith(LONG_TEXT)"), [])
 
+    def test_a_bare_query_after_a_clipboard_assertion_is_the_rendered_text(self):
+        for query in ("screen.getByText(TAIL);", "await screen.findByText(TAIL)"):
+            with self.subTest(query):
+                self.assertEqual(self.failures("expect(bubble).not.toHaveTextContent(TAIL);", "fireEvent.click(expand);",
+                                               "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);", query), [])
+
     def test_assertions_without_semicolons_still_count(self):
         self.assertEqual(self.failures('it("hides", () => {', "  expect(bubble).not.toHaveTextContent(TAIL)",
                                        "  expect(bubble).toHaveTextContent(TAIL)", "})"), [])
