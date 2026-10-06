@@ -436,6 +436,7 @@ def harvest(run):
     children = [c for c in chats if c not in leads]
     transcripts = run.root / "transcripts" / "sessions"
     copied = [p for c in [*leads, *children] for p in copy_session(c.parent, transcripts)]
+    leads, children = ([transcripts / c.parent.parent.name / c.parent.name / c.name for c in group] for group in (leads, children))
     entry = run.case.get("entry")
     cwd = str(run.project)
     empty = {"events": [], "files_read": [], "worklist": [], "spawns": [], "final_reply": None,
