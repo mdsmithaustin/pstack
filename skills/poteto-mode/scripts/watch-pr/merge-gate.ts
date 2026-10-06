@@ -30,6 +30,7 @@ export const GATES = [
   "threads",
   "mergeability",
   "draft",
+  "merge-queue",
 ] as const;
 export type Gate = (typeof GATES)[number];
 
@@ -89,6 +90,7 @@ export type MergeReceipt =
 export interface MergePort {
   conversation(context: T.PrContext): Promise<Conversation>;
   patchId(baseRef: string, headSha: CommitSha): Promise<PatchId>;
+  usesMergeQueue(context: T.PrContext, baseRef: string): Promise<boolean>;
   merge(request: MergeRequest): Promise<MergeReceipt>;
   comment(context: T.PrContext, body: string): Promise<void>;
 }
@@ -133,7 +135,6 @@ function verdictGate(verdict: VerdictReading): Outcome {
     : fail(`${problems.join("; ")} by ${record.author} at ${record.url}`);
 }
 
-const short = (sha: string): string => sha.slice(0, 8);
 const repoLabel = (repo: T.Repository): string =>
   `${repo.host}/${repo.owner}/${repo.repo}`;
 
@@ -151,7 +152,7 @@ function headGate(
   if (verdict.record.head === headSha) return pass(`verdict covers ${headSha}`);
   return patchIdOk
     ? pass(
-        `verdict at ${short(verdict.record.head)} covers an unchanged patch at ${short(headSha)}`
+        `verdict Head: ${verdict.record.head} is not the PR head ${headSha}, but the patch is unchanged`
       )
     : fail(
         `verdict covers ${verdict.record.head} but the PR head is ${headSha}`
@@ -296,6 +297,17 @@ function mergeabilityGate(snapshot: T.PrSnapshot): Outcome {
 const draftGate = (isDraft: boolean): Outcome =>
   isDraft ? fail("PR is a draft") : pass("not a draft");
 
+/**
+ * On a queue-enabled branch `gh pr merge` only enqueues the PR, and the queue
+ * lands it later without rerunning any other gate.
+ */
+const mergeQueueGate = (base: string, queued: boolean): Outcome =>
+  queued
+    ? fail(
+        `${base} uses a merge queue: gh pr merge would only enqueue the PR, and the queue lands it without rerunning these gates`
+      )
+    : pass(`${base} has no merge queue`);
+
 export async function evaluateGates(args: {
   readonly reader: T.GitHubReader;
   readonly port: MergePort;
@@ -327,6 +339,10 @@ export async function evaluateGates(args: {
       : null;
   const notEvaluated = fail(`not evaluated: PR is ${facts.state}`);
   const open = snapshot.kind === "open" ? snapshot : null;
+  const queued =
+    open === null
+      ? null
+      : await args.port.usesMergeQueue(args.context, facts.baseRefName);
   const patchIdOutcome = patchIdGate({
     verdict,
     state: facts.state,
@@ -345,6 +361,8 @@ export async function evaluateGates(args: {
     threads: open === null ? notEvaluated : threadsGate(open, conversation),
     mergeability: mergeabilityGate(snapshot),
     draft: draftGate(facts.isDraft),
+    "merge-queue":
+      queued === null ? notEvaluated : mergeQueueGate(facts.baseRefName, queued),
   };
   const gates = GATES.map((gate) => ({ gate, ...outcomes[gate] }));
   return {

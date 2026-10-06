@@ -166,6 +166,71 @@ describe("merge-gate", () => {
     });
   });
 
+  describe("a base branch with a merge queue", () => {
+    const queued: WorldOptions = { port: { mergeQueue: true } };
+
+    it("refuses with exit 10, names the merge-queue gate, and does not enqueue", async () => {
+      const result = await run(MERGE_ARGS, queued);
+      expect(result.exitCode).toBe(10);
+      expect(mergeCalls(result.port)).toEqual([]);
+      expect(commentCalls(result.port)).toEqual([]);
+      const out = parsed(result.stdout);
+      expect(out.kind).toBe("REFUSED");
+      expect(
+        out.report.gates
+          .filter((gate: { ok: boolean }) => !gate.ok)
+          .map((gate: { gate: string }) => gate.gate)
+      ).toEqual(["merge-queue"]);
+    });
+
+    it("says why in pretty mode", async () => {
+      const result = await run([...MERGE_ARGS, "--pretty"], queued);
+      expect(result.stdout.join("")).toContain(
+        "FAIL merge-queue: main uses a merge queue: gh pr merge would only enqueue the PR, and the queue lands it without rerunning these gates"
+      );
+    });
+
+    it("enqueues under --override, after posting the reason and the gate", async () => {
+      const pending = { kind: "pending", mergeCommit: null, observed: "state=OPEN" } as const;
+      const result = await run([...MERGE_ARGS, "--override", "owner accepts the queue"], {
+        port: { mergeQueue: true, receipt: pending },
+      });
+      expect(result.exitCode).toBe(11);
+      const [body] = commentCalls(result.port);
+      expect(body?.split("\n")[0]).toBe("merge-gate override: owner accepts the queue");
+      expect(body).toContain("- merge-queue: main uses a merge queue");
+      expect(mergeCalls(result.port)).toHaveLength(1);
+      expect(parsed(result.stdout)).toMatchObject({
+        kind: "QUEUED",
+        override: "owner accepts the queue",
+      });
+    });
+
+    it("fails --check, so a caller sees the queue before it merges", async () => {
+      const result = await run([...MERGE_ARGS, "--check"], queued);
+      expect(result.exitCode).toBe(10);
+      expect(mergeCalls(result.port)).toEqual([]);
+    });
+
+    it("exits 1 and merges nothing when the queue cannot be read", async () => {
+      const built = world();
+      const port = {
+        ...built.port,
+        async usesMergeQueue(): Promise<boolean> {
+          throw failureThrownByGitHub;
+        },
+      };
+      const harness = testRuntime({ reader: built.reader, port });
+      expect(await main(MERGE_ARGS, harness.runtime)).toBe(1);
+      expect(parsed(harness.stdout)).toMatchObject({
+        kind: "ERROR",
+        source: "github",
+        detail: "gh: HTTP 502",
+      });
+      expect(mergeCalls(built.port)).toEqual([]);
+    });
+  });
+
   describe("--check", () => {
     it("prints the report and exits 0 for a ready PR without merging", async () => {
       const result = await run([...MERGE_ARGS, "--check"]);

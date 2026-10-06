@@ -92,6 +92,7 @@ export type PortCall =
       readonly baseRef: string;
       readonly headSha: CommitSha;
     }
+  | { readonly kind: "merge-queue"; readonly baseRef: string }
   | { readonly kind: "merge"; readonly request: MergeRequest }
   | { readonly kind: "comment"; readonly body: string };
 
@@ -104,6 +105,7 @@ export interface FakePortOptions {
   readonly receipt?: MergeReceipt;
   readonly truncated?: readonly Truncation[];
   readonly commentError?: Error;
+  readonly mergeQueue?: boolean;
 }
 
 export function fakePort(
@@ -125,6 +127,10 @@ export function fakePort(
       calls.push({ kind: "patch-id", baseRef, headSha });
       if (options.patchIdError !== undefined) throw options.patchIdError;
       return options.patchId ?? PATCH;
+    },
+    async usesMergeQueue(_context, baseRef) {
+      calls.push({ kind: "merge-queue", baseRef });
+      return options.mergeQueue ?? false;
     },
     async merge(request) {
       calls.push({ kind: "merge", request });

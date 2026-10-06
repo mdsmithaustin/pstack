@@ -28,6 +28,16 @@ import { parsePatchId, type CommitSha, type IssueComment, type PatchId } from ".
 export const CONVERSATION_QUERY =
   "\nquery MergeGateConversation($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      author { login }\n      reviewThreads(first: 1) { totalCount }\n      reviewRequests(first: 1) { totalCount }\n      reviews(first: 1) { totalCount }\n      comments(last: 100) {\n        totalCount\n        nodes {\n          body\n          url\n          createdAt\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
 
+export const MERGE_QUEUE_QUERY =
+  "\nquery MergeGateQueue($owner: String!, $repo: String!, $branch: String!) {\n  repository(owner: $owner, name: $repo) {\n    mergeQueue(branch: $branch) { id }\n  }\n}\n";
+
+export function parseMergeQueue(value: unknown): boolean {
+  const queue = at(value, ["data", "repository", "mergeQueue"]);
+  if (queue === null) return false;
+  record(queue, "repository.mergeQueue");
+  return true;
+}
+
 const firstLine = (value: string): string =>
   value.trim().split(/\r?\n/, 1)[0]?.slice(0, 240) ?? "";
 
@@ -111,6 +121,16 @@ export class GhGitMergePort implements MergePort {
   async conversation(context: T.PrContext): Promise<Conversation> {
     return parseConversation(
       await runJson(graphqlArgs(CONVERSATION_QUERY, context))
+    );
+  }
+
+  async usesMergeQueue(context: T.PrContext, baseRef: string): Promise<boolean> {
+    return parseMergeQueue(
+      await runJson([
+        ...graphqlArgs(MERGE_QUEUE_QUERY, context),
+        "-f",
+        `branch=${baseRef}`,
+      ])
     );
   }
 

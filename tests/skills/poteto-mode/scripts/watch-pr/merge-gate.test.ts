@@ -41,7 +41,7 @@ const detailOf = (gateReport: GateReport, gate: string): string =>
   gateReport.gates.find((result) => result.gate === gate)?.detail ?? "missing";
 
 describe("evaluateGates", () => {
-  it("is ready when every gate holds, and lists all eight gates in order", async () => {
+  it("is ready when every gate holds, and lists all nine gates in order", async () => {
     const { report: ready } = await report();
     expect(ready.ready).toBe(true);
     expect(ready.gates.map((result) => result.gate)).toEqual([...GATES]);
@@ -54,6 +54,7 @@ describe("evaluateGates", () => {
       "threads",
       "mergeability",
       "draft",
+      "merge-queue",
     ]);
     expect(ready.headSha).toBe(HEAD);
     expect(ready.state).toBe("OPEN");
@@ -164,7 +165,7 @@ describe("evaluateGates", () => {
       });
       expect(result.ready).toBe(true);
       expect(detailOf(result, "head")).toBe(
-        `verdict at ${HEAD.slice(0, 8)} covers an unchanged patch at ${MOVED_HEAD.slice(0, 8)}`
+        `verdict Head: ${HEAD} is not the PR head ${MOVED_HEAD}, but the patch is unchanged`
       );
     });
 
@@ -279,6 +280,29 @@ describe("evaluateGates", () => {
       const { report: result } = await report({ facts: { isDraft: true } });
       expect(failedNames(result)).toEqual(["draft"]);
     });
+
+    it("merge-queue: a base branch with a merge queue fails alone", async () => {
+      const { report: result } = await report({
+        facts: { baseRefName: "release/2" },
+        port: { mergeQueue: true },
+      });
+      expect(failedNames(result)).toEqual(["merge-queue"]);
+      expect(detailOf(result, "merge-queue")).toBe(
+        "release/2 uses a merge queue: gh pr merge would only enqueue the PR, and the queue lands it without rerunning these gates"
+      );
+    });
+
+    it("merge-queue: no queue passes and names the branch it read", async () => {
+      const { report: result, world: built } = await report({
+        facts: { baseRefName: "release/2" },
+      });
+      expect(result.ready).toBe(true);
+      expect(detailOf(result, "merge-queue")).toBe("release/2 has no merge queue");
+      expect(built.port.calls).toContainEqual({
+        kind: "merge-queue",
+        baseRef: "release/2",
+      });
+    });
   });
 
   describe("truncated reads fail closed", () => {
@@ -314,7 +338,7 @@ describe("evaluateGates", () => {
       rollupState: "FAILURE",
       threads: [unresolvedThread()],
       flaggedReviews: [openFlaggedReview()],
-      port: { comments: [], patchId: OTHER_PATCH },
+      port: { comments: [], patchId: OTHER_PATCH, mergeQueue: true },
     });
     expect(result.ready).toBe(false);
     expect(failedNames(result)).toEqual([...GATES]);
@@ -362,10 +386,20 @@ describe("evaluateGates", () => {
     });
     expect(result.ready).toBe(false);
     expect(result.state).toBe("MERGED");
+    expect(failedNames(result)).toEqual([
+      "patch-id",
+      "checks",
+      "review-bodies",
+      "threads",
+      "mergeability",
+      "merge-queue",
+    ]);
     expect(detailOf(result, "mergeability")).toBe("PR is MERGED, not open");
     expect(detailOf(result, "checks")).toBe("not evaluated: PR is MERGED");
     expect(detailOf(result, "patch-id")).toBe("not evaluated: PR is MERGED");
+    expect(detailOf(result, "merge-queue")).toBe("not evaluated: PR is MERGED");
     expect(built.port.calls.some((call) => call.kind === "patch-id")).toBe(false);
+    expect(built.port.calls.some((call) => call.kind === "merge-queue")).toBe(false);
   });
 
   it("refuses a PR closed without merging", async () => {
