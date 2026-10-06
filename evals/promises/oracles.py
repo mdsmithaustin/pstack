@@ -74,6 +74,7 @@ CONSTRAINT_ALIASES = {"newline": (r"\n", "linesep", "endswith"), "trailing": (r"
 CONSTRAINT_SUBJECTS = {"do not remove: the sink needs a trailing newline on every row": ("sink", "row")}
 SCRATCH_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/")
 LOG_NAMES = ("decisions.tsv", ".audit/")
+PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
 HOW_SECTIONS = ("overview", "key concepts", "how it works", "where things live", "gotchas")
@@ -573,7 +574,7 @@ class View:
         return [e for e in self.edits(turn) if e[2] == "source"]
 
     def project_edits(self, turn=None):
-        return [e for e in self.edits(turn) if e[2] in ("source", "test", "doc", "data")]
+        return [e for e in self.edits(turn) if e[2] in PROJECT_CLASSES]
 
     def asked_user(self, turn=None):
         for call in self.tool_calls:
@@ -2592,7 +2593,7 @@ def arm_dirs(command):
     return dirs
 
 
-GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?[MADRC][MADRC ]?\s+\S|^\s*(?:modified|deleted|new file):\s')
+GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?(?:[MADRCU][MADRCU ]?\s+\S|\?\? ([^\s"]+))|^\s*(?:modified|deleted|new file|both \w+):\s')
 
 
 def parent_written(view, candidates):
@@ -2605,7 +2606,8 @@ def parent_written(view, candidates):
             continue
         command = str(given.get(SHELL_TOOLS[call["name"]]) or "").strip()
         if command.startswith("git status") and (given.get("workdir") or given.get("cwd")) in (None, view.trace.get("cwd")):
-            if GIT_DIRTY.search(((view.results_for(call) or {}).get("output_head") or "").replace("\\n", "\n")):
+            status = ((view.results_for(call) or {}).get("output_head") or "").replace("\\n", "\n")
+            if any(m.group(1) is None or (not m.group(1).endswith("/") and view.classify(m.group(1)) in PROJECT_CLASSES) for m in GIT_DIRTY.finditer(status)):
                 return seq
     return None
 
