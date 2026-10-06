@@ -903,7 +903,8 @@ class HermesEvidence:
                         if not isinstance(call, dict) or not isinstance(call.get("function"), dict):
                             raise EvidenceRefused("decode-failed", "invalid native tool call")
                         fn = call["function"]
-                        args = json.loads(fn.get("arguments") or "{}")
+                        arguments = fn.get("arguments")
+                        args = json.loads("{}" if arguments in (None, "") else arguments)
                         if not isinstance(args, dict) or not isinstance(fn.get("name"), str):
                             raise EvidenceRefused("decode-failed", "invalid native tool arguments")
                 grouped.setdefault(message["session_id"], []).append(freeze({key: message[key] for key in required}))
