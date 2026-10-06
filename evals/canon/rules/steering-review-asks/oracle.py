@@ -637,6 +637,7 @@ REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
 ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 OPERAND_WANTED = re.compile(r"(?:=>|[=:,?]|&&|\|\|)[ \t]*$")
 CHAINED_LINE = re.compile(r"\n\s*\??\.")
+QUOTED = re.compile(STRING)
 
 
 def clipboard_spies(source):
@@ -661,8 +662,9 @@ def stub_captures(source):
             char = source[end]
             if depth <= 0 and (char == ";" or char == "\n" and not line_continues(source, end)):
                 break
+            literal = QUOTED.match(source, end)
             depth += (char in "([{") - (char in ")]}")
-            end += 1
+            end = literal.end() if literal else end + 1
         captured = CAPTURED_BY_STUB.search(source, found.end(), end)
         if captured:
             names.add(captured.group(1))
