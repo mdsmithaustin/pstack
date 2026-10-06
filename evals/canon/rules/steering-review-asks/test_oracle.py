@@ -199,6 +199,26 @@ class HiddenTailTests(unittest.TestCase):
         self.assertEqual(self.failures('expect(bubble).not.toHaveTextContent("tail (end")', 'expect(bubble).toHaveTextContent("tail (end")',
                                        "expect(writeText).toHaveBeenCalledWith(LONG_TEXT)"), [])
 
+    def test_a_present_constant_built_from_the_absent_value_counts(self):
+        for definitions in (["const LONG_TEXT = `${HEAD}${TAIL}`;"], ["const LONG_TEXT = HEAD + TAIL;"],
+                            ['const LONG_TEXT: string = "chunk ".repeat(900) + TAIL;'],
+                            ['const TAIL = "the ending";', 'const LONG_TEXT = "r ".repeat(2500) + "the ending";']):
+            for present in ("expect(container).toHaveTextContent(LONG_TEXT);", "expect(container.textContent).toBe(LONG_TEXT);"):
+                with self.subTest(definitions=definitions, present=present):
+                    self.assertEqual(self.failures(*definitions, "expect(container).not.toHaveTextContent(TAIL);", present), [])
+
+    def test_a_present_constant_not_built_from_the_absent_value_does_not_count(self):
+        self.assertEqual(self.failures('const HEAD = "chunk ".repeat(900);', "const LONG_TEXT = HEAD + TAIL;",
+                                       "expect(container).not.toHaveTextContent(TAIL);", "expect(container).toHaveTextContent(HEAD);"),
+                         [self.PRESENT])
+
+    def test_a_constant_and_its_literal_name_the_same_value(self):
+        for absent, present in (("TAIL", '"the end of it"'), ('"the end of it"', "TAIL"), ("/the end of it/", '"the end of it"'),
+                                ("new RegExp(TAIL)", "TAIL"), ("TAIL", "expect.stringContaining(TAIL)"), ("TAIL", "`${TAIL}`")):
+            with self.subTest(absent=absent, present=present):
+                self.assertEqual(self.failures('const TAIL = "the end of it";', f"expect(container).not.toHaveTextContent({absent});",
+                                               f"expect(container).toHaveTextContent({present});"), [])
+
     def test_a_bare_query_after_a_clipboard_assertion_is_the_rendered_text(self):
         for query in ("screen.getByText(TAIL);", "await screen.findByText(TAIL)"):
             with self.subTest(query):
