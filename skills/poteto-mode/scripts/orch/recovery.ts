@@ -53,6 +53,8 @@ export interface SavedDecision extends AckDecision, WriteIntent {}
 export type Authority = "worker" | "verifier";
 declare const panelArm: unique symbol;
 export type NumericPanelArm = number & { readonly [panelArm]: true };
+declare const executionIdentity: unique symbol;
+export type ConcreteExecutionIdentity = string & { readonly [executionIdentity]: true };
 
 export interface AttemptSlot {
   readonly unit: string;
@@ -62,8 +64,8 @@ export interface AttemptSlot {
 }
 export interface Resolution {
   readonly harness: string;
-  readonly model: string;
-  readonly effort: string;
+  readonly model: ConcreteExecutionIdentity;
+  readonly effort: ConcreteExecutionIdentity;
 }
 export interface BeginAttempt extends AttemptSlot {
   readonly requestId: string;
@@ -164,6 +166,15 @@ function parseArm(role: string, value: unknown): NumericPanelArm {
   if (value !== 1) throw new UserError("single-value roles require arm 1");
   return value;
 }
+function isConcreteExecutionIdentity(value: string): value is ConcreteExecutionIdentity {
+  return !roleContract.unresolvedAliases.includes(value.trim());
+}
+function concreteIdentity(value: unknown): ConcreteExecutionIdentity {
+  const identity = text(value);
+  if (!isConcreteExecutionIdentity(identity))
+    throw new UserError("execution identity must be concrete");
+  return identity;
+}
 export function parseBeginAttempt(value: unknown): BeginAttempt {
   const row = record(value);
   const resolution = record(row.resolution);
@@ -181,8 +192,8 @@ export function parseBeginAttempt(value: unknown): BeginAttempt {
     checkout: text(row.checkout),
     resolution: {
       harness: text(resolution.harness),
-      model: text(resolution.model),
-      effort: text(resolution.effort),
+      model: concreteIdentity(resolution.model),
+      effort: concreteIdentity(resolution.effort),
     },
   };
 }

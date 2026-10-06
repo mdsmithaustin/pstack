@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -304,6 +304,127 @@ function completionArgs(
     ...(head === undefined ? [] : ["--pr", head.pr, "--sha", head.sha]),
   ];
 }
+describe("CLI concrete execution identity", () => {
+  async function snapshot(dir: string) {
+    const files: Record<string, string> = {};
+    for (const name of (await readdir(dir, { recursive: true })).sort()) {
+      const path = join(dir, name);
+      if ((await stat(path)).isFile()) files[name] = await readFile(path, "utf8");
+    }
+    return files;
+  }
+
+  for (const field of ["model", "effort"] as const) {
+    for (const alias of ["inherit-parent", "auto", " inherit-parent ", " auto "]) {
+      it(`rejects ${field} ${JSON.stringify(alias)} before allocating or replacing an attempt`, async () => {
+        const { dir, run } = await fixture();
+        expect(JSON.parse(run("attempt", "list").out)).toEqual([]);
+        const resolution = { harness: "codex", model: "gpt-6.1-sol", effort: "high" };
+        const request = {
+          unit: "u", role: "feature", arm: 1, authority: "worker", requestId: "first",
+          brief: "brief.md", checkout: dir, resolution,
+        };
+        const path = await input(dir, "identity.json", {
+          ...request, resolution: { ...resolution, [field]: alias },
+        });
+        const before = await snapshot(dir);
+        const denied = run("attempt", "begin", "--file", path);
+        expect(denied.code).toBe(1);
+        expect(denied.err).toContain("execution identity must be concrete");
+        expect(await snapshot(dir)).toEqual(before);
+        expect(JSON.parse(run("attempt", "list").out)).toEqual([]);
+
+        await input(dir, "identity.json", request);
+        const first = run("attempt", "begin", "--file", path);
+        expect(first.code).toBe(0);
+        const predecessor = JSON.parse(first.out);
+        expect(predecessor.resolution).toEqual(resolution);
+        expect(run("attempt", "begin", "--file", path).out).toBe(first.out);
+
+        const replacement = { ...request, requestId: "second", replace: predecessor.id };
+        await input(dir, "identity.json", {
+          ...replacement, resolution: { ...resolution, [field]: alias },
+        });
+        const beforeReplacement = await snapshot(dir);
+        const deniedReplacement = run("attempt", "begin", "--file", path);
+        expect(deniedReplacement.code).toBe(1);
+        expect(deniedReplacement.err).toContain("execution identity must be concrete");
+        expect(await snapshot(dir)).toEqual(beforeReplacement);
+        expect(JSON.parse(run("attempt", "list").out)).toEqual([predecessor]);
+        expect(run("unit", "set", "u", "--state", "accepted", "--attempt", predecessor.id).code).toBe(0);
+
+        await input(dir, "identity.json", replacement);
+        const second = run("attempt", "begin", "--file", path);
+        expect(second.code).toBe(0);
+        expect(JSON.parse(second.out)).toMatchObject({
+          requestId: "second", replace: predecessor.id, resolution,
+          observation: { kind: "unknown" }, settled: null,
+        });
+        expect(run("attempt", "begin", "--file", path).out).toBe(second.out);
+        expect(JSON.parse(run("attempt", "list").out)).toHaveLength(2);
+      });
+    }
+    for (const alias of ["inherit-parent", "auto"]) {
+      it(`rejects a saved ${field} ${alias} without rewriting the record`, async () => {
+        const { dir, run } = await fixture();
+        const { attempt } = await begin(dir, run, "saved");
+        const path = join(dir, "attempts.json");
+        await writeFile(path, JSON.stringify([{
+          ...attempt, resolution: { ...attempt.resolution, [field]: alias },
+        }]));
+        const before = await snapshot(dir);
+        const denied = run("attempt", "list");
+        expect(denied.code).toBe(1);
+        expect(denied.err).toContain("execution identity must be concrete");
+        expect(await snapshot(dir)).toEqual(before);
+        await writeFile(path, JSON.stringify([attempt]));
+        expect(JSON.parse(run("attempt", "list").out)).toEqual([attempt]);
+      });
+    }
+  }
+
+  for (const resolution of [
+    { harness: "claude-code", model: "claude-sonnet-4-6", effort: "high" },
+    { harness: "grok", model: "grok-4.7", effort: "medium" },
+    { harness: "hermes", model: "provider/concrete-model", effort: "low" },
+  ]) {
+    it(`keeps ${resolution.harness} concrete execution identity idempotent`, async () => {
+      const { dir, run } = await fixture();
+      const path = await input(dir, "concrete.json", {
+        unit: "u", role: "feature", arm: 1, authority: "worker", requestId: "concrete",
+        brief: "brief.md", checkout: dir, resolution,
+      });
+      const first = run("attempt", "begin", "--file", path);
+      expect(first.code).toBe(0);
+      expect(JSON.parse(first.out).resolution).toEqual(resolution);
+      expect(run("attempt", "begin", "--file", path).out).toBe(first.out);
+      expect(JSON.parse(await readFile(join(dir, "attempts.json"), "utf8"))[0].resolution).toEqual(resolution);
+    });
+  }
+
+  for (const [harness, entry, model, effort] of [
+    ["codex", "inherit-parent@high", "inherit-parent", "high"],
+    ["codex", "auto@high", "inherit-parent", "high"],
+    ["claude-code", "sonnet", "sonnet", "inherit-parent"],
+    ["grok", "grok-4.7", "grok-4.7", "inherit-parent"],
+  ] as const) {
+    it(`preserves ${harness} resolver inheritance for ${entry}`, async () => {
+      const { dir } = await fixture();
+      await mkdir(join(dir, ".agents"));
+      await writeFile(join(dir, ".agents", "pstack-models.md"), `## ${harness}\nfeature: ${entry}\n`);
+      const result = Bun.spawnSync([
+        "python3", join(import.meta.dir, "../../../../../skills/setup-pstack/scripts/check-models-config.py"),
+        "--resolve", "--harness", harness, "--project", dir,
+        "--user-file", join(dir, "absent-user"), "feature",
+      ], { env: { ...process.env, CODEX_HOME: join(dir, "absent-catalog"), PYTHONDONTWRITEBYTECODE: "1" } });
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout.toString())).toEqual({
+        role: "feature", arm: 1, model, effort, source: `workspace ## ${harness}`,
+      });
+    });
+  }
+});
+
 describe("CLI attempt authority", () => {
   it("makes requestId idempotent and replacement compare-and-set", async () => {
     const { dir, run } = await fixture();

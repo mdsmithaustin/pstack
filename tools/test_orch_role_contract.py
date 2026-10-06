@@ -16,4 +16,5 @@ class OrchRoleContract(unittest.TestCase):
         self.assertEqual(artifact, {
             'singleRoles': sorted(models.ROLES - models.PANEL_ROLES),
             'panelRoles': sorted(models.PANEL_ROLES),
+            'unresolvedAliases': sorted(models.OTHER_ALIASES),
         })
