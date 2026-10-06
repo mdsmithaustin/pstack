@@ -43,4 +43,4 @@ The source checkout's `evals/resume-recovery/README.md` provides the operator
 screen. Its current oracle accepts Codex CLI evidence only. Native Codex,
 Claude Code, Hermes, and Grok require observed evidence support before
 eligibility can pass. Report that gap without substituting an execution
-route. The parent owns core integration and the live cross-harness screen.
+route.

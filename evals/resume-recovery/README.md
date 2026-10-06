@@ -2,8 +2,8 @@
 
 Use this suite to test a saved exact role and arm through an existing
 execution route. `oracle.py` prepares files and checks evidence. It never
-launches an agent. Read [the retained scope](operator-plan.md) before spending
-model budget. The parent integrates core and drives the live screen.
+launches an agent. Read [the bounded operator plan](operator-plan.md) before
+spending model budget.
 
 ## Run the model-free checks
 
@@ -248,5 +248,5 @@ Codex delegation, Claude Code, Hermes, or Grok. Keep reciprocal priority
 configured even when a preferred destination has no certified route.
 Record an unavailable destination or missing provenance as a gap. Never
 substitute a model, effort, role, or panel arm to make the screen pass.
-A Codex-first screen cannot establish cross-harness capability. The parent
-owns that later screen through existing delegation paths and its oracle.
+A Codex-first screen cannot establish cross-harness capability. Each other
+route needs its own actual destination screen and independent oracle pass.
