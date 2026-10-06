@@ -2193,8 +2193,7 @@ export function openStore(
               ? {}
               : {
                   attempt: {
-                    ...attempt,
-                    ...(unit === undefined ? {} : reboundAttempt(attempt, unit)),
+                    ...(unit === undefined ? attempt : reboundAttempt(attempt, unit)),
                     settled: {
                       kind: "accepted",
                       at: ledger?.ts ?? new Date().toISOString(),
