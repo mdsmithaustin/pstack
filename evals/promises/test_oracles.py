@@ -2870,6 +2870,11 @@ class Issue133WritesAndReruns(unittest.TestCase):
         asked = grade("architect-checkpoint-opt-in", minimal(final_reply="Design A is in docs/design.md. Reply “approve” to implement it."), case)
         self.assertEqual(asked["verdict"], PASS, asked)
 
+    def test_copilot_a_negated_approval_is_not_a_pause(self):
+        case = load_case("architect-checkpoint-run")
+        for reply in ("The architect did not approve the design.", "The architect didn't approve the design."):
+            self.assertEqual(grade("architect-checkpoint-opt-in", minimal(final_reply=reply), case)["verdict"], INCONCLUSIVE, reply)
+
     def test_f16_reading_the_runner_prompt_alone_is_not_a_fan_out(self):
         case, pid = load_case("feature-boundary-run"), "poteto-mode-triggers-architect-on-boundary-crossing"
         events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
