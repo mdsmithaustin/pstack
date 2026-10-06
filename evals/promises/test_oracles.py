@@ -2766,6 +2766,82 @@ class Issue133WritesAndReruns(unittest.TestCase):
         events = [{"seq": 1, "kind": "tool_call", "name": "Skill", "input": {"skill": "/how"}}]
         self.assertEqual(oracles.View(minimal(events=events), load_case("how-run"), None).lead_reads(), ["how/SKILL.md"])
 
+    def worklist_at(self, list_seq):
+        events = ([read(1, "poteto-mode/playbooks/feature.md"), read(2, "unslop/SKILL.md"),
+                   {"seq": 3, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "### Feature"},
+                   {"seq": 4, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "name: unslop"}]
+                  + bash(6, "ls") + bash(8, "cat tally/__main__.py") + [text(list_seq, "Worklist")])
+        trace = minimal(events=events, worklist=[{"seq": list_seq, "carrier": "text", "items": feature_items()}])
+        return grade("worklist-falls-back-to-numbered-list", trace, feature_case(env={"todo_tools": False}))
+
+    def test_worklist_lands_after_the_playbook_read_and_before_the_next_tool_call(self):
+        self.assertEqual(self.worklist_at(5)["verdict"], PASS)
+        late = self.worklist_at(30)
+        self.assertEqual(late["verdict"], FAIL, late)
+        self.assertEqual(late["failures"], ["first numbered list at seq 30 is not between the playbook read (answered at seq 3) and the next tool call (seq 6)"])
+
+    def test_runtime_encoding_needs_a_curated_subject(self):
+        constraint = "do not remove: the sink needs a trailing newline on every row"
+        reply = "the trailing newline is gone"
+        for line in ('    do = "\\n"', '    for every in "\\n":', '    needs = "\\n"'):
+            self.assertIsNone(oracles.encoding_landed({"rollup/export.py": line}, constraint, reply), line)
+        self.assertEqual(oracles.encoding_landed({"rollup/sink.py": '        self.handle.write(row + "\\n")'}, constraint, reply),
+                         "runtime: rollup/sink.py")
+        self.assertIsNone(oracles.encoding_landed({"tests/test_export.py": "def test_done(): pass"}, constraint))
+        self.assertEqual(oracles.encoding_landed({"tests/test_export.py": "assert out.endswith('\\n')"}, constraint), "tests/test_export.py")
+
+    def sicko(self, reply):
+        events = [{"seq": 3, "kind": "tool_call", "name": "Agent", "input": {"subagent_type": "comment-sicko"}, "id": "a"},
+                  {"seq": 4, "kind": "tool_result", "name": "Agent", "ok": True, "output_head": "HA HA HA. Deleted 20 comments.", "id": "a"}]
+        spawns = [{"seq": 3, "tool": "Agent", "subagent_type": "comment-sicko", "prompt_head": "Clean the diff."}]
+        return grade("no-comments-spawns-comment-sicko", minimal(events=events, spawns=spawns, final_reply=reply), load_case("no-comments-run"))
+
+    def test_batch9_an_empty_encoding_offers_line_is_not_an_offer(self):
+        none = self.sicko("Removed 20 comments.\n- Architect sketch, reruns, encoding offers, encodings, and open work: none.")
+        self.assertEqual(none["verdict"], INCONCLUSIVE, none)
+        self.assertIn("encoding offer in reply: False", none["evidence"])
+        offer = self.sicko("Removed 20 comments. The cheapest encoding is a sink test; say yes and I'll add it.")
+        self.assertEqual(offer["verdict"], PASS, offer)
+
+    def test_batch9_a_failing_assertion_is_a_check_that_ran(self):
+        failing = bash(10, "python3 -m unittest tests.test_export", ok=False, head="FAIL: test_retry\nAssertionError: 8 != 7\nFAILED (failures=1)")
+        green = bash(20, "python3 -m unittest tests.test_export", head="Ran 1 test\n\nOK")
+        result = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=failing + green, final_reply="Fixed and verified."), load_case("bug-fix-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_batch9_a_later_script_check_clears_a_check_that_could_not_run(self):
+        case = load_case("bug-fix-run")
+        cannot = bash(10, "python3 -m rollup data/orders.csv /tmp/out.csv", ok=False, head="ModuleNotFoundError: No module named 'rollup'")
+        script = bash(20, "python3 /private/tmp/rollup-retry-check.py", head="ids 1001..1007 match")
+        recovered = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=cannot + script, final_reply="Fixed and verified."), case)
+        self.assertEqual(recovered["verdict"], INCONCLUSIVE, recovered)
+        stuck = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=cannot, final_reply="Fixed and verified."), case)
+        self.assertEqual(stuck["verdict"], FAIL, stuck)
+
+    def test_f16_a_lone_sleep_is_not_a_loop_facility(self):
+        case = load_case("overnight-run")
+        self.assertEqual(grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, "python3 -m http.server & sleep 2; curl localhost:8000")), case)["verdict"], FAIL)
+        self.assertEqual(grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, "until curl -sf localhost:8000; do sleep 5; done")), case)["verdict"], PASS)
+
+    def test_f16_waiting_or_approval_in_passing_is_not_a_pause(self):
+        case = load_case("architect-checkpoint-run")
+        passing = grade("architect-checkpoint-opt-in", minimal(final_reply="Design A chosen. The judge approved it; no step is waiting."), case)
+        self.assertEqual(passing["verdict"], INCONCLUSIVE, passing)
+        asked = grade("architect-checkpoint-opt-in", minimal(final_reply="Design A is in docs/design.md. Reply “approve” to implement it."), case)
+        self.assertEqual(asked["verdict"], PASS, asked)
+
+    def test_f16_reading_the_runner_prompt_alone_is_not_a_fan_out(self):
+        case, pid = load_case("feature-boundary-run"), "poteto-mode-triggers-architect-on-boundary-crossing"
+        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
+        self.assertEqual(grade(pid, minimal(events=events, final_reply="done"), case)["verdict"], FAIL)
+        sealed = [{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (3, 4)]
+        self.assertEqual(grade(pid, minimal(events=events, spawns=sealed, harness="codex", final_reply="done"), case)["verdict"], PASS)
+
+    def test_hermes_audit_the_keeps_going_count_names_its_turn(self):
+        events = in_turn(0, [{"seq": 0, "kind": "user", "text": "going to bed"}] + bash(1, "ls")) + in_turn(1, [{"seq": 5, "kind": "user", "text": "catch up"}] + bash(6, "ls"))
+        result = grade("session-override-keeps-going", minimal(events=events), load_case("overnight-run"))
+        self.assertIn("tool calls in the first turn: 1", result["evidence"])
+
 
 if __name__ == "__main__":
     unittest.main()
