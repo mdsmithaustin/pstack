@@ -623,18 +623,23 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 });
 '''
 
-COPY_MATCHER = r"\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\()"
-COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + COPY_MATCHER)
+CALLED_WITH = r"\s*\.toHaveBeen(?:Last|Nth)?CalledWith\("
+PAYLOAD_MATCHER = r"\s*\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
+COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + f"(?:{CALLED_WITH}|{PAYLOAD_MATCHER})")
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
-SPY_AS_WRITETEXT = re.compile(r"(?:writeText|copyText)\s*:\s*(\w+)\b(?!\s*[.(])")
-SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;]*?["'](?:writeText|copyText)["']""")
+SPY_AS_WRITETEXT = re.compile(r"clipboard[^;]*?\bwriteText\s*:\s*(\w+)\b(?!\s*[.(])")
+SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;,]*\bclipboard\s*,\s*["']writeText["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
 ARGUMENT = re.compile(r"""(?:"[^"]*"|'[^']*'|`[^`]*`|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 
 
+def clipboard_spies(source):
+    return {name for pattern in (SPY_AS_WRITETEXT, SPY_ON_WRITETEXT) for name in pattern.findall(source)}
+
+
 def clipboard_names(source):
-    return {name for pattern in (CAPTURED_BY_STUB, SPY_AS_WRITETEXT, SPY_ON_WRITETEXT) for name in pattern.findall(source)}
+    return set(CAPTURED_BY_STUB.findall(source)) | clipboard_spies(source)
 
 
 def asserts_on_clipboard(line, names):
@@ -647,18 +652,20 @@ def unquoted(value):
 
 def asserts_copied_value(source):
     """An expectation on the clipboard spy's arguments, or on a variable or
-    spy that holds what Copy writes. A stub, or a bare toHaveBeenCalled,
-    checks nothing about what Copy writes."""
+    spy that holds what Copy writes. A stub, a bare toHaveBeenCalled, or an
+    identity check on the spy checks nothing about what Copy writes."""
     if COPIED_VALUE.search(source):
         return True
-    return any(re.search(rf"expect\(\s*{re.escape(name)}\b[^;]*?\)" + COPY_MATCHER, source) for name in clipboard_names(source))
+    captured = (rf"expect\(\s*{re.escape(name)}\b[^;]*?\){PAYLOAD_MATCHER}" for name in CAPTURED_BY_STUB.findall(source))
+    spied = (rf"expect\(\s*{re.escape(name)}(?:\s*\){CALLED_WITH}|\.mock\.[^;]*?\){PAYLOAD_MATCHER})" for name in clipboard_spies(source))
+    return any(re.search(pattern, source) for pattern in (*captured, *spied))
 
 
-def asserted_values(pattern, lines):
+def asserted_values(pattern, source):
     """The first argument of each assertion pattern finds, so "the end" and
     'the end' compare equal."""
-    return {unquoted(" ".join(ARGUMENT.match(line, found.end()).group().split()))
-            for line in lines for found in pattern.finditer(line)}
+    values = {unquoted(" ".join(ARGUMENT.match(source, found.end()).group().split())) for found in pattern.finditer(source)}
+    return values - {""}
 
 
 def tests_assert_hidden_text_and_copy(added):
@@ -669,8 +676,8 @@ def tests_assert_hidden_text_and_copy(added):
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     names = clipboard_names(source)
-    rendered = [line for line in lines if not asserts_on_clipboard(line, names)]
-    absent = asserted_values(ABSENT, lines)
+    rendered = "\n".join(line for line in lines if not asserts_on_clipboard(line, names))
+    absent = asserted_values(ABSENT, rendered)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
                                         ("that hidden prompt text is present", absent & asserted_values(PRESENT, rendered)))
@@ -764,11 +771,11 @@ def shipped_issues():
 
 def prose(issue):
     """The whitespace-normalized sentences of one parsed issue, whatever its
-    shape. A record with no string of four or more words keeps its longest
-    string."""
+    shape. A record with no string of four or more words keeps its string of
+    the most words, a label such as unsupported-platform being one word."""
     if isinstance(issue, str):
         return [" ".join(issue.split())] if issue.split() else []
-    return record_prose(issue) or sorted(record_prose(issue, words=1), key=len)[-1:]
+    return record_prose(issue) or sorted(record_prose(issue, words=1), key=lambda text: (len(text.split()), len(text)))[-1:]
 
 
 def record_prose(value, words=4):
