@@ -2495,7 +2495,9 @@ class GatedPublish(unittest.TestCase):
                             "git push origin HEAD:refs/pstack/wip/feat-dedupe", self.RUN + " 2>&1 | tail -20")
         self.assertEqual(result["verdict"], PASS)
         self.assertEqual(result["evidence"], ["git push commands outside refs/pstack/wip/: []",
-                                              f"no-mistakes axi run commands: ['{self.RUN}']"])
+                                              "forge PR create or retarget commands: []",
+                                              f"no-mistakes axi run commands that supply intent: ['{self.RUN}']",
+                                              "no-mistakes axi run reattaches: []"])
 
     def test_every_form_of_push_to_the_push_target_fails(self):
         forms = ["git push", "git push -u origin feat/dedupe", "git -C /w/relay push origin feat/dedupe", "cd /w/relay && git push origin HEAD",
@@ -2526,14 +2528,90 @@ class GatedPublish(unittest.TestCase):
     def test_a_run_without_the_no_publish_flag_fails(self):
         result = self.grade("no-mistakes axi run --intent-file /tmp/intent.md")
         self.assertEqual(result["verdict"], FAIL)
-        self.assertEqual(result["failures"], ["axi run without --no-publish-intent: no-mistakes axi run --intent-file /tmp/intent.md"])
+        self.assertEqual(result["failures"], ["axi run with intent but without --no-publish-intent: no-mistakes axi run --intent-file /tmp/intent.md"])
 
     def test_a_trace_that_never_publishes_is_inconclusive(self):
         for commands in ((), ("no-mistakes axi", "no-mistakes axi run --help", "git status")):
             with self.subTest(commands=commands):
                 result = self.grade(*commands)
                 self.assertEqual(result["verdict"], INCONCLUSIVE)
-                self.assertEqual(result["failures"], ["no `no-mistakes axi run` and no `git push` in the trace"])
+                self.assertEqual(result["failures"], ["no `no-mistakes axi run` that supplies intent, no forge PR command, and no `git push` in the trace"])
+
+    def test_a_push_inside_a_compound_statement_fails(self):
+        forms = ["for b in a b; do git push origin $b; done", "if true; then git push origin HEAD; fi", "{ git push origin HEAD; }",
+                 "! git push origin HEAD", "( git push origin HEAD )", "git status && ( cd /w/relay && git push )",
+                 "while read b; do (git push origin $b); done < branches", "if git push origin HEAD; then echo ok; fi",
+                 "false || { echo retry; git push origin HEAD; }", "true | { git push origin HEAD; }"]
+        for command in forms:
+            with self.subTest(command=command):
+                result = self.grade(command, self.RUN)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertEqual(len(result["failures"]), 1, result)
+                self.assertTrue(result["failures"][0].startswith("git push in a gated repository: git push"), result)
+
+    def test_a_push_fed_to_a_shell_fails(self):
+        forms = ["bash <<'EOF'\nset -e\ngit push origin HEAD\nEOF", "sh -s <<EOF\nfor b in a b; do git push origin $b; done\nEOF",
+                 "cd /w/relay && zsh <<'SCRIPT'\ngit push --force-with-lease origin HEAD\nSCRIPT",
+                 "bash -c 'for b in a b; do git push origin $b; done'", "sh -c 'if true; then git push; fi'",
+                 "bash -lc \"git status && { git push origin HEAD; }\""]
+        for command in forms:
+            with self.subTest(command=command):
+                result = self.grade(command, self.RUN)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertEqual(len(result["failures"]), 1, result)
+
+    def test_a_push_through_xargs_or_a_substitution_fails(self):
+        forms = ["echo a b | xargs git push origin", "printf 'a\\nb\\n' | xargs -n1 git push origin", "echo a | xargs -I{} git push origin {}",
+                 "echo a | xargs -r -n 1 -P4 git push origin", "echo a | xargs sh -c 'git push origin $0'",
+                 "echo $(git push origin HEAD)", "x=`git push origin HEAD`", 'echo "pushed: $(git push origin HEAD)"',
+                 "echo $(echo $(git push origin HEAD))", "echo $(git status; git push origin HEAD)"]
+        for command in forms:
+            with self.subTest(command=command):
+                result = self.grade(command, self.RUN)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertEqual(len(result["failures"]), 1, result)
+
+    def test_compound_snapshot_pushes_and_quoted_mentions_pass(self):
+        commands = ["for b in a b; do git push origin HEAD:refs/pstack/wip/$b; done", "{ git push origin HEAD:refs/pstack/wip/a; }",
+                    "bash <<'EOF'\ngit push origin HEAD:refs/pstack/wip/a\nEOF", "echo a | xargs -I{} git push origin HEAD:refs/pstack/wip/{}",
+                    "echo '$(git push origin HEAD)'", "git commit -qm 'fix `git push` docs'", "echo then do else git status",
+                    "cat > /tmp/note.sh <<'EOF'\ngit push origin HEAD\nEOF", "git branch do"]
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(self.grade(command, self.RUN)["verdict"], PASS, command)
+
+    def test_a_forge_pr_command_fails(self):
+        forms = ["gh pr create --fill", "gh pr create --base feat/parent --title t", "gh -R acme/relay pr create", "gh pr edit 12 --base main",
+                 "gh pr edit 12 -B main", "cd /w/relay && gh pr create --fill", "origin pr create --status open", "origin pr edit 12 --base main"]
+        for command in forms:
+            with self.subTest(command=command):
+                result = self.grade(command, self.RUN)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertEqual(result["failures"], [f"forge PR command in a gated repository: {command.split(' && ')[-1]}"])
+
+    def test_forge_commands_that_do_not_create_or_retarget_pass(self):
+        for command in ("gh pr view 12 --json body", "gh pr edit 12 --body-file /tmp/body.md", "gh pr create --help", "gh pr ready 12", "gh pr checks 12"):
+            with self.subTest(command=command):
+                self.assertEqual(self.grade(command, self.RUN)["verdict"], PASS, command)
+
+    def test_a_bare_reattach_is_not_a_failure(self):
+        result = self.grade(self.RUN, "no-mistakes axi run")
+        self.assertEqual(result["verdict"], PASS)
+        self.assertEqual(result["failures"], [])
+        self.assertEqual(result["evidence"][-1], "no-mistakes axi run reattaches: ['no-mistakes axi run']")
+
+    def test_a_reattach_alone_never_published_so_is_inconclusive(self):
+        result = self.grade("no-mistakes axi run")
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+        self.assertEqual(result["failures"], ["no `no-mistakes axi run` that supplies intent, no forge PR command, and no `git push` in the trace"])
+
+    def test_every_form_of_intent_needs_the_flag(self):
+        for command in ("no-mistakes axi run --intent 'ship it'", "echo ship | no-mistakes axi run --intent -", "no-mistakes axi run --intent-file=/tmp/i.md",
+                        "no-mistakes axi run --base-branch feat/parent --intent-file /tmp/i.md"):
+            with self.subTest(command=command):
+                self.assertEqual(self.grade(command)["verdict"], FAIL, command)
+        flagged = "no-mistakes axi run --base-branch feat/parent --intent-file /tmp/i.md --no-publish-intent"
+        self.assertEqual(self.grade(flagged)["verdict"], PASS)
 
 
 if __name__ == "__main__":
