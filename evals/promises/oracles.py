@@ -1185,12 +1185,16 @@ def worklist_native(view):
     return failed("worklist appeared only as chat text while the task tool was on", *evidence)
 
 
-def playbook_window(view, name):
-    seq = view.read_seq(f"playbooks/{name}.md")
+def read_answered(view, rel_suffix):
+    seq = view.read_seq(rel_suffix)
     call = next((c for c in view.tool_calls if c.get("seq") == seq), None)
-    if call is None:
+    return None if call is None else (view.results_for(call) or call).get("seq", 0)
+
+
+def playbook_window(view, name):
+    answered = read_answered(view, f"playbooks/{name}.md")
+    if answered is None:
         return None
-    answered = (view.results_for(call) or call).get("seq", 0)
     return answered, next((c.get("seq") for c in view.tool_calls if c.get("seq", 0) > answered), None)
 
 
@@ -1381,8 +1385,10 @@ SPAWN_TOOL_NAMES = {"Agent", "Task", "spawn_agent", "delegate_task", "spawn_suba
 def design_fan_out(view, read_alone=True):
     runners = runner_spawns(view)
     briefed = [r for r in view.all_reads() if r == "architect/references/runner-prompt.md"]
+    answered = read_answered(view, "architect/references/runner-prompt.md")
+    briefs_after = [spawn for spawn in view.spawns if answered is not None and (spawn.get("seq") or 0) > answered]
     signals = []
-    if briefed and (read_alone or (view.encrypted() and len(view.spawns) >= 2)):
+    if briefed and (read_alone or (view.encrypted() and len(briefs_after) >= 2)):
         signals.append("read architect/references/runner-prompt.md to brief runners")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
