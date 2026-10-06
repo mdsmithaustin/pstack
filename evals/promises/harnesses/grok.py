@@ -436,6 +436,7 @@ def harvest(run):
     children = [c for c in chats if c not in leads]
     transcripts = run.root / "transcripts" / "sessions"
     copied = [p for c in [*leads, *children] for p in copy_session(c.parent, transcripts)]
+    manifest = {Path(p) for p in copied}
     leads, children = ([transcripts / c.parent.parent.name / c.parent.name / c.name for c in group] for group in (leads, children))
     entry = run.case.get("entry")
     cwd = str(run.project)
@@ -447,7 +448,7 @@ def harvest(run):
 
     metas = {}
     for lead_chat in leads:
-        for meta_path in lead_chat.parent.glob("subagents/*/meta.json"):
+        for meta_path in sorted(p for p in manifest if p.name == "meta.json" and p.parents[2] == lead_chat.parent):
             metas[meta_path] = json.loads(meta_path.read_text())
     subagents, matched, first_replies = [], set(), {}
     for chat in children:
@@ -507,16 +508,16 @@ def harvest(run):
         "x_subagents": subagents,
         "x_unlinked_children": sorted(s["session_id"] for s in subagents if not s["parent_session_id"]),
         "x_host_skill_hits": host_skill_hits(all_paths),
-        "x_cost_usd_lead": lead_cost(leads),
+        "x_cost_usd_lead": lead_cost(leads, manifest),
         "x_timed_out": any(t.get("timed_out") for t in run.turns),
     }
 
 
-def lead_cost(leads):
+def lead_cost(leads, manifest):
     ticks = 0
     for chat in leads:
         usage = chat.parent / "usage.json"
-        if usage.is_file():
+        if usage in manifest:
             try:
                 ticks += json.loads(usage.read_text()).get("session", {}).get("costUsdTicks", 0) or 0
             except (json.JSONDecodeError, AttributeError):
