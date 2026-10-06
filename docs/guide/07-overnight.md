@@ -64,6 +64,8 @@ The contract above drives one task to one finish condition. Some nights hold mor
 /poteto-mode full autopilot on this queue. each item is independent. i want them merged by morning.
 ```
 
+On a base branch with a merge queue, owners stop at merge-ready, and the final reply lists those PRs as open operator gates.
+
 [Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) runs the same owner loop but ships nothing. You wake up to one linear base-branch stack with a verifier's verdict on every link, and you review and land it yourself. Pick it over Autopilot-full when the changes are coupled, or when you want your own eyes on the work before anything merges:
 
 ```text
