@@ -2661,6 +2661,11 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(oracles.shell_writes("git apply --check <<'EOF'\n" + body), [])
         self.assertEqual(oracles.shell_writes("git apply fix.patch"), [])
 
+    def test_copilot_a_target_directory_option_is_the_copy_destination(self):
+        for command, want in (("cp -t /tmp/out a.py", ["/tmp/out"]), ("cp --target-directory=/tmp/out a.py b.py", ["/tmp/out"]),
+                              ("install -m 644 -t bin a.py", ["bin"]), ("cp -rt out notes/a.md", ["out"])):
+            self.assertEqual(oracles.shell_writes(command), want, command)
+
     def test_copilot_each_patch_writes_only_its_own_body(self):
         def body(name):
             return f"--- a/{name}\n+++ b/{name}\n@@ -1 +1 @@\n-x\n+y\nEOF"
