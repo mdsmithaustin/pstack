@@ -6,6 +6,8 @@ description: pstack per-role model choices (overrides skill defaults)
 # `model@effort` pins the reasoning effort (none, low, medium, high, xhigh, max, or ultra; the lint rejects an effort the model cannot take). A line without a suffix gets setup-pstack's effort policy, never another file's suffix (floor high on Codex and Hermes when the line names a model, the session effort on Claude Code and Grok Build).
 # `## codex`, `## claude-code`, `## grok`, `## hermes` sections override flat lines in either file, for that harness only.
 # budget: default (keep as written)
+# resume-priority: codex=claude-code
+# resume-priority: claude-code=codex
 feature, refactoring: sonnet
 bug-fix: sonnet
 perf-issue: sonnet

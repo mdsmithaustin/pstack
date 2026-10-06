@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -37,6 +38,7 @@ CLAUDE_CODE_SECTION = "claude-code"
 INHERIT = "inherit-parent"
 CONFIG_NAME = "pstack-models.md"
 SKILL_DEFAULT_FILE = Path(__file__).resolve().parent.parent / "examples" / CONFIG_NAME
+RESUME_DEFAULTS = {"codex": ("claude-code",), "claude-code": ("codex",)}
 
 
 class Cli(NamedTuple):
@@ -185,7 +187,7 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
 
 
 def parse(text: str) -> tuple[dict, list]:
-    findings: list[tuple[int, str, str]] = []
+    _, findings = parse_resume_priority(text)
     sections: dict[str, dict[str, list[tuple[str, str | None]]]] = {"": {}}
     lines = text.splitlines()
 
@@ -261,6 +263,51 @@ def parse(text: str) -> tuple[dict, list]:
             findings.append((line_no, "notice", f"Claude Code cannot use none or ultra, so it runs `{name}` at the session effort"))
 
     return sections, findings
+
+
+class Priority(NamedTuple):
+    source: str
+    destinations: tuple[str, ...]
+    configured_source: str
+
+
+def parse_resume_priority(text: str) -> tuple[dict[str, tuple[str, ...]], list[tuple[int, str, str]]]:
+    priorities = {}
+    findings = []
+    lines = text.splitlines()
+    body_start = 0
+    if lines and lines[0].strip() == "---":
+        body_start = next((i + 1 for i in range(1, len(lines)) if lines[i].strip() == "---"), len(lines))
+    seen = set()
+    for i in range(body_start, len(lines)):
+        line = lines[i].strip()
+        if not line.startswith("# resume-priority"):
+            continue
+        match = re.fullmatch(r"# resume-priority: ([a-z-]+)=([a-z,-]+)", line)
+        if not match:
+            findings.append((i + 1, "error", "malformed resume-priority directive"))
+            continue
+        source, values = match.groups()
+        destinations = tuple(values.split(","))
+        if source not in CLIS or any(value not in CLIS for value in destinations):
+            findings.append((i + 1, "error", "unknown resume-priority harness"))
+        elif source in seen:
+            findings.append((i + 1, "error", f"duplicate resume-priority source {source!r}"))
+        elif source in destinations:
+            findings.append((i + 1, "error", "resume-priority cannot include its source"))
+        elif len(set(destinations)) != len(destinations):
+            findings.append((i + 1, "error", "duplicate resume-priority destination"))
+        else:
+            priorities[source] = destinations
+        seen.add(source)
+    return priorities, findings
+
+
+def resolve_priority(source: str, workspace: dict, user: dict) -> Priority:
+    for configured_source, priorities in (("workspace", workspace), ("user", user)):
+        if source in priorities:
+            return Priority(source, priorities[source], configured_source)
+    return Priority(source, RESUME_DEFAULTS.get(source, ()), "default")
 
 
 class Layer(NamedTuple):

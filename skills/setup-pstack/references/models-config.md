@@ -17,6 +17,13 @@ Failure signal: nonzero exit. It prints one JSON line per arm with `role`, `arm`
 - A `## codex`, `## claude-code`, `## grok`, or `## hermes` header starts a section whose lines apply to that CLI only. Lines above any header are flat lines and apply everywhere. Put a CLI's own slug, such as `gpt-6-sol` or `grok-4.7`, under that CLI's section, because Codex, Hermes, and Grok Build each accept any model name from a flat line.
 - `trail reviewer` runs the show-me-your-work reviewer and every independent verdict and review, including the audit lanes the **swarm** skill gives it. When it resolves to the model that did the work, the spawn steps down one tier so the review stays cross-model. `default` is the entry for a spawn whose skill names no role, and ships as `inherit-parent`.
 - `# budget: <label> (<effort>)` records the budget setup-pstack last applied. Resolution never reads it.
+- `# resume-priority: source=destination,...` orders recovery destinations for one source. Names are `codex`, `claude-code`, `grok`, or `hermes`. Reject malformed directives, duplicate source directives, duplicate destinations, self destinations, and unknown names.
+
+## Resume priority
+
+The workspace directive overrides the user directive for the same source. Other sources keep their user setting. Without a directive, Codex prefers Claude Code and Claude Code prefers Codex. Hermes and Grok have no implicit destination. The shipped example shows the reciprocal defaults.
+
+Priority does not change role resolution, dispatch preference, permission settings, or retry allowance. A listed destination still needs a concrete exact role and panel arm resolution and current observed capability evidence. Installing a CLI does not certify it. Preserve every existing priority directive when setup rewrites the file. Change a source only when the user requests it.
 
 ## Resolution
 
