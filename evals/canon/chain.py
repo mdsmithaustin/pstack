@@ -1049,6 +1049,19 @@ def step_specs(text, skill_names):
     return steps
 
 
+def playbook_opening(text):
+    """The identity of a playbook's opening prose: the first clause of the
+    first line the extractor prints before step 1, five words at most, like a
+    step's identity. The line is the bold lead or else a sentence, and the
+    first clause is the same either way. None when no prose precedes step 1."""
+    for line in text.splitlines():
+        if re.match(r"^\d+\.\s", line):
+            return None
+        if line.strip() and not line.startswith("#"):
+            return first_clause(normalize(line))
+    return None
+
+
 def message_items(text):
     """The list items of a message: each numbered or bulleted line with the
     lines that continue it. A message with no list is one item."""
@@ -1286,6 +1299,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
     fidelity = step_fidelity(specs, items)
     pointer_total = sum(len(step["pointers"]) for step in fidelity)
     blob = normalize("\n".join(tool_lists or text_lists))
+    opening = playbook_opening(playbook_texts.get(matched, "")) if specs else None
     steps = playbook_steps(playbook_texts.get(matched, "")) if matched else []
     def share(keys):
         return (round(sum(key in blob for key in keys) / len(keys), 2) if blob else 0.0) if keys else None
@@ -1332,6 +1346,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
             "carrier": carrier,
             "tool_rejected": rejected,
             "valid_carrier": valid_carrier(carrier, trace.worklist_tool_offered, rejected),
+            "opening": {"identity": opening, "kept": opening in blob} if opening else None,
             "steps": fidelity,
             "steps_listed": sum(step["listed"] for step in fidelity) if fidelity else None,
             "steps_total": len(fidelity) if fidelity else None,
@@ -1613,6 +1628,7 @@ STAGES = {
     "worklist carried in messages": lambda row: row["worklist"]["carrier"] == "message",
     "worklist present via a valid carrier": lambda row: row["worklist"]["valid_carrier"],
     "every playbook step listed": lambda row: None if row["worklist"]["steps_total"] is None else row["worklist"]["steps_listed"] == row["worklist"]["steps_total"],
+    "playbook opening prose listed": lambda row: None if row["worklist"]["opening"] is None else row["worklist"]["opening"]["kept"],
     "step pointers preserved (fraction)": lambda row: row["worklist"]["pointer_fraction"],
     "owner file read or injected": lambda row: row["owner_read"],
     "owner read in full": lambda row: row["owner_read_full"],

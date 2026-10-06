@@ -1022,6 +1022,81 @@ class WorklistCarrierTests(unittest.TestCase):
         self.assertFalse(self.worklist(None, [])["valid_carrier"])
 
 
+def playbook_text(name):
+    return (SKILLS / "poteto-mode" / "playbooks" / f"{name}.md").read_text()
+
+
+def numbered_steps(text):
+    return [re.sub(r"^\d+\.\s+", "", line) for line in text.splitlines() if re.match(r"^\d+\.\s", line)]
+
+
+class PlaybookOpeningTests(unittest.TestCase):
+    def test_a_bold_lead_is_the_opening_and_cuts_to_its_first_clause(self):
+        self.assertEqual([chain.playbook_opening(playbook_text(name)) for name in ("feature", "bug-fix", "refactoring", "orchestrate", "multi-phase-plan")], [
+            "you own the design", "you own this task", "you own the contract", "you own the program", "you own the plan",
+        ])
+
+    def test_a_playbook_without_a_bold_lead_opens_with_its_first_sentence(self):
+        self.assertEqual(chain.playbook_opening(playbook_text("research")), "use for external")
+
+    def test_steps_with_nothing_before_them_have_no_opening(self):
+        self.assertIsNone(chain.playbook_opening(FEATURE))
+
+    def test_no_shipped_playbook_opens_with_the_read_in_full_sentence(self):
+        names = sorted(path.stem for path in (SKILLS / "poteto-mode" / "playbooks").glob("*.md"))
+        openings = {name: chain.playbook_opening(playbook_text(name)) for name in names}
+
+        self.assertEqual([name for name, opening in openings.items() if not opening or opening.startswith("read this playbook")], [])
+
+
+class WorklistOpeningTests(unittest.TestCase):
+    """Item 0 of a worklist is the matched playbook's opening prose. A run can
+    copy every numbered step and still drop it, which the step stages score as
+    a full list."""
+
+    def worklist(self, name, lines, carrier="tool"):
+        text = playbook_text(name)
+        trace = chain.Trace(events=[chain.Event(0, "main", "read", f"poteto-mode/playbooks/{name}.md"),
+                                    chain.Event(1, "main", "worklist" if carrier == "tool" else "message", text="\n".join(lines))])
+        return shipped_stages(trace, "sessions-by-tag", f"poteto-mode/playbooks/{name}.md", {name: text})["worklist"]
+
+    def test_every_step_without_the_opening_prose_fails_item_zero(self):
+        worklist = self.worklist("feature", numbered_steps(playbook_text("feature")))
+
+        self.assertEqual((worklist["steps_listed"], worklist["steps_total"], worklist["opening"]),
+                         (8, 8, {"identity": "you own the design", "kept": False}))
+
+    def test_the_opening_line_ahead_of_every_step_passes_item_zero(self):
+        text = playbook_text("feature")
+        opening = next(line for line in text.splitlines() if line.startswith("**You own"))
+        worklist = self.worklist("feature", [opening, *numbered_steps(text)])
+
+        self.assertEqual((worklist["steps_listed"], worklist["opening"]), (8, {"identity": "you own the design", "kept": True}))
+
+    def test_a_reworded_item_that_keeps_the_lead_clause_passes(self):
+        worklist = self.worklist("bug-fix", ["Worklist:", "0. You own this task: plan, review, verify.", "1. Reproduce it yourself"], carrier="message")
+
+        self.assertEqual(worklist["opening"], {"identity": "you own this task", "kept": True})
+
+    def test_no_worklist_fails_item_zero(self):
+        trace = chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md")])
+
+        self.assertEqual(shipped_stages(trace, "sessions-by-tag", "poteto-mode/playbooks/feature.md")["worklist"]["opening"],
+                         {"identity": "you own the design", "kept": False})
+
+    def test_a_playbook_with_no_numbered_steps_has_no_worklist_to_open(self):
+        self.assertIsNone(self.worklist("opening-a-pr", ["Use when the matched playbook produces a PR."])["opening"])
+
+    def test_a_playbook_with_nothing_before_step_one_has_no_item_zero(self):
+        self.assertIsNone(run_stages(chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md")]))["worklist"]["opening"])
+
+    def test_the_stage_reads_the_item_zero_verdict_and_skips_runs_without_one(self):
+        stage = chain.STAGES["playbook opening prose listed"]
+
+        self.assertEqual([stage({"worklist": {"opening": opening}}) for opening in ({"identity": "x", "kept": True}, {"identity": "x", "kept": False}, None)],
+                         [True, False, None])
+
+
 class NoTranscriptsTests(unittest.TestCase):
     def test_a_harvest_without_transcripts_changes_nothing(self):
         with tempfile.TemporaryDirectory() as directory:

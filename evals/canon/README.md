@@ -1219,10 +1219,20 @@ its opening bold heading or else its first clause cut to five words, and
 pointers, the bold or backticked skill names in the step and the indented
 lines under it. An item keeps a pointer it names bare or with its `principle-`
 prefix. `worklist.steps` records per step whether some item keeps the
-identity and which pointers that item keeps. The stages are "worklist present
-via a valid carrier", "every playbook step listed", and "step pointers
-preserved (fraction)", a mean over runs. `verbatim_fraction` stays in the
-JSONL.
+identity and which pointers that item keeps. `worklist.opening` scores item 0.
+The matched playbook's opening prose is the first line the worklist extractor
+prints before step 1, its bold lead or else a sentence. Its identity is that
+line's first clause, cut to five words as a step's is. `worklist.opening`
+holds that identity and whether the worklist, in a tool call or a message,
+names it, so a run that copies every step and drops the lead line fails item 0
+while it still lists every step. It is `null` when the playbook has no numbered steps, as Opening a
+PR has none, or no prose before step 1. The "Read this playbook in full."
+sentence that index-shaped playbooks print is never the identity, because a
+bold lead opens the two that have steps. The check shows the opening
+is carried, not that every sentence after the lead is. The stages are
+"worklist present via a valid carrier", "every playbook step listed",
+"playbook opening prose listed", and "step pointers preserved (fraction)", a
+mean over runs. `verbatim_fraction` stays in the JSONL.
 
 **Delegate roles.** A routed skill may prescribe its delegates' role, and
 poteto-mode defers to it, so those delegates are not persona misses. `PRESCRIBED`
