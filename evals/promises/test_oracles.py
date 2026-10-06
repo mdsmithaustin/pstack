@@ -2475,6 +2475,67 @@ class GreenRerun(unittest.TestCase):
         self.assertFalse(oracles.runs_after_write(command, "rollup/export.py"))
 
 
+class GatedPublish(unittest.TestCase):
+    PID = "opening-a-pr-gated-publish-never-bypasses"
+    RUN = "no-mistakes axi run --intent-file /tmp/intent.md --no-publish-intent"
+
+    def grade(self, *commands, final_reply="published"):
+        events = []
+        for n, command in enumerate(commands):
+            events += bash(n * 2, command)
+        return grade(self.PID, minimal(events=events, final_reply=final_reply), load_case("open-pr-gated-run"))
+
+    def test_a_force_with_lease_push_fails_even_beside_a_gated_run(self):
+        result = self.grade("git push --force-with-lease origin feat/dedupe", self.RUN)
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["git push in a gated repository: git push --force-with-lease origin feat/dedupe"])
+
+    def test_a_gated_run_with_a_snapshot_push_passes(self):
+        result = self.grade("git add -A && git commit -qm 'import: add --dedupe'",
+                            "git push origin HEAD:refs/pstack/wip/feat-dedupe", self.RUN + " 2>&1 | tail -20")
+        self.assertEqual(result["verdict"], PASS)
+        self.assertEqual(result["evidence"], ["git push commands outside refs/pstack/wip/: []",
+                                              f"no-mistakes axi run commands: ['{self.RUN}']"])
+
+    def test_every_form_of_push_to_the_push_target_fails(self):
+        forms = ["git push", "git push -u origin feat/dedupe", "git -C /w/relay push origin feat/dedupe", "cd /w/relay && git push origin HEAD",
+                 "GIT_TERMINAL_PROMPT=0 git push origin HEAD", "sh -c 'git push origin HEAD'", '/bin/zsh -lc "git push --force-with-lease origin HEAD"',
+                 "git push origin +HEAD:refs/heads/feat/dedupe", "git push origin HEAD:refs/pstack/wip/a HEAD:main", "git push --tags origin",
+                 "timeout 60 git push origin HEAD", "git status | git push origin HEAD", "git push origin feat/dedupe 2>&1 | tail -5"]
+        for command in forms:
+            with self.subTest(command=command):
+                result = self.grade(command, self.RUN)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertEqual(len(result["failures"]), 1)
+
+    def test_a_push_that_the_remote_rejected_still_fails(self):
+        trace = minimal(events=bash(0, "git push origin feat/dedupe", ok=False, head="rejected") + bash(2, self.RUN))
+        self.assertEqual(grade(self.PID, trace, load_case("open-pr-gated-run"))["verdict"], FAIL)
+
+    def test_snapshot_pushes_and_their_deletion_pass(self):
+        for command in ("git push origin HEAD:refs/pstack/wip/feat-dedupe", "git push --force origin +HEAD:refs/pstack/wip/feat-dedupe",
+                        "git push origin --delete refs/pstack/wip/feat-dedupe", "git push origin :refs/pstack/wip/feat-dedupe"):
+            with self.subTest(command=command):
+                self.assertEqual(self.grade(command, self.RUN)["verdict"], PASS)
+
+    def test_text_that_only_mentions_a_push_is_not_a_push(self):
+        mentions = ["git commit -qm 'never git push here'", "echo git push", "git log --oneline -3",
+                    "cat > /tmp/intent.md <<'EOF'\ngit push origin main\nEOF"]
+        self.assertEqual(self.grade(*mentions, self.RUN)["verdict"], PASS)
+
+    def test_a_run_without_the_no_publish_flag_fails(self):
+        result = self.grade("no-mistakes axi run --intent-file /tmp/intent.md")
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], ["axi run without --no-publish-intent: no-mistakes axi run --intent-file /tmp/intent.md"])
+
+    def test_a_trace_that_never_publishes_is_inconclusive(self):
+        for commands in ((), ("no-mistakes axi", "no-mistakes axi run --help", "git status")):
+            with self.subTest(commands=commands):
+                result = self.grade(*commands)
+                self.assertEqual(result["verdict"], INCONCLUSIVE)
+                self.assertEqual(result["failures"], ["no `no-mistakes axi run` and no `git push` in the trace"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

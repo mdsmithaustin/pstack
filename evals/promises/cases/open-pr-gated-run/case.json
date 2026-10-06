@@ -1,0 +1,16 @@
+{
+ "promises": [
+  "opening-a-pr-gated-publish-never-bypasses"
+ ],
+ "fixture": "relay",
+ "history": "relay-branch-work",
+ "entry": "poteto-mode",
+ "turns": [
+  "open the pr. small ordered commits, evidence in the description."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "deferred": "live.make_project adds no remote and each harness adapter builds its own PATH inside its sandbox, so the bare origin, the no-mistakes remote, and the argv-logging no-mistakes stub have no provisioning hook"
+}
