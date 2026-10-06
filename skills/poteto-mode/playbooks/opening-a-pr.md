@@ -31,7 +31,7 @@ After these sections, attach videos or screenshots when they prove a claim, and 
 
 - When `NO_MISTAKES_GATE` is set, you are a no-mistakes pipeline step. Never push, open a PR, or start a run.
 - When `SANDBOX_NAME` is set, you run in a sandbox clone, which has no `no-mistakes` remote. When your brief says the repository is gated, or the repository commits `.no-mistakes.yaml`, commit on a feature branch and never push. Report the branch, the head SHA, and that a gated publish is needed. The host fetches the branch from its `sandbox-<name>` remote and publishes it.
-- Otherwise the repository is gated when `git remote get-url no-mistakes` succeeds and `no-mistakes axi` prints no `error:`. When the repository commits `.no-mistakes.yaml` but has no `no-mistakes` remote, stop and report that `no-mistakes init` is needed.
+- Otherwise the repository is gated when `git remote get-url no-mistakes` succeeds and `no-mistakes axi` prints no `error:`. When the remote exists but `no-mistakes axi` prints `error:`, the gate is broken. Stop and report the error. When the repository commits `.no-mistakes.yaml` but has no `no-mistakes` remote, stop and report that `no-mistakes init` is needed.
 - When you launch a sandboxed agent on a gated repository, say in its brief that the repository is gated.
 
 In a gated repository, the gate owns every write to the push target and every PR it opens. These rules override every push, rebase, PR creation, and retarget in other playbooks, which apply only to ungated repositories. When the no-mistakes skill is installed, read it and follow its run, gate, and `branch_sync` rules. Otherwise use `no-mistakes axi --help`.
@@ -43,7 +43,7 @@ In a gated repository, the gate owns every write to the push target and every PR
 - Before any local commit on a published branch, read `branch_sync` and follow its `next_action`. Commit only when it allows a commit.
 - Relay an `ask-user` finding verbatim to the user, or from a subagent to its parent. Pass `--yes` only when the user's grant names no-mistakes.
 - When `no-mistakes doctor` fails or the gate cannot run, stop and report. Publish around the gate only when the user said "bypass no-mistakes" in this session.
-- After each run, check the pipeline's PR title against **Titles** and correct it with the forge. The squash body comes from the merge step's body file.
+- After each run, check the pipeline's PR title against **Titles** and correct it with the forge. The squash body comes from `merge-gate --body-file` in `playbooks/shipping.md`.
 - `axi run` and `axi respond` block for up to 8 minutes. Give each call a tool timeout of 10 minutes. `rerun` has no `--wait` flag, so run it in the background and read its output when it exits.
 
 **Attachments.** Upload through the forge, not a browser. With Origin, use its attach flag when `origin pr create --help` lists one. Otherwise, for a GitHub repository, use `gh`, whichever CLI opened the PR. Pass `--attach <path>` to `gh pr create`, `gh pr edit`, or `gh pr comment`, once per file, with alt text after `#` (`--attach './login.png#The login error'`). A body that references the local path, such as `![alt](./login.png)`, gets that reference rewritten to the upload. `--attach` needs gh 2.99.0 or later and push access. When `gh pr edit --help` does not list it, run a gh at 2.99.0 or later. Do not upload through undocumented endpoints.

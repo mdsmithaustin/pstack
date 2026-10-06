@@ -2490,6 +2490,14 @@ class GatedPublish(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL)
         self.assertEqual(result["failures"], ["git push in a gated repository: git push --force-with-lease origin feat/dedupe"])
 
+    def test_a_snapshot_ref_held_in_a_variable_passes(self):
+        result = self.grade("R=refs/pstack/wip/feat-dedupe; git push origin HEAD:$R", self.RUN)
+        self.assertEqual(result["verdict"], PASS)
+
+    def test_a_push_target_held_in_a_variable_fails(self):
+        result = self.grade("B=feat/dedupe; git push origin $B", self.RUN)
+        self.assertEqual(result["verdict"], FAIL)
+
     def test_a_gated_run_with_a_snapshot_push_passes(self):
         result = self.grade("git add -A && git commit -qm 'import: add --dedupe'",
                             "git push origin HEAD:refs/pstack/wip/feat-dedupe", self.RUN + " 2>&1 | tail -20")
@@ -2546,8 +2554,8 @@ class GatedPublish(unittest.TestCase):
             with self.subTest(command=command):
                 result = self.grade(command, self.RUN)
                 self.assertEqual(result["verdict"], FAIL, result)
-                self.assertEqual(len(result["failures"]), 1, result)
-                self.assertTrue(result["failures"][0].startswith("git push in a gated repository: git push"), result)
+                self.assertTrue(result["failures"], result)
+                self.assertTrue(all(f.startswith("git push in a gated repository: git push") for f in result["failures"]), result)
 
     def test_a_push_fed_to_a_shell_fails(self):
         forms = ["bash <<'EOF'\nset -e\ngit push origin HEAD\nEOF", "sh -s <<EOF\nfor b in a b; do git push origin $b; done\nEOF",
@@ -2558,7 +2566,7 @@ class GatedPublish(unittest.TestCase):
             with self.subTest(command=command):
                 result = self.grade(command, self.RUN)
                 self.assertEqual(result["verdict"], FAIL, result)
-                self.assertEqual(len(result["failures"]), 1, result)
+                self.assertTrue(all(f.startswith("git push in a gated repository: git push") for f in result["failures"]), result)
 
     def test_a_push_through_xargs_or_a_substitution_fails(self):
         forms = ["echo a b | xargs git push origin", "printf 'a\\nb\\n' | xargs -n1 git push origin", "echo a | xargs -I{} git push origin {}",

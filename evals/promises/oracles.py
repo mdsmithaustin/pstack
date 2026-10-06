@@ -2892,7 +2892,7 @@ def forge_pr_write(argv):
 def gated_publish(view):
     pushes, forge, runs, reattaches = [], [], [], []
     for _, command, _, _ in view.commands():
-        for argv in simple_commands(command):
+        for argv in simple_commands(expand_assignments(command)):
             args = git_push_args(argv)
             if args is not None and not pushes_only_snapshots(args):
                 pushes.append(" ".join(argv)[:120])
