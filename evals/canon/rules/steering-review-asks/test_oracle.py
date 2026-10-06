@@ -54,7 +54,7 @@ class SkippedGraderTests(unittest.TestCase):
 
 class CopyAssertionTests(unittest.TestCase):
     """C3 wants an assertion on what Copy writes, not a mention of the clipboard."""
-    BUBBLE = ["expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent(HEAD);"]
+    BUBBLE = ["expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent(TAIL);"]
 
     def failures(self, *lines):
         return oracle().tests_assert_hidden_text_and_copy({"web/src/chat.test.tsx": [*self.BUBBLE, *lines]})
@@ -97,6 +97,56 @@ class CopyAssertionTests(unittest.TestCase):
             "}) } });",
             "expect(bubble).toBeDefined();",
         ), ["constraint:C3: no added web test asserts what Copy writes"])
+
+    def test_a_spy_installed_under_another_name_and_asserted_with_the_payload_counts(self):
+        self.assertEqual(self.failures(
+            "const spy = vi.fn();",
+            "Object.assign(navigator, { clipboard: { writeText: spy } });",
+            "expect(spy).toHaveBeenCalledWith(LONG_TEXT);",
+        ), [])
+
+    def test_a_named_spy_on_writetext_asserted_with_the_payload_counts(self):
+        self.assertEqual(self.failures(
+            'const copied = vi.spyOn(navigator.clipboard, "writeText");',
+            "expect(copied).toHaveBeenLastCalledWith(LONG_TEXT);",
+        ), [])
+
+    def test_a_spy_installed_under_another_name_with_a_bare_called_check_does_not_count(self):
+        self.assertEqual(self.failures(
+            "const spy = vi.fn();",
+            "Object.assign(navigator, { clipboard: { writeText: spy } });",
+            "expect(spy).toHaveBeenCalled();",
+        ), ["constraint:C3: no added web test asserts what Copy writes"])
+
+
+class HiddenTailTests(unittest.TestCase):
+    """C3 wants the text past the cut asserted absent while collapsed and present
+    after, so the absent and present assertions must name the same value."""
+    COPY = "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);"
+    PRESENT = "constraint:C3: no added web test asserts that hidden prompt text is present"
+
+    def failures(self, *lines):
+        return oracle().tests_assert_hidden_text_and_copy({"web/src/chat.test.tsx": [self.COPY, *lines]})
+
+    def test_an_unrelated_present_assertion_does_not_count(self):
+        self.assertEqual(self.failures("expect(bubble).not.toHaveTextContent(TAIL);",
+                                       "expect(bubble).toHaveTextContent(SHORT_TEXT);"), [self.PRESENT])
+
+    def test_the_copied_payload_holding_the_tail_is_not_the_rendered_text(self):
+        self.assertEqual(self.failures(
+            "const written: string[] = [];",
+            "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });",
+            "expect(bubble).not.toHaveTextContent(TAIL);",
+            "expect(written[0]).toContain(TAIL);",
+        ), [self.PRESENT])
+
+    def test_the_same_value_absent_then_present_counts_across_assertion_forms(self):
+        for absent, present in (("expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent( TAIL );"),
+                                ("expect(screen.queryByText(TAIL)).toBeNull();", "expect(screen.getByText(TAIL)).toBeTruthy();"),
+                                ("expect(bubble.textContent).not.toContain(TAIL);", "expect(bubble.textContent).toContain(TAIL);"),
+                                ('expect(bubble).not.toHaveTextContent("the end");', "expect(bubble).toHaveTextContent('the end');")):
+            with self.subTest(absent):
+                self.assertEqual(self.failures(absent, present), [])
 
 
 class KnownIssueProseTests(unittest.TestCase):
@@ -240,16 +290,16 @@ class ExecutableOnlyTests(unittest.TestCase):
 
     def test_hidden_text_and_copy_assertions_in_js_comments_do_not_count(self):
         content = ("// expect(writeText).toHaveBeenCalledWith(LONG_TEXT);\n"
-                   "/* expect(bubble).not.toHaveTextContent(TAIL);\n   expect(bubble).toHaveTextContent(HEAD); */")
+                   "/* expect(bubble).not.toHaveTextContent(TAIL);\n   expect(bubble).toHaveTextContent(TAIL); */")
         self.assertEqual(self.run_static("tests_assert_hidden_text_and_copy", self.TS, content), [
             "constraint:C3: no added web test asserts what Copy writes",
             "constraint:C3: no added web test asserts that hidden prompt text is absent",
-            "constraint:C3: no added web test asserts that prompt text is present",
+            "constraint:C3: no added web test asserts that hidden prompt text is present",
         ])
 
     def test_hidden_text_and_copy_assertions_in_code_still_count(self):
         content = ("expect(writeText).toHaveBeenCalledWith(LONG_TEXT);\n"
-                   "expect(bubble).not.toHaveTextContent(TAIL);\nexpect(bubble).toHaveTextContent(HEAD);")
+                   "expect(bubble).not.toHaveTextContent(TAIL);\nexpect(bubble).toHaveTextContent(TAIL);")
         self.assertEqual(self.run_static("tests_assert_hidden_text_and_copy", self.TS, content), [])
 
 
@@ -400,6 +450,7 @@ class LongPromptTests(ReplayedPullRequest):
             f"constraint:C1: {self.CHECKS}::C1 collapsed preview never splits a surrogate pair failed",
             "constraint:C3: no added web test asserts what Copy writes",
             "constraint:C3: no added web test asserts that hidden prompt text is absent",
+            "constraint:C3: no added web test asserts that hidden prompt text is present",
         ])
 
     def test_spreading_the_whole_prompt_into_code_points_fails_the_allocation_ask(self):
