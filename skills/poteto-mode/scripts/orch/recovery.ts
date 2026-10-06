@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import roleContract from "./role-contract.json";
 import { UserError, parseVerdict, type Verdict } from "./validation.ts";
 import {
@@ -227,6 +228,9 @@ export function parseBeginAttempt(value: unknown): BeginAttempt {
     throw new UserError("authority must be worker or verifier");
   const unit = text(row.unit);
   const arm = parseArm(role, row.arm);
+  const checkout = text(row.checkout);
+  if (!isAbsolute(checkout))
+    throw new UserError("checkout must be an absolute path");
   return {
     unit,
     role,
@@ -235,7 +239,7 @@ export function parseBeginAttempt(value: unknown): BeginAttempt {
     requestId: text(row.requestId),
     ...(row.replace === undefined ? {} : { replace: safeId(row.replace) }),
     brief: text(row.brief),
-    checkout: text(row.checkout),
+    checkout,
     resolution: {
       harness,
       model: concreteIdentity(resolution.model),

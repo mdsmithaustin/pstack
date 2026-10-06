@@ -84,6 +84,8 @@ On the first affected command, the store scans older `inbox-batches/` directorie
 }
 ```
 
+`checkout` must be an absolute path. An invalid saved checkout exits 1 on cold load without rewriting the record.
+
 Resolve the actual role and exact panel arm through the current resolver as usual. Normal resolver inheritance remains supported. If model or effort inherits, record the actual value observed in the parent or execution context before saving the request. Do not substitute a made-up model. Saved attempts record concrete execution context. `resolution.harness` accepts only `claude-code`, `codex`, `grok`, and `hermes`. An invalid saved harness exits 1 on cold load without rewriting the record. Model and effort reject `inherit-parent` and `auto`, including surrounding whitespace, with exit 1 before allocating an attempt or replacing a slot. Rejected saved records remain unchanged on disk for inspection.
 
 Optional `resolutionContext` pairs the exact raw successful `--work-model` argument with the complete canonical printed arm. A successful no-flag invocation records `workModel: null`. Canonical model and effort may inherit or differ from observed execution after the existing spawn fallback. Preserve `source`, ordered `notes`, optional `step`, and absent versus present optional fields. The parser requires both members and matching role and arm. It validates their structure without implementing model policy.

@@ -37,6 +37,14 @@ async function input(dir: string, name: string, value: unknown) {
   await writeFile(path, JSON.stringify(value));
   return path;
 }
+async function snapshot(dir: string) {
+  const files: Record<string, string> = {};
+  for (const name of (await readdir(dir, { recursive: true })).sort()) {
+    const path = join(dir, name);
+    if ((await stat(path)).isFile()) files[name] = await readFile(path, "utf8");
+  }
+  return files;
+}
 afterEach(async () => {
   for (const dir of directories.splice(0))
     await rm(dir, { recursive: true, force: true });
@@ -450,16 +458,97 @@ function completionArgs(
     ...(head === undefined ? [] : ["--pr", head.pr, "--sha", head.sha]),
   ];
 }
-describe("CLI concrete execution identity", () => {
-  async function snapshot(dir: string) {
-    const files: Record<string, string> = {};
-    for (const name of (await readdir(dir, { recursive: true })).sort()) {
-      const path = join(dir, name);
-      if ((await stat(path)).isFile()) files[name] = await readFile(path, "utf8");
-    }
-    return files;
+describe("CLI absolute checkout", () => {
+  for (const checkout of ["worktrees/u", ".", "../worktrees/u"]) {
+    it(`rejects checkout ${JSON.stringify(checkout)} before allocating or replacing an attempt`, async () => {
+      const { dir, run } = await fixture();
+      const request = {
+        unit: "u", role: "feature", arm: 1, authority: "worker", requestId: "first",
+        brief: "brief.md", checkout: dir,
+        resolution: { harness: "codex", model: "gpt-6.1-sol", effort: "xhigh" },
+      };
+      const path = await input(dir, "checkout.json", { ...request, checkout });
+      const before = await snapshot(dir);
+      const denied = run("attempt", "begin", "--file", path);
+      expect(denied.code).toBe(1);
+      expect(denied.out).toBe("");
+      expect(denied.err).toContain("checkout must be an absolute path");
+      expect(await snapshot(dir)).toEqual(before);
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([]);
+
+      await input(dir, "checkout.json", request);
+      const first = run("attempt", "begin", "--file", path);
+      expect(first.code).toBe(0);
+      const predecessor = JSON.parse(first.out);
+      expect(predecessor).toMatchObject({ requestId: "first", checkout: dir });
+      expect(run("attempt", "begin", "--file", path).out).toBe(first.out);
+
+      const replacement = { ...request, requestId: "second", replace: predecessor.id };
+      await input(dir, "checkout.json", { ...replacement, checkout });
+      const beforeReplacement = await snapshot(dir);
+      const deniedReplacement = run("attempt", "begin", "--file", path);
+      expect(deniedReplacement.code).toBe(1);
+      expect(deniedReplacement.out).toBe("");
+      expect(deniedReplacement.err).toContain("checkout must be an absolute path");
+      expect(await snapshot(dir)).toEqual(beforeReplacement);
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([predecessor]);
+
+      await input(dir, "checkout.json", replacement);
+      const second = run("attempt", "begin", "--file", path);
+      expect(second.code).toBe(0);
+      const successor = JSON.parse(second.out);
+      expect(successor).toMatchObject({ requestId: "second", replace: predecessor.id, checkout: dir });
+      expect(successor.id).not.toBe(predecessor.id);
+      expect(run("attempt", "begin", "--file", path).out).toBe(second.out);
+      expect(JSON.parse(run("attempt", "list").out)).toEqual([predecessor, successor]);
+    });
+
+    it(`rejects saved checkout ${JSON.stringify(checkout)} on cold load without changing files`, async () => {
+      const { dir, run } = await fixture();
+      const { attempt } = await begin(dir, run, "saved-checkout");
+      const path = join(dir, "attempts.json");
+      await writeFile(path, JSON.stringify([{ ...attempt, checkout }]));
+      const before = await snapshot(dir);
+      const denied = run("attempt", "list");
+      expect(denied.code).toBe(1);
+      expect(denied.out).toBe("");
+      expect(denied.err).toContain("checkout must be an absolute path");
+      expect(await snapshot(dir)).toEqual(before);
+      await writeFile(path, JSON.stringify([attempt]));
+      const restored = run("attempt", "list");
+      expect(restored.code).toBe(0);
+      expect(JSON.parse(restored.out)).toEqual([attempt]);
+    });
   }
 
+  it("retains an absolute checkout unchanged from a different coordinator directory", async () => {
+    const { dir, run } = await fixture();
+    const checkout = `${dir}/missing checkout/../u`;
+    const path = await input(dir, "absolute.json", {
+      unit: "u", role: "feature", arm: 1, authority: "worker", requestId: "absolute",
+      brief: "brief.md", checkout,
+      resolution: { harness: "codex", model: "gpt-6.1-sol", effort: "xhigh" },
+    });
+    const first = run("attempt", "begin", "--file", path);
+    expect(first.code).toBe(0);
+    const attempt = JSON.parse(first.out);
+    expect(attempt.checkout).toBe(checkout);
+    const coordinator = join(dir, "coordinator");
+    await mkdir(coordinator);
+    const before = await snapshot(dir);
+    for (const args of [["attempt", "begin", "--file", path], ["attempt", "list"]]) {
+      const result = Bun.spawnSync([
+        process.execPath, script, "--store", dir, "--json", ...args,
+      ], { cwd: coordinator });
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr.toString()).toBe("");
+      expect(JSON.parse(result.stdout.toString())).toEqual(args[1] === "begin" ? attempt : [attempt]);
+      expect(await snapshot(dir)).toEqual(before);
+    }
+  });
+});
+
+describe("CLI concrete execution identity", () => {
   for (const harness of ["cursor", "codxe"]) {
     it(`rejects harness ${harness} before publishing or replacing an attempt`, async () => {
       const { dir, run } = await fixture();
