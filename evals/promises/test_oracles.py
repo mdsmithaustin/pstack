@@ -286,7 +286,7 @@ class BoundaryGuard(unittest.TestCase):
         case = load_case("feature-boundary-run")
         pid = "poteto-mode-triggers-architect-on-boundary-crossing"
         designed = minimal(events=[read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/SKILL.md"),
-                                   read(2, "architect/references/runner-prompt.md")], final_reply="done")
+                                   read(2, "architect/references/runner-prompt.md")], spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], final_reply="done")
         self.assertEqual(grade(pid, designed, case)["verdict"], PASS)
         skipped = minimal(events=[read(0, "poteto-mode/playbooks/feature.md")] + bash(1, "python3 -m relay import feeds/sample.json"),
                           final_reply="done")
@@ -446,7 +446,7 @@ class FailedReads(unittest.TestCase):
     def trace(self, ok, **extra):
         events = [read(0, "poteto-mode/playbooks/feature.md"), {"seq": 1, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "x"},
                   read(2, self.BRIEF), {"seq": 3, "kind": "tool_result", "name": "Read", "ok": ok, "output_head": "x" if ok else "File does not exist"}]
-        return minimal(events=events, final_reply="done", **extra)
+        return minimal(events=events, final_reply="done", spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], **extra)
 
     def test_a_read_whose_result_failed_is_not_evidence(self):
         case = load_case("feature-boundary-run")
@@ -488,7 +488,7 @@ class HostSkillContamination(unittest.TestCase):
     def test_empty_hits_do_not_block_grading(self):
         case = load_case("feature-boundary-run")
         events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
-        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, final_reply="done", x_host_skill_hits=[]), case)
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], final_reply="done", x_host_skill_hits=[]), case)
         self.assertEqual(result["verdict"], PASS)
 
 

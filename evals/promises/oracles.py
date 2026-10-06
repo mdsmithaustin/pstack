@@ -71,6 +71,7 @@ GIT_NO_WRITE_FLAGS = {"--abort", "--dry-run", "--quit"}
 PLAYBOOK_ENTRY = re.compile(r"^- \*\*(.+?)\.\*\*.*?`playbooks/([a-z0-9-]+)\.md`")
 ENCODING_OFFER = re.compile(r"\bencod\w*|\boffer\w*|\bcheapest\b", re.I)
 CONSTRAINT_ALIASES = {"newline": (r"\n", "linesep", "endswith"), "trailing": (r"\n",)}
+CONSTRAINT_SUBJECTS = {"do not remove: the sink needs a trailing newline on every row": ("sink", "row")}
 SCRATCH_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/")
 LOG_NAMES = ("decisions.tsv", ".audit/")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
@@ -1174,6 +1175,15 @@ def worklist_native(view):
     return failed("worklist appeared only as chat text while the task tool was on", *evidence)
 
 
+def playbook_window(view, name):
+    seq = view.read_seq(f"playbooks/{name}.md")
+    call = next((c for c in view.tool_calls if c.get("seq") == seq), None)
+    if call is None:
+        return None
+    answered = (view.results_for(call) or call).get("seq", 0)
+    return answered, next((c.get("seq") for c in view.tool_calls if c.get("seq", 0) > answered), None)
+
+
 @oracle("worklist-falls-back-to-numbered-list")
 def worklist_fallback(view):
     env = view.case.get("env") or {}
@@ -1185,12 +1195,18 @@ def worklist_fallback(view):
     if text:
         want = (view.case.get("expect") or {}).get("playbook")
         shape = playbook_shape(want, view.skills_root) if want else None
+        failures = []
         if shape:
             matched, missing, _ = steps_in_order(text[0]["items"], shape, 0)
             evidence.append(f"numbered list matches steps {matched}, missing {missing}")
             if len(matched) < max(1, len(shape["steps"]) // 2):
-                return failed("numbered list in chat does not carry the playbook steps", *evidence)
-        return passed(*evidence)
+                failures.append("numbered list in chat does not carry the playbook steps")
+        window = playbook_window(view, want) if want else None
+        first = text[0].get("seq") or 0
+        if window and not (window[0] < first and (window[1] is None or first < window[1])):
+            failures.append(f"first numbered list at seq {first} is not between the playbook read (answered at seq {window[0]}) "
+                            f"and the next tool call (seq {window[1]})")
+        return failed(failures, *evidence) if failures else passed(*evidence)
     if not carriers and view.killed and len(view.tool_calls) < 3:
         return inconclusive("run ended before any worklist appeared", *evidence)
     return failed("no numbered list with states in chat", *evidence)
@@ -1281,12 +1297,18 @@ def artifact_runs(view, pattern):
     return [(seq, c, ok) for seq, c, ok, _ in view.commands() if pattern.search(plain(c))]
 
 
+CANNOT_RUN = re.compile(r"ModuleNotFoundError|ImportError|No module named|command not found|No such file or directory|can't open file|"
+                        r"SyntaxError|Permission denied|Cannot find module|ENOENT")
+SCRIPT_RUN = re.compile(r"\b(?:python3?|node|bash|sh)\s+\S+\.(?:py|js|ts|sh)\b")
+
+
 @oracle("reply-says-inconclusive-when-check-cannot-run")
 def reply_inconclusive(view):
     pattern = artifact_regex(view)
-    checks = [(seq, c, ok) for seq, c, ok, _ in view.commands() if pattern.search(plain(c)) or re.search(r"unittest|pytest|npm test|node .*\.ts", c)]
-    broken = [c for seq, c, ok in checks if ok is False and not any(s > seq and o is not False and pattern.search(plain(cc)) for s, cc, o in checks)]
-    evidence = [f"check commands: {len(checks)}, last attempt failed to run: {len(broken)}"]
+    checks = [(seq, c, ok, head) for seq, c, ok, head in view.commands()
+              if pattern.search(plain(c)) or re.search(r"unittest|pytest|npm test|node .*\.ts", c) or SCRIPT_RUN.search(c)]
+    broken = [c for seq, c, ok, head in checks if ok is False and CANNOT_RUN.search(head) and not any(s > seq and o is not False for s, _, o, _ in checks)]
+    evidence = [f"check commands: {len(checks)}, could not run and never ran later: {len(broken)}"]
     if not checks:
         return inconclusive("no check command ran; promise not exercised", *evidence)
     if not broken:
@@ -1346,11 +1368,11 @@ DESIGN_BRIEF = re.compile(r"design candidate|candidate design|design sketch|arch
 SPAWN_TOOL_NAMES = {"Agent", "Task", "spawn_agent", "delegate_task", "spawn_subagent"}
 
 
-def design_fan_out(view):
+def design_fan_out(view, read_alone=True):
     runners = runner_spawns(view)
     briefed = [r for r in view.all_reads() if r == "architect/references/runner-prompt.md"]
     signals = []
-    if briefed:
+    if briefed and (read_alone or (view.encrypted() and len(view.spawns) >= 2)):
         signals.append("read architect/references/runner-prompt.md to brief runners")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
@@ -1375,7 +1397,7 @@ def design_ladder(view):
 
 @oracle("poteto-mode-triggers-architect-on-boundary-crossing")
 def architect_on_boundary(view):
-    signals = design_fan_out(view)
+    signals = design_fan_out(view, read_alone=False)
     evidence = [f"fan-out signals: {signals}"]
     if signals:
         return passed(*evidence)
@@ -1913,6 +1935,7 @@ def added_since_base(view):
 
 def encoding_landed(changes, constraint, reply=""):
     words = [t for t in content_tokens(constraint) if t not in ("not", "remove")]
+    words = [w for w in words if w in CONSTRAINT_ALIASES or w in CONSTRAINT_SUBJECTS.get(constraint, words)]
     needles = words + [a for w in words for a in CONSTRAINT_ALIASES.get(w, ())]
     for path, added in sorted(changes.items()):
         if ENCODING_FILE.search(path) and any(n in added.lower() for n in needles):
@@ -1935,7 +1958,7 @@ def comment_sicko(view):
     signature = any("ha ha ha" in view.spawn_result(s).lower() for s in sicko)
     evidence.append(f"persona signature visible in a result: {signature}")
     expect = view.case.get("expect") or {}
-    offer = bool(ENCODING_OFFER.search(view.final_reply))
+    offer = any(ENCODING_OFFER.search(line) and not re.search(r":\s*none\W*$", line, re.I) for line in view.final_reply.splitlines())
     evidence.append(f"encoding offer in reply: {offer}")
     if view.project and _is_dir(view.project):
         texts = "\n".join(_read_text(p, errors="replace") for p in _files(view.project, "*.py", recursive=True) if ".agents" not in p.parts and ".claude" not in p.parts)
@@ -2145,12 +2168,15 @@ def finished_in_first_turn(view, commits):
             and not any(commits_made(view, turn) or view.source_edits(turn) for turn in later_turns))
 
 
+SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|:|\[)|\bdo\b.*?\bsleep\s+\d.*?\bdone\b", re.S)
+
+
 @oracle("autonomous-run-uses-loop-facility")
 def loop_facility(view):
     prompt = " ".join(str(t) for t in view.case.get("turns", []))
     loops = [c for c in view.tool_calls if c.get("name") in ("Monitor", "loop", "Loop", "schedule")]
     watchers = view.spawns_where(r"watch\w*", r"wake\w*", r"re-check\w*", r"heartbeat\w*")
-    shell_loops = [c for c in view.commands() if re.search(r"\bwhile\s+(?:true|:|\[)|\bsleep\s+\d+", c[1])]
+    shell_loops = [c for c in view.commands() if SHELL_LOOP.search(mask_quoted(strip_heredocs(c[1])))]
     commits = len(view.run_commits()) if view.run_commits() is not None else None
     evidence = [f"loop tool calls: {len(loops)}", f"watcher spawns: {len(watchers)}", f"shell loops: {len(shell_loops)}",
                 f"commits past fixture: {commits}", f"prompt asks for /loop: {'/loop' in prompt}"]
@@ -2184,7 +2210,7 @@ def keeps_going(view):
     asked = view.asked_user(0)
     questions = view.question_texts(0)
     calls = len([c for c in view.tool_calls if view.turn_of(c.get("seq")) in (0, None)])
-    evidence = [f"ask tool calls: {bool(asked)}", f"questions to the user: {questions[:2]}", f"tool calls in the run: {calls}"]
+    evidence = [f"ask tool calls: {bool(asked)}", f"questions to the user: {questions[:2]}", f"tool calls in the first turn: {calls}"]
     if asked or questions:
         return failed("the run stopped to ask after `going to bed`", *evidence)
     if calls < 10:
@@ -2739,7 +2765,7 @@ def architect_checkpoint(view):
     sources = view.source_edits()
     tree = sorted(p for p in view.changed_since_base() or () if view.classify(p) == "source")
     low = view.final_reply.lower()
-    pause = bool(re.search(r"sign-off|approve|before implementing|proceed\?|shall i implement|waiting", low))
+    pause = bool(re.search(r"sign-off|\bapprove\b|before implementing|proceed\?|shall i implement|waiting (?:for|on) (?:you|your)\b", low))
     evidence = [f"source edits: {[e[1] for e in sources][:3]}", f"project source changed since the fixture: {tree[:3]}", f"reply pauses for sign-off: {pause}"]
     if sources or tree:
         return failed("checkpoint requested but implementation started", *evidence)
