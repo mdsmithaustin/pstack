@@ -2845,6 +2845,8 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(grade(pid, minimal(events=events, final_reply="done"), case)["verdict"], FAIL)
         sealed = [{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (3, 4)]
         self.assertEqual(grade(pid, minimal(events=events, spawns=sealed, harness="codex", final_reply="done"), case)["verdict"], PASS)
+        late = [read(0, "poteto-mode/playbooks/feature.md"), read(5, "architect/references/runner-prompt.md")]
+        self.assertEqual(grade(pid, minimal(events=late, spawns=sealed, harness="codex", final_reply="done"), case)["verdict"], FAIL)
 
     def test_hermes_audit_the_keeps_going_count_names_its_turn(self):
         events = in_turn(0, [{"seq": 0, "kind": "user", "text": "going to bed"}] + bash(1, "ls")) + in_turn(1, [{"seq": 5, "kind": "user", "text": "catch up"}] + bash(6, "ls"))
