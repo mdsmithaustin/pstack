@@ -11,7 +11,7 @@ class CallIds(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="pstack-ids-test-")
         self.addCleanup(tmp.cleanup)
-        self.tmp = Path(tmp.name)
+        self.tmp = Path(tmp.name).resolve()
 
     def lines(self, name, rows):
         path = self.tmp / name

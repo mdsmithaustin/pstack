@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 import live
-from grade_boundary import copy_file
+from grade_boundary import copy_file, read_file
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/", ".codex/"]
@@ -112,7 +112,7 @@ def turn(run, text, index):
 
 
 def records(path):
-    for line in Path(path).read_text(errors="replace").splitlines():
+    for line in read_file(Path(path)).decode(errors="replace").splitlines():
         try:
             record = json.loads(line)
         except json.JSONDecodeError:

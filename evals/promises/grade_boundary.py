@@ -241,12 +241,16 @@ def _copy_tree(source, destination):
         root.close()
 
 
-def copy_file(source, target):
-    root = _Root.open(source.parent)
+def read_file(path):
+    root = _Root.open(path.parent)
     try:
-        data = root.read(source.name)
+        return root.read(path.name)
     finally:
         root.close()
+
+
+def copy_file(source, target):
+    data = read_file(source)
     root = _Root.open(target.parent, create=True)
     try:
         root.write(target.name, data)
