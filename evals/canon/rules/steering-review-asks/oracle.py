@@ -1067,8 +1067,8 @@ def test_hermes_desktop_reopens_the_app_it_did_not_rebuild(windows_tree, monkeyp
     assert (outcome, "no launchable app was found" in out, ANCESTOR in windows_tree.stopped) == (True, False, False), out
 '''
 
-PLATFORM_PATCH = re.compile(r"""setattr\(\s*["']sys\.platform["']|setattr\([^)]*\bsys\b[^)]*["']platform["']|\bsys\.platform\s*=(?!=)"""
-                            r"""|patch(?:\.object)?\(\s*(?:["']sys\.platform["']|sys\s*,\s*["']platform["'])""")
+PLATFORM_PATCH = re.compile(r"""setattr\(\s*["'](?:[\w.]+\.)?sys\.platform["']|setattr\([^)]*\bsys\b[^)]*["']platform["']|\bsys\.platform\s*=(?!=)"""
+                            r"""|patch(?:\.object)?\(\s*(?:["'](?:[\w.]+\.)?sys\.platform["']|(?:[\w.]+\.)?sys\s*,\s*["']platform["'])""")
 
 
 WINDOWS_MARK = re.compile(r"""pytest\.mark\.platforms\([^)]*["']windows["']""")
