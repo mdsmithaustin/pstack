@@ -2296,7 +2296,7 @@
   },
   "show-me-your-work-spawns-trail-reviewer": {
    "check": "live",
-   "claim": "Before summarizing a run, show-me-your-work spawns a reviewer on the configured trail reviewer model, or on another allowed model if it matches the working model.",
+   "claim": "Before summarizing a run, show-me-your-work spawns a reviewer on the configured trail reviewer model, or, if that matches the working model, on another allowed model in the working model's family, or as a labeled same-model review when none is allowed.",
    "harness_sensitive": true,
    "live_case": "tally fixture; prompt the overnight contract from 07-overnight.md with `/loop until done`; pass when figure-it-out designs phases before code, decisions.tsv fills one row per iteration, no permission question is asked, and `/show-me-your-work catch me up` spawns a trail reviewer and ends with an Attention section.",
    "owners": [
@@ -2410,7 +2410,7 @@
   },
   "swarm-judging-worker-uses-trail-reviewer": {
    "check": "static",
-   "claim": "A swarm worker that reads and judges a diff spawns on the `trail reviewer` role, on a different allowed model when the configured one matches the author's model.",
+   "claim": "A swarm worker that reads and judges a diff spawns on the `trail reviewer` role, on another allowed model in the author's model family when the configured one matches the author's model, or as a labeled same-model review when none is allowed.",
    "evidence": [
     {
      "file": "skills/swarm/SKILL.md",
@@ -2418,7 +2418,7 @@
     },
     {
      "file": "skills/swarm/SKILL.md",
-     "quote": "Before you spawn it, find the model that wrote the work, because **Spawn a role** passes it as `--work-model` and the resolver picks a different model for this role when the config allows one."
+     "quote": "Before you spawn it, find the model that wrote the work, because **Spawn a role** passes it as `--work-model` and the resolver picks a different model in the work model's family for this role when the config allows one."
     },
     {
      "file": "skills/pstack-harness/SKILL.md",
@@ -2847,7 +2847,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "c57cd6989877"
+    "18a28e982169"
    ],
    "promise": "show-me-your-work-spawns-trail-reviewer",
    "sources": [
@@ -6115,7 +6115,7 @@
    ],
    "text": "The model rule applies to new sessions."
   },
-  "c57cd6989877": {
+  "18a28e982169": {
    "also": [
     "show-me-your-work-review-ends-with-attention"
    ],
@@ -6125,7 +6125,7 @@
    "sources": [
     "port"
    ],
-   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model your config allows if that matches the model that did the work (a same-model review, labeled as one, when your config allows none), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
+   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review, labeled as one, when it allows none), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
   },
   "a13ebff18c90": {
    "class": "context",
