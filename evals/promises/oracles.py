@@ -1761,7 +1761,7 @@ def why_null(view):
 SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+(?:searched|consulted|checked|coverage))\**\s*(?::|$)")
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
 CLAUSE_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
-CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody)\b|n't\b")
+CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n't\b")
 
 
 def affirmed(pattern, low):
