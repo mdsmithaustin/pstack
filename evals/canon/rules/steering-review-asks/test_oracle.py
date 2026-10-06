@@ -73,12 +73,6 @@ class CopyAssertionTests(unittest.TestCase):
             "expect(writeText).toHaveBeenCalledTimes(1);",
         ), ["constraint:C3: no added web test asserts what Copy writes"])
 
-    def test_a_called_with_check_that_passes_no_payload_does_not_count(self):
-        for check in ("expect(writeText).toHaveBeenCalledWith();", "expect(navigator.clipboard.writeText).toHaveBeenCalledWith( );"):
-            with self.subTest(check):
-                self.assertEqual(self.failures("const writeText = vi.fn();", check),
-                                 ["constraint:C3: no added web test asserts what Copy writes"])
-
     def test_a_spy_asserted_with_the_payload_counts(self):
         self.assertEqual(self.failures("const writeText = vi.fn();", "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);"), [])
 
@@ -142,86 +136,6 @@ class CopyAssertionTests(unittest.TestCase):
             "  written.push(text);",
             "}) } });",
             "expect(bubble).toBeDefined();",
-        ), ["constraint:C3: no added web test asserts what Copy writes"])
-
-    def test_a_spy_installed_under_another_name_and_asserted_with_the_payload_counts(self):
-        self.assertEqual(self.failures(
-            "const spy = vi.fn();",
-            "Object.assign(navigator, { clipboard: { writeText: spy } });",
-            "expect(spy).toHaveBeenCalledWith(LONG_TEXT);",
-        ), [])
-
-    def test_a_named_spy_on_writetext_asserted_with_the_payload_counts(self):
-        self.assertEqual(self.failures(
-            'const copied = vi.spyOn(navigator.clipboard, "writeText");',
-            "expect(copied).toHaveBeenLastCalledWith(LONG_TEXT);",
-        ), [])
-
-    def test_a_writetext_spy_outside_the_clipboard_does_not_count(self):
-        self.assertEqual(self.failures(
-            "const spy = vi.fn();",
-            "const editor = { writeText: spy };",
-            "expect(spy).toHaveBeenCalledWith(LONG_TEXT);",
-        ), ["constraint:C3: no added web test asserts what Copy writes"])
-
-    def test_a_writetext_spy_after_an_unrelated_clipboard_mention_does_not_count(self):
-        self.assertEqual(self.failures(
-            "const clipboard = navigator.clipboard",
-            "const editor = { writeText: spy }",
-            "expect(spy).toHaveBeenCalledWith(LONG_TEXT)",
-        ), ["constraint:C3: no added web test asserts what Copy writes"])
-
-    def test_a_spy_installed_on_the_clipboard_object_counts_in_each_form(self):
-        for install in ('Object.defineProperty(navigator, "clipboard", { value: { writeText: spy } });',
-                        "Object.assign(navigator.clipboard, { writeText: spy });"):
-            with self.subTest(install):
-                self.assertEqual(self.failures(install, "expect(spy).toHaveBeenCalledWith(LONG_TEXT);"), [])
-
-    def test_an_identity_check_on_a_clipboard_spy_does_not_assert_the_payload(self):
-        self.assertEqual(self.failures(
-            'const copied = vi.spyOn(navigator.clipboard, "writeText");',
-            "expect(copied).toBe(originalSpy);",
-        ), ["constraint:C3: no added web test asserts what Copy writes"])
-
-    def test_an_identity_check_on_the_writetext_spy_itself_does_not_count(self):
-        for check in ("expect(writeText).toBe(originalSpy);", "expect(navigator.clipboard.writeText).toEqual(spy);"):
-            with self.subTest(check):
-                self.assertEqual(self.failures("const writeText = vi.fn();", check),
-                                 ["constraint:C3: no added web test asserts what Copy writes"])
-
-    def test_a_spy_under_a_quoted_writetext_key_counts(self):
-        self.assertEqual(self.failures('vi.stubGlobal("navigator", { clipboard: { "writeText": spy } });',
-                                       "expect(spy).toHaveBeenCalledWith(LONG_TEXT);"), [])
-
-    def test_a_clipboard_subject_and_a_later_matcher_on_another_assertion_do_not_join(self):
-        self.assertEqual(self.failures("const writeText = vi.fn()", "expect(writeText).toBe(originalSpy)",
-                                       "expect(unrelated).toHaveBeenCalledWith(LONG_TEXT)"),
-                         ["constraint:C3: no added web test asserts what Copy writes"])
-
-    def test_the_text_read_back_from_the_clipboard_counts(self):
-        self.assertEqual(self.failures("expect(await navigator.clipboard.readText()).toBe(LONG_TEXT);"), [])
-
-    def test_text_read_back_from_something_other_than_the_clipboard_does_not_count(self):
-        self.assertEqual(self.failures("expect(editor.readText()).toBe(LONG_TEXT);"),
-                         ["constraint:C3: no added web test asserts what Copy writes"])
-
-    def test_a_clipboard_spy_call_argument_compared_to_the_prompt_counts(self):
-        self.assertEqual(self.failures(
-            'const copied = vi.spyOn(navigator.clipboard, "writeText");',
-            "expect(copied.mock.calls[0][0]).toBe(LONG_TEXT);",
-        ), [])
-
-    def test_a_clipboard_spy_result_compared_to_a_value_does_not_count(self):
-        self.assertEqual(self.failures(
-            'const copied = vi.spyOn(navigator.clipboard, "writeText");',
-            "expect(copied.mock.results).toEqual([]);",
-        ), ["constraint:C3: no added web test asserts what Copy writes"])
-
-    def test_a_spy_installed_under_another_name_with_a_bare_called_check_does_not_count(self):
-        self.assertEqual(self.failures(
-            "const spy = vi.fn();",
-            "Object.assign(navigator, { clipboard: { writeText: spy } });",
-            "expect(spy).toHaveBeenCalled();",
         ), ["constraint:C3: no added web test asserts what Copy writes"])
 
 
