@@ -56,10 +56,13 @@ has `harness`, exact `resolution`, observed `route` and `version`, retained
 
 `--contexts` names an operator-owned JSON object keyed by destination
 harness. Each value records `available`, `route`, `version`,
-`permission_context`, and an absolute `eval_run` directory. The current
-Codex CLI context uses route `codex-cli`, its observed CLI version, and the
-screen's scoped permission context. The resolver probes the installed
-Codex CLI version again. Missing observations deny eligibility.
+`permission_context`, and an absolute `eval_run` directory. The canonical
+route is `skill-ci-pinned-runner`, with suite `pstack-resume-runner-v2`.
+The five binding keys are `harness`, `resolution`, `route`, `version`, and
+`permission_context`. Its `runner` object records the exact pin, driver and
+wrapper paths and SHA-256 hashes, and existing backend option. Diagnostic
+preparation accepts `version: null`. The resolver requires an observed
+version for eligibility. Missing observations deny eligibility.
 
 `--oracle` names the trusted current oracle from the source checkout.
 Omitting it denies eligibility. The oracle reruns against retained raw
@@ -71,9 +74,22 @@ self-reported pass boolean. The run directory and oracle share the existing
 trusted local operator boundary. Hashes detect changed evidence and do not
 provide execution attestation against a malicious local operator.
 
-The source checkout's `evals/resume-recovery/README.md` contains runnable
-preparation, interruption, recovery, refusal, and grading instructions.
-Installed skill packages omit the eval corpus. The current oracle supports
-Codex CLI evidence. Other routes remain ineligible until their observed
-provenance has an independent oracle. Keep explicit human model overrides,
-native delegation preference, CLI fallback, and existing retry limits.
+The source checkout's `evals/resume-recovery/README.md` prepares a case for
+the canonical public `tools/run_runner.py` driver. Codex uses `--codex-cmd`.
+The resolver destination `claude-code` uses driver backend `claude` and
+`--claude-bin`. Preparation prints a command without launching it.
+Installed skill packages omit the eval corpus.
+
+Current captures always yield a gap report. Claude's native CLI version and
+attributed permission-gate denial can be observed. Applied effort, full
+effective permissions, post-wrapper origin, executed pin, and host/archive
+authority remain unproven. `check` exits nonzero without a
+receipt, so neither destination can currently become eligible through this
+oracle. Resolver-unit stub tests exercise receipt rechecking only. They
+cannot certify an actual destination, and fake captures never become
+production eligible.
+
+Installed but unregistered Hermes and Grok remain a coverage gap. The
+canonical consumer has no backend for either. Native routes also need
+observed evidence support. Keep explicit human model overrides, native
+delegation preference, CLI fallback, and existing retry limits.

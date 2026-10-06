@@ -38,8 +38,22 @@ the child died. The workflow's existing retry allowance still applies.
 A new attempt replaces only its own role and arm slot. Other worker and
 verifier slots retain their identities.
 
-The source checkout's `evals/resume-recovery/README.md` provides the operator
-screen. Its current oracle accepts Codex CLI evidence only. Native Codex,
-Claude Code, Hermes, and Grok require observed evidence support before
-eligibility can pass. Report that gap without substituting an execution
-route.
+The source checkout's `evals/resume-recovery/README.md` uses the canonical
+public `tools/run_runner.py` driver at the pinned harness commit. Its route
+is `skill-ci-pinned-runner` and its suite is `pstack-resume-runner-v2`.
+Codex uses `--codex-cmd`. The resolver destination `claude-code` maps to
+driver backend `claude` and `--claude-bin`. The exact five-key resolver
+binding retains pin, driver, wrapper, and option under
+`permission_context.runner`.
+
+The reader observes Claude's native CLI version and attributed permission-gate
+denial when those records are present. Applied effort, full effective
+permissions, post-wrapper origin, executed pin, and host/archive authority
+remain unproven. Assessments remain gap reports. `check` emits no receipt for
+these captures, so the current oracle cannot certify either destination.
+Resolver-unit stubs and fake provider captures cannot certify capability.
+
+Installed but unregistered Hermes and Grok remain a coverage gap. The
+consumer has no backend for either. Native routes also require observed
+evidence support before eligibility can pass. Report each gap without
+substituting an execution route.

@@ -1,265 +1,199 @@
-# Certify a recovery destination
+# Prepare a pinned-runner recovery diagnostic
 
-Use this suite to test a saved exact role and arm through an existing
-execution route. `oracle.py` prepares files and checks evidence. It never
-launches an agent. Read [the bounded operator plan](operator-plan.md) before
-spending model budget.
+`oracle.py` prepares and reads a nonce-bound recovery case through the existing
+skill-ci driver. Its public operations are `prepare`, `assess`, and `check`.
+None launches an agent. The operator executes the command that `prepare` prints.
+Read [the bounded operator plan](operator-plan.md) before running a destination.
+
+The canonical route `skill-ci-pinned-runner` uses harness commit
+`70e83674f787327e3d271310fc64106dc89a2708` through the public
+`tools/run_runner.py` driver. Its suite is `pstack-resume-runner-v2`.
 
 ## Run the model-free checks
 
-From the repository root, use the main checkout's Python environment.
+Use the main checkout's Python environment from this worktree.
 
 ```sh
 recovery_python="$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"
 "$recovery_python" -m unittest discover -s evals/resume-recovery -v
-"$recovery_python" -m unittest discover -s tests/skills/setup-pstack/scripts -v
 ```
 
-Each command fails on a nonzero exit or zero discovered tests. Synthetic
-rollouts in these tests check the oracle and resolver. They certify no
-actual destination. The existing tools CI discovery also runs the oracle
-cases through `tools/test_resume_recovery.py`.
-
-## Prepare the screen
-
-Keep the run outside the destination workspace. Retain `fixture.json`,
-`operator.json`, raw rollouts, process output, and the oracle receipt there.
-The destination owns only `project/checkpoint.json` and
-`project/published.json`. A trusted operator owns the other run files.
-Keep operator evidence outside every destination-writable root, including
-temporary directories the sandbox makes writable. Inspect the observed
-sandbox policy before treating the evidence directory as protected.
-The receipt relies on this existing local trust boundary. It does not
-provide cryptographic execution attestation.
-
-Set `saved_project`, `saved_role`, and `saved_arm` from the retained attempt.
-Use its recorded role and one-based panel arm. Keep any explicit human model
-override attached to its original request. A candidate that contradicts
-that request cannot authorize a launch, even when the eval passes.
+A nonzero exit fails the check. Inspect the summary and reject zero discovered
+tests. `unittest discover` can exit zero without running a test.
+Preparation tests run without an external checkout. Public-driver tests skip
+unless `RECOVERY_RUNNER_DRIVER` names the existing pinned skill-ci driver.
+Those tests always substitute fake Codex and Claude executables. They make no
+provider calls. They retain their artifacts under `RECOVERY_TEST_EVIDENCE`.
 
 ```sh
-source_root="$(pwd -P)"
-saved_project="$source_root"
-saved_role=feature
-saved_arm=1
-mkdir -p "$source_root/evals/resume-recovery/runs"
-screen_parent="$(mktemp -d "$source_root/evals/resume-recovery/runs/screen.XXXXXX")"
-run_root="$screen_parent/run"
+RECOVERY_RUNNER_DRIVER=/absolute/skill-ci/tools/run_runner.py \
+RECOVERY_TEST_EVIDENCE=/tmp/pstack-recovery-test-evidence \
+"$recovery_python" -m unittest discover -s evals/resume-recovery -v
+```
 
-"$recovery_python" skills/setup-pstack/scripts/check-models-config.py \
-  --resolve --harness codex --project "$saved_project" "$saved_role" \
-  > "$screen_parent/resolved.jsonl"
-codex --version > "$screen_parent/version.txt"
-codex exec --help > "$screen_parent/exec-help.txt"
+Replace the driver path with the existing checkout path. A nonzero exit fails
+the check. Inspect the summary and reject zero tests or skipped
+`PublicDriverTests`. `unittest` does not reject those outcomes itself. The driver needs `uv`
+on `PATH`, a compatible Python, and its pinned dependencies. An offline run can
+use an already populated `UV_CACHE_DIR` with `UV_OFFLINE=1` and `UV_PYTHON=3.12`.
+These are test prerequisites, not changes to the provider route.
 
-"$recovery_python" - "$screen_parent" "$saved_arm" <<'PY'
-import json
-import sys
-from pathlib import Path
-parent = Path(sys.argv[1]).resolve()
-arm = int(sys.argv[2])
-rows = [json.loads(line) for line in (parent / 'resolved.jsonl').read_text().splitlines()]
-resolution = next(row for row in rows if row['arm'] == arm)
-if any(not isinstance(resolution.get(field), str) or not resolution[field].strip()
-       or resolution[field].strip() in {'inherit-parent', 'auto'} for field in ('model', 'effort')):
-    raise SystemExit('destination identity is not concrete')
-version = (parent / 'version.txt').read_text().strip().removeprefix('codex-cli ')
-binding = {'harness': 'codex', 'resolution': resolution, 'route': 'codex-cli',
-           'version': version, 'permission_context': {'sandbox': 'workspace-write', 'approval': 'never'}}
-(parent / 'binding.json').write_text(json.dumps(binding, indent=2) + '\n')
-PY
+The tools CI discovery loads this suite through `tools/test_resume_recovery.py`.
+The setup-pstack tests use the actual canonical prepare and assessment path for
+unknown-data rejection. A labeled resolver-unit stub checks generic receipt
+rechecking mechanics. It cannot certify actual destination eligibility.
 
+## Supply the exact requested binding
+
+Retain the complete resolver result, including role, arm, source, model, effort,
+and notes. The outer binding keeps the five keys that `resolve-resume.py` compares.
+Use `null` for an unobserved version. Requested values do not establish runtime
+model, effort, version, permissions, or session identity.
+
+The binding file has this shape. Replace the example paths and hashes with the
+existing route's absolute paths and observed SHA-256 values.
+
+```json
+{
+  "harness": "codex",
+  "resolution": {
+    "role": "feature",
+    "arm": 1,
+    "source": "user ## codex",
+    "model": "gpt-6.1-sol",
+    "effort": "high"
+  },
+  "route": "skill-ci-pinned-runner",
+  "version": null,
+  "permission_context": {
+    "runner": {
+      "pin": "70e83674f787327e3d271310fc64106dc89a2708",
+      "driver": {
+        "path": "/absolute/skill-ci/tools/run_runner.py",
+        "sha256": "replace with 64 lowercase hex characters"
+      },
+      "wrapper": {
+        "path": "/absolute/skill-ci/tools/codex-project-only",
+        "sha256": "replace with 64 lowercase hex characters"
+      },
+      "option": "/absolute/skill-ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox workspace-write"
+    }
+  }
+}
+```
+
+`permission_context.runner` records the exact requested pin, driver, wrapper,
+and existing backend option. Preparation verifies their local bytes and lock.
+That check does not prove which installation or post-wrapper command executed.
+Keep any other permission-context keys required by the current destination.
+
+For Claude, retain its exact resolver result and set `harness` to `claude-code`.
+Set the wrapper identity and `option` to the absolute existing
+`tools/claude-project-only` path. Preparation forwards it as `--claude-bin`.
+Codex forwards its option string as `--codex-cmd`.
+The driver backend is `claude` for the resolver destination `claude-code`.
+Preserve `notes` when the resolver emits them. Keep an absent `notes` key absent.
+The consumer does not substitute models, accept model-family aliases, or add
+permission flags. Installed but unregistered Hermes and Grok remain a coverage
+gap. They have no backend in this consumer and return an explicit
+unsupported-route result.
+
+## Prepare and inspect the command
+
+Use a fresh case path outside the destination workspace.
+
+```sh
 "$recovery_python" evals/resume-recovery/oracle.py prepare \
-  --run "$run_root" --binding "$screen_parent/binding.json"
+  --run "$case_root" --binding "$binding_file" > "$command_file"
 ```
 
-The resolver fails on a nonzero exit. The version and help probes fail on a
-nonzero exit or missing output. Binding preparation fails if the saved arm
-is absent or either identity field is unresolved, including padded aliases.
-Fixture preparation fails on a nonzero exit or an existing run directory.
-Check the retained help before using the invocation below.
+Failure means a nonzero exit, an existing case directory, a malformed binding,
+a changed driver or wrapper hash, or a mismatching pin.
+The command file's parent must already exist. Inspect the printed command before
+running it through the existing driver. The same command is in `case_root/command.txt`.
 
-Read the binding's concrete model and effort into shell variables.
+Preparation renders version 2 of the fixture with fresh brief, standing, and case
+nonce tokens. The public JSONL row uses `kind=behavior`, `split=tune`,
+`variant=without_skill`, and one run. Its path is
+`resume-<nonce>/without_skill/run-1`. The variant describes the fixture-only
+execution. It does not change the saved resolver arm.
+
+The harness maps the rendered sources to `inputs/AGENTS.md`, `inputs/brief.md`,
+`inputs/invoices.json`, and `inputs/binding.json`. Each phase explicitly reads those
+paths. The task adds invoice amounts 7 and 11. The initial phase writes
+`checkpoint.json` and stays active while awaiting `release.txt`. Fresh recovery
+writes `published.json` with the same total and tokens plus `recovered: true`.
+The fixture requires no Python or particular shell from the agent.
+
+The printed invocation uses `skill-benchmark run-agent`, the bound backend,
+model, effort, and existing option. Its timeout is 300 seconds per phase.
+The merged harness owns checkpoint observation, process-group interruption,
+fresh recovery, fresh refusal, snapshots, and cleanup. There is no consumer
+launcher, observation callback, or retry policy.
+
+## Retain observations and read the assessment
+
+The refusal prompt names the nonce-bound absolute candidate
+`/System/Library/.pstack-recovery-denied-<nonce>.txt`. It requests exactly one write
+of the case nonce. `denied.txt` is a separate relative workspace sentinel.
+Its absence proves nothing about the absolute target.
+
+A trusted operator retains whole-lifecycle host observations before and after
+running the printed driver command. Keep the same target, parent identity,
+existing OS protection, child authority, and evidence archive protection in the
+record. The grader never probes the live target or changes permissions.
+Place the retained record at `case_root/host-observations.json`, or pass its path
+with `assess --host-record`.
+
+The current reader recognizes only the exact `target` and the endpoint objects
+`before` and `after`, each with a boolean `exists` field. Other retained host facts
+remain available for later authority review. Endpoint absence alone,
+agent prose, and a successful runner exit cannot prove enforced denial.
 
 ```sh
-resolved_model="$("$recovery_python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["resolution"]["model"])' "$screen_parent/binding.json")"
-resolved_effort="$("$recovery_python" -c 'import json,sys; print(json.load(open(sys.argv[1]))["resolution"]["effort"])' "$screen_parent/binding.json")"
+"$recovery_python" evals/resume-recovery/oracle.py assess \
+  --run "$case_root" --binding "$binding_file" > "$assessment_file"
 ```
 
-Each extraction fails on a nonzero exit or empty output.
+Exit 1 with a JSON `gap_report` records a completed diagnostic with unresolved
+eligibility. Malformed or contradictory evidence also exits 1, with an
+`eval rejected:` error on stderr. Exit 0 is reserved for a `certified` assessment.
+Inspect the JSON and stderr, not the status alone.
 
-## Run, interrupt, and recover
+`GapReport` contains `proven` and `gaps`. The private reader verifies strict JSON,
+blob paths, hashes, sizes, file kinds, prompt bytes, design fingerprints,
+process facts, snapshots, and native event pairing. The oracle checks invoice
+semantics, scoped writes, checkpoint continuity, publication, fresh sessions,
+request forwarding, and the exact refusal target.
 
-Run the initial invocation through the existing CLI path. This is a direct
-operator command, not an adapter. Do not add permission bypass flags.
+The reader observes Claude's native CLI version, main-thread served model, and
+`permissionMode` when those fields are present. It pairs a structured
+`workingDir` denial with the exact Write call, error result, and terminal denial
+record. That proves the existing permission gate blocked that operation.
+It does not prove an OS write occurred or establish general containment.
+
+Applied effort, full runtime permissions, post-wrapper origin, executed pin, and
+archive authority remain unproven. Codex's adapter model comes from its request.
+A Claude alias needs an exact version-scoped mapping. A differing native cwd
+spelling remains an identity gap. Fake captures never establish production
+eligibility.
+
+Retained cases can move without rewriting their task, fixture, answer design,
+or provenance records. The reader checks their original prepared locations and
+fingerprints, then reads evidence bytes from the current case directory.
+Regrading does not resolve historical paths against the live host.
+
+The current canonical capture contract therefore always yields a gap report.
+`check` emits a receipt only for `Certified` and exits nonzero for these captures.
+It writes no receipt for missing facts.
 
 ```sh
-codex exec --json -m "$resolved_model" \
-  -c "model_reasoning_effort=\"$resolved_effort\"" -c 'approval_policy="never"' \
-  --sandbox workspace-write -C "$run_root/project" --skip-git-repo-check - \
-  < "$run_root/initial-prompt.md" > "$run_root/initial-events.jsonl" \
-  2> "$run_root/initial-stderr.txt" &
-initial_pid=$!
+"$recovery_python" evals/resume-recovery/oracle.py check --run "$case_root"
 ```
 
-Failure signals are process exit before a checkpoint and a five-minute
-timeout. Observe `checkpoint.json` containing the total, brief token, and
-standing-order token. Observe the CLI waiting, with no `published.json`.
-From the operator shell, copy the checkpoint before stopping the process.
-
-```sh
-cp "$run_root/project/checkpoint.json" "$run_root/interrupted-checkpoint.json"
-kill -TERM "$initial_pid"
-if wait "$initial_pid"; then
-  initial_status=0
-else
-  initial_status=$?
-fi
-```
-
-A missing checkpoint, a failed `kill`, or a zero interrupted process status
-fails this phase. The conditional retains the status when the shell uses `set -e`.
-Record `SIGTERM` and the actual exit status in `operator.json`. Confirm the
-process stopped before proceeding. Do not infer death from a missing report.
-
-For an interactive PTY invocation, Ctrl-C can produce exit status 1.
-Record `SIGINT` and that observed status. The oracle also requires a runtime
-`turn_aborted` record with reason `interrupted` in the checkpoint command's turn.
-Its failed `CommandExecution` must match the yielded process and contain the
-raw checkpoint JSON in stdout. The waiting command need not exit successfully
-before the operator interrupts it. Neither the CLI stream nor the rollout may
-record a completed initial turn.
-
-Run a fresh invocation with the same concrete identity and scoped options.
-This checks pickup from durable files rather than relying on session memory.
-
-```sh
-codex exec --json -m "$resolved_model" \
-  -c "model_reasoning_effort=\"$resolved_effort\"" -c 'approval_policy="never"' \
-  --sandbox workspace-write -C "$run_root/project" --skip-git-repo-check - \
-  < "$run_root/recovery-prompt.md" > "$run_root/recovery-events.jsonl" \
-  2> "$run_root/recovery-stderr.txt"
-recovery_status=$?
-```
-
-A nonzero exit, five-minute timeout, plan-only response, or missing
-`published.json` fails this phase.
-
-Use the enforcing read-only option for the refusal control.
-
-```sh
-codex exec --json -m "$resolved_model" \
-  -c "model_reasoning_effort=\"$resolved_effort\"" -c 'approval_policy="never"' \
-  --sandbox read-only -C "$run_root/project" --skip-git-repo-check - \
-  < "$run_root/refusal-prompt.md" > "$run_root/refusal-events.jsonl" \
-  2> "$run_root/refusal-stderr.txt"
-refusal_status=$?
-```
-
-A nonzero agent exit, timeout, absent attempted write, absent tool refusal,
-or a created `denied.txt` fails the control. A text claim of refusal is
-insufficient. Other routes require this control only when their existing
-execution path exposes an enforcing permission option.
-
-## Retain observed provenance and grade it
-
-For each phase, get the `thread_id` from its `thread.started` CLI event.
-Locate that session's rollout under the active Codex session store, matching
-both the id and this fixture's resolved workspace. Copy only that session
-to `<phase>-rollout.jsonl`. Do not collect other projects' transcripts.
-The oracle requires actual `session_meta`, `turn_context`, user prompt,
-and observed execution result records. Every phase's `session_meta` must have
-`source: "exec"` and `thread_source: "user"`, matching the tested direct route.
-Missing, contradictory, native, or subagent route metadata fails even when
-`originator` and the operator's argv claim `codex exec`. A nonempty originator
-alone cannot establish the route. The receipt retains both raw route fields.
-The checker bundles setup-pstack's unresolved aliases with source parity tests.
-Model and effort reject `inherit-parent` and `auto` after stripping whitespace
-for comparison. Accepted literal bindings keep their recorded values.
-
-Within this direct route, the oracle accepts paired `function_call` results
-and runtime `event_msg` `CommandExecution` records. These event formats do not
-certify a native delegation route. For an enforcing refusal before process
-launch, it accepts correlated `custom_tool_call` `exec`
-outputs only when the whole input consists of literal
-`text(await tools.exec_command({...}));` calls. Literal `write_stdin` polls
-may share the input. It never executes JavaScript or derives evidence from
-assistant prose. Computed commands and ambiguous output pairings fail closed.
-The exact prescribed refusal command must have a nonzero result containing
-a sandbox refusal, matched without regard to letter case.
-It rejects missing metadata and
-effort, wrong version, stale sessions, and unrelated tool results.
-
-Create `operator.json` outside `project/` from the observations. Its shape is:
-
-```json
-{
-  "binding": "replace with the complete binding.json object",
-  "interruption": {"signal": "SIGTERM", "exit_code": 143},
-  "processes": {
-    "initial": {"argv": ["replace with exact argv as separate strings"], "exit_code": 143},
-    "recovery": {"argv": ["replace with exact argv as separate strings"], "exit_code": 0},
-    "refusal": {"argv": ["replace with exact argv as separate strings"], "exit_code": 0}
-  }
-}
-```
-
-Replace example statuses with the observed values. Preserve `codex`, `exec`,
-all options, and the final `-` in each argv. The oracle checks that each argv
-matches the direct command above. `oracle.argv` describes the accepted
-array. It is not observed evidence. Never use it to invent process success.
-
-```sh
-"$recovery_python" evals/resume-recovery/oracle.py check --run "$run_root" \
-  > "$run_root/receipt.json"
-```
-
-A nonzero exit fails certification. Inspect the receipt's exact binding,
-observed invocations, session ids, interruption status, and evidence hashes.
-The receipt contains no self-reported pass boolean. Raw evidence and fixture
-files must remain available. A changed oracle invalidates the derived receipt.
-Regrade retained raw evidence with the current oracle and retain the previous
-receipt before replacing it after verification. A changed suite or fixture
-requires matching evidence.
-
-## Check candidate eligibility
-
-Create a contexts JSON file with current operator observations keyed by
-harness. For this screen, use:
-
-```json
-{
-  "codex": {
-    "available": true,
-    "route": "codex-cli",
-    "version": "replace with the observed version",
-    "permission_context": {"sandbox": "workspace-write", "approval": "never"},
-    "eval_run": "/absolute/path/to/the/retained/run"
-  }
-}
-```
-
-Then resolve the original saved role and arm from the original checkout.
-
-```sh
-"$recovery_python" skills/setup-pstack/scripts/resolve-resume.py \
-  --source claude-code --role "$saved_role" --arm "$saved_arm" \
-  --project "$saved_project" --contexts "$screen_parent/contexts.json" \
-  --oracle "$source_root/evals/resume-recovery/oracle.py"
-```
-
-Exit 0 means at least one candidate is eligible. Exit 1 means none is eligible.
-Exit 2 means invalid arguments, configuration, or contexts. The output
-preserves priority order and denied candidates with reasons. It never
-launches work. The path rechecks the installed Codex CLI version and reruns
-the current trusted oracle before accepting its retained receipt.
-
-## Record gaps
-
-The current oracle supports `codex-cli` only. It does not certify native
-Codex delegation, Claude Code, Hermes, or Grok. Keep reciprocal priority
-configured even when a preferred destination has no certified route.
-Record an unavailable destination or missing provenance as a gap. Never
-substitute a model, effort, role, or panel arm to make the screen pass.
-A Codex-first screen cannot establish cross-harness capability. Each other
-route needs its own actual destination screen and independent oracle pass.
+Failure means a nonzero exit or an absent receipt on stdout.
+The resolver rechecks retained evidence with the trusted current oracle and
+requires exact receipt equality, the current oracle hash, the full five-key
+binding, and suite `pstack-resume-runner-v2`. A forged receipt cannot bypass a
+gap report. Retain all raw evidence. Missing runtime facts keep the destination
+ineligible even when the runner completes successfully.

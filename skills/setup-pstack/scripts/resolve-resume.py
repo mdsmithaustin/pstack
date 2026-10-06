@@ -61,10 +61,6 @@ def candidate(harness: str, role: str, arm: int, layers: list, context: dict, or
             raise ValueError("destination identity is not concrete")
         if context.get("available") is not True or not route or not version:
             raise ValueError("destination availability, route or version is unobserved")
-        if route == "codex-cli":
-            installed = subprocess.run(["codex", "--version"], capture_output=True, text=True, timeout=10)
-            if harness != "codex" or installed.returncode or installed.stdout.strip() != f"codex-cli {version}":
-                raise ValueError("current destination CLI version differs or is unavailable")
         if oracle is None:
             raise ValueError("current external oracle is required")
         run = Path(context["eval_run"])
@@ -85,7 +81,7 @@ def candidate(harness: str, role: str, arm: int, layers: list, context: dict, or
                    "permission_context": context["permission_context"]}
         if receipt["binding"] != binding:
             raise ValueError("eval binding does not match exact current resolution or route context")
-        if receipt["suite"] != "pstack-resume-v1":
+        if receipt["suite"] != "pstack-resume-runner-v2":
             raise ValueError("unsupported eval suite")
         return DestinationCandidate(harness, resolution, route, version, receipt, True, None)
     except (OSError, ValueError, KeyError, TypeError, LookupError, subprocess.TimeoutExpired) as error:

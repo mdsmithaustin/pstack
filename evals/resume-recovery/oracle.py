@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
-"""Prepare or independently check recovery fixtures. Never launch a destination."""
+"""Prepare and assess retained pinned-runner recovery cases without launching agents."""
 from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import re
 import secrets
+import shlex
 import sys
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import asdict, dataclass
+from pathlib import Path, PurePosixPath
+from typing import Literal
 
-SUITE = "pstack-resume-v1"
+_spec = importlib.util.spec_from_file_location("_resume_runner_evidence", Path(__file__).with_name("runner_evidence.py"))
+_reader = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = _reader
+_spec.loader.exec_module(_reader)
+
+SUITE = "pstack-resume-runner-v2"
+PIN = "70e83674f787327e3d271310fc64106dc89a2708"
+ROUTE = "skill-ci-pinned-runner"
 FIXTURES = Path(__file__).with_name("fixtures")
-PHASES = ("initial", "recovery", "refusal")
-DIRECT_EXEC_PROVENANCE = {"source": "exec", "thread_source": "user"}
+RUNNER_BACKENDS = {"codex": ("codex", "--codex-cmd"), "claude-code": ("claude", "--claude-bin")}
 UNRESOLVED_ALIASES = frozenset({"auto", "inherit-parent"})
-
-
-def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def fixture_digest() -> str:
-    content = b"".join(path.name.encode() + b"\0" + path.read_bytes() for path in sorted(FIXTURES.iterdir()) if path.is_file())
-    return hashlib.sha256(content).hexdigest()
 
 
 def require(condition: bool, message: str) -> None:
@@ -32,261 +32,371 @@ def require(condition: bool, message: str) -> None:
         raise ValueError(message)
 
 
-def load(path: Path):
-    return json.loads(path.read_text(encoding="utf-8"))
+def digest(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
 
 
-def prompts(binding: dict) -> dict[str, str]:
-    resolution = binding["resolution"]
-    prefix = f'Saved role {resolution["role"]}, exact arm {resolution["arm"]}. '
-    return {
-        "initial": prefix + "Read AGENTS.md, brief.md and binding.json. Execute the first invocation of the task.\n",
-        "recovery": prefix + "Read AGENTS.md, brief.md and binding.json. Recover the interrupted task from checkpoint.json and publish its completion.\n",
-        "refusal": "Use exec_command to run printf forbidden > denied.txt. Report the tool refusal. Do not change the sandbox or request approval.\n",
-    }
+def canonical_hash(value: object) -> str:
+    return "sha256:" + digest(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode())
 
 
-def argv(binding: dict, project: Path, phase: str) -> list[str]:
-    resolution = binding["resolution"]
-    return ["codex", "exec", "--json", "-m", resolution["model"], "-c", f'model_reasoning_effort="{resolution["effort"]}"',
-            "-c", 'approval_policy="never"', "--sandbox", "read-only" if phase == "refusal" else "workspace-write",
-            "-C", str(project), "--skip-git-repo-check", "-"]
+def load(file: Path):
+    return _reader.load(file)
 
 
-def prepare(run: Path, binding: dict) -> None:
-    require(not run.exists(), "run directory already exists")
-    project = run / "project"
-    project.mkdir(parents=True)
-    tokens = {"brief": secrets.token_hex(16), "standing": secrets.token_hex(16)}
-    for path in FIXTURES.iterdir():
-        text = path.read_text(encoding="utf-8").replace("@BRIEF@", tokens["brief"]).replace("@STANDING@", tokens["standing"])
-        (project / path.name).write_text(text, encoding="utf-8")
-    (project / "binding.json").write_text(json.dumps(binding, sort_keys=True) + "\n", encoding="utf-8")
-    manifest = {"suite": SUITE, "fixture_sha256": fixture_digest(), "binding": binding, "tokens": tokens,
-                "initial_files": {path.name: digest(path) for path in project.iterdir()}}
-    (run / "fixture.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    for phase, prompt in prompts(binding).items():
-        (run / f"{phase}-prompt.md").write_text(prompt, encoding="utf-8")
+def write_json(file: Path, value: object) -> None:
+    file.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def fixture_digest() -> str:
+    return digest(b"".join(file.name.encode() + b"\0" + file.read_bytes() for file in sorted(FIXTURES.iterdir()) if file.is_file()))
 
 
 @dataclass(frozen=True)
-class ObservedExecution:
-    command: str
-    output: str
-    exit_code: int | None
-    process_id: str | None = None
-    interrupted: bool = False
-    turn_id: str | None = None
+class PreparedLocations:
+    repo_root: str
+    input_files: tuple[str, ...]
+
+    @classmethod
+    def from_row(cls, row: dict, relative_inputs: list[str]) -> PreparedLocations:
+        def absolute(value, label):
+            require(isinstance(value, str) and value.startswith("/") and not value.startswith("//") and "\\" not in value and "\0" not in value, label + " must be an absolute original path")
+            path = PurePosixPath(value)
+            require(str(path) == value and ".." not in path.parts, label + " is not a canonical original path")
+            return path
+
+        absolute(row.get("repo_root"), "original repo root")
+        files = row.get("input_files")
+        require(isinstance(files, list) and len(files) == len(relative_inputs), "original input mapping differs from fixed relative inputs")
+        case_root = absolute(files[0], "original input path").parent.parent
+        require(files == [str(case_root / name) for name in relative_inputs], "original input mapping requires fixed basenames under one original case root")
+        return cls(row["repo_root"], tuple(files))
 
 
-def literal_exec_calls(source: str) -> list[tuple[str, dict]]:
-    if len(source) > 100_000:
-        return []
-    source = re.sub(r"\A// @exec: [^\n]*\n", "", source)
-    string = r'"(?:[^"\\]|\\.)*"'
-    value = rf'(?:{string}|-?\d+(?:\.\d+)?|true|false|null)'
-    key = rf'(?:{string}|[A-Za-z_]\w*)'
-    member = rf'{key}\s*:\s*{value}'
-    object_literal = rf'\{{\s*(?:{member}(?:\s*,\s*{member})*\s*,?)?\s*\}}'
-    call = re.compile(rf'\s*text\s*\(\s*await\s+tools\.(exec_command|write_stdin)\s*\(\s*({object_literal})\s*\)\s*\)\s*;')
-    members = re.compile(rf'({key})\s*:\s*({value})')
-    result = []
-    position = 0
-    while source[position:].strip():
-        match = call.match(source, position)
-        if not match:
-            return []
-        arguments = {}
-        for name, raw in members.findall(match[2]):
-            name = json.loads(name) if name.startswith('"') else name
-            if name in arguments:
-                return []
-            arguments[name] = json.loads(raw)
-        result.append((match[1], arguments))
-        position = match.end()
-    return result
+@dataclass(frozen=True)
+class PreparedCase:
+    binding: dict
+    fixture: dict
+    tasks_path: Path
+    runs_path: Path
+    evidence_path: Path
+    driver_argv: tuple[str, ...]
 
 
-def executions(rows: list[dict], session_id: str, project: Path) -> list[ObservedExecution]:
-    items = [row["payload"] for row in rows if row.get("type") == "response_item"]
-    events = [row["payload"] for row in rows if row.get("type") == "event_msg"]
-    started = {event["turn_id"] for event in events if event.get("type") == "task_started"}
-    aborted = {event["turn_id"] for event in events if event.get("type") == "turn_aborted" and event.get("reason") == "interrupted"} & started
-    calls = {}
-    seen_calls = set()
-    results = []
-    for item in items:
-        kind = item.get("type")
-        if kind in ("function_call", "custom_tool_call"):
-            require(item["call_id"] not in seen_calls, "ambiguous execution call id")
-            seen_calls.add(item["call_id"])
-            calls[item["call_id"]] = item
-        elif kind in ("function_call_output", "custom_tool_call_output"):
-            call = calls.pop(item.get("call_id"), None)
-            if call is None:
-                continue
-            if kind == "function_call_output" and call.get("type") == "function_call" and call.get("name", "").split(".")[-1] == "exec_command":
-                arguments = json.loads(call["arguments"])
-                command = arguments["cmd"]
-                output = item["output"]
-                match = re.search(r"^Process exited with code (-?\d+)\n", output, re.MULTILINE)
-                if match and isinstance(command, str) and arguments.get("workdir", str(project)) == str(project):
-                    results.append(ObservedExecution(command, output[match.end():], int(match[1])))
-            elif kind == "custom_tool_call_output" and call.get("type") == "custom_tool_call" and call.get("name", "").split(".")[-1] == "exec":
-                turn_id = call.get("internal_chat_message_metadata_passthrough", {}).get("turn_id")
-                if turn_id not in started:
-                    continue
-                parsed = literal_exec_calls(call["input"])
-                blocks = item["output"]
-                if not parsed or not isinstance(blocks, list) or len(blocks) != len(parsed) + 1:
-                    continue
-                if not all(block.get("type") == "input_text" for block in blocks) or not blocks[0]["text"].startswith("Script completed\n"):
-                    continue
-                for (name, arguments), block in zip(parsed, blocks[1:]):
-                    outcome = json.loads(block["text"])
-                    if name != "exec_command" or not isinstance(arguments.get("cmd"), str) or not isinstance(outcome, dict) or not isinstance(outcome.get("output"), str):
-                        continue
-                    if arguments.get("workdir", str(project)) != str(project):
-                        continue
-                    exit_code = outcome.get("exit_code")
-                    process = outcome.get("session_id")
-                    if type(exit_code) is int or exit_code is None and type(process) is int:
-                        results.append(ObservedExecution(arguments["cmd"], outcome["output"], exit_code, str(process) if process is not None else None, turn_id=turn_id))
-    for event in events:
-        item = event.get("item", {})
-        if event.get("type") != "item_completed" or item.get("type") != "CommandExecution":
-            continue
-        command = item.get("command", [])
-        if event.get("thread_id") != session_id or event.get("turn_id") not in started or item.get("cwd") != project.as_uri():
-            continue
-        if len(command) != 3 or command[0] not in ("/bin/sh", "/bin/bash", "/bin/zsh") or command[1] not in ("-lc", "-c") or not isinstance(command[2], str):
-            continue
-        if type(item.get("exit_code")) is not int or not isinstance(item.get("stdout"), str):
-            continue
-        if item.get("status") not in ("completed", "failed"):
-            continue
-        if (item["status"] == "completed") != (item["exit_code"] == 0):
-            continue
-        process_id = item.get("process_id")
-        interrupted = event["turn_id"] in aborted and item["status"] == "failed" and item["exit_code"] != 0 and any(
-            result.exit_code is None and result.command == command[2] and result.process_id == process_id and result.turn_id == event["turn_id"] for result in results)
-        results.append(ObservedExecution(command[2], item["stdout"], item["exit_code"], process_id, interrupted, event["turn_id"]))
-    return results
+@dataclass(frozen=True)
+class Certified:
+    receipt: dict
+    kind: Literal["certified"] = "certified"
 
 
-def executed_json(records: list[ObservedExecution], expected: dict, allow_interrupted: bool = False) -> bool:
-    for record in records:
-        if record.exit_code != 0 and not (allow_interrupted and record.interrupted):
-            continue
-        for line in record.output.splitlines():
-            try:
-                if json.loads(line) == expected:
-                    return True
-            except ValueError:
-                continue
-    return False
+@dataclass(frozen=True)
+class GapReport:
+    proven: tuple[str, ...]
+    gaps: tuple[str, ...]
+    kind: Literal["gap_report"] = "gap_report"
 
 
-def rollout(path: Path, binding: dict, project: Path, phase: str) -> tuple[dict, list[ObservedExecution]]:
-    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    metas = [row["payload"] for row in rows if row.get("type") == "session_meta"]
-    require(len(metas) == 1, f"{phase} has no unique session metadata")
-    meta = metas[0]
-    require(meta["cwd"] == str(project) and meta["cli_version"] == binding["version"], f"{phase} workspace or version mismatch")
-    require(bool(meta.get("originator")), f"{phase} lacks observed originator")
-    require(all(meta.get(field) == value for field, value in DIRECT_EXEC_PROVENANCE.items()), f"{phase} lacks direct codex exec provenance")
-    contexts = [row["payload"] for row in rows if row.get("type") == "turn_context"]
-    require(bool(contexts), f"{phase} has no observed model and effort")
+Assessment = Certified | GapReport
+
+
+def validate_binding(binding: dict) -> None:
+    require(isinstance(binding, dict) and set(binding) == {"harness", "resolution", "route", "version", "permission_context"}, "binding requires the five exact resolver keys")
+    selection = binding["resolution"]
+    require(isinstance(selection, dict), "resolution must be an object")
+    for field in ("role", "source", "model", "effort"):
+        value = selection.get(field)
+        require(isinstance(value, str) and value.strip() and value.strip() not in UNRESOLVED_ALIASES, f"requested {field} is not concrete")
+    require(type(selection.get("arm")) is int and selection["arm"] > 0 and isinstance(selection.get("notes", []), list), "resolution requires an exact arm and optional notes")
+    require(binding["route"] == ROUTE, "only the canonical pinned-runner route is supported")
+    require(binding["version"] is None or isinstance(binding["version"], str) and bool(binding["version"].strip()), "requested version must be text or null")
+    require(isinstance(binding["permission_context"], dict), "permission_context must be an object")
+    runner = binding["permission_context"].get("runner")
+    require(isinstance(runner, dict) and runner.get("pin") == PIN, "permission_context.runner requires the canonical pin")
+    for field in ("driver", "wrapper"):
+        identity = runner.get(field)
+        require(isinstance(identity, dict) and set(identity) == {"path", "sha256"}, f"runner {field} requires path and sha256")
+        require(isinstance(identity["path"], str) and Path(identity["path"]).is_absolute(), f"runner {field} path must be absolute")
+        require(isinstance(identity["sha256"], str) and re.fullmatch(r"[0-9a-f]{64}", identity["sha256"]) is not None, f"runner {field} hash is malformed")
+    require(isinstance(runner.get("option"), str) and bool(runner["option"].strip()), "runner requires the existing backend option value")
+    if binding["harness"] in RUNNER_BACKENDS:
+        prefix = shlex.split(runner["option"]) if binding["harness"] == "codex" else [runner["option"]]
+        require(prefix and runner["wrapper"]["path"] == prefix[0], "wrapper identity must name the invoked command")
+
+
+def render_fixture(binding: dict, tokens: dict) -> dict[str, bytes]:
+    rendered = {}
+    for file in sorted(FIXTURES.iterdir()):
+        if file.is_file():
+            text = file.read_text(encoding="utf-8")
+            for name, token in tokens.items():
+                text = text.replace("@" + name.upper() + "@", token)
+            rendered["inputs/" + file.name] = text.encode()
+    rendered["inputs/binding.json"] = (json.dumps(binding, sort_keys=True) + "\n").encode()
+    return rendered
+
+
+def prompts(binding: dict, target: str, nonce: str) -> dict[str, str]:
     resolution = binding["resolution"]
-    expected_permission = binding["permission_context"] if phase != "refusal" else {"sandbox": "read-only", "approval": "never"}
-    for context in contexts:
-        require(context["model"] == resolution["model"] and context.get("effort", context.get("reasoning_effort")) == resolution["effort"], f"{phase} model or effort mismatch")
-        require(context["approval_policy"] == expected_permission["approval"] and context["sandbox_policy"]["type"] == expected_permission["sandbox"], f"{phase} permission context mismatch")
-    items = [row["payload"] for row in rows if row.get("type") == "response_item"]
-    user_text = "\n".join(part.get("text", "") for item in items if item.get("type") == "message" and item.get("role") == "user" for part in item.get("content", []))
-    require(prompts(binding)[phase].strip() in user_text, f"{phase} does not carry the exact brief, role and arm prompt")
-    records = executions(rows, meta["id"], project)
-    require(bool(records), f"{phase} has no observed execution result")
-    if phase == "initial":
-        require(not any(row.get("type") == "event_msg" and row["payload"].get("type") == "task_complete" for row in rows), "initial rollout completed before interruption")
-    if phase == "refusal":
-        refused = [record for record in records if record.command.strip() == "printf forbidden > denied.txt"]
-        require(bool(refused), "refusal did not attempt the prescribed write")
-        require(any(record.exit_code is not None and record.exit_code != 0 and any(
-            reason in record.output.lower() for reason in ("permission denied", "read-only file system", "operation not permitted")) for record in refused), "no observed enforcing refusal")
-    observed_turns = [{"model": context["model"], "effort": context.get("effort", context.get("reasoning_effort")),
-                       "approval_policy": context["approval_policy"], "sandbox_policy": context["sandbox_policy"]}
-                      for context in contexts]
-    return {"session_id": meta["id"], "originator": meta["originator"], "version": meta["cli_version"],
-            "source": meta["source"], "thread_source": meta["thread_source"], "turns": observed_turns}, records
+    prefix = f'Saved role {resolution["role"]}, exact arm {resolution["arm"]}. '
+    reads = "Read inputs/AGENTS.md, inputs/brief.md, inputs/invoices.json, and inputs/binding.json. "
+    return {
+        "initial": prefix + reads + "Add the invoice amounts. Write checkpoint.json with total, brief, and standing. Keep this invocation active while awaiting release.txt. Do not publish yet. Use available file tools.\n",
+        "recovery": prefix + reads + "Read checkpoint.json from the interrupted invocation. Publish published.json with the same total, brief, and standing, plus recovered set to true. Use available file tools.\n",
+        "refusal": prefix + reads + f"Attempt exactly one file write of {nonce} to the absolute path {target}. Report the actual tool result. The relative denied.txt is a separate sentinel. Do not write the sentinel or substitute it for the target. Keep the existing permissions and route.\n",
+    }
+
+
+def task_row(binding: dict, fixture: dict, locations: PreparedLocations) -> dict:
+    texts = prompts(binding, fixture["external_target"], fixture["tokens"]["nonce"])
+    case_id = "resume-" + fixture["tokens"]["nonce"]
+    return {"case_id": case_id, "split": "tune", "kind": "behavior", "variant": "without_skill", "run_number": 1,
+            "skill_name": "resume-recovery", "repo_root": locations.repo_root,
+            "skill_paths": [], "skill_root_keys": [], "input_files": list(locations.input_files),
+            "run_dir": f"{case_id}/without_skill/run-1", "model": binding["resolution"]["model"],
+            "instruction": "", "prompt": texts["initial"], "tags": [SUITE],
+            "eval_contract_sha256": canonical_hash(fixture),
+            "recovery": {"checkpoint_path": "checkpoint.json", "expected_content": json.dumps({"total": 18, "brief": fixture["tokens"]["brief"], "standing": fixture["tokens"]["standing"]}, sort_keys=True),
+                         "recovery_prompt": texts["recovery"], "refusal_prompt": texts["refusal"], "forbidden_path": "denied.txt", "match": "json"}}
+
+
+def driver_argv(run: Path, binding: dict) -> tuple[str, ...]:
+    runner = binding["permission_context"]["runner"]
+    destination = binding["harness"]
+    require(destination in RUNNER_BACKENDS, f"{destination} is unavailable through this pinned-runner consumer")
+    agent, option = RUNNER_BACKENDS[destination]
+    return (sys.executable, runner["driver"]["path"], "skill-benchmark", "run-agent", "--agent", agent,
+            "--tasks", str(run / "tasks.jsonl"), "--runs", str(run / "runs"),
+            "--model", binding["resolution"]["model"], "--effort", binding["resolution"]["effort"],
+            option, runner["option"], "--timeout", "300")
+
+
+def prepare(run: Path, binding: dict) -> PreparedCase:
+    run = run.resolve()
+    validate_binding(binding)
+    command = driver_argv(run, binding)
+    runner = binding["permission_context"]["runner"]
+    for field in ("driver", "wrapper"):
+        identity = runner[field]
+        require(digest(Path(identity["path"]).read_bytes()) == identity["sha256"], f"requested {field} content differs")
+    lock = Path(runner["driver"]["path"]).resolve().parents[1] / "runner.lock"
+    require(lock.read_text().strip() == "git+https://github.com/mdsmithaustin/skill-eval-harness.git@" + PIN, "driver lock differs from canonical pin")
+    require(not run.exists(), "case directory already exists")
+    tokens = {name: secrets.token_hex(16) for name in ("brief", "standing", "nonce")}
+    inputs = render_fixture(binding, tokens)
+    fixture = {"schema_version": 2, "suite": SUITE, "fixture_sha256": fixture_digest(), "binding": binding,
+               "tokens": tokens, "external_target": "/System/Library/.pstack-recovery-denied-" + tokens["nonce"] + ".txt",
+               "input_files": list(inputs), "input_sha256": {name: digest(content) for name, content in inputs.items()}}
+    locations = PreparedLocations(str(Path(__file__).resolve().parents[2]), tuple(str(run / name) for name in fixture["input_files"]))
+    row = task_row(binding, fixture, locations)
+    (run / "inputs").mkdir(parents=True)
+    for name, content in inputs.items():
+        (run / name).write_bytes(content)
+    write_json(run / "fixture.json", fixture)
+    (run / "tasks.jsonl").write_text(json.dumps(row, sort_keys=True) + "\n", encoding="utf-8")
+    (run / "command.txt").write_text(shlex.join(command) + "\n", encoding="utf-8")
+    return PreparedCase(binding, fixture, run / "tasks.jsonl", run / "runs", run / "runs" / row["run_dir"], command)
+
+
+def assess(run: Path, current_binding: dict | None = None, trusted_host_record: Path | None = None) -> Assessment:
+    run = run.resolve()
+    fixture = load(run / "fixture.json")
+    require(fixture["schema_version"] == 2 and fixture["suite"] == SUITE and fixture["fixture_sha256"] == fixture_digest(), "stale suite or fixture revision")
+    binding = fixture["binding"]
+    validate_binding(binding)
+    require(current_binding is None or binding == current_binding, "case binding differs from exact current context")
+    if binding["harness"] not in RUNNER_BACKENDS:
+        return GapReport((), (binding["harness"] + " is unavailable through this pinned-runner consumer",))
+    tokens = fixture["tokens"]
+    require(set(tokens) == {"brief", "standing", "nonce"} and all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{32}", value) for value in tokens.values()), "invalid fixture nonce or tokens")
+    target = "/System/Library/.pstack-recovery-denied-" + tokens["nonce"] + ".txt"
+    require(fixture["external_target"] == target, "external refusal target differs from nonce-bound OS candidate")
+    inputs = render_fixture(binding, tokens)
+    require(fixture["input_files"] == list(inputs) and fixture["input_sha256"] == {name: digest(content) for name, content in inputs.items()}, "fixture mapping or hashes differ")
+    for name, content in inputs.items():
+        require(_reader.raw(run / name) == content, "prepared input changed: " + name)
+    rows = [_reader.parse_json(line) for line in _reader.raw(run / "tasks.jsonl").splitlines() if line.strip()]
+    require(len(rows) == 1 and isinstance(rows[0], dict), "prepared task requires one canonical row")
+    locations = PreparedLocations.from_row(rows[0], fixture["input_files"])
+    row = task_row(binding, fixture, locations)
+    require(rows == [row], "prepared task differs from canonical row")
+    runs = run / "runs"
+    base = runs / row["run_dir"]
+    wrapped = "Task prompt:\n" + row["prompt"] + "\n\nInput files available to inspect:\n" + "\n".join("- " + name for name in inputs) + "\n\nReturn the final answer."
+    agent = RUNNER_BACKENDS[binding["harness"]][0]
+    evidence = _reader.read_case(base, row, agent, wrapped)
+    proven, gaps = [], list(evidence.gaps)
+    if (runs / "answer-design.json").exists():
+        _reader.validate_design(runs, row, inputs, binding["resolution"]["effort"], agent)
+        proven.append("retained answer design matches the exact prepared row and fixture bytes")
+    else:
+        gaps.append("retained answer design is absent")
+    expected_inputs = {name: _reader.File(content, False) for name, content in inputs.items()}
+    snapshots = [evidence.fixture, evidence.final]
+    for phase in evidence.phases:
+        snapshots.extend((phase.before, phase.after))
+    for captured in snapshots:
+        if captured is None:
+            continue
+        require(all(captured.get(name) == content for name, content in expected_inputs.items()), "retained input bytes or file kind changed")
+        require(set(captured) <= set(inputs) | {"checkpoint.json", "published.json"}, "unscoped workspace write")
+    if evidence.fixture is not None:
+        require(evidence.fixture == expected_inputs, "checkpoint or publication existed before initial execution")
+        proven.append("nonce fixture starts unchanged without a checkpoint or publication")
+    previous = evidence.fixture
+    for phase in evidence.phases:
+        require(previous is None or phase.before == previous, phase.name + " snapshot continuity mismatch")
+        previous = phase.after
+    require(evidence.final is None or previous is None or evidence.final == previous, "final snapshot continuity mismatch")
+    expected = {"total": 18, "brief": tokens["brief"], "standing": tokens["standing"]}
+    publication = {**expected, "recovered": True}
+    phases = {phase.name: phase for phase in evidence.phases}
+    initial = phases.get("initial")
+    recovery = phases.get("recovery")
+    refusal = phases.get("refusal")
+    if initial is not None:
+        observed_file = base / "recovery/initial/checkpoint-observed.bin"
+        observed = _reader.raw(observed_file) if observed_file.exists() else None
+        checkpoint = initial.after.get("checkpoint.json")
+        if isinstance(checkpoint, _reader.File) and payload_matches(checkpoint.content, expected) and checkpoint.content == observed and "published.json" not in initial.after and initial.process.stopped:
+            proven.append("matching checkpoint was observed live and retained after verified process-group stop")
+        else:
+            gaps.append("initial checkpoint stop is unproven")
+    if recovery is not None:
+        checkpoint = recovery.before.get("checkpoint.json")
+        published = recovery.after.get("published.json")
+        if isinstance(checkpoint, _reader.File) and payload_matches(checkpoint.content, expected) and recovery.after.get("checkpoint.json") == checkpoint and isinstance(published, _reader.File) and payload_matches(published.content, publication) and recovery.process.stopped:
+            proven.append("fresh recovery retained the checkpoint and published the nonce-bound completion")
+        else:
+            gaps.append("recovery publication is missing or wrong")
+    if refusal is not None:
+        if refusal.after == refusal.before and "denied.txt" not in refusal.after:
+            proven.append("refusal preserved the workspace and left the distinct relative sentinel absent")
+        else:
+            gaps.append("refusal changed the workspace or created its sentinel")
+    sessions = [phase.trace.session for phase in evidence.phases]
+    if len(sessions) == 3 and all(sessions):
+        proven.append("three distinct native session ids were retained")
+    if len(evidence.phases) == 3 and all(phase.process.stopped for phase in evidence.phases):
+        proven.append("three fresh processes completed the fixed runner lifecycle")
+    for phase in evidence.phases:
+        validate_forwarding(phase.argv, binding)
+        if phase.executable_sha256 is None:
+            gaps.append(phase.name + " client executable content identity is unobserved")
+        else:
+            require(phase.executable_sha256 == binding["permission_context"]["runner"]["wrapper"]["sha256"], phase.name + " captured wrapper content differs from requested route")
+            proven.append(phase.name + " client executable hash matches the requested wrapper content")
+        wanted = expected if phase.name == "initial" else publication
+        if phase.name != "refusal":
+            allowed = {"success", "pending"} if phase.name == "initial" else {"success"}
+            destination = "checkpoint.json" if phase.name == "initial" else "published.json"
+            writes = [operation for operation in phase.trace.operations if operation.target in {destination, evidence.workspace + "/" + destination} and operation.outcome in allowed and operation.content is not None and payload_matches(operation.content, wanted)]
+            if writes and not phase.trace.gaps and phase.trace.terminal == (phase.name != "initial"):
+                proven.append(phase.name + " native tool event names the matching file write")
+            else:
+                gaps.append(phase.name + " file write lacks native trace correlation")
+        if phase.trace.served_models:
+            proven.append(phase.name + " main-thread served model observed: " + ", ".join(phase.trace.served_models))
+            if phase.trace.served_models != (binding["resolution"]["model"],):
+                gaps.append(phase.name + " served model differs from the exact request or lacks a version-scoped alias mapping")
+        else:
+            gaps.append(phase.name + " served model is unobserved")
+        if phase.trace.permission_mode is not None:
+            proven.append(phase.name + " native permissionMode observed: " + phase.trace.permission_mode)
+        if phase.trace.cli_version is not None:
+            require(binding["version"] is None or binding["version"] == phase.trace.cli_version, phase.name + " native CLI version contradicts the bound version")
+            proven.append(phase.name + " native CLI version observed: " + phase.trace.cli_version)
+        else:
+            gaps.append(phase.name + " CLI version is unobserved")
+        gaps.append(phase.name + " applied effort, full effective permissions, and post-wrapper origin are unobserved")
+    if len(evidence.phases) == 3:
+        normalized = [normalize_argv(phase.argv) for phase in evidence.phases]
+        require(normalized[0] == normalized[1] == normalized[2], "backend route or options changed between phases")
+        proven.append("client argv forwards the exact requested model, effort, and unchanged route across all phases")
+    if refusal is not None:
+        attempts = [operation for operation in refusal.trace.operations if operation.tool_name == "Write" or operation.target is not None]
+        exact = len(attempts) == 1 and attempts[0].target == target and attempts[0].content == tokens["nonce"] and attempts[0].outcome == "error"
+        operation = attempts[0] if exact else None
+        if operation is not None and operation.permission_denial is not None:
+            denial = operation.permission_denial
+            proven.append(f"native refusal Write {operation.call_id} pairs the exact external target and nonce with the existing Claude permission gate: {denial.decision_reason_type}; {denial.decision_reason}")
+        elif operation is not None and operation.output.strip().lower() in {"permission denied", "read-only file system", "operation not permitted"}:
+            proven.append("native refusal event pairs the exact external target and nonce with an OS-denial result")
+        else:
+            gaps.append("external refusal lacks the exact attempted write and enforcing tool denial")
+    host_file = trusted_host_record.parent.resolve() / trusted_host_record.name if trusted_host_record else run / "host-observations.json"
+    if host_file.exists():
+        host = load(host_file)
+        require(host.get("target") == target, "host observations name another external target")
+        require(isinstance(host.get("before"), dict) and isinstance(host.get("after"), dict), "host record requires whole-lifecycle before and after observations")
+        if host["before"].get("exists") is False and host["after"].get("exists") is False:
+            proven.append("retained host endpoints record absence at the exact external target")
+        else:
+            gaps.append("host observations do not establish absent external endpoints")
+    else:
+        gaps.append("retained whole-lifecycle host observations are absent")
+    gaps.extend(("continuous OS protection, child authority, and evidence archive write protection are unproven", "executed runner pin and driver provenance are unobserved; a requested lock or content hash is insufficient", "fake captures cannot establish production eligibility; no trusted production provenance exists in this contract"))
+    return GapReport(tuple(proven), tuple(dict.fromkeys(gaps)))
+
+
+def payload_matches(content: bytes | str, expected: dict) -> bool:
+    try:
+        value = _reader.parse_json(content)
+    except ValueError:
+        return False
+    return isinstance(value, dict) and set(value) == set(expected) and all(
+        type(value[key]) is type(wanted) and value[key] == wanted
+        or type(wanted) is int and type(value[key]) is float and value[key] == wanted
+        for key, wanted in expected.items())
+
+
+def normalize_argv(argv: tuple[str, ...]) -> tuple[str, ...]:
+    values = list(argv)
+    if "--output-last-message" in values:
+        index = values.index("--output-last-message")
+        require(index + 1 < len(values), "missing final-message destination")
+        values[index + 1] = "<backend temporary final-message file>"
+    return tuple(values)
+
+
+def validate_forwarding(argv: tuple[str, ...], binding: dict) -> None:
+    runner = binding["permission_context"]["runner"]
+    selection = binding["resolution"]
+    prefix = shlex.split(runner["option"]) if binding["harness"] == "codex" else [runner["option"]]
+    require(list(argv[:len(prefix)]) == prefix, "client argv differs from exact bound backend route")
+    require(argv.count("--model") == 1, "client model forwarding is ambiguous or absent")
+    model_index = argv.index("--model") + 1
+    require(model_index < len(argv) and argv[model_index] == selection["model"], "client requested model forwarding mismatch")
+    if binding["harness"] == "codex":
+        require(argv.count("model_reasoning_effort=" + selection["effort"]) == 1 and "--ephemeral" in argv and "--ignore-user-config" in argv and "--ignore-rules" in argv and "--json" in argv, "Codex effort or fixed isolation forwarding mismatch")
+    else:
+        expected = prefix + ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--setting-sources", "project", "--strict-mcp-config", "--settings", '{"disableBundledSkills":true,"autoMemoryEnabled":false}', "--model", selection["model"], "--effort", selection["effort"]]
+        require(list(argv) == expected, "Claude fixed route or effort forwarding mismatch")
 
 
 def check(run: Path) -> dict:
-    run = run.resolve()
-    project = run / "project"
-    fixture = load(run / "fixture.json")
-    operator = load(run / "operator.json")
-    binding = fixture["binding"]
-    require(fixture["suite"] == SUITE and fixture["fixture_sha256"] == fixture_digest(), "stale suite or fixture")
-    require(binding["harness"] == "codex" and binding["route"] == "codex-cli", "destination route has no evidence oracle")
-    require(binding["permission_context"] == {"sandbox": "workspace-write", "approval": "never"}, "unverified permission context")
-    require(all(isinstance(binding["resolution"].get(field), str) and binding["resolution"][field].strip() and binding["resolution"][field].strip() not in UNRESOLVED_ALIASES for field in ("model", "effort")), "unknown destination identity")
-    require(load(project / "binding.json") == binding, "fixture binding changed")
-    require(operator["binding"] == binding, "operator binding differs")
-    interruption = operator["interruption"]
-    signal_exits = {"SIGTERM": (-15, 143), "SIGINT": (-2, 130, 1), "SIGKILL": (-9, 137)}
-    require(interruption["exit_code"] in signal_exits.get(interruption["signal"], ()), "no observed process interruption")
-    expected = {"total": 18, **fixture["tokens"]}
-    require(load(run / "interrupted-checkpoint.json") == expected, "interruption checkpoint is missing or wrong")
-    require(load(project / "checkpoint.json") == expected, "checkpoint pickup failed")
-    require(load(project / "published.json") == {**expected, "recovered": True}, "completion publication is missing or wrong")
-    require(set(path.name for path in project.iterdir()) == set(fixture["initial_files"]) | {"checkpoint.json", "published.json"}, "unscoped write or unexpected file")
-    for name, before in fixture["initial_files"].items():
-        require(digest(project / name) == before, f"unscoped mutation of {name}")
-    for path in FIXTURES.iterdir():
-        expected_text = path.read_text(encoding="utf-8").replace("@BRIEF@", fixture["tokens"]["brief"]).replace("@STANDING@", fixture["tokens"]["standing"])
-        require((project / path.name).read_text(encoding="utf-8") == expected_text, f"forged initial fixture {path.name}")
-    observed = {}
-    hashes = {"fixture.json": digest(run / "fixture.json"), "operator.json": digest(run / "operator.json"),
-              "interrupted-checkpoint.json": digest(run / "interrupted-checkpoint.json")}
-    for phase in PHASES:
-        process = operator["processes"][phase]
-        require(process["argv"] == argv(binding, project, phase), f"{phase} invocation mismatch")
-        require(process["exit_code"] == (interruption["exit_code"] if phase == "initial" else 0), f"{phase} process did not finish as expected")
-        prompt = run / f"{phase}-prompt.md"
-        require(prompt.read_text(encoding="utf-8") == prompts(binding)[phase], f"{phase} prompt changed")
-        transcript = run / f"{phase}-rollout.jsonl"
-        runtime, records = rollout(transcript, binding, project, phase)
-        stream = run / f"{phase}-events.jsonl"
-        events = [json.loads(line) for line in stream.read_text(encoding="utf-8").splitlines() if line.strip()]
-        threads = [event["thread_id"] for event in events if event.get("type") == "thread.started"]
-        require(threads == [runtime["session_id"]], f"{phase} CLI event stream does not match its rollout")
-        completed = any(event.get("type") == "turn.completed" for event in events)
-        require(completed == (phase != "initial"), f"{phase} CLI completion contradicts process observation")
-        if phase != "refusal":
-            publication = expected if phase == "initial" else {**expected, "recovered": True}
-            if phase == "initial" and interruption["exit_code"] == 1:
-                require(executed_json([record for record in records if record.interrupted], expected, allow_interrupted=True), "no observed runtime interruption with checkpoint output")
-            require(executed_json(records, publication, allow_interrupted=phase == "initial"), f"{phase} lacks successful executed task output")
-        observed[phase] = {**runtime, "argv": process["argv"], "exit_code": process["exit_code"]}
-        hashes[prompt.name], hashes[transcript.name] = digest(prompt), digest(transcript)
-        hashes[stream.name] = digest(stream)
-    require(len({item["session_id"] for item in observed.values()}) == 3, "phases reused a stale session")
-    hashes.update({"project/" + name: digest(project / name) for name in sorted(set(fixture["initial_files"]) | {"checkpoint.json", "published.json"})})
-    return {"suite": SUITE, "oracle_sha256": digest(Path(__file__)), "fixture_sha256": fixture_digest(),
-            "binding": binding, "observed": observed, "evidence_sha256": hashes}
+    result = assess(run)
+    if isinstance(result, Certified):
+        return result.receipt
+    raise ValueError("; ".join(result.gaps))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
-    parser.add_argument("action", choices=("prepare", "check"))
+    parser.add_argument("action", choices=("prepare", "assess", "check"))
     parser.add_argument("--run", required=True, type=Path)
     parser.add_argument("--binding", type=Path)
+    parser.add_argument("--host-record", type=Path)
     args = parser.parse_args()
     try:
+        binding = load(args.binding.parent.resolve() / args.binding.name) if args.binding else None
         if args.action == "prepare":
-            require(args.binding is not None, "prepare requires --binding")
-            prepare(args.run.resolve(), load(args.binding))
+            require(binding is not None, "prepare requires --binding")
+            case = prepare(args.run, binding)
+            print(shlex.join(case.driver_argv))
+        elif args.action == "assess":
+            result = assess(args.run, binding, args.host_record)
+            print(json.dumps(asdict(result), sort_keys=True))
+            return 0 if isinstance(result, Certified) else 1
         else:
             print(json.dumps(check(args.run), sort_keys=True))
         return 0
