@@ -2747,6 +2747,72 @@
     "skills/setup-pstack/SKILL.md"
    ],
    "scenario": "setup-run"
+  },
+  "opening-a-pr-gated-publish-never-bypasses": {
+   "check": "live",
+   "claim": "In a repository that gates pushes through no-mistakes, the agent publishes each branch and opens each PR with `no-mistakes axi run --intent-file <file> --no-publish-intent`, runs no `git push` except to a `refs/pstack/wip/*` snapshot ref, and runs no `gh pr create` or `gh pr edit --base`. A bare `no-mistakes axi run` that reattaches needs no flag.",
+   "harness_sensitive": false,
+   "live_case": "relay fixture with committed work, a local bare `origin`, a `no-mistakes` remote, and a stub `no-mistakes` on PATH that logs its argv; prompt `/poteto-mode open the pr. small ordered commits, evidence in the description.`; pass when the trace runs a `no-mistakes axi run` that supplies intent with `--no-publish-intent`, runs no `git push` other than to a `refs/pstack/wip/*` snapshot ref (a push inside a loop, group, `bash -c`, heredoc, `xargs`, or command substitution counts), and runs no `gh pr create` or `gh pr edit --base`.",
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ],
+   "scenario": "open-pr-gated-run"
+  },
+  "opening-a-pr-gated-restack-uses-rerun": {
+   "check": "static",
+   "claim": "In a gated repository the agent restacks or retargets a published branch with `no-mistakes rerun --base-branch <new-base>` and never rebases it by hand.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "After a terminal outcome, or once the monitor has stopped, restack or retarget with `no-mistakes rerun --base-branch <new-base>`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
+  "opening-a-pr-broken-gate-stops-and-reports": {
+   "check": "static",
+   "claim": "When `no-mistakes doctor` fails or the gate cannot run, the agent stops and reports.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "When `no-mistakes doctor` fails or the gate cannot run, stop and report."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
+  "opening-a-pr-gated-bypass-needs-the-user-word": {
+   "check": "static",
+   "claim": "In a gated repository the agent publishes around the gate only when the user said \"bypass no-mistakes\" in the current session.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "Publish around the gate only when the user said \"bypass no-mistakes\" in this session."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
+  "opening-a-pr-sandbox-commits-and-leaves-push-to-host": {
+   "check": "static",
+   "claim": "An agent in a sandbox on a gated repository commits on a feature branch, never pushes, and reports the branch, head SHA, and that a gated publish is needed.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "When your brief says the repository is gated, or the repository commits `.no-mistakes.yaml`, commit on a feature branch and never push. Report the branch, the head SHA, and that a gated publish is needed."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
   }
  },
  "units": {
@@ -8383,6 +8449,54 @@
     "port"
    ],
    "text": "The [Session pickup playbook](../../skills/poteto-mode/playbooks/session-pickup.md) reads the prior trail for completed work and decisions."
+  },
+  "6918480c3779": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-sandbox-commits-and-leaves-push-to-host",
+   "sources": [
+    "port"
+   ],
+   "text": "An agent in a Docker sandbox commits and leaves the push to the host."
+  },
+  "43e02298cf4e": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-publish-never-bypasses",
+   "sources": [
+    "port"
+   ],
+   "text": "When a repository gates pushes through [no-mistakes](https://kunchenguid.github.io/no-mistakes/), the agent publishes each branch and opens each PR through the no-mistakes pipeline, and restacks with `no-mistakes rerun` once a run ends.",
+   "also": [
+    "opening-a-pr-gated-restack-uses-rerun"
+   ]
+  },
+  "a2243b46af58": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-publish-never-bypasses",
+   "sources": [
+    "port"
+   ],
+   "text": "It pushes nothing else except work-in-progress snapshots under `refs/pstack/wip/`, or under the agent ref convention the repository names."
+  },
+  "9859e25220ba": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-broken-gate-stops-and-reports",
+   "sources": [
+    "port"
+   ],
+   "text": "When the gate is broken, it stops and reports."
+  },
+  "87bfddd41221": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-bypass-needs-the-user-word",
+   "sources": [
+    "port"
+   ],
+   "text": "It pushes around the gate only after you say \"bypass no-mistakes\" in the session."
   }
  }
 }
