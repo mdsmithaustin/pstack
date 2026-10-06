@@ -626,7 +626,8 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 CALLED_WITH = r"\s*\.toHaveBeen(?:Last|Nth)?CalledWith\("
 PAYLOAD_MATCHER = r"\s*\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
 COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + f"(?:{CALLED_WITH}|{PAYLOAD_MATCHER})")
-CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
+CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)\s*(?:[:=]\s*(?:(?:vi|jest)\.fn\(\s*)?(?:async\s*)?(?:function\s*)?\([^)]*\)\s*(?:=>\s*)?"
+                              r"|\([^)]*\)\s*(?=\{))(?:\{[^}]*?\b)?(\w+)(?:\.push\(|\s*=(?![=>]))")
 SPY_AS_WRITETEXT = re.compile(r"""clipboard["']?\s*[:,]\s*\{(?:\s*value\s*:\s*\{)?[^{}]*?\bwriteText\s*:\s*(\w+)\b(?!\s*[.(])""")
 SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;,]*\bclipboard\s*,\s*["']writeText["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
