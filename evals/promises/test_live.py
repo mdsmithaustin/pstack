@@ -38,6 +38,18 @@ class ChatWorklist(unittest.TestCase):
         self.assertEqual([i["state"] for i in live.chat_worklist("[x] one\n[ ] two\n- [~] three")],
                          ["completed", "pending", "in progress"])
 
+    def test_parenthesized_state_with_an_explanation_parses(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("1. Read source (done: inspected)\n2. Run check (done: passed)")],
+                         ["completed", "completed"])
+
+    def test_emphasized_done_and_blocked_annotations_parse(self):
+        reply = ("4. Delegate code-writing on the `feature` role. *(done: commit `3f31bec`, reviewed by me)*\n"
+                 "8. Opening a PR. *(blocked: `git remote -v` is empty)*")
+        self.assertEqual([i["state"] for i in live.chat_worklist(reply)], ["completed", "blocked"])
+
+    def test_a_mid_sentence_state_word_with_a_colon_is_not_a_state(self):
+        self.assertIsNone(live.chat_worklist("1. Mark it done: later\n2. Note the pending: queue"))
+
 
 class FixtureCommits(unittest.TestCase):
     def test_commits_ignore_the_contributors_signing_and_hook_settings(self):
