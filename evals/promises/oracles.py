@@ -1758,8 +1758,14 @@ def why_null(view):
     return failed("reply does not report the absent evidence categories as null results", *evidence)
 
 
-SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+(?:searched|consulted|checked|coverage))\**\s*(?::|$)"
-                             r"|\bsources\s+(?:consulted|searched|checked)\b")
+SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+(?:searched|consulted|checked|coverage))\**\s*(?::|$)")
+SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
+CLAUSE_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
+CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody)\b")
+
+
+def negated(low, start):
+    return bool(CLAUSE_NEGATION.search(CLAUSE_SPLIT.split(low[:start])[-1]))
 
 
 @oracle("how-why-reports-name-sources-searched")
@@ -1768,7 +1774,7 @@ def sources_named(view):
     if gate:
         return gate
     low = view.final_reply.lower()
-    section = SOURCES_SECTION.search(low)
+    section = SOURCES_SECTION.search(low) or any(not negated(low, m.start()) for m in SOURCES_LISTED.finditer(low))
     git = re.search(r"\bgit\b|commit", low)
     evidence = [f"sources section: {bool(section)}", f"git named: {bool(git)}"]
     return passed(*evidence) if section and git else failed("reply has no sources section naming what was searched", *evidence)
@@ -2644,11 +2650,7 @@ PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|p
 
 
 def picked(low):
-    for match in PICKED.finditer(low):
-        clause = re.split(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b", low[:match.start()])[-1]
-        if not re.search(r"\b(?:no|not|none|never|neither|nor|nobody)\b", clause):
-            return True
-    return False
+    return any(not negated(low, m.start()) for m in PICKED.finditer(low))
 
 
 @oracle("arena-fans-out-and-grafts")
