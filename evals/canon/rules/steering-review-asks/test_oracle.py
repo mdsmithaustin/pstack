@@ -137,6 +137,15 @@ class CopyAssertionTests(unittest.TestCase):
             "expect(copied).toBe(originalSpy);",
         ), ["constraint:C3: no added web test asserts what Copy writes"])
 
+    def test_an_identity_check_on_the_writetext_spy_itself_does_not_count(self):
+        for check in ("expect(writeText).toBe(originalSpy);", "expect(navigator.clipboard.writeText).toEqual(spy);"):
+            with self.subTest(check):
+                self.assertEqual(self.failures("const writeText = vi.fn();", check),
+                                 ["constraint:C3: no added web test asserts what Copy writes"])
+
+    def test_the_text_read_back_from_the_clipboard_counts(self):
+        self.assertEqual(self.failures("expect(await navigator.clipboard.readText()).toBe(LONG_TEXT);"), [])
+
     def test_a_clipboard_spy_call_argument_compared_to_the_prompt_counts(self):
         self.assertEqual(self.failures(
             'const copied = vi.spyOn(navigator.clipboard, "writeText");',
