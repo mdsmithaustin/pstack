@@ -628,10 +628,12 @@ COPIED_VALUE = re.compile(
     r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|" + PAYLOAD_MATCHER + ")")
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
-PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(")
+PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(|textContent\s*\)\s*\.(?:toBe|toEqual)\(")
 STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
 REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
 ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
+WRAPPED = re.compile(r"(?:expect\.stringContaining|new RegExp)\((.*)\)|`\$\{\s*([\w$.]+)\s*\}`|/([^\\/\[\](){}.*+?^$|]+)/[a-z]*")
+DEFINITION = re.compile(r"\b(?:const|let|var)\s+([\w$]+)\s*(?::[^=;\n]*)?=\s*([^;\n]*)")
 
 
 def asserts_copied_value(source):
@@ -648,10 +650,32 @@ def unquoted(value):
     return re.sub(r"\\(.)", r"\1", value[1:-1]) if re.fullmatch(STRING, value) else value
 
 
+def named(argument):
+    """The text or name an assertion argument stands for: a string's contents,
+    or what stringContaining, new RegExp, a lone ${} template, or a regex with
+    no special characters wraps."""
+    argument = " ".join(argument.split())
+    wrapped = WRAPPED.fullmatch(argument)
+    return named(next(group for group in wrapped.groups() if group is not None)) if wrapped else unquoted(argument)
+
+
+def aliases(value, definitions):
+    definition = definitions.get(value, "")
+    return {value, unquoted(definition)} if re.fullmatch(STRING, definition) else {value}
+
+
+def shows_hidden_value(present, absent, definitions):
+    """The present value is the absent one, under its own name or its string
+    literal, or a constant whose definition holds it, such as HEAD + TAIL."""
+    hidden = aliases(absent, definitions)
+    return bool(aliases(present, definitions) & hidden) or any(
+        re.search(rf"(?<![\w$]){re.escape(text)}(?![\w$])", definitions.get(present, "")) for text in hidden)
+
+
 def rendered_values(pattern, source):
-    """The first argument of each assertion pattern finds, so "the end" and
-    'the end' compare equal. A toContain on the clipboard or on a variable its
-    stub fills checks what Copy writes, not the rendered text."""
+    """What the first argument of each assertion pattern finds names. A
+    toContain on the clipboard or on a variable its stub fills checks what
+    Copy writes, not the rendered text."""
     captured = set(CAPTURED_BY_STUB.findall(source))
     values = set()
     for found in pattern.finditer(source):
@@ -659,7 +683,7 @@ def rendered_values(pattern, source):
         if "toContain" in found.group() and (re.search(r"writeText|clipboard|copyText", subject)
                                              or any(re.match(rf"\s*{re.escape(name)}\b", subject) for name in captured)):
             continue
-        values.add(unquoted(" ".join(ARGUMENT.match(source, found.end()).group().split())))
+        values.add(named(ARGUMENT.match(source, found.end()).group()))
     return values - {""}
 
 
@@ -670,10 +694,12 @@ def tests_assert_hidden_text_and_copy(added):
     the rendered text, and the Copy payload must be asserted."""
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
-    absent = rendered_values(ABSENT, source)
+    absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
+    definitions = {name: text.strip() for name, text in DEFINITION.findall(source)}
+    shown = any(shows_hidden_value(value, hidden, definitions) for value in present for hidden in absent)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
-                                        ("that hidden prompt text is present", absent & rendered_values(PRESENT, source)))
+                                        ("that hidden prompt text is present", shown))
                if not found]
     return [f"constraint:C3: no added web test asserts {what}" for what in missing]
 
