@@ -1227,37 +1227,38 @@ extractor is the awk program that `tools/test_playbook_shape.py` mirrors, and
 `PORTING.md` ("Playbook rules sit where the worklist extractor reaches them")
 says why the lead line lives there. When the line opens with a bold lead, it
 has two identities: the lead's first clause and, if prose follows the bold
-span, that prose's first clause. Punctuation, dashes, and ellipses between the
-bold span and that prose are skipped, and a part with no word character gives
-no identity, since a wordless identity would match every worklist. A line with
-no bold lead has one, its first clause. A first clause ends at the first
-`.`, `,`, `;`, `:`, `!`, `?`, or `(` that is followed by whitespace or ends the
-text, or at a spaced hyphen, en dash, or em dash, and it keeps five words at
-most. A step's identity is the bold span that opens its numbered line, kept
-whole, only when that span ends in `.` or `:` inside the `**`, as in
-`**Frame.**`. Without that mark the step is cut as a first clause, so Eval's
-steps 4 and 5 give "spawn n parallel candidates on" and "spawn one blinded
-judge on". The trailing identity is required
-because the verbatim-worklist contract (`skills/poteto-mode/SKILL.md`,
+span, that prose's first clause. Spaces and any of `.`, `,`, `;`, `:`, `!`,
+`?`, a hyphen, an en dash, an em dash, or `…` between the bold span and that
+prose are skipped, and a part with no word character gives no identity, since a
+wordless identity would match every worklist. A line with no bold lead has one,
+its first clause. A first clause ends at the first `.`, `,`, `;`, `:`, `!`,
+`?`, or `(` that is followed by whitespace or ends the text, or at a spaced
+hyphen, en dash, or em dash, and it keeps five words at most. A step's identity
+is the bold span that opens its numbered line, kept whole, only when that span
+ends in `.` or `:` inside the `**`, as in `**Frame.**`. Without that mark the
+step is cut as a first clause, so Eval's steps 4 and 5 give "spawn n parallel
+candidates on" and "spawn one blinded judge on". The trailing identity is
+required because the verbatim-worklist contract (`skills/poteto-mode/SKILL.md`,
 Playbooks) copies the opening prose, and that prose can carry a rule (Bug fix's
-delegate sentence) or a scope (Refactoring's "Distinct from Feature"). Bug fix's
-line gives "you own this task" and "delegate investigation and the fix".
+delegate sentence) or a scope (Refactoring's "Distinct from Feature"). Bug
+fix's line gives "you own this task" and "delegate investigation and the fix".
 `worklist.opening` holds the identities and whether the worklist carries all of
 them. A run that copies every step but drops the lead, or keeps the lead and
 drops the delegate sentence, fails item 0 while it still lists every step.
 
 The check is presence anywhere in the worklist text, not position. The text is
 the one `verbatim_fraction` reads, the tool-call text when the lead made any
-worklist tool call and otherwise the list-like messages. The check covers the
-first clauses of the lead line, not every sentence of the opening. A reworded
-item that keeps those clauses passes.
+worklist tool call and otherwise the messages other than the final reply that
+say worklist, todo list, or to-do list, or that name two playbook steps. The
+check covers the first clauses of the lead line, not every sentence of the
+opening. A reworded item that keeps those clauses passes.
 
 `worklist.opening` is `null`, and the run leaves the stage's denominator, when
 no playbook matched, when the matched playbook's text is not in the mounted
 tree, when the playbook has no numbered steps, as Opening a PR has none,
 when no prose precedes step 1, or when the line has no words. Index-shaped
-playbooks are the ones whose printed line starts with "Read this playbook in
-full." The playbook shape test marks them with `INDEX_SHAPED` in
+playbooks are the ones with a printed line that starts with "Read this
+playbook in full." The playbook shape test marks them with `INDEX_SHAPED` in
 `tools/test_playbook_shape.py`, and they are Orchestrate, Multi-phase-plan, and
 Opening a PR. That sentence is never an identity. Orchestrate and
 Multi-phase-plan open with a bold lead, and a test pins that no identity of any

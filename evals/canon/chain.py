@@ -1058,12 +1058,12 @@ def playbook_opening(text):
     prose follows the bold span, that prose's first clause too, because the
     verbatim-worklist contract copies the whole opening line, and the prose
     can carry a rule (Bug fix's "Delegate investigation") or a scope
-    (Refactoring's "Distinct from Feature"). Punctuation, dashes, and
-    ellipses between the bold span and that prose are skipped, and a part with
-    no word character gives no identity, because a wordless identity matches
-    every worklist. A line with no
-    bold lead gives its first clause. Each is five words at most. None when no
-    prose precedes step 1 or the line has no words."""
+    (Refactoring's "Distinct from Feature"). Spaces and any of `.`, `,`,
+    `;`, `:`, `!`, `?`, a hyphen, an en dash, an em dash, or `…` between the
+    bold span and that prose are skipped, and a part with no word character
+    gives no identity, because a wordless identity matches every worklist. A
+    line with no bold lead gives its first clause. Each is five words at most.
+    None when no prose precedes step 1 or the line has no words."""
     for line in text.splitlines():
         if re.match(r"^\d+\.\s", line):
             return None
