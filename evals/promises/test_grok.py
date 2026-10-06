@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from grade_boundary import GradeRefused
 from harnesses import grok
 
 
@@ -82,6 +83,52 @@ class CallIds(unittest.TestCase):
         parsed = grok.parse_session(self.lines("chat_history.jsonl", rows), "/w", None)
         self.assertEqual([(e["kind"], e.get("id"), e.get("ok")) for e in parsed["events"]],
                          [("tool_call", "t1", None), ("tool_call", "t2", None), ("tool_result", "t2", False), ("tool_result", "t1", True)])
+
+
+class CopySession(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-grok-copy-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+        self.session = self.tmp / "native" / "cwd" / "session"
+        self.session.mkdir(parents=True)
+        self.captured = self.tmp / "captured"
+        self.captured.mkdir()
+        self.outside = self.tmp / "outside-marker"
+        self.outside.write_bytes(b"outside marker\n")
+        self.chat = self.session / "chat_history.jsonl"
+
+    def test_source_link_is_refused_without_copying_outside_bytes(self):
+        self.chat.symlink_to(self.outside)
+        with self.assertRaises(GradeRefused):
+            grok.copy_session(self.session, self.captured)
+        self.assertEqual([p.read_bytes() for p in self.captured.rglob("*") if p.is_file()], [])
+
+    def test_destination_file_link_is_refused_without_writing_outside(self):
+        self.chat.write_bytes(b"native transcript\n")
+        (self.captured / "cwd" / "session").mkdir(parents=True)
+        (self.captured / "cwd" / "session" / self.chat.name).symlink_to(self.outside)
+        with self.assertRaises(GradeRefused):
+            grok.copy_session(self.session, self.captured)
+        self.assertEqual(self.outside.read_bytes(), b"outside marker\n")
+
+    def test_destination_directory_link_is_refused_without_creating_outside(self):
+        self.chat.write_bytes(b"native transcript\n")
+        external = self.tmp / "outside-directory"
+        external.mkdir()
+        (self.captured / "cwd").symlink_to(external, target_is_directory=True)
+        with self.assertRaises(GradeRefused):
+            grok.copy_session(self.session, self.captured)
+        self.assertEqual(list(external.iterdir()), [])
+
+    def test_session_files_and_subagent_meta_are_copied(self):
+        self.chat.write_bytes(b"native transcript\n")
+        (self.session / "subagents" / "kid").mkdir(parents=True)
+        (self.session / "subagents" / "kid" / "meta.json").write_bytes(b"{}")
+        target = self.captured / "cwd" / "session"
+        self.assertEqual(grok.copy_session(self.session, self.captured),
+                         [str(target / "chat_history.jsonl"), str(target / "subagents" / "kid" / "meta.json")])
+        self.assertEqual((target / "chat_history.jsonl").read_bytes(), b"native transcript\n")
 
 
 if __name__ == "__main__":
