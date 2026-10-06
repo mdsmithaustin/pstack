@@ -2742,18 +2742,20 @@ def arena_lead_reads(view):
         if call.get("name") in SHELL_TOOLS:
             command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
             written = {os.path.normpath(w) for w in shell_writes(command) + python_writes(command)}
+            found = []
             for token in resolved_shell_paths(strip_heredocs(command)):
                 if ASSIGNMENT.fullmatch(" " + token):
                     continue
                 paths = re.findall(r"['\"]([^'\"]*[/.][^'\"]*)['\"]", token) if "(" in token else [token]
-                reads += [p for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
+                found += [p for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
+            reads += [(p, found[:n].count(p)) for n, p in enumerate(found)]
         else:
-            reads += [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
+            reads += [(given[f], 0) for f in PATH_FIELDS if isinstance(given.get(f), str)]
     named = rationale_pattern(view, candidates)
-    rationale_reads = [p for p in reads if named.search(p) and not skill_rel(p)]
-    others = [p for p in reads if p not in rationale_reads and not skill_rel(p)]
-    # A path that still holds a shell variable can name a different file on each read, so it is not merged.
-    rationales = {n if "$" in p else os.path.normpath(p.strip("\"'")) for n, p in enumerate(rationale_reads)}
+    rationale_reads = [(p, copy) for p, copy in reads if named.search(p) and not skill_rel(p)]
+    others = [p for p, _ in reads if not named.search(p) and not skill_rel(p)]
+    # Copies of one unresolved path inside a command come from an unrolled loop and can name different files.
+    rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'")) for p, copy in rationale_reads}
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
     evidence = [f"rationale files read after the last candidate spawn: {len(rationales)}", f"other candidate files read: {len(others)}"]
     if not judges:
