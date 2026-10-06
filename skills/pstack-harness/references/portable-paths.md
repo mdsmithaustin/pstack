@@ -82,7 +82,7 @@ A fresh pstack trunk read fetches the exact remote-tracking ref before it reads 
 
 ## Resolve the consumer project root
 
-Run this block only before reading a consumer-owned control skill. It uses the current directory unless the program restores an existing `PROJECT_ROOT`. Read the skill with `git -C "${PROJECT_ROOT:?}" show "origin/main:$CONTROL_SKILL_PATH"`. If that read fails, report that the control skill is not on `origin/main` and treat its surface as having no control skill.
+Run this block only before reading a consumer-owned control skill. It uses the current directory unless the program restores an existing `PROJECT_ROOT`. Read the skill with `git -C "${PROJECT_ROOT:?}" show "origin/main:$CONTROL_SKILL_PATH"`. If that read fails, report the error and treat the surface as having no control skill.
 
 ```sh
 PROJECT_ROOT=$(git -C "${PROJECT_ROOT:-.}" rev-parse --show-toplevel 2>/dev/null) || {

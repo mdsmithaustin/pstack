@@ -1229,7 +1229,7 @@
   },
   "interrogate-reviewers-on-different-models": {
    "check": "live",
-   "claim": "interrogate's reviewers run on different models per the configured panel, or as same-model arms with distinct reviewer letters on the same prompt and rubric where the harness offers one vendor.",
+   "claim": "interrogate's reviewers run on different models per the configured panel, or as same-model arms with distinct reviewer letters where the harness offers one vendor.",
    "harness_sensitive": true,
    "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one reviewer per configured model spawns, no file changes, and the reply sorts findings into Act on, Consider, Noted, Dismissed with reasons.",
    "owners": [
