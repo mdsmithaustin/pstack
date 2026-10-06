@@ -44,7 +44,7 @@ In a gated repository, the gate owns every write to the push target and every PR
 - Relay an `ask-user` finding verbatim to the user, or from a subagent to its parent. Pass `--yes` only when the user's grant names no-mistakes.
 - When `no-mistakes doctor` fails or the gate cannot run, stop and report. Publish around the gate only when the user said "bypass no-mistakes" in this session.
 - After each run, check the pipeline's PR title against **Titles** and correct it with the forge. The squash body comes from `merge-gate --body-file` in `playbooks/shipping.md`.
-- `axi run` and `axi respond` block for up to 8 minutes. Give each call a tool timeout of 10 minutes. `rerun` has no `--wait` flag, so run it in the background and read its output when it exits.
+- `axi run` and `axi respond` block for up to 8 minutes. Give each call a tool timeout of 10 minutes. After `rerun` starts a new run, drive that run with `no-mistakes axi run` (reattach) and `axi respond` until it reaches an outcome.
 
 **Attachments.** Upload through the forge, not a browser. With Origin, use its attach flag when `origin pr create --help` lists one. Otherwise, for a GitHub repository, use `gh`, whichever CLI opened the PR. Pass `--attach <path>` to `gh pr create`, `gh pr edit`, or `gh pr comment`, once per file, with alt text after `#` (`--attach './login.png#The login error'`). A body that references the local path, such as `![alt](./login.png)`, gets that reference rewritten to the upload. `--attach` needs gh 2.99.0 or later and push access. When `gh pr edit --help` does not list it, run a gh at 2.99.0 or later. Do not upload through undocumented endpoints.
 
