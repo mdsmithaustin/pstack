@@ -95,7 +95,7 @@ class CopyAssertionTests(unittest.TestCase):
             "expect(written[0]).toBe(LONG_TEXT);",
         ), [])
 
-    TRUNK_CREDITED_CAPTURES = (
+    CAPTURE_FORMS = (
         ("const writeText = vi.fn(); writeText.mockImplementation(async (t: string) => { written = t; });", "expect(written).toBe(LONG_TEXT);"),
         ("vi.mocked(navigator.clipboard.writeText).mockImplementation(async (t) => { written = t })", "expect(written).toBe(LONG_TEXT);"),
         ('vi.spyOn(navigator.clipboard, "writeText").mockImplementationOnce(async (t) => { written = t; });', "expect(written).toBe(LONG_TEXT);"),
@@ -118,8 +118,8 @@ class CopyAssertionTests(unittest.TestCase):
          "expect(written).toEqual([LONG_TEXT]);"),
     )
 
-    def test_every_payload_capture_trunk_credits_still_counts(self):
-        for stub, compared in self.TRUNK_CREDITED_CAPTURES:
+    def test_a_payload_captured_in_each_stub_form_and_compared_counts(self):
+        for stub, compared in self.CAPTURE_FORMS:
             with self.subTest(stub):
                 self.assertEqual(self.failures(stub, compared), [])
 
