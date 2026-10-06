@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -80,6 +81,7 @@ MODEL_EFFORTS: dict[str, frozenset[str]] = {
     "gpt-6-sol": ALLOWED_EFFORTS - {"none"},
     "gpt-6-luna": ALLOWED_EFFORTS - {"none", "ultra"},
     "grok-4.7": frozenset({"low", "medium", "high", "xhigh"}),
+    "grok-4.7-build-fast": frozenset({"low", "medium", "high", "xhigh"}),
     **{alias: CLAUDE_EFFORTS for alias in CLAUDE_ALIASES},
 }
 
@@ -91,6 +93,13 @@ XHIGH_FLOOR_ROLES = {
 }
 DEFAULT_EFFORT_FLOOR = "high"
 GPT6_RELEASES_NEWEST_FIRST = ("gpt-6.1-", "gpt-6-")
+TIER_FAMILIES = (
+    ("fable", "opus", "sonnet", "haiku"),
+    ("astra", "sol", "luna"),
+    ("grok-4.7", "grok-4.7-build-fast"),
+)
+STEP_CEILING = "xhigh"
+STEP_UP_FLOOR = "high"
 
 
 NO_CATALOG: Mapping[str, frozenset[str]] = MappingProxyType({})
@@ -112,11 +121,15 @@ def _model_efforts(model: str, listed: Mapping[str, frozenset[str]]) -> frozense
     return listed.get(model) or MODEL_EFFORTS.get(model, ALLOWED_EFFORTS)
 
 
+def _tier(model: str) -> str:
+    prefix = next((p for p in GPT6_RELEASES_NEWEST_FIRST if model.startswith(p)), "")
+    return model[len(prefix):]
+
+
 def _listed_release(model: str, effort: str, listed: Mapping[str, frozenset[str]]) -> str:
-    prefix = next((p for p in GPT6_RELEASES_NEWEST_FIRST if model.startswith(p)), None)
-    if prefix is None:
+    tier = _tier(model)
+    if tier == model:
         return model
-    tier = model[len(prefix):]
     for release in GPT6_RELEASES_NEWEST_FIRST:
         candidate = release + tier
         if candidate in listed and effort in _model_efforts(candidate, listed):
@@ -275,6 +288,7 @@ class ResolvedArm(NamedTuple):
     effort: str
     source: str
     notes: tuple[str, ...] = ()
+    step: str | None = None
 
     def to_json(self) -> str:
         record: dict = {
@@ -283,6 +297,8 @@ class ResolvedArm(NamedTuple):
         }
         if self.notes:
             record["notes"] = list(self.notes)
+        if self.step:
+            record["step"] = self.step
         return json.dumps(record)
 
 
@@ -297,6 +313,11 @@ def _resolve_model(model: str, written_effort: str | None, harness: str) -> tupl
         shown = translated_model if written_effort or translated_effort is None else f"{translated_model}@{translated_effort}"
         return translated_model, written_effort or translated_effort, [f"{model} translated to {shown}"]
     return INHERIT, written_effort, [f"{model} is not usable on {harness}"]
+
+
+def _nearest_at_or_below(target: str, ranked: list[str]) -> str:
+    at_or_below = [e for e in ranked if EFFORT_ORDER.index(e) <= EFFORT_ORDER.index(target)]
+    return at_or_below[-1] if at_or_below else ranked[0]
 
 
 def _resolve_effort(
@@ -319,8 +340,7 @@ def _resolve_effort(
     note = f"effort {floor} is not usable with {model}"
     if note not in notes:
         notes.append(note)
-    at_or_below = [e for e in ranked if EFFORT_ORDER.index(e) <= EFFORT_ORDER.index(floor)]
-    return at_or_below[-1] if at_or_below else ranked[0]
+    return _nearest_at_or_below(floor, ranked)
 
 
 def _resolve_arm(
@@ -351,6 +371,49 @@ def resolve_role(
     raise LookupError(f"no layer binds role {role!r}")
 
 
+def _newest_allowed(tier: str, allowed: frozenset[str]) -> str:
+    return next(m for m in (*(r + tier for r in GPT6_RELEASES_NEWEST_FIRST), tier) if m in allowed)
+
+
+def _shift_effort(base: str, delta: int, floor: str) -> str:
+    low, high = EFFORT_ORDER.index(floor), EFFORT_ORDER.index(STEP_CEILING)
+    return EFFORT_ORDER[min(max(EFFORT_ORDER.index(base) + delta, low), high)]
+
+
+def step_reviewer(
+    reviewer: ResolvedArm, work_model: str, work_effort: str | None,
+    harness: str, allowed: frozenset[str], listed: Mapping[str, frozenset[str]],
+) -> ResolvedArm:
+    tier = _tier(work_model)
+    if reviewer.model == INHERIT or _tier(reviewer.model) != tier:
+        return reviewer
+    family = next((f for f in TIER_FAMILIES if tier in f), (tier,))
+    held = {_tier(m) for m in allowed}
+    above = [t for t in family[:family.index(tier)] if t in held]
+    below = [t for t in family[family.index(tier) + 1:] if t in held]
+    if above:
+        step, delta, floor, target_tier = "up", -1, STEP_UP_FLOOR, above[-1]
+    elif below:
+        step, delta, floor, target_tier = "down", 1, EFFORT_ORDER[0], below[0]
+    else:
+        step, delta, floor, target_tier = "same-model", 1, EFFORT_ORDER[0], tier
+    base = work_effort if work_effort not in (None, INHERIT) else reviewer.effort
+    model = reviewer.model if step == "same-model" else _newest_allowed(target_tier, allowed)
+    effort = INHERIT
+    if base != INHERIT:
+        target = _shift_effort(base, delta, floor)
+        model = _listed_release(model, target, listed)
+        offered = [e for e in EFFORT_ORDER if e in _model_efforts(model, listed) and e in CLIS[harness].efforts]
+        effort = _nearest_at_or_below(target, offered) if offered else target
+    result = (
+        "the config allows no other model in its family, so this is a same-model review"
+        if step == "same-model" else f"stepped {step} to {model}"
+    )
+    note = f"trail reviewer matched work model {work_model}; {result}"
+    notes = (*reviewer.notes, note) if step == "same-model" else (note,)
+    return reviewer._replace(model=model, effort=effort, notes=notes, step=step)
+
+
 def build_layers(harness: str, workspace: dict, user: dict, skill_default: dict) -> list[Layer]:
     return [
         Layer(f"workspace ## {harness}", workspace.get(harness, {})),
@@ -368,14 +431,36 @@ def _load_layer_file(path: Path) -> tuple[dict, list[tuple[int, str, str]]]:
     return parse(path.read_text(encoding="utf-8"))
 
 
+def _work_model(value: str) -> tuple[str, str | None]:
+    model, at, effort = value.partition("@")
+    if at and effort not in (*EFFORT_ORDER, INHERIT):
+        raise argparse.ArgumentTypeError(f"unknown effort {effort!r}")
+    return model, effort if at else None
+
+
+def _claude_alias_of(model: str, harness: str) -> str:
+    cli = CLIS[harness]
+    full_id = re.fullmatch(r"claude-([a-z]+)(?:-.*)?", model)
+    alias = full_id[1] if full_id else model
+    if alias in CLAUDE_ALIASES and (cli.native_aliases or alias in cli.translation):
+        return alias
+    return model
+
+
 def _resolve_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="check-models-config.py", allow_abbrev=False)
     parser.add_argument("--resolve", action="store_true", required=True)
     parser.add_argument("--harness", required=True, choices=sorted(CLIS))
     parser.add_argument("--project", type=Path, default=Path.cwd())
     parser.add_argument("--user-file", type=Path, default=Path.home() / ".agents" / CONFIG_NAME)
+    parser.add_argument("--work-model", type=_work_model, metavar="MODEL[@EFFORT]")
     parser.add_argument("roles", nargs="*", metavar="ROLE")
     args = parser.parse_args(argv)
+    if args.work_model:
+        work_name, work_written_effort = args.work_model
+        work_name = _claude_alias_of(work_name, args.harness)
+        if not _is_valid_model_name(work_name):
+            parser.error(f"argument --work-model: invalid model name {work_name!r}")
 
     unknown = [r for r in args.roles if r not in ROLES]
     if unknown:
@@ -399,8 +484,15 @@ def _resolve_main(argv: list[str]) -> int:
     layers = build_layers(args.harness, parsed[workspace_file], parsed[args.user_file], skill_default)
     catalog = CLIS[args.harness].catalog
     listed = listed_models(catalog) if catalog else NO_CATALOG
+    if args.work_model:
+        work_model, work_effort, _ = _resolve_model(work_name, work_written_effort, args.harness)
+        allowed = frozenset(
+            arm.model for role in ROLES for arm in resolve_role(role, args.harness, layers, listed)
+        ) - {INHERIT}
     for role in args.roles or sorted(ROLES):
         for arm in resolve_role(role, args.harness, layers, listed):
+            if args.work_model and role == "trail reviewer":
+                arm = step_reviewer(arm, work_model, work_effort, args.harness, allowed, listed)
             print(arm.to_json())
     return 0
 
@@ -408,7 +500,7 @@ def _resolve_main(argv: list[str]) -> int:
 USAGE = (
     "usage: check-models-config.py <file> [<file>...]\n"
     f"       check-models-config.py --resolve --harness {{{','.join(sorted(CLIS))}}}"
-    " [--project DIR] [--user-file FILE] [ROLE ...]"
+    " [--project DIR] [--user-file FILE] [--work-model MODEL[@EFFORT]] [ROLE ...]"
 )
 
 

@@ -64,7 +64,7 @@ Correct the log, not the story. The audit never edits or removes a row, even an 
 
 ## Cross-model review of the trail
 
-Before handing back, spawn a reviewer subagent on the `trail reviewer` role per **Spawn a role** in the **pstack-harness** skill. That section resolves the role, steps it down one tier when it resolves to the model that did the work so the review stays cross-model, and builds this CLI's spawn call. Never pick a model that neither the resolver's output nor that step-down names. Self-review is not a substitute. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky.
+Before handing back, spawn a reviewer subagent on the `trail reviewer` role per **Spawn a role** in the **pstack-harness** skill. That section resolves the role with `--work-model <model>@<effort>` set to the model that did the work, so the review moves off that model when the config allows another model in its family, and builds this CLI's spawn call. A `same-model` step means the config allows no other model in the work model's family, and the verdict says it is a same-model review. Never pick a model that the resolver's output does not name. Self-review is not a substitute. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky.
 
 - Decisions logged with weak or absent evidence.
 - Verification steps skipped or claimed without proof in the transcript.
