@@ -626,7 +626,7 @@ it("C2 renders a long prompt without walking the whole prompt per code point", (
 CALLED_WITH = r"\s*\.toHaveBeen(?:Last|Nth)?CalledWith\((?!\s*\))"
 PAYLOAD_MATCHER = r"\s*\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
 COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + CALLED_WITH
-                          + r"|expect\([^;]*?(?:(?:writeText|copyText)\.mock\.|readText\()[^;]*?\)" + PAYLOAD_MATCHER)
+                          + r"|expect\([^;]*?(?:(?:writeText|copyText)\.mock\.|clipboard\.readText\()[^;]*?\)" + PAYLOAD_MATCHER)
 CAPTURED_BY_STUB = re.compile(r"\b(\w+)(?:\.push\(|\s*=(?![=>]))")
 SPY_AS_WRITETEXT = re.compile(r"""clipboard["']?\s*[:,]\s*\{(?:\s*value\s*:\s*\{)?[^{}]*?\bwriteText["']?\s*:\s*(\w+)\b(?!\s*[.(])""")
 SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;,]*\bclipboard\s*,\s*["']writeText["']""")
@@ -638,6 +638,7 @@ ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)
 OPERAND_WANTED = re.compile(r"(?:=>|[=:,?]|&&|\|\|)[ \t]*$")
 CHAINED_LINE = re.compile(r"\n\s*\??\.")
 QUOTED = re.compile(STRING)
+STUB_NAME = re.compile(rf"{STRING}|writeText|copyText")
 
 
 def clipboard_spies(source):
@@ -652,11 +653,13 @@ def line_continues(source, newline):
 
 def stub_captures(source):
     """The variables a clipboard stub fills: the first push or assignment in
-    the statement after each writeText or copyText. The statement ends at a
-    semicolon, or at a line break that does not continue it, outside the
-    brackets it opened."""
+    the statement after each writeText or copyText outside a longer string
+    literal. The statement ends at a semicolon, or at a line break that does
+    not continue it, outside the brackets it opened."""
     names = set()
-    for found in re.finditer(r"writeText|copyText", source):
+    for found in STUB_NAME.finditer(source):
+        if found.group()[0] in "\"'`" and found.group()[1:-1] not in ("writeText", "copyText"):
+            continue
         depth, end = 0, found.end()
         while end < len(source):
             char = source[end]
