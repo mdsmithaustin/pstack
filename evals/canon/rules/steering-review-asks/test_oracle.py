@@ -247,7 +247,8 @@ class HiddenTailTests(unittest.TestCase):
         for after in (["const writeText = vi.fn()", "const bubble = renderPrompt()"],
                       ["const writeText = vi.fn()", "bubble = renderPrompt()"],
                       ["const writeText = vi.fn()", "beforeEach(() => {", "  bubble = renderPrompt()", "})"],
-                      ['vi.stubGlobal("navigator", { clipboard: { writeText } })', "beforeEach(() => {", "  bubble = renderPrompt()", "})"]):
+                      ['vi.stubGlobal("navigator", { clipboard: { writeText } })', "beforeEach(() => {", "  bubble = renderPrompt()", "})"],
+                      ['const writeText = vi.fn(() => log(":-("))', "bubble = renderPrompt()"]):
             with self.subTest(after):
                 self.assertEqual(self.failures(*after, "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(TAIL)"), [])
 
