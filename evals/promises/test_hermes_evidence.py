@@ -49,19 +49,32 @@ class HarvestCustodyRegression(unittest.TestCase):
         self.assertEqual(outside.read_bytes(), b"owned-outside-write-canary\n")
         self.assertEqual(trace["final_reply"], "owned native reply")
 
-    def test_non_string_tool_arguments_are_retained_incomplete(self):
-        db = HermesDatabase(hermes.profile(self.run) / "state.db")
+    def harvest_with_arguments(self, arguments):
+        path = hermes.profile(self.run) / "state.db"
+        path.unlink(missing_ok=True)
+        db = HermesDatabase(path)
         db.session("root")
         db.message("root", "user", "go")
         db.message("root", "assistant", "owned native reply",
-                   calls=[{"id": "c1", "function": {"name": "read_file", "arguments": {"path": "x"}}}])
+                   calls=[{"id": "c1", "function": {"name": "read_file", "arguments": arguments}}])
         db.done()
-        trace = hermes.harvest(self.run)
-        self.assertEqual(trace["x_harvest_error"],
-                         "decode-failed: TypeError: the JSON object must be str, bytes or bytearray, not dict")
-        self.assertEqual(trace["events"], [])
-        result = self.run._hermes_evidence.private_root / "acquisitions" / trace["x_acquisition"] / "result.json"
-        self.assertEqual(json.loads(result.read_text())["reason"], "decode-failed")
+        return hermes.harvest(self.run)
+
+    def test_non_string_tool_arguments_are_retained_incomplete(self):
+        for arguments, kind in (({"path": "x"}, "dict"), ({}, "dict"), ([], "list"), (0, "int"), (False, "bool")):
+            with self.subTest(arguments=arguments):
+                trace = self.harvest_with_arguments(arguments)
+                self.assertEqual(trace.get("x_harvest_error"),
+                                 f"decode-failed: TypeError: the JSON object must be str, bytes or bytearray, not {kind}")
+                self.assertEqual(trace["events"], [])
+                result = self.run._hermes_evidence.private_root / "acquisitions" / trace["x_acquisition"] / "result.json"
+                self.assertEqual(json.loads(result.read_text())["reason"], "decode-failed")
+
+    def test_null_or_empty_tool_arguments_read_as_none(self):
+        for arguments in (None, ""):
+            with self.subTest(arguments=arguments):
+                trace = self.harvest_with_arguments(arguments)
+                self.assertEqual((trace.get("x_harvest_error"), trace["final_reply"]), (None, "owned native reply"))
 
     def test_missing_main_cannot_reuse_previous_acquisition(self):
         path = self.database()
