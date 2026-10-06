@@ -2956,7 +2956,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "18a28e982169"
+    "fcf9c8ddab41"
    ],
    "promise": "show-me-your-work-spawns-trail-reviewer",
    "sources": [
@@ -6254,7 +6254,7 @@
    ],
    "text": "The model rule applies to new sessions."
   },
-  "18a28e982169": {
+  "fcf9c8ddab41": {
    "also": [
     "show-me-your-work-review-ends-with-attention"
    ],
@@ -6264,7 +6264,7 @@
    "sources": [
     "port"
    ],
-   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review, labeled as one, when it allows none), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
+   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review when it allows none, labeled as one in the verdict and the reply), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
   },
   "a13ebff18c90": {
    "class": "context",

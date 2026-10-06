@@ -25,7 +25,7 @@ Put each section under a `##` heading, not a bold lead-in, so the sections stand
 
 After these sections, attach videos or screenshots when they prove a claim, and follow any attachment rule the repo's `AGENTS.md` or PR template sets, such as a Demo section. Do not paste full SHAs, swarm or arena lane recitals, lever-correction essays, file-by-file checklists, or "CLEAN" verdicts. Put these details in a linked artifact. A commit body does not restate its subject.
 
-**Forge.** Resolve the forge before the first PR operation and keep that choice for create, edit, view, watch, and merge. GitHub CLI (`gh`) is the default. If `command -v origin` succeeds and Origin can resolve the repository, prefer `origin pr ...`. If Origin is absent or cannot resolve the repository, stay on `gh` and record the fallback. Do not require Graphite (`gt`). If neither CLI can open the PR, push the branch, report that no PR exists, and name the branch.
+**Forge.** Resolve the forge before the first PR operation and keep that choice for create, edit, view, watch, and merge. GitHub CLI (`gh`) is the default. If `command -v origin` succeeds and Origin can resolve the repository, prefer `origin pr ...`. If Origin is absent or cannot resolve the repository, stay on `gh` and record the fallback. Do not require Graphite (`gt`). In an ungated repository, when the run has no built-in PR tool and neither CLI can open the PR, push the branch, report that no PR exists, and name the branch.
 
 **Gated publish.** Resolve the publish path with the forge, before the first push.
 
