@@ -104,6 +104,17 @@ class CopySession(unittest.TestCase):
             grok.copy_session(self.session, self.captured)
         self.assertEqual([p.read_bytes() for p in self.captured.rglob("*") if p.is_file()], [])
 
+    def test_dangling_or_directory_source_link_is_refused(self):
+        self.chat.write_bytes(b"native transcript\n")
+        (self.tmp / "outside-directory").mkdir()
+        for target in (self.tmp / "missing", self.tmp / "outside-directory"):
+            with self.subTest(target=target.name):
+                events = self.session / "events.jsonl"
+                events.unlink(missing_ok=True)
+                events.symlink_to(target)
+                with self.assertRaises(GradeRefused):
+                    grok.copy_session(self.session, self.captured)
+
     def test_destination_file_link_is_refused_without_writing_outside(self):
         self.chat.write_bytes(b"native transcript\n")
         (self.captured / "cwd" / "session").mkdir(parents=True)
