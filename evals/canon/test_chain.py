@@ -1059,6 +1059,21 @@ class PlaybookOpeningTests(unittest.TestCase):
     def test_a_bold_lead_followed_only_by_punctuation_has_no_empty_identity(self):
         self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (".", ":", " . ")], [("you own x",)] * 3)
 
+    def test_a_dash_or_ellipsis_between_the_bold_span_and_the_trailing_clause_is_skipped(self):
+        self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (" \u2014 Delegate the fix.", " \u2013 Delegate the fix.", "\u2026 Delegate the fix.")],
+                         [("you own x", "delegate the fix")] * 3)
+
+    def test_a_bold_lead_followed_only_by_a_dash_or_ellipsis_has_no_wordless_identity(self):
+        self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (" \u2014", " \u2013", "\u2026", " $$")],
+                         [("you own x",)] * 4)
+
+    def test_an_exclamation_or_question_mark_ends_the_opening_clause(self):
+        self.assertEqual([chain.playbook_opening(f"{line}\n" + FEATURE) for line in ("**You own this task! Plan, review.**", "**You own this task? Plan, review.**", "Use for X! More.")],
+                         [("you own this task",), ("you own this task",), ("use for x",)])
+
+    def test_a_spaced_em_dash_ends_the_opening_clause(self):
+        self.assertEqual(chain.first_clause("you own this task \u2014 plan, review"), "you own this task")
+
     def test_a_worklist_without_the_trailing_clause_fails_item_zero_when_punctuation_trails_the_bold_span(self):
         text = "**You own X**. Delegate the fix.\n" + FEATURE
         trace = lambda item: chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md"),

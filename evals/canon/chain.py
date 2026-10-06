@@ -1023,7 +1023,7 @@ class Step:
 def first_clause(text, words=5):
     """The opening clause, cut at its first punctuation mark and at five
     words, so a paraphrase of the rest of the clause still names the step."""
-    clause = re.split(r"[.,;:(]\s|[.,;:(]$|\s[-–]\s", text + " ", maxsplit=1)[0]
+    clause = re.split(r"[.,;:!?(]\s|[.,;:!?(]$|\s[-–—]\s", text + " ", maxsplit=1)[0]
     return " ".join(clause.split()[:words])
 
 
@@ -1058,9 +1058,10 @@ def playbook_opening(text):
     prose follows the bold span, that prose's first clause too, because the
     verbatim-worklist contract copies the whole opening line, and the prose
     can carry a rule (Bug fix's "Delegate investigation") or a scope
-    (Refactoring's "Distinct from Feature"). Punctuation between the bold
-    span and that prose is skipped, and a part that yields no words gives no
-    identity, because an empty identity matches every worklist. A line with no
+    (Refactoring's "Distinct from Feature"). Punctuation, dashes, and
+    ellipses between the bold span and that prose are skipped, and a part with
+    no word character gives no identity, because a wordless identity matches
+    every worklist. A line with no
     bold lead gives its first clause. Each is five words at most. None when no
     prose precedes step 1 or the line has no words."""
     for line in text.splitlines():
@@ -1069,8 +1070,8 @@ def playbook_opening(text):
         if line.strip() and not line.startswith("#"):
             lead = re.match(r"\*\*(.+?)\*\*(.*)", line)
             parts = lead.groups() if lead else (line,)
-            identities = (first_clause(normalize(part).lstrip(" .,;:!?-")) for part in parts)
-            return tuple(filter(None, identities)) or None
+            identities = (first_clause(normalize(part).lstrip(" .,;:!?-–—…")) for part in parts)
+            return tuple(i for i in identities if re.search(r"\w", i)) or None
     return None
 
 

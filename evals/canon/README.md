@@ -1215,7 +1215,7 @@ Claude's TodoWrite or TaskCreate in the init tools, or for Codex an
 `update_plan` in the rollout's tool list or any `update_plan` call, else
 `null`. A message counts as a worklist when it says worklist or names two
 playbook steps. Each numbered step of the matched playbook has an identity,
-its opening bold heading or else its first clause cut to five words, and
+a bold heading or else its first clause, and
 pointers, the bold or backticked skill names in the step and the indented
 lines under it. An item keeps a pointer it names bare or with its `principle-`
 prefix. `worklist.steps` records per step whether some item keeps the
@@ -1227,12 +1227,17 @@ extractor is the awk program that `tools/test_playbook_shape.py` mirrors, and
 `PORTING.md` ("Playbook rules sit where the worklist extractor reaches them")
 says why the lead line lives there. When the line opens with a bold lead, it
 has two identities: the lead's first clause and, if prose follows the bold
-span, that prose's first clause. Punctuation between the bold span and that
-prose is skipped, and a part with no words gives no identity, since an empty
-identity would match every worklist. A line with no bold lead has one, its
-first clause. Each identity is cut at its first punctuation mark and at five
-words. A step's identity is cut the same way only when the step has no bold
-heading. A bold heading is kept whole. The trailing identity is required
+span, that prose's first clause. Punctuation, dashes, and ellipses between the
+bold span and that prose are skipped, and a part with no word character gives
+no identity, since a wordless identity would match every worklist. A line with
+no bold lead has one, its first clause. A first clause ends at the first
+`.`, `,`, `;`, `:`, `!`, `?`, or `(` that is followed by whitespace or ends the
+text, or at a spaced hyphen, en dash, or em dash, and it keeps five words at
+most. A step's identity is the bold span that opens its numbered line, kept
+whole, only when that span ends in `.` or `:` inside the `**`, as in
+`**Frame.**`. Without that mark the step is cut as a first clause, so Eval's
+steps 4 and 5 give "spawn n parallel candidates on" and "spawn one blinded
+judge on". The trailing identity is required
 because the verbatim-worklist contract (`skills/poteto-mode/SKILL.md`,
 Playbooks) copies the opening prose, and that prose can carry a rule (Bug fix's
 delegate sentence) or a scope (Refactoring's "Distinct from Feature"). Bug fix's
@@ -1249,13 +1254,14 @@ item that keeps those clauses passes.
 
 `worklist.opening` is `null`, and the run leaves the stage's denominator, when
 no playbook matched, when the matched playbook's text is not in the mounted
-tree, when the playbook has no numbered steps, as Opening a PR has none, or
-when no prose precedes step 1. Index-shaped playbooks are the ones with a
-printed line that starts with "Read this playbook in full." (`line.startswith`
-on `SENTINEL`, and `INDEX_SHAPED` in `tools/test_playbook_shape.py`:
-Orchestrate, Multi-phase-plan, and Opening a PR). That sentence is never an
-identity. Orchestrate and Multi-phase-plan open with a bold lead, and a test
-pins that no identity of any shipped playbook starts with the sentence.
+tree, when the playbook has no numbered steps, as Opening a PR has none,
+when no prose precedes step 1, or when the line has no words. Index-shaped
+playbooks are the ones whose printed line starts with "Read this playbook in
+full." The playbook shape test marks them with `INDEX_SHAPED` in
+`tools/test_playbook_shape.py`, and they are Orchestrate, Multi-phase-plan, and
+Opening a PR. That sentence is never an identity. Orchestrate and
+Multi-phase-plan open with a bold lead, and a test pins that no identity of any
+shipped playbook starts with the sentence.
 
 The stages are "worklist present via a valid carrier", "every playbook step
 listed", "playbook opening prose listed", and "step pointers preserved
