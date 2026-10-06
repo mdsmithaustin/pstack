@@ -2608,6 +2608,7 @@ def arm_dirs(command):
     return dirs
 
 
+ARENA_DIRS = (".worktrees/", ".arena/")
 GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?(?:[MADRCU][MADRCU ]?\s+\S|\?\? ([^\s"]+))|^\s*(?:modified|deleted|new file|both \w+):\s')
 
 
@@ -2622,7 +2623,7 @@ def parent_written(view, candidates):
         command = str(given.get(SHELL_TOOLS[call["name"]]) or "").strip()
         if command.startswith("git status") and (given.get("workdir") or given.get("cwd")) in (None, view.trace.get("cwd")):
             status = ((view.results_for(call) or {}).get("output_head") or "").replace("\\n", "\n")
-            if any(m.group(1) is None or (not m.group(1).endswith("/") and view.classify(m.group(1)) in PROJECT_CLASSES) for m in GIT_DIRTY.finditer(status)):
+            if any(m.group(1) is None or (not m.group(1).startswith(ARENA_DIRS) and view.classify(m.group(1)) in PROJECT_CLASSES) for m in GIT_DIRTY.finditer(status)):
                 return seq
     return None
 
