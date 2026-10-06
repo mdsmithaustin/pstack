@@ -66,5 +66,31 @@ class CopyInto(unittest.TestCase):
         self.assertEqual(Path(copied[0]).read_bytes(), b"native rollout\n")
 
 
+class FindRollouts(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-find-test-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+        self.store = self.tmp / "sessions" / "2026"
+        self.store.mkdir(parents=True)
+        self.lead = self.rollout(self.store / "rollout-a-lead.jsonl", {"id": "lead"})
+        self.outside = self.rollout(self.tmp / "outside.jsonl", {"id": "kid", "parent_thread_id": "lead"})
+        (self.tmp / "outside-directory").mkdir()
+
+    def rollout(self, path, meta):
+        path.write_text(json.dumps({"type": "session_meta", "payload": meta}) + "\n")
+        return path
+
+    def test_linked_rollout_is_refused_before_discovery_reads_it(self):
+        self.assertEqual(codex.find_rollouts(self.store, {"lead"}), ([self.lead], []))
+        link = self.store / "rollout-b-kid.jsonl"
+        for target in (self.outside, self.tmp / "missing", self.tmp / "outside-directory"):
+            with self.subTest(target=target.name):
+                link.unlink(missing_ok=True)
+                link.symlink_to(target)
+                with self.assertRaises(GradeRefused):
+                    codex.find_rollouts(self.store, {"lead"})
+
+
 if __name__ == "__main__":
     unittest.main()
