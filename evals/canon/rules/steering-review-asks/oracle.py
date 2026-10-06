@@ -695,7 +695,7 @@ def asserts_copied_value(source):
     spy that holds what Copy writes. A stub, a bare toHaveBeenCalled, or an
     identity check on the spy checks nothing about what Copy writes."""
     captured = [rf"expect\(\s*{re.escape(name)}\b[^;]*?\){PAYLOAD_MATCHER}" for name in stub_captures(source)]
-    spied = [rf"expect\(\s*{re.escape(name)}(?:\s*\){CALLED_WITH}|\.mock\.[^;]*?\){PAYLOAD_MATCHER})" for name in clipboard_spies(source)]
+    spied = [rf"expect\(\s*{re.escape(name)}(?:\s*\){CALLED_WITH}|\.mock\.(?:calls|lastCall)\b[^;]*?\){PAYLOAD_MATCHER})" for name in clipboard_spies(source)]
     return any(COPIED_VALUE.search(assertion) or any(re.search(pattern, assertion) for pattern in (*captured, *spied))
                for assertion in assertions(source))
 
