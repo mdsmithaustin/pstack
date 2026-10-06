@@ -202,6 +202,12 @@ class CopyAssertionTests(unittest.TestCase):
             "expect(copied.mock.calls[0][0]).toBe(LONG_TEXT);",
         ), [])
 
+    def test_a_clipboard_spy_result_compared_to_a_value_does_not_count(self):
+        self.assertEqual(self.failures(
+            'const copied = vi.spyOn(navigator.clipboard, "writeText");',
+            "expect(copied.mock.results).toEqual([]);",
+        ), ["constraint:C3: no added web test asserts what Copy writes"])
+
     def test_a_spy_installed_under_another_name_with_a_bare_called_check_does_not_count(self):
         self.assertEqual(self.failures(
             "const spy = vi.fn();",
