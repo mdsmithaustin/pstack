@@ -95,13 +95,33 @@ class CopyAssertionTests(unittest.TestCase):
             "expect(written[0]).toBe(LONG_TEXT);",
         ), [])
 
-    def test_a_payload_captured_by_a_mock_implementation_or_a_wrapped_push_counts(self):
-        for stub in ("Object.assign(navigator, { clipboard: { writeText: vi.fn().mockImplementation(async (text: string) => { written = text; }) } });",
-                     'vi.spyOn(navigator.clipboard, "writeText").mockImplementation(async (text) => { written = text })',
-                     "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((t) => Promise.resolve(written.push(t))) } });",
-                     "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn(async (text: string) => void written.push(text)) } });"):
+    TRUNK_CREDITED_CAPTURES = (
+        ("const writeText = vi.fn(); writeText.mockImplementation(async (t: string) => { written = t; });", "expect(written).toBe(LONG_TEXT);"),
+        ("vi.mocked(navigator.clipboard.writeText).mockImplementation(async (t) => { written = t })", "expect(written).toBe(LONG_TEXT);"),
+        ('vi.spyOn(navigator.clipboard, "writeText").mockImplementationOnce(async (t) => { written = t; });', "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn<(text: string) => Promise<void>>(async (t) => { written = t }) } });",
+         "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn(async text => { written = text }) } });", "expect(written).toBe(LONG_TEXT);"),
+        ('vi.spyOn(navigator.clipboard, "writeText").mockImplementation(text => { written = text })', "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn(async (t: string): Promise<void> => { written = t }) } });",
+         "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn((t) => (written = t)) } });", "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn(text => written.push(text)) } });", "expect(written).toEqual([LONG_TEXT]);"),
+        ("vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(t => { written.push(t); return Promise.resolve(); });",
+         "expect(written).toEqual([LONG_TEXT]);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn().mockImplementation(async (text: string) => { written = text; }) } });",
+         "expect(written).toBe(LONG_TEXT);"),
+        ('vi.spyOn(navigator.clipboard, "writeText").mockImplementation(async (text) => { written = text })', "expect(written).toBe(LONG_TEXT);"),
+        ('vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn((t) => Promise.resolve(written.push(t))) } });',
+         "expect(written).toEqual([LONG_TEXT]);"),
+        ('vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn(async (text: string) => void written.push(text)) } });',
+         "expect(written).toEqual([LONG_TEXT]);"),
+    )
+
+    def test_every_payload_capture_trunk_credits_still_counts(self):
+        for stub, compared in self.TRUNK_CREDITED_CAPTURES:
             with self.subTest(stub):
-                self.assertEqual(self.failures(stub, "expect(written).toEqual([LONG_TEXT]);"), [])
+                self.assertEqual(self.failures(stub, compared), [])
 
     def test_a_captured_payload_that_is_never_compared_does_not_count(self):
         self.assertEqual(self.failures(
