@@ -134,12 +134,18 @@ def executable_js(source):
     return "".join(out).split("\n")
 
 
+class Unparsed(list):
+    """The added lines of a Python file that does not parse. pytest cannot
+    collect it, so a check may fail on these lines but never credits them."""
+
+
 def executable_added(diff, files):
     """added_lines with the non-code text of each added Python or JS/TS line
     blanked, so a static check never credits a comment or a docstring as a
     test. files is apply_diff's {path: bytes or None}, the patched files the
     added line numbers index into. A Python file that does not parse fails
-    closed: its raw added lines count, minus those that start with #."""
+    closed: its raw added lines, minus those that start with #, come back
+    as Unparsed."""
     executable = {}
     for path, found in added_numbered(diff).items():
         data = files.get(path)
@@ -149,7 +155,7 @@ def executable_added(diff, files):
         source = data.decode("utf-8", errors="replace")
         lines = executable_python(source) if path.endswith(".py") else executable_js(source)
         if lines is None:
-            executable[path] = ["" if line.lstrip().startswith("#") else line for _, line in found]
+            executable[path] = Unparsed("" if line.lstrip().startswith("#") else line for _, line in found)
         else:
             executable[path] = [lines[number - 1] for number, _ in found]
     return executable
@@ -492,7 +498,7 @@ def adds_minimal_fixture(added):
     <status>, which only the agent's own tests can hold: some payload the diff
     adds to a test file has no <tool-use-id>."""
     for path, lines in added.items():
-        if not is_test_file(path):
+        if not is_test_file(path) or isinstance(lines, Unparsed):
             continue
         for payload in re.findall(r"<task-notification>(.*?)</task-notification>", "\n".join(lines), re.S):
             if "<tool-use-id>" not in payload:
@@ -755,17 +761,18 @@ def shipped_issues():
 
 
 def prose(issue):
-    """The whitespace-normalized sentences of one parsed issue, whatever its shape."""
+    """The whitespace-normalized sentences of one parsed issue, whatever its
+    shape. A record with no string of four words keeps its longest string."""
     if isinstance(issue, str):
         return [" ".join(issue.split())] if issue.split() else []
-    return record_prose(issue)
+    return record_prose(issue) or sorted(record_prose(issue, words=1), key=len)[-1:]
 
 
-def record_prose(value):
-    """The prose inside a structured record; a string of fewer than four words
-    there is metadata such as a kind or severity, not a sentence."""
+def record_prose(value, words=4):
+    """The prose inside a structured record; a string of fewer than `words`
+    words there is metadata such as a kind or severity, not a sentence."""
     if isinstance(value, str):
-        return [" ".join(value.split())] if len(value.split()) >= 4 else []
+        return [" ".join(value.split())] if len(value.split()) >= words else []
     if dataclasses.is_dataclass(value):
         value = dataclasses.asdict(value)
     elif hasattr(value, "model_dump"):
@@ -773,7 +780,7 @@ def record_prose(value):
     elif hasattr(value, "__dict__"):
         value = vars(value)
     items = value.values() if isinstance(value, dict) else value if isinstance(value, (list, tuple)) else []
-    return [text for item in items for text in record_prose(item)]
+    return [text for item in items for text in record_prose(item, words)]
 
 
 class Installs(list):
@@ -1116,7 +1123,7 @@ def tests_never_patch_the_host(added):
     patched = {path: len({source.count("\n", 0, found.start()) for found in PLATFORM_PATCH.finditer(source)})
                for path, source in sources.items()}
     failures = [f"constraint:C3: {path} patches sys.platform on {count} added line(s)" for path, count in patched.items() if count]
-    if not any(WINDOWS_MARK.search(source) for source in sources.values()):
+    if not any(WINDOWS_MARK.search(source) for path, source in sources.items() if not isinstance(added[path], Unparsed)):
         failures.append('constraint:C3: no added test is marked @pytest.mark.platforms("windows")')
     return failures
 
