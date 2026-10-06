@@ -186,19 +186,21 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
     return entries, deferred_flat_notices
 
 
+def _frontmatter_body_start(lines: list[str]) -> int | None:
+    if not lines or lines[0].strip() != "---":
+        return 0
+    return next((i + 1 for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+
+
 def parse(text: str) -> tuple[dict, list]:
     _, findings = parse_resume_priority(text)
     sections: dict[str, dict[str, list[tuple[str, str | None]]]] = {"": {}}
     lines = text.splitlines()
 
-    body_start = 0
-    if lines and lines[0].strip() == "---":
-        close_idx = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
-        if close_idx is None:
-            findings.append((1, "error", "unclosed frontmatter fence"))
-            body_start = len(lines)
-        else:
-            body_start = close_idx + 1
+    body_start = _frontmatter_body_start(lines)
+    if body_start is None:
+        findings.append((1, "error", "unclosed frontmatter fence"))
+        body_start = len(lines)
 
     current_section = ""
     headers_seen: set[str] = set()
@@ -275,9 +277,9 @@ def parse_resume_priority(text: str) -> tuple[dict[str, tuple[str, ...]], list[t
     priorities = {}
     findings = []
     lines = text.splitlines()
-    body_start = 0
-    if lines and lines[0].strip() == "---":
-        body_start = next((i + 1 for i in range(1, len(lines)) if lines[i].strip() == "---"), len(lines))
+    body_start = _frontmatter_body_start(lines)
+    if body_start is None:
+        body_start = len(lines)
     seen = set()
     for i in range(body_start, len(lines)):
         line = lines[i].strip()
