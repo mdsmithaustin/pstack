@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import secrets
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 SUITE = "pstack-resume-v1"
@@ -65,11 +67,116 @@ def prepare(run: Path, binding: dict) -> None:
         (run / f"{phase}-prompt.md").write_text(prompt, encoding="utf-8")
 
 
-def executed_json(outputs: list[str], expected: dict) -> bool:
-    for output in outputs:
-        if "Process exited with code 0" not in output:
+@dataclass(frozen=True)
+class ObservedExecution:
+    command: str
+    output: str
+    exit_code: int | None
+    process_id: str | None = None
+    interrupted: bool = False
+    turn_id: str | None = None
+
+
+def literal_exec_calls(source: str) -> list[tuple[str, dict]]:
+    if len(source) > 100_000:
+        return []
+    source = re.sub(r"\A// @exec: [^\n]*\n", "", source)
+    string = r'"(?:[^"\\]|\\.)*"'
+    value = rf'(?:{string}|-?\d+(?:\.\d+)?|true|false|null)'
+    key = rf'(?:{string}|[A-Za-z_]\w*)'
+    member = rf'{key}\s*:\s*{value}'
+    object_literal = rf'\{{\s*(?:{member}(?:\s*,\s*{member})*\s*,?)?\s*\}}'
+    call = re.compile(rf'\s*text\s*\(\s*await\s+tools\.(exec_command|write_stdin)\s*\(\s*({object_literal})\s*\)\s*\)\s*;')
+    members = re.compile(rf'({key})\s*:\s*({value})')
+    result = []
+    position = 0
+    while source[position:].strip():
+        match = call.match(source, position)
+        if not match:
+            return []
+        arguments = {}
+        for name, raw in members.findall(match[2]):
+            name = json.loads(name) if name.startswith('"') else name
+            if name in arguments:
+                return []
+            arguments[name] = json.loads(raw)
+        result.append((match[1], arguments))
+        position = match.end()
+    return result
+
+
+def executions(rows: list[dict], session_id: str, project: Path) -> list[ObservedExecution]:
+    items = [row["payload"] for row in rows if row.get("type") == "response_item"]
+    events = [row["payload"] for row in rows if row.get("type") == "event_msg"]
+    started = {event["turn_id"] for event in events if event.get("type") == "task_started"}
+    aborted = {event["turn_id"] for event in events if event.get("type") == "turn_aborted" and event.get("reason") == "interrupted"} & started
+    calls = {}
+    seen_calls = set()
+    results = []
+    for item in items:
+        kind = item.get("type")
+        if kind in ("function_call", "custom_tool_call"):
+            require(item["call_id"] not in seen_calls, "ambiguous execution call id")
+            seen_calls.add(item["call_id"])
+            calls[item["call_id"]] = item
+        elif kind in ("function_call_output", "custom_tool_call_output"):
+            call = calls.pop(item.get("call_id"), None)
+            if call is None:
+                continue
+            if kind == "function_call_output" and call.get("type") == "function_call" and call.get("name", "").split(".")[-1] == "exec_command":
+                arguments = json.loads(call["arguments"])
+                command = arguments["cmd"]
+                output = item["output"]
+                match = re.search(r"^Process exited with code (-?\d+)\n", output, re.MULTILINE)
+                if match and isinstance(command, str) and arguments.get("workdir", str(project)) == str(project):
+                    results.append(ObservedExecution(command, output[match.end():], int(match[1])))
+            elif kind == "custom_tool_call_output" and call.get("type") == "custom_tool_call" and call.get("name", "").split(".")[-1] == "exec":
+                turn_id = call.get("internal_chat_message_metadata_passthrough", {}).get("turn_id")
+                if turn_id not in started:
+                    continue
+                parsed = literal_exec_calls(call["input"])
+                blocks = item["output"]
+                if not parsed or not isinstance(blocks, list) or len(blocks) != len(parsed) + 1:
+                    continue
+                if not all(block.get("type") == "input_text" for block in blocks) or not blocks[0]["text"].startswith("Script completed\n"):
+                    continue
+                for (name, arguments), block in zip(parsed, blocks[1:]):
+                    outcome = json.loads(block["text"])
+                    if name != "exec_command" or not isinstance(arguments.get("cmd"), str) or not isinstance(outcome, dict) or not isinstance(outcome.get("output"), str):
+                        continue
+                    if arguments.get("workdir", str(project)) != str(project):
+                        continue
+                    exit_code = outcome.get("exit_code")
+                    process = outcome.get("session_id")
+                    if type(exit_code) is int or exit_code is None and type(process) is int:
+                        results.append(ObservedExecution(arguments["cmd"], outcome["output"], exit_code, str(process) if process is not None else None, turn_id=turn_id))
+    for event in events:
+        item = event.get("item", {})
+        if event.get("type") != "item_completed" or item.get("type") != "CommandExecution":
             continue
-        for line in output.splitlines():
+        command = item.get("command", [])
+        if event.get("thread_id") != session_id or event.get("turn_id") not in started or item.get("cwd") != project.as_uri():
+            continue
+        if len(command) != 3 or command[0] not in ("/bin/sh", "/bin/bash", "/bin/zsh") or command[1] not in ("-lc", "-c") or not isinstance(command[2], str):
+            continue
+        if type(item.get("exit_code")) is not int or not isinstance(item.get("stdout"), str):
+            continue
+        if item.get("status") not in ("completed", "failed"):
+            continue
+        if (item["status"] == "completed") != (item["exit_code"] == 0):
+            continue
+        process_id = item.get("process_id")
+        interrupted = event["turn_id"] in aborted and item["status"] == "failed" and item["exit_code"] != 0 and any(
+            result.exit_code is None and result.command == command[2] and result.process_id == process_id and result.turn_id == event["turn_id"] for result in results)
+        results.append(ObservedExecution(command[2], item["stdout"], item["exit_code"], process_id, interrupted, event["turn_id"]))
+    return results
+
+
+def executed_json(records: list[ObservedExecution], expected: dict, allow_interrupted: bool = False) -> bool:
+    for record in records:
+        if record.exit_code != 0 and not (allow_interrupted and record.interrupted):
+            continue
+        for line in record.output.splitlines():
             try:
                 if json.loads(line) == expected:
                     return True
@@ -78,7 +185,7 @@ def executed_json(outputs: list[str], expected: dict) -> bool:
     return False
 
 
-def rollout(path: Path, binding: dict, project: Path, phase: str) -> tuple[dict, list[str]]:
+def rollout(path: Path, binding: dict, project: Path, phase: str) -> tuple[dict, list[ObservedExecution]]:
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     metas = [row["payload"] for row in rows if row.get("type") == "session_meta"]
     require(len(metas) == 1, f"{phase} has no unique session metadata")
@@ -95,19 +202,20 @@ def rollout(path: Path, binding: dict, project: Path, phase: str) -> tuple[dict,
     items = [row["payload"] for row in rows if row.get("type") == "response_item"]
     user_text = "\n".join(part.get("text", "") for item in items if item.get("type") == "message" and item.get("role") == "user" for part in item.get("content", []))
     require(prompts(binding)[phase].strip() in user_text, f"{phase} does not carry the exact brief, role and arm prompt")
-    calls = {item["call_id"]: item for item in items if item.get("type") == "function_call" and item.get("name", "").split(".")[-1] == "exec_command"}
-    outputs = [item["output"] for item in items if item.get("type") == "function_call_output" and item.get("call_id") in calls]
-    require(bool(outputs), f"{phase} has no observed execution result")
+    records = executions(rows, meta["id"], project)
+    require(bool(records), f"{phase} has no observed execution result")
+    if phase == "initial":
+        require(not any(row.get("type") == "event_msg" and row["payload"].get("type") == "task_complete" for row in rows), "initial rollout completed before interruption")
     if phase == "refusal":
-        refused_ids = {identity for identity, call in calls.items() if json.loads(call["arguments"])["cmd"].strip() == "printf forbidden > denied.txt"}
-        require(bool(refused_ids), "refusal did not attempt the prescribed write")
-        refused_outputs = [item["output"] for item in items if item.get("type") == "function_call_output" and item.get("call_id") in refused_ids]
-        require(any("Permission denied" in output or "Read-only file system" in output or "Operation not permitted" in output for output in refused_outputs), "no observed enforcing refusal")
+        refused = [record for record in records if record.command.strip() == "printf forbidden > denied.txt"]
+        require(bool(refused), "refusal did not attempt the prescribed write")
+        require(any(record.exit_code is not None and record.exit_code != 0 and any(
+            reason in record.output.lower() for reason in ("permission denied", "read-only file system", "operation not permitted")) for record in refused), "no observed enforcing refusal")
     observed_turns = [{"model": context["model"], "effort": context.get("effort", context.get("reasoning_effort")),
                        "approval_policy": context["approval_policy"], "sandbox_policy": context["sandbox_policy"]}
                       for context in contexts]
     return {"session_id": meta["id"], "originator": meta["originator"], "version": meta["cli_version"],
-            "turns": observed_turns}, outputs
+            "turns": observed_turns}, records
 
 
 def check(run: Path) -> dict:
@@ -119,11 +227,12 @@ def check(run: Path) -> dict:
     require(fixture["suite"] == SUITE and fixture["fixture_sha256"] == fixture_digest(), "stale suite or fixture")
     require(binding["harness"] == "codex" and binding["route"] == "codex-cli", "destination route has no evidence oracle")
     require(binding["permission_context"] == {"sandbox": "workspace-write", "approval": "never"}, "unverified permission context")
-    require(binding["resolution"]["model"] != "inherit-parent" and binding["resolution"]["effort"] != "inherit-parent", "unknown destination identity")
+    require(all(isinstance(binding["resolution"].get(field), str) and binding["resolution"][field].strip() and binding["resolution"][field] != "inherit-parent" for field in ("model", "effort")), "unknown destination identity")
     require(load(project / "binding.json") == binding, "fixture binding changed")
     require(operator["binding"] == binding, "operator binding differs")
     interruption = operator["interruption"]
-    require(interruption["signal"] in ("SIGTERM", "SIGINT", "SIGKILL") and interruption["exit_code"] in (-15, -2, -9, 143, 130, 137), "no observed process interruption")
+    signal_exits = {"SIGTERM": (-15, 143), "SIGINT": (-2, 130, 1), "SIGKILL": (-9, 137)}
+    require(interruption["exit_code"] in signal_exits.get(interruption["signal"], ()), "no observed process interruption")
     expected = {"total": 18, **fixture["tokens"]}
     require(load(run / "interrupted-checkpoint.json") == expected, "interruption checkpoint is missing or wrong")
     require(load(project / "checkpoint.json") == expected, "checkpoint pickup failed")
@@ -144,7 +253,7 @@ def check(run: Path) -> dict:
         prompt = run / f"{phase}-prompt.md"
         require(prompt.read_text(encoding="utf-8") == prompts(binding)[phase], f"{phase} prompt changed")
         transcript = run / f"{phase}-rollout.jsonl"
-        runtime, outputs = rollout(transcript, binding, project, phase)
+        runtime, records = rollout(transcript, binding, project, phase)
         stream = run / f"{phase}-events.jsonl"
         events = [json.loads(line) for line in stream.read_text(encoding="utf-8").splitlines() if line.strip()]
         threads = [event["thread_id"] for event in events if event.get("type") == "thread.started"]
@@ -153,7 +262,9 @@ def check(run: Path) -> dict:
         require(completed == (phase != "initial"), f"{phase} CLI completion contradicts process observation")
         if phase != "refusal":
             publication = expected if phase == "initial" else {**expected, "recovered": True}
-            require(executed_json(outputs, publication), f"{phase} lacks successful executed task output")
+            if phase == "initial" and interruption["exit_code"] == 1:
+                require(executed_json([record for record in records if record.interrupted], expected, allow_interrupted=True), "no observed runtime interruption with checkpoint output")
+            require(executed_json(records, publication, allow_interrupted=phase == "initial"), f"{phase} lacks successful executed task output")
         observed[phase] = {**runtime, "argv": process["argv"], "exit_code": process["exit_code"]}
         hashes[prompt.name], hashes[transcript.name] = digest(prompt), digest(transcript)
         hashes[stream.name] = digest(stream)

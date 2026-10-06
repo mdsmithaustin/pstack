@@ -1,7 +1,13 @@
 # Planned destination screen
 
 This artifact records the expected live scope before any destination call.
-No live call has run for this routing unit.
+The parent has retained one bounded live Codex 0.160.1 screen outside this
+checkout. Its initial PTY received Ctrl-C after the checkpoint copy and exited
+with status 1. The rollout records the interrupted turn and failed waiting
+command with checkpoint stdout. Recovery published the total and both tokens.
+The read-only invocation returned a correlated nonzero sandbox refusal for the
+exact write command, and `denied.txt` is absent. Recheck these retained files
+with the current oracle before issuing a receipt. This repair needs no new call.
 
 The parent first integrates core recovery. Then run one Codex CLI screen for
 the saved exact role and arm. The screen has three destination invocations.

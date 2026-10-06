@@ -60,7 +60,8 @@ parent = Path(sys.argv[1]).resolve()
 arm = int(sys.argv[2])
 rows = [json.loads(line) for line in (parent / 'resolved.jsonl').read_text().splitlines()]
 resolution = next(row for row in rows if row['arm'] == arm)
-if 'inherit-parent' in (resolution['model'], resolution['effort']):
+if any(not isinstance(resolution.get(field), str) or not resolution[field].strip()
+       or resolution[field] == 'inherit-parent' for field in ('model', 'effort')):
     raise SystemExit('destination identity is not concrete')
 version = (parent / 'version.txt').read_text().strip().removeprefix('codex-cli ')
 binding = {'harness': 'codex', 'resolution': resolution, 'route': 'codex-cli',
@@ -121,6 +122,14 @@ fails this phase. The conditional retains the status when the shell uses `set -e
 Record `SIGTERM` and the actual exit status in `operator.json`. Confirm the
 process stopped before proceeding. Do not infer death from a missing report.
 
+For an interactive PTY invocation, Ctrl-C can produce exit status 1.
+Record `SIGINT` and that observed status. The oracle also requires a runtime
+`turn_aborted` record with reason `interrupted` in the checkpoint command's turn.
+Its failed `CommandExecution` must match the yielded process and contain the
+raw checkpoint JSON in stdout. The waiting command need not exit successfully
+before the operator interrupts it. Neither the CLI stream nor the rollout may
+record a completed initial turn.
+
 Run a fresh invocation with the same concrete identity and scoped options.
 This checks pickup from durable files rather than relying on session memory.
 
@@ -159,7 +168,16 @@ Locate that session's rollout under the active Codex session store, matching
 both the id and this fixture's resolved workspace. Copy only that session
 to `<phase>-rollout.jsonl`. Do not collect other projects' transcripts.
 The oracle requires actual `session_meta`, `turn_context`, user prompt,
-and paired execution result records. It rejects missing metadata and
+and observed execution result records. It accepts paired `function_call`
+results and native `event_msg` `CommandExecution` records. For an enforcing
+refusal before process launch, it accepts correlated `custom_tool_call` `exec`
+outputs only when the whole input consists of literal
+`text(await tools.exec_command({...}));` calls. Literal `write_stdin` polls
+may share the input. It never executes JavaScript or derives evidence from
+assistant prose. Computed commands and ambiguous output pairings fail closed.
+The exact prescribed refusal command must have a nonzero result containing
+a sandbox refusal, matched without regard to letter case.
+It rejects missing metadata and
 effort, wrong version, stale sessions, and unrelated tool results.
 
 Create `operator.json` outside `project/` from the observations. Its shape is:

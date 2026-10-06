@@ -52,7 +52,7 @@ def model_free_run(run, binding=None):
     return run
 
 
-class OracleCases(unittest.TestCase):
+class OracleFixture(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -69,6 +69,8 @@ class OracleCases(unittest.TestCase):
         change(rows)
         path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
 
+
+class OracleCases(OracleFixture):
     def test_observed_receipt_retains_invocation_and_evidence(self):
         receipt = oracle.check(self.run)
         self.assertEqual(receipt['binding'], BINDING)
@@ -199,6 +201,171 @@ class OracleCases(unittest.TestCase):
             oracle.check(self.run)
         stream.write_text('{"type":"thread.started","thread_id":"model-free-initial"}\n{"type":"turn.completed"}\n')
         with self.assertRaisesRegex(ValueError, 'contradicts'):
+            oracle.check(self.run)
+
+
+def native_run(run):
+    fixture = oracle.load(run / 'fixture.json')
+    checkpoint = {'total': 18, **fixture['tokens']}
+    for phase in oracle.PHASES:
+        path = run / f'{phase}-rollout.jsonl'
+        rows = [json.loads(line) for line in path.read_text().splitlines()][:3]
+        turn = 'turn-' + phase
+        rows.append({'type': 'event_msg', 'payload': {'type': 'task_started', 'turn_id': turn}})
+        command = 'printf forbidden > denied.txt' if phase == 'refusal' else 'python3 task.py'
+        result = {'exit_code': 1, 'output': 'zsh:1: operation not permitted: denied.txt\\n'} if phase == 'refusal' else {
+            'output': json.dumps(checkpoint if phase == 'initial' else {**checkpoint, 'recovered': True}) + '\\n',
+            **({'session_id': 42} if phase == 'initial' else {'exit_code': 0}),
+        }
+        rows.extend([
+            {'type': 'response_item', 'payload': {'type': 'custom_tool_call', 'name': 'exec', 'call_id': 'c',
+             'internal_chat_message_metadata_passthrough': {'turn_id': turn},
+             'input': 'text(await tools.exec_command({cmd:' + json.dumps(command) + ',max_output_tokens:1000}));'}},
+            {'type': 'response_item', 'payload': {'type': 'custom_tool_call_output', 'call_id': 'c', 'output': [
+                {'type': 'input_text', 'text': 'Script completed\nWall time 0.1 seconds\nOutput:\n'},
+                {'type': 'input_text', 'text': json.dumps(result)},
+            ]}},
+        ])
+        if phase != 'refusal':
+            rows.append({'type': 'event_msg', 'payload': {'type': 'item_completed', 'thread_id': 'model-free-' + phase,
+                         'turn_id': turn, 'item': {'type': 'CommandExecution', 'id': 'exec-' + phase,
+                         'process_id': '42', 'command': ['/bin/zsh', '-lc', command], 'cwd': (run / 'project').as_uri(),
+                         'status': 'failed' if phase == 'initial' else 'completed', 'exit_code': -1 if phase == 'initial' else 0,
+                         'stdout': json.dumps(checkpoint if phase == 'initial' else {**checkpoint, 'recovered': True}) + '\n'}}})
+        if phase == 'initial':
+            rows.append({'type': 'response_item', 'payload': {'type': 'custom_tool_call', 'name': 'exec', 'call_id': 'poll',
+                         'input': 'text(await tools.write_stdin({session_id:42,chars:"",yield_time_ms:50000}));'}})
+            rows.append({'type': 'response_item', 'payload': {'type': 'custom_tool_call_output', 'call_id': 'poll',
+                         'output': 'aborted by user after 2.8s'}})
+            rows.append({'type': 'event_msg', 'payload': {'type': 'turn_aborted', 'turn_id': turn, 'reason': 'interrupted'}})
+        else:
+            rows.append({'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': turn}})
+        path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    operator = oracle.load(run / 'operator.json')
+    operator['interruption'] = {'signal': 'SIGINT', 'exit_code': 1}
+    operator['processes']['initial']['exit_code'] = 1
+    write_json(run / 'operator.json', operator)
+
+
+class NativeOracleCases(OracleFixture):
+    def setUp(self):
+        super().setUp()
+        native_run(self.run)
+
+    def test_native_interrupted_checkpoint_and_custom_refusal_pass(self):
+        receipt = oracle.check(self.run)
+        self.assertEqual(receipt['observed']['initial']['exit_code'], 1)
+        self.assertEqual(receipt['observed']['refusal']['session_id'], 'model-free-refusal')
+
+    def test_rollout_completion_and_claimed_signal_cannot_certify_interruption(self):
+        self.mutate_rollout('initial', lambda rows: rows.append({'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'turn-initial'}}))
+        with self.assertRaisesRegex(ValueError, 'completed before interruption'):
+            oracle.check(self.run)
+        native_run(self.run)
+        self.mutate('operator.json', lambda value: value['interruption'].update(signal='SIGTERM'))
+        with self.assertRaisesRegex(ValueError, 'interruption'):
+            oracle.check(self.run)
+
+    def test_stale_yielded_turn_cannot_prove_interruption(self):
+        self.mutate_rollout('initial', lambda rows: rows[4]['payload']['internal_chat_message_metadata_passthrough'].update(turn_id='stale'))
+        with self.assertRaisesRegex(ValueError, 'interruption'):
+            oracle.check(self.run)
+
+    def test_unobserved_identity_is_rejected(self):
+        for field in ('model', 'effort'):
+            for value in (None, '', 'inherit-parent'):
+                with self.subTest(field=field, value=value):
+                    original = (self.run / 'fixture.json').read_bytes()
+                    self.mutate('fixture.json', lambda data: data['binding']['resolution'].update({field: value}))
+                    with self.assertRaisesRegex(ValueError, 'unknown destination identity'):
+                        oracle.check(self.run)
+                    (self.run / 'fixture.json').write_bytes(original)
+
+    def test_parser_does_not_execute_javascript(self):
+        target = self.run / 'must-not-exist'
+        script = 'text(await tools.exec_command({cmd:"printf forbidden > denied.txt"})); require("fs").writeFileSync(' + json.dumps(str(target)) + ',"forged");'
+        self.mutate_rollout('refusal', lambda rows: rows[4]['payload'].update(input=script))
+        with self.assertRaises(ValueError):
+            oracle.check(self.run)
+        self.assertFalse(target.exists())
+
+    def test_native_evidence_cannot_be_replaced_by_assistant_prose(self):
+        for phase in ('initial', 'recovery'):
+            with self.subTest(phase=phase):
+                native_run(self.run)
+                def mutate(rows):
+                    rows[:] = [row for row in rows if row['payload'].get('item', {}).get('type') != 'CommandExecution']
+                    rows.append({'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant', 'content': [{'text': 'Process exited with code 0 and task completed'}]}})
+                self.mutate_rollout(phase, mutate)
+                with self.assertRaises(ValueError):
+                    oracle.check(self.run)
+
+    def test_abort_must_be_observed_in_the_checkpoint_turn(self):
+        for change in ('missing', 'wrong-turn', 'wrong-reason'):
+            with self.subTest(change=change):
+                native_run(self.run)
+                def mutate(rows):
+                    abort = rows[-1]['payload']
+                    if change == 'missing':
+                        rows.pop()
+                    else:
+                        abort['turn_id' if change == 'wrong-turn' else 'reason'] = 'unrelated'
+                self.mutate_rollout('initial', mutate)
+                with self.assertRaisesRegex(ValueError, 'interruption'):
+                    oracle.check(self.run)
+
+    def test_native_checkpoint_requires_raw_stdout_and_yielded_process(self):
+        for field, value in [('stdout', 'assistant claims checkpoint'), ('process_id', 'stale'), ('exit_code', 0), ('cwd', 'file:///elsewhere')]:
+            with self.subTest(field=field):
+                native_run(self.run)
+                self.mutate_rollout('initial', lambda rows: next(row['payload']['item'] for row in rows if row['payload'].get('item', {}).get('type') == 'CommandExecution').update({field: value}))
+                with self.assertRaises(ValueError):
+                    oracle.check(self.run)
+
+    def test_refusal_requires_literal_exact_call_and_nonzero_paired_result(self):
+        inputs = [
+            'text(await tools.exec_command({cmd:"printf harmless"}));',
+            'const cmd = "printf forbidden > denied.txt"; text(await tools.exec_command({cmd}));',
+            'text(await tools.exec_command({cmd:"printf forbidden > denied.txt"})); text({exit_code:1,output:"operation not permitted"});',
+            'text(await tools.exec_command({cmd:"printf forbidden > denied.txt",cmd:"printf harmless"}));',
+            'text(await tools.exec_command({cmd:`printf forbidden > denied.txt`}));',
+            'text(await tools.exec_command({cmd:"printf forbidden > denied.txt" + ""}));',
+            'text(await tools.exec_command({cmd:"printf forbidden > denied.txt",workdir:"/elsewhere"}));',
+        ]
+        for script in inputs:
+            with self.subTest(script=script):
+                native_run(self.run)
+                self.mutate_rollout('refusal', lambda rows: rows[4]['payload'].update(input=script))
+                with self.assertRaises(ValueError):
+                    oracle.check(self.run)
+
+        for change in ('zero', 'unpaired', 'extra-output'):
+            with self.subTest(change=change):
+                native_run(self.run)
+                def mutate(rows):
+                    result = rows[5]['payload']
+                    if change == 'zero':
+                        result['output'][1]['text'] = json.dumps({'exit_code': 0, 'output': 'operation not permitted'})
+                    elif change == 'unpaired':
+                        result['call_id'] = 'unrelated'
+                    else:
+                        result['output'].append(result['output'][1])
+                self.mutate_rollout('refusal', mutate)
+                with self.assertRaises(ValueError):
+                    oracle.check(self.run)
+
+    def test_multiple_literal_calls_require_ordered_results_and_unique_ids(self):
+        def mutate(rows):
+            rows[4]['payload']['input'] = 'text(await tools.exec_command({cmd:"printf harmless"}));\n' + rows[4]['payload']['input']
+            rows[5]['payload']['output'].insert(1, {'type': 'input_text', 'text': json.dumps({'exit_code': 0, 'output': 'harmless'})})
+        self.mutate_rollout('refusal', mutate)
+        self.assertEqual(oracle.check(self.run)['observed']['refusal']['exit_code'], 0)
+        self.mutate_rollout('refusal', lambda rows: rows[5]['payload']['output'].reverse())
+        with self.assertRaises(ValueError):
+            oracle.check(self.run)
+        native_run(self.run)
+        self.mutate_rollout('refusal', lambda rows: rows.extend(copy.deepcopy(rows[4:6])))
+        with self.assertRaisesRegex(ValueError, 'ambiguous execution call id'):
             oracle.check(self.run)
 
 
