@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sys
 import unittest
 from pathlib import Path
 
@@ -18,3 +19,9 @@ class OrchRoleContract(unittest.TestCase):
             'panelRoles': sorted(models.PANEL_ROLES),
             'unresolvedAliases': sorted(models.OTHER_ALIASES),
         })
+        source = ROOT / 'evals/resume-recovery/oracle.py'
+        spec = importlib.util.spec_from_file_location('resume_oracle_contract', source)
+        oracle = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = oracle
+        spec.loader.exec_module(oracle)
+        self.assertEqual(oracle.UNRESOLVED_ALIASES, models.OTHER_ALIASES)

@@ -14,6 +14,8 @@ from pathlib import Path
 SUITE = "pstack-resume-v1"
 FIXTURES = Path(__file__).with_name("fixtures")
 PHASES = ("initial", "recovery", "refusal")
+DIRECT_EXEC_PROVENANCE = {"source": "exec", "thread_source": "user"}
+UNRESOLVED_ALIASES = frozenset({"auto", "inherit-parent"})
 
 
 def digest(path: Path) -> str:
@@ -192,6 +194,7 @@ def rollout(path: Path, binding: dict, project: Path, phase: str) -> tuple[dict,
     meta = metas[0]
     require(meta["cwd"] == str(project) and meta["cli_version"] == binding["version"], f"{phase} workspace or version mismatch")
     require(bool(meta.get("originator")), f"{phase} lacks observed originator")
+    require(all(meta.get(field) == value for field, value in DIRECT_EXEC_PROVENANCE.items()), f"{phase} lacks direct codex exec provenance")
     contexts = [row["payload"] for row in rows if row.get("type") == "turn_context"]
     require(bool(contexts), f"{phase} has no observed model and effort")
     resolution = binding["resolution"]
@@ -215,7 +218,7 @@ def rollout(path: Path, binding: dict, project: Path, phase: str) -> tuple[dict,
                        "approval_policy": context["approval_policy"], "sandbox_policy": context["sandbox_policy"]}
                       for context in contexts]
     return {"session_id": meta["id"], "originator": meta["originator"], "version": meta["cli_version"],
-            "turns": observed_turns}, records
+            "source": meta["source"], "thread_source": meta["thread_source"], "turns": observed_turns}, records
 
 
 def check(run: Path) -> dict:
@@ -227,7 +230,7 @@ def check(run: Path) -> dict:
     require(fixture["suite"] == SUITE and fixture["fixture_sha256"] == fixture_digest(), "stale suite or fixture")
     require(binding["harness"] == "codex" and binding["route"] == "codex-cli", "destination route has no evidence oracle")
     require(binding["permission_context"] == {"sandbox": "workspace-write", "approval": "never"}, "unverified permission context")
-    require(all(isinstance(binding["resolution"].get(field), str) and binding["resolution"][field].strip() and binding["resolution"][field] != "inherit-parent" for field in ("model", "effort")), "unknown destination identity")
+    require(all(isinstance(binding["resolution"].get(field), str) and binding["resolution"][field].strip() and binding["resolution"][field].strip() not in UNRESOLVED_ALIASES for field in ("model", "effort")), "unknown destination identity")
     require(load(project / "binding.json") == binding, "fixture binding changed")
     require(operator["binding"] == binding, "operator binding differs")
     interruption = operator["interruption"]

@@ -34,7 +34,7 @@ def model_free_run(run, binding=None):
         output = 'Process exited with code 1\nPermission denied' if phase == 'refusal' else 'Process exited with code 0\n' + json.dumps(checkpoint if phase == 'initial' else publication)
         command = 'printf forbidden > denied.txt' if phase == 'refusal' else 'python task-command'
         rows = [
-            {'type': 'session_meta', 'payload': {'id': 'model-free-' + phase, 'cwd': str(project), 'cli_version': binding['version'], 'originator': 'codex_exec'}},
+            {'type': 'session_meta', 'payload': {'id': 'model-free-' + phase, 'cwd': str(project), 'cli_version': binding['version'], 'originator': 'Codex Desktop', 'source': 'exec', 'thread_source': 'user'}},
             {'type': 'turn_context', 'payload': {'model': binding['resolution']['model'], 'effort': binding['resolution']['effort'], 'approval_policy': 'never', 'sandbox_policy': {'type': 'read-only' if phase == 'refusal' else 'workspace-write'}}},
             {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user', 'content': [{'text': oracle.prompts(binding)[phase]}]}},
             {'type': 'response_item', 'payload': {'type': 'function_call', 'name': 'exec_command', 'call_id': 'c', 'arguments': json.dumps({'cmd': command})}},
@@ -75,7 +75,10 @@ class OracleCases(OracleFixture):
         self.assertEqual(receipt['binding'], BINDING)
         self.assertEqual(receipt['observed']['initial']['exit_code'], -15)
         self.assertEqual(receipt['observed']['recovery']['session_id'], 'model-free-recovery')
-        self.assertEqual(receipt['observed']['recovery']['originator'], 'codex_exec')
+        self.assertEqual(receipt['observed']['recovery']['originator'], 'Codex Desktop')
+        for phase in oracle.PHASES:
+            self.assertEqual(receipt['observed'][phase]['source'], 'exec')
+            self.assertEqual(receipt['observed'][phase]['thread_source'], 'user')
         self.assertEqual(receipt['observed']['recovery']['turns'], [{'model': 'gpt-6.1-sol', 'effort': 'high', 'approval_policy': 'never', 'sandbox_policy': {'type': 'workspace-write'}}])
         self.assertEqual(receipt['evidence_sha256']['project/published.json'], oracle.digest(self.run / 'project/published.json'))
         self.assertNotIn('passed', receipt)
@@ -145,6 +148,49 @@ class OracleCases(OracleFixture):
         with self.assertRaisesRegex(ValueError, 'no evidence oracle'):
             oracle.check(self.run)
 
+    def test_each_phase_requires_direct_exec_provenance(self):
+        subagent = {'subagent': {'thread_spawn': {'parent_thread_id': 'model-free-parent', 'depth': 1,
+                    'agent_path': '/root/model_free', 'agent_nickname': 'Model-free', 'agent_role': 'default'}}}
+        model_free_provenance = [
+            {},
+            {'source': 'exec'},
+            {'thread_source': 'user'},
+            {'source': 'cli', 'thread_source': 'user'},
+            {'source': 'vscode', 'thread_source': 'user'},
+            {'source': subagent, 'thread_source': 'subagent'},
+            {'source': subagent, 'thread_source': subagent},
+            {'source': subagent, 'thread_source': 'user'},
+            {'source': 'exec', 'thread_source': subagent},
+            {'source': 'exec', 'thread_source': 'cli'},
+            {'source': None, 'thread_source': 'user'},
+            {'source': 'exec', 'thread_source': None},
+        ]
+        for phase in oracle.PHASES:
+            path = self.run / f'{phase}-rollout.jsonl'
+            original = path.read_bytes()
+            for provenance in model_free_provenance:
+                with self.subTest(phase=phase, provenance=provenance):
+                    path.write_bytes(original)
+                    def mutate(rows):
+                        meta = rows[0]['payload']
+                        meta.pop('source')
+                        meta.pop('thread_source')
+                        meta.update(provenance, originator='codex_exec')
+                    self.mutate_rollout(phase, mutate)
+                    with self.assertRaisesRegex(ValueError, phase + ' lacks direct codex exec provenance'):
+                        oracle.check(self.run)
+            path.write_bytes(original)
+
+    def test_unresolved_aliases_cannot_receive_a_receipt(self):
+        for field in ('model', 'effort'):
+            for alias in ('inherit-parent', 'auto', ' inherit-parent ', ' auto ', '\tinherit-parent\n', '\tauto\n'):
+                with self.subTest(field=field, alias=alias):
+                    with tempfile.TemporaryDirectory() as directory:
+                        binding = copy.deepcopy(BINDING)
+                        binding['resolution'][field] = alias
+                        with self.assertRaisesRegex(ValueError, 'unknown destination identity'):
+                            model_free_run(Path(directory) / 'run', binding)
+
     def test_wrong_observed_model_effort_version_and_permissions_fail(self):
         for key, value in [('model', 'gpt-6-luna'), ('effort', 'low'), ('approval_policy', 'on-request')]:
             with self.subTest(key=key):
@@ -203,7 +249,7 @@ class OracleCases(OracleFixture):
             oracle.check(self.run)
 
 
-def native_run(run):
+def runtime_event_run(run):
     fixture = oracle.load(run / 'fixture.json')
     checkpoint = {'total': 18, **fixture['tokens']}
     for phase in oracle.PHASES:
@@ -246,12 +292,12 @@ def native_run(run):
     write_json(run / 'operator.json', operator)
 
 
-class NativeOracleCases(OracleFixture):
+class RuntimeEventOracleCases(OracleFixture):
     def setUp(self):
         super().setUp()
-        native_run(self.run)
+        runtime_event_run(self.run)
 
-    def test_native_interrupted_checkpoint_and_custom_refusal_pass(self):
+    def test_cli_runtime_interrupted_checkpoint_and_custom_refusal_pass(self):
         receipt = oracle.check(self.run)
         self.assertEqual(receipt['observed']['initial']['exit_code'], 1)
         self.assertEqual(receipt['observed']['refusal']['session_id'], 'model-free-refusal')
@@ -260,7 +306,7 @@ class NativeOracleCases(OracleFixture):
         self.mutate_rollout('initial', lambda rows: rows.append({'type': 'event_msg', 'payload': {'type': 'task_complete', 'turn_id': 'turn-initial'}}))
         with self.assertRaisesRegex(ValueError, 'completed before interruption'):
             oracle.check(self.run)
-        native_run(self.run)
+        runtime_event_run(self.run)
         self.mutate('operator.json', lambda value: value['interruption'].update(signal='SIGTERM'))
         with self.assertRaisesRegex(ValueError, 'interruption'):
             oracle.check(self.run)
@@ -288,10 +334,10 @@ class NativeOracleCases(OracleFixture):
             oracle.check(self.run)
         self.assertFalse(target.exists())
 
-    def test_native_evidence_cannot_be_replaced_by_assistant_prose(self):
+    def test_runtime_evidence_cannot_be_replaced_by_assistant_prose(self):
         for phase in ('initial', 'recovery'):
             with self.subTest(phase=phase):
-                native_run(self.run)
+                runtime_event_run(self.run)
                 def mutate(rows):
                     rows[:] = [row for row in rows if row['payload'].get('item', {}).get('type') != 'CommandExecution']
                     rows.append({'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant', 'content': [{'text': 'Process exited with code 0 and task completed'}]}})
@@ -302,7 +348,7 @@ class NativeOracleCases(OracleFixture):
     def test_abort_must_be_observed_in_the_checkpoint_turn(self):
         for change in ('missing', 'wrong-turn', 'wrong-reason'):
             with self.subTest(change=change):
-                native_run(self.run)
+                runtime_event_run(self.run)
                 def mutate(rows):
                     abort = rows[-1]['payload']
                     if change == 'missing':
@@ -313,10 +359,10 @@ class NativeOracleCases(OracleFixture):
                 with self.assertRaisesRegex(ValueError, 'interruption'):
                     oracle.check(self.run)
 
-    def test_native_checkpoint_requires_raw_stdout_and_yielded_process(self):
+    def test_runtime_checkpoint_requires_raw_stdout_and_yielded_process(self):
         for field, value in [('stdout', 'assistant claims checkpoint'), ('process_id', 'stale'), ('exit_code', 0), ('cwd', 'file:///elsewhere')]:
             with self.subTest(field=field):
-                native_run(self.run)
+                runtime_event_run(self.run)
                 self.mutate_rollout('initial', lambda rows: next(row['payload']['item'] for row in rows if row['payload'].get('item', {}).get('type') == 'CommandExecution').update({field: value}))
                 with self.assertRaises(ValueError):
                     oracle.check(self.run)
@@ -333,14 +379,14 @@ class NativeOracleCases(OracleFixture):
         ]
         for script in inputs:
             with self.subTest(script=script):
-                native_run(self.run)
+                runtime_event_run(self.run)
                 self.mutate_rollout('refusal', lambda rows: rows[4]['payload'].update(input=script))
                 with self.assertRaises(ValueError):
                     oracle.check(self.run)
 
         for change in ('zero', 'unpaired', 'extra-output'):
             with self.subTest(change=change):
-                native_run(self.run)
+                runtime_event_run(self.run)
                 def mutate(rows):
                     result = rows[5]['payload']
                     if change == 'zero':
@@ -362,7 +408,7 @@ class NativeOracleCases(OracleFixture):
         self.mutate_rollout('refusal', lambda rows: rows[5]['payload']['output'].reverse())
         with self.assertRaises(ValueError):
             oracle.check(self.run)
-        native_run(self.run)
+        runtime_event_run(self.run)
         self.mutate_rollout('refusal', lambda rows: rows.extend(copy.deepcopy(rows[4:6])))
         with self.assertRaisesRegex(ValueError, 'ambiguous execution call id'):
             oracle.check(self.run)

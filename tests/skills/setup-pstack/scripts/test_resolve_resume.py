@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -134,6 +135,37 @@ class ResumeCli(unittest.TestCase):
         (run / 'project/published.json').unlink()
         data = self.resolve('--oracle', str(ORACLE))
         self.assertIn('current oracle rejected evidence', data['candidates'][0]['reason'])
+
+    def test_prior_oracle_receipt_is_ineligible_after_checker_change(self):
+        self.instrument_run()
+        checker = self.root / 'checker'
+        checker.mkdir()
+        source = checker / 'oracle.py'
+        source.write_bytes(ORACLE.read_bytes() + b'\n')
+        shutil.copytree(ORACLE.with_name('fixtures'), checker / 'fixtures')
+        data = self.resolve('--oracle', str(source))
+        self.assertEqual(data['candidates'][0]['reason'], 'stale or forged eval receipt')
+        self.assertFalse(data['candidates'][0]['eligible'])
+
+    def test_non_direct_metadata_denies_candidate_in_every_phase(self):
+        run = self.instrument_run()
+        for phase in ('initial', 'recovery', 'refusal'):
+            path = run / f'{phase}-rollout.jsonl'
+            original = path.read_bytes()
+            for provenance in ({}, {'source': 'cli', 'thread_source': 'user'},
+                               {'source': 'exec', 'thread_source': 'subagent'}):
+                with self.subTest(phase=phase, provenance=provenance):
+                    rows = [json.loads(line) for line in original.splitlines()]
+                    meta = rows[0]['payload']
+                    meta.pop('source')
+                    meta.pop('thread_source')
+                    meta.update(provenance, originator='codex_exec')
+                    path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+                    data = self.resolve('--oracle', str(ORACLE))
+                    self.assertEqual(data['candidates'][0]['reason'],
+                                     'current oracle rejected evidence: eval rejected: ' + phase + ' lacks direct codex exec provenance')
+                    self.assertFalse(data['candidates'][0]['eligible'])
+            path.write_bytes(original)
 
     def test_cli_version_drift_and_disappearing_executable_fail(self):
         self.instrument_run()

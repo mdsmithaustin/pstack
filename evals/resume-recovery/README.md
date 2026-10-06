@@ -61,7 +61,7 @@ arm = int(sys.argv[2])
 rows = [json.loads(line) for line in (parent / 'resolved.jsonl').read_text().splitlines()]
 resolution = next(row for row in rows if row['arm'] == arm)
 if any(not isinstance(resolution.get(field), str) or not resolution[field].strip()
-       or resolution[field] == 'inherit-parent' for field in ('model', 'effort')):
+       or resolution[field].strip() in {'inherit-parent', 'auto'} for field in ('model', 'effort')):
     raise SystemExit('destination identity is not concrete')
 version = (parent / 'version.txt').read_text().strip().removeprefix('codex-cli ')
 binding = {'harness': 'codex', 'resolution': resolution, 'route': 'codex-cli',
@@ -75,9 +75,9 @@ PY
 
 The resolver fails on a nonzero exit. The version and help probes fail on a
 nonzero exit or missing output. Binding preparation fails if the saved arm
-is absent or either identity field inherits. Fixture preparation fails on a
-nonzero exit or an existing run directory. Check the retained help before
-using the invocation below.
+is absent or either identity field is unresolved, including padded aliases.
+Fixture preparation fails on a nonzero exit or an existing run directory.
+Check the retained help before using the invocation below.
 
 Read the binding's concrete model and effort into shell variables.
 
@@ -168,9 +168,19 @@ Locate that session's rollout under the active Codex session store, matching
 both the id and this fixture's resolved workspace. Copy only that session
 to `<phase>-rollout.jsonl`. Do not collect other projects' transcripts.
 The oracle requires actual `session_meta`, `turn_context`, user prompt,
-and observed execution result records. It accepts paired `function_call`
-results and native `event_msg` `CommandExecution` records. For an enforcing
-refusal before process launch, it accepts correlated `custom_tool_call` `exec`
+and observed execution result records. Every phase's `session_meta` must have
+`source: "exec"` and `thread_source: "user"`, matching the tested direct route.
+Missing, contradictory, native, or subagent route metadata fails even when
+`originator` and the operator's argv claim `codex exec`. A nonempty originator
+alone cannot establish the route. The receipt retains both raw route fields.
+The checker bundles setup-pstack's unresolved aliases with source parity tests.
+Model and effort reject `inherit-parent` and `auto` after stripping whitespace
+for comparison. Accepted literal bindings keep their recorded values.
+
+Within this direct route, the oracle accepts paired `function_call` results
+and runtime `event_msg` `CommandExecution` records. These event formats do not
+certify a native delegation route. For an enforcing refusal before process
+launch, it accepts correlated `custom_tool_call` `exec`
 outputs only when the whole input consists of literal
 `text(await tools.exec_command({...}));` calls. Literal `write_stdin` polls
 may share the input. It never executes JavaScript or derives evidence from
@@ -207,7 +217,10 @@ array. It is not observed evidence. Never use it to invent process success.
 A nonzero exit fails certification. Inspect the receipt's exact binding,
 observed invocations, session ids, interruption status, and evidence hashes.
 The receipt contains no self-reported pass boolean. Raw evidence and fixture
-files must remain available. A new oracle or fixture invalidates old evidence.
+files must remain available. A changed oracle invalidates the derived receipt.
+Regrade retained raw evidence with the current oracle and retain the previous
+receipt before replacing it after verification. A changed suite or fixture
+requires matching evidence.
 
 ## Check candidate eligibility
 
