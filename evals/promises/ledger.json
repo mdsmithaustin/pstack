@@ -1545,7 +1545,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
-     "quote": "Inspect the existing runtime identity, forge, pushed branch, and checkout before declaring an attempt terminal. Missing runtime evidence stays uncertain."
+     "quote": "Inspect the existing runtime identity, forge, pushed branch, and checkout to assess runtime state. Missing runtime evidence stays uncertain."
     },
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",

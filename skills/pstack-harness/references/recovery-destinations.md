@@ -34,10 +34,9 @@ A native child's lifetime follows the owning session and the actual
 mechanism. A CLI process may outlive its parent conversation. Save an
 observed task id or CLI process receipt when the mechanism provides one.
 A missing observation means unknown lifetime. It does not establish that
-the child died or authorize another launch. Reconcile completion and
-supersession before consuming the existing retry allowance. A new attempt
-replaces only its own role and arm slot. Other worker and verifier slots
-retain their identities.
+the child died. The workflow's existing retry allowance still applies.
+A new attempt replaces only its own role and arm slot. Other worker and
+verifier slots retain their identities.
 
 The source checkout's `evals/resume-recovery/README.md` provides the operator
 screen. Its current oracle accepts Codex CLI evidence only. Native Codex,
