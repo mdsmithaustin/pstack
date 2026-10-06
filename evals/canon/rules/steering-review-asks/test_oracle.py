@@ -116,6 +116,9 @@ class CopyAssertionTests(unittest.TestCase):
          "expect(written).toEqual([LONG_TEXT]);"),
         ('vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn(async (text: string) => void written.push(text)) } });',
          "expect(written).toEqual([LONG_TEXT]);"),
+        ('vi.spyOn(navigator.clipboard, "writeText")\n  .mockImplementation(async (t) => { written = t })', "expect(written).toBe(LONG_TEXT)"),
+        ("Object.assign(navigator.clipboard, {\n  writeText: (t) =>\n    written.push(t),\n})", "expect(written).toEqual([LONG_TEXT])"),
+        ("Object.assign(navigator.clipboard, {\n  writeText:\n    vi.fn((t) => { written = t }),\n})", "expect(written).toBe(LONG_TEXT)"),
     )
 
     def test_a_payload_captured_in_each_stub_form_and_compared_counts(self):
