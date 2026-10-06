@@ -2736,6 +2736,36 @@ class Issue133WritesAndReruns(unittest.TestCase):
         self.assertEqual(grade("prove-it-works-checks-real-artifact", minimal(events=bash(5, f"{restore}\n{run}")), case)["verdict"], PASS)
         self.assertEqual(grade("prove-it-works-checks-real-artifact", minimal(events=bash(5, f"{run}\n{restore}"), final_reply="done"), case)["verdict"], FAIL)
 
+    def author_turn(self, *events, pid="poteto-runs-documentation-impact-before-completion"):
+        trace_events = (in_turn(0, [{"seq": 0, "kind": "user", "text": "add --json"}, read(1, "documentation-impact/SKILL.md"), *events, text(50, "Done.")])
+                        + in_turn(1, [{"seq": 60, "kind": "user", "text": "review"}, text(61, "x")]))
+        return grade(pid, minimal(events=trace_events, final_reply="x"), load_case("doc-impact-run"))
+
+    def test_n3_a_labeled_result_in_pending_work_is_not_an_author_result(self):
+        label = "Result: independent review required"
+        pending = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [{"content": f"Record {label}", "status": "pending"}]}}
+        plan = {"seq": 2, "kind": "tool_call", "name": "update_plan", "input": {"plan": [{"step": f"Record {label}", "status": "pending"}]}}
+        brief = {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {"prompt": f"Review the docs. Report `{label}` or `Result: independent review not required`."}}
+        done = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [{"content": f"Record {label}", "status": "completed"}]}}
+        handoff = {"seq": 2, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [{"context": "Author result: `independent review required` because the README changed."}]}}
+        self.assertEqual(self.author_turn(pending)["verdict"], FAIL)
+        self.assertEqual(self.author_turn(plan)["verdict"], FAIL)
+        self.assertEqual(self.author_turn(brief)["verdict"], FAIL)
+        self.assertEqual(self.author_turn(*bash(3, f"grep -n '{label}' skills/documentation-impact/SKILL.md"))["verdict"], FAIL)
+        self.assertEqual(self.author_turn(done)["verdict"], PASS)
+        self.assertEqual(self.author_turn(handoff)["verdict"], PASS)
+
+    def test_n7_a_recorded_not_required_result_reads_as_not_required(self):
+        done = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [
+            {"content": "Author result: independent review not required.", "status": "completed"}]}}
+        result = self.author_turn(done, pid="documentation-impact-independent-review-pass-required")
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "author result: not required")
+
+    def test_n7_a_slash_prefixed_skill_load_reads_the_bare_skill(self):
+        events = [{"seq": 1, "kind": "tool_call", "name": "Skill", "input": {"skill": "/how"}}]
+        self.assertEqual(oracles.View(minimal(events=events), load_case("how-run"), None).lead_reads(), ["how/SKILL.md"])
+
 
 if __name__ == "__main__":
     unittest.main()
