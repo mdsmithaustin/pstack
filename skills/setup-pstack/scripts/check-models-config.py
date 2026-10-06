@@ -404,7 +404,7 @@ def step_reviewer(
         target = _shift_effort(base, delta, floor)
         model = _listed_release(model, target, listed)
         offered = [e for e in EFFORT_ORDER if e in _model_efforts(model, listed) and e in CLIS[harness].efforts]
-        effort = _nearest_at_or_below(target, offered)
+        effort = _nearest_at_or_below(target, offered) if offered else target
     result = (
         "the config allows no other model in its family, so this is a same-model review"
         if step == "same-model" else f"stepped {step} to {model}"

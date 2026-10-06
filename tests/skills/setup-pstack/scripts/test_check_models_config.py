@@ -831,6 +831,17 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
         [arm] = self.resolve(harness, "trail reviewer", user=user, codex_catalog=codex_catalog, work_model=work_model)
         return arm
 
+    def test_a_step_target_with_no_recognized_levels_keeps_the_target_effort(self):
+        catalog = catalog_json("gpt-6-sol", catalog_entry("gpt-6-astra", levels=["minimal"]))
+        user = "## codex\ntrail reviewer: gpt-6-sol@xhigh\nfeature: gpt-6-astra\n"
+        self.assertEqual(
+            self.reviewer("codex", "gpt-6-sol@xhigh", user=user, codex_catalog=catalog),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
+                "notes": ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], "step": "up",
+            },
+        )
+
     def test_claude_steps_down_when_the_config_never_names_a_higher_tier(self):
         self.assertEqual(
             self.reviewer("claude-code", "opus@xhigh"),
