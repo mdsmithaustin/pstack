@@ -169,6 +169,10 @@ class KnownIssueProseTests(unittest.TestCase):
         self.assertEqual(self.prose({"kind": "embedded", "severity": "high", "summary": "Embedded mode loops on this pin."}),
                          ["Embedded mode loops on this pin."])
 
+    def test_a_record_whose_prose_is_short_keeps_its_longest_string(self):
+        self.assertEqual(self.prose({"kind": "embedded", "severity": "high", "summary": "Embedded mode loops."}),
+                         ["Embedded mode loops."])
+
 
 class LiveEntryPinTests(unittest.TestCase):
     """C6: the agent's own tests still pass once the edited catalog entry is restored."""
@@ -323,6 +327,11 @@ class ExecutableOnlyTests(unittest.TestCase):
         self.assertEqual(self.run_static("tests_never_patch_the_host", self.PY,
                                          'def test_a():\n    """@pytest.mark.platforms("windows")"""'), [self.NO_MARK])
 
+    def test_an_unparseable_file_earns_no_credit_from_a_docstring(self):
+        mark = 'def test_x(:\n    """@pytest.mark.platforms("windows")"""'
+        self.assertEqual(self.run_static("tests_never_patch_the_host", self.PY, mark), [self.NO_MARK])
+        self.assertEqual(self.run_static("adds_minimal_fixture", self.PY, f'def test_x(:\n    """{self.FIXTURE}"""'), self.K4)
+
     def test_hidden_text_and_copy_assertions_in_js_comments_do_not_count(self):
         content = ("// expect(writeText).toHaveBeenCalledWith(LONG_TEXT);\n"
                    "/* expect(bubble).not.toHaveTextContent(TAIL);\n   expect(bubble).toHaveTextContent(TAIL); */")
@@ -373,6 +382,15 @@ class DesktopSkipTests(ReplayedPullRequest):
             'constraint:C3: no added test is marked @pytest.mark.platforms("windows")',
         ])
 
+
+    def test_an_early_windows_skip_alone_leaves_the_helper_stopping_its_own_desktop(self):
+        def keep_the_posix_only_spare(diff):
+            return re.sub(r"(?ms)^@@ -428,13 .*?(?=^@@ -1249,)", "", diff, count=1)
+
+        self.assertEqual(self.grade_sample("good", keep_the_posix_only_spare)[0], [
+            "functional: tests/hermes_cli/test_desktop_update_tail.py"
+            "::test_windows_stop_spares_its_own_desktop_and_stops_an_unrelated_one failed",
+        ])
 
     def test_an_unparseable_extra_test_file_cannot_hide_a_platform_patch(self):
         extra = "tests/hermes_cli/test_extra.py"
