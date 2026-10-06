@@ -1,4 +1,3 @@
-"""Model-free fixtures exercise the oracle. They do not certify a destination."""
 import copy
 import json
 import tempfile
