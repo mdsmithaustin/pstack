@@ -1341,7 +1341,8 @@ SCRIPT_FILE = re.compile(r"\.(?:py|js|ts|sh)\b")
 
 
 def runs_script(code):
-    return any(len(argv) > 1 and os.path.basename(argv[0]) in SCRIPT_RUNNERS and SCRIPT_FILE.search(argv[1]) for argv in simple_commands(code))
+    return any(os.path.basename(argv[0]) in SCRIPT_RUNNERS and SCRIPT_FILE.search(next((a for a in argv[1:] if not a.startswith("-")), ""))
+               for argv in simple_commands(code) if argv)
 
 
 @oracle("reply-says-inconclusive-when-check-cannot-run")
