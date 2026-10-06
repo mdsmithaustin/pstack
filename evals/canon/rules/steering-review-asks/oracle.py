@@ -642,8 +642,22 @@ def clipboard_names(source):
     return set(CAPTURED_BY_STUB.findall(source)) | clipboard_spies(source)
 
 
-def asserts_on_clipboard(line, names):
-    return COPIED_VALUE.search(line) or any(re.search(rf"expect\(\s*{re.escape(name)}\b", line) for name in names)
+def asserts_on_clipboard(statement, names):
+    return COPIED_VALUE.search(statement) or any(re.search(rf"expect\(\s*{re.escape(name)}\b", statement) for name in names)
+
+
+def statements(source):
+    """source cut at each ;, and at each line end that closes every ( or
+    follows a {, unless the next line continues a chain with ., so one
+    assertion split across lines stays whole."""
+    pieces, start, depth = [], 0, 0
+    for at, char in enumerate(source):
+        depth += (char == "(") - (char == ")")
+        if char == ";" or char == "\n" and not re.match(r"[ \t]*\.", source[at + 1:]) and (
+                depth <= 0 or source[start:at].rstrip().endswith("{")):
+            pieces.append(source[start:at + 1])
+            start, depth = at + 1, 0
+    return [*pieces, source[start:]]
 
 
 def unquoted(value):
@@ -676,7 +690,7 @@ def tests_assert_hidden_text_and_copy(added):
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     names = clipboard_names(source)
-    rendered = "\n".join(line for line in lines if not asserts_on_clipboard(line, names))
+    rendered = "".join(statement for statement in statements(source) if not asserts_on_clipboard(statement, names))
     absent = asserted_values(ABSENT, rendered)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
