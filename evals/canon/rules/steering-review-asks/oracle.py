@@ -627,8 +627,7 @@ CALLED_WITH = r"\s*\.toHaveBeen(?:Last|Nth)?CalledWith\((?!\s*\))"
 PAYLOAD_MATCHER = r"\s*\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
 COPIED_VALUE = re.compile(r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)" + CALLED_WITH
                           + r"|expect\([^;]*?(?:(?:writeText|copyText)\.mock\.|readText\()[^;]*?\)" + PAYLOAD_MATCHER)
-CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)(?:(?!;|\n\s*(?:const|let|var|expect|await|it|test|describe)\b)[\s\S])*?"
-                              r"\b(\w+)(?:\.push\(|\s*=(?![=>]))")
+CAPTURED_BY_STUB = re.compile(r"\b(\w+)(?:\.push\(|\s*=(?![=>]))")
 SPY_AS_WRITETEXT = re.compile(r"""clipboard["']?\s*[:,]\s*\{(?:\s*value\s*:\s*\{)?[^{}]*?\bwriteText["']?\s*:\s*(\w+)\b(?!\s*[.(])""")
 SPY_ON_WRITETEXT = re.compile(r"""(\w+)\s*=\s*(?:vi|jest)\.spyOn\([^;,]*\bclipboard\s*,\s*["']writeText["']""")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
@@ -636,14 +635,42 @@ PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:ge
 STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
 REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
 ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
+OPERAND_WANTED = re.compile(r"(?:=>|[=:,?]|&&|\|\|)[ \t]*$")
+CHAINED_LINE = re.compile(r"\n\s*\??\.")
 
 
 def clipboard_spies(source):
     return {name for pattern in (SPY_AS_WRITETEXT, SPY_ON_WRITETEXT) for name in pattern.findall(source)}
 
 
+def line_continues(source, newline):
+    """A line break inside a statement: its line ends wanting an operand, or
+    the next line opens with a member access."""
+    return bool(OPERAND_WANTED.search(source[source.rfind("\n", 0, newline) + 1:newline]) or CHAINED_LINE.match(source, newline))
+
+
+def stub_captures(source):
+    """The variables a clipboard stub fills: the first push or assignment in
+    the statement after each writeText or copyText. The statement ends at a
+    semicolon, or at a line break that does not continue it, outside the
+    brackets it opened."""
+    names = set()
+    for found in re.finditer(r"writeText|copyText", source):
+        depth, end = 0, found.end()
+        while end < len(source):
+            char = source[end]
+            if depth <= 0 and (char == ";" or char == "\n" and not line_continues(source, end)):
+                break
+            depth += (char in "([{") - (char in ")]}")
+            end += 1
+        captured = CAPTURED_BY_STUB.search(source, found.end(), end)
+        if captured:
+            names.add(captured.group(1))
+    return names
+
+
 def clipboard_names(source):
-    return set(CAPTURED_BY_STUB.findall(source)) | clipboard_spies(source)
+    return stub_captures(source) | clipboard_spies(source)
 
 
 def asserts_on_clipboard(assertion, names):
@@ -662,7 +689,7 @@ def asserts_copied_value(source):
     """An expectation on the clipboard spy's arguments, or on a variable or
     spy that holds what Copy writes. A stub, a bare toHaveBeenCalled, or an
     identity check on the spy checks nothing about what Copy writes."""
-    captured = [rf"expect\(\s*{re.escape(name)}\b[^;]*?\){PAYLOAD_MATCHER}" for name in CAPTURED_BY_STUB.findall(source)]
+    captured = [rf"expect\(\s*{re.escape(name)}\b[^;]*?\){PAYLOAD_MATCHER}" for name in stub_captures(source)]
     spied = [rf"expect\(\s*{re.escape(name)}(?:\s*\){CALLED_WITH}|\.mock\.[^;]*?\){PAYLOAD_MATCHER})" for name in clipboard_spies(source)]
     return any(COPIED_VALUE.search(assertion) or any(re.search(pattern, assertion) for pattern in (*captured, *spied))
                for assertion in assertions(source))
