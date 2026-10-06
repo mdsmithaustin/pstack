@@ -167,6 +167,18 @@ class HiddenTailTests(unittest.TestCase):
             "expect(bubble).toHaveTextContent(TAIL);",
         ), ["constraint:C3: no added web test asserts that hidden prompt text is absent", self.PRESENT])
 
+    def test_a_multiline_assertion_on_the_copied_payload_is_not_the_rendered_text(self):
+        stub = ["const written: string[] = [];",
+                "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });",
+                'it("copies", () => {', "  expect(bubble).not.toHaveTextContent(TAIL);"]
+        for copied in (["  expect(written[0])", "    .toContain(TAIL);"], ["  expect(", "    written[0],", "  ).toContain(TAIL);"]):
+            with self.subTest(copied):
+                self.assertEqual(self.failures(*stub, *copied, "});"), [self.PRESENT])
+
+    def test_assertions_without_semicolons_still_count(self):
+        self.assertEqual(self.failures('it("hides", () => {', "  expect(bubble).not.toHaveTextContent(TAIL)",
+                                       "  expect(bubble).toHaveTextContent(TAIL)", "})"), [])
+
     def test_multiline_assertions_compare_their_values(self):
         absent = ["expect(bubble).not.toHaveTextContent(", "  TAIL,", ");"]
         self.assertEqual(self.failures(*absent, "expect(bubble).toHaveTextContent(", "  SHORT_TEXT,", ");"), [self.PRESENT])
