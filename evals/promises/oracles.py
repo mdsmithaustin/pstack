@@ -830,16 +830,25 @@ PATCH_COMMAND = re.compile(r"\bgit\s+apply\b(?!.*\s--(?:check|stat|numstat|summa
 PATCH_TARGET = re.compile(r"(?m)^\+\+\+ (?:b/)?(\S+)")
 
 
-def shell_writes(command):
-    out = []
-    patched = PATCH_TARGET.findall(command)
-    for segment, masked, base in walk_segments(expand_assignments(strip_heredocs(command))):
-        found = [m for pattern in WRITE_TARGETS for m in re.finditer(pattern, masked)]
-        targets = [segment[m.start(1):m.end(1)].strip("\"'") for m in found]
-        if PATCH_COMMAND.search(masked):
-            targets += patched
-        out += [under(base, target) for target in targets if is_write_target(target)]
-    return out
+def uncommented(command):
+    out, quote, escaped, comment, prev = [], None, False, False, "\n"
+    for char in command:
+        if comment:
+            comment = char != "\n"
+        elif escaped:
+            escaped = False
+        elif char == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            quote = None if char == quote else quote
+        elif char == "#" and prev.isspace():
+            comment = True
+        elif char in "'\"":
+            quote = char
+        if not comment:
+            out.append(char)
+        prev = char
+    return "".join(out)
 
 
 PYTHON_HEADER = re.compile(r"\bpython[0-9.]*\b|\buv run\b")
@@ -849,19 +858,30 @@ PYTHON_BOUND_WRITE = re.compile(r"(\w+)\.(?:write_text|write_bytes)\(")
 PYTHON_OPEN_WRITE = re.compile(r"\bopen\(\s*(['\"])([^'\"\n]+)\1\s*,\s*(['\"])([^'\"\n]*)\3")
 
 
-def python_writes(command):
-    out, bodies = [], [body for _, body in heredoc_bodies(command)]
-    for segment, _, base in walk_segments(expand_assignments(strip_heredocs(command))):
+def python_targets(source):
+    found = [(m.start(), m.group(2)) for m in PYTHON_DIRECT_WRITE.finditer(source)]
+    bound = {m.group(1): m.group(3) for m in PYTHON_BOUND_PATH.finditer(source)}
+    found += [(m.start(), bound[m.group(1)]) for m in PYTHON_BOUND_WRITE.finditer(source) if m.group(1) in bound]
+    found += [(m.start(), m.group(2)) for m in PYTHON_OPEN_WRITE.finditer(source) if re.search(r"[wax]", m.group(4))]
+    return [path for _, path in sorted(found)]
+
+
+def segment_writes(command):
+    patched, bodies = PATCH_TARGET.findall(command), [body for _, body in heredoc_bodies(command)]
+    for segment, masked, base in walk_segments(expand_assignments(uncommented(strip_heredocs(command)))):
         body = bodies.pop(0) if HEREDOC.search(segment) and bodies else None
-        if not PYTHON_HEADER.search(segment):
-            continue
-        source = segment if body is None else body
-        found = [(m.start(), m.group(2)) for m in PYTHON_DIRECT_WRITE.finditer(source)]
-        bound = {m.group(1): m.group(3) for m in PYTHON_BOUND_PATH.finditer(source)}
-        found += [(m.start(), bound[m.group(1)]) for m in PYTHON_BOUND_WRITE.finditer(source) if m.group(1) in bound]
-        found += [(m.start(), m.group(2)) for m in PYTHON_OPEN_WRITE.finditer(source) if re.search(r"[wax]", m.group(4))]
-        out += [under(base, path) for _, path in sorted(found)]
-    return out
+        found = [m for pattern in WRITE_TARGETS for m in re.finditer(pattern, masked)]
+        shell = [segment[m.start(1):m.end(1)].strip("\"'") for m in found] + (patched if PATCH_COMMAND.search(masked) else [])
+        python = python_targets(segment if body is None else body) if PYTHON_HEADER.search(segment) else []
+        yield segment, [under(base, t) for t in shell if is_write_target(t)], [under(base, t) for t in python]
+
+
+def shell_writes(command):
+    return [target for _, shell, _ in segment_writes(command) for target in shell]
+
+
+def python_writes(command):
+    return [target for _, _, python in segment_writes(command) for target in python]
 
 
 def history_steps(name):
@@ -1286,7 +1306,9 @@ def prove_it_works(view):
     if not anchors:
         return inconclusive("no source edit by the lead and no code delegate" + (" (run killed)" if view.killed else ""))
     anchor = max(anchors)
-    after = [r for r in artifact_runs(view, pattern) if r[0] > anchor]
+    same = [path for seq, path, _ in view.source_edits() if seq == anchor]
+    after = [r for r in artifact_runs(view, pattern)
+             if r[0] > anchor or (same and r[0] == anchor and all(runs_after_write(r[1], path, pattern) for path in same))]
     evidence = [f"change anchor at seq {anchor} (last lead source edit or code-delegate spawn)",
                 f"artifact runs after it: {[plain(c)[:80] for _, c, _ in after][:3]}"]
     if any(ok is not False for _, _, ok in after):
@@ -1509,14 +1531,17 @@ def repro_first(view):
     return failed("no reproduction command before editing source", *evidence)
 
 
+GREEN = re.compile(r"\bOK\b|passed|\.\.\. ok\b|^ok\b", re.M)
+
+
 @oracle("bug-fix-uses-poteto-tdd-when-cheap")
 def tdd_in_bug_fix(view):
     read = view.skill_read("poteto-tdd") or view.skill_read("tdd")
     tests = [e for e in view.edits() if e[2] == "test"]
     sources = view.source_edits()
-    runs = [(seq, c, ok, head) for seq, c, ok, head in view.commands() if re.search(r"unittest|pytest|test_", c)]
+    runs = [(seq, c, ok, head) for seq, c, ok, head in view.commands() if re.search(r"unittest|pytest|test_", uncommented(c))]
     failing = [r for r in runs if r[2] is False or re.search(r"\bFAIL|Error|failures=\d*[1-9]", r[3])]
-    green = [r for r in runs if r[2] is not False and re.search(r"\bOK\b|passed|ok\b", r[3]) and not re.search(r"FAIL|Error", r[3])]
+    green = [r for r in runs if r[2] is not False and GREEN.search(r[3]) and not re.search(r"FAIL|Error", r[3])]
     evidence = [f"tdd skill read: {read}", f"test edits: {len(tests)}, source edits: {len(sources)}",
                 f"test runs: {len(runs)}, failing runs: {len(failing)}"]
     commits = view.run_commits()
@@ -2225,35 +2250,28 @@ def attention_section(view):
     return passed(*evidence) if reviewed else failed("Attention section lacks the `reviewed by <model>@<effort>` line", *evidence)
 
 
-def blank_heredocs(command):
-    out, end = [], None
-    for line in command.split("\n"):
-        if end is not None:
-            out.append(" " * len(line))
-            end = None if line.strip() == end else end
-            continue
-        out.append(line)
-        match = HEREDOC.search(line)
-        end = match.group(2) if match else None
-    return "\n".join(out)
+TEST_RUN = re.compile(r"unittest|pytest|npm test|node .*test")
 
 
-def runs_after_write(command, path):
-    name = re.escape(Path(path).name)
-    cue = re.search(r"(?:>>?|\btee\b|\bsed\s+-i|\bopen\(|write_text|\.write\()[^;&|\n]{0,80}?" + name, command)
-    written = cue.start() if cue else command.find(Path(path).name)
-    runs = [m.start() for m in re.finditer(r"unittest|pytest|npm test|node .*test", blank_heredocs(command))]
-    return written >= 0 and any(start > written for start in runs)
+def runs_after_write(command, path, run=TEST_RUN):
+    want, written, ran = os.path.normpath(path), None, []
+    for index, (segment, shell, python) in enumerate(segment_writes(command)):
+        if run.search(segment):
+            ran.append(index)
+        if want in {os.path.normpath(target) for target in shell + python}:
+            written = index
+    return written is not None and any(index > written for index in ran)
 
 
 @oracle("poteto-tdd-failing-test-first")
 def tdd_first(view):
     tests = [e for e in view.edits() if e[2] == "test"]
     sources = view.source_edits()
-    runs = [(seq, c, ok, head) for seq, c, ok, head in view.commands() if re.search(r"unittest|pytest|test_|npm test|node .*test", c)]
+    runs = [(seq, c, ok, head) for seq, c, ok, head in view.commands() if re.search(r"unittest|pytest|test_|npm test|node .*test", uncommented(c))]
     failing = [r for r in runs if r[2] is False or re.search(r"\bFAIL|Error|failures=\d*[1-9]|✗|not ok", r[3])]
-    green = [r for r in runs if r[2] is not False and re.search(r"\bOK\b|passed|ok\b", r[3]) and not re.search(r"FAIL|Error", r[3])]
-    after_fix = [g for g in green if sources and (g[0] > sources[0][0] or (g[0] == sources[0][0] and all(
+    green = [r for r in runs if r[2] is not False and GREEN.search(r[3]) and not re.search(r"FAIL|Error", r[3])]
+    last = sources[-1][0] if sources else None
+    after_fix = [g for g in green if sources and (g[0] > last or (g[0] == last and all(
         runs_after_write(g[1], s[1]) for s in sources if s[0] == g[0])))]
     evidence = [f"test edits: {[e[1] for e in tests][:2]}", f"source edits: {[e[1] for e in sources][:2]}",
                 f"failing runs: {len(failing)}, green runs after a source edit: {len(after_fix)}"]
