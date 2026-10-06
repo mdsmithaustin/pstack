@@ -181,6 +181,18 @@ class HarvestCaptures(unittest.TestCase):
         self.assertEqual((trace["final_reply"], [s["description"] for s in trace["x_subagents"]]),
                          ("native reply", ["native kid"]))
 
+    def test_harvest_reads_only_the_files_it_copied(self):
+        self.meta.unlink()
+        outside_usage = self.tmp / "outside-usage.json"
+        outside_usage.write_text(json.dumps({"session": {"costUsdTicks": 10 ** 10}}))
+        planted = self.run_.root / "transcripts" / "sessions" / "cwd" / "lead"
+        (planted / "subagents" / "planted").mkdir(parents=True)
+        (planted / "usage.json").symlink_to(outside_usage)
+        (planted / "subagents" / "planted" / "meta.json").symlink_to(self.outside_meta)
+        with mock.patch.object(grok, "host_home", return_value=self.tmp / "host"):
+            trace = grok.harvest(self.run_)
+        self.assertEqual((trace["x_cost_usd_lead"], [s["description"] for s in trace["x_subagents"]]), (0, [None]))
+
 
 if __name__ == "__main__":
     unittest.main()
