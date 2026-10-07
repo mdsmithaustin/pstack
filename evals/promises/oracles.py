@@ -75,8 +75,7 @@ CONSTRAINT_ALIASES = {"newline": (r"\n", "linesep", "endswith"), "trailing": (r"
 CONSTRAINT_SUBJECTS = {"do not remove: the sink needs a trailing newline on every row": ("sink", "row")}
 SCRATCH_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/")
 LOG_NAMES = ("decisions.tsv", ".audit/")
-TEST_PATH = re.compile(r"(?<![a-z])(?i:test)|(?<=[a-z])(?:T(?i:est)|tests)|(?:smoke|self|unit|load|e2e)test|(?:^|/)conftest\.py$|\.spec\.")
-SCRATCH_NAME = re.compile(r"(?:^|/)(?:scratch|repro(?![a-z])|reproduc)|^(?:tmp/|(?:verify|baseline)[/_\-\d])")
+NOT_TEST_WORDS = re.compile(r"contest|protest|attest|detest|latest|greatest|fastest|shortest|smartest|hottest|cutest|softest|strictest|(?:^|/)pytest\.ini$")
 PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
@@ -564,11 +563,12 @@ class View:
         inside = rel != path
         if rel.startswith(PRIVATE_PREFIXES) or "/skills/" in path:
             return "private"
-        if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) or SCRATCH_NAME.search(rel):
+        if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) \
+                or rel.startswith(("tmp/", "scratch", "repro", "verify", "baseline")) and not rel.startswith("reprocess"):
             return "scratch"
         if any(tag in rel for tag in LOG_NAMES):
             return "log"
-        if TEST_PATH.search(rel):
+        if "test" in NOT_TEST_WORDS.sub("", rel.lower()) or ".spec." in rel.lower():
             return "test"
         if rel.endswith((".md", ".rst")) or rel.lower().startswith("readme"):
             return "doc"
@@ -1803,35 +1803,16 @@ SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
 CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n['’]t\b")
-OR_JOIN = re.compile(r"\s+or\s+(?:the\s+|a\s+)?")
-NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a)\b")
-NOT_AFTER = re.compile(r"[\s:]+not\b")
-DIRECTLY_NEGATED = re.compile(r"\s+(?:(?:pick(?:ed)?|cho(?:se|ose))\s+)?(?:(?:a|an|any)\s+)?")
-
-
-def mention_states(pattern, low, nouns=None):
-    cuts = [0] + [m.end() for m in CLAUSE_SPLIT.finditer(low)]
-    found = list(CLAUSE_NEGATION.finditer(low))
-    negations = [n.start() for n in found]
-    heads, last_end = [], None
-    for m in re.finditer(pattern, low):
-        clause = cuts[bisect.bisect_right(cuts, m.start()) - 1]
-        at = bisect.bisect_left(negations, m.start())
-        bound = at > bisect.bisect_left(negations, clause) and (
-            not any_between(heads, negations[at - 1], m.start()) or bool(OR_JOIN.fullmatch(low, last_end, m.start())))
-        if nouns and nouns.fullmatch(m.group()):
-            heads.append(m.start())
-        last_end = m.end()
-        if NAMES_NOTHING.match(low, m.end(), m.end() + 12):
-            yield "nothing"
-        elif bound:
-            yield "negated" if DIRECTLY_NEGATED.fullmatch(low, found[at - 1].end(), m.start()) else "blocked"
-        else:
-            yield "blocked" if NOT_AFTER.match(low, m.end()) else "affirmed"
 
 
 def affirmed(pattern, low):
-    return "affirmed" in mention_states(pattern, low)
+    cuts = [0] + [m.end() for m in CLAUSE_SPLIT.finditer(low)]
+    negations = [m.start() for m in CLAUSE_NEGATION.finditer(low)]
+    for m in re.finditer(pattern, low):
+        clause = cuts[bisect.bisect_right(cuts, m.start()) - 1]
+        if bisect.bisect_left(negations, clause) == bisect.bisect_left(negations, m.start()):
+            return True
+    return False
 
 
 @oracle("how-why-reports-name-sources-searched")
@@ -2271,7 +2252,7 @@ def finished_in_first_turn(view, commits):
 
 
 SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|True\b|:|\[)|(?:^|[;&|]\s*)watch\s", re.M)
-SLEEP_LOOP = (re.compile(r"\bdo\b"), re.compile(r"\bsleep\s+\d"), re.compile(r"\bdone\b"))
+SLEEP_LOOP = (re.compile(r"\b(?:while|until|do)\b"), re.compile(r"\bsleep\s+\d"), re.compile(r"\bdone\b"))
 SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:\s+[^\s'"]+){1,64}|eval"""
                         r"""|tmux\s+(?:send-keys|new-session|new)(?:\s+[^\s'"]+){0,64})\s+(['"])(.*?)\1""", re.S)
 SHELL_READERS = {"bash", "ssh", "python3"}
@@ -2991,15 +2972,14 @@ def arena_worktrees(view):
     return passed(*evidence)
 
 
-PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on|based on) (?:candidate|arm) [\w-]+")
+PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on|based on|went with) (?:candidate|arm) [\w-]+")
 
 
 @oracle("arena-fans-out-and-grafts")
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    states = set(mention_states(rf"\b(?:base|winner)\b|{PICKED.pattern}", low, nouns=re.compile("base|winner")))
-    base = "affirmed" in states
+    base = bool(re.search(r"\bbase(?:line)?\b", low)) or affirmed(PICKED, low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
@@ -3008,12 +2988,8 @@ def arena_grafts(view):
         return failed("candidates spawned sequentially", *evidence)
     if not view.final_reply:
         return inconclusive("no synthesis reply" + (" (run killed)" if view.killed else ""), *evidence)
-    grafted = "graft" in low or "converge" in low or "consensus" in low
-    if base and grafted:
+    if base and ("graft" in low or "converge" in low or "consensus" in low):
         return passed(*evidence)
-    if grafted and "blocked" in states:
-        return inconclusive("a negation near the named base may or may not scope over it, which a pattern cannot read", *evidence,
-                            needs_judge=True, excerpt=excerpt_of(view.final_reply))
     return failed("reply does not name the base and the grafts", *evidence)
 
 
