@@ -340,6 +340,13 @@ class HiddenTailTests(unittest.TestCase):
                 self.assertEqual(self.failures('const TAIL = "the end of it";', f"expect(container).not.toHaveTextContent({absent});",
                                                f"expect(container).toHaveTextContent({present});"), [])
 
+    def test_a_constant_and_a_literal_that_spell_the_same_text_with_escapes_match(self):
+        for constant, literal in ((r'"\x41\u0042\u{43}"', '"ABC"'), (r"'it\'s'", '"it\'s"'), (r'"tab\there"', r"'tab\u0009here'"),
+                                  (r'"caf\u00e9"', '"café"')):
+            with self.subTest(constant):
+                self.assertEqual(self.failures(f"const TAIL = {constant};", "expect(container).not.toHaveTextContent(TAIL);",
+                                               f"expect(container).toHaveTextContent({literal});"), [])
+
     def test_a_bare_query_after_a_clipboard_assertion_is_the_rendered_text(self):
         for query in ("screen.getByText(TAIL);", "await screen.findByText(TAIL)"):
             with self.subTest(query):
