@@ -3537,10 +3537,11 @@ class Issue133RoundThree(unittest.TestCase):
                          "**Persona**: Explorer {n} (cli)", "- **Role:** Explorer {n} - found it", "**Role:** Explorer {n}, found it"):
             trio = [template.format(n=n) for n in (1, 2, 3)]
             self.assertEqual(how_labels(*trio), PASS, trio[0])
+
+    def test_round17_a_bold_source_label_keeps_the_text_after_it(self):
         for reply in ("**Source:** Source control and tracked repository files.", "**Source**: Source control and tracked repository files.",
                       "**Sources:** git history", "**Sources**: git history", "- **Source:** Source control and tracked repository files."):
-            self.assertEqual(why_labels(reply, "### Source\n\nIssue / ticket tracker through GitHub MCP, read-only.",
-                                        "### Source\n\nLong-form documents through Pages MCP, read-only."), PASS, reply)
+            self.assertEqual(why_labels(reply), PASS, reply)
 
     def test_round17_a_bold_role_label_naming_one_explorer_is_no_wide_fan_out(self):
         for reply in ("**Role:** Explorer 2", "**Role**: Explorer 2 (parser)", "**Persona:** explorer 2"):
