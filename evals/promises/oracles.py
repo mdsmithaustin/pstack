@@ -3012,7 +3012,7 @@ def arena_grafts(view):
     if base and grafted:
         return passed(*evidence)
     if grafted and "blocked" in states:
-        return inconclusive("a negation elsewhere in the clause may not scope over the named base, which a pattern cannot read", *evidence,
+        return inconclusive("a negation near the named base may or may not scope over it, which a pattern cannot read", *evidence,
                             needs_judge=True, excerpt=excerpt_of(view.final_reply))
     return failed("reply does not name the base and the grafts", *evidence)
 
