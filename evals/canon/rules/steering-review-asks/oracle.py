@@ -627,6 +627,7 @@ PAYLOAD_MATCHER = r"\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
 COPIED_VALUE = re.compile(
     r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|" + PAYLOAD_MATCHER + ")")
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
+CAPTURED_ON_STUB_LINE = re.compile(r"(?:writeText|copyText)[^;\n]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(|textContent\s*\)\s*\.(?:toBe|toEqual)\(")
 STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
@@ -674,9 +675,10 @@ def shows_hidden_value(present, absent, definitions):
 
 def rendered_values(pattern, source):
     """What the first argument of each assertion pattern finds names. A
-    toContain on the clipboard or on a variable its stub fills checks what
-    Copy writes, not the rendered text."""
-    captured = set(CAPTURED_BY_STUB.findall(source))
+    toContain on the clipboard, or on a variable its stub fills on the stub's
+    own line, checks what Copy writes, not the rendered text. A semicolonless
+    file has no other statement end a regex can find."""
+    captured = set(CAPTURED_ON_STUB_LINE.findall(source))
     values = set()
     for found in pattern.finditer(source):
         subject = source[source.rfind("expect(", 0, found.start()) + len("expect("):found.start()]
