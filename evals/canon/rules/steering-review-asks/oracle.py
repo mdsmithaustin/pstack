@@ -633,7 +633,8 @@ ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(|textContent\s*\)\s*\.(?:toBe|toEqual)\(")
 STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
 REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
-WRAPPED = re.compile(r"(?:expect\.stringContaining|new RegExp)\((.*)\)|`\$\{\s*([\w$.]+)\s*\}`|/([^\\/\[\](){}.*+?^$|]+)/[a-z]*")
+PLAIN_REGEX = r"/([^\\/\[\](){}.*+?^$|]+)/"
+WRAPPED = re.compile(rf"expect\.stringContaining\((.*)\)|`\$\{{\s*([\w$.]+)\s*\}}`|{PLAIN_REGEX}")
 DECLARATION = re.compile(r"\b(const|let|var)\s+")
 DECLARATOR = re.compile(r"\s*([\w$]+)\s*(?::(?:\([^()]*\)|=>|[^=,;\n()])*)?(=(?![=>]))?\s*")
 FUNCTION = re.compile(r"\bfunction\s*\*?\s*([\w$]+)")
@@ -647,6 +648,8 @@ PARAMETERS_END = re.compile(r"\s*(?::[^=;{}()]*)?(?:=>|\{)")
 CONTROL_HEAD = re.compile(r"\b(?:if|for|while|switch|with)\s*$")
 BARE_PARAMETER = re.compile(r"(?<![\w$.])([\w$]+)\s*=>")
 PATTERN_END = re.compile(r"\s*=(?![=>])")
+CHANGED_IN_PLACE = re.compile(r"(?<![\w$.])([\w$]+)(?:\s*\.\s*(?:push|unshift|splice|set)\s*\(|\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*=(?![=>]))"
+                              r"|\bObject\.assign\(\s*([\w$]+)")
 REBINDING = re.compile(r"(?<![\w$.])([\w$]+)\s*(?:\?\?|\|\||&&|\*\*|<<|>>>?|[-+*/%&|^])?=(?![=>])")
 JSX_TAG = re.compile(r"<[A-Za-z][\w$.]*\s[^<>]*>")
 Rendered = collections.namedtuple("Rendered", "text expression")
@@ -684,10 +687,10 @@ def decoded(escape):
 
 def named(argument):
     """The text or name an assertion argument stands for: a string's contents,
-    or what stringContaining, new RegExp, a lone ${} template, or a regex with
-    no special characters wraps. A string is text, and so is a template until
-    it substitutes; anything else is an expression, whose code names
-    constants."""
+    or what stringContaining, a lone ${} template, or a regex with no special
+    characters or flags wraps. A string is text, and so is a template until
+    it substitutes; anything else, a RegExp built at runtime among them, is
+    an expression, whose code names constants."""
     argument = " ".join(argument.split())
     wrapped = WRAPPED.fullmatch(argument)
     if wrapped and wrapped.group(3) is not None:
@@ -832,8 +835,8 @@ def definitions_in(source):
     """Every value bound to each name: each declarator of a const, let, or var
     list, function declarations, and assignments to a name the file declares
     with let, var, or a const with no value. Also the names the file may bind
-    to a value it does not know: those names and each one unknown_names
-    finds."""
+    to a value it does not know: those names, each one bound to a regex
+    unreadable() rejects, and each one unknown_names finds."""
     text = statements(source)
     definitions, mutable, initialized = collections.defaultdict(list), set(), collections.Counter()
     for declaration in DECLARATION.finditer(text):
@@ -854,14 +857,17 @@ def definitions_in(source):
     for head in ASSIGNMENT.finditer(text):
         if head.group(1) in mutable:
             definitions[head.group(1)].append(bound_value(text, head.end())[0])
-    return definitions, mutable | unknown_names(code(text), initialized)
+    unreadable_regexes = {name for name, texts in definitions.items() if any(map(unreadable, texts))}
+    return definitions, mutable | unreadable_regexes | unknown_names(code(text), initialized)
 
 
 def unknown_names(text, initialized):
-    """Each name a parameter list or a destructuring pattern binds, and each
-    name assigned more often than a declaration gives it a value. A JSX
-    attribute is not an assignment."""
-    names, opens = set(BARE_PARAMETER.findall(text)), []
+    """Each name a parameter list or a destructuring pattern binds, each name
+    assigned more often than a declaration gives it a value, and each name
+    whose value a method, an index assignment, or Object.assign changes in
+    place. A JSX attribute is not an assignment."""
+    names = set(BARE_PARAMETER.findall(text)) | {name for found in CHANGED_IN_PLACE.findall(text) for name in found if name}
+    opens = []
     for at, char in enumerate(text):
         if char in "([{":
             opens.append(at)
@@ -893,15 +899,20 @@ def resolved_names(definitions):
     return set(known)
 
 
-def proves_unrelated(present, absent, definitions, unknown):
-    """Whether no present value shows an absent one, on proof: the reader
-    resolves every name each present value mentions, and none shows an
-    absent value. Only a const or a function declaration resolves, and not
-    when the file also binds the name another way. A value it cannot
-    resolve may hold anything, so it gets the credit trunk gives any present
-    assertion."""
-    known = resolved_names({name: texts for name, texts in definitions.items() if name not in unknown})
-    return all(free_names(value) <= known
+def unreadable(text):
+    """Whether text is a regex literal that is more than plain text: a flag,
+    an escape, a class, a group, an anchor, a quantifier, or alternation."""
+    return bool(REGEX_AT.fullmatch(text)) and not re.fullmatch(PLAIN_REGEX, text)
+
+
+def proves_unrelated(present, absent, definitions, known):
+    """Whether no present value shows an absent one, on proof: its file
+    resolves every name each present value mentions, no present value is a
+    regex the reader cannot read, and none shows an absent value. Only a
+    const or a function declaration resolves, and not when the file also
+    binds the name another way. A value it cannot resolve may hold
+    anything, so it gets the credit trunk gives any present assertion."""
+    return all(free_names(value) <= known and not unreadable(value.text)
                and not any(shows_hidden_value(value, hidden, definitions) for hidden in absent) for value in present)
 
 
@@ -928,11 +939,22 @@ def tests_assert_hidden_text_and_copy(added):
     not only the button labels. A regex over the added web test lines is a
     proxy: some value must be asserted absent, some value present in the
     rendered text, and the Copy payload asserted. The present check fails
-    only when the reader proves no present value shows an absent one."""
-    lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
-    source = "\n".join(lines)
-    absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
-    unrelated = absent and proves_unrelated(present, absent, *definitions_in(source))
+    only when the reader proves no present value shows an absent one. Each
+    file resolves its present values with only the names it binds, since an
+    import or a name another test file declares holds a value it does not
+    see."""
+    sources = ["\n".join(found) for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path)]
+    source = "\n".join(sources)
+    absent = rendered_values(ABSENT, source)
+    readings = [(rendered_values(PRESENT, text), *definitions_in(text)) for text in sources]
+    definitions = collections.defaultdict(list)
+    for _, own, _ in readings:
+        for name, texts in own.items():
+            definitions[name] += texts
+    present = any(values for values, _, _ in readings)
+    unrelated = absent and all(
+        proves_unrelated(values, absent, definitions, resolved_names({name: texts for name, texts in own.items() if name not in unknown}))
+        for values, own, unknown in readings)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
                                         ("that hidden prompt text is present", present and not unrelated))
