@@ -11,5 +11,5 @@ description = "Run the lint-tier checks the no-mistakes gate runs"
 run = "tools/gate-check.sh lint"
 
 [tasks.gate-test]
-description = "Run the test-tier checks the no-mistakes gate runs"
+description = "Run the manual test-tier checks"
 run = "tools/gate-check.sh test"
