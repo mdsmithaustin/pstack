@@ -65,27 +65,36 @@ class HarvestCopies(unittest.TestCase):
                                     turns=[{"session_id": "lead", "argv": ["codex", "go"]}])
         store = root / "codex-home" / "sessions" / "2026"
         store.mkdir(parents=True)
-        self.rollout = store / "rollout-x-lead.jsonl"
-        self.rollout.write_text(self.reply("native reply"))
+        self.rollouts = {"lead": store / "rollout-x-lead.jsonl", "kid": store / "rollout-y-kid.jsonl"}
+        self.write("native")
         (root / "launch.json").write_text(json.dumps({"path": "codex", "source": "test", "version": "test", "rejected": []}))
 
-    def reply(self, text):
-        return "".join(json.dumps(r) + "\n" for r in [
-            {"type": "session_meta", "payload": {"id": "lead", "cwd": "/w"}},
-            {"type": "response_item", "payload": {"type": "message", "role": "assistant",
-                                                  "content": [{"type": "output_text", "text": text}]}}])
+    def write(self, version):
+        for thread, path in self.rollouts.items():
+            meta = {"id": thread, "cwd": "/w", **({"parent_thread_id": "lead"} if thread == "kid" else {})}
+            path.write_text("".join(json.dumps(r) + "\n" for r in [
+                {"type": "session_meta", "payload": meta},
+                {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+                                                      "content": [{"type": "output_text", "text": f"{version} {thread} reply"}]}}]))
 
-    def test_the_trace_is_parsed_from_the_bytes_the_copy_retained(self):
+    def retained_reply(self, trace, thread):
+        path = next(Path(p) for p in trace["transcript_paths"] if Path(p).name == self.rollouts[thread].name)
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        return rows[-1]["payload"]["content"][0]["text"]
+
+    def test_the_trace_matches_the_retained_rollouts_when_natives_change_around_the_copy(self):
         copy = codex.copy_into
 
-        def rewrite_then_copy(*args):
-            self.rollout.write_text(self.reply("rewritten reply"))
-            return copy(*args)
+        def rewrite_around_copy(*args):
+            self.write("before-copy")
+            copied = copy(*args)
+            self.write("after-copy")
+            return copied
 
-        with mock.patch.object(codex, "copy_into", side_effect=rewrite_then_copy):
+        with mock.patch.object(codex, "copy_into", side_effect=rewrite_around_copy):
             trace = codex.harvest(self.run_)
-        retained = Path(trace["transcript_paths"][0]).read_text()
-        self.assertEqual((trace["final_reply"], retained), ("native reply", self.reply("native reply")))
+        self.assertEqual((trace["final_reply"], [s["final_reply"] for s in trace["x_subagents"]]),
+                         (self.retained_reply(trace, "lead"), [self.retained_reply(trace, "kid")]))
 
     def test_harvest_refuses_a_linked_or_vanished_turn_stream(self):
         outside = self.run_.root / "outside.jsonl"
