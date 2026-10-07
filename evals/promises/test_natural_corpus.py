@@ -201,6 +201,18 @@ REVIEW_LINE_NATURALS = (
     ("The reviewer’s verdict is pass.", PASS),
     ("Independent review: pass without blockers.", PASS),
     ("Independent review: pass without any findings.", PASS),
+    ("Independent review: pass (no edits by the reviewer).", PASS),
+    ("Independent review: pass - no edits", PASS),
+    ("Independent review: pass ✅ (no edits)", PASS),
+    ("Independent review: pass (didn't edit)", INCONCLUSIVE),
+    ("Independent review: pass — no re-review needed.", INCONCLUSIVE),
+    ("Independent review passed without edits.", PASS),
+    ("No files changed since the independent review passed.", PASS),
+    ("The README was not modified after the independent review passed.", PASS),
+    ("Independent review (nothing to fix): pass", INCONCLUSIVE),
+    ("Independent review (README (docs) had nothing to fix): pass", INCONCLUSIVE),
+    ("Independent review: pass: 0 blockers", PASS),
+    ("Verdict: pass: sonnet", PASS),
 )
 
 REVIEW_BLOCK_NEGATED = (
@@ -401,6 +413,8 @@ REVIEW_LINE_NEGATED = (
     ("Review verdict (likely): pass", INCONCLUSIVE),
     ("Review (maybe): pass", INCONCLUSIVE),
     ("Review verdict (assumed): pass", INCONCLUSIVE),
+    ("Independent review: pass (2 failed items)", INCONCLUSIVE),
+    ("Independent review: pass - 1 failing finding", INCONCLUSIVE),
 )
 
 ARENA_NATURALS = (

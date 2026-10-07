@@ -3441,7 +3441,8 @@ class LinearTime(unittest.TestCase):
     def test_a_long_review_reply_grades_in_linear_time(self):
         self.assert_quick(review_line, "PASS" + " " * LONG, " " * LONG + "pass from the reviewer", "pass " * (LONG // 5), "no pass " * (LONG // 8),
                           "[" * LONG + "pass", "](" * (LONG // 2) + "pass", "\n" * LONG + "Review: pass", "Review: " + "(" * LONG + "pass",
-                          "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass")
+                          "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass",
+                          "a" + "_" * LONG + "b pass")
 
 
 def review_line(line):
