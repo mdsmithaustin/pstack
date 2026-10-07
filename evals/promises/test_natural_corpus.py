@@ -225,6 +225,7 @@ REVIEW_LINE_NATURALS = (
     ("Independent review, not blocking anything: pass", INCONCLUSIVE),
     ("Independent review: pass, no edits needed", PASS),
     ("Independent review: pass (no edits needed)", PASS),
+    ("Nothing left to fix! Independent review: pass", PASS),
 )
 
 REVIEW_BLOCK_NEGATED = (
