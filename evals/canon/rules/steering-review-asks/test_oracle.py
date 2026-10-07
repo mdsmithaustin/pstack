@@ -278,6 +278,32 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [self.PRESENT])
 
+    def test_a_present_value_the_file_does_not_resolve_gets_trunk_credit(self):
+        absent, tail = "expect(bubble).not.toHaveTextContent(TAIL)", 'const TAIL = "UNIQUE_TAIL"'
+        for row, lines in (("name the file never binds", [absent, "expect(bubble).toHaveTextContent(SHORT_TEXT)"]),
+                           ("values imported from a fixture module", ['import { TAIL, LONG_TEXT } from "./fixtures"', absent,
+                                                                      "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("test.each row", [tail, 'test.each([[TAIL]])("shows %s", (text) => {', absent,
+                                              "  expect(bubble).toHaveTextContent(text)", "})"]),
+                           ("static class field", ['class P { static TAIL = "UNIQUE_TAIL"; static LONG = "a".repeat(500) + P.TAIL }',
+                                                   "expect(bubble).not.toHaveTextContent(P.TAIL)", "expect(bubble).toHaveTextContent(P.LONG)"]),
+                           ("type annotation with a comma", [tail, 'const TEXTS: Record<string, string> = { long: "x".repeat(500) + TAIL }', absent,
+                                                             "expect(bubble).toHaveTextContent(TEXTS.long)"]),
+                           ("argument nested past two parentheses", [tail, absent, "expect(bubble).toHaveTextContent(new RegExp(escapeRegExp(String(TAIL))))"]),
+                           ("literal prefix before deep parentheses", [tail, 'const HEAD = "chunk"', absent,
+                                                                       "expect(bubble).toHaveTextContent(HEAD + (((TAIL))))"]),
+                           ("array argument with a comma", [tail, 'const HEAD = "chunk"', absent, 'expect(bubble).toHaveTextContent([HEAD, TAIL].join(""))']),
+                           ("escaped backtick in a multi-line template", ["const LONG_TEXT = `it\\`s", "${TAIL}`", absent,
+                                                                          "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("property of an object the file does not bind", [absent, "expect(bubble).toHaveTextContent(fixtures.LONG_TEXT)"]),
+                           ("spread of a name the file does not bind", [absent, 'expect(bubble).toHaveTextContent([...PARTS].join(""))'])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_present_assertion_with_nothing_asserted_absent_is_still_present(self):
+        self.assertEqual(self.failures('const HEAD = "chunk"', "expect(bubble).toHaveTextContent(HEAD)"),
+                         ["constraint:C3: no added web test asserts that hidden prompt text is absent"])
+
     def test_a_constant_declared_in_an_open_test_body_keeps_its_literal(self):
         self.assertEqual(self.failures('it("hides the tail", () => {', '  const TAIL = "tail marker"', "  expect(bubble).not.toHaveTextContent(TAIL)",
                                        '  expect(bubble).toHaveTextContent("tail marker")', "})"), [])
