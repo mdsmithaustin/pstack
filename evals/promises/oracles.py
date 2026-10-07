@@ -2570,7 +2570,7 @@ def doc_impact_before_completion(view):
     return passed(*evidence)
 
 
-VERDICT_WORD = re.compile(r"\bpass(?:ed)?\b", re.I)
+VERDICT_WORD = re.compile(r"\bpass(?:ed|es|ing)?\b", re.I)
 VERDICT_MARKUP = re.compile(r"[*`\[\]✅✔☑✓\ufe0f]|(?<!\w)_+|(?<!_)_+(?!\w)")
 VERDICT_END = re.compile(r"\n|[.!?;](?=\s|$)")
 VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before|since|after)\b", re.I)
@@ -2581,8 +2581,9 @@ NEGATION_ON_PASS = re.compile(r"\b(?:not|no|never|nothing|neither|cannot|fail(?:
 ON_THE_WORD = re.compile(r"\s+(?:[\w'’]+\s+)?")
 FAILING_VERDICT = re.compile(r"\b(?:fail(?:s|ed)?|needs?[- ]changes|blocked|rejected)\b", re.I)
 NOT_RUN = re.compile(r"(?:\bno\s+(?:(?:independent|trail|docs?|documentation)\s+)*review(?:er)?s?(?:\s+(?:was\s+)?(?:run|ran))?"
-                     r"|\breview(?:er)?s?\W{0,3}(?:(?:was|has)\s+)?(?:not\s+(?:yet\s+)?run|never\s+ran|did\s+not\s+run|didn['’]t\s+run|skipped))"
+                     r"|(?<!-)(?<!second\s)(?<!2nd\s)\breview(?:er)?s?\W{0,3}(?:(?:was|has)\s+)?(?:not\s+(?:yet\s+)?run|never\s+ran|did\s+not\s+run|didn['’]t\s+run|skipped))"
                      r"(?=\s*(?:[.,;:!?)|—–\n]|-\s|$))", re.I)
+REPAIR_GAP = re.compile(r"(?:\s+(?:at\s+)?[0-9a-f]{7,40})?\s*(?:->|=>|→|[—–/]|\s-\s)\s*(?:(?:round\s+\d+|now)\s+)?", re.I)
 BENIGN_NEGATION = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|0)|without(?:\s+any)?)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
                              r"|objections?|items?|(?:edits?|changes)(?:\s+(?:needed|required|requested))?)\b", re.I)
 PUNCT_OPENER = r"[,():|+—–]|\s-\s"
@@ -2594,7 +2595,7 @@ TRAILER_ITEM = re.compile(r"(?:with\s+)?(?:\d+\s+(?:[\w-]+\s+)?(?:findings?|bloc
                           r"|(?:the\s+)?(?:independent|trail|docs?|documentation)(?:\s+review(?:er)?)?|(?:claude|opus|sonnet|haiku|fable|gpt|grok|gemini|codex)[\w.@-]*", re.I)
 PLAIN_ASIDE = re.compile(TRAILER_ITEM.pattern + r"|read[- ]only|(?:see\s+)?(?:https?://\S+|[\w.-]*/[\w./#-]*|[\w-]+\.\w{1,5})", re.I)
 LABEL_AFTER = re.compile(r"(?:by|from)\s", re.I)
-PASS_COMPLEMENT = re.compile(r"verdict|on\s+re-?review|it|the\s+(?:change|docs)", re.I)
+PASS_COMPLEMENT = re.compile(r"verdict|on\s+re-?review|it|the\s+(?:change|docs)|at\s+(?:head\s+)?[0-9a-f]{7,40}", re.I)
 LEAD_MARKS = re.compile(r"[\s>|#+*-]*(?:\d+[.)]\s+)?(?:[xX]\s+)?")
 LABEL_SEPARATOR = re.compile(r"->|[:|=→—–(]|\s-\s")
 CLOSED_LABEL = re.compile(r"(?:(?:independent|docs|documentation)\s+)*(?:review|trail\s+review(?:er)?)(?:\s+(?:verdict|result|status))?|verdict")
@@ -2652,7 +2653,8 @@ def label_kind(before, context, header):
         label, quals = " ".join(closed[:cut.start()].lower().split()), closed[cut.end():].lower().split()
         named = header or CLOSED_LABEL.fullmatch(label) or (label in GENERIC_LABELS and REVIEW_NAMED.search(f"{context} {' '.join(quals)}"))
         plain_quals = all(q in LABEL_WORDS or q.isdigit() for q in quals)
-        plain_asides = all(PLAIN_ASIDE.fullmatch(a.strip()) or BENIGN_NEGATION.fullmatch(a.strip()) for a in asides)
+        plain_asides = all(PLAIN_ASIDE.fullmatch(i.strip()) or BENIGN_NEGATION.fullmatch(i.strip())
+                           for a in asides for i in re.split(r",\s", a) if i.strip())
         return "label" if named and plain_quals and plain_asides and not HEDGE.search(text[:cut.start()]) else None
     words = text.lower().split()
     while words and words[-1] in QUALIFIERS:
@@ -2711,12 +2713,31 @@ def negated_on_the_word(plain, m, found):
     return bool(ON_THE_WORD.fullmatch(plain, found["on_pass"][at], m.start())) and not VERDICT_CLAUSE.search(plain, found["on_pass"][at], m.start())
 
 
-def failing_label(plain, f, found):
+def failing_label(plain, f, found, wide=True):
     clause_start = clause_of(plain, found, f.start(), f.end())[1]
     line = bisect.bisect_left(found["newlines"], f.start())
     line_start = found["newlines"][line - 1] + 1 if line else 0
-    context = plain[max(line_start, clause_start - 300):clause_start] + " " + previous_line(plain, found["newlines"], line)
+    context = plain[max(line_start, clause_start - 300):clause_start] + " " + previous_line(plain, found["newlines"], line) if wide else ""
     return label_kind(plain[max(clause_start, f.start() - VERDICT_SPAN):f.start()], context, False)
+
+
+def off_topic_clause(text):
+    return OFF_TOPIC.search(text) and not (NEGATION_AFTER_PASS.search(text) or FAILING_VERDICT.search(text) or REVIEW_NAMED.search(text))
+
+
+def repairs(plain, failing, mentions):
+    history, repaired, chain, last = {}, [], [], None
+    for kind, item in sorted([(FAIL, f) for f in failing] + [(PASS, m) for m in mentions], key=lambda pair: pair[1].start()):
+        linked = last is not None and item.start() - last.end() <= 60 and REPAIR_GAP.fullmatch(plain, last.end(), item.start())
+        chain = chain if linked else []
+        if kind == FAIL:
+            chain.append(item)
+        elif chain:
+            history[item.start()] = chain[0].start()
+            repaired += chain
+            chain = []
+        last = item
+    return history, repaired
 
 
 def mention_verdict(plain, m, found):
@@ -2724,11 +2745,11 @@ def mention_verdict(plain, m, found):
     near, stop = max(clause_start, m.start() - VERDICT_SPAN), min(sentence_end, m.end() + VERDICT_SPAN)
     at = bisect.bisect_left(found["openers"], m.end())
     split = found["openers"][at] if at < len(found["openers"]) and found["openers"][at] < stop else stop
-    before = plain[near:m.start()]
-    off_topic = (any_between(found["off_topic"], near, m.start()) or any_between(found["off_topic"], m.end(), split)
-                 or not before.strip() and any_between(found["off_topic"], split, stop))
-    if off_topic and not (any_between(found["named"], near, m.start()) or any_between(found["named"], m.end(), split)):
-        return None
+    before = plain[near:max(near, found["history"].get(m.start(), m.start()))]
+    subject = any_between(found["off_topic"], near, m.start()) or any_between(found["off_topic"], m.end(), split)
+    if (subject or not before.strip() and any_between(found["off_topic"], split, stop)) and not (
+            any_between(found["named"], near, m.start()) or any_between(found["named"], m.end(), split)):
+        return None if subject or plain[split:split + 1] == ":" else INCONCLUSIVE
     at = bisect.bisect_left(found["aside_openers"], m.end())
     aside = min(found["aside_openers"][at:at + 1] + [clause_end])
     if negated_on_the_word(plain, m, found):
@@ -2740,7 +2761,11 @@ def mention_verdict(plain, m, found):
     if (m.start() - clause_start > VERDICT_SPAN or sentence_end - m.end() > VERDICT_SPAN or plain[sentence_end:sentence_end + 1] == "?"
             or any_between(found["mentions"], clause_start, m.start())):
         return INCONCLUSIVE
-    direct = BENIGN_NEGATION.sub(" ", plain[m.end():split]).strip()
+    direct = plain[m.end():split]
+    clause = VERDICT_CLAUSE.search(direct)
+    if clause and off_topic_clause(direct[clause.end():]):
+        direct = direct[:clause.start()]
+    direct = BENIGN_NEGATION.sub(" ", direct).strip()
     if direct and not PASS_COMPLEMENT.fullmatch(direct):
         return INCONCLUSIVE
     line = bisect.bisect_left(found["newlines"], m.start())
@@ -2759,11 +2784,12 @@ def mention_verdict(plain, m, found):
 
 def review_pass(reply):
     plain = VERDICT_MARKUP.sub(lambda m: " " * len(m.group()), reply or "")
-    benign = [(m.start(), m.end()) for m in BENIGN_NEGATION.finditer(plain)]
     mentions = list(VERDICT_WORD.finditer(plain))
-    clauses = list(VERDICT_CLAUSE.finditer(plain))
-    starts, negations = [m.start() for m in mentions], positions(VERDICT_NEGATION, plain, benign)
+    history, repaired = repairs(plain, list(FAILING_VERDICT.finditer(plain)), mentions)
+    benign = sorted([(m.start(), m.end()) for m in BENIGN_NEGATION.finditer(plain)] + [(f.start(), f.end()) for f in repaired])
     asides = parentheticals(plain)
+    clauses = [m for m in VERDICT_CLAUSE.finditer(plain) if outside([m.start()], asides)]
+    starts, negations = [m.start() for m in mentions], positions(VERDICT_NEGATION, plain, benign)
     on_pass = list(NEGATION_ON_PASS.finditer(plain))
     kept = set(outside([m.start() for m in on_pass], benign))
     found = {"ends": positions(VERDICT_END, plain), "clause_starts": [m.start() for m in clauses], "clause_ends": [m.end() for m in clauses],
@@ -2771,16 +2797,17 @@ def review_pass(reply):
              "on_pass": [m.end() for m in on_pass if m.start() in kept],
              "negations": negations, "direct": outside(negations, asides), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign),
              "openers": positions(VERDICT_OPENER, plain), "aside_openers": positions(ASIDE_OPENER, plain), "off_topic": positions(OFF_TOPIC, plain),
-             "named": positions(REVIEW_NAMED, plain), "mentions": starts}
+             "named": positions(REVIEW_NAMED, plain), "mentions": starts, "history": history}
     graded = [(kind, m.start()) for m in mentions if (kind := mention_verdict(plain, m, found))]
     not_run = list(NOT_RUN.finditer(plain))
-    failing = [(f, failing_label(plain, f, found)) for f in FAILING_VERDICT.finditer(plain)]
+    skipped = {f.start() for f in repaired}
+    failing = [(f, failing_label(plain, f, found)) for f in FAILING_VERDICT.finditer(plain) if f.start() not in skipped]
     if any(kind == PASS for kind, _ in graded):
         blockers = ([at for kind, at in graded if kind in (FAIL, NEGATED)] + [f.start() for f in not_run]
                     + [f.start() for f, kind in failing if kind in ("label", "phrase")])
         return (None, min(blockers)) if blockers else (True, None)
     undecided = [at for kind, at in graded if kind != FAIL]
-    proofs = not_run + [f for f, kind in failing if kind == "label"]
+    proofs = not_run + [f for f, kind in failing if kind == "label" and failing_label(plain, f, found, wide=False) == "label"]
     bare = set(outside([f.end() - 1 for f in proofs], asides))
     settled = [clause_of(plain, found, f.start(), f.end())[2] for f in proofs if f.end() - 1 in bare]
     if not undecided or max(undecided) < max(settled, default=-1):
