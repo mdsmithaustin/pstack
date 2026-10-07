@@ -260,6 +260,7 @@ class HiddenTailTests(unittest.TestCase):
                                                                                 "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
                            ("present in parentheses", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent((LONG_TEXT))"]),
                            ("present cast to a type", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(LONG_TEXT as string)"]),
+                           ("present template holding the constant", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(`Prompt: ${LONG_TEXT}`)"]),
                            ("function declaration builds the present value", ["function makeLong() {", "  return HEAD + TAIL", "}",
                                                                               "const LONG_TEXT = makeLong()", absent,
                                                                               "expect(bubble).toHaveTextContent(LONG_TEXT)"])):
