@@ -214,6 +214,24 @@ class HiddenTailTests(unittest.TestCase):
                 with self.subTest(definitions=definitions, present=present):
                     self.assertEqual(self.failures(*definitions, "expect(container).not.toHaveTextContent(TAIL);", present), [])
 
+    def test_a_present_value_tied_to_the_absent_one_counts(self):
+        long_from_tail = 'const LONG_TEXT = "a".repeat(9000) + TAIL;'
+        for row, lines in (("inline concatenation", ["expect(bubble).not.toHaveTextContent(TAIL);",
+                                                     "expect(bubble).toHaveTextContent(HEAD + TAIL);"]),
+                           ("inline template", ["expect(bubble).not.toHaveTextContent(TAIL);",
+                                                "expect(bubble).toHaveTextContent(`${HEAD}${TAIL}`);"]),
+                           ("tail sliced from the present value", ["const TAIL = LONG_TEXT.slice(-40);",
+                                                                   "expect(bubble).not.toHaveTextContent(TAIL);",
+                                                                   "expect(bubble).toHaveTextContent(LONG_TEXT);"]),
+                           ("definition continued on the next line", ['const LONG_TEXT = "chunk ".repeat(2500) +', "  TAIL;",
+                                                                      "expect(bubble).not.toHaveTextContent(TAIL);",
+                                                                      "expect(bubble).toHaveTextContent(LONG_TEXT);"]),
+                           ("absent literal of a constant the present one holds", ['const TAIL = "UNIQUE_TAIL";', long_from_tail,
+                                                                                    'expect(bubble).not.toHaveTextContent("UNIQUE_TAIL");',
+                                                                                    "expect(bubble).toHaveTextContent(LONG_TEXT);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
     def test_a_present_constant_not_built_from_the_absent_value_does_not_count(self):
         self.assertEqual(self.failures('const HEAD = "chunk ".repeat(900);', "const LONG_TEXT = HEAD + TAIL;",
                                        "expect(container).not.toHaveTextContent(TAIL);", "expect(container).toHaveTextContent(HEAD);"),
