@@ -53,6 +53,26 @@ REVIEW_BLOCK_NATURALS = (
     ("- [x] Independent review: pass", PASS),
     ("1. Independent review: pass", PASS),
     ("> Independent review: pass", PASS),
+    ("Independent review: needs changes at 9b97b117 → pass at cd8c2a74.", PASS),
+    ("Independent review: needs changes → pass at cd8c2a74.", PASS),
+    ("Independent review: round 1 needs changes -> round 2 pass.", PASS),
+    ("Independent review: needs changes — now pass.", PASS),
+    ("Independent review: needs changes => pass.", PASS),
+    ("Independent review: needs changes / pass.", PASS),
+    ("Independent review: fail → pass.", PASS),
+    ("Independent review: pass with no findings, so re-review was skipped.", INCONCLUSIVE),
+    ("The independent review passed on the first round, so the re-review was skipped.", INCONCLUSIVE),
+    ("I ran the independent review and it passed.\nStatus: blocked on CI.", INCONCLUSIVE),
+    ("I ran the independent review and it passed.\nResult: blocked on CI.", INCONCLUSIVE),
+    ("I asked the trail reviewer to check the docs.\nPass, no edits needed, and the test suite is green.", INCONCLUSIVE),
+    ("I asked the trail reviewer to check the docs. Pass, no edits needed, and the test suite is green.", INCONCLUSIVE),
+    ("PASS (tests green)", INCONCLUSIVE),
+    ("Independent review (trail reviewer, sonnet@xhigh): pass and tests are green.", PASS),
+    ("Independent review (round 3, sonnet): pass.", PASS),
+    ("1. Tests pass.\n2. Independent review passes.\n3. No remaining TODOs.", PASS),
+    ("Independent review passes.", PASS),
+    ("Docs review: passes", PASS),
+    ("Independent review: passing", PASS),
 )
 
 REVIEW_LINE_NATURALS = (
@@ -295,6 +315,14 @@ REVIEW_BLOCK_NEGATED = (
     ("| Item | Verdict |\n|---|---|\n| expected | pass |", INCONCLUSIVE),
     ("| Item | Verdict |\n|---|---|\n| maybe | pass |", INCONCLUSIVE),
     ("| Item | Verdict |\n|---|---|\n| planned | pass |", INCONCLUSIVE),
+    ("Independent review: pass → needs changes.", INCONCLUSIVE),
+    ("Independent review: needs changes to pass.", FAIL),
+    ("Independent review: pass and needs changes.", INCONCLUSIVE),
+    ("Independent review: pass and tests are failing.", INCONCLUSIVE),
+    ("Independent review: pass and CI is blocked.", INCONCLUSIVE),
+    ("Independent review: skipped.\nTests pass.", FAIL),
+    ("Independent review: not passing.", FAIL),
+    ("Independent review never passes.", FAIL),
 )
 
 REVIEW_LINE_NEGATED = (
