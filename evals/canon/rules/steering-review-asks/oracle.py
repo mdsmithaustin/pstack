@@ -631,6 +631,11 @@ CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*
 QUOTED_METHOD = re.compile(r"""(["'`])(writeText|copyText)\1""")
 FILLED_BY = re.compile(r"(\w+)(?:\.push\(|\s*=(?![=>]))")
 DESTRUCTURING = re.compile(r"\b(?:const|let|var)\s*([\[{][^=;]*[\]}])\s*=(?![=>])\s*")
+CHAINED = re.compile(r"\)[ \t]*\.")
+CLIPBOARD_READ = re.compile(r"\bmock\s*\.\s*(?:calls|lastCall|results)\b|\breadText\s*\(|\b(?:writeText|copyText)\s*\.\s*mock\b"
+                            r"|\b(?:spyOn|mocked)\s*\([^()]*(?<![\w$])(?:clipboard|writeText|copyText)(?![\w$])")
+CLIPBOARD_SUBJECT = re.compile(CLIPBOARD_READ.pattern + r"|(?<![\w$])(?:writeText|copyText|clipboard)(?![\w$])")
+PLACEHOLDER = re.compile(r"0|\[\s*\]|\{\s*\}|null|undefined")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(|textContent\s*\)\s*\.(?:toBe|toEqual)\(")
 STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
@@ -919,41 +924,91 @@ def proves_unrelated(present, hidden, definitions, known):
     return all(resolves(value, known) and not shows_hidden_value(value, hidden, definitions) for value in present)
 
 
-def clipboard_captures(source, definitions):
-    """Each name a clipboard stub fills, and each name a destructuring pattern
-    unpacks from a clipboard value, as const [[payload]] = writeText.mock.calls
-    does. A stub runs from a writeText or copyText in code, or a spy's quoted
-    method name, to the end of its statement, across lines while a bracket is
-    open and through a method chained onto the call it sits in. The same word
-    in a test title is prose."""
-    text, names = code(QUOTED_METHOD.sub(r"\2", statements(source))), set()
+def clipboard_reads(source):
+    """Each name the file binds only to what Copy writes, on proof: a value a
+    writeText or copyText stub assigns or pushes, a value read from a mock's
+    calls, lastCall, or results or from readText(), a spyOn or mocked spy on
+    the clipboard, or a value built from names already proven. A stub runs from a writeText or copyText in code,
+    or a spy's quoted method name, to the end of its statement, across lines
+    while a bracket is open and through a method chained onto the call it
+    sits in, on the same line or the next. A JSX tag and a test title hold no
+    stub. Any other binding of the name, a parameter outside a stub among
+    them, leaves it unproven, and an empty starting value neither proves nor
+    disproves."""
+    text = JSX_TAG.sub(lambda tag: " " * len(tag.group()), code(QUOTED_METHOD.sub(r"\2", statements(source))))
+    filled, outside = set(), list(text)
     for found in re.finditer(r"writeText|copyText", text):
         depth, at = 0, found.end()
         while at < len(text):
             depth += (text[at] in "([{") - (text[at] in ")]}")
-            if depth < 0 and text.startswith(").", at):
+            if depth < 0 and CHAINED.match(text, at):
                 depth = 0
             elif depth < 0 or depth == 0 and text[at] in ";,\n":
                 break
             at += 1
-        names.update(FILLED_BY.findall(text[found.end():at]))
-    for pattern in DESTRUCTURING.finditer(text):
-        if about_clipboard(bound_value(text, pattern.end())[0], (), definitions):
-            names.update(FREE_NAME.findall(pattern.group(1)))
+        filled.update(FILLED_BY.findall(text[found.end():at]))
+        outside[found.start():at] = " " * (at - found.start())
+    outside = "".join(outside)
+    sites = [(name, None) for name in parameter_names(outside)]
+    for declaration in DECLARATION.finditer(outside):
+        at = declaration.end()
+        while (declarator := DECLARATOR.match(outside, at)) and declarator.group(2):
+            value, _, at = bound_value(text, declarator.end(2))
+            sites.append((declarator.group(1), value))
+            if not outside.startswith(",", at):
+                break
+            at += 1
+    for head in (*REBINDING.finditer(outside), *CHANGED_IN_PLACE.finditer(outside)):
+        sites.append((head.group(1) or head.group(2), bound_value(text, head.end())[0]))
+    for pattern in DESTRUCTURING.finditer(outside):
+        value = bound_value(text, outside.index("=", pattern.end(1)) + 1)[0]
+        sites += [(name, value) for name in FREE_NAME.findall(pattern.group(1))]
+    proven = set()
+    while True:
+        read, other = set(filled), set()
+        for name, value in sites:
+            if value is not None and reads_clipboard(value, proven):
+                read.add(name)
+            elif value is None or not PLACEHOLDER.fullmatch(value):
+                other.add(name)
+        if read - other == proven:
+            return proven
+        proven = read - other
+
+
+def parameter_names(text):
+    """Each name a parameter list binds."""
+    names, opens = set(BARE_PARAMETER.findall(text)), []
+    for at, char in enumerate(text):
+        if char == "(":
+            opens.append(at)
+        elif char == ")" and opens:
+            start = opens.pop()
+            if PARAMETERS_END.match(text, at + 1) and not CONTROL_HEAD.search(text[max(0, start - 8):start]):
+                names.update(FREE_NAME.findall(text[start + 1:at]))
     return names
 
 
-def about_clipboard(subject, captured, definitions):
+def reads_clipboard(value, proven):
+    """Whether a bound value, in code() form, is what Copy writes: a read of a
+    mock's calls, lastCall, or results or of readText(), a spyOn or mocked spy
+    on the clipboard, or built only from names proven to hold it."""
+    names = set(FREE_NAME.findall(value)) - {"await"}
+    return bool(CLIPBOARD_READ.search(value) or names and names <= proven)
+
+
+def about_clipboard(subject, reads):
     """Whether an expectation's subject is what Copy writes, not the rendered
-    text: it names the clipboard, starts with a name the clipboard stub fills,
-    or names a constant bound to a clipboard value, as
-    payload = writeText.mock.calls[0][0] is."""
-    texts = [subject, *(bound for name in names_reached(Rendered(subject, True), definitions) for bound in definitions.get(name, []))]
-    return (any(re.search(r"writeText|clipboard|copyText", text) for text in texts)
-            or any(re.match(rf"\s*{re.escape(name)}\b", subject) for name in captured))
+    text, on proof: it reads a mock's calls, lastCall, or results, calls
+    readText(), or spies on the clipboard, it names the clipboard or a
+    writeText or copyText spy in code, or every name it mentions is one
+    clipboard_reads proves. A name the file also binds to anything else may
+    hold the rendered text, so its expectation stays."""
+    text = code(subject)
+    return bool(CLIPBOARD_SUBJECT.search(text)) or reads_clipboard(text, reads)
 
 
-def other_expectations(source, captured, definitions):
+def other_expectations(source, reads, definitions):
     """The text each expect( that neither asserts absence nor is about the
     clipboard holds: its subject, its matcher chain, and each definition of a
     name the chain reaches, as LONG_TEXT.length reaches the text LONG_TEXT is
@@ -964,20 +1019,20 @@ def other_expectations(source, captured, definitions):
     for start in re.finditer(r"(?<![\w$.])expect\(", text):
         statement = bound_value(text, start.start())[0]
         subject, _, close = bound_value(statement, len("expect("))
-        if not (ABSENT.search(statement) or about_clipboard(subject, captured, definitions)):
+        if not (ABSENT.search(statement) or about_clipboard(subject, reads)):
             arguments = Rendered(statement[close + 1:], True)
             found += [subject, arguments.text, *(bound for name in names_reached(arguments, definitions) for bound in definitions.get(name, []))]
     return found
 
 
-def rendered_values(pattern, source, captured, definitions):
+def rendered_values(pattern, source, reads):
     """What the first argument of each assertion pattern finds names. A
     toContain on what Copy writes checks the payload, not the rendered text.
     A semicolonless file has no other statement end a regex can find."""
     values = set()
     for found in pattern.finditer(source):
         subject = source[source.rfind("expect(", 0, found.start()) + len("expect("):found.start()]
-        if "toContain" in found.group() and about_clipboard(subject, captured, definitions):
+        if "toContain" in found.group() and about_clipboard(subject, reads):
             continue
         value = named(bound_value(source, found.end(), len(source))[0])
         if value.text:
@@ -1000,9 +1055,9 @@ def tests_assert_hidden_text_and_copy(added):
     readings = []
     for text in sources:
         own, unknown = definitions_in(text)
-        captured = clipboard_captures(text, own)
-        readings.append((rendered_values(PRESENT, text, captured, own), rendered_values(ABSENT, text, captured, own),
-                         {name: texts for name, texts in own.items() if name not in unknown}, own, other_expectations(text, captured, own)))
+        reads = clipboard_reads(text)
+        readings.append((rendered_values(PRESENT, text, reads), rendered_values(ABSENT, text, reads),
+                         {name: texts for name, texts in own.items() if name not in unknown}, own, other_expectations(text, reads, own)))
     absent = set().union(*(values for _, values, *_ in readings))
     definitions = collections.defaultdict(list)
     for *_, own, _ in readings:

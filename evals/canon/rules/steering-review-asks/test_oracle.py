@@ -294,6 +294,14 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(row):
                 self.assertEqual(self.failures('it("copies", () => {', *copies, "});", *rendered, *shown, "});"), [])
 
+    def test_a_named_clipboard_spy_checked_for_the_prompt_is_not_the_rendered_text(self):
+        for spy in ('vi.spyOn(navigator.clipboard, "writeText")', 'jest.spyOn(navigator.clipboard, "writeText")',
+                    "vi.mocked(navigator.clipboard.writeText)"):
+            with self.subTest(spy):
+                self.assertEqual(self.failures('const TAIL = "UNIQUE_TAIL";', 'const LONG_TEXT = "filler ".repeat(400) + TAIL;', f"const spy = {spy};",
+                                               "expect(bubble).not.toHaveTextContent(TAIL);", "expect(spy).toHaveBeenCalledWith(LONG_TEXT);"),
+                                 [self.PRESENT])
+
     def test_a_thousand_absent_values_against_a_thousand_present_ones_grade_in_seconds(self):
         lines = [f'const T{i} = "absent marker {i}";' for i in range(1000)] + [f'const P{i} = "present text {i}";' for i in range(1000)]
         lines += [f"expect(bubble).not.toHaveTextContent(T{i});" for i in range(1000)]
