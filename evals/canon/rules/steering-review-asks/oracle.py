@@ -638,7 +638,6 @@ WRAPPED = re.compile(rf"expect\.stringContaining\((.*)\)|`\$\{{\s*([\w$.]+)\s*\}
 DECLARATION = re.compile(r"\b(const|let|var)\s+")
 DECLARATOR = re.compile(r"\s*([\w$]+)\s*(?::(?:\([^()]*\)|=>|[^=,;\n()])*)?(=(?![=>]))?\s*")
 ASSIGNMENT = re.compile(r"(?<![\w$.])([\w$]+)\s*\+?=(?![=>])\s*")
-OPENER = ASSIGNMENT
 STRING_AT = re.compile(STRING)
 REGEX_AT = re.compile(REGEX_LITERAL)
 FREE_NAME = re.compile(r"(?<![\w$.])[A-Za-z_$][\w$]*|(?<=\.\.\.)[A-Za-z_$][\w$]*")
@@ -781,7 +780,7 @@ def statements(source):
 
 def open_depth(statement):
     """How many brackets the earliest open binding in a statement leaves open."""
-    return max((bound_value(statement, head.end())[1] for head in OPENER.finditer(statement)), default=0)
+    return max((bound_value(statement, head.end())[1] for head in ASSIGNMENT.finditer(statement)), default=0)
 
 
 def balance(line):
@@ -837,8 +836,8 @@ def bound_value(statement, start, end=None):
 
 def definitions_in(source):
     """Every value bound to each name: each declarator of a const, let, or var
-    list, and assignments to a name the file declares
-    with let, var, or a const with no value. Also the names the file may bind
+    list, and assignments to a name the file declares with let, var, or a
+    const with no value. Also the names the file may bind
     to a value it does not know: those names, each one bound to a regex
     unreadable() rejects, and each one unknown_names finds."""
     text = statements(source)
@@ -930,9 +929,9 @@ def tests_assert_hidden_text_and_copy(added):
     proxy: some value must be asserted absent, some value present in the
     rendered text, and the Copy payload asserted. The present check fails
     only when the reader proves no present value shows an absent one. Each
-    file resolves its present values with only the names it binds, since an
-    import or a name another test file declares holds a value it does not
-    see."""
+    file resolves its absent and present values with only the names it binds,
+    since an import or a name another test file declares holds a value it
+    does not see."""
     sources = ["\n".join(found) for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path)]
     readings = []
     for text in sources:

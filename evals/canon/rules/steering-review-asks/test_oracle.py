@@ -142,8 +142,8 @@ class CopyAssertionTests(unittest.TestCase):
 class HiddenTailTests(unittest.TestCase):
     """C3 wants the text past the cut asserted absent while collapsed and present
     after. The present ask fails only on proof: some value is asserted absent,
-    the file resolves every present value, and none shows an absent one. A
-    present value the file does not resolve gets the credit trunk gives."""
+    the file resolves every absent and present value, and none shows an absent
+    one. A value the file does not resolve gets the credit trunk gives."""
     COPY = "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);"
     PRESENT = "constraint:C3: no added web test asserts that hidden prompt text is present"
 
