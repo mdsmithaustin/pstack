@@ -3245,14 +3245,14 @@ class Issue133RoundTwo(unittest.TestCase):
         for command in ("bash -c 'sleep 30'", "echo 'while true; do sleep 5; done'", "ssh build-host 'sleep 60'"):
             self.assertNotEqual(self.loop(command), PASS, command)
 
-    def candidates_then_status(self, before, tool="Bash", status_input=None):
+    def candidates_then_status(self, before, tool="Bash", status_input=None, status=" M relay/cache.py"):
         def task(n):
             return {"description": "candidate", "prompt": f"Design one cache-key candidate. Write only under /tmp/arena/candidate-{n}/: cache.py, rationale.md."}
         events = [{"seq": 43 + n, "kind": "tool_call", "name": "Agent", "input": task(n)} for n in range(1, 6)]
         for n, command in enumerate(before):
             events += bash(50 + 2 * n, command)
         events += [{"seq": 60, "kind": "tool_call", "name": tool, "input": status_input or {"command": "git status --short"}},
-                   {"seq": 61, "kind": "tool_result", "name": tool, "ok": True, "output_head": " M relay/cache.py"}]
+                   {"seq": 61, "kind": "tool_result", "name": tool, "ok": True, "output_head": status}]
         spawns = [{"seq": 43 + n, "tool": "Agent", "prompt_head": task(n)["prompt"]} for n in range(1, 6)]
         return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, cwd="/w/relay"), load_case("arena-run"))["verdict"]
 
@@ -3293,6 +3293,28 @@ class Issue133RoundTwo(unittest.TestCase):
                   delegate(10, "Implement the exporter change in src/b.py.", "Explorer 3: wired."), delegate(30, "Write the answer.")]
         result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
         self.assertEqual(result["verdict"], PASS, result)
+
+    def test_copilot_a_quoted_untracked_project_file_is_a_parent_write(self):
+        self.assertEqual(self.candidates_then_status([], status='?? "docs/new guide.md"'), FAIL)
+        self.assertEqual(self.candidates_then_status([], status='?? ".worktrees/candidate 1/"'), PASS)
+
+    def test_copilot_an_uppercase_sources_heading_keeps_its_next_line(self):
+        spawns = [{"seq": 10, "tool": "spawn_agent", "model": "gpt-6.1-sol", "prompt_head": None, "x_prompt_encrypted": True,
+                   "x_child_first_reply": "### SOURCES\nSource control: git log and blame on relay/cache.py.", "task_name": "t"}]
+        events = [{"seq": 10, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": "t"}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1", result)
+
+    def test_copilot_a_comment_after_a_control_operator_is_not_a_green_rerun(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/__main__.py": "x = 0\n"})
+        events = ([self.write(8, project, "tests/test_main.py")]
+                  + bash(10, "python3 -m unittest tests.test_main", ok=False, head="FAIL: test_limit\nFAILED (failures=1)")
+                  + [edit(12, f"{project}/rollup/__main__.py")])
+        for command in ("echo OK;# rerun unittest", "echo OK&&# rerun unittest", "echo OK|# rerun unittest"):
+            result = grade("poteto-tdd-failing-test-first", minimal(events=events + bash(14, command, head="OK")), load_case("tdd-run"), project)
+            self.assertEqual(result["verdict"], INCONCLUSIVE, command)
 
     def test_a_long_numbered_label_grades_in_linear_time(self):
         spawns = [delegate(10, "Implement the parser change.", "## Explorer " + "1" * 26 + "x")]
