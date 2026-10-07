@@ -626,6 +626,7 @@ ARENA_NATURALS = (
     "Rebased onto candidate 2, then grafted retries from candidate 3.",
     "Based on the scores, candidate 2 won; I grafted retries from candidate 3.",
     "Never in doubt - based on candidate 2; retries grafted from candidate 3.",
+    "Never in doubt - rebased onto candidate 2; retries grafted from candidate 3.",
 )
 
 ARENA_NEGATED = (
