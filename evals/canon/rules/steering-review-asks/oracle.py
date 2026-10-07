@@ -5,6 +5,7 @@ when it meets what the maintainer asked for in review (constraint:<id>).
 Scope against the merged diff is reported, never failed: the check writes
 scope.json beside the harvested workspace.diff."""
 import ast
+import collections
 import io
 import json
 import re
@@ -663,10 +664,10 @@ def named(argument):
 
 
 def aliases(value, definitions):
-    """A value, the string literal a constant of that name holds, and every
+    """A value, every string literal a constant of that name holds, and every
     constant whose string literal is that value."""
-    literals = {name: unquoted(text) for name, text in definitions.items() if re.fullmatch(STRING, text)}
-    return {value, literals.get(value, value)} | {name for name, text in literals.items() if text == value}
+    literals = {(name, unquoted(text)) for name, texts in definitions.items() for text in texts if re.fullmatch(STRING, text)}
+    return {value} | {text for name, text in literals if name == value} | {name for name, text in literals if text == value}
 
 
 def mentions(text, values):
@@ -679,8 +680,8 @@ def shows_hidden_value(present, absent, definitions):
     absent value or its definition mentions the present one, as
     LONG_TEXT.slice(-40) does."""
     hidden = aliases(absent, definitions)
-    return bool(aliases(present, definitions) & hidden) or mentions(f"{present}\n{definitions.get(present, '')}", hidden) or mentions(
-        f"{absent}\n{definitions.get(absent, '')}", {present})
+    return bool(aliases(present, definitions) & hidden) or mentions("\n".join([present, *definitions.get(present, [])]), hidden) or mentions(
+        "\n".join([absent, *definitions.get(absent, [])]), {present})
 
 
 def statements(source):
@@ -725,7 +726,9 @@ def tests_assert_hidden_text_and_copy(added):
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
-    definitions = {name: text.strip() for name, text in DEFINITION.findall(statements(source))}
+    definitions = collections.defaultdict(list)
+    for name, text in DEFINITION.findall(statements(source)):
+        definitions[name].append(text.strip())
     shown = any(shows_hidden_value(value, hidden, definitions) for value in present for hidden in absent)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
