@@ -77,6 +77,7 @@ REVIEW_BLOCK_NATURALS = (
     ("Independent review: needs changes - pass.", PASS),
     ("Independent review: pass. The second review was skipped.", PASS),
     ("Independent review: pass. The 2nd review was skipped.", PASS),
+    ("Independent review: pass and CI is green.", PASS),
 )
 
 REVIEW_LINE_NATURALS = (
@@ -329,6 +330,12 @@ REVIEW_BLOCK_NEGATED = (
     ("Independent review never passes.", FAIL),
     ("Independent review: pass. The review was skipped.", INCONCLUSIVE),
     ("Independent review: pass and the tests re-review is still open.", INCONCLUSIVE),
+    ("Independent review: pass but revoked after the tests changed.", INCONCLUSIVE),
+    ("Independent review: pass but only if CI is green.", INCONCLUSIVE),
+    ("Independent review: pass but I overrode it once CI ran.", INCONCLUSIVE),
+    ("Independent review: pass and I retracted it after the tests changed.", INCONCLUSIVE),
+    ("Independent review: pass and it stays valid unless the build changes.", INCONCLUSIVE),
+    ("Independent review: pass but the tests are red and I reverted it.", INCONCLUSIVE),
 )
 
 REVIEW_LINE_NEGATED = (
@@ -574,6 +581,7 @@ ARENA_NEGATED = (
 )
 
 LOOP_NATURALS = (
+    "tmux new -s ssh-watch 'while true; do sleep 60; done'", "ssh tmux.internal 'while true; do sleep 60; done'",
     "nohup sh -c 'while true; do ./check.sh; sleep 60; done' >loop.log 2>&1 &", "ssh devbox 'while true; do ./check.sh; sleep 60; done'",
     "tmux send-keys -t loop 'while true; do ./check.sh; sleep 60; done' Enter", "tmux new-session -d -s watch 'while true; do ./check.sh; sleep 60; done'",
     'sh -c "until [ -f /tmp/done ]; do sleep 10; done"', "docker exec ci bash -lc 'while :; do ./check.sh; sleep 60; done'",

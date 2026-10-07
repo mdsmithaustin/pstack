@@ -3476,7 +3476,7 @@ class LinearTime(unittest.TestCase):
         self.assert_quick(walk, "cd $(" * 160_000, "(cd x " * 160_000, "cd x; " * 160_000)
 
     def test_a_long_run_of_ssh_or_tmux_words_grades_in_linear_time(self):
-        self.assert_quick(loop_verdict, "ssh " * (LONG // 4), "tmux new " * (LONG // 9))
+        self.assert_quick(loop_verdict, "ssh " * (LONG // 4), "tmux new " * (LONG // 9), "x.ssh " * (LONG // 6), "ssh /ssh " * (LONG // 9))
 
 
 def review_line(line):
