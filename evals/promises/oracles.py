@@ -2254,9 +2254,8 @@ def finished_in_first_turn(view, commits):
 
 SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|True\b|:|\[)|(?:^|[;&|]\s*)watch\s", re.M)
 SLEEP_LOOP = (re.compile(r"\bdo\b"), re.compile(r"\bsleep\s+\d"), re.compile(r"\bdone\b"))
-SHELL_ARG = r"""\s+(?!(?:ssh|tmux)\b)[^\s'"]+"""
-SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:""" + SHELL_ARG + r""")+|eval"""
-                        r"""|tmux\s+(?:send-keys|new-session|new)(?:""" + SHELL_ARG + r""")*)\s+(['"])(.*?)\1""", re.S)
+SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:\s+[^\s'"]+){1,16}|eval"""
+                        r"""|tmux\s+(?:send-keys|new-session|new)(?:\s+[^\s'"]+){0,16})\s+(['"])(.*?)\1""", re.S)
 SHELL_READERS = {"bash", "ssh", "python3"}
 
 
@@ -2608,6 +2607,7 @@ LABEL_SEPARATOR = re.compile(r"->|[:|=→—–(]|\s-\s")
 CLOSED_LABEL = re.compile(r"(?:(?:independent|docs|documentation)\s+)*(?:review|trail\s+review(?:er)?)(?:\s+(?:verdict|result|status))?|verdict")
 REVIEW_NAMED = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b", re.I)
 OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|typecheck\w*|pytest|unittest)\b", re.I)
+OFF_TOPIC_GREEN = re.compile(r"\s*(?:the\s+)?(?:[\w-]+\s+)?" + OFF_TOPIC.pattern + r"\s+(?:is|are)\s+green\s*", re.I)
 GENERIC_LABELS = {"result", "status"}
 QUALIFIERS = {"a", "clean", "final", "overall"}
 LABEL_WORDS = QUALIFIERS | {"re-review", "round", "independent", "trail", "reviewer", "review"}
@@ -2728,10 +2728,6 @@ def failing_label(plain, f, found, wide=True):
     return label_kind(plain[max(clause_start, f.start() - VERDICT_SPAN):f.start()], context, False)
 
 
-def off_topic_clause(text):
-    return OFF_TOPIC.search(text) and not (NEGATION_AFTER_PASS.search(text) or FAILING_VERDICT.search(text) or REVIEW_NAMED.search(text))
-
-
 def repairs(plain, failing, mentions):
     history, repaired, chain, last = {}, [], [], None
     for kind, item in sorted([(FAIL, f) for f in failing] + [(PASS, m) for m in mentions], key=lambda pair: pair[1].start()):
@@ -2770,7 +2766,7 @@ def mention_verdict(plain, m, found):
         return INCONCLUSIVE
     direct = plain[m.end():split]
     clause = VERDICT_CLAUSE.search(direct)
-    if clause and off_topic_clause(direct[clause.end():]):
+    if clause and OFF_TOPIC_GREEN.fullmatch(direct, clause.end()):
         direct = direct[:clause.start()]
     direct = BENIGN_NEGATION.sub(" ", direct).strip()
     if direct and not PASS_COMPLEMENT.fullmatch(direct):
