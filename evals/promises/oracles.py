@@ -2583,9 +2583,9 @@ TRAILER_ITEM = re.compile(r"(?:with\s+)?(?:\d+\s+(?:[\w-]+\s+)?(?:findings?|bloc
                           r"|(?:the\s+)?(?:independent|trail|docs?|documentation)(?:\s+review(?:er)?)?|(?:claude|opus|sonnet|haiku|fable|gpt|grok|gemini|codex)[\w.@-]*", re.I)
 LABEL_AFTER = re.compile(r"(?:by|from)\s", re.I)
 PASS_COMPLEMENT = re.compile(r"verdict|on\s+re-?review|it|the\s+(?:change|docs)", re.I)
-LEAD_MARKS = re.compile(r"[\s>|#+*-]*(?:\d+[.)]\s+)?")
+LEAD_MARKS = re.compile(r"[\s>|#+*-]*(?:\d+[.)]\s+)?(?:[xX]\s+)?")
 LABEL_SEPARATOR = re.compile(r"->|[:|=→—–(]|\s-\s")
-REVIEW_NOUN = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b|\bdocs?\b|\bdocumentation\b", re.I)
+CLOSED_LABEL = re.compile(r"(?:(?:independent|docs|documentation)\s+)*(?:review|trail\s+review(?:er)?)(?:\s+(?:verdict|result|status))?|verdict")
 REVIEW_NAMED = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b", re.I)
 OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|typecheck\w*|pytest|unittest)\b", re.I)
 HEDGE = re.compile(r"\b(?:expect\w*|predict\w*|target|goal|desired|hop(?:e|es|ed|ing)|planned|next|if|whether|unless|until|once|likely|probably|maybe|assum\w*)\b", re.I)
@@ -2614,7 +2614,7 @@ def any_between(found, start, end):
     return bisect.bisect_left(found, start) < bisect.bisect_left(found, end)
 
 
-def label_kind(before, context):
+def label_kind(before, context, header):
     text = LEAD_MARKS.sub("", before, count=1).replace("’", "'")
     if not text.strip():
         return "bare"
@@ -2622,10 +2622,10 @@ def label_kind(before, context):
     cuts = list(LABEL_SEPARATOR.finditer(closed))
     if cuts:
         cut = cuts[-1]
-        label, quals = text[:cut.start()].strip(), closed[cut.end():].lower().split()
-        named = REVIEW_NOUN.search(label) or (label.lower() in GENERIC_LABELS and REVIEW_NAMED.search(f"{context} {' '.join(quals)}"))
+        label, quals = " ".join(closed[:cut.start()].lower().split()), closed[cut.end():].lower().split()
+        named = header or CLOSED_LABEL.fullmatch(label) or (label in GENERIC_LABELS and REVIEW_NAMED.search(f"{context} {' '.join(quals)}"))
         plain_quals = all(q in LABEL_WORDS or q.isdigit() for q in quals)
-        return "label" if named and plain_quals and not HEDGE.search(label) else None
+        return "label" if named and plain_quals and not HEDGE.search(text[:cut.start()]) else None
     words = text.lower().split()
     while words and words[-1] in QUALIFIERS:
         words.pop()
@@ -2643,6 +2643,18 @@ def trailer_kind(trailer):
     if not all(TRAILER_ITEM.fullmatch(i) for i in items):
         return None
     return "source" if any(LABEL_AFTER.match(i) for i in items) else "notes"
+
+
+def table_headers(plain):
+    lines, headers, header = plain.split("\n"), {}, None
+    for at, line in enumerate(lines):
+        if not line.lstrip().startswith("|"):
+            header = None
+        elif at and set(line) <= set("|-: \t"):
+            header = lines[at - 1].split("|")
+        elif header:
+            headers[at] = header
+    return headers
 
 
 def previous_line(plain, newlines, line):
@@ -2680,7 +2692,10 @@ def mention_verdict(plain, m, found):
     line = bisect.bisect_left(found["newlines"], m.start())
     previous = previous_line(plain, found["newlines"], line)
     line_start = found["newlines"][line - 1] + 1 if line else 0
-    kind = label_kind(before, plain[max(line_start, clause_start - 300):clause_start] + " " + previous)
+    header = found["headers"].get(line, ())
+    column = bisect.bisect_left(found["pipes"], m.start()) - bisect.bisect_left(found["pipes"], line_start)
+    named_column = column < len(header) and CLOSED_LABEL.fullmatch(" ".join(header[column].lower().split()))
+    kind = label_kind(before, plain[max(line_start, clause_start - 300):clause_start] + " " + previous, named_column)
     tail = trailer_kind(BENIGN_NEGATION.sub(" ", plain[split:stop]))
     heading = VERDICT_END.split(previous)[-1].strip()
     if tail and (kind == "label" or kind in ("bare", "receipt") and tail == "source" or kind == "bare" and heading.startswith("#") and REVIEW_NAMED.search(heading)):
@@ -2694,7 +2709,7 @@ def review_pass(reply):
     mentions = list(VERDICT_WORD.finditer(plain))
     clauses = list(VERDICT_CLAUSE.finditer(plain))
     found = {"ends": positions(VERDICT_END, plain), "clause_starts": [m.start() for m in clauses], "clause_ends": [m.end() for m in clauses],
-             "newlines": positions(re.compile("\n"), plain),
+             "newlines": positions(re.compile("\n"), plain), "pipes": positions(re.compile(r"\|"), plain), "headers": table_headers(plain),
              "negations": positions(VERDICT_NEGATION, plain, benign), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign), "openers": positions(VERDICT_OPENER, plain),
              "off_topic": positions(OFF_TOPIC, plain), "named": positions(REVIEW_NAMED, plain), "mentions": [m.start() for m in mentions]}
     verdicts = {}

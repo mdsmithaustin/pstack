@@ -3481,9 +3481,10 @@ class ReviewVerdictGuard(unittest.TestCase):
     def test_a_table_cell_takes_its_label_from_the_column_header(self):
         self.assertEqual(review_line("\n| Gate | Verdict |\n|---|---|\n| docs | pass |")["verdict"], PASS)
         self.assertEqual(review_line("\n| Gate | Notes |\n|---|---|\n| docs | pass |")["verdict"], INCONCLUSIVE)
+        self.assertEqual(review_line("\n| Gate | Verdict |\n|---|---|\nLater rows:\n| docs | pass |")["verdict"], INCONCLUSIVE)
 
     def test_a_filename_link_or_version_does_not_end_the_label(self):
-        for line in ("Independent review of README.md: pass", "[Independent review](docs/review.md): pass", "Reviewer: PASS (v2.1)"):
+        for line in ("Independent review (README.md): pass", "[Independent review](docs/review.md): pass", "Review: PASS (v2.1)"):
             self.assertEqual(review_line(line)["verdict"], PASS, line)
 
 
