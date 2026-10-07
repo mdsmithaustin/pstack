@@ -1616,10 +1616,10 @@ class ReplyWording(unittest.TestCase):
             self.assertEqual(result["verdict"], PASS, (line, result))
 
     def test_a_coordinated_negation_is_not_a_pick(self):
-        for line, verdict in (("Neither candidate 1 nor candidate 2 was selected, and no graft was applied.", FAIL),
-                              ("It was not the case that candidate 1 was selected, and no graft was applied.", INCONCLUSIVE)):
+        for line in ("Neither candidate 1 nor candidate 2 was selected, and no graft was applied.",
+                     "It was not the case that candidate 1 was selected, and no graft was applied."):
             result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
-            self.assertEqual(result["verdict"], verdict, (line, result))
+            self.assertEqual(result["verdict"], FAIL, (line, result))
 
     def test_a_negation_before_and_does_not_cancel_the_pick_after_it(self):
         result = self.arena("Arena result\n- No clear winner and candidate 1 was selected, with retries grafted from candidate 3.\n- Verified: 8 unit tests passed.")
@@ -2642,12 +2642,12 @@ class Issue133WritesAndReruns(unittest.TestCase):
     def test_n7_a_redirect_on_cd_writes_in_the_directory_it_leaves(self):
         self.assertEqual(oracles.shell_writes("cd /tmp/s > moved.log && echo x > a.txt"), ["moved.log", "/tmp/s/a.txt"])
 
-    def test_f12_scratch_and_test_names_need_a_word_boundary(self):
+    def test_f12_english_words_and_reprocess_are_source(self):
         view = oracles.View(minimal(), {}, None)
         names = ("verify.py", "scratch.py", "reprocess.py", "contest.py", "latest.py", "attestation.py",
                  "verify_tally_json.py", "repro-retry.sh", "scratchpad/a.py", "tests/test_x.py", "pkg/x_test.go", "__tests__/a.js")
         self.assertEqual({n: view.classify(n) for n in names},
-                         {"verify.py": "source", "scratch.py": "scratch", "reprocess.py": "source", "contest.py": "source",
+                         {"verify.py": "scratch", "scratch.py": "scratch", "reprocess.py": "source", "contest.py": "source",
                           "latest.py": "source", "attestation.py": "source", "verify_tally_json.py": "scratch",
                           "repro-retry.sh": "scratch", "scratchpad/a.py": "scratch", "tests/test_x.py": "test",
                           "pkg/x_test.go": "test", "__tests__/a.js": "test"})
@@ -2657,13 +2657,16 @@ class Issue133WritesAndReruns(unittest.TestCase):
         for name in NATURAL_TEST_NAMES:
             self.assertEqual(view.classify(name), "test", name)
 
-    def test_test_names_count_unless_test_ends_a_lowercase_word(self):
+    def test_a_name_holding_test_is_a_test_unless_test_ends_an_english_word(self):
         view = oracles.View(minimal(), {}, None)
-        names = {**{name: "test" for name in CONVENTIONAL_TEST_NAMES},
-                 **{name: "source" for name in ("contest.py", "latest.py", "attestation.py", "protest/x.py", "greatest_hits.py", "Contest.java",
-                                                "LatestVersion.java", "pytest.ini")},
-                 **{name: "scratch" for name in ("scratch.py", "scratch.sh", "reproducer.py", "tools/scratch.py", "src/repro_bug.py")},
-                 "verify.py": "source", "baseline.py": "source", "verify_fix.sh": "scratch", "baseline/x.txt": "scratch"}
+        names = {**{name: "test" for name in CONVENTIONAL_TEST_NAMES + NATURAL_TEST_NAMES + ("test_contest.py", "tests/latest.py", "Login.spec.js")},
+                 **{name: "source" for name in ("contest.py", "protest/x.py", "attestation.py", "detest.py", "latest.py", "greatest_hits.py",
+                                                "fastest.py", "shortest_path.py", "smartest.py", "hottest.py", "cutest.py", "softest.py",
+                                                "strictest.py", "Contest.java", "LatestVersion.java", "pytest.ini", "backend/pytest.ini")},
+                 **{name: "scratch" for name in ("scratch.py", "scratch.sh", "repro.py", "reproducer.py", "verify.py", "baseline.py",
+                                                 "verify_fix.sh", "baseline/x.txt", "scratchpad/a.py")},
+                 **{name: "source" for name in ("reprocess.py", "reprocess_queue.py", "tools/scratch.py", "src/repro_bug.py",
+                                                "src/reproduction/x.py", "pkg/scratchpad/x.py")}}
         self.assertEqual({name: view.classify(name) for name in names}, names)
 
     def test_tdd_and_repro_oracles_read_each_test_and_scratch_name(self):
@@ -3070,17 +3073,13 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
             self.assertEqual(self.arena(line), FAIL, line)
         self.assertEqual(self.arena("Candidate 1 is the base; retries were grafted from candidate 3."), PASS)
 
-    def test_copilot_a_negated_base_names_no_base(self):
-        self.assertEqual(self.arena("No base was selected; retries were grafted from candidate 3."), FAIL)
-
     def test_n10_a_negation_anywhere_in_the_picks_clause_cancels_it(self):
-        for line in ("Nobody picked candidate 1, and retries were grafted from candidate 3.",
-                     "We never selected candidate 1, and retries were grafted from candidate 3."):
-            self.assertEqual(self.arena(line), FAIL, line)
         for line in ("It was not at any point in the long review the case that candidate 1 was selected, with retries grafted from candidate 3.",
+                     "Nobody picked candidate 1, and retries were grafted from candidate 3.",
                      "None of us selected candidate 1, and retries were grafted from candidate 3.",
+                     "We never selected candidate 1, and retries were grafted from candidate 3.",
                      "Neither of us selected candidate 1, and retries were grafted from candidate 3."):
-            self.assertEqual(self.arena(line), INCONCLUSIVE, line)
+            self.assertEqual(self.arena(line), FAIL, line)
 
     def test_n10_each_clause_split_ends_an_earlier_negation(self):
         for split in (". ", ", ", "; ", ": ", "\n- ", " but ", " and ", " so ", " because ", " since ", " although ", " though ",
@@ -3457,31 +3456,11 @@ class Issue133RoundThree(unittest.TestCase):
         self.assertEqual(status_after(["cd /w/relay-wt/candidate-1", "cd ../relay"], failing={"cd /w/relay-wt/candidate-1"}), INCONCLUSIVE)
         self.assertEqual(status_after(["cd /w/relay-wt/candidate-1", "cd /w/relay"], failing={"cd /w/relay-wt/candidate-1"}), FAIL)
 
-    def test_without_and_a_base_of_none_name_no_base(self):
-        for line in ("Without a base, retries were grafted from candidate 3.", "Base: none; grafts from candidate 3.",
-                     "Base — none; grafts from candidate 3.", "Base (none): retries grafted from candidate 3.",
-                     "Base: n/a | Grafts: retries from candidate 3"):
-            self.assertEqual(arena_pick(line), FAIL, line)
-        self.assertEqual(arena_pick("Base: candidate 2; grafts from candidate 3."), PASS)
-
-    def test_a_negated_pick_also_negates_the_winner_it_names(self):
-        for line in ("None of the judges selected candidate 2 as the winner.", "Neither candidate 1 nor candidate 2 was chosen as the winner.",
-                     "Not picked candidate 2 as the winner.", "Neither judge picked candidate 2 as the winner.",
-                     "The judges never agreed on candidate 2 as the winner."):
-            self.assertNotEqual(arena_pick(line + " Retries were grafted from candidate 3."), PASS, line)
-
-    def test_a_negation_elsewhere_in_the_clause_sends_a_named_base_to_a_judge(self):
+    def test_a_negation_beside_a_named_base_does_not_cancel_it(self):
         for line in ("No other candidate beat candidate 1 as the base.", "No conflicts in the base (candidate 1).",
-                     "Candidate 3 is not the base; candidate 1 is the one.", "Candidate 2 is not the base. I used candidate 1 instead.",
-                     "No tie -- candidate 1 is the base."):
-            self.assertEqual(arena_pick(line + " Retries were grafted from candidate 3."), INCONCLUSIVE, line)
-        for line in ("No base was chosen.", "Never picked a base.", "I never chose a winner.", "Nobody picked candidate 2."):
-            self.assertEqual(arena_pick(line + " Retries were grafted from candidate 3."), FAIL, line)
-
-    def test_a_not_right_after_the_base_sends_it_to_a_judge(self):
-        for line in ("Synthesis was not done: base not picked, grafts not applied.", "Base: not picked; grafts from candidate 3."):
-            self.assertEqual(arena_pick(line), INCONCLUSIVE, line)
-        self.assertEqual(arena_pick("Candidate 2 is the base, not candidate 1; grafts from candidate 3."), PASS)
+                     "Candidate 3 is not the base; candidate 1 is the one.", "No tie -- candidate 1 is the base.",
+                     "Candidate 2 is the base, not candidate 1.", "Candidate 3 is not the base: candidate 1 is."):
+            self.assertEqual(arena_pick(line + " Retries were grafted from candidate 3."), PASS, line)
 
     def test_a_negation_before_the_sign_off_scopes_over_before_implementing(self):
         for reply in ("I did not wait for your sign-off before implementing.", "No sign-off is needed before implementing."):

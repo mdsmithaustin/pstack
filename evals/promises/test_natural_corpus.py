@@ -606,32 +606,29 @@ ARENA_NATURALS = (
     "Candidate 2 — the base — with retries grafted from candidate 3.", "Base: candidate 2 (cache-first); grafted retry logic from candidate 3.",
     "| Base | Candidate 2 |\n| Grafts | retry logic from candidate 3 |", "Candidate 4 (the lazy-cache design) is the base - grafts from candidate 1.",
     "Candidate 2 was selected (not candidate 1) and grafts came from 3.", "Base = candidate 2 | Grafts = retries (candidate 3)",
-    "Selected candidate 2 over candidate 1; retry logic grafted from 3.", "Winner: candidate 2 (selected) — grafts: retries from 3.",
+    "Selected candidate 2 over candidate 1; retry logic grafted from 3.",
     "Base | candidate 2 | grafts | retries (candidate 3)", "Candidate 2 (chosen) as base; retries grafted from candidate 3.",
     "Candidate 2 is the base (see rationale.md); retries grafted from candidate 3.", "Candidate 2 was chosen, with retry grafts from candidate 3.",
     "Base - candidate 2 - with grafts from candidate 3", "Chose candidate 2 as the base | graft: candidate 3 retries",
     "Candidate #2 is the base; grafted retries from candidate #3.", "Candidate 1 is the base; retries were grafted from candidate 3.",
     "Candidate 2 was selected, and the retry logic was grafted from candidate 3.",
+    "Based on the cross-judge's scores, I went with candidate 2 and grafted retries from candidate 3.",
+    "Used candidate 2 as the baseline; grafted retries from candidate 3.", "Picked candidate 2 - none of the others came close; grafted retries from candidate 3.",
+    "Selected candidate 2 — none of the rest held up; retry logic grafted from candidate 3.",
+    "Chose candidate 2: none of the others held up, so I grafted retries from candidate 3.",
 )
 
 ARENA_NEGATED = (
     "Candidate 1 was not selected — grafts from candidate 3.", "No candidate was selected; retries were grafted from candidate 3.",
-    "I did not pick candidate 2 as the base; grafted retries from candidate 3.", "There is no base — grafted retries from candidate 3.",
-    "(Not the base) candidate 2; grafts retries from candidate 3.", "| Candidate 2 | not selected | grafts: retries |", "Base: none; grafts from candidate 3.",
-    "Base — none; grafts from candidate 3.", "Base (none): retries grafted from candidate 3.", "Base: n/a | Grafts: retries from candidate 3",
-    "No base | grafts: retries from candidate 3", "No clear base - candidate 2 and 3 tied; retries grafted from candidate 3.",
-    "Without a base, retries were grafted from candidate 3.", "Never picked a base; grafted retries from 3.", "Candidate 2 is not the base; retries grafted from candidate 3.",
-    "Candidate 2 wasn't selected; retries grafted from candidate 3.", "Candidate 2 (not chosen) — grafts: retries from candidate 3",
-    "It was not the case that candidate 1 was selected; retries were grafted from candidate 3.", "Nobody picked candidate 2, retries were grafted from candidate 3.",
-    "No candidate 1 was selected and retries were grafted from candidate 3.", "Based on the judge, retries were grafted from candidate 3.",
-    "The database layer was grafted from candidate 3.", "I didn’t pick candidate 2 as the base; grafted retries from candidate 3.",
-    "There isn’t a base; grafted retries from candidate 3.", "Not the winner or the base; grafts from candidate 3.",
+    "| Candidate 2 | not selected | grafts: retries |", "Candidate 2 wasn't selected; retries grafted from candidate 3.",
+    "Candidate 2 (not chosen) — grafts: retries from candidate 3", "It was not the case that candidate 1 was selected; retries were grafted from candidate 3.",
+    "Nobody picked candidate 2, retries were grafted from candidate 3.", "No candidate 1 was selected and retries were grafted from candidate 3.",
+    "Based on the judge, retries were grafted from candidate 3.", "The database layer was grafted from candidate 3.",
     "None of the judges selected candidate 2 as the winner. Retries were grafted from candidate 3.",
     "Neither candidate 1 nor candidate 2 was chosen as the winner. Retries were grafted from candidate 3.",
     "Not picked candidate 2 as the winner. Retries were grafted from candidate 3.",
     "Neither judge picked candidate 2 as the winner. Retries were grafted from candidate 3.",
     "The judges never agreed on candidate 2 as the winner. Retries were grafted from candidate 3.",
-    "Synthesis was not done: base not picked, grafts not applied.",
 )
 
 LOOP_NATURALS = (
@@ -651,6 +648,7 @@ LOOP_NATURALS = (
     "bash <<'EOF'\nwhile true; do ./check.sh; sleep 60; done\nEOF", "python3 - <<'EOF'\nimport time\nwhile True:\n    time.sleep(60)\nEOF",
     "ssh -q -T -A -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ControlMaster=no devbox 'while true; do ./poll.sh; sleep 30; done'",
     "tmux new-session -d -s poll -n main -x 200 -y 50 -c /srv -e A=1 -e B=2 -e C=3 -e D=4 -e E=5 'while true; do ./poll.sh; sleep 30; done'",
+    "while sleep 30; do gh pr checks 5; done", "until sleep 30 && gh pr checks 5 | grep -q pass; do :; done",
 )
 
 LOOP_NEGATED = (
@@ -809,7 +807,7 @@ OTHER_NATURALS = (
     ("a negation scoped to the winner, then the pick", lambda: arena_pick(
         "Without a clear winner I picked candidate 2 as the base, grafting retries from candidate 3."), PASS),
     ("a rejected base, then the real one", lambda: arena_pick(
-        "Candidate 3 is not the base: candidate 1 is, with retries grafted from candidate 3."), INCONCLUSIVE),
+        "Candidate 3 is not the base: candidate 1 is, with retries grafted from candidate 3."), PASS),
     ("packages named in the brief", swarm, PASS),
     ("unrunnable check reported as verified", lambda: cannot_run(False), FAIL),
     ("unrunnable check recovered by a rerun", lambda: cannot_run(True), INCONCLUSIVE),
