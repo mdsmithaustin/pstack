@@ -1806,20 +1806,28 @@ CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|sinc
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n['’]t\b")
 OR_JOIN = re.compile(r"\s+or\s+(?:the\s+|a\s+)?")
 NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a)\b")
+DIRECTLY_NEGATED = re.compile(r"\s+(?:(?:pick(?:ed)?|cho(?:se|ose))\s+)?(?:(?:a|an|any)\s+)?")
 
 
-def mention_states(pattern, low):
+def mention_states(pattern, low, nouns=None):
     cuts = [0] + [m.end() for m in CLAUSE_SPLIT.finditer(low)]
-    negations = [m.start() for m in CLAUSE_NEGATION.finditer(low)]
-    targets, last_end = [], None
+    found = list(CLAUSE_NEGATION.finditer(low))
+    negations = [n.start() for n in found]
+    heads, last_end = [], None
     for m in re.finditer(pattern, low):
         clause = cuts[bisect.bisect_right(cuts, m.start()) - 1]
         at = bisect.bisect_left(negations, m.start())
         bound = at > bisect.bisect_left(negations, clause) and (
-            not any_between(targets, negations[at - 1], m.start()) or bool(OR_JOIN.fullmatch(low, last_end, m.start())))
-        targets.append(m.start())
+            not any_between(heads, negations[at - 1], m.start()) or bool(OR_JOIN.fullmatch(low, last_end, m.start())))
+        if nouns and nouns.fullmatch(m.group()):
+            heads.append(m.start())
         last_end = m.end()
-        yield "nothing" if NAMES_NOTHING.match(low, m.end(), m.end() + 12) else "negated" if bound else "affirmed"
+        if NAMES_NOTHING.match(low, m.end(), m.end() + 12):
+            yield "nothing"
+        elif not bound:
+            yield "affirmed"
+        else:
+            yield "negated" if DIRECTLY_NEGATED.fullmatch(low, found[at - 1].end(), m.start()) else "blocked"
 
 
 def affirmed(pattern, low):
@@ -2983,7 +2991,6 @@ def arena_worktrees(view):
     return passed(*evidence)
 
 
-ELLIPTICAL_PICK = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:is|was)(?=\s*(?:[,;:.\n]|$))")
 PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on|based on) (?:candidate|arm) [\w-]+")
 
 
@@ -2991,7 +2998,7 @@ PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|p
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    states = set(mention_states(rf"\b(?:base|winner)\b|{PICKED.pattern}", low))
+    states = set(mention_states(rf"\b(?:base|winner)\b|{PICKED.pattern}", low, nouns=re.compile("base|winner")))
     base = "affirmed" in states
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
@@ -3004,8 +3011,9 @@ def arena_grafts(view):
     grafted = "graft" in low or "converge" in low or "consensus" in low
     if base and grafted:
         return passed(*evidence)
-    if grafted and "negated" in states and ELLIPTICAL_PICK.search(low):
-        return inconclusive("the reply negates one base and names a candidate with an elided predicate, which a pattern cannot read", *evidence)
+    if grafted and "blocked" in states:
+        return inconclusive("a negation elsewhere in the clause may not scope over the named base, which a pattern cannot read", *evidence,
+                            needs_judge=True, excerpt=excerpt_of(view.final_reply))
     return failed("reply does not name the base and the grafts", *evidence)
 
 

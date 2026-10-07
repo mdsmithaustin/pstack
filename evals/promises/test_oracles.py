@@ -1616,10 +1616,10 @@ class ReplyWording(unittest.TestCase):
             self.assertEqual(result["verdict"], PASS, (line, result))
 
     def test_a_coordinated_negation_is_not_a_pick(self):
-        for line in ("Neither candidate 1 nor candidate 2 was selected, and no graft was applied.",
-                     "It was not the case that candidate 1 was selected, and no graft was applied."):
+        for line, verdict in (("Neither candidate 1 nor candidate 2 was selected, and no graft was applied.", FAIL),
+                              ("It was not the case that candidate 1 was selected, and no graft was applied.", INCONCLUSIVE)):
             result = self.arena(f"Arena result\n- {line}\n- Verified: 8 unit tests passed.")
-            self.assertEqual(result["verdict"], FAIL, (line, result))
+            self.assertEqual(result["verdict"], verdict, (line, result))
 
     def test_a_negation_before_and_does_not_cancel_the_pick_after_it(self):
         result = self.arena("Arena result\n- No clear winner and candidate 1 was selected, with retries grafted from candidate 3.\n- Verified: 8 unit tests passed.")
@@ -3046,12 +3046,13 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         self.assertEqual(self.arena("No base was selected; retries were grafted from candidate 3."), FAIL)
 
     def test_n10_a_negation_anywhere_in_the_picks_clause_cancels_it(self):
-        for line in ("It was not at any point in the long review the case that candidate 1 was selected, with retries grafted from candidate 3.",
-                     "Nobody picked candidate 1, and retries were grafted from candidate 3.",
-                     "None of us selected candidate 1, and retries were grafted from candidate 3.",
-                     "We never selected candidate 1, and retries were grafted from candidate 3.",
-                     "Neither of us selected candidate 1, and retries were grafted from candidate 3."):
+        for line in ("Nobody picked candidate 1, and retries were grafted from candidate 3.",
+                     "We never selected candidate 1, and retries were grafted from candidate 3."):
             self.assertEqual(self.arena(line), FAIL, line)
+        for line in ("It was not at any point in the long review the case that candidate 1 was selected, with retries grafted from candidate 3.",
+                     "None of us selected candidate 1, and retries were grafted from candidate 3.",
+                     "Neither of us selected candidate 1, and retries were grafted from candidate 3."):
+            self.assertEqual(self.arena(line), INCONCLUSIVE, line)
 
     def test_n10_each_clause_split_ends_an_earlier_negation(self):
         for split in (". ", ", ", "; ", ": ", "\n- ", " but ", " and ", " so ", " because ", " since ", " although ", " though ",
@@ -3431,6 +3432,25 @@ class Issue133RoundThree(unittest.TestCase):
                      "Base: n/a | Grafts: retries from candidate 3"):
             self.assertEqual(arena_pick(line), FAIL, line)
         self.assertEqual(arena_pick("Base: candidate 2; grafts from candidate 3."), PASS)
+
+    def test_a_negated_pick_also_negates_the_winner_it_names(self):
+        for line in ("None of the judges selected candidate 2 as the winner.", "Neither candidate 1 nor candidate 2 was chosen as the winner.",
+                     "Not picked candidate 2 as the winner.", "Neither judge picked candidate 2 as the winner.",
+                     "The judges never agreed on candidate 2 as the winner."):
+            self.assertNotEqual(arena_pick(line + " Retries were grafted from candidate 3."), PASS, line)
+
+    def test_a_negation_elsewhere_in_the_clause_sends_a_named_base_to_a_judge(self):
+        for line in ("No other candidate beat candidate 1 as the base.", "No conflicts in the base (candidate 1).",
+                     "Candidate 3 is not the base; candidate 1 is the one.", "Candidate 2 is not the base. I used candidate 1 instead.",
+                     "No tie -- candidate 1 is the base."):
+            self.assertEqual(arena_pick(line + " Retries were grafted from candidate 3."), INCONCLUSIVE, line)
+        for line in ("No base was chosen.", "Never picked a base.", "I never chose a winner.", "Nobody picked candidate 2."):
+            self.assertEqual(arena_pick(line + " Retries were grafted from candidate 3."), FAIL, line)
+
+    def test_a_negation_before_the_sign_off_scopes_over_before_implementing(self):
+        for reply in ("I did not wait for your sign-off before implementing.", "No sign-off is needed before implementing."):
+            self.assertEqual(grade("architect-checkpoint-opt-in", minimal(final_reply=reply), load_case("architect-checkpoint-run"))["verdict"],
+                             INCONCLUSIVE, reply)
 
 
 LONG = 200_000
