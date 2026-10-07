@@ -2568,15 +2568,16 @@ def doc_impact_before_completion(view):
 
 
 VERDICT_WORD = re.compile(r"\bpass(?:ed)?\b", re.I)
-VERDICT_MARKUP = re.compile(r"[*`\[\]✅✔☑✓\ufe0f]|(?<!\w)_+|_+(?!\w)")
+VERDICT_MARKUP = re.compile(r"[*`\[\]✅✔☑✓\ufe0f]|(?<!\w)_+|(?<!_)_+(?!\w)")
 VERDICT_END = re.compile(r"\n|[.!?;](?=\s|$)")
-VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before)\b", re.I)
+VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before|since|after)\b", re.I)
 VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nobody|nothing|neither|nor|cannot|unable|without|refus(?:e|es|ed|ing)"
                               r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n't\b|[❌✗✘🚫⛔]", re.I)
 NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|needed)\b", re.I)
 BENIGN_NEGATION = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|0)|without(?:\s+any)?)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
-                             r"|objections?|items?|changes(?:\s+(?:needed|required|requested))?)\b", re.I)
-VERDICT_OPENER = re.compile(r"[,():|+—–]|\s-\s|\s(?:with|by|from)\b", re.I)
+                             r"|objections?|items?|edits?|changes(?:\s+(?:needed|required|requested))?)\b", re.I)
+ASIDE_OPENER = re.compile(r"[,():|+—–]|\s-\s")
+VERDICT_OPENER = re.compile(ASIDE_OPENER.pattern + r"|\s(?:with|by|from)\b", re.I)
 TRAILER_SPLIT = re.compile(r"[,():|+—–]|\s-\s|\band\b", re.I)
 TRAILER_ITEM = re.compile(r"(?:with\s+)?(?:\d+\s+(?:[\w-]+\s+)?(?:findings?|blockers?|issues?|nits?|notes?|comments?|suggestions?|items?)|notes?|nits?|comments?|suggestions?)"
                           r"|(?:by|from)\s+(?:the\s+)?(?:(?:independent|trail)\s+)*review(?:er)?s?|round\s+\d+|(?:head\s+)?[0-9a-f]{7,40}|v?\d+(?:\.\d+)+"
@@ -2601,13 +2602,28 @@ VERDICT_SPAN = 200
 
 
 def positions(pattern, text, skip=()):
+    return outside([m.start() for m in pattern.finditer(text)], skip)
+
+
+def outside(found, skip):
     starts = [s for s, _ in skip]
-    found = []
-    for m in pattern.finditer(text):
-        at = bisect.bisect_right(starts, m.start()) - 1
-        if at < 0 or skip[at][1] <= m.start():
-            found.append(m.start())
-    return found
+    return [p for p in found if (at := bisect.bisect_right(starts, p) - 1) < 0 or skip[at][1] <= p]
+
+
+def parentheticals(plain, mentions):
+    spans, opens = [], []
+    for m in re.finditer(r"[()]", plain):
+        if m.group() == "(":
+            opens.append(m.start())
+        elif opens:
+            start = opens.pop()
+            if bisect.bisect_left(mentions, start) == bisect.bisect_left(mentions, m.end()):
+                spans.append((start, m.end()))
+    outer = []
+    for span in sorted(spans):
+        if not outer or span[0] >= outer[-1][1]:
+            outer.append(span)
+    return outer
 
 
 def any_between(found, start, end):
@@ -2681,8 +2697,12 @@ def mention_verdict(plain, m, found):
                  or not before.strip() and any_between(found["off_topic"], split, stop))
     if off_topic and not (any_between(found["named"], near, m.start()) or any_between(found["named"], m.end(), split)):
         return None
-    if any_between(found["negations"], clause_start, m.start()) or any_between(found["negations_after"], m.end(), clause_end):
+    at = bisect.bisect_left(found["aside_openers"], m.end())
+    aside = min(found["aside_openers"][at:at + 1] + [clause_end])
+    if any_between(found["direct"], clause_start, m.start()) or any_between(found["negations_after"], m.end(), aside):
         return FAIL
+    if any_between(found["negations"], clause_start, m.start()) or any_between(found["negations_after"], aside, clause_end):
+        return INCONCLUSIVE
     if (m.start() - clause_start > VERDICT_SPAN or sentence_end - m.end() > VERDICT_SPAN or plain[sentence_end:sentence_end + 1] == "?"
             or any_between(found["mentions"], clause_start, m.start())):
         return INCONCLUSIVE
@@ -2708,10 +2728,12 @@ def review_pass(reply):
     benign = [(m.start(), m.end()) for m in BENIGN_NEGATION.finditer(plain)]
     mentions = list(VERDICT_WORD.finditer(plain))
     clauses = list(VERDICT_CLAUSE.finditer(plain))
+    starts, negations = [m.start() for m in mentions], positions(VERDICT_NEGATION, plain, benign)
     found = {"ends": positions(VERDICT_END, plain), "clause_starts": [m.start() for m in clauses], "clause_ends": [m.end() for m in clauses],
              "newlines": positions(re.compile("\n"), plain), "pipes": positions(re.compile(r"\|"), plain), "headers": table_headers(plain),
-             "negations": positions(VERDICT_NEGATION, plain, benign), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign), "openers": positions(VERDICT_OPENER, plain),
-             "off_topic": positions(OFF_TOPIC, plain), "named": positions(REVIEW_NAMED, plain), "mentions": [m.start() for m in mentions]}
+             "negations": negations, "direct": outside(negations, parentheticals(plain, starts)), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign),
+             "openers": positions(VERDICT_OPENER, plain), "aside_openers": positions(ASIDE_OPENER, plain), "off_topic": positions(OFF_TOPIC, plain),
+             "named": positions(REVIEW_NAMED, plain), "mentions": starts}
     verdicts = {}
     for m in mentions:
         verdicts.setdefault(mention_verdict(plain, m, found), m.start())
