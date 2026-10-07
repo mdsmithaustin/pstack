@@ -633,7 +633,6 @@ ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(|textContent\s*\)\s*\.(?:toBe|toEqual)\(")
 STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
 REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
-ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 WRAPPED = re.compile(r"(?:expect\.stringContaining|new RegExp)\((.*)\)|`\$\{\s*([\w$.]+)\s*\}`|/([^\\/\[\](){}.*+?^$|]+)/[a-z]*")
 DECLARATION = re.compile(r"\b(const|let|var)\s+")
 DECLARATOR = re.compile(r"\s*([\w$]+)\s*(?::(?:\([^()]*\)|=>|[^=,;\n()])*)?(=(?![=>]))?\s*")
@@ -643,6 +642,7 @@ OPENER = re.compile(rf"{ASSIGNMENT.pattern}|{FUNCTION.pattern}")
 STRING_AT = re.compile(STRING)
 REGEX_AT = re.compile(REGEX_LITERAL)
 NAME = re.compile(r"[A-Za-z_$][\w$]*")
+FREE_NAME = re.compile(r"(?<![\w$.])[A-Za-z_$][\w$]*|(?<=\.\.\.)[A-Za-z_$][\w$]*")
 Rendered = collections.namedtuple("Rendered", "text expression")
 
 
@@ -769,7 +769,7 @@ def literal_end(text, at, end=None):
 
 
 def code(text):
-    """The text with each string and regex literal replaced by _, and each
+    """The text with each string and regex literal replaced by 0, and each
     template by its ${} contents, so only code is left to name constants."""
     out, at = [], 0
     while at < len(text):
@@ -780,18 +780,19 @@ def code(text):
             continue
         literal = text[at:end]
         substitutions = re.findall(r"\$\{([^}]*)\}", literal) if literal.startswith("`") else []
-        out.append("(" + " ".join(code(part) for part in substitutions) + ")" if substitutions else "_")
+        out.append("(" + " ".join(code(part) for part in substitutions) + ")" if substitutions else "0")
         at = end
     return "".join(out)
 
 
-def bound_value(statement, start):
-    """The value a binding starts at start, up to the line end, or the
-    semicolon, comma, or closing bracket that ends it outside literals; how
-    many of its brackets are open if it reaches the line end; and where it
-    ends."""
-    end = statement.find("\n", start)
-    end = len(statement) if end < 0 else end
+def bound_value(statement, start, end=None):
+    """The value a binding or argument starts at start, up to end (by default
+    the line end), or the semicolon, comma, or closing bracket that ends it
+    outside literals; how many of its brackets are open if it reaches end;
+    and where it ends."""
+    if end is None:
+        end = statement.find("\n", start)
+        end = len(statement) if end < 0 else end
     depth, at = 0, start
     while at < end:
         literal = literal_end(statement, at, end)
@@ -831,6 +832,35 @@ def definitions_in(source):
     return definitions
 
 
+def resolved_names(definitions):
+    """The names whose every definition the reader resolves: each name a
+    definition mentions outside literals and property access is resolved in
+    turn. A name with no definition here, such as an import, a parameter, a
+    global, or a class, is not, and neither is one on a cycle."""
+    needs = {name: {use for text in texts for use in FREE_NAME.findall(code(text))} for name, texts in definitions.items()}
+    users = collections.defaultdict(list)
+    for name, uses in needs.items():
+        for use in uses:
+            users[use].append(name)
+    known = [name for name, uses in needs.items() if not uses]
+    for name in known:
+        for user in users[name]:
+            needs[user].discard(name)
+            if not needs[user]:
+                known.append(user)
+    return set(known)
+
+
+def proves_unrelated(present, absent, definitions):
+    """Whether no present value shows an absent one, on proof: the reader
+    resolves every name each present value mentions, and none shows an
+    absent value. A value it cannot resolve may hold anything, so it gets
+    the credit trunk gives any present assertion."""
+    known = resolved_names(definitions)
+    return all(set(FREE_NAME.findall(code(value.text)) if value.expression else ()) <= known
+               and not any(shows_hidden_value(value, hidden, definitions) for hidden in absent) for value in present)
+
+
 def rendered_values(pattern, source):
     """What the first argument of each assertion pattern finds names. A
     toContain on the clipboard, or on a variable its stub fills on the stub's
@@ -843,7 +873,7 @@ def rendered_values(pattern, source):
         if "toContain" in found.group() and (re.search(r"writeText|clipboard|copyText", subject)
                                              or any(re.match(rf"\s*{re.escape(name)}\b", subject) for name in captured)):
             continue
-        value = named(ARGUMENT.match(source, found.end()).group())
+        value = named(bound_value(source, found.end(), len(source))[0])
         if value.text:
             values.add(value)
     return values
@@ -852,16 +882,16 @@ def rendered_values(pattern, source):
 def tests_assert_hidden_text_and_copy(added):
     """The reviewer asked for tests of the collapsed text and the Copy payload,
     not only the button labels. A regex over the added web test lines is a
-    proxy: some value must be asserted absent and the same value present in
-    the rendered text, and the Copy payload must be asserted."""
+    proxy: some value must be asserted absent, some value present in the
+    rendered text, and the Copy payload asserted. The present check fails
+    only when the reader proves no present value shows an absent one."""
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
-    definitions = definitions_in(source)
-    shown = any(shows_hidden_value(value, hidden, definitions) for value in present for hidden in absent)
+    unrelated = absent and proves_unrelated(present, absent, definitions_in(source))
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
-                                        ("that hidden prompt text is present", shown))
+                                        ("that hidden prompt text is present", present and not unrelated))
                if not found]
     return [f"constraint:C3: no added web test asserts {what}" for what in missing]
 

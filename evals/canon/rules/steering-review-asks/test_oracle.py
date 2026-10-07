@@ -149,7 +149,7 @@ class HiddenTailTests(unittest.TestCase):
         return oracle().tests_assert_hidden_text_and_copy({"web/src/chat.test.tsx": [self.COPY, *lines]})
 
     def test_an_unrelated_present_assertion_does_not_count(self):
-        self.assertEqual(self.failures("expect(bubble).not.toHaveTextContent(TAIL);",
+        self.assertEqual(self.failures('const SHORT_TEXT = "Hello";', "expect(bubble).not.toHaveTextContent(TAIL);",
                                        "expect(bubble).toHaveTextContent(SHORT_TEXT);"), [self.PRESENT])
 
     def test_the_copied_payload_holding_the_tail_is_not_the_rendered_text(self):
@@ -166,7 +166,7 @@ class HiddenTailTests(unittest.TestCase):
             "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });",
             "expect(written).not.toContain(TAIL);",
             "expect(bubble).toHaveTextContent(TAIL);",
-        ), ["constraint:C3: no added web test asserts that hidden prompt text is absent", self.PRESENT])
+        ), ["constraint:C3: no added web test asserts that hidden prompt text is absent"])
 
     def test_a_multiline_assertion_on_the_copied_payload_is_not_the_rendered_text(self):
         stub = ["const written: string[] = [];",
@@ -271,6 +271,8 @@ class HiddenTailTests(unittest.TestCase):
         absent = "expect(bubble).not.toHaveTextContent(TAIL)"
         for row, lines in (("unrelated value wrapped in a call", ['const HEAD = "chunk ".repeat(900)', "const LONG_TEXT = HEAD + TAIL", absent,
                                                                   "expect(bubble).toHaveTextContent(HEAD.trim())"]),
+                           ("unrelated value two names away", ['const HEAD = "chunk"', "const LABEL = HEAD.repeat(2)", absent,
+                                                               "expect(bubble).toHaveTextContent(LABEL)"]),
                            ("open test body after a declaration", ['it("hides the tail", () => {', '  const HEAD = "chunk"', absent,
                                                                    "  expect(bubble).toHaveTextContent(HEAD)", "})"]),
                            ("button label that shares a constant's name", ['const prompt = "a".repeat(9000) + TAIL', absent,
@@ -296,7 +298,8 @@ class HiddenTailTests(unittest.TestCase):
                            ("escaped backtick in a multi-line template", ["const LONG_TEXT = `it\\`s", "${TAIL}`", absent,
                                                                           "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
                            ("property of an object the file does not bind", [absent, "expect(bubble).toHaveTextContent(fixtures.LONG_TEXT)"]),
-                           ("spread of a name the file does not bind", [absent, 'expect(bubble).toHaveTextContent([...PARTS].join(""))'])):
+                           ("spread of a name the file does not bind", [absent, 'expect(bubble).toHaveTextContent([...PARTS].join(""))']),
+                           ("names bound only by each other", ["let A = B", "let B = A", absent, "expect(bubble).toHaveTextContent(A)"])):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [])
 
@@ -339,7 +342,7 @@ class HiddenTailTests(unittest.TestCase):
         absent, prompt = "expect(bubble).not.toHaveTextContent(TAIL)", 'const prompt = "a".repeat(13000) + TAIL'
         for row, lines in (("regex constant", [prompt, "const EXPAND = /show full prompt/i", absent, "expect(screen.getByText(EXPAND)).toBeInTheDocument()"]),
                            ("template constant", [prompt, "const EXPAND = `show full prompt`", absent, "expect(screen.getByText(EXPAND)).toBeInTheDocument()"]),
-                           ("template label with a count", [prompt, absent, "expect(bubble).toHaveTextContent(`Show full prompt (${count} chars)`)"]),
+                           ("template label with a count", [prompt, "const count = 13000", absent, "expect(bubble).toHaveTextContent(`Show full prompt (${count} chars)`)"]),
                            ("flagless regex constant above a definition", ["const SHOW_LESS = /show less/", 'const TAIL = "tail marker"', absent,
                                                                             "expect(screen.getByText(SHOW_LESS)).toBeInTheDocument()"]),
                            ("block body statements", ["function setup() {", '  const label = "Show more"', "  render(<Bubble text={LONG_TEXT} />)", "}",
@@ -410,7 +413,7 @@ class HiddenTailTests(unittest.TestCase):
 
     def test_multiline_assertions_compare_their_values(self):
         absent = ["expect(bubble).not.toHaveTextContent(", "  TAIL,", ");"]
-        self.assertEqual(self.failures(*absent, "expect(bubble).toHaveTextContent(", "  SHORT_TEXT,", ");"), [self.PRESENT])
+        self.assertEqual(self.failures('const SHORT_TEXT = "Hello";', *absent, "expect(bubble).toHaveTextContent(", "  SHORT_TEXT,", ");"), [self.PRESENT])
         self.assertEqual(self.failures(*absent, "expect(bubble).toHaveTextContent(", "  TAIL", ");"), [])
 
     def test_the_same_value_absent_then_present_counts_across_assertion_forms(self):
@@ -782,7 +785,6 @@ class LongPromptTests(ReplayedPullRequest):
             f"constraint:C1: {self.CHECKS}::C1 collapsed preview never splits a surrogate pair failed",
             "constraint:C3: no added web test asserts what Copy writes",
             "constraint:C3: no added web test asserts that hidden prompt text is absent",
-            "constraint:C3: no added web test asserts that hidden prompt text is present",
         ])
 
     def test_spreading_the_whole_prompt_into_code_points_fails_the_allocation_ask(self):
