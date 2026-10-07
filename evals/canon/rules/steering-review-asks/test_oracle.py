@@ -380,6 +380,31 @@ class HiddenTailTests(unittest.TestCase):
             self.assertEqual(graded({**shared, "web/src/b.test.tsx": ['const HEAD = "chunk"', *absent, "expect(bubble).toHaveTextContent(HEAD)"]}),
                              [self.PRESENT])
 
+    def test_an_absent_value_cut_from_a_constant_the_present_value_names_counts(self):
+        long, tail = 'const LONG_TEXT = "a".repeat(12000) + "UNIQUE_TAIL"', 'const TAIL = "UNIQUE_TAIL"'
+        for row, setup, absent in (("slice from the front", [], "LONG_TEXT.slice(12000)"),
+                                   ("slice from the end", [], "LONG_TEXT.slice(-11)"),
+                                   ("constant holding the slice", ["const HIDDEN = LONG_TEXT.slice(12000)"], "HIDDEN")):
+            for form, present in (("name", "TAIL"), ("stringContaining", "expect.stringContaining(TAIL)")):
+                with self.subTest(f"{row}, present {form}"):
+                    self.assertEqual(self.failures(long, tail, *setup, f"expect(bubble).not.toHaveTextContent({absent})",
+                                                   f"expect(bubble).toHaveTextContent({present})"), [])
+
+    def test_an_absent_value_cut_from_a_constant_holding_the_present_literal_counts(self):
+        self.assertEqual(self.failures('const LONG = "a".repeat(100) + "ZZZZZ"', "expect(bubble).not.toHaveTextContent(LONG.slice(-5))",
+                                       'expect(bubble).toHaveTextContent("ZZZZZ")'), [])
+
+    def test_an_absent_value_the_file_does_not_resolve_gets_trunk_credit(self):
+        present = 'expect(bubble).toHaveTextContent("a".repeat(100) + "UNIQUE_TAIL")'
+        for row, lines in (("name the file never binds", ["expect(bubble).not.toHaveTextContent(TAIL)", present]),
+                           ("name imported from a fixture module", ['import { TAIL } from "./fixtures"', "expect(bubble).not.toHaveTextContent(TAIL)", present]),
+                           ("constant built from an imported name", ['import { LONG_TEXT } from "./fixtures"', "const TAIL = LONG_TEXT.slice(-11)",
+                                                                     "expect(bubble).not.toHaveTextContent(TAIL)", present])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+        with self.subTest("name the file binds to a literal"):
+            self.assertEqual(self.failures('const TAIL = "UNIQUE_TAIL"', "expect(bubble).not.toHaveTextContent(TAIL)", present), [])
+
     def test_a_present_expression_over_the_value_the_absent_one_is_cut_from_counts(self):
         cut = ['const FULL = "x".repeat(500) + " the end"', "const TAIL = FULL.slice(-30)", "expect(bubble).not.toHaveTextContent(TAIL)"]
         for present in ("FULL.trim()", "FULL.slice(0, 100)"):
