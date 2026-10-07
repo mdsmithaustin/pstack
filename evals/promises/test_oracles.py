@@ -3532,6 +3532,36 @@ class Issue133RoundThree(unittest.TestCase):
                       "## Source\ncommit 12d7ece\n\nThe cap came from it.", "Sources:\ncommit 12d7ece\n3a4b5c6", "Source: commit 12d7ece\n## Notes\nThe cap came from it."):
             self.assertEqual(sources(reply), FAIL, reply)
 
+    def test_round17_a_bold_role_persona_or_source_label_keeps_the_text_after_it(self):
+        for template in ("**Role:** Explorer {n} (parser) found it", "**Role**: Explorer {n} found it", "**Persona:** explorer {n}",
+                         "**Persona**: Explorer {n} (cli)", "- **Role:** Explorer {n} - found it", "**Role:** Explorer {n}, found it"):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), PASS, trio[0])
+        for reply in ("**Source:** Source control and tracked repository files.", "**Source**: Source control and tracked repository files.",
+                      "**Sources:** git history", "**Sources**: git history", "- **Source:** Source control and tracked repository files."):
+            self.assertEqual(why_labels(reply, "### Source\n\nIssue / ticket tracker through GitHub MCP, read-only.",
+                                        "### Source\n\nLong-form documents through Pages MCP, read-only."), PASS, reply)
+
+    def test_round17_a_bold_role_label_naming_one_explorer_is_no_wide_fan_out(self):
+        for reply in ("**Role:** Explorer 2", "**Role**: Explorer 2 (parser)", "**Persona:** explorer 2"):
+            spawns = [delegate(10, "Implement the parser change.", reply)]
+            events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+            result = grade("how-narrow-question-no-explorers", minimal(events=events, spawns=spawns, harness="hermes", final_reply="x"), load_case("how-run"))
+            self.assertEqual(result["verdict"], FAIL, reply)
+
+    def test_round17_a_bold_findings_label_still_drops_the_text_after_it(self):
+        for template in ("**Findings:** Explorer {n} saw it", "**Notes**: the explorer {n} saw it", "**Summary:** explorer {n}"):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), FAIL, trio[0])
+
+    def test_round17_a_bold_source_label_with_the_colon_inside_names_a_commit_only_source_like_one_outside(self):
+        def sources(reply):
+            return grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))["verdict"]
+        for reply in ("**Source:** commit 12d7ece.", "**Source**: commit 12d7ece.", "**Source:** 12d7ece"):
+            self.assertEqual(sources(reply), FAIL, reply)
+        for reply in ("**Source:** git log", "**Source**: git log"):
+            self.assertEqual(sources(reply), PASS, reply)
+
 
 LONG = 200_000
 
@@ -3551,13 +3581,15 @@ class LinearTime(unittest.TestCase):
         self.assert_quick(narrow, "## Explorer " + "(" * LONG, "## Explorer " + " " * LONG + "1", "## Explorer" + " 1" * (LONG // 2),
                           "## Explorer " + " -" * (LONG // 2) + " x", "Explorer " + "(" * LONG, "- " + " " * LONG + "x", "1." + " " * LONG + "x",
                           "Explorer " + "(1), " * (LONG // 5), "Explorer" + " 1," * (LONG // 3), "**" + "a" * LONG, "Explorer " + "- " * (LONG // 2) + "x",
-                          "Explorer " + " \u2014" * (LONG // 2), "* " * (LONG // 2) + "Explorer")
+                          "Explorer " + " \u2014" * (LONG // 2), "* " * (LONG // 2) + "Explorer",
+                          "**Role:** " + "x" * LONG, "**a**" * (LONG // 5), "**Role:** Explorer " + "(" * LONG, "**Role**" + " " * LONG + "x")
 
     def test_a_long_commit_only_source_section_grades_in_linear_time(self):
         def sources(reply):
             grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))
         self.assert_quick(sources, "Source:\n" + "12d7ece\n" * (LONG // 8) + "x", "Source: commit 12d7ece\n\n" * (LONG // 24), "Source:" + " " * LONG + "12d7ece",
-                          "Source: " + "12d7ece\n" * (LONG // 8), "Source:\n" + "12d7ece\n \n" * (LONG // 10) + "source:")
+                          "Source: " + "12d7ece\n" * (LONG // 8), "Source:\n" + "12d7ece\n \n" * (LONG // 10) + "source:",
+                          "**Source:" + "*" * LONG, "**Source:**" + " " * LONG + "12d7ece", "**Source:**\n" + "12d7ece\n" * (LONG // 8) + "x")
         self.assert_quick(arena_pick, "based on " * (LONG // 9) + "candidate", "Based " + "** " * (LONG // 3) + "on candidate 1")
 
     def test_a_long_relative_write_path_grades_in_linear_time(self):
