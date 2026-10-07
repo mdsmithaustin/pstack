@@ -2715,7 +2715,8 @@ def doc_impact_review(view):
     result = turn_author_result(view, turn, reply)
     reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
     verdict_pass, undecided = review_pass(reply)
-    evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {verdict_pass}"]
+    evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {verdict_pass}",
+                f"graded reply: {'final reply' if turn is None else f'turn {turn}'}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)
     if result == "not required":
