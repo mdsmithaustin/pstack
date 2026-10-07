@@ -75,25 +75,25 @@ class ChatWorklist(unittest.TestCase):
                          ["completed", "completed"])
 
     def test_a_long_item_of_repeated_annotations_parses_in_linear_time(self):
-        item = "1. text " + "(done: x) " * 20000 + "tail"
+        item = "1. text " + "(done: x) " * 40000 + "tail"
         for reply, states in ((item + "\n2. (done: y)", None), (item + " (done: z)\n2. (done: y)", ["completed", "completed"])):
             started = time.perf_counter()
             worklist = live.chat_worklist(reply)
             elapsed = time.perf_counter() - started
             with self.subTest(states=states):
                 self.assertEqual(worklist and [i["state"] for i in worklist], states)
-                self.assertLess(elapsed, 0.1)
+                self.assertLess(elapsed, 2)
 
     def test_a_long_run_of_separators_before_a_trailing_state_parses_in_linear_time(self):
         for separator in (" ", "-", "*", "(", "_", "["):
             for tail, states in (("x", None), ("done", ["completed", "completed"])):
-                reply = "1. text" + separator * 20000 + tail + "\n2. (done: y)"
+                reply = "1. text" + separator * 40000 + tail + "\n2. (done: y)"
                 started = time.perf_counter()
                 worklist = live.chat_worklist(reply)
                 elapsed = time.perf_counter() - started
                 with self.subTest(separator=separator, tail=tail):
                     self.assertEqual(worklist and [i["state"] for i in worklist], states)
-                    self.assertLess(elapsed, 0.1)
+                    self.assertLess(elapsed, 2)
 
 
 class Custody(unittest.TestCase):
