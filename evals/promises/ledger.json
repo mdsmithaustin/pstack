@@ -2824,11 +2824,11 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "On a case-insensitive disk, the likely cause is that `init` ran from a path spelled differently from the one `git rev-parse --show-toplevel` prints. The fix is to re-run `no-mistakes init` from that exact path."
+     "quote": "On a case-insensitive disk, the likely cause is that `init` ran from a path spelled differently from the main checkout's path, the parent of the directory that `git rev-parse --path-format=absolute --git-common-dir` prints."
     },
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "When the repository commits `.no-mistakes.yaml` but has no `no-mistakes` remote, stop and report that `no-mistakes init` must run from the path `git rev-parse --show-toplevel` prints."
+     "quote": "When the repository commits `.no-mistakes.yaml` but has no `no-mistakes` remote, stop and report that `no-mistakes init` must run from the main checkout's path, the parent of the directory that `git rev-parse --path-format=absolute --git-common-dir` prints."
     }
    ],
    "harness_sensitive": false,
@@ -8520,14 +8520,14 @@
    ],
    "text": "An agent in a Docker sandbox commits and leaves the push to the host."
   },
-  "0dfb62ac8b0c": {
+  "134c056dc17e": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
    "promise": "opening-a-pr-gated-publish-init-uses-canonical-path",
    "sources": [
     "port"
    ],
-   "text": "Run `no-mistakes init` from the path `git rev-parse --show-toplevel` prints, because on a case-insensitive disk no-mistakes matches the spelling `init` used."
+   "text": "Run `no-mistakes init` in your main checkout, from the exact path spelling that git reports, because on a case-insensitive disk no-mistakes matches the spelling `init` used."
   }
  }
 }
