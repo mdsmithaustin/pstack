@@ -264,6 +264,7 @@ class Child:
 class Trace:
     events: list = field(default_factory=list)
     final: str = ""
+    output_md: str = ""
     slash_commands: tuple = ()
     worklist_tool_offered: bool = None  # None when the trace neither lists tools nor calls one
     result_events: int = None
@@ -1343,7 +1344,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         counts["prescribed"] += bool(spawn.prescribed)
         counts["persona"] += spawn.persona
         counts["implementation_misses"] += spawn in implementers and not spawn.persona
-    cited = cited_principles(trace.final, principles)
+    cited = cited_principles(trace.output_md + "\n" + trace.final, principles)
     unread = [slug for slug in cited if f"{slug}/SKILL.md" not in first_read]
     delegate_edits = sorted({event.path for event in edits if event.actor == "delegate"})
     return {
@@ -1580,7 +1581,7 @@ def analyze(trace_path, principles):
         attach_transcripts(trace, run.agent, harvest / "transcripts", tree, lines)
     output = run.path / "output.md"
     if output.is_file():
-        trace.final = output.read_text(errors="replace") + "\n" + trace.final
+        trace.output_md = output.read_text(errors="replace")
     injected = injection(run, run.agent, entry, trace)
     playbook_texts = {PLAYBOOK.match(path).group(1): source.read_text(errors="replace") for path, source in files.items() if PLAYBOOK.match(path)}
     workspace = "workspace" in build_info.get("cases", {}).get(run.case, {})

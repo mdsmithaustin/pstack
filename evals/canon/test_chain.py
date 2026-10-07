@@ -334,6 +334,8 @@ def make_run(directory, agent, fixture, transcripts=True, tree=TREE, case="sessi
     run = work / "runs" / case / "with_skill"
     run.mkdir(parents=True)
     shutil.copy(source / "run" / "trace.jsonl", run / "trace.jsonl")
+    if (source / "run" / "output.md").is_file():
+        shutil.copy(source / "run" / "output.md", run / "output.md")
     harvest = work / "harvest" / case / "with_skill"
     harvest.mkdir(parents=True)
     if transcripts:
@@ -1020,6 +1022,22 @@ class WorklistCarrierTests(unittest.TestCase):
 
     def test_no_list_is_no_valid_carrier(self):
         self.assertFalse(self.worklist(None, [])["valid_carrier"])
+
+
+class FinalReplyTests(unittest.TestCase):
+    def test_a_final_reply_recap_is_not_the_worklist(self):
+        worklist = analyze("claude-final-recap", "claude", transcripts=False)["worklist"]
+
+        self.assertEqual((worklist["carrier"], worklist["steps_listed"]), ("none", 0))
+
+    def test_a_principle_named_only_in_output_md_is_cited(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "claude", "claude-final-recap", transcripts=False)
+            with (trace_path.parent / "output.md").open("a") as output:
+                output.write("Prove It Works shaped the check.\n")
+            row = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual(row["citations"]["cited"], ["principle-prove-it-works"])
 
 
 def playbook_text(name):
