@@ -2580,8 +2580,9 @@ NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|nee
 NEGATION_ON_PASS = re.compile(r"\b(?:not|no|never|nothing|neither|cannot|fail(?:s|ed)?|refus(?:e|es|ed)|declin(?:e|es|ed))\b|n['’]t\b|[❌✗✘🚫⛔]", re.I)
 ON_THE_WORD = re.compile(r"\s+(?:[\w'’]+\s+)?")
 FAILING_VERDICT = re.compile(r"\b(?:fail(?:s|ed)?|needs?[- ]changes|blocked|rejected)\b", re.I)
-NOT_RUN = re.compile(r"\bno\s+(?:(?:independent|trail|docs?|documentation)\s+)*review(?:er)?s?(?=\s*(?:[.,;:!?)|—–\n]|-\s|$)|\s+(?:was\s+)?(?:run|ran)\b)"
-                     r"|\breview(?:er)?s?\W{0,3}(?:(?:was|has)\s+)?(?:not\s+(?:yet\s+)?run|never\s+ran|did\s+not\s+run|didn['’]t\s+run|skipped)\b", re.I)
+NOT_RUN = re.compile(r"(?:\bno\s+(?:(?:independent|trail|docs?|documentation)\s+)*review(?:er)?s?(?:\s+(?:was\s+)?(?:run|ran))?"
+                     r"|\breview(?:er)?s?\W{0,3}(?:(?:was|has)\s+)?(?:not\s+(?:yet\s+)?run|never\s+ran|did\s+not\s+run|didn['’]t\s+run|skipped))"
+                     r"(?=\s*(?:[.,;:!?)|—–\n]|-\s|$))", re.I)
 BENIGN_NEGATION = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|0)|without(?:\s+any)?)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
                              r"|objections?|items?|(?:edits?|changes)(?:\s+(?:needed|required|requested))?)\b", re.I)
 PUNCT_OPENER = r"[,():|+—–]|\s-\s"
@@ -2607,6 +2608,7 @@ NOUN_WORDS = NOUN_HEADS | {"the", "independent", "trail", "docs", "documentation
 REPORT_VERBS = (("came", "back", "with"), ("came", "back", "as"), ("came", "back"), ("gave", "it"), ("is",), ("was",), ("returned",), ("gave",),
                 ("reported",), ("says",), ("said",))
 RECEIPTS = {("got",), ("i", "got"), ("we", "got"), ("received",)}
+HEDGE = re.compile(r"\b(?:expect\w*|maybe|planned)\b", re.I)
 VERDICT_SPAN = 200
 NEGATED = "NEGATED"
 
@@ -2651,7 +2653,7 @@ def label_kind(before, context, header):
         named = header or CLOSED_LABEL.fullmatch(label) or (label in GENERIC_LABELS and REVIEW_NAMED.search(f"{context} {' '.join(quals)}"))
         plain_quals = all(q in LABEL_WORDS or q.isdigit() for q in quals)
         plain_asides = all(PLAIN_ASIDE.fullmatch(a.strip()) or BENIGN_NEGATION.fullmatch(a.strip()) for a in asides)
-        return "label" if named and plain_quals and plain_asides else None
+        return "label" if named and plain_quals and plain_asides and not HEDGE.search(text[:cut.start()]) else None
     words = text.lower().split()
     while words and words[-1] in QUALIFIERS:
         words.pop()
