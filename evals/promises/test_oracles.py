@@ -3411,6 +3411,33 @@ class Issue133RoundThree(unittest.TestCase):
         self.assertEqual(arena_pick("Base: candidate 2; grafts from candidate 3."), PASS)
 
 
+LONG = 200_000
+
+
+class LinearTime(unittest.TestCase):
+    def assert_quick(self, grade_one, *inputs):
+        for value in inputs:
+            started = time.perf_counter()
+            grade_one(value)
+            self.assertLess(time.perf_counter() - started, 0.5, repr(value[:40]))
+
+    def test_a_long_reply_label_grades_in_linear_time(self):
+        def narrow(reply):
+            spawns = [delegate(10, "Implement the parser change.", reply)]
+            events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+            grade("how-narrow-question-no-explorers", minimal(events=events, spawns=spawns, harness="hermes", final_reply="x"), load_case("how-run"))
+        self.assert_quick(narrow, "## Explorer " + "(" * LONG, "## Explorer " + " " * LONG + "1", "## Explorer" + " 1" * (LONG // 2),
+                          "## Explorer " + " -" * (LONG // 2) + " x", "Explorer " + "(" * LONG)
+
+    def test_a_long_git_status_grades_in_linear_time(self):
+        self.assert_quick(lambda status: status_after([], status=status), "\n" * LONG, " \n" * (LONG // 2), "\t" * LONG + "x", "M" + " " * LONG)
+
+    def test_a_long_reply_of_negated_cues_grades_in_linear_time(self):
+        self.assert_quick(arena_pick, "no base " * (LONG // 8), "not candidate 1 was selected " * (LONG // 30))
+        checkpoint = lambda reply: grade("architect-checkpoint-opt-in", minimal(final_reply=reply), load_case("architect-checkpoint-run"))
+        self.assert_quick(checkpoint, "do not approve " * (LONG // 15))
+
+
 if __name__ == "__main__":
     unittest.main()
 
