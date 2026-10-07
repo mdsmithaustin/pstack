@@ -2607,7 +2607,7 @@ LABEL_SEPARATOR = re.compile(r"->|[:|=→—–(]|\s-\s")
 CLOSED_LABEL = re.compile(r"(?:(?:independent|docs|documentation)\s+)*(?:review|trail\s+review(?:er)?)(?:\s+(?:verdict|result|status))?|verdict")
 REVIEW_NAMED = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b", re.I)
 OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|typecheck\w*|pytest|unittest)\b", re.I)
-OFF_TOPIC_GREEN = re.compile(r"\s*(?:the\s+)?(?:[\w-]+\s+)?" + OFF_TOPIC.pattern + r"\s+(?:is|are)\s+green\s*", re.I)
+OFF_TOPIC_GREEN = re.compile(r"\s*" + OFF_TOPIC.pattern + r"\s+(?:is|are)\s+green\s*", re.I)
 GENERIC_LABELS = {"result", "status"}
 QUALIFIERS = {"a", "clean", "final", "overall"}
 LABEL_WORDS = QUALIFIERS | {"re-review", "round", "independent", "trail", "reviewer", "review"}
