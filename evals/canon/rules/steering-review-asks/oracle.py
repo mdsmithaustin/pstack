@@ -634,7 +634,9 @@ STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
 REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
 ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 WRAPPED = re.compile(r"(?:expect\.stringContaining|new RegExp)\((.*)\)|`\$\{\s*([\w$.]+)\s*\}`|/([^\\/\[\](){}.*+?^$|]+)/[a-z]*")
-DEFINITION = re.compile(r"\b(?:const|let|var)\s+([\w$]+)\s*(?::[^=;\n]*)?=\s*([^;\n]*)")
+LINE_STRING = r"""(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\\n])*`)"""
+DECLARATION = r"\b(?:const|let|var)\s"
+DEFINITION = re.compile(rf"{DECLARATION}+([\w$]+)\s*(?::[^=;\n]*)?=\s*((?:{LINE_STRING}|(?!{DECLARATION})[^;\n\"'`])*)")
 
 
 def asserts_copied_value(source):
@@ -672,12 +674,31 @@ def mentions(text, values):
 
 
 def shows_hidden_value(present, absent, definitions):
-    """The present value is the absent one under another name, or holds it, as
-    HEAD + TAIL does, or the absent value is cut from it, as LONG_TEXT.slice(-40)
-    is."""
+    """The present value is the absent one under another name; or the present
+    value or its definition mentions the absent one, as HEAD + TAIL does; or the
+    absent value or its definition mentions the present one, as
+    LONG_TEXT.slice(-40) does."""
     hidden = aliases(absent, definitions)
-    return bool(aliases(present, definitions) & hidden) or mentions(present, hidden) or mentions(
-        definitions.get(present, ""), hidden) or mentions(definitions.get(absent, ""), {present})
+    return bool(aliases(present, definitions) & hidden) or mentions(f"{present}\n{definitions.get(present, '')}", hidden) or mentions(
+        f"{absent}\n{definitions.get(absent, '')}", {present})
+
+
+def statements(source):
+    """The source with each statement on one line. JavaScript carries a
+    statement past a newline inside a template literal, after a line that ends
+    in an operator or an opening bracket, and before a line that opens with an
+    operator, a dot, a comma, or a closing bracket. A full-line comment ends
+    nothing and holds no code."""
+    joined = []
+    for line in source.split("\n"):
+        if line.lstrip().startswith(("//", "/*", "*")):
+            continue
+        if joined and (len(re.findall(r"(?<!\\)`", joined[-1])) % 2 or re.search(r"[-+*/%&|^?:,=<>(\[{]\s*$", joined[-1])
+                       or re.match(r"\s*[-+%&|^?:.,=)\]]", line)):
+            joined[-1] += " " + line.strip()
+        else:
+            joined.append(line)
+    return "\n".join(joined)
 
 
 def rendered_values(pattern, source):
@@ -704,8 +725,7 @@ def tests_assert_hidden_text_and_copy(added):
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
-    statements = re.sub(r"([-+*%&|^?:,=(\[{])[ \t]*\n\s*", r"\1 ", source)
-    definitions = {name: text.strip() for name, text in DEFINITION.findall(statements)}
+    definitions = {name: text.strip() for name, text in DEFINITION.findall(statements(source))}
     shown = any(shows_hidden_value(value, hidden, definitions) for value in present for hidden in absent)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
