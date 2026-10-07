@@ -626,6 +626,8 @@ ARENA_NATURALS = (
     "Never in doubt - based on candidate 2; retries grafted from candidate 3.",
     "Never in doubt - rebased onto candidate 2; retries grafted from candidate 3.",
     "The bases were candidate 1 and candidate 2; grafted retries from candidate 3.",
+    "I based the design on **candidate 2**, with retries grafted from candidate 3.", "Rebased onto `candidate 2`, with retries grafted from candidate 3.",
+    "Based on candidate #2, with retries grafted from candidate 3.", "Based on candidate-2, with retries grafted from candidate 3.",
 )
 
 ARENA_NEGATED = (
@@ -702,9 +704,11 @@ SEALED_EXPLORER_LABELS = ("Explorer-1: parser", "Explorer 1/3: parser", "Explore
                           "Explorer II: found it", "Explorer for the parser: found it", "Explorer angle 1: found it", "explorer a: found it",
                           "explorer ii: found it", "Explorer One: found it", "Explorer Alpha: found it", "Explorer on the parser: found it",
                           "[Explorer 1] found it", "Explorer 1 reporting: found it", "Explorer scanning the parser: found it", "explorer_1: found it",
-                          "explorer-a: found it")
+                          "explorer-a: found it", "Explorer A - found it", "Explorer One \u2014 found it", "Explorer 1 \u2013 found it", "Explorer angle 1, found it",
+                          "Explorer 1 of 3 - found it", "Explorer (parser), found it", "Explorer output - found it", "**Explorer 1** - found it",
+                          "- Explorer 1: found it", "1. Explorer 1: found it")
 SEALED_NOT_EXPLORER_LABELS = ("Explorer notes: found it", "Explorer findings: found it", "Explorer, findings: found it", "Explorer — notes: found it",
-                              "Explorer - summary: found it")
+                              "Explorer - summary: found it", "Explorer notes - found it", "Explorer findings \u2014 found it", "Explorer 1 findings, found it")
 
 STATUS_AFTER = (["cd /w/relay-wt/candidate-1"], ["cd ../relay-wt/candidate-2"], ["pushd /w/relay-wt/candidate-1 >/dev/null"])
 
@@ -805,6 +809,8 @@ OTHER_NATURALS = (
     ("four investigators in one message", why_investigators, PASS),
     ("Sources: line", lambda: reply_oracle("how-why-reports-name-sources-searched", "why-run",
                                            "The cap was raised in commit 12d7ece.\n\nSources: git log, README, open issues."), PASS),
+    ("Source line with a commit and a second source", lambda: reply_oracle("how-why-reports-name-sources-searched", "why-run",
+                                                                          "Source: commit 12d7ece\nSee also the PR."), PASS),
     ("Sources searched heading", lambda: reply_oracle("how-why-reports-name-sources-searched", "why-run",
                                                       "Retry cap came from commit 12d7ece.\n\n**Sources searched**: git history, docs."), PASS),
     ("judge on another model", lambda: judged("gpt-6.1-sol", "claude-opus-5-5", ["opus", "sonnet"]), PASS),
