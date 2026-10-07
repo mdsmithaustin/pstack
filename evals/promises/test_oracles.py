@@ -3478,6 +3478,11 @@ class Issue133RoundThree(unittest.TestCase):
         for line in ("No base was chosen.", "Never picked a base.", "I never chose a winner.", "Nobody picked candidate 2."):
             self.assertEqual(arena_pick(line + " Retries were grafted from candidate 3."), FAIL, line)
 
+    def test_a_not_right_after_the_base_sends_it_to_a_judge(self):
+        for line in ("Synthesis was not done: base not picked, grafts not applied.", "Base: not picked; grafts from candidate 3."):
+            self.assertEqual(arena_pick(line), INCONCLUSIVE, line)
+        self.assertEqual(arena_pick("Candidate 2 is the base, not candidate 1; grafts from candidate 3."), PASS)
+
     def test_a_negation_before_the_sign_off_scopes_over_before_implementing(self):
         for reply in ("I did not wait for your sign-off before implementing.", "No sign-off is needed before implementing."):
             self.assertEqual(grade("architect-checkpoint-opt-in", minimal(final_reply=reply), load_case("architect-checkpoint-run"))["verdict"],

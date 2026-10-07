@@ -631,6 +631,7 @@ ARENA_NEGATED = (
     "Not picked candidate 2 as the winner. Retries were grafted from candidate 3.",
     "Neither judge picked candidate 2 as the winner. Retries were grafted from candidate 3.",
     "The judges never agreed on candidate 2 as the winner. Retries were grafted from candidate 3.",
+    "Synthesis was not done: base not picked, grafts not applied.",
 )
 
 LOOP_NATURALS = (

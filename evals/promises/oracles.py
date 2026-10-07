@@ -1805,6 +1805,7 @@ CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|sinc
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n['’]t\b")
 OR_JOIN = re.compile(r"\s+or\s+(?:the\s+|a\s+)?")
 NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a)\b")
+NOT_AFTER = re.compile(r"[\s:]+not\b")
 DIRECTLY_NEGATED = re.compile(r"\s+(?:(?:pick(?:ed)?|cho(?:se|ose))\s+)?(?:(?:a|an|any)\s+)?")
 
 
@@ -1823,10 +1824,10 @@ def mention_states(pattern, low, nouns=None):
         last_end = m.end()
         if NAMES_NOTHING.match(low, m.end(), m.end() + 12):
             yield "nothing"
-        elif not bound:
-            yield "affirmed"
-        else:
+        elif bound:
             yield "negated" if DIRECTLY_NEGATED.fullmatch(low, found[at - 1].end(), m.start()) else "blocked"
+        else:
+            yield "blocked" if NOT_AFTER.match(low, m.end()) else "affirmed"
 
 
 def affirmed(pattern, low):
