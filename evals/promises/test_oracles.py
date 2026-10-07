@@ -3,6 +3,7 @@ import sys
 import re
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -3292,6 +3293,13 @@ class Issue133RoundTwo(unittest.TestCase):
                   delegate(10, "Implement the exporter change in src/b.py.", "Explorer 3: wired."), delegate(30, "Write the answer.")]
         result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
         self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_long_numbered_label_grades_in_linear_time(self):
+        spawns = [delegate(10, "Implement the parser change.", "## Explorer " + "1" * 26 + "x")]
+        started = time.monotonic()
+        grade("how-narrow-question-no-explorers", minimal(events=[{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}], spawns=spawns,
+                                                          harness="hermes", final_reply="x"), load_case("how-run"))
+        self.assertLess(time.monotonic() - started, 1)
 
 if __name__ == "__main__":
     unittest.main()
