@@ -89,7 +89,7 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
                         r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
-REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*[Ss]ources?\s*\n+[^\n]*|#{1,6}[^\n]+|[A-Za-z][\w /-]{0,30}:[^\n]*)")
+REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|[A-Za-z][\w /-]{0,30}:[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
 LABEL_QUALIFIER = re.compile(r"\s+#?\d+\s*$|\s*\([^)]*\)\s*$|\s+[—–-]\s.*$")
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
@@ -882,7 +882,7 @@ def uncommented(command):
             escaped = True
         elif quote:
             quote = None if char == quote else quote
-        elif char == "#" and prev.isspace():
+        elif char == "#" and (prev.isspace() or prev in ";&|()"):
             comment = True
         elif char in "'\"":
             quote = char
@@ -2653,7 +2653,7 @@ def arm_dirs(command):
 
 
 ARENA_DIRS = (".worktrees/", ".arena/")
-GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?(?:[MADRCU][MADRCU ]?\s+\S|\?\? ([^\s"]+))|^\s*(?:modified|deleted|new file|both \w+):\s')
+GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?(?:[MADRCU][MADRCU ]?\s+\S|\?\? (?:"([^"\n]+)"|([^\s"]+)))|^\s*(?:modified|deleted|new file|both \w+):\s')
 
 
 def cwd_after(command, cwd):
@@ -2681,7 +2681,8 @@ def parent_written(view, candidates):
             cwd = cwd_after(command, cwd)
         if seq > start and command.startswith("git status") and here == parent:
             status = ((view.results_for(call) or {}).get("output_head") or "").replace("\\n", "\n")
-            if any(m.group(1) is None or (not m.group(1).startswith(ARENA_DIRS) and view.classify(m.group(1)) in PROJECT_CLASSES) for m in GIT_DIRTY.finditer(status)):
+            untracked = [m.group(1) or m.group(2) for m in GIT_DIRTY.finditer(status)]
+            if any(path is None or (not path.startswith(ARENA_DIRS) and view.classify(path) in PROJECT_CLASSES) for path in untracked):
                 return seq
     return None
 
