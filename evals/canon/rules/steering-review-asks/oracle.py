@@ -635,9 +635,12 @@ STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
 REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
 ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 WRAPPED = re.compile(r"(?:expect\.stringContaining|new RegExp)\((.*)\)|`\$\{\s*([\w$.]+)\s*\}`|/([^\\/\[\](){}.*+?^$|]+)/[a-z]*")
-LINE_STRING = r"""(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\\n])*`)"""
-DECLARATION = r"\b(?:const|let|var)\s"
-DEFINITION = re.compile(rf"{DECLARATION}+([\w$]+)\s*(?::[^=;\n]*)?=\s*((?:{LINE_STRING}|(?!{DECLARATION})[^;\n\"'`])*)")
+QUOTED = r"""(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')"""
+LINE_STRING = rf"(?:{QUOTED}|`(?:\\.|[^`\\\n])*`)"
+DECLARATION = r"\s*\b(?:const|let|var)\s"
+DEFINITION = re.compile(r"(?=(?<![\w$.])(?:(?:const|let|var)\s+([\w$]+)\s*(?::[^=;\n]*)?|([\w$]+)\s*)=(?![=>])\s*([^;\n]*))")
+NAME = re.compile(r"[A-Za-z_$][\w$]*")
+CODE = re.compile(r"\w\.\w|\w\s*\(|\$\{|\+|\[")
 
 
 def asserts_copied_value(source):
@@ -674,32 +677,53 @@ def mentions(text, values):
     return any(re.search(rf"(?<![\w$]){re.escape(value)}(?![\w$])", text) for value in values)
 
 
+def reaches(value, targets, definitions):
+    """Whether a value, or a definition of a name it leads to, mentions a
+    target. Prose such as a button label names no constants; an identifier or
+    an expression does, and so does each definition after its quoted strings."""
+    texts, seen = [value], set()
+    names = NAME.findall(value) if NAME.fullmatch(value) or CODE.search(value) else []
+    while texts:
+        if any(mentions(text, targets) for text in texts):
+            return True
+        fresh = set(names) - seen
+        seen |= fresh
+        texts = [text for name in fresh for text in definitions.get(name, [])]
+        names = [name for text in texts for name in NAME.findall(re.sub(QUOTED, "", text))]
+    return False
+
+
 def shows_hidden_value(present, absent, definitions):
     """The present value is the absent one under another name; or the present
-    value or its definition mentions the absent one, as HEAD + TAIL does; or the
-    absent value or its definition mentions the present one, as
-    LONG_TEXT.slice(-40) does."""
+    value reaches the absent one through the names it mentions, as
+    LONG_TEXT.trim() does when LONG_TEXT = HEAD + TAIL; or the absent value
+    reaches the present one, as LONG_TEXT.slice(-40) does."""
     hidden = aliases(absent, definitions)
-    return bool(aliases(present, definitions) & hidden) or mentions("\n".join([present, *definitions.get(present, [])]), hidden) or mentions(
-        "\n".join([absent, *definitions.get(absent, [])]), {present})
+    return bool(aliases(present, definitions) & hidden) or reaches(present, hidden, definitions) or reaches(absent, {present}, definitions)
 
 
 def statements(source):
     """The source with each statement on one line. JavaScript carries a
-    statement past a newline inside a template literal, after a line that ends
-    in an operator or an opening bracket, and before a line that opens with an
-    operator, a dot, a comma, or a closing bracket. A full-line comment ends
-    nothing and holds no code."""
+    statement past a newline while a declaration's brackets are open, inside a
+    template literal, after a line that ends in an operator or an opening
+    bracket, and before a line that opens with an operator, a dot, a comma, or
+    a closing bracket. A blank or full-line comment line holds no code."""
     joined = []
     for line in source.split("\n"):
-        if line.lstrip().startswith(("//", "/*", "*")):
+        if not line.strip() or line.lstrip().startswith(("//", "/*", "*")):
             continue
-        if joined and (len(re.findall(r"(?<!\\)`", joined[-1])) % 2 or re.search(r"[-+*/%&|^?:,=<>(\[{]\s*$", joined[-1])
-                       or re.match(r"\s*[-+%&|^?:.,=)\]]", line)):
+        if joined and (open_declaration(joined[-1]) or len(re.findall(r"(?<!\\)`", joined[-1])) % 2
+                       or re.search(r"[-+*/%&|^?:,=<>(\[{]\s*$", joined[-1]) or re.match(r"\s*[-+%&|^?:.,=)\]]", line)):
             joined[-1] += " " + line.strip()
         else:
             joined.append(line)
     return "\n".join(joined)
+
+
+def open_declaration(statement):
+    """A declaration whose brackets are still open, outside its strings."""
+    code = re.sub(LINE_STRING, "", statement)
+    return bool(re.match(DECLARATION, statement)) and sum(code.count(c) for c in "([{") > sum(code.count(c) for c in ")]}")
 
 
 def rendered_values(pattern, source):
@@ -727,8 +751,8 @@ def tests_assert_hidden_text_and_copy(added):
     source = "\n".join(lines)
     absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
     definitions = collections.defaultdict(list)
-    for name, text in DEFINITION.findall(statements(source)):
-        definitions[name].append(text.strip())
+    for declared, assigned, text in DEFINITION.findall(statements(source)):
+        definitions[declared or assigned].append(text.strip())
     shown = any(shows_hidden_value(value, hidden, definitions) for value in present for hidden in absent)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),

@@ -266,7 +266,9 @@ class HiddenTailTests(unittest.TestCase):
         for row, lines in (("unrelated value wrapped in a call", ['const HEAD = "chunk ".repeat(900)', "const LONG_TEXT = HEAD + TAIL", absent,
                                                                   "expect(bubble).toHaveTextContent(HEAD.trim())"]),
                            ("open test body after a declaration", ['it("hides the tail", () => {', '  const HEAD = "chunk"', absent,
-                                                                   "  expect(bubble).toHaveTextContent(HEAD)", "})"])):
+                                                                   "  expect(bubble).toHaveTextContent(HEAD)", "})"]),
+                           ("button label that shares a constant's name", ['const prompt = "a".repeat(9000) + TAIL', absent,
+                                                                           'expect(screen.getByText("Show full prompt")).toBeInTheDocument()'])):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [self.PRESENT])
 
