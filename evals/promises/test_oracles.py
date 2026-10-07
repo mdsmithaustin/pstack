@@ -3358,12 +3358,12 @@ def arena_pick(line):
     return grade("arena-fans-out-and-grafts", trace, load_case("arena-run"))["verdict"]
 
 
-def status_after(commands, status=" M relay/cache.py"):
+def status_after(commands, status=" M relay/cache.py", failing=()):
     def task(n):
         return {"description": "candidate", "prompt": f"Design one cache-key candidate. Write only under /tmp/arena/candidate-{n}/: cache.py, rationale.md."}
     events = [{"seq": 43 + n, "kind": "tool_call", "name": "Agent", "input": task(n)} for n in range(1, 6)]
     for n, command in enumerate(commands):
-        events += bash(50 + 2 * n, command)
+        events += bash(50 + 2 * n, command, ok=command not in failing)
     events += bash(60, "git status --short", head=status)
     spawns = [{"seq": 43 + n, "tool": "Agent", "prompt_head": task(n)["prompt"]} for n in range(1, 6)]
     return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, cwd="/w/relay"), load_case("arena-run"))["verdict"]
@@ -3403,6 +3403,12 @@ class Issue133RoundThree(unittest.TestCase):
     def test_a_status_after_a_pushd_into_a_candidate_is_not_the_parent(self):
         self.assertEqual(status_after(["pushd /w/relay-wt/candidate-1 >/dev/null"]), PASS)
         self.assertEqual(status_after([]), FAIL)
+
+    def test_a_status_after_a_failed_cd_or_pushd_shows_an_unknown_checkout(self):
+        for command in ("cd /w/relay-wt/candidate-1", "pushd /w/relay-wt/candidate-1", "cd /w/relay-wt/candidate-1 && pytest"):
+            self.assertEqual(status_after([command], failing={command}), INCONCLUSIVE, command)
+        self.assertEqual(status_after(["cd /w/relay-wt/candidate-1", "cd ../relay"], failing={"cd /w/relay-wt/candidate-1"}), INCONCLUSIVE)
+        self.assertEqual(status_after(["cd /w/relay-wt/candidate-1", "cd /w/relay"], failing={"cd /w/relay-wt/candidate-1"}), FAIL)
 
     def test_without_and_a_base_of_none_name_no_base(self):
         for line in ("Without a base, retries were grafted from candidate 3.", "Base: none; grafts from candidate 3.",
