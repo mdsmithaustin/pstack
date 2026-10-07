@@ -244,6 +244,13 @@ class HiddenTailTests(unittest.TestCase):
                 self.assertEqual(self.failures(*definition, "expect(bubble).not.toHaveTextContent(TAIL)",
                                                "expect(bubble).toHaveTextContent(LONG_TEXT)"), [])
 
+    def test_a_name_defined_twice_keeps_both_definitions(self):
+        for second in ('const LONG_TEXT = "short";', 'const TAIL = "unrelated";'):
+            with self.subTest(second):
+                self.assertEqual(self.failures('it("hides the tail", () => {', "  const LONG_TEXT = HEAD + TAIL;",
+                                               "  expect(bubble).not.toHaveTextContent(TAIL);", "  expect(bubble).toHaveTextContent(LONG_TEXT);",
+                                               "});", 'it("renders a short prompt", () => {', f"  {second}", "});"), [])
+
     def test_a_joined_line_keeps_each_definition_its_own(self):
         absent = "expect(bubble).not.toHaveTextContent(TAIL)"
         for row, lines, expected in (
