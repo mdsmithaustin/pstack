@@ -325,7 +325,8 @@ class HiddenTailTests(unittest.TestCase):
         absent, present = "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(LONG_TEXT)"
         for row, lines in (("const list", ['const HEAD = "x".repeat(9), TAIL = "the end", LONG_TEXT = HEAD + TAIL']),
                            ("let list assigned in a hook", ["let TAIL, LONG_TEXT", "beforeEach(() => {", '  TAIL = "the end"', '  LONG_TEXT = "x".repeat(9) + TAIL', "})"]),
-                           ("let list with a value", ['let HEAD = "x".repeat(9), LONG_TEXT', "beforeEach(() => {", "  LONG_TEXT = HEAD + TAIL", "})"])):
+                           ("let list with a value", ['let HEAD = "x".repeat(9), LONG_TEXT', "beforeEach(() => {", "  LONG_TEXT = HEAD + TAIL", "})"]),
+                           ("function type annotation", ["const makeLong: (n: number) => string = (n) => HEAD + TAIL", "const LONG_TEXT = makeLong(9)"])):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines, absent, present), [])
 
