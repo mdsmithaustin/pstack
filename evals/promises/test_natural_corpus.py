@@ -87,6 +87,8 @@ REVIEW_LINE_NATURALS = (
     ("Docs pass: pass", INCONCLUSIVE),
     ("The docs check passed.", INCONCLUSIVE),
     ("Pass: docs check", INCONCLUSIVE),
+    ("Independent check: pass", INCONCLUSIVE),
+    ("Trail check: pass", INCONCLUSIVE),
     ("The independent reviewer reported pass.", PASS),
     ("The review did not pass at first, then passed.", INCONCLUSIVE),
     ("Review failed twice before it passed.", INCONCLUSIVE),
