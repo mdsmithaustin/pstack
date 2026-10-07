@@ -636,9 +636,9 @@ REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
 ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 WRAPPED = re.compile(r"(?:expect\.stringContaining|new RegExp)\((.*)\)|`\$\{\s*([\w$.]+)\s*\}`|/([^\\/\[\](){}.*+?^$|]+)/[a-z]*")
 QUOTED = r"""(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')"""
-DECLARATION = r"\s*\b(?:const|let|var|function)\s"
-DEFINITION = re.compile(r"(?=(?<![\w$.])(?:(?:const|let|var)\s+([\w$]+)\s*(?::[^=;\n]*)?=(?![=>])|function\s*\*?\s*([\w$]+)|([\w$]+)\s*=(?![=>]))"
-                        r"\s*([^;\n]*))")
+BINDING = re.compile(r"(?<![\w$.])(?:(?:const|let|var)\s+([\w$]+)\s*(?::[^=;\n]*)?=(?![=>])|function\s*\*?\s*([\w$]+)|([\w$]+)\s*\+?=(?![=>]))\s*")
+MUTABLE = re.compile(r"\b(?:let|var)\s+([\w$]+)")
+STRING_AT = re.compile(STRING)
 NAME = re.compile(r"[A-Za-z_$][\w$]*")
 Rendered = collections.namedtuple("Rendered", "text expression")
 
@@ -661,14 +661,15 @@ def named(argument):
     """The text or name an assertion argument stands for: a string's contents,
     or what stringContaining, new RegExp, a lone ${} template, or a regex with
     no special characters wraps. Only an expression names constants; a string
-    or regex literal is text."""
+    or regex literal is text, and a template is text until it substitutes."""
     argument = " ".join(argument.split())
     wrapped = WRAPPED.fullmatch(argument)
     if wrapped and wrapped.group(3) is not None:
         return Rendered(wrapped.group(3), False)
     if wrapped:
         return named(next(group for group in wrapped.groups() if group is not None))
-    return Rendered(unquoted(argument), not re.fullmatch(STRING, argument))
+    literal = re.fullmatch(REGEX_LITERAL, argument) or re.fullmatch(STRING, argument) and "${" not in argument
+    return Rendered(unquoted(argument), not literal)
 
 
 def aliases(value, definitions):
@@ -704,7 +705,7 @@ def shows_hidden_value(present, absent, definitions):
 
 def statements(source):
     """The source with each statement on one line. JavaScript carries a
-    statement past a newline while a declaration's brackets are open, inside a
+    statement past a newline while a binding's brackets are open, inside a
     template literal, after a line that ends in an operator or an opening
     bracket, and before a line that opens with an operator, a dot, a comma, or
     a closing bracket. A blank or full-line comment line holds no code."""
@@ -712,7 +713,8 @@ def statements(source):
     for line in source.split("\n"):
         if not line.strip() or line.lstrip().startswith(("//", "/*", "*")):
             continue
-        if joined and (open_declaration(joined[-1]) or len(re.findall(r"(?<!\\)`", joined[-1])) % 2
+        if joined and (any(bound_value(joined[-1], head.end())[1] for head in BINDING.finditer(joined[-1]))
+                       or len(re.findall(r"(?<!\\)`", joined[-1])) % 2
                        or re.search(r"[-+*/%&|^?:,=<>(\[{]\s*$", joined[-1]) or re.match(r"\s*[-+%&|^?:.,=)\]]", line)):
             joined[-1] += " " + line.strip()
         else:
@@ -720,10 +722,36 @@ def statements(source):
     return "\n".join(joined)
 
 
-def open_declaration(statement):
-    """A declaration whose brackets are still open, outside its strings."""
-    code = re.sub(STRING, "", statement)
-    return bool(re.match(DECLARATION, statement)) and sum(code.count(c) for c in "([{") > sum(code.count(c) for c in ")]}")
+def bound_value(statement, start):
+    """The value a binding starts at start, up to the line end, or the
+    semicolon or closing bracket that ends it outside strings, and whether its
+    brackets are still open at the line end."""
+    end = statement.find("\n", start)
+    end = len(statement) if end < 0 else end
+    depth, at = 0, start
+    while at < end:
+        string = STRING_AT.match(statement, at, end)
+        if string:
+            at = string.end()
+            continue
+        depth += (statement[at] in "([{") - (statement[at] in ")]}")
+        if depth < 0 or statement[at] == ";" and depth == 0:
+            break
+        at += 1
+    return statement[start:at].strip(), depth > 0 and at == end
+
+
+def definitions_in(source):
+    """Every value bound to each name: declarations, function declarations,
+    and assignments to a name the file declares with let or var."""
+    text = statements(source)
+    mutable = set(MUTABLE.findall(text))
+    definitions = collections.defaultdict(list)
+    for head in BINDING.finditer(text):
+        declared, function, assigned = head.groups()
+        if declared or function or assigned in mutable:
+            definitions[declared or function or assigned].append(bound_value(text, head.end())[0])
+    return definitions
 
 
 def rendered_values(pattern, source):
@@ -752,9 +780,7 @@ def tests_assert_hidden_text_and_copy(added):
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
-    definitions = collections.defaultdict(list)
-    for *names, text in DEFINITION.findall(statements(source)):
-        definitions[next(name for name in names if name)].append(text.strip())
+    definitions = definitions_in(source)
     shown = any(shows_hidden_value(value, hidden, definitions) for value in present for hidden in absent)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
