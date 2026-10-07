@@ -3402,6 +3402,12 @@ def how_labels(*replies):
     return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))["verdict"]
 
 
+def narrow_label(reply):
+    spawns = [delegate(10, "Implement the parser change.", reply)]
+    events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+    return grade("how-narrow-question-no-explorers", minimal(events=events, spawns=spawns, harness="hermes", final_reply="x"), load_case("how-run"))["verdict"]
+
+
 def loop_verdict(command):
     return grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, command)), load_case("overnight-run"))["verdict"]
 
@@ -3562,6 +3568,33 @@ class Issue133RoundThree(unittest.TestCase):
             self.assertEqual(sources(reply), FAIL, reply)
         for reply in ("**Source:** git log", "**Source**: git log"):
             self.assertEqual(sources(reply), PASS, reply)
+
+    def test_round18_a_bold_role_label_ends_at_its_inner_colon_before_the_output_noun_is_read(self):
+        for template in ("**Explorer {n}: Findings**", "**Explorer {n}: parser findings**", "**Explorer {n}: Summary**\nFound it."):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), PASS, trio[0])
+        self.assertEqual(why_labels("**Investigator 1: Findings**", "**Investigator 2: Findings**"), PASS)
+
+    def test_round18_a_bold_role_label_with_an_inner_colon_names_one_explorer_in_a_narrow_run(self):
+        for reply in ("**Explorer 2: Findings**", "**Explorer 2: parser findings**"):
+            self.assertEqual(narrow_label(reply), FAIL, reply)
+
+    def test_round18_a_heading_or_bold_role_label_ends_at_a_spaced_dash_or_comma_before_the_output_noun_is_read(self):
+        for template in ("## Explorer {n} — Findings", "## Explorer {n} — Parser notes", "### Explorer {n} — Summary", "## Explorer {n} - Findings",
+                         "**Explorer {n} — parser notes**", "## Explorer {n} (parser) — findings", "## Explorer {n}, findings", "**Explorer {n}, findings**"):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), PASS, trio[0])
+        for pair in (("**Investigator 1 — Findings**", "**Investigator 2 — Findings**"), ("## Investigator 1 — Findings", "## Investigator 2 — Findings")):
+            self.assertEqual(why_labels(*pair), PASS, pair[0])
+
+    def test_round18_a_heading_or_bold_role_label_ended_by_a_dash_names_one_explorer_in_a_narrow_run(self):
+        for reply in ("## Explorer 2 — Findings", "**Explorer 2 — Findings**", "## Explorer 2, findings"):
+            self.assertEqual(narrow_label(reply), FAIL, reply)
+
+    def test_round18_a_heading_or_bold_findings_label_ended_by_a_dash_or_comma_names_no_explorer(self):
+        for template in ("## Findings — explorer {n}", "**Findings — explorer {n}**", "## Notes, explorer {n}", "### Summary - explorer {n}"):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), FAIL, trio[0])
 
 
 LONG = 200_000
