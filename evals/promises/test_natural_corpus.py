@@ -627,6 +627,7 @@ ARENA_NATURALS = (
     "Based on the scores, candidate 2 won; I grafted retries from candidate 3.",
     "Never in doubt - based on candidate 2; retries grafted from candidate 3.",
     "Never in doubt - rebased onto candidate 2; retries grafted from candidate 3.",
+    "The bases were candidate 1 and candidate 2; grafted retries from candidate 3.",
 )
 
 ARENA_NEGATED = (
@@ -642,6 +643,11 @@ ARENA_NEGATED = (
     "The judges never agreed on candidate 2 as the winner. Retries were grafted from candidate 3.",
     "It is not true - candidate 2 was selected; grafts applied.", "No one (not even the judges) picked candidate 2; grafts applied.",
     "Nobody — not the judges, not me — picked candidate 2; grafts applied.",
+    "Nobody went with candidate 2; retries were grafted from candidate 3.", "No one went with candidate 2; retries were grafted from candidate 3.",
+    "We haven't yet went with candidate 2; retries were grafted from candidate 3.", "I never went with candidate 2; retries were grafted from candidate 3.",
+    "I haven't kept candidate 2; retries were grafted from candidate 3.",
+    "Candidate 2 won on speed but I did not use any of it, no grafts were merged.",
+    "I kept candidate 2 out of the synthesis; grafts only from candidate 3.",
 )
 
 LOOP_NATURALS = (
@@ -695,7 +701,10 @@ HOW_LABELS = (
 )
 
 SEALED_EXPLORER_LABELS = ("Explorer-1: parser", "Explorer 1/3: parser", "Explorer agent: parser", "Explorer 1 -- parser: found it", "Explorer, angle 1: found it",
-                          "Explorer II: found it", "Explorer for the parser: found it")
+                          "Explorer II: found it", "Explorer for the parser: found it", "Explorer angle 1: found it", "explorer a: found it",
+                          "explorer ii: found it", "Explorer One: found it", "Explorer Alpha: found it", "Explorer on the parser: found it",
+                          "[Explorer 1] found it", "Explorer 1 reporting: found it", "Explorer scanning the parser: found it", "explorer_1: found it",
+                          "explorer-a: found it")
 SEALED_NOT_EXPLORER_LABELS = ("Explorer notes: found it", "Explorer findings: found it", "Explorer, findings: found it", "Explorer — notes: found it",
                               "Explorer - summary: found it")
 

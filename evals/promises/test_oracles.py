@@ -2676,6 +2676,12 @@ class Issue133WritesAndReruns(unittest.TestCase):
                  "spec/support/latest.rb", "web/e2e/fastest.ts", "src/latest.cy.js", "src/greatest.e2e.js")
         self.assertEqual({n: view.classify(n) for n in names}, {n: "test" for n in names})
 
+    def test_a_spec_or_e2e_directory_alone_does_not_make_a_test(self):
+        view = oracles.View(minimal(), {}, None)
+        names = {"src/spec/parser.rs": "source", "lib/spec/loader.py": "source", "docs/spec/api.md": "doc", "api/spec/openapi.json": "data",
+                 "packages/spec/src/index.ts": "source", "src/e2e/runner.go": "source", "spec/latest_spec.rb": "test"}
+        self.assertEqual({name: view.classify(name) for name in names}, names)
+
     def test_tdd_and_repro_oracles_read_each_test_and_scratch_name(self):
         project = Path(tempfile.mkdtemp()) / "project"
         project.mkdir()
@@ -3031,6 +3037,13 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
     def test_n4_a_single_cited_source_is_not_a_sources_section(self):
         self.assertEqual(self.sources("Source: commit 12d7ece."), FAIL)
         self.assertEqual(self.sources("Commit 12d7ece raised it.\n\nSources: git log, README."), PASS)
+
+    def test_n4_a_singular_source_label_naming_more_than_a_commit_is_a_sources_section(self):
+        for reply in ("Source: git log", "Source: git history", "Source: git log, README", "**Source**: git log", "- Source: git log",
+                      "> Source: git log", "## Source\ngit log"):
+            self.assertEqual(self.sources(reply), PASS, reply)
+        for reply in ("Source: commit 12d7ece.", "## Source\ncommit 12d7ece", "- Source: 12d7ece"):
+            self.assertEqual(self.sources(reply), FAIL, reply)
 
     def test_n7_a_source_label_must_start_a_sentence(self):
         self.assertEqual(self.sources("Commit 12d7ece pulled from two open sources: the upstream git mirror and a fork."), FAIL)
@@ -3491,6 +3504,16 @@ class LinearTime(unittest.TestCase):
             grade("how-narrow-question-no-explorers", minimal(events=events, spawns=spawns, harness="hermes", final_reply="x"), load_case("how-run"))
         self.assert_quick(narrow, "## Explorer " + "(" * LONG, "## Explorer " + " " * LONG + "1", "## Explorer" + " 1" * (LONG // 2),
                           "## Explorer " + " -" * (LONG // 2) + " x", "Explorer " + "(" * LONG)
+
+    def test_a_long_relative_write_path_grades_in_linear_time(self):
+        project = tempfile.TemporaryDirectory()
+        self.addCleanup(project.cleanup)
+        deep = "a/" * (LONG // 2) + "f.py"
+        view = oracles.View(minimal(events=bash(1, f"echo x > {deep} && echo y > ../elsewhere/g.py && echo z > a/../h.py")), {}, project.name)
+        started = time.perf_counter()
+        edits = view.edits()
+        self.assertLess(time.perf_counter() - started, 2)
+        self.assertEqual(edits, [(1, deep, "source"), (1, "a/../h.py", "source")])
 
     def test_a_long_git_status_grades_in_linear_time(self):
         self.assert_quick(lambda status: status_after([], status=status), "\n" * LONG, " \n" * (LONG // 2), "\t" * LONG + "x", "M" + " " * LONG)
