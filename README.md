@@ -279,7 +279,7 @@ to set it up, point your agent at [`FOR_AGENTS.md`](./automations/benny/FOR_AGEN
 
 ## contributor checks
 
-Use Python 3.12 and Bun 1.4.0. Create the local virtual environment in the main checkout, install the hook, and let the fast pre-commit checks run before each commit.
+CI uses Python 3.12 and Bun 1.4.0. For the pre-commit hook, create the local virtual environment in the main checkout, install the hook, and let its fast checks run before each commit. The gate selects its interpreter separately, as described below.
 
 ```sh
 python3 -m venv .venv
@@ -287,37 +287,45 @@ python3 -m venv .venv
 lefthook install
 ```
 
-Run the full CI-equivalent checks from the repository root:
+Run the local gate tiers from the repository root:
 
 ```sh
-.venv/bin/python tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json
-.venv/bin/python tools/check-pii.py
-.venv/bin/python tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
-.venv/bin/python tools/check-skill-content.py skills --conventions-file tools/skill-content-conventions.json
-.venv/bin/python tools/generate-subagents.py --check
-.venv/bin/python -m unittest discover -s tools -p 'test_*.py'
+tools/gate-check.sh lint
+tools/gate-check.sh test
+```
+
+The `lint` tier checks cross-suite references, skill frontmatter and trigger declaration coverage, skill content, the generated subagent bundle, the promise ledger, and the shipped models config. The `test` tier runs the tools, promise, and setup-pstack unit suites, then installs the poteto-mode dependencies with the frozen lockfile and runs its Bun tests and typecheck. Each check belongs to one tier. The script runs every check in the selected tier, prints a PASS or FAIL line for each, and exits nonzero if any check fails. Unit suites and Bun tests must report tests, not a zero-test success.
+
+The script needs neither mise nor the main checkout's `.venv`. It selects `PSTACK_GATE_PYTHON` when set to a Python executable, then the pinned native interpreter documented in [the promise suite README](./evals/promises/README.md#run-the-model-free-checks), then `uv` on PATH with Python 3.12 and `tools/requirements.txt`. The native pin is deliberate because Python 3.12 fails the native fsmonitor control on the reviewed host. The test tier also needs Bun. When the adjacent skill-ci checkout described below is available, `mise run gate-lint` and `mise run gate-test` wrap the same script.
+
+`.no-mistakes.yaml` uses these tiers for earlier feedback. GitHub CI remains authoritative and additionally runs the Docker oracle and canon suites, the npx installation probe, the reusable skill-ci workflow, and the Linux worktree-audit job. Those checks stay outside the local gate tiers. CI cancels superseded pull-request runs of `lint.yml` and `skill-checks.yml`; pushes to main never cancel. The gate omits intent from PR bodies, collapses its appendix, and protects `.github/workflows/**` and `.github/rulesets/**` from automatic repairs.
+
+To reproduce the Docker suites and installation probe manually, use the commands below. Follow the [canon setup instructions](./evals/canon/README.md) for its skill-ci dependency.
+
+```sh
 docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
 (cd evals/verify-commands/oracles && python3 -m unittest -v test_check_plan)
 (cd evals/canon && python3 -m unittest -v)
-.venv/bin/python evals/promises/ledger.py audit
-.venv/bin/python -m unittest discover -s evals/promises -p 'test_*.py'
 .venv/bin/python tools/probe-subagent-install.py
-.venv/bin/python -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
-.venv/bin/python skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
-bun install --cwd skills/poteto-mode/scripts --frozen-lockfile
-bun run --cwd skills/poteto-mode/scripts test
-bun run --cwd skills/poteto-mode/scripts typecheck
+```
+
+Each command exits nonzero on failure. Each unittest command must report tests, not a zero-test success.
+
+The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. For a manual whole-tree PII scan, hook configuration check, and whitespace check:
+
+```sh
+.venv/bin/python tools/check-pii.py
 lefthook validate
 git diff --check
 ```
 
-Each command exits nonzero when its check fails. The five unittest commands and the Bun test command must report tests, not a zero-test success. The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. Bun tests run in CI and remain available as manual contributor checks.
+Each command exits nonzero when its check fails.
 
 `evals/promises/` checks that the port keeps the user guide's promises on all four harnesses. Its README covers the ledger audit, the live runs, and how to classify a guide sentence that an upstream sync adds.
 
 Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The same reasoning keeps tests out: they live under `tests/`, mirroring their path under `skills/` (`tests/skills/poteto-mode/scripts/` and `tests/skills/setup-pstack/scripts/`), and the same test fails if a tracked file under `skills/` matches a test-file pattern. The Bun and typecheck scripts in `skills/poteto-mode/scripts/package.json` reach into `tests/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 
-The commands above do not cover the manifests. CI runs that gate separately, through the `evals-dir` input to `skill-checks`. For every `evals/**/shared-benchmark.json` it runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. The runner is pinned in `runner.lock` in `mdsmithaustin/skill-ci`, so reproduce that gate locally with the build that file names rather than whatever `skill-benchmark` is on your PATH.
+The local gate tiers do not cover the manifests. CI runs that gate separately, through the `evals-dir` input to `skill-checks`. For every `evals/**/shared-benchmark.json` it runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. The runner is pinned in `runner.lock` in `mdsmithaustin/skill-ci`, so reproduce that gate locally with the build that file names rather than whatever `skill-benchmark` is on your PATH.
 
 `mise.toml` adds local tasks for those runner commands. It expects a checkout of `mdsmithaustin/skill-ci` beside this one and `uv` on your PATH. A worktree under `.worktrees/` inherits that path from the main checkout. A checkout anywhere else, such as under `$TMPDIR`, cannot load these tasks, so run them from the main checkout or a `.worktrees/` worktree. mise asks you to run `mise trust` once. Each runner task reads that checkout's `runner.lock` and invokes the pinned runner in an isolated uv environment. A globally installed runner cannot override the lock.
 
@@ -333,7 +341,7 @@ Pinning the runner does not make those two commands complete. Neither resolves `
 
 `skill-audit` is stricter than CI on one point. CI skips `audit-manifest` for a manifest with no cases, and the task audits every manifest it finds, so an empty manifest fails locally and passes in CI. Nothing in this repository has one today.
 
-`skill-lint` is not a superset of the fenced list above. It runs the frontmatter and content checkers without the trigger declaration corpus. The fenced frontmatter command also verifies trigger declaration coverage.
+`skill-lint` is not a superset of the gate lint tier. It runs the frontmatter and content checkers without the trigger declaration corpus. The gate frontmatter check also verifies trigger declaration coverage.
 
 `skill-trigger <skill>` and `skill-run <skill>` spend model budget on your own logins and never run in CI. Both default their output to `<skill>/eval-runs/`, inside the skills tree. A git install never sees it, because `.gitignore` covers it, but an install from a local working tree copies that directory like any other, which is what the repository-root `evals/` tree prevents. Pass `OUT` to write under `evals/` instead.
 
