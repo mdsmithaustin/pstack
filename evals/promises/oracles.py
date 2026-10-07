@@ -91,7 +91,7 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
 REPLY_HEAD = 300
 REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*[Ss]ources?\s*\n+[^\n]*|#{1,6}[^\n]+|[A-Za-z][\w /-]{0,30}:[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
-LABEL_QUALIFIER = re.compile(r"(?:\s*(?:#?\d+|\([^)]*\)|[—–-]\s.*))+\s*$")
+LABEL_QUALIFIER = re.compile(r"\s+#?\d+\s*$|\s*\([^)]*\)\s*$|\s+[—–-]\s.*$")
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -622,7 +622,9 @@ class View:
         name = label.group(0).partition(":")[0]
         if LABEL_KEEPS_BODY.search(name):
             return label.group(0).lower(), False
-        return LABEL_QUALIFIER.sub("", name).lower(), True
+        while (trimmed := LABEL_QUALIFIER.sub("", name)) != name:
+            name = trimmed
+        return name.lower(), True
 
     def spawns_where(self, *needles, turn=None, reply=True):
         alternatives = "|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles)
