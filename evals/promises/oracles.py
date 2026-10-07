@@ -2762,9 +2762,11 @@ def review_pass(reply):
     clauses = list(VERDICT_CLAUSE.finditer(plain))
     starts, negations = [m.start() for m in mentions], positions(VERDICT_NEGATION, plain, benign)
     asides = parentheticals(plain)
+    on_pass = list(NEGATION_ON_PASS.finditer(plain))
+    kept = set(outside([m.start() for m in on_pass], benign))
     found = {"ends": positions(VERDICT_END, plain), "clause_starts": [m.start() for m in clauses], "clause_ends": [m.end() for m in clauses],
              "newlines": positions(re.compile("\n"), plain), "pipes": positions(re.compile(r"\|"), plain), "headers": table_headers(plain),
-             "on_pass": [m.end() for m in NEGATION_ON_PASS.finditer(plain) if outside([m.start()], benign)],
+             "on_pass": [m.end() for m in on_pass if m.start() in kept],
              "negations": negations, "direct": outside(negations, asides), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign),
              "openers": positions(VERDICT_OPENER, plain), "aside_openers": positions(ASIDE_OPENER, plain), "off_topic": positions(OFF_TOPIC, plain),
              "named": positions(REVIEW_NAMED, plain), "mentions": starts}
@@ -2777,7 +2779,8 @@ def review_pass(reply):
         return (None, min(blockers)) if blockers else (True, None)
     undecided = [at for kind, at in graded if kind != FAIL]
     proofs = not_run + [f for f, kind in failing if kind == "label"]
-    settled = [clause_of(plain, found, f.start(), f.end())[2] for f in proofs if outside([f.end() - 1], asides)]
+    bare = set(outside([f.end() - 1 for f in proofs], asides))
+    settled = [clause_of(plain, found, f.start(), f.end())[2] for f in proofs if f.end() - 1 in bare]
     if not undecided or max(undecided) < max(settled, default=-1):
         return False, None
     return None, min(undecided)
