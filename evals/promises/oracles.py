@@ -2599,7 +2599,6 @@ LABEL_SEPARATOR = re.compile(r"->|[:|=→—–(]|\s-\s")
 CLOSED_LABEL = re.compile(r"(?:(?:independent|docs|documentation)\s+)*(?:review|trail\s+review(?:er)?)(?:\s+(?:verdict|result|status))?|verdict")
 REVIEW_NAMED = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b", re.I)
 OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|typecheck\w*|pytest|unittest)\b", re.I)
-HEDGE = re.compile(r"\b(?:expect\w*|predict\w*|target|goal|desired|hop(?:e|es|ed|ing)|planned|next|if|whether|unless|until|once|likely|probably|maybe|assum\w*)\b", re.I)
 GENERIC_LABELS = {"result", "status"}
 QUALIFIERS = {"a", "clean", "final", "overall"}
 LABEL_WORDS = QUALIFIERS | {"re-review", "round", "independent", "trail", "reviewer", "review"}
@@ -2621,15 +2620,13 @@ def outside(found, skip):
     return [p for p in found if (at := bisect.bisect_right(starts, p) - 1) < 0 or skip[at][1] <= p]
 
 
-def parentheticals(plain, mentions):
+def parentheticals(plain):
     spans, opens = [], []
     for m in re.finditer(r"[()]", plain):
         if m.group() == "(":
             opens.append(m.start())
         elif opens:
-            start = opens.pop()
-            if bisect.bisect_left(mentions, start) == bisect.bisect_left(mentions, m.end()):
-                spans.append((start, m.end()))
+            spans.append((opens.pop(), m.end()))
     outer = []
     for span in sorted(spans):
         if not outer or span[0] >= outer[-1][1]:
@@ -2654,7 +2651,7 @@ def label_kind(before, context, header):
         named = header or CLOSED_LABEL.fullmatch(label) or (label in GENERIC_LABELS and REVIEW_NAMED.search(f"{context} {' '.join(quals)}"))
         plain_quals = all(q in LABEL_WORDS or q.isdigit() for q in quals)
         plain_asides = all(PLAIN_ASIDE.fullmatch(a.strip()) or BENIGN_NEGATION.fullmatch(a.strip()) for a in asides)
-        return "label" if named and plain_quals and plain_asides and not HEDGE.search(text[:cut.start()]) else None
+        return "label" if named and plain_quals and plain_asides else None
     words = text.lower().split()
     while words and words[-1] in QUALIFIERS:
         words.pop()
@@ -2764,7 +2761,7 @@ def review_pass(reply):
     mentions = list(VERDICT_WORD.finditer(plain))
     clauses = list(VERDICT_CLAUSE.finditer(plain))
     starts, negations = [m.start() for m in mentions], positions(VERDICT_NEGATION, plain, benign)
-    asides = parentheticals(plain, starts)
+    asides = parentheticals(plain)
     found = {"ends": positions(VERDICT_END, plain), "clause_starts": [m.start() for m in clauses], "clause_ends": [m.end() for m in clauses],
              "newlines": positions(re.compile("\n"), plain), "pipes": positions(re.compile(r"\|"), plain), "headers": table_headers(plain),
              "on_pass": [m.end() for m in NEGATION_ON_PASS.finditer(plain) if outside([m.start()], benign)],
@@ -2772,7 +2769,7 @@ def review_pass(reply):
              "openers": positions(VERDICT_OPENER, plain), "aside_openers": positions(ASIDE_OPENER, plain), "off_topic": positions(OFF_TOPIC, plain),
              "named": positions(REVIEW_NAMED, plain), "mentions": starts}
     graded = [(kind, m.start()) for m in mentions if (kind := mention_verdict(plain, m, found))]
-    not_run = [f for f in NOT_RUN.finditer(plain) if outside([f.start()], benign)]
+    not_run = list(NOT_RUN.finditer(plain))
     failing = [(f, failing_label(plain, f, found)) for f in FAILING_VERDICT.finditer(plain)]
     if any(kind == PASS for kind, _ in graded):
         blockers = ([at for kind, at in graded if kind in (FAIL, NEGATED)] + [f.start() for f in not_run]
