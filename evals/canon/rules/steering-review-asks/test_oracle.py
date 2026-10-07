@@ -228,9 +228,33 @@ class HiddenTailTests(unittest.TestCase):
                                                                       "expect(bubble).toHaveTextContent(LONG_TEXT);"]),
                            ("absent literal of a constant the present one holds", ['const TAIL = "UNIQUE_TAIL";', long_from_tail,
                                                                                     'expect(bubble).not.toHaveTextContent("UNIQUE_TAIL");',
-                                                                                    "expect(bubble).toHaveTextContent(LONG_TEXT);"])):
+                                                                                    "expect(bubble).toHaveTextContent(LONG_TEXT);"]),
+                           ("absent cut inline from the present value", ["expect(bubble).not.toHaveTextContent(LONG_TEXT.slice(-40));",
+                                                                          "expect(bubble).toHaveTextContent(LONG_TEXT);"])):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [])
+
+    def test_a_definition_continued_as_javascript_continues_a_statement_counts(self):
+        for row, definition in (("next line opens with an operator", ['const LONG_TEXT = "a".repeat(9000)', "  + TAIL"]),
+                                ("next line opens with a method call", ['const LONG_TEXT = "a".repeat(9000)', "  .concat(TAIL)"]),
+                                ("line ends with an arrow", ["const LONG_TEXT = () =>", "  TAIL"]),
+                                ("line ends with a division", ["const LONG_TEXT = 1 /", "  TAIL"]),
+                                ("template literal across lines", ["const LONG_TEXT = `a", "${TAIL}`"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*definition, "expect(bubble).not.toHaveTextContent(TAIL)",
+                                               "expect(bubble).toHaveTextContent(LONG_TEXT)"), [])
+
+    def test_a_joined_line_keeps_each_definition_its_own(self):
+        absent = "expect(bubble).not.toHaveTextContent(TAIL)"
+        for row, lines, expected in (
+                ("regex literal above a string constant", ["const RE = /chunk/", 'const TAIL = "tail marker"', absent,
+                                                           'expect(bubble).toHaveTextContent("tail marker")'], []),
+                ("declaration word inside a string", ["const RE = /chunk/", 'const TAIL = "let it end"', absent,
+                                                      'expect(bubble).toHaveTextContent("let it end")'], []),
+                ("stray backtick in a comment", ["// a ` stray", 'const HEAD = "chunk"', absent,
+                                                 "expect(bubble).toHaveTextContent(HEAD)"], [self.PRESENT])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), expected)
 
     def test_a_present_constant_not_built_from_the_absent_value_does_not_count(self):
         self.assertEqual(self.failures('const HEAD = "chunk ".repeat(900);', "const LONG_TEXT = HEAD + TAIL;",
