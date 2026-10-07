@@ -954,10 +954,25 @@ def clipboard_reads(source, definitions):
     stub. Any other binding leaves the name unproven: a parameter outside a
     stub, a loop variable, an import, a function, class, or enum declaration,
     or a declaration, assignment, or destructuring pattern whose value is not
-    one of those. An empty starting value neither proves nor disproves.
-    rendered is each of clipboard, writeText, and copyText that the
-    definitions bind to something that is neither a spy nor a clipboard read,
-    such as a rendered element."""
+    one of those. A neutral starting value neither proves nor disproves: any
+    string literal, a template with no substitution, a regex literal, 0, [],
+    {}, null, undefined, or new Array(), with or without an as or satisfies
+    cast or a leading <Type>. A template with a substitution, any other
+    number, true or false, a nonempty array or object, a concatenation, and a
+    call are not neutral.
+    rendered is each of clipboard, writeText, and copyText that a declarator,
+    or an assignment to a name the file declares with let, var, or no value,
+    binds to a value that is neither neutral nor a clipboard value. A
+    clipboard value reads a mock's calls, lastCall, or results or readText(),
+    reaches a member or names a bare clipboard, writeText, or copyText, holds
+    one of the words fn, spy, spyOn, stub, or mocked, starts a word with
+    Mock, or is built only from proven names. A rendered element is none of
+    these. A fake the pattern does not recognize, such as
+    new FakeClipboard(), mockClipboard(), or createWriteTextMock(), is
+    rendered, as trunk reads it. A destructuring pattern, a loop binding, an
+    import, a parameter, a declaration of the name as a function or class, and
+    an assignment to a const the file declares with a value never make it
+    rendered, so it stays the clipboard."""
     text = JSX_TAG.sub(lambda tag: " " * len(tag.group()), code(QUOTED_METHOD.sub(r"\2", statements(source))))
     filled, outside = set(), list(text)
     for found in re.finditer(r"writeText|copyText", text):
@@ -1048,10 +1063,13 @@ def about_clipboard(subject, reads):
     text, on proof: it reads a mock's calls, lastCall, or results, calls
     readText(), spies on the clipboard, or reaches a member named clipboard,
     writeText, or copyText; it names a bare clipboard, writeText, or copyText
-    that no binding of the file gives something else, such as a rendered
-    element; or every name it mentions is one clipboard_reads proves. A name
-    the file also binds to anything else may hold the rendered text, so its
-    expectation stays."""
+    that clipboard_reads does not report as rendered, so a declarator or an
+    assignment to a let, var, or valueless name must bind it to a value that
+    is neither neutral nor a clipboard value, such as a rendered element, and
+    a destructuring pattern or a loop binding of the name does not; or every
+    name it mentions is one clipboard_reads proves. A name the file also
+    binds to anything else may hold the rendered text, so its expectation
+    stays."""
     text = code(subject)
     return (bool(CLIPBOARD_SUBJECT.search(text)) or any(name not in reads.rendered for name in CLIPBOARD_NAME.findall(text))
             or reads_clipboard(text, reads.proven))
