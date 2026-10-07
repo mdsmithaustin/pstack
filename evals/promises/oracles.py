@@ -829,7 +829,13 @@ def cd_into(segment, base):
     if words[:1] not in (["cd"], ["pushd"]) or len(words) < 2:
         return None
     target = words[1].strip("\"'")
-    return target if target.startswith("/") or not base else f"{base}/{target}"
+    if target.startswith("/") or not base:
+        return target
+    return f"{base}/{target}" if len(base) + len(target) < PATH_MAX else UNKNOWN_DIR
+
+
+PATH_MAX = 4096
+UNKNOWN_DIR = "$UNKNOWN_DIR"
 
 
 def under(base, target):
@@ -2248,8 +2254,9 @@ def finished_in_first_turn(view, commits):
 
 SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|True\b|:|\[)|(?:^|[;&|]\s*)watch\s", re.M)
 SLEEP_LOOP = (re.compile(r"\bdo\b"), re.compile(r"\bsleep\s+\d"), re.compile(r"\bdone\b"))
-SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:\s+[^\s'"]+)+|eval"""
-                        r"""|tmux\s+(?:send-keys|new-session|new)(?:\s+[^\s'"]+)*)\s+(['"])(.*?)\1""", re.S)
+SHELL_ARG = r"""\s+(?!(?:ssh|tmux)\b)[^\s'"]+"""
+SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:""" + SHELL_ARG + r""")++|eval"""
+                        r"""|tmux\s+(?:send-keys|new-session|new)(?:""" + SHELL_ARG + r""")*+)\s+(['"])(.*?)\1""", re.S)
 SHELL_READERS = {"bash", "ssh", "python3"}
 
 
@@ -2909,10 +2916,12 @@ GIT_DIRTY = re.compile(r'(?m)(?:^|")[ \t]?(?:[MADRCU][MADRCU ]?[ \t]+\S|\?\? (?:
 
 
 def cd_target(command):
-    pieces = list(walk_segments(command))
-    if not pieces:
+    last = None
+    for last in walk_segments(command):
+        pass
+    if last is None:
         return ""
-    piece, _, base = pieces[-1]
+    piece, _, base = last
     return cd_into(piece, base) or base
 
 
