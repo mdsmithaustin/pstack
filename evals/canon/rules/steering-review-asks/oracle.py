@@ -660,10 +660,12 @@ ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0"
 
 
 def unquoted(value):
-    """A string literal's text, with its JavaScript escapes decoded."""
+    """A string literal's text, with its JavaScript escapes decoded and each
+    UTF-16 surrogate pair joined into its character."""
     if not re.fullmatch(STRING, value):
         return value
-    return re.sub(r"\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|(.))", decoded, value[1:-1])
+    text = re.sub(r"\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|(.))", decoded, value[1:-1])
+    return text.encode("utf-16", "surrogatepass").decode("utf-16", "surrogatepass")
 
 
 def decoded(escape):
