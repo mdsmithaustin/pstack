@@ -3616,7 +3616,8 @@ class LinearTime(unittest.TestCase):
                           "## Explorer " + " -" * (LONG // 2) + " x", "Explorer " + "(" * LONG, "- " + " " * LONG + "x", "1." + " " * LONG + "x",
                           "Explorer " + "(1), " * (LONG // 5), "Explorer" + " 1," * (LONG // 3), "**" + "a" * LONG, "Explorer " + "- " * (LONG // 2) + "x",
                           "Explorer " + " \u2014" * (LONG // 2), "* " * (LONG // 2) + "Explorer",
-                          "**Role:** " + "x" * LONG, "**a**" * (LONG // 5), "**Role:** Explorer " + "(" * LONG, "**Role**" + " " * LONG + "x")
+                          "**Role:** " + "x" * LONG, "**a**" * (LONG // 5), "**Role:** Explorer " + "(" * LONG, "**Role**" + " " * LONG + "x",
+                          "## Explorer" + " \u2014x" * (LONG // 3), "## Explorer 1" + " " * LONG + "\u2014x", "## " + "x" * LONG + " \u2014 findings")
 
     def test_a_long_commit_only_source_section_grades_in_linear_time(self):
         def sources(reply):
