@@ -636,11 +636,11 @@ REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
 ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 WRAPPED = re.compile(r"(?:expect\.stringContaining|new RegExp)\((.*)\)|`\$\{\s*([\w$.]+)\s*\}`|/([^\\/\[\](){}.*+?^$|]+)/[a-z]*")
 QUOTED = r"""(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')"""
-LINE_STRING = rf"(?:{QUOTED}|`(?:\\.|[^`\\\n])*`)"
-DECLARATION = r"\s*\b(?:const|let|var)\s"
-DEFINITION = re.compile(r"(?=(?<![\w$.])(?:(?:const|let|var)\s+([\w$]+)\s*(?::[^=;\n]*)?|([\w$]+)\s*)=(?![=>])\s*([^;\n]*))")
+DECLARATION = r"\s*\b(?:const|let|var|function)\s"
+DEFINITION = re.compile(r"(?=(?<![\w$.])(?:(?:const|let|var)\s+([\w$]+)\s*(?::[^=;\n]*)?=(?![=>])|function\s*\*?\s*([\w$]+)|([\w$]+)\s*=(?![=>]))"
+                        r"\s*([^;\n]*))")
 NAME = re.compile(r"[A-Za-z_$][\w$]*")
-CODE = re.compile(r"\w\.\w|\w\s*\(|\$\{|\+|\[")
+Rendered = collections.namedtuple("Rendered", "text expression")
 
 
 def asserts_copied_value(source):
@@ -660,31 +660,30 @@ def unquoted(value):
 def named(argument):
     """The text or name an assertion argument stands for: a string's contents,
     or what stringContaining, new RegExp, a lone ${} template, or a regex with
-    no special characters wraps."""
+    no special characters wraps. Only an expression names constants; a string
+    or regex literal is text."""
     argument = " ".join(argument.split())
     wrapped = WRAPPED.fullmatch(argument)
-    return named(next(group for group in wrapped.groups() if group is not None)) if wrapped else unquoted(argument)
+    if wrapped and wrapped.group(3) is not None:
+        return Rendered(wrapped.group(3), False)
+    if wrapped:
+        return named(next(group for group in wrapped.groups() if group is not None))
+    return Rendered(unquoted(argument), not re.fullmatch(STRING, argument))
 
 
 def aliases(value, definitions):
-    """A value, every string literal a constant of that name holds, and every
-    constant whose string literal is that value."""
-    literals = {(name, unquoted(text)) for name, texts in definitions.items() for text in texts if re.fullmatch(STRING, text)}
-    return {value} | {text for name, text in literals if name == value} | {name for name, text in literals if text == value}
-
-
-def mentions(text, values):
-    return any(re.search(rf"(?<![\w$]){re.escape(value)}(?![\w$])", text) for value in values)
+    """A value and every string literal a constant of that name holds."""
+    return {value} | {unquoted(text) for text in definitions.get(value, []) if re.fullmatch(STRING, text)}
 
 
 def reaches(value, targets, definitions):
-    """Whether a value, or a definition of a name it leads to, mentions a
-    target. Prose such as a button label names no constants; an identifier or
-    an expression does, and so does each definition after its quoted strings."""
-    texts, seen = [value], set()
-    names = NAME.findall(value) if NAME.fullmatch(value) or CODE.search(value) else []
+    """Whether a rendered value, or a definition of a name it leads to,
+    mentions a target. A literal names no constants; an expression does, and
+    so does each definition outside its quoted strings."""
+    texts, seen = [value.text], set()
+    names = NAME.findall(value.text) if value.expression else []
     while texts:
-        if any(mentions(text, targets) for text in texts):
+        if any(re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", text) for text in texts for target in targets):
             return True
         fresh = set(names) - seen
         seen |= fresh
@@ -698,8 +697,9 @@ def shows_hidden_value(present, absent, definitions):
     value reaches the absent one through the names it mentions, as
     LONG_TEXT.trim() does when LONG_TEXT = HEAD + TAIL; or the absent value
     reaches the present one, as LONG_TEXT.slice(-40) does."""
-    hidden = aliases(absent, definitions)
-    return bool(aliases(present, definitions) & hidden) or reaches(present, hidden, definitions) or reaches(absent, {present}, definitions)
+    hidden = aliases(absent.text, definitions)
+    return (bool(aliases(present.text, definitions) & hidden) or reaches(present, hidden, definitions)
+            or reaches(absent, {present.text}, definitions))
 
 
 def statements(source):
@@ -722,7 +722,7 @@ def statements(source):
 
 def open_declaration(statement):
     """A declaration whose brackets are still open, outside its strings."""
-    code = re.sub(LINE_STRING, "", statement)
+    code = re.sub(STRING, "", statement)
     return bool(re.match(DECLARATION, statement)) and sum(code.count(c) for c in "([{") > sum(code.count(c) for c in ")]}")
 
 
@@ -738,8 +738,10 @@ def rendered_values(pattern, source):
         if "toContain" in found.group() and (re.search(r"writeText|clipboard|copyText", subject)
                                              or any(re.match(rf"\s*{re.escape(name)}\b", subject) for name in captured)):
             continue
-        values.add(named(ARGUMENT.match(source, found.end()).group()))
-    return values - {""}
+        value = named(ARGUMENT.match(source, found.end()).group())
+        if value.text:
+            values.add(value)
+    return values
 
 
 def tests_assert_hidden_text_and_copy(added):
@@ -751,8 +753,8 @@ def tests_assert_hidden_text_and_copy(added):
     source = "\n".join(lines)
     absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
     definitions = collections.defaultdict(list)
-    for declared, assigned, text in DEFINITION.findall(statements(source)):
-        definitions[declared or assigned].append(text.strip())
+    for *names, text in DEFINITION.findall(statements(source)):
+        definitions[next(name for name in names if name)].append(text.strip())
     shown = any(shows_hidden_value(value, hidden, definitions) for value in present for hidden in absent)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
