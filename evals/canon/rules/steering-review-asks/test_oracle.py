@@ -341,6 +341,16 @@ class HiddenTailTests(unittest.TestCase):
         self.assertEqual(self.failures('import { text as shown } from "./fixtures";', *self.STUB_FILLS_TEXT,
                                        "expect(bubble).not.toHaveTextContent(TAIL);", "expect(text).toContain(TAIL);"), [self.PRESENT])
 
+    def test_a_name_the_file_declares_as_a_function_or_a_class_is_the_rendered_text(self):
+        for row, declaration in (("function", "function text() { return bubble.textContent; }"),
+                                 ("generator", "function* text() { yield bubble.textContent; }"),
+                                 ("async function", "async function text() { return bubble.textContent; }"),
+                                 ("class", "class text {}"),
+                                 ("enum", "enum text { Tail }")):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*self.STUB_FILLS_TEXT, declaration, "expect(bubble).not.toHaveTextContent(TAIL);",
+                                               "expect(text).toContain(TAIL);"), [])
+
     def test_a_name_assigned_by_an_index_or_a_property_is_not_a_pattern_binding(self):
         for assigned in ("parts[0] = view;", "view[text] = parts;", "view.text = parts;", "const other = [text] == parts;"):
             with self.subTest(assigned):
@@ -355,6 +365,46 @@ class HiddenTailTests(unittest.TestCase):
                 self.assertEqual(self.failures(start,
                                                "Object.assign(navigator, { clipboard: { writeText: async (t: string) => { copied = t; } } });",
                                                "expect(bubble).not.toHaveTextContent(TAIL);", "expect(copied).toContain(TAIL);"), [self.PRESENT])
+
+    def test_a_rendered_element_named_for_the_clipboard_is_the_rendered_text(self):
+        for row, lines in (
+                ("element named clipboard", ['const clipboard = screen.getByTestId("bubble");', "expect(clipboard.textContent).toContain(TAIL);"]),
+                ("text named copyText", ['const copyText = screen.getByTestId("bubble").textContent;', "expect(copyText).toContain(TAIL);"]),
+                ("text named writeText", ['const writeText = screen.getByTestId("bubble").textContent ?? "";', "expect(writeText).toContain(TAIL);"]),
+                ("within a render", ['const clipboard = within(container).getByTestId("bubble");', "expect(clipboard).toHaveTextContent(TAIL);"]),
+                ("render result", ["const clipboard = render(<PromptBubble text={LONG_TEXT} />);", "expect(clipboard.container.textContent).toContain(TAIL);"]),
+                ("assigned later", ["let clipboard;", 'clipboard = screen.getByTestId("bubble");', "expect(clipboard.textContent).toContain(TAIL);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures("expect(bubble).not.toHaveTextContent(TAIL);", *lines), [])
+
+    def test_a_clipboard_named_value_the_file_binds_to_a_spy_stays_the_clipboard(self):
+        for row, lines in (
+                ("spy", ["const copyText = vi.fn();", "expect(copyText).toContain(TAIL);"]),
+                ("spy with a resolved value", ["const writeText = jest.fn().mockResolvedValue(undefined);", "expect(writeText).toContain(TAIL);"]),
+                ("spy assigned later", ["let writeText;", "writeText = vi.fn();", "expect(writeText).toContain(TAIL);"]),
+                ("clipboard stub object", ["const clipboard = { writeText: vi.fn() };", "expect(clipboard).toContain(TAIL);"]),
+                ("spy on the clipboard", ['const clipboard = vi.spyOn(navigator, "clipboard", "get");', "expect(clipboard).toContain(TAIL);"]),
+                ("member of the navigator", ["expect(navigator.clipboard).toContain(TAIL);"]),
+                ("name bound nowhere", ["expect(clipboard).toContain(TAIL);"]),
+                ("name imported", ['import { writeText } from "./spies";', "expect(writeText).toContain(TAIL);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures("expect(bubble).not.toHaveTextContent(TAIL);", *lines), [self.PRESENT])
+
+    def test_a_present_definition_written_with_escapes_shows_the_absent_text_it_spells(self):
+        for row, definition, absent in (
+                ("escaped quote", r'''const LONG = "a".repeat(9) + 'it\'s the end';''', '"it\'s the end"'),
+                ("escaped quote on both sides", r'''const LONG = "a".repeat(9) + 'it\'s the end';''', r"'it\'s the end'"),
+                ("newline", r'''const LONG = "a".repeat(9) + "line\nbreak end";''', r'"line\nbreak end"'),
+                ("unicode escape", r'''const LONG = "a".repeat(9) + "caf\u00e9 end";''', '"café end"'),
+                ("unicode escape on both sides", r'''const LONG = "a".repeat(9) + "caf\u00e9 end";''', r'"caf\u00e9 end"'),
+                ("hex escape", r'''const LONG = "a".repeat(9) + "A\x41 end";''', '"AA end"'),
+                ("backslash", r'''const LONG = "a".repeat(9) + "C:\\dir end";''', r'"C:\\dir end"')):
+            with self.subTest(row):
+                self.assertEqual(self.failures(definition, f"expect(bubble).not.toHaveTextContent({absent});", "expect(bubble).toHaveTextContent(LONG);"), [])
+
+    def test_a_present_definition_that_spells_other_text_with_escapes_does_not_count(self):
+        self.assertEqual(self.failures(r"""const LONG = "a".repeat(9) + "line\nbreak end";""", r"""expect(bubble).not.toHaveTextContent("line\tbreak end");""",
+                                       "expect(bubble).toHaveTextContent(LONG);"), [self.PRESENT])
 
     def test_a_named_clipboard_spy_checked_for_the_prompt_is_not_the_rendered_text(self):
         for spy in ('vi.spyOn(navigator.clipboard, "writeText")', 'jest.spyOn(navigator.clipboard, "writeText")',
