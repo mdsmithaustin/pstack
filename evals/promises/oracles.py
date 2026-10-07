@@ -75,8 +75,8 @@ CONSTRAINT_ALIASES = {"newline": (r"\n", "linesep", "endswith"), "trailing": (r"
 CONSTRAINT_SUBJECTS = {"do not remove: the sink needs a trailing newline on every row": ("sink", "row")}
 SCRATCH_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/")
 LOG_NAMES = ("decisions.tsv", ".audit/")
-TEST_PATH = re.compile(r"(?:^|[/_.-])test(?:s|data|ing)?(?=$|[\d_./-])|(?:^|/)conftest\.py$|\.spec\.")
-CAMEL_TEST = re.compile(r"[a-z\d]Tests?\.\w+$")
+TEST_PATH = re.compile(r"(?<![a-z])(?i:test)|(?<=[a-z])(?:T(?i:est)|tests)|(?:smoke|self|unit|load|e2e)test|(?:^|/)conftest\.py$|\.spec\.")
+SCRATCH_NAME = re.compile(r"(?:^|/)(?:scratch|repro(?![a-z])|reproduc)|^(?:tmp/|(?:verify|baseline)[/_\-\d])")
 PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
@@ -564,12 +564,11 @@ class View:
         inside = rel != path
         if rel.startswith(PRIVATE_PREFIXES) or "/skills/" in path:
             return "private"
-        if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) \
-                or re.match(r"tmp/|(?:scratch\w*|verify|baseline)[/_\-\d]|repro(?:duce|duction)?[/_\-\d.]", rel):
+        if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) or SCRATCH_NAME.search(rel):
             return "scratch"
         if any(tag in rel for tag in LOG_NAMES):
             return "log"
-        if TEST_PATH.search(rel.lower()) or CAMEL_TEST.search(rel):
+        if TEST_PATH.search(rel):
             return "test"
         if rel.endswith((".md", ".rst")) or rel.lower().startswith("readme"):
             return "doc"

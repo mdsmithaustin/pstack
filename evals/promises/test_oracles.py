@@ -2647,7 +2647,7 @@ class Issue133WritesAndReruns(unittest.TestCase):
         names = ("verify.py", "scratch.py", "reprocess.py", "contest.py", "latest.py", "attestation.py",
                  "verify_tally_json.py", "repro-retry.sh", "scratchpad/a.py", "tests/test_x.py", "pkg/x_test.go", "__tests__/a.js")
         self.assertEqual({n: view.classify(n) for n in names},
-                         {"verify.py": "source", "scratch.py": "source", "reprocess.py": "source", "contest.py": "source",
+                         {"verify.py": "source", "scratch.py": "scratch", "reprocess.py": "source", "contest.py": "source",
                           "latest.py": "source", "attestation.py": "source", "verify_tally_json.py": "scratch",
                           "repro-retry.sh": "scratch", "scratchpad/a.py": "scratch", "tests/test_x.py": "test",
                           "pkg/x_test.go": "test", "__tests__/a.js": "test"})
@@ -2656,6 +2656,34 @@ class Issue133WritesAndReruns(unittest.TestCase):
         view = oracles.View(minimal(), {}, None)
         for name in NATURAL_TEST_NAMES:
             self.assertEqual(view.classify(name), "test", name)
+
+    def test_test_names_count_unless_test_ends_a_lowercase_word(self):
+        view = oracles.View(minimal(), {}, None)
+        names = {**{name: "test" for name in CONVENTIONAL_TEST_NAMES},
+                 **{name: "source" for name in ("contest.py", "latest.py", "attestation.py", "protest/x.py", "greatest_hits.py", "Contest.java",
+                                                "LatestVersion.java", "pytest.ini")},
+                 **{name: "scratch" for name in ("scratch.py", "scratch.sh", "reproducer.py", "tools/scratch.py", "src/repro_bug.py")},
+                 "verify.py": "source", "baseline.py": "source", "verify_fix.sh": "scratch", "baseline/x.txt": "scratch"}
+        self.assertEqual({name: view.classify(name) for name in names}, names)
+
+    def test_tdd_and_repro_oracles_read_each_test_and_scratch_name(self):
+        project = Path(tempfile.mkdtemp()) / "project"
+        project.mkdir()
+        write = lambda seq, rel: {"seq": seq, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/{rel}", "content": "x"}}
+        red_green = lambda seq: (bash(seq, "python3 -m unittest discover -s tests", ok=False, head="FAIL: test_retry\nFAILED (failures=1)")
+                                 + [write(seq + 3, "rollup/export.py")] + bash(seq + 4, "python3 -m unittest discover -s tests", head="Ran 3 tests\n\nOK"))
+        for name in CONVENTIONAL_TEST_NAMES:
+            events = [write(4, name)] + red_green(5)
+            self.assertEqual([grade(pid, minimal(events=events), load_case(case), project)["verdict"]
+                              for pid, case in (("poteto-tdd-failing-test-first", "tdd-run"), ("bug-fix-uses-poteto-tdd-when-cheap", "bug-fix-run"))],
+                             [PASS, PASS], name)
+        for name in ("scratch.py", "scratch.sh", "reproducer.py", "repro.py"):
+            repro = [write(1, name)] + bash(2, f"ROLLUP_BUSY_AFTER=2 python3 {name}", ok=False, head="duplicate rows")
+            fixed = repro + [{"seq": 6, "kind": "tool_call", "name": "Edit", "input": {"file_path": f"{project}/rollup/export.py"}}]
+            self.assertEqual(grade("bug-fix-reproduces-before-fixing", minimal(events=fixed + bash(7, "python3 -m rollup data/orders.csv /tmp/out.csv", head="ok")),
+                                   load_case("bug-fix-run"), project)["verdict"], PASS, name)
+            tdd = repro + [write(4, "tests/test_export.py")] + red_green(5)
+            self.assertEqual(grade("poteto-tdd-failing-test-first", minimal(events=tdd), load_case("tdd-run"), project)["verdict"], PASS, name)
 
     def test_f13_copy_install_perl_dd_and_ed_write_their_targets(self):
         for command, want in (("cp a.py b.py", ["b.py"]), ("cp -r notes/a.md notes/b.md out/", ["out/"]),
@@ -3224,10 +3252,9 @@ class Issue133RoundTwo(unittest.TestCase):
     def test_a_root_repro_script_is_scratch(self):
         project = self.project()
         view = oracles.View(minimal(), load_case("bug-fix-run"), project)
-        for rel in ("repro.py", "reproduce.py", "reproduce_bug.py", "repro-2.sh", "reproduction/run.sh"):
+        for rel in ("repro.py", "reproduce.py", "reproduce_bug.py", "repro-2.sh", "reproduction/run.sh", "reproducer.py"):
             self.assertEqual(view.classify(f"{project}/{rel}"), "scratch", rel)
-        for rel in ("reprocess.py", "reproducer.py"):
-            self.assertEqual(view.classify(f"{project}/{rel}"), "source", rel)
+        self.assertEqual(view.classify(f"{project}/reprocess.py"), "source")
 
     def test_a_root_repro_script_is_not_the_fix(self):
         project = self.project()
@@ -3361,6 +3388,11 @@ def loop_verdict(command):
     return grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, command)), load_case("overnight-run"))["verdict"]
 
 
+CONVENTIONAL_TEST_NAMES = ("APITests.swift", "UserAPITests.swift", "LoginUITests.swift", "UITests.swift", "APITest.java", "URLTest.java", "IOTests.cs",
+                           "CLITests.cs", "XTests.swift", "MyAppTests/Helpers.swift", "UnitTests/Foo.cs", "IntegrationTests/Foo.cs", "MyApp.UnitTests/Foo.cs",
+                           "internal/testutil/db.go", "internal/testhelper/x.go", "testutils/render.ts", "src/testUtils.ts", "TestHelpers.swift",
+                           "TestBase.java", "testmain.py", "testutils.py", "testcases.py", "testsuite.py", "testMain.js", "TestMain.java", "TestFoo.cs",
+                           "runtests.py", "smoketest.py", "selftest.py", "unittest_helpers.py", "loadtest/x.js", "e2etest.ts")
 NATURAL_TEST_NAMES = ("test-main.py", "test1.py", "tests2/x.py", "tests-unit/x.py", "FooTest.java", "FooTests.java", "foo_test.go", "conftest.py",
                       "test-utils.js", "foo.spec.ts", "__tests__/x.js")
 
