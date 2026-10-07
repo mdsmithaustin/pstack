@@ -628,7 +628,9 @@ PAYLOAD_MATCHER = r"\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
 COPIED_VALUE = re.compile(
     r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|" + PAYLOAD_MATCHER + ")")
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
-CAPTURED_ON_STUB_LINE = re.compile(r"(?:writeText|copyText)[^;\n]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
+QUOTED_METHOD = re.compile(r"""(["'`])(writeText|copyText)\1""")
+FILLED_BY = re.compile(r"(\w+)(?:\.push\(|\s*=(?![=>]))")
+DESTRUCTURING = re.compile(r"\b(?:const|let|var)\s*([\[{][^=;]*[\]}])\s*=(?![=>])\s*")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(|textContent\s*\)\s*\.(?:toBe|toEqual)\(")
 STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
@@ -708,7 +710,22 @@ def reaches(value, targets, definitions):
     mentions a target. A literal names no constants; an expression does, and
     so does each definition outside its quoted strings."""
     texts = [value.text, *(text for name in names_reached(value, definitions) for text in definitions.get(name, []))]
-    return any(re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", text) for text in texts for target in targets)
+    return any(target in text and re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", text) for text in texts for target in targets)
+
+
+Hidden = collections.namedtuple("Hidden", "search code names")
+
+
+def hidden_values(absent, definitions):
+    """The absent values pooled, so each present value is checked against all
+    of them at once: one search for any text they stand for (each one's own
+    and every string literal a constant of that name holds), the code of each
+    and of the definitions of the names it reaches, joined, and those names."""
+    reached = [names_reached(value, definitions) for value in absent]
+    targets = sorted(set().union(*(aliases(value.text, definitions) for value in absent)), key=len, reverse=True)
+    search = re.compile(rf"(?<![\w$])(?:{'|'.join(map(re.escape, targets))})(?![\w$])" if targets else r"(?!)").search
+    texts = (text for value, names in zip(absent, reached) for text in (value.text, *(bound for name in names for bound in definitions.get(name, []))))
+    return Hidden(search, Rendered("\n".join(texts), False), set().union(*reached))
 
 
 def names_reached(value, definitions):
@@ -727,15 +744,15 @@ def held(value, definitions):
                            if re.fullmatch(STRING, text)}
 
 
-def shows_hidden_value(present, absent, definitions):
-    """The present value is the absent one under another name; or the present
-    value reaches the absent one through the names it mentions, as
-    LONG_TEXT.trim() does when LONG_TEXT = HEAD + TAIL; or the absent value
+def shows_hidden_value(present, hidden, definitions):
+    """The present value is an absent one under another name; or the present
+    value reaches an absent one through the names it mentions, as
+    LONG_TEXT.trim() does when LONG_TEXT = HEAD + TAIL; or an absent value
     reaches the present one, as LONG_TEXT.slice(-40) does; or both reach one
     name, as FULL.trim() and TAIL = FULL.slice(-30) do."""
-    hidden = aliases(absent.text, definitions)
-    return (reaches(present, hidden, definitions) or reaches(absent, held(present, definitions), definitions)
-            or bool(names_reached(present, definitions) & names_reached(absent, definitions)))
+    names = names_reached(present, definitions)
+    return (any(hidden.search(text) for text in (present.text, *(bound for name in names for bound in definitions.get(name, []))))
+            or reaches(hidden.code, held(present, definitions), definitions) or bool(names & hidden.names))
 
 
 def statements(source):
@@ -892,66 +909,76 @@ def evaluable(value, known):
     return bool(texts) and all(re.fullmatch(STRING, text) and "${" not in text for text in texts)
 
 
-def proves_unrelated(present, absent, definitions, known):
+def proves_unrelated(present, hidden, definitions, known):
     """Whether no present value shows an absent one, on proof: the file
     resolves every name each present value mentions, no present value is a
     regex the reader cannot read, and none shows an absent value. Only a const
     resolves, and not when the file also binds the name another way. A value it
     cannot resolve may hold anything, so it gets the credit trunk gives any
     present assertion."""
-    return all(resolves(value, known) and not any(shows_hidden_value(value, hidden, definitions) for hidden in absent)
-               for value in present)
+    return all(resolves(value, known) and not shows_hidden_value(value, hidden, definitions) for value in present)
 
 
-def clipboard_captures(text):
-    """Each name the call or declaration around a writeText or copyText
-    mention pushes to or assigns, up to the bracket that closes it."""
-    return {name for found in re.finditer(r"writeText|copyText", text)
-            for name in re.findall(r"(\w+)(?:\.push\(|\s*=(?![=>]))", bound_value(text, found.start())[0])}
+def clipboard_captures(source, definitions):
+    """Each name a clipboard stub fills, and each name a destructuring pattern
+    unpacks from a clipboard value, as const [[payload]] = writeText.mock.calls
+    does. A stub runs from a writeText or copyText in code, or a spy's quoted
+    method name, to the end of its statement, across lines while a bracket is
+    open and through a method chained onto the call it sits in. The same word
+    in a test title is prose."""
+    text, names = code(QUOTED_METHOD.sub(r"\2", statements(source))), set()
+    for found in re.finditer(r"writeText|copyText", text):
+        depth, at = 0, found.end()
+        while at < len(text):
+            depth += (text[at] in "([{") - (text[at] in ")]}")
+            if depth < 0 and text.startswith(").", at):
+                depth = 0
+            elif depth < 0 or depth == 0 and text[at] in ";,\n":
+                break
+            at += 1
+        names.update(FILLED_BY.findall(text[found.end():at]))
+    for pattern in DESTRUCTURING.finditer(text):
+        if about_clipboard(bound_value(text, pattern.end())[0], (), definitions):
+            names.update(FREE_NAME.findall(pattern.group(1)))
+    return names
 
 
-def other_expectations(source, definitions):
+def about_clipboard(subject, captured, definitions):
+    """Whether an expectation's subject is what Copy writes, not the rendered
+    text: it names the clipboard, starts with a name the clipboard stub fills,
+    or names a constant bound to a clipboard value, as
+    payload = writeText.mock.calls[0][0] is. The subject's own names stay
+    unexpanded past that, since a rendered container's definition may mention
+    anything."""
+    texts = [subject, *(bound for name in names_reached(Rendered(subject, True), definitions) for bound in definitions.get(name, []))]
+    return (any(re.search(r"writeText|clipboard|copyText", text) for text in texts)
+            or any(re.match(rf"\s*{re.escape(name)}\b", subject) for name in captured))
+
+
+def other_expectations(source, captured, definitions):
     """The text each expect( that neither asserts absence nor is about the
     clipboard holds: its subject, its matcher chain, and each definition of a
     name the chain reaches, as LONG_TEXT.length reaches the text LONG_TEXT is
-    built from. A clipboard payload is not the rendered text, so a subject
-    that names the clipboard, a variable its stub fills, or a name bound to a
-    clipboard call is left out. The subject's own names stay unexpanded, since
-    a rendered container's definition may mention anything. The present forms
-    the reader recognizes are among them, and so are the ones it does not."""
-    text = statements(source)
-    captured, found = clipboard_captures(text), []
+    built from. The present forms the reader recognizes are among them, and
+    so are the ones it does not."""
+    text, found = statements(source), []
     for start in re.finditer(r"(?<![\w$.])expect\(", text):
         statement = bound_value(text, start.start())[0]
         subject, _, close = bound_value(statement, len("expect("))
-        subject_texts = [subject, *(bound for name in names_reached(Rendered(subject, True), definitions) for bound in definitions.get(name, []))]
-        if not (ABSENT.search(statement) or any(re.search(r"writeText|clipboard|copyText", part) for part in subject_texts)
-                or any(re.match(rf"\s*{re.escape(name)}\b", subject) for name in captured)):
+        if not (ABSENT.search(statement) or about_clipboard(subject, captured, definitions)):
             arguments = Rendered(statement[close + 1:], True)
             found += [subject, arguments.text, *(bound for name in names_reached(arguments, definitions) for bound in definitions.get(name, []))]
     return found
 
 
-def mentions_hidden_value(texts, absent, definitions):
-    """Whether any text holds a value an absent one stands for: its name or
-    its literal text. One search over the joined texts, since a stress file
-    holds thousands of absent values and expectations."""
-    blob = "\n".join(texts)
-    targets = set().union(*(aliases(value.text, definitions) for value in absent))
-    return any(target in blob and re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", blob) for target in targets)
-
-
-def rendered_values(pattern, source):
+def rendered_values(pattern, source, captured, definitions):
     """What the first argument of each assertion pattern finds names. A
-    toContain on the clipboard, or on a variable its stub fills on the stub's
-    own line, checks what Copy writes, not the rendered text. A semicolonless
-    file has no other statement end a regex can find."""
-    captured = set(CAPTURED_ON_STUB_LINE.findall(source))
+    toContain on what Copy writes checks the payload, not the rendered text.
+    A semicolonless file has no other statement end a regex can find."""
     values = set()
     for found in pattern.finditer(source):
         subject = source[source.rfind("expect(", 0, found.start()) + len("expect("):found.start()]
-        if "toContain" in found.group() and (re.search(r"writeText|clipboard|copyText", subject)
-                                             or any(re.match(rf"\s*{re.escape(name)}\b", subject) for name in captured)):
+        if "toContain" in found.group() and about_clipboard(subject, captured, definitions):
             continue
         value = named(bound_value(source, found.end(), len(source))[0])
         if value.text:
@@ -968,23 +995,25 @@ def tests_assert_hidden_text_and_copy(added):
     any other expectation that mentions an absent value credits it. Each
     file resolves its absent and present values with only the names it binds,
     since an import or a name another test file declares holds a value it
-    does not see."""
+    does not see. The absent values are pooled once, since a stress file
+    holds thousands of absent values and expectations."""
     sources = ["\n".join(found) for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path)]
     readings = []
     for text in sources:
         own, unknown = definitions_in(text)
-        readings.append((rendered_values(PRESENT, text), rendered_values(ABSENT, text),
-                         {name: texts for name, texts in own.items() if name not in unknown}, own))
-    absent = set().union(*(values for _, values, _, _ in readings))
+        captured = clipboard_captures(text, own)
+        readings.append((rendered_values(PRESENT, text, captured, own), rendered_values(ABSENT, text, captured, own),
+                         {name: texts for name, texts in own.items() if name not in unknown}, own, other_expectations(text, captured, own)))
+    absent = set().union(*(values for _, values, *_ in readings))
     definitions = collections.defaultdict(list)
-    for _, _, _, own in readings:
+    for *_, own, _ in readings:
         for name, texts in own.items():
             definitions[name] += texts
-    present = any(values for values, _, _, _ in readings)
-    unrelated = absent and all(evaluable(hidden, known) for _, values, known, _ in readings for hidden in values) and all(
-        proves_unrelated(values, absent, definitions, known) for values, _, known, _ in readings)
-    shown = present and not unrelated or mentions_hidden_value(
-        [text for file, (*_, own) in zip(sources, readings) for text in other_expectations(file, own)], absent, definitions)
+    hidden = hidden_values(absent, definitions)
+    present = any(values for values, *_ in readings)
+    unrelated = absent and all(evaluable(value, known) for _, values, known, *_ in readings for value in values) and all(
+        proves_unrelated(values, hidden, definitions, known) for values, _, known, *_ in readings)
+    shown = present and not unrelated or any(hidden.search(text) for *_, others in readings for text in others)
     source = "\n".join(sources)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
