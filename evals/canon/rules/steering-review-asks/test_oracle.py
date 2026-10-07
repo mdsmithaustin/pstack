@@ -309,6 +309,30 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [self.PRESENT])
 
+    def test_literal_text_names_no_constants(self):
+        absent, prompt = "expect(bubble).not.toHaveTextContent(TAIL)", 'const prompt = "a".repeat(13000) + TAIL'
+        for row, lines in (("regex constant", [prompt, "const EXPAND = /show full prompt/i", absent, "expect(screen.getByText(EXPAND)).toBeInTheDocument()"]),
+                           ("template constant", [prompt, "const EXPAND = `show full prompt`", absent, "expect(screen.getByText(EXPAND)).toBeInTheDocument()"]),
+                           ("template label with a count", [prompt, absent, "expect(bubble).toHaveTextContent(`Show full prompt (${count} chars)`)"]),
+                           ("flagless regex constant above a definition", ["const SHOW_LESS = /show less/", 'const TAIL = "tail marker"', absent,
+                                                                            "expect(screen.getByText(SHOW_LESS)).toBeInTheDocument()"]),
+                           ("block body statements", ["function setup() {", '  const label = "Show more"', "  render(<Bubble text={LONG_TEXT} />)", "}",
+                                                      'const LONG_TEXT = "a".repeat(9) + TAIL', absent, "expect(screen.getByText(label)).toBeInTheDocument()"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [self.PRESENT])
+
+    def test_each_declarator_in_a_list_is_a_definition(self):
+        absent, present = "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(LONG_TEXT)"
+        for row, lines in (("const list", ['const HEAD = "x".repeat(9), TAIL = "the end", LONG_TEXT = HEAD + TAIL']),
+                           ("let list assigned in a hook", ["let TAIL, LONG_TEXT", "beforeEach(() => {", '  TAIL = "the end"', '  LONG_TEXT = "x".repeat(9) + TAIL', "})"]),
+                           ("let list with a value", ['let HEAD = "x".repeat(9), LONG_TEXT', "beforeEach(() => {", "  LONG_TEXT = HEAD + TAIL", "})"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines, absent, present), [])
+
+    def test_an_escape_past_the_last_code_point_is_kept_as_written(self):
+        self.assertEqual(self.failures('const TAIL = "\\u{110000}";', "expect(container).not.toHaveTextContent(TAIL);",
+                                       "expect(container).toHaveTextContent(TAIL);"), [])
+
     def test_a_name_defined_twice_keeps_both_definitions(self):
         for second in ('const LONG_TEXT = "short";', 'const TAIL = "unrelated";'):
             with self.subTest(second):
