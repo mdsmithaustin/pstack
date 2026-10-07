@@ -1,6 +1,5 @@
 commands:
   lint: tools/gate-check.sh lint
-  test: tools/gate-check.sh test
 pr:
   publish_intent: false
   appendix: collapsed

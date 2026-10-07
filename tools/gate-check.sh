@@ -39,6 +39,7 @@ run lint "skill frontmatter" . "${py[@]}" tools/check-skill-frontmatter.py skill
 run lint "skill content" . "${py[@]}" tools/check-skill-content.py skills --conventions-file tools/skill-content-conventions.json
 run lint "subagent bundle" . "${py[@]}" tools/generate-subagents.py --check
 run lint "promise ledger" . "${py[@]}" evals/promises/ledger.py audit
+run lint "whole-tree pii" . "${py[@]}" tools/check-pii.py
 run lint "pstack-models default" . "${py[@]}" skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
 
 run test "tools unit tests" . "${py[@]}" -m unittest discover -s tools -p 'test_*.py'
