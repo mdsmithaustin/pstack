@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 import live
-from grade_boundary import copy_file, read_file
+from grade_boundary import GradeRefused, copy_file, read_file
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/", ".codex/"]
@@ -129,6 +129,9 @@ def session_meta(path):
 
 
 def find_rollouts(store, threads):
+    linked = next((p for p in store.rglob("*") if p.is_symlink() and p.is_dir()), None)
+    if linked:
+        raise GradeRefused("unsafe_link", linked)
     metas = {path: session_meta(path) for path in sorted(store.rglob("rollout-*.jsonl"))}
     leads = [p for p, m in metas.items() if m.get("id") in threads or any(p.name.endswith(f"-{t}.jsonl") for t in threads)]
     if not threads:
