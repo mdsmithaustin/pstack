@@ -635,10 +635,13 @@ STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
 REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
 ARGUMENT = re.compile(rf"""(?:{STRING}|{REGEX_LITERAL}|\((?:[^()]|\([^()]*\))*\)|[^,()"'`])*""")
 WRAPPED = re.compile(r"(?:expect\.stringContaining|new RegExp)\((.*)\)|`\$\{\s*([\w$.]+)\s*\}`|/([^\\/\[\](){}.*+?^$|]+)/[a-z]*")
-QUOTED = r"""(?:"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')"""
-BINDING = re.compile(r"(?<![\w$.])(?:(?:const|let|var)\s+([\w$]+)\s*(?::[^=;\n]*)?=(?![=>])|function\s*\*?\s*([\w$]+)|([\w$]+)\s*\+?=(?![=>]))\s*")
-MUTABLE = re.compile(r"\b(?:let|var)\s+([\w$]+)")
+DECLARATION = re.compile(r"\b(const|let|var)\s+")
+DECLARATOR = re.compile(r"\s*([\w$]+)\s*(?::(?:\([^()]*\)|=>|[^=,;\n()])*)?(=(?![=>]))?\s*")
+FUNCTION = re.compile(r"\bfunction\s*\*?\s*([\w$]+)")
+ASSIGNMENT = re.compile(r"(?<![\w$.])([\w$]+)\s*\+?=(?![=>])\s*")
+OPENER = re.compile(rf"{ASSIGNMENT.pattern}|{FUNCTION.pattern}")
 STRING_AT = re.compile(STRING)
+REGEX_AT = re.compile(REGEX_LITERAL)
 NAME = re.compile(r"[A-Za-z_$][\w$]*")
 Rendered = collections.namedtuple("Rendered", "text expression")
 
@@ -664,23 +667,27 @@ def unquoted(value):
 
 
 def decoded(escape):
-    code = escape.group(1) or escape.group(2) or escape.group(3)
-    return chr(int(code, 16)) if code else ESCAPES.get(escape.group(4), escape.group(4))
+    digits = escape.group(1) or escape.group(2) or escape.group(3)
+    if not digits:
+        return ESCAPES.get(escape.group(4), escape.group(4))
+    point = int(digits, 16)
+    return chr(point) if point <= 0x10FFFF else escape.group()
 
 
 def named(argument):
     """The text or name an assertion argument stands for: a string's contents,
     or what stringContaining, new RegExp, a lone ${} template, or a regex with
-    no special characters wraps. Only an expression names constants; a string
-    or regex literal is text, and a template is text until it substitutes."""
+    no special characters wraps. A string is text, and so is a template until
+    it substitutes; anything else is an expression, whose code names
+    constants."""
     argument = " ".join(argument.split())
     wrapped = WRAPPED.fullmatch(argument)
     if wrapped and wrapped.group(3) is not None:
         return Rendered(wrapped.group(3), False)
     if wrapped:
         return named(next(group for group in wrapped.groups() if group is not None))
-    literal = re.fullmatch(REGEX_LITERAL, argument) or re.fullmatch(STRING, argument) and "${" not in argument
-    return Rendered(unquoted(argument), not literal)
+    literal = re.fullmatch(STRING, argument) and "${" not in argument
+    return Rendered(unquoted(argument), False) if literal else Rendered(argument, True)
 
 
 def aliases(value, definitions):
@@ -693,14 +700,14 @@ def reaches(value, targets, definitions):
     mentions a target. A literal names no constants; an expression does, and
     so does each definition outside its quoted strings."""
     texts, seen = [value.text], set()
-    names = NAME.findall(value.text) if value.expression else []
+    names = NAME.findall(code(value.text)) if value.expression else []
     while texts:
         if any(re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", text) for text in texts for target in targets):
             return True
         fresh = set(names) - seen
         seen |= fresh
         texts = [text for name in fresh for text in definitions.get(name, [])]
-        names = [name for text in texts for name in NAME.findall(re.sub(QUOTED, "", text))]
+        names = [name for text in texts for name in NAME.findall(code(text))]
     return False
 
 
@@ -716,52 +723,109 @@ def shows_hidden_value(present, absent, definitions):
 
 def statements(source):
     """The source with each statement on one line. JavaScript carries a
-    statement past a newline while a binding's brackets are open, inside a
-    template literal, after a line that ends in an operator or an opening
-    bracket, and before a line that opens with an operator, a dot, a comma, or
-    a closing bracket. A blank or full-line comment line holds no code."""
-    joined = []
+    statement past a newline inside a template literal, after a line that ends
+    in an operator or an opening bracket, and before a line that opens with an
+    operator, a dot, a comma, a ) or a ]. A binding whose brackets are still
+    open takes the next line as its next statement. A blank or full-line
+    comment line holds no code."""
+    joined, depth, ticks, previous = [], 0, 0, ""
     for line in source.split("\n"):
         if not line.strip() or line.lstrip().startswith(("//", "/*", "*")):
             continue
-        if joined and (any(bound_value(joined[-1], head.end())[1] for head in BINDING.finditer(joined[-1]))
-                       or len(re.findall(r"(?<!\\)`", joined[-1])) % 2
-                       or re.search(r"[-+*/%&|^?:,=<>(\[{]\s*$", joined[-1]) or re.match(r"\s*[-+%&|^?:.,=)\]]", line)):
+        if joined and ticks % 2:
             joined[-1] += " " + line.strip()
+        elif joined and (re.search(r"[-+*/%&|^?:,=<>(\[{]\s*$", code(previous)) or re.match(r"\s*[-+%&|^?:.,=)\]]", line)):
+            joined[-1] += " " + line.strip()
+            depth = depth + balance(line) if depth else open_depth(joined[-1])
+        elif depth > 0:
+            joined[-1] += "; " + line.strip()
+            depth += balance(line)
         else:
             joined.append(line)
+            depth, ticks = open_depth(line), 0
+        ticks += code(line).count("`")
+        previous = line
     return "\n".join(joined)
+
+
+def open_depth(statement):
+    """How many brackets the earliest open binding in a statement leaves open."""
+    return max((bound_value(statement, head.end())[1] for head in OPENER.finditer(statement)), default=0)
+
+
+def balance(line):
+    text = code(line)
+    return sum(text.count(c) for c in "([{") - sum(text.count(c) for c in ")]}")
+
+
+def literal_end(text, at, end=None):
+    """Where a string, template, or regex literal starting at `at` ends."""
+    end = len(text) if end is None else end
+    pattern = REGEX_AT if text[at] == "/" else STRING_AT if text[at] in "\"'`" else None
+    found = pattern and pattern.match(text, at, end)
+    return found.end() if found else None
+
+
+def code(text):
+    """The text with each string and regex literal replaced by _, and each
+    template by its ${} contents, so only code is left to name constants."""
+    out, at = [], 0
+    while at < len(text):
+        end = literal_end(text, at)
+        if end is None:
+            out.append(text[at])
+            at += 1
+            continue
+        literal = text[at:end]
+        substitutions = re.findall(r"\$\{([^}]*)\}", literal) if literal.startswith("`") else []
+        out.append("(" + " ".join(code(part) for part in substitutions) + ")" if substitutions else "_")
+        at = end
+    return "".join(out)
 
 
 def bound_value(statement, start):
     """The value a binding starts at start, up to the line end, or the
-    semicolon or closing bracket that ends it outside strings, and whether its
-    brackets are still open at the line end."""
+    semicolon, comma, or closing bracket that ends it outside literals; how
+    many of its brackets are open if it reaches the line end; and where it
+    ends."""
     end = statement.find("\n", start)
     end = len(statement) if end < 0 else end
     depth, at = 0, start
     while at < end:
-        string = STRING_AT.match(statement, at, end)
-        if string:
-            at = string.end()
+        literal = literal_end(statement, at, end)
+        if literal:
+            at = literal
             continue
         depth += (statement[at] in "([{") - (statement[at] in ")]}")
-        if depth < 0 or statement[at] == ";" and depth == 0:
+        if depth < 0 or depth == 0 and statement[at] in ";,":
             break
         at += 1
-    return statement[start:at].strip(), depth > 0 and at == end
+    return statement[start:at].strip(), depth if at == end else 0, at
 
 
 def definitions_in(source):
-    """Every value bound to each name: declarations, function declarations,
-    and assignments to a name the file declares with let or var."""
+    """Every value bound to each name: each declarator of a const, let, or var
+    list, function declarations, and assignments to a name the file declares
+    with let or var."""
     text = statements(source)
-    mutable = set(MUTABLE.findall(text))
-    definitions = collections.defaultdict(list)
-    for head in BINDING.finditer(text):
-        declared, function, assigned = head.groups()
-        if declared or function or assigned in mutable:
-            definitions[declared or function or assigned].append(bound_value(text, head.end())[0])
+    definitions, mutable = collections.defaultdict(list), set()
+    for declaration in DECLARATION.finditer(text):
+        at = declaration.end()
+        while declarator := DECLARATOR.match(text, at):
+            name, at = declarator.group(1), declarator.end()
+            if declaration.group(1) != "const":
+                mutable.add(name)
+            if declarator.group(2):
+                value, _, at = bound_value(text, at)
+                definitions[name].append(value)
+            if not text.startswith(",", at):
+                break
+            at += 1
+    for head in FUNCTION.finditer(text):
+        definitions[head.group(1)].append(bound_value(text, head.end())[0])
+    for head in ASSIGNMENT.finditer(text):
+        if head.group(1) in mutable:
+            definitions[head.group(1)].append(bound_value(text, head.end())[0])
     return definitions
 
 
