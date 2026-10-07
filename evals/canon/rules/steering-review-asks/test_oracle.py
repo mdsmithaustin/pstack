@@ -3,6 +3,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -211,6 +212,54 @@ class HiddenTailTests(unittest.TestCase):
                 self.assertEqual(self.failures("vi.stubGlobal(\"navigator\", { clipboard: {", stub,
                                                "expect(bubble).not.toHaveTextContent(TAIL)", f"expect({name}).toContain(TAIL)"),
                                  [self.PRESENT])
+
+    UNRELATED = ['const SHORT_TEXT = "Hello, world!"', "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(SHORT_TEXT)"]
+
+    def test_a_copied_payload_assertion_is_not_the_rendered_text_whatever_the_stub_spans(self):
+        for row, lines in (
+                ("array filled on a later line of a multi-line stub",
+                 ["const writtenTexts: string[] = [];", 'vi.stubGlobal("navigator", {', "  clipboard: {", "    writeText: vi.fn((text: string) => {",
+                  "      writtenTexts.push(text);", "      return Promise.resolve();", "    }),", "  },", "});", "expect(writtenTexts[0]).toContain(TAIL)"]),
+                ("let assigned on a later line of a multi-line stub",
+                 ["let copied = '';", "Object.assign(navigator, {", "  clipboard: {", "    writeText: async (text: string) => {", "      await Promise.resolve();",
+                  "      copied = text;", "    },", "  },", "});", "expect(copied).toContain(TAIL)"]),
+                ("push after another statement in a spy implementation",
+                 ["const written: string[] = [];", 'vi.spyOn(navigator.clipboard, "writeText").mockImplementation(async (t) => {', "  log(t);",
+                  "  written.push(t);", "});", "expect(written[0]).toContain(TAIL)"]),
+                ("assignment in a mockImplementation on a spy declared above",
+                 ["let written = '';", "const writeText = vi.fn();", "writeText.mockImplementation(async (t) => {", "  written = t", "})",
+                  "expect(written).toContain(TAIL)"]),
+                ("name bound to a call argument",
+                 ["const writeText = vi.fn();", "const payload = writeText.mock.calls[0][0];", "expect(payload).toContain(TAIL)"]),
+                ("name destructured from the calls",
+                 ["const writeText = vi.fn();", "const [[payload]] = writeText.mock.calls;", "expect(payload).toContain(TAIL)"]),
+                ("name destructured from calls held in another name",
+                 ["const calls = navigator.clipboard.writeText.mock.calls;", "const [[payload]] = calls;", "expect(payload).toContain(TAIL)"]),
+                ("object pattern over the last call",
+                 ["const writeText = vi.fn();", "const { 0: payload } = writeText.mock.lastCall;", "expect(payload).toContain(TAIL)"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures_bound(*self.UNRELATED[:1], *lines, *self.UNRELATED[1:]), [self.PRESENT])
+
+    def test_rendered_text_beside_a_multiline_clipboard_stub_still_counts(self):
+        stub = ["const written: string[] = [];", "Object.assign(navigator, {", "  clipboard: {", "    writeText: (t) => {", "      written.push(t);", "    },", "  },", "});",
+                "const shown = bubble.textContent", "expect(bubble).not.toHaveTextContent(TAIL)"]
+        for present in ("expect(shown).toContain(TAIL)", "expect(bubble.textContent).toContain(TAIL)"):
+            with self.subTest(present):
+                self.assertEqual(self.failures(*stub, present), [])
+
+    def test_a_test_titled_for_the_clipboard_does_not_make_its_variables_clipboard_captures(self):
+        self.assertEqual(self.failures('it("hands writeText the full prompt", () => {', "  const shown = bubble.textContent", "  copied = 1",
+                                       "  expect(bubble).not.toHaveTextContent(TAIL)", "  expect(shown).toContain(TAIL)", "})"), [])
+
+    def test_a_thousand_absent_values_against_a_thousand_present_ones_grade_in_seconds(self):
+        lines = [f'const T{i} = "absent marker {i}";' for i in range(1000)] + [f'const P{i} = "present text {i}";' for i in range(1000)]
+        lines += [f"expect(bubble).not.toHaveTextContent(T{i});" for i in range(1000)]
+        lines += [f"expect(bubble).toHaveTextContent(P{i});" for i in range(1000)]
+        start = time.monotonic()
+        failures = self.failures(*lines)
+        elapsed = time.monotonic() - start
+        self.assertEqual(failures, [self.PRESENT])
+        self.assertLess(elapsed, 2, f"graded in {elapsed:.1f}s")
 
     def test_an_open_paren_inside_a_string_does_not_join_the_next_assertions(self):
         self.assertEqual(self.failures('expect(bubble).not.toHaveTextContent("tail (end")', 'expect(bubble).toHaveTextContent("tail (end")',
@@ -940,6 +989,10 @@ class LongPromptTests(ReplayedPullRequest):
 
     def test_merged_preview_trims_a_split_surrogate_and_tests_what_copy_writes(self):
         self.assertEqual(self.grade_sample("good"), ([], {"outside_footprint": [], "added": 253, "merged_added": 253}))
+
+    def test_the_merged_tests_with_the_tied_present_swapped_for_an_unrelated_one_fail_the_present_ask(self):
+        swapped = self.grade_sample("good", lambda diff: diff.replace("+    expect(bubble).toHaveTextContent(TAIL);", "+    expect(bubble).toHaveTextContent(SHORT_TEXT);"))[0]
+        self.assertEqual(swapped, ["constraint:C3: no added web test asserts that hidden prompt text is present"])
 
     def test_pre_review_preview_cuts_utf16_units_and_tests_only_labels(self):
         self.assertEqual(self.grade_sample("bad")[0], [
