@@ -6,6 +6,7 @@ Scope against the merged diff is reported, never failed: the check writes
 scope.json beside the harvested workspace.diff."""
 import ast
 import collections
+import functools
 import io
 import json
 import re
@@ -630,12 +631,19 @@ COPIED_VALUE = re.compile(
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
 QUOTED_METHOD = re.compile(r"""(["'`])(writeText|copyText)\1""")
 FILLED_BY = re.compile(r"(\w+)(?:\.push\(|\s*=(?![=>]))")
-DESTRUCTURING = re.compile(r"\b(?:const|let|var)\s*([\[{][^=;]*[\]}])\s*=(?![=>])\s*")
+LOOP_BINDING = re.compile(r"\bfor\s*(?:await\s*)?\(\s*(?:(?:const|let|var)\s+)?([\[{][^;]*?[\]}]|[\w$]+)\s*(?:of|in)\b")
+DECLARED_NAME = re.compile(r"\b(?:function\s*\*?|class|enum)\s*([\w$]+)")
+IMPORT_CLAUSE = re.compile(r"\bimport\s+(?:type\s+)?([^;\"'`]*?)\s+from\s*[\"'`]")
+IMPORT_ALIAS = re.compile(r"[\w$]+\s+as\s+")
+INDEXED = re.compile(r"[\w$)\]]\s*$")
+DECLARING = re.compile(r"\b(?:const|let|var)\s*$")
 CHAINED = re.compile(r"\)[ \t]*\.")
 CLIPBOARD_READ = re.compile(r"\bmock\s*\.\s*(?:calls|lastCall|results)\b|\breadText\s*\(|\b(?:writeText|copyText)\s*\.\s*mock\b"
                             r"|\b(?:spyOn|mocked)\s*\([^()]*(?<![\w$])(?:clipboard|writeText|copyText)(?![\w$])")
-CLIPBOARD_SUBJECT = re.compile(CLIPBOARD_READ.pattern + r"|(?<![\w$])(?:writeText|copyText|clipboard)(?![\w$])")
-PLACEHOLDER = re.compile(r"0|\[\s*\]|\{\s*\}|null|undefined")
+CLIPBOARD_SUBJECT = re.compile(CLIPBOARD_READ.pattern + r"|\.\s*(?:writeText|copyText|clipboard)(?![\w$])")
+CLIPBOARD_NAME = re.compile(r"(?<![\w$.])(writeText|copyText|clipboard)(?![\w$])")
+CLIPBOARD_VALUE = re.compile(CLIPBOARD_SUBJECT.pattern + r"|(?<![\w$.])(?:writeText|copyText|clipboard)(?![\w$])|\b(?:fn|spy|spyOn|stub|mocked?)\b|\bMock")
+PLACEHOLDER = re.compile(r"(?:<[^<>]*>\s*)?(?:0|\[\s*\]|\{\s*\}|null|undefined|(?:new\s+)?Array\s*(?:<[^()]*>)?\s*\(\s*\))(?:\s+(?:as|satisfies)\s.*)?")
 ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
 PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(|textContent\s*\)\s*\.(?:toBe|toEqual)\(")
 STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
@@ -657,6 +665,7 @@ CHANGED_IN_PLACE = re.compile(r"(?<![\w$.])([\w$]+)(?:\s*\.\s*(?:push|unshift|sp
 REBINDING = re.compile(r"(?<![\w$.])([\w$]+)\s*(?:\?\?|\|\||&&|\*\*|<<|>>>?|[-+*/%&|^])?=(?![=>])")
 JSX_TAG = re.compile(r"<[A-Za-z][\w$.]*\s[^<>]*>")
 Rendered = collections.namedtuple("Rendered", "text expression")
+Reads = collections.namedtuple("Reads", "proven rendered")
 
 
 def asserts_copied_value(source):
@@ -705,6 +714,13 @@ def named(argument):
     return Rendered(unquoted(argument), False) if literal else Rendered(argument, True)
 
 
+@functools.lru_cache(maxsize=None)
+def spelled(text):
+    """The text with the escapes of each string literal decoded and its quotes
+    kept, so a definition spelled with an escape meets the text it spells."""
+    return re.sub(STRING, lambda found: found.group()[0] + unquoted(found.group()) + found.group()[0], text)
+
+
 def aliases(value, definitions):
     """A value and every string literal a constant of that name holds."""
     return {value} | {unquoted(text) for text in definitions.get(value, []) if re.fullmatch(STRING, text)}
@@ -715,7 +731,8 @@ def reaches(value, targets, definitions):
     mentions a target. A literal names no constants; an expression does, and
     so does each definition outside its quoted strings."""
     texts = [value.text, *(text for name in names_reached(value, definitions) for text in definitions.get(name, []))]
-    return any(target in text and re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", text) for text in texts for target in targets)
+    return any(target in text and re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", text)
+               for text in {*texts, *map(spelled, texts)} for target in targets)
 
 
 Hidden = collections.namedtuple("Hidden", "search code names")
@@ -756,7 +773,8 @@ def shows_hidden_value(present, hidden, definitions):
     reaches the present one, as LONG_TEXT.slice(-40) does; or both reach one
     name, as FULL.trim() and TAIL = FULL.slice(-30) do."""
     names = names_reached(present, definitions)
-    return (any(hidden.search(text) for text in (present.text, *(bound for name in names for bound in definitions.get(name, []))))
+    texts = (present.text, *(bound for name in names for bound in definitions.get(name, [])))
+    return (any(hidden.search(text) for text in (*texts, *map(spelled, texts)))
             or reaches(hidden.code, held(present, definitions), definitions) or bool(names & hidden.names))
 
 
@@ -924,17 +942,22 @@ def proves_unrelated(present, hidden, definitions, known):
     return all(resolves(value, known) and not shows_hidden_value(value, hidden, definitions) for value in present)
 
 
-def clipboard_reads(source):
-    """Each name the file binds only to what Copy writes, on proof: a value a
-    writeText or copyText stub assigns or pushes, a value read from a mock's
-    calls, lastCall, or results or from readText(), a spyOn or mocked spy on
-    the clipboard, or a value built from names already proven. A stub runs from a writeText or copyText in code,
+def clipboard_reads(source, definitions):
+    """Reads(proven, rendered). proven is each name the file binds only to what
+    Copy writes, on proof: a value a writeText or copyText stub assigns or
+    pushes, a value read from a mock's calls, lastCall, or results or from
+    readText(), a spyOn or mocked spy on the clipboard, or a value built from
+    names already proven. A stub runs from a writeText or copyText in code,
     or a spy's quoted method name, to the end of its statement, across lines
     while a bracket is open and through a method chained onto the call it
     sits in, on the same line or the next. A JSX tag and a test title hold no
-    stub. Any other binding of the name, a parameter outside a stub among
-    them, leaves it unproven, and an empty starting value neither proves nor
-    disproves."""
+    stub. Any other binding leaves the name unproven: a parameter outside a
+    stub, a loop variable, an import, a function, class, or enum declaration,
+    or a declaration, assignment, or destructuring pattern whose value is not
+    one of those. An empty starting value neither proves nor disproves.
+    rendered is each of clipboard, writeText, and copyText that the
+    definitions bind to something that is neither a spy nor a clipboard read,
+    such as a rendered element."""
     text = JSX_TAG.sub(lambda tag: " " * len(tag.group()), code(QUOTED_METHOD.sub(r"\2", statements(source))))
     filled, outside = set(), list(text)
     for found in re.finditer(r"writeText|copyText", text):
@@ -960,9 +983,12 @@ def clipboard_reads(source):
             at += 1
     for head in (*REBINDING.finditer(outside), *CHANGED_IN_PLACE.finditer(outside)):
         sites.append((head.group(1) or head.group(2), bound_value(text, head.end())[0]))
-    for pattern in DESTRUCTURING.finditer(outside):
-        value = bound_value(text, outside.index("=", pattern.end(1)) + 1)[0]
-        sites += [(name, value) for name in FREE_NAME.findall(pattern.group(1))]
+    for names, value_at in destructured(outside):
+        sites += [(name, bound_value(text, value_at)[0]) for name in names]
+    sites += [(name, None) for loop in LOOP_BINDING.finditer(outside) for name in FREE_NAME.findall(loop.group(1))]
+    sites += [(declared.group(1), None) for declared in DECLARED_NAME.finditer(outside)]
+    for clause in IMPORT_CLAUSE.finditer(source):
+        sites += [(name, None) for name in FREE_NAME.findall(IMPORT_ALIAS.sub("", clause.group(1)))]
     proven = set()
     while True:
         read, other = set(filled), set()
@@ -972,8 +998,28 @@ def clipboard_reads(source):
             elif value is None or not PLACEHOLDER.fullmatch(value):
                 other.add(name)
         if read - other == proven:
-            return proven
+            break
         proven = read - other
+    values = {name: [code(value) for value in values] for name, values in definitions.items() if CLIPBOARD_NAME.fullmatch(name)}
+    rendered = {name for name, values in values.items() for value in values
+                if not (PLACEHOLDER.fullmatch(value) or CLIPBOARD_VALUE.search(value) or reads_clipboard(value, proven))}
+    return Reads(proven, rendered)
+
+
+def destructured(text):
+    """Each destructuring pattern in text that an = follows, declared or
+    assigned, as the names it mentions and where its value starts. A bracket
+    pair after a name, a call, or an index is an index access."""
+    opens, found = [], []
+    for at, char in enumerate(text):
+        if char in "([{":
+            opens.append(at)
+        elif char in ")]}" and opens:
+            start = opens.pop()
+            before, end = text[max(0, start - 12):start], PATTERN_END.match(text, at + 1)
+            if char in "]}" and end and not (INDEXED.search(before) and not DECLARING.search(before)):
+                found.append((FREE_NAME.findall(text[start + 1:at]), end.end()))
+    return found
 
 
 def parameter_names(text):
@@ -1000,12 +1046,15 @@ def reads_clipboard(value, proven):
 def about_clipboard(subject, reads):
     """Whether an expectation's subject is what Copy writes, not the rendered
     text, on proof: it reads a mock's calls, lastCall, or results, calls
-    readText(), or spies on the clipboard, it names the clipboard or a
-    writeText or copyText spy in code, or every name it mentions is one
-    clipboard_reads proves. A name the file also binds to anything else may
-    hold the rendered text, so its expectation stays."""
+    readText(), spies on the clipboard, or reaches a member named clipboard,
+    writeText, or copyText; it names a bare clipboard, writeText, or copyText
+    that no binding of the file gives something else, such as a rendered
+    element; or every name it mentions is one clipboard_reads proves. A name
+    the file also binds to anything else may hold the rendered text, so its
+    expectation stays."""
     text = code(subject)
-    return bool(CLIPBOARD_SUBJECT.search(text)) or reads_clipboard(text, reads)
+    return (bool(CLIPBOARD_SUBJECT.search(text)) or any(name not in reads.rendered for name in CLIPBOARD_NAME.findall(text))
+            or reads_clipboard(text, reads.proven))
 
 
 def other_expectations(source, reads, definitions):
@@ -1055,7 +1104,7 @@ def tests_assert_hidden_text_and_copy(added):
     readings = []
     for text in sources:
         own, unknown = definitions_in(text)
-        reads = clipboard_reads(text)
+        reads = clipboard_reads(text, own)
         readings.append((rendered_values(PRESENT, text, reads), rendered_values(ABSENT, text, reads),
                          {name: texts for name, texts in own.items() if name not in unknown}, own, other_expectations(text, reads, own)))
     absent = set().union(*(values for _, values, *_ in readings))
