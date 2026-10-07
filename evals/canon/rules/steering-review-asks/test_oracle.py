@@ -294,6 +294,68 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(row):
                 self.assertEqual(self.failures('it("copies", () => {', *copies, "});", *rendered, *shown, "});"), [])
 
+    STUB_FILLS_TEXT = ['let text = "";', "Object.assign(navigator, { clipboard: { writeText: async (t: string) => { text = t; } } });"]
+
+    def test_a_name_another_test_binds_in_a_loop_head_is_the_rendered_text(self):
+        for row, loop in (
+                ("for of", "for (const text of texts) {"),
+                ("for in", "for (var text in texts) {"),
+                ("for of with let", "for (let text of texts) {"),
+                ("for await", "for await (const text of texts) {"),
+                ("array pattern", "for (const [text] of pairs) {"),
+                ("object pattern", "for (const { text } of rows) {"),
+                ("bare name", "for (text of texts) {")):
+            for what, absent, present in (("present", ["  expect(bubble).not.toHaveTextContent(TAIL);"], "  expect(text).toContain(TAIL);"),
+                                          ("absent", ["  expect(bubble).toHaveTextContent(TAIL);"], "  expect(text).not.toContain(TAIL);")):
+                with self.subTest(row=row, what=what):
+                    self.assertEqual(self.failures('it("copies", () => {', *self.STUB_FILLS_TEXT, "});", 'it("renders", () => {', *absent,
+                                                   f"  {loop}", present, "  }", "});"), [])
+
+    def test_a_name_another_test_assigns_by_destructuring_is_the_rendered_text(self):
+        for row, binding in (
+                ("object pattern", "({ text } = view);"),
+                ("object pattern with a rename", "({ shown: text } = view);"),
+                ("array pattern", "[text] = parts;"),
+                ("array pattern after a name", "[first, text] = parts;"),
+                ("nested pattern", "[{ text }] = rows;"),
+                ("pattern with a default", '({ text = "" } = view);'),
+                ("pattern declared by const", "const { text } = view;")):
+            with self.subTest(row):
+                self.assertEqual(self.failures('it("copies", () => {', *self.STUB_FILLS_TEXT, "});", 'it("renders", () => {', "  let text;", f"  {binding}",
+                                               "  expect(bubble).not.toHaveTextContent(TAIL);", "  expect(text).toContain(TAIL);", "});"), [])
+
+    def test_a_name_the_file_imports_is_the_rendered_text(self):
+        for row, statement in (
+                ("named import", 'import { text } from "./fixtures";'),
+                ("default import", 'import text from "./text";'),
+                ("namespace import", 'import * as text from "./text";'),
+                ("renamed import", 'import { shown as text } from "./fixtures";'),
+                ("default beside named", 'import text, { other } from "./fixtures";'),
+                ("type import", 'import type { text } from "./fixtures";'),
+                ("multi-line import", 'import {\n  other,\n  text\n} from "./fixtures";')):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*statement.split("\n"), *self.STUB_FILLS_TEXT, "expect(bubble).not.toHaveTextContent(TAIL);",
+                                               "expect(text).toContain(TAIL);"), [])
+
+    def test_a_name_the_file_imports_under_another_name_stays_the_clipboard(self):
+        self.assertEqual(self.failures('import { text as shown } from "./fixtures";', *self.STUB_FILLS_TEXT,
+                                       "expect(bubble).not.toHaveTextContent(TAIL);", "expect(text).toContain(TAIL);"), [self.PRESENT])
+
+    def test_a_name_assigned_by_an_index_or_a_property_is_not_a_pattern_binding(self):
+        for assigned in ("parts[0] = view;", "view[text] = parts;", "view.text = parts;", "const other = [text] == parts;"):
+            with self.subTest(assigned):
+                self.assertEqual(self.failures(*self.STUB_FILLS_TEXT, assigned, "expect(bubble).not.toHaveTextContent(TAIL);",
+                                               "expect(text).toContain(TAIL);"), [self.PRESENT])
+
+    def test_a_cast_empty_starting_value_leaves_the_stub_filled_name_the_clipboard(self):
+        for start in ("let copied = [] as string[];", 'let copied = "" as string;', "let copied = new Array<string>();", "let copied = new Array();",
+                      "let copied = <string[]>[];", "let copied = {} as Record<string, string>;", "let copied = [] satisfies string[];",
+                      "let copied = null as string | null;", "let copied = undefined as string | undefined;"):
+            with self.subTest(start):
+                self.assertEqual(self.failures(start,
+                                               "Object.assign(navigator, { clipboard: { writeText: async (t: string) => { copied = t; } } });",
+                                               "expect(bubble).not.toHaveTextContent(TAIL);", "expect(copied).toContain(TAIL);"), [self.PRESENT])
+
     def test_a_named_clipboard_spy_checked_for_the_prompt_is_not_the_rendered_text(self):
         for spy in ('vi.spyOn(navigator.clipboard, "writeText")', 'jest.spyOn(navigator.clipboard, "writeText")',
                     "vi.mocked(navigator.clipboard.writeText)"):
