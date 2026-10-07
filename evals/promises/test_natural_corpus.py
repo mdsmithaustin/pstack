@@ -211,6 +211,8 @@ REVIEW_LINE_NATURALS = (
     ("The README was not modified after the independent review passed.", PASS),
     ("Independent review (nothing to fix): pass", INCONCLUSIVE),
     ("Independent review (README (docs) had nothing to fix): pass", INCONCLUSIVE),
+    ("Independent review (nothing to fix) — pass", INCONCLUSIVE),
+    ("Independent review (README (docs) had nothing to fix) — pass", INCONCLUSIVE),
     ("Independent review: pass: 0 blockers", PASS),
     ("Verdict: pass: sonnet", PASS),
     ("The independent review passed with nothing to fix.", INCONCLUSIVE),
