@@ -2652,6 +2652,11 @@ class Issue133WritesAndReruns(unittest.TestCase):
                           "repro-retry.sh": "scratch", "scratchpad/a.py": "scratch", "tests/test_x.py": "test",
                           "pkg/x_test.go": "test", "__tests__/a.js": "test"})
 
+    def test_natural_test_file_names_are_tests(self):
+        view = oracles.View(minimal(), {}, None)
+        for name in NATURAL_TEST_NAMES:
+            self.assertEqual(view.classify(name), "test", name)
+
     def test_f13_copy_install_perl_dd_and_ed_write_their_targets(self):
         for command, want in (("cp a.py b.py", ["b.py"]), ("cp -r notes/a.md notes/b.md out/", ["out/"]),
                               ("install -m 644 a.py bin/a.py", ["bin/a.py"]), ("perl -pi -e 's/a/b/' x.py", ["x.py"]),
@@ -3354,6 +3359,10 @@ def how_labels(*replies):
 
 def loop_verdict(command):
     return grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, command)), load_case("overnight-run"))["verdict"]
+
+
+NATURAL_TEST_NAMES = ("test-main.py", "test1.py", "tests2/x.py", "tests-unit/x.py", "FooTest.java", "FooTests.java", "foo_test.go", "conftest.py",
+                      "test-utils.js", "foo.spec.ts", "__tests__/x.js")
 
 
 def arena_pick(line):

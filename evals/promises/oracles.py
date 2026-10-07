@@ -75,6 +75,8 @@ CONSTRAINT_ALIASES = {"newline": (r"\n", "linesep", "endswith"), "trailing": (r"
 CONSTRAINT_SUBJECTS = {"do not remove: the sink needs a trailing newline on every row": ("sink", "row")}
 SCRATCH_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/")
 LOG_NAMES = ("decisions.tsv", ".audit/")
+TEST_PATH = re.compile(r"(?:^|[/_.-])test(?:s|data|ing)?(?=$|[\d_./-])|(?:^|/)conftest\.py$|\.spec\.")
+CAMEL_TEST = re.compile(r"[a-z\d]Tests?\.\w+$")
 PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
@@ -567,7 +569,7 @@ class View:
             return "scratch"
         if any(tag in rel for tag in LOG_NAMES):
             return "log"
-        if re.search(r"(?:^|/)test(?:s|data|ing)?(?:[/_.]|$)|[_.-]tests?[_./]|\.spec\.", rel.lower()):
+        if TEST_PATH.search(rel.lower()) or CAMEL_TEST.search(rel):
             return "test"
         if rel.endswith((".md", ".rst")) or rel.lower().startswith("readme"):
             return "doc"
@@ -1801,19 +1803,24 @@ def why_null(view):
 SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+(?:searched|consulted|checked|coverage))\**\s*(?::|$)")
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
 CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
-CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n't\b")
+CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n['’]t\b")
 NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a)\b")
 
 
-def affirmed(pattern, low):
+def mention_states(pattern, low):
     cuts = [0] + [m.end() for m in CLAUSE_SPLIT.finditer(low)]
     negations = [m.start() for m in CLAUSE_NEGATION.finditer(low)]
+    targets = []
     for m in re.finditer(pattern, low):
         clause = cuts[bisect.bisect_right(cuts, m.start()) - 1]
-        negated = bisect.bisect_left(negations, clause) < bisect.bisect_left(negations, m.start())
-        if not negated and not NAMES_NOTHING.match(low, m.end(), m.end() + 12):
-            return True
-    return False
+        at = bisect.bisect_left(negations, m.start())
+        bound = at > bisect.bisect_left(negations, clause) and not any_between(targets, negations[at - 1], m.start())
+        targets.append(m.start())
+        yield "nothing" if NAMES_NOTHING.match(low, m.end(), m.end() + 12) else "negated" if bound else "affirmed"
+
+
+def affirmed(pattern, low):
+    return "affirmed" in mention_states(pattern, low)
 
 
 @oracle("how-why-reports-name-sources-searched")
@@ -2581,15 +2588,15 @@ VERDICT_MARKUP = re.compile(r"[*`\[\]✅✔☑✓\ufe0f]|(?<!\w)_+|(?<!_)_+(?!\w
 VERDICT_END = re.compile(r"\n|[.!?;](?=\s|$)")
 VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before|since|after)\b", re.I)
 VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nobody|nothing|neither|nor|cannot|unable|without|refus(?:e|es|ed|ing)"
-                              r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n't\b|[❌✗✘🚫⛔]", re.I)
+                              r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n['’]t\b|[❌✗✘🚫⛔]", re.I)
 NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|needed)\b", re.I)
 NEGATION_ON_PASS = re.compile(r"\b(?:not|no|never|nothing|neither|cannot|fail(?:s|ed)?|refus(?:e|es|ed)|declin(?:e|es|ed))\b|n['’]t\b|[❌✗✘🚫⛔]", re.I)
-ON_THE_WORD = re.compile(r"\s+(?:[\w'’]+\s+)?")
+ON_THE_WORD = re.compile(r"[ \t]+(?:[\w'’]+[ \t]+)?")
 FAILING_VERDICT = re.compile(r"\b(?:fail(?:s|ed)?|needs?[- ]changes|blocked|rejected)\b", re.I)
 NOT_RUN = re.compile(r"(?:\bno\s+(?:(?:independent|trail|docs?|documentation)\s+)*review(?:er)?s?(?:\s+(?:was\s+)?(?:run|ran))?"
                      r"|(?<!-)(?<!second\s)(?<!2nd\s)\breview(?:er)?s?\W{0,3}(?:(?:was|has)\s+)?(?:not\s+(?:yet\s+)?run|never\s+ran|did\s+not\s+run|didn['’]t\s+run|skipped))"
                      r"(?=\s*(?:[.,;:!?)|—–\n]|-\s|$))", re.I)
-REPAIR_GAP = re.compile(r"(?:\s+(?:at\s+)?[0-9a-f]{7,40})?\s*(?:->|=>|→|[—–/]|\s-\s)\s*(?:(?:round\s+\d+|now)\s+)?", re.I)
+REPAIR_GAP = re.compile(r"(?:\s+(?:at\s+)?[0-9a-f]{7,40})?\s*(?:->|=>|→|[—–]|\s-\s)\s*(?:(?:round\s+\d+|now)\s+)?", re.I)
 BENIGN_NEGATION = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|0)|without(?:\s+any)?)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
                              r"|objections?|items?|(?:edits?|changes)(?:\s+(?:needed|required|requested))?)\b", re.I)
 PUNCT_OPENER = r"[,():|+—–]|\s-\s"
@@ -2973,6 +2980,7 @@ def arena_worktrees(view):
     return passed(*evidence)
 
 
+ELLIPTICAL_PICK = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:is|was)(?=\s*(?:[,;:.\n]|$))")
 PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on|based on) (?:candidate|arm) [\w-]+")
 
 
@@ -2980,7 +2988,8 @@ PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|p
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = affirmed(r"\b(?:base|winner)\b", low) or affirmed(PICKED, low)
+    states = set(mention_states(rf"\b(?:base|winner)\b|{PICKED.pattern}", low))
+    base = "affirmed" in states
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
@@ -2989,8 +2998,11 @@ def arena_grafts(view):
         return failed("candidates spawned sequentially", *evidence)
     if not view.final_reply:
         return inconclusive("no synthesis reply" + (" (run killed)" if view.killed else ""), *evidence)
-    if base and ("graft" in low or "converge" in low or "consensus" in low):
+    grafted = "graft" in low or "converge" in low or "consensus" in low
+    if base and grafted:
         return passed(*evidence)
+    if grafted and "negated" in states and ELLIPTICAL_PICK.search(low):
+        return inconclusive("the reply negates one base and names a candidate with an elided predicate, which a pattern cannot read", *evidence)
     return failed("reply does not name the base and the grafts", *evidence)
 
 

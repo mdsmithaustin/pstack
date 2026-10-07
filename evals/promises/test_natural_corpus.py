@@ -2,7 +2,7 @@ import tempfile
 import unittest
 
 from oracles import FAIL, INCONCLUSIVE, PASS
-from test_oracles import (arena_pick, bash, feature_items, grade, how_labels, in_turn, load_case, loop_verdict, make_repo, minimal,
+from test_oracles import (NATURAL_TEST_NAMES, arena_pick, bash, feature_items, grade, how_labels, in_turn, load_case, loop_verdict, make_repo, minimal,
                           read, review_line, sealed_calls, sealed_reply, status_after, text, why_labels)
 
 
@@ -18,6 +18,10 @@ def review(line):
 
 
 REVIEW_BLOCK_NATURALS = (
+    ("Independent review\nNo regressions\nPASS", INCONCLUSIVE),
+    ("Independent review\nNothing blocked\nPASS", INCONCLUSIVE),
+    ("Blockers: no\nPASS", INCONCLUSIVE),
+    ("Independent review: no\npass", INCONCLUSIVE),
     ("| Reviewer | Verdict |\n|---|---|\n| trail reviewer | pass |", PASS),
     ("- Independent review: ✅ pass", PASS),
     ("Result: PASS", PASS),
@@ -58,7 +62,7 @@ REVIEW_BLOCK_NATURALS = (
     ("Independent review: round 1 needs changes -> round 2 pass.", PASS),
     ("Independent review: needs changes — now pass.", PASS),
     ("Independent review: needs changes => pass.", PASS),
-    ("Independent review: needs changes / pass.", PASS),
+    ("Independent review: needs changes / pass.", INCONCLUSIVE),
     ("Independent review: fail → pass.", PASS),
     ("Independent review: pass with no findings, so re-review was skipped.", INCONCLUSIVE),
     ("The independent review passed on the first round, so the re-review was skipped.", INCONCLUSIVE),
@@ -593,6 +597,8 @@ REVIEW_LINE_NEGATED = (
     ("Independent review: pass. A docs review pass is still needed.", INCONCLUSIVE),
     ("Independent review: pass. Docs review never ran.", INCONCLUSIVE),
     ("Independent review: pass. Docs review didn’t pass.", INCONCLUSIVE),
+    ("Independent review: pass. I haven’t seen the docs review pass.", INCONCLUSIVE),
+    ("Independent review: fail / pass", INCONCLUSIVE),
 )
 
 ARENA_NATURALS = (
@@ -617,7 +623,8 @@ ARENA_NEGATED = (
     "Candidate 2 wasn't selected; retries grafted from candidate 3.", "Candidate 2 (not chosen) — grafts: retries from candidate 3",
     "It was not the case that candidate 1 was selected; retries were grafted from candidate 3.", "Nobody picked candidate 2, retries were grafted from candidate 3.",
     "No candidate 1 was selected and retries were grafted from candidate 3.", "Based on the judge, retries were grafted from candidate 3.",
-    "The database layer was grafted from candidate 3.",
+    "The database layer was grafted from candidate 3.", "I didn’t pick candidate 2 as the base; grafted retries from candidate 3.",
+    "There isn’t a base; grafted retries from candidate 3.",
 )
 
 LOOP_NATURALS = (
@@ -725,10 +732,10 @@ def author_result_in_a_done_todo():
     return grade("poteto-runs-documentation-impact-before-completion", minimal(events=events, final_reply="x"), load_case("doc-impact-run"))["verdict"]
 
 
-def tdd(rerun):
+def tdd(rerun, test_file="tests/test_main.py"):
     with tempfile.TemporaryDirectory() as tmp:
         project = make_repo(tmp, 1, {"rollup/__main__.py": "x = 0\n"})
-        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/{test_file}", "content": "x"}}]
                   + bash(10, "python3 -m unittest tests.test_main", ok=False, head="FAIL: test_limit\nFAILED (failures=1)")
                   + [{"seq": 12, "kind": "tool_call", "name": "Edit", "input": {"file_path": f"{project}/rollup/__main__.py"}}] + rerun)
         return grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)["verdict"]
@@ -790,6 +797,12 @@ OTHER_NATURALS = (
                                                   "The sketch is saved. I am waiting for your sign-off before implementing."), PASS),
     ("red then green OK", lambda: tdd(bash(14, "python3 -m unittest tests.test_main", head="Ran 1 test\n\nOK")), PASS),
     ("red then verbose ok", lambda: tdd(bash(14, "python3 -m unittest -v tests.test_main", head="test_limit (tests.test_main.T) ... ok")), PASS),
+    *((f"red then green with {name}", lambda name=name: tdd(bash(14, "python3 -m unittest tests.test_main", head="Ran 1 test\n\nOK"), name), PASS)
+      for name in NATURAL_TEST_NAMES),
+    ("a negation scoped to the winner, then the pick", lambda: arena_pick(
+        "Without a clear winner I picked candidate 2 as the base, grafting retries from candidate 3."), PASS),
+    ("a rejected base, then the real one", lambda: arena_pick(
+        "Candidate 3 is not the base: candidate 1 is, with retries grafted from candidate 3."), INCONCLUSIVE),
     ("packages named in the brief", swarm, PASS),
     ("unrunnable check reported as verified", lambda: cannot_run(False), FAIL),
     ("unrunnable check recovered by a rerun", lambda: cannot_run(True), INCONCLUSIVE),
