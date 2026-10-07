@@ -2523,18 +2523,27 @@ def doc_impact_before_completion(view):
 
 
 VERDICT_NEGATION = re.compile(r"\b(?:not|never|cannot|unable|fail(?:ed|s)?|without|refus(?:e|ed|es)|would|unlikely)\b|n't\b", re.I)
-VERDICT_SUBJECT = re.compile(r"\breview(?:er)?s?\b|\bit\b", re.I)
+VERDICT_SUBJECT = re.compile(r"\breview(?:er)?s?\b|\bverdict\b|\bit\b", re.I)
+VERDICT_LABEL = re.compile(r"\breview|\bverdict\b", re.I)
+VERDICT_SOURCE = re.compile(r"\s+from\s+(?:the\s+)?(?:[\w-]+\s+){0,3}review(?:er)?s?\b", re.I)
+MARKUP = re.compile(r"[*`]|(?<!\w)_+|_+(?!\w)")
 
 
-def negated_verdict(reply, match):
+def pass_verdict(reply, match):
     word = list(re.finditer(r"\bpass(?:ed)?\b", match.group(0), re.I))[-1]
-    clause = re.split(r"[.;:!?\n]|\b(?:then|and|but)\b", reply[:match.start() + word.start()], flags=re.I)[-1]
+    clause = re.split(r"[.;!?\n]|\b(?:then|and|but)\b", reply[:match.start() + word.start()], flags=re.I)[-1]
+    label, colon, clause = clause.rpartition(":")
+    if colon and not clause.strip():
+        return bool(VERDICT_LABEL.search(label)) and not VERDICT_NEGATION.search(label)
+    if not clause.strip():
+        return True
     subject = list(VERDICT_SUBJECT.finditer(clause))
-    if not subject:
-        bare = word.start() == 0
-        return bool(clause.strip()) if bare else bool(VERDICT_NEGATION.search(clause))
-    before = " ".join(clause[:subject[-1].start()].split()[-2:])
-    return bool(VERDICT_NEGATION.search(clause[subject[-1].start():]) or re.search(r"\b(?:no|neither)\b", before, re.I))
+    if subject:
+        before = " ".join(clause[:subject[-1].start()].split()[-2:])
+        return not (VERDICT_NEGATION.search(clause[subject[-1].start():]) or re.search(r"\b(?:no|neither)\b", before, re.I))
+    if word.start() or VERDICT_SOURCE.match(reply, match.end()):
+        return not VERDICT_NEGATION.search(clause)
+    return False
 
 
 @oracle("documentation-impact-independent-review-pass-required")
@@ -2545,8 +2554,8 @@ def doc_impact_review(view):
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
     result = turn_author_result(view, turn, reply)
     reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
-    verdict_word = next((m for m in re.finditer(r"\bpass\b|\breview\b[^.\n]{0,40}\bpassed\b", reply or "", re.I)
-                         if not negated_verdict(reply, m)), None)
+    plain = MARKUP.sub("", reply or "")
+    verdict_word = next((m for m in re.finditer(r"\bpass\b|\breview\b[^.\n]{0,40}\bpassed\b", plain, re.I) if pass_verdict(plain, m)), None)
     evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {bool(verdict_word)}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)
