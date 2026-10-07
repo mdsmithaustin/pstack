@@ -256,6 +256,7 @@ def copy_file(source, target):
         root.write(target.name, data)
     finally:
         root.close()
+    return data
 
 
 def _snapshot(path):
