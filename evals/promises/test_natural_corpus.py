@@ -199,6 +199,8 @@ REVIEW_LINE_NATURALS = (
     ("Independent review: pass (round 2)", PASS),
     ("Independent review: pass – no findings", PASS),
     ("The reviewer’s verdict is pass.", PASS),
+    ("Independent review: pass without blockers.", PASS),
+    ("Independent review: pass without any findings.", PASS),
 )
 
 REVIEW_BLOCK_NEGATED = (
