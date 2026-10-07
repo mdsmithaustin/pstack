@@ -653,8 +653,19 @@ def asserts_copied_value(source):
     return any(re.search(rf"expect\(\s*{re.escape(name)}\b[^;]*?\)\s*" + PAYLOAD_MATCHER, source) for name in captured)
 
 
+ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
+
+
 def unquoted(value):
-    return re.sub(r"\\(.)", r"\1", value[1:-1]) if re.fullmatch(STRING, value) else value
+    """A string literal's text, with its JavaScript escapes decoded."""
+    if not re.fullmatch(STRING, value):
+        return value
+    return re.sub(r"\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|(.))", decoded, value[1:-1])
+
+
+def decoded(escape):
+    code = escape.group(1) or escape.group(2) or escape.group(3)
+    return chr(int(code, 16)) if code else ESCAPES.get(escape.group(4), escape.group(4))
 
 
 def named(argument):
