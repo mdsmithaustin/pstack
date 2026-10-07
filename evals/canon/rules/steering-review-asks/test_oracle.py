@@ -408,6 +408,52 @@ class HiddenTailTests(unittest.TestCase):
         with self.subTest("name the file binds to a literal"):
             self.assertEqual(self.failures('const TAIL = "UNIQUE_TAIL"', "expect(bubble).not.toHaveTextContent(TAIL)", present), [])
 
+    GOOD_SHAPE = ["const COLLAPSE_THRESHOLD = 12000", 'const TAIL = "UNIQUE_TAIL"', 'const LONG_TEXT = "a".repeat(COLLAPSE_THRESHOLD) + TAIL',
+                  'const SHORT_TEXT = "Hello, world!"', 'const bubble = screen.getByTestId("message-bubble")',
+                  "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(SHORT_TEXT)"]
+
+    def test_an_expectation_that_mentions_the_absent_value_is_present_whatever_its_form(self):
+        for form in ("expect(bubble.textContent).toMatch(TAIL)",
+                     "expect(screen.queryByText(TAIL, { exact: false })).toBeInTheDocument()",
+                     "expect(screen.queryByText(/UNIQUE_TAIL/)).not.toBeNull()",
+                     "expect(within(bubble).queryByText(/UNIQUE_TAIL/)).toBeTruthy()",
+                     "expect(bubble.textContent?.endsWith(TAIL)).toBe(true)",
+                     "expect(bubble.textContent).toHaveLength(LONG_TEXT.length)",
+                     "expect(bubble.textContent).toStrictEqual(TAIL)"):
+            with self.subTest(form):
+                self.assertEqual(self.failures(*self.GOOD_SHAPE, form), [])
+
+    def test_a_mention_credits_with_no_assertion_the_reader_recognizes_as_present(self):
+        self.assertEqual(self.failures(*self.GOOD_SHAPE[:-1], "expect(bubble.textContent).toMatch(TAIL)"), [])
+
+    def test_the_issue_shape_with_nothing_present_that_mentions_the_absent_value_still_fails(self):
+        self.assertEqual(self.failures(*self.GOOD_SHAPE), [self.PRESENT])
+        self.assertEqual(self.failures(*self.GOOD_SHAPE, "expect(bubble.textContent).toMatch(SHORT_TEXT)", 'expect(bubble.textContent).toHaveLength(12)'),
+                         [self.PRESENT])
+
+    def test_a_clipboard_expectation_that_mentions_the_absent_value_is_not_the_rendered_text(self):
+        stub = ["const written: string[] = [];", 'vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });']
+        for form in ("expect(written[0]).toBe(LONG_TEXT)", "expect(written[0]).toContain(TAIL)", "expect(written).toHaveLength(1)",
+                     "expect(writeText).toHaveBeenCalledWith(LONG_TEXT)"):
+            with self.subTest(form):
+                self.assertEqual(self.failures(*stub, *self.GOOD_SHAPE, form), [self.PRESENT])
+
+    def test_an_absent_value_the_reader_cannot_evaluate_gets_trunk_credit(self):
+        hidden = "expect(bubble).not.toHaveTextContent(TAIL)"
+        for row, lines, shown in (("concatenation", ['const TAIL = "UNIQUE_" + "TAIL"', hidden], "UNIQUE_TAIL"),
+                                  ("repeat", ['const TAIL = "ab".repeat(3)', hidden], "ababab"),
+                                  ("template with an expression", ['const WORD = "TAIL"', "const TAIL = `UNIQUE_${WORD}`", hidden], "UNIQUE_TAIL"),
+                                  ("join", ['const TAIL = ["UNIQUE", "TAIL"].join("_")', hidden], "UNIQUE_TAIL"),
+                                  ("slice of a literal", ['const TAIL = "xxUNIQUE_TAIL".slice(2)', hidden], "UNIQUE_TAIL"),
+                                  ("inline concatenation", ['expect(bubble).not.toHaveTextContent("UNIQUE_" + "TAIL")'], "UNIQUE_TAIL"),
+                                  ("inline repeat", ['expect(bubble).not.toHaveTextContent("ab".repeat(3))'], "ababab")):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines, f'expect(bubble).toHaveTextContent("{shown}")'), [])
+
+    def test_a_computed_absent_value_beside_a_plain_one_is_still_unresolved(self):
+        self.assertEqual(self.failures('const TAIL = "UNIQUE_TAIL"', 'const HEAD = "chunk"', "expect(bubble).not.toHaveTextContent(TAIL)",
+                                       'expect(bubble).not.toHaveTextContent("a".repeat(3))', "expect(bubble).toHaveTextContent(HEAD)"), [])
+
     def test_a_present_expression_over_the_value_the_absent_one_is_cut_from_counts(self):
         cut = ['const FULL = "x".repeat(500) + " the end"', "const TAIL = FULL.slice(-30)", "expect(bubble).not.toHaveTextContent(TAIL)"]
         for present in ("FULL.trim()", "FULL.slice(0, 100)"):
