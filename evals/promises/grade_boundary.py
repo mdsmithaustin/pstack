@@ -249,14 +249,29 @@ def read_file(path):
         root.close()
 
 
-def copy_file(source, target):
-    data = read_file(source)
+def write_file(target, data):
     root = _Root.open(target.parent, create=True)
     try:
         root.write(target.name, data)
     finally:
         root.close()
+
+
+def copy_file(source, target):
+    data = read_file(source)
+    write_file(target, data)
     return data
+
+
+def create_file(path):
+    root = _Root.open(path.parent)
+    try:
+        fd = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=root.fd)
+    except OSError as error:
+        raise GradeRefused("output_unsafe", path) from error
+    finally:
+        root.close()
+    return os.fdopen(fd, "wb")
 
 
 def _snapshot(path):

@@ -28,7 +28,7 @@ class CallIds(unittest.TestCase):
                 item({"type": "function_call", "name": "exec_command", "call_id": "x2", "arguments": json.dumps({"cmd": "b"})}),
                 item({"type": "function_call_output", "call_id": "x2", "output": "Error: nope"}),
                 item({"type": "function_call_output", "call_id": "x1", "output": "fine"})]
-        parsed = codex.harvest_rollout(self.lines("rollout-s.jsonl", rows))
+        parsed = codex.harvest_rollout(self.lines("rollout-s.jsonl", rows).read_bytes())
         self.assertEqual([(e["kind"], e.get("id"), e.get("ok")) for e in parsed["events"]],
                          [("tool_call", "x1", None), ("tool_call", "x2", None), ("tool_result", "x2", False), ("tool_result", "x1", True)])
 
@@ -38,32 +38,20 @@ class CopyInto(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory(prefix="pstack-copy-test-")
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name).resolve()
-        self.native = self.tmp / "native"
-        self.native.mkdir()
+        self.source = self.tmp / "native" / "rollout-a.jsonl"
         self.outside = self.tmp / "outside.jsonl"
         self.outside.write_bytes(b"outside marker\n")
 
-    def test_source_link_is_refused_without_copying_outside_bytes(self):
-        link = self.native / "rollout-a.jsonl"
-        link.symlink_to(self.outside)
-        with self.assertRaises(GradeRefused):
-            codex.copy_into([link], self.tmp / "captured")
-        self.assertEqual([p.read_bytes() for p in (self.tmp / "captured").glob("*")], [])
-
     def test_destination_link_is_refused_without_writing_outside(self):
-        source = self.native / "rollout-a.jsonl"
-        source.write_bytes(b"native rollout\n")
         captured = self.tmp / "captured"
         captured.mkdir()
-        (captured / source.name).symlink_to(self.outside)
+        (captured / self.source.name).symlink_to(self.outside)
         with self.assertRaises(GradeRefused):
-            codex.copy_into([source], captured)
+            codex.copy_into({self.source: b"native rollout\n"}, captured)
         self.assertEqual(self.outside.read_bytes(), b"outside marker\n")
 
     def test_regular_rollout_is_copied(self):
-        source = self.native / "rollout-a.jsonl"
-        source.write_bytes(b"native rollout\n")
-        copied = codex.copy_into([source], self.tmp / "captured")
+        copied = codex.copy_into({self.source: b"native rollout\n"}, self.tmp / "captured")
         self.assertEqual(copied, [str(self.tmp / "captured" / "rollout-a.jsonl")])
         self.assertEqual(Path(copied[0]).read_bytes(), b"native rollout\n")
 
@@ -116,7 +104,7 @@ class FindRollouts(unittest.TestCase):
         return path
 
     def test_linked_rollout_is_refused_before_discovery_reads_it(self):
-        self.assertEqual(codex.find_rollouts(self.store, {"lead"}), ([self.lead], []))
+        self.assertEqual(codex.find_rollouts(self.store, {"lead"}), ({self.lead: self.lead.read_bytes()}, {}))
         link = self.store / "rollout-b-kid.jsonl"
         for target in (self.outside, self.tmp / "missing", self.tmp / "outside-directory"):
             with self.subTest(target=target.name):
