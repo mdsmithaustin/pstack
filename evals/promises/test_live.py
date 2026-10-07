@@ -1,3 +1,4 @@
+import fcntl
 import json
 import io
 import os
@@ -12,7 +13,7 @@ from contextlib import redirect_stdout
 from contextlib import nullcontext
 
 import live
-from grade_boundary import _authorize_fixture
+from grade_boundary import GradeRefused, _authorize_fixture
 
 CODEX_CHAT = """I'm using `poteto-mode`. I'll identify the command first.
 
@@ -82,6 +83,74 @@ class ChatWorklist(unittest.TestCase):
             with self.subTest(states=states):
                 self.assertEqual(worklist and [i["state"] for i in worklist], states)
                 self.assertLess(elapsed, 0.1)
+
+    def test_a_long_run_of_separators_before_a_trailing_state_parses_in_linear_time(self):
+        for separator in (" ", "-", "*", "(", "_", "["):
+            for tail, states in (("x", None), ("done", ["completed", "completed"])):
+                reply = "1. text" + separator * 20000 + tail + "\n2. (done: y)"
+                started = time.perf_counter()
+                worklist = live.chat_worklist(reply)
+                elapsed = time.perf_counter() - started
+                with self.subTest(separator=separator, tail=tail):
+                    self.assertEqual(worklist and [i["state"] for i in worklist], states)
+                    self.assertLess(elapsed, 0.1)
+
+
+class Custody(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-live-custody-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+        self.canary = self.tmp / "canary.txt"
+        self.canary.write_bytes(b"CANARY\n")
+        self.ran = self.tmp / "ran"
+        self.argv = ["/bin/sh", "-c", f"echo out; echo err >&2; touch {self.ran}"]
+
+    def test_execute_refuses_a_planted_stream_link_without_writing_through_it(self):
+        for name, target in (("stdout", self.canary), ("stderr", self.canary), ("stdout", self.tmp / "missing")):
+            with self.subTest(name=name, target=target.name):
+                streams = self.tmp / f"streams-{name}-{target.name}"
+                streams.mkdir()
+                paths = {"stdout": streams / "turn-1.jsonl", "stderr": streams / "turn-1.err"}
+                paths[name].symlink_to(target)
+                with self.assertRaises(GradeRefused) as refused:
+                    live.execute(self.argv, self.tmp, {}, 5, paths["stdout"], paths["stderr"])
+                self.assertEqual((refused.exception.receipt["reason"], self.canary.read_bytes(), self.ran.exists(),
+                                  (self.tmp / "missing").exists()), ("output_unsafe", b"CANARY\n", False, False))
+
+    def test_execute_refuses_a_linked_stream_directory_without_creating_outside(self):
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        (self.tmp / "transcripts").symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(GradeRefused):
+            live.execute(self.argv, self.tmp, {}, 5, self.tmp / "transcripts" / "turn-0.jsonl",
+                         self.tmp / "transcripts" / "turn-0.err")
+        self.assertEqual((list(outside.iterdir()), self.ran.exists()), ([], False))
+
+    def test_execute_captures_both_streams_in_fresh_files(self):
+        record = live.execute(self.argv, self.tmp, {}, 5, self.tmp / "turn-0.jsonl", self.tmp / "turn-0.err")
+        self.assertEqual((record["exit_code"], (self.tmp / "turn-0.jsonl").read_bytes(), (self.tmp / "turn-0.err").read_bytes()),
+                         (0, b"out\n", b"err\n"))
+
+    def test_fixture_lock_refuses_a_planted_link_without_truncating_its_target(self):
+        for target in (self.canary, self.tmp / "missing"):
+            with self.subTest(target=target.name):
+                lock = self.tmp / "pstack-live-fx.lock"
+                lock.unlink(missing_ok=True)
+                lock.symlink_to(target)
+                with mock.patch.object(live.tempfile, "gettempdir", return_value=str(self.tmp)), \
+                        self.assertRaises(OSError):
+                    live.fixture_lock("fx").close()
+                self.assertEqual((self.canary.read_bytes(), (self.tmp / "missing").exists()), (b"CANARY\n", False))
+
+    def test_fixture_lock_excludes_a_second_holder(self):
+        with mock.patch.object(live.tempfile, "gettempdir", return_value=str(self.tmp)):
+            held = live.fixture_lock("fx")
+            try:
+                with open(self.tmp / "pstack-live-fx.lock", "rb") as other, self.assertRaises(BlockingIOError):
+                    fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                held.close()
 
 
 class FixtureCommits(unittest.TestCase):

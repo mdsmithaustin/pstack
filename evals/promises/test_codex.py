@@ -2,6 +2,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 from grade_boundary import GradeRefused
 from harnesses import codex
@@ -64,6 +66,38 @@ class CopyInto(unittest.TestCase):
         copied = codex.copy_into([source], self.tmp / "captured")
         self.assertEqual(copied, [str(self.tmp / "captured" / "rollout-a.jsonl")])
         self.assertEqual(Path(copied[0]).read_bytes(), b"native rollout\n")
+
+
+class HarvestCopies(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-codex-harvest-")
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve() / "run"
+        self.run_ = SimpleNamespace(root=root, project=root / "w" / "p", case={"turns": ["go"]},
+                                    turns=[{"session_id": "lead", "argv": ["codex", "go"]}])
+        store = root / "codex-home" / "sessions" / "2026"
+        store.mkdir(parents=True)
+        self.rollout = store / "rollout-x-lead.jsonl"
+        self.rollout.write_text(self.reply("native reply"))
+        (root / "launch.json").write_text(json.dumps({"path": "codex", "source": "test", "version": "test", "rejected": []}))
+
+    def reply(self, text):
+        return "".join(json.dumps(r) + "\n" for r in [
+            {"type": "session_meta", "payload": {"id": "lead", "cwd": "/w"}},
+            {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+                                                  "content": [{"type": "output_text", "text": text}]}}])
+
+    def test_the_trace_is_parsed_from_the_bytes_the_copy_retained(self):
+        copy = codex.copy_into
+
+        def rewrite_then_copy(*args):
+            self.rollout.write_text(self.reply("rewritten reply"))
+            return copy(*args)
+
+        with mock.patch.object(codex, "copy_into", side_effect=rewrite_then_copy):
+            trace = codex.harvest(self.run_)
+        retained = Path(trace["transcript_paths"][0]).read_text()
+        self.assertEqual((trace["final_reply"], retained), ("native reply", self.reply("native reply")))
 
 
 class FindRollouts(unittest.TestCase):

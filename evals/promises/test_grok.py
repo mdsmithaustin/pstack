@@ -129,6 +129,22 @@ class CopySession(unittest.TestCase):
             grok.copy_session(self.session, self.captured)
         self.assertEqual(refused.exception.receipt["reason"], "input_changed")
 
+    def test_a_non_chat_file_that_vanishes_before_its_copy_is_refused(self):
+        self.chat.write_bytes(b"native transcript\n")
+        (self.session / "usage.json").write_bytes(b"{}")
+        (self.session / "subagents" / "kid").mkdir(parents=True)
+        (self.session / "subagents" / "kid" / "meta.json").write_bytes(b"{}")
+        copy = grok.copy_file
+        for name in ("usage.json", "meta.json"):
+            def vanish(source, target):
+                if source.name == name:
+                    raise FileNotFoundError(source)
+                return copy(source, target)
+            with self.subTest(name=name):
+                with mock.patch.object(grok, "copy_file", side_effect=vanish), self.assertRaises(GradeRefused) as refused:
+                    grok.copy_session(self.session, self.captured)
+                self.assertEqual(refused.exception.receipt["reason"], "input_changed")
+
     def test_session_files_and_subagent_meta_are_copied(self):
         self.chat.write_bytes(b"native transcript\n")
         (self.session / "subagents" / "kid").mkdir(parents=True)
@@ -192,6 +208,34 @@ class HarvestCaptures(unittest.TestCase):
         with mock.patch.object(grok, "host_home", return_value=self.tmp / "host"):
             trace = grok.harvest(self.run_)
         self.assertEqual((trace["x_cost_usd_lead"], [s["description"] for s in trace["x_subagents"]]), (0, [None]))
+
+    def harvest_with_stream(self, plant):
+        stream = self.run_.root / "transcripts" / "turn-0.json"
+        stream.parent.mkdir(parents=True, exist_ok=True)
+        plant(stream)
+        self.run_.turns[0]["stream"] = str(stream)
+        with mock.patch.object(grok, "host_home", return_value=self.tmp / "host"):
+            return grok.harvest(self.run_)
+
+    def test_harvest_reads_a_regular_turn_stream_for_host_skill_hits(self):
+        trace = self.harvest_with_stream(lambda stream: stream.write_bytes(self.outside_chat.read_bytes()))
+        self.assertEqual((trace["x_host_skill_hits"], trace["transcript_paths"][-1]),
+                         ([str(self.tmp / "host" / ".claude" / "skills")], self.run_.turns[0]["stream"]))
+
+    def test_harvest_refuses_a_turn_stream_link_without_reading_its_target(self):
+        for target in (self.outside_chat, self.tmp / "missing"):
+            with self.subTest(target=target.name):
+                with self.assertRaises(GradeRefused) as refused:
+                    self.harvest_with_stream(lambda stream: (stream.unlink(missing_ok=True), stream.symlink_to(target)))
+                self.assertEqual(refused.exception.receipt["reason"], "unsafe_link")
+
+    def test_harvest_refuses_a_dangling_lead_chat(self):
+        self.chat.unlink()
+        self.chat.symlink_to(self.tmp / "missing")
+        with mock.patch.object(grok, "host_home", return_value=self.tmp / "host"), \
+                self.assertRaises(GradeRefused) as refused:
+            grok.harvest(self.run_)
+        self.assertEqual(refused.exception.receipt["reason"], "unsafe_link")
 
     def vanish_before_copy(self, session):
         native = self.lead.parent / session / "chat_history.jsonl"
