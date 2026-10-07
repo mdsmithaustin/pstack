@@ -91,6 +91,15 @@ class FindRollouts(unittest.TestCase):
                 with self.assertRaises(GradeRefused):
                     codex.find_rollouts(self.store, {"lead"})
 
+    def test_linked_directory_in_the_store_is_refused(self):
+        linked = self.tmp / "outside-directory"
+        self.rollout(linked / "rollout-z.jsonl", {"id": "kid", "parent_thread_id": "lead"})
+        (self.store / "linkdir").symlink_to(linked, target_is_directory=True)
+        with self.assertRaises(GradeRefused) as refused:
+            codex.find_rollouts(self.store, {"lead"})
+        self.assertEqual(refused.exception.receipt,
+                         {"run_id": None, "reason": "unsafe_link", "detail": str(self.store / "linkdir")})
+
 
 if __name__ == "__main__":
     unittest.main()
