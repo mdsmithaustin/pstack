@@ -89,9 +89,9 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
                         r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
-REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|[A-Za-z][\w /-]{0,30}:[^\n]*)")
+REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|[\[*]*[A-Za-z][\w /#()*—–-]{0,40}:[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
-LABEL_QUALIFIER = re.compile(r"\s+#?\d+\s*$|\s*\([^)]*\)\s*$|\s+[—–-]\s.*$")
+LABEL_QUALIFIER = re.compile(r"#?\d+|[A-Z]|of|(?i:report)")
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -622,9 +622,10 @@ class View:
         name = label.group(0).partition(":")[0]
         if LABEL_KEEPS_BODY.search(name):
             return label.group(0).lower(), False
-        while (trimmed := LABEL_QUALIFIER.sub("", name)) != name:
-            name = trimmed
-        return name.lower(), True
+        words = re.sub(r"\([^()]*\)|[*\[\]]", " ", re.split(r"\s-\s|[—–]", name, maxsplit=1)[0]).split()
+        while words and LABEL_QUALIFIER.fullmatch(words[-1]):
+            words.pop()
+        return " ".join(words).lower(), True
 
     def spawns_where(self, *needles, turn=None, reply=True):
         alternatives = "|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles)
@@ -821,7 +822,7 @@ def is_write_target(target):
 
 def cd_into(segment, base):
     words = segment.strip().split()
-    if words[:1] != ["cd"] or len(words) < 2:
+    if words[:1] not in (["cd"], ["pushd"]) or len(words) < 2:
         return None
     target = words[1].strip("\"'")
     return target if target.startswith("/") or not base else f"{base}/{target}"
@@ -1790,11 +1791,13 @@ def why_null(view):
 SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+(?:searched|consulted|checked|coverage))\**\s*(?::|$)")
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
 CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
-CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n't\b")
+CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n't\b")
+NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a|nothing|tbd)\b")
 
 
 def affirmed(pattern, low):
-    return any(not CLAUSE_NEGATION.search(CLAUSE_SPLIT.split(low[:m.start()])[-1]) for m in re.finditer(pattern, low))
+    return any(not CLAUSE_NEGATION.search(CLAUSE_SPLIT.split(low[:m.start()])[-1]) and not NAMES_NOTHING.match(low, m.end(), m.end() + 12)
+               for m in re.finditer(pattern, low))
 
 
 @oracle("how-why-reports-name-sources-searched")
@@ -2233,13 +2236,28 @@ def finished_in_first_turn(view, commits):
             and not any(commits_made(view, turn) or view.source_edits(turn) for turn in later_turns))
 
 
-SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|:|\[)|\bdo\b.*?\bsleep\s+\d.*?\bdone\b", re.S)
-SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|ssh(?:\s+[^\s'"]+)+)\s+(['"])(.*?)\1""", re.S)
+SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|True\b|:|\[)|(?:^|[;&|]\s*)watch\s", re.M)
+SLEEP_LOOP = (re.compile(r"\bdo\b"), re.compile(r"\bsleep\s+\d"), re.compile(r"\bdone\b"))
+SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:\s+[^\s'"]+)+|eval"""
+                        r"""|tmux\s+(?:send-keys|send|new-session|new|new-window|neww|split-window|splitw)(?:\s+[^\s'"]+)*)\s+(['"])(.*?)\1""", re.S)
+SHELL_READERS = {"sh", "bash", "zsh", "dash", "ksh", "ssh", "python", "python3"}
+
+
+def loop_text(text):
+    found, at = None, 0
+    for step in SLEEP_LOOP:
+        found = step.search(text, at)
+        if not found:
+            return bool(SHELL_LOOP.search(text))
+        at = found.end()
+    return True
 
 
 def shell_loop(command):
-    command = strip_heredocs(command)
-    return bool(SHELL_LOOP.search(mask_quoted(command)) or any(SHELL_LOOP.search(body) for _, body in SHELL_BODY.findall(command)))
+    fed = [body for header, body in heredoc_bodies(command) if SHELL_READERS & set(mask_quoted(header).split())]
+    command = uncommented(strip_heredocs(command))
+    return (loop_text(mask_quoted(command)) or any(loop_text(body) for _, body in SHELL_BODY.findall(command))
+            or any(map(shell_loop, fed)))
 
 
 @oracle("autonomous-run-uses-loop-facility")
