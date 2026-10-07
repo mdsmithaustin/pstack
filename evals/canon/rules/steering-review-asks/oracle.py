@@ -661,16 +661,23 @@ def named(argument):
 
 
 def aliases(value, definitions):
-    definition = definitions.get(value, "")
-    return {value, unquoted(definition)} if re.fullmatch(STRING, definition) else {value}
+    """A value, the string literal a constant of that name holds, and every
+    constant whose string literal is that value."""
+    literals = {name: unquoted(text) for name, text in definitions.items() if re.fullmatch(STRING, text)}
+    return {value, literals.get(value, value)} | {name for name, text in literals.items() if text == value}
+
+
+def mentions(text, values):
+    return any(re.search(rf"(?<![\w$]){re.escape(value)}(?![\w$])", text) for value in values)
 
 
 def shows_hidden_value(present, absent, definitions):
-    """The present value is the absent one, under its own name or its string
-    literal, or a constant whose definition holds it, such as HEAD + TAIL."""
+    """The present value is the absent one under another name, or holds it, as
+    HEAD + TAIL does, or the absent value is cut from it, as LONG_TEXT.slice(-40)
+    is."""
     hidden = aliases(absent, definitions)
-    return bool(aliases(present, definitions) & hidden) or any(
-        re.search(rf"(?<![\w$]){re.escape(text)}(?![\w$])", definitions.get(present, "")) for text in hidden)
+    return bool(aliases(present, definitions) & hidden) or mentions(present, hidden) or mentions(
+        definitions.get(present, ""), hidden) or mentions(definitions.get(absent, ""), {present})
 
 
 def rendered_values(pattern, source):
@@ -697,7 +704,8 @@ def tests_assert_hidden_text_and_copy(added):
     lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
     source = "\n".join(lines)
     absent, present = rendered_values(ABSENT, source), rendered_values(PRESENT, source)
-    definitions = {name: text.strip() for name, text in DEFINITION.findall(source)}
+    statements = re.sub(r"([-+*%&|^?:,=(\[{])[ \t]*\n\s*", r"\1 ", source)
+    definitions = {name: text.strip() for name, text in DEFINITION.findall(statements)}
     shown = any(shows_hidden_value(value, hidden, definitions) for value in present for hidden in absent)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
