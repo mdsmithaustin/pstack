@@ -956,13 +956,16 @@ def clipboard_reads(source, definitions):
     or a declaration, assignment, or destructuring pattern whose value is not
     one of those. A neutral starting value neither proves nor disproves: any
     string literal, a template with no substitution, a regex literal, 0, [],
-    {}, null, undefined, or new Array(), with or without an as or satisfies
-    cast or a leading <Type>. A template with a substitution, any other
-    number, true or false, a nonempty array or object, a concatenation, and a
-    call are not neutral.
+    {}, null, undefined, new Array(), or Array(), with or without type
+    arguments as in Array<string>(), and with or without an as or satisfies
+    cast or a leading <Type> that has no nested type arguments. A template
+    with a substitution, any other number, true or false, a nonempty array or
+    object, a concatenation, a leading cast with nested type arguments such
+    as <Array<string>>[] or <Record<string, string>>{}, and any call other
+    than Array() or Array<T>() are not neutral.
     rendered is each of clipboard, writeText, and copyText that a declarator,
-    or an assignment to a name the file declares with let, var, or no value,
-    binds to a value that is neither neutral nor a clipboard value. A
+    or an = or += assignment to a name the file declares with let, var, or no
+    value, binds to a value that is neither neutral nor a clipboard value. A
     clipboard value reads a mock's calls, lastCall, or results or readText(),
     reaches a member or names a bare clipboard, writeText, or copyText, holds
     one of the words fn, spy, spyOn, stub, or mocked, starts a word with
@@ -970,8 +973,9 @@ def clipboard_reads(source, definitions):
     these. A fake the pattern does not recognize, such as
     new FakeClipboard(), mockClipboard(), or createWriteTextMock(), is
     rendered, as trunk reads it. A destructuring pattern, a loop binding, an
-    import, a parameter, a declaration of the name as a function or class, and
-    an assignment to a const the file declares with a value never make it
+    import, a parameter, a declaration of the name as a function or class, an
+    assignment to a const the file declares with a value, and an assignment
+    with any operator but = and +=, such as ??=, &&=, or ||=, never make it
     rendered, so it stays the clipboard."""
     text = JSX_TAG.sub(lambda tag: " " * len(tag.group()), code(QUOTED_METHOD.sub(r"\2", statements(source))))
     filled, outside = set(), list(text)
@@ -1063,10 +1067,11 @@ def about_clipboard(subject, reads):
     text, on proof: it reads a mock's calls, lastCall, or results, calls
     readText(), spies on the clipboard, or reaches a member named clipboard,
     writeText, or copyText; it names a bare clipboard, writeText, or copyText
-    that clipboard_reads does not report as rendered, so a declarator or an
-    assignment to a let, var, or valueless name must bind it to a value that
-    is neither neutral nor a clipboard value, such as a rendered element, and
-    a destructuring pattern or a loop binding of the name does not; or every
+    that clipboard_reads does not report as rendered, so a declarator or an =
+    or += assignment to a let, var, or valueless name must bind it to a value
+    that is neither neutral nor a clipboard value, such as a rendered
+    element, and a destructuring pattern, a loop binding, or a ??=, &&=, or
+    ||= assignment of the name does not; or every
     name it mentions is one clipboard_reads proves. A name the file also
     binds to anything else may hold the rendered text, so its expectation
     stays."""
