@@ -149,8 +149,11 @@ class HarvestCaptures(unittest.TestCase):
         (sessions / "kid" / "chat_history.jsonl").write_text(json.dumps({"type": "assistant", "content": "kid reply"}) + "\n")
         self.chat.write_text(json.dumps({"type": "assistant", "content": "native reply"}) + "\n")
         self.meta.write_text(json.dumps({"child_session_id": "kid", "description": "native kid"}))
+        canary = str(self.tmp / "host" / ".claude" / "skills")
         self.outside_chat = self.tmp / "outside-chat.jsonl"
-        self.outside_chat.write_text(json.dumps({"type": "assistant", "content": "outside reply"}) + "\n")
+        self.outside_chat.write_text(json.dumps({"type": "assistant", "content": f"outside reply {canary}"}) + "\n")
+        self.outside_kid_chat = self.tmp / "outside-kid-chat.jsonl"
+        self.outside_kid_chat.write_text(json.dumps({"type": "assistant", "content": "outside kid reply"}) + "\n")
         self.outside_meta = self.tmp / "outside-meta.json"
         self.outside_meta.write_text(json.dumps({"child_session_id": "kid", "description": "outside kid"}))
 
@@ -212,21 +215,23 @@ class HarvestCaptures(unittest.TestCase):
         outside_usage = self.tmp / "outside-usage.json"
         outside_usage.write_text(json.dumps({"session": {"costUsdTicks": 10 ** 10}}))
         copy = grok.copy_session
+        swaps = {"lead": (("chat_history.jsonl", self.outside_chat), ("usage.json", outside_usage),
+                          ("subagents/kid/meta.json", self.outside_meta)),
+                 "kid": (("chat_history.jsonl", self.outside_kid_chat),)}
 
         def copy_then_change(session_dir, destination):
             copied = copy(session_dir, destination)
             target = destination / session_dir.parent.name / session_dir.name
-            if session_dir.name == "lead":
-                for name, outside in (("chat_history.jsonl", self.outside_chat), ("usage.json", outside_usage),
-                                      ("subagents/kid/meta.json", self.outside_meta)):
-                    change(target / name, outside)
+            for name, outside in swaps.get(session_dir.name, ()):
+                change(target / name, outside)
             return copied
 
         with mock.patch.object(grok, "copy_session", side_effect=copy_then_change), \
                 mock.patch.object(grok, "host_home", return_value=self.tmp / "host"):
             trace = grok.harvest(self.run_)
-        self.assertEqual((trace["final_reply"], trace["x_cost_usd_lead"], [s["description"] for s in trace["x_subagents"]]),
-                         ("native reply", 0.02, ["native kid"]))
+        self.assertEqual((trace["final_reply"], trace["x_cost_usd_lead"], [(s["description"], s["final_reply"]) for s in trace["x_subagents"]],
+                          trace["x_host_skill_hits"]),
+                         ("native reply", 0.02, [("native kid", "kid reply")], []))
 
     def test_harvest_never_follows_a_capture_linked_out_after_the_copy(self):
         def link(path, outside):
