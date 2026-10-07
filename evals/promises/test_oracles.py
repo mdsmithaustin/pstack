@@ -3456,6 +3456,11 @@ class ReviewVerdictGuard(unittest.TestCase):
         self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), result)
         self.assertIn("and it passed", result["excerpt"])
 
+    def test_the_judge_excerpt_holds_the_undecided_pass_in_a_long_reply(self):
+        result = review_line("Changed the CLI flag parsing and the README table. " * 60 + "I ran the independent review and it passed. **Closing notes**")
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("and it passed", result["excerpt"])
+
     def test_a_labeled_pass_decides_beside_an_unlabeled_one(self):
         self.assertEqual(review_line("Independent review: pass. It passed on the first try.")["verdict"], PASS)
 
