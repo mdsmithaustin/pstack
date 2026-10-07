@@ -559,7 +559,7 @@ class View:
         if rel.startswith(PRIVATE_PREFIXES) or "/skills/" in path:
             return "private"
         if (not inside and path.startswith(SCRATCH_PREFIXES)) or path.startswith(("$TMPDIR", "${TMPDIR", "$T/", "$V/", "$S/")) \
-                or re.match(r"tmp/|(?:scratch\w*|repro|verify|baseline)[/_\-\d]", rel):
+                or re.match(r"tmp/|(?:scratch\w*|verify|baseline)[/_\-\d]|repro(?:duce|duction)?[/_\-\d.]", rel):
             return "scratch"
         if any(tag in rel for tag in LOG_NAMES):
             return "log"
