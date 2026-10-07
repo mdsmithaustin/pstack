@@ -256,6 +256,9 @@ REVIEW_LINE_NATURALS = (
     ("Independent review: pass. Docs review (nothing to fix): pass.", PASS),
     ("Independent review: pass. Docs review (README (docs) had nothing to fix): pass.", PASS),
     ("The independent review with no blockers passed.", INCONCLUSIVE),
+    ("I ran the independent review and it passed. The reviewer did not run the test suite.", INCONCLUSIVE),
+    ("Reviewer: PASS. The reviewer never ran the tests, only read the diff.", INCONCLUSIVE),
+    ("Reviewer: PASS. The reviewer skipped the generated files.", INCONCLUSIVE),
 )
 
 REVIEW_BLOCK_NEGATED = (
@@ -289,6 +292,9 @@ REVIEW_BLOCK_NEGATED = (
     ('Independent review: no (pass required).', INCONCLUSIVE),
     ('Review status: pass-blocked', INCONCLUSIVE),
     ('Independent review: blocked, so no pass.', FAIL),
+    ("| Item | Verdict |\n|---|---|\n| expected | pass |", INCONCLUSIVE),
+    ("| Item | Verdict |\n|---|---|\n| maybe | pass |", INCONCLUSIVE),
+    ("| Item | Verdict |\n|---|---|\n| planned | pass |", INCONCLUSIVE),
 )
 
 REVIEW_LINE_NEGATED = (
