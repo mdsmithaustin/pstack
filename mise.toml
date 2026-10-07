@@ -5,3 +5,11 @@ CONTENT_CONVENTIONS_FILE = "tools/skill-content-conventions.json"
 
 [task_config]
 includes = ["../skill-ci/skill-tasks.toml"]
+
+[tasks.gate-lint]
+description = "Run the lint-tier checks the no-mistakes gate runs"
+run = "tools/gate-check.sh lint"
+
+[tasks.gate-test]
+description = "Run the test-tier checks the no-mistakes gate runs"
+run = "tools/gate-check.sh test"
