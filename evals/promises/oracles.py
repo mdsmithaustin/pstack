@@ -2606,7 +2606,6 @@ LEAD_MARKS = re.compile(r"[\s>|#+*-]*(?:\d+[.)]\s+)?(?:[xX]\s+)?")
 LABEL_SEPARATOR = re.compile(r"->|[:|=→—–(]|\s-\s")
 CLOSED_LABEL = re.compile(r"(?:(?:independent|docs|documentation)\s+)*(?:review|trail\s+review(?:er)?)(?:\s+(?:verdict|result|status))?|verdict")
 REVIEW_NAMED = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b", re.I)
-REVIEW_WORDS = re.compile(r"\b(?:docs?|documentation|independent|trail)\b", re.I)
 OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|typecheck\w*|pytest|unittest)\b", re.I)
 OFF_TOPIC_GREEN = re.compile(r"\s*" + OFF_TOPIC.pattern + r"\s+(?:is|are)\s+green\s*", re.I)
 GENERIC_LABELS = {"result", "status"}
@@ -2753,8 +2752,7 @@ def mention_verdict(plain, m, found):
     subject = any_between(found["off_topic"], near, m.start()) or any_between(found["off_topic"], m.end(), split)
     if (subject or not before.strip() and any_between(found["off_topic"], split, stop)) and not (
             any_between(found["named"], near, m.start()) or any_between(found["named"], m.end(), split)):
-        ignored = (subject or plain[split:split + 1] == ":") and not any_between(found["review_words"], near, stop)
-        return None if ignored else INCONCLUSIVE
+        return None
     at = bisect.bisect_left(found["aside_openers"], m.end())
     aside = min(found["aside_openers"][at:at + 1] + [clause_end])
     if negated_on_the_word(plain, m, found):
@@ -2802,7 +2800,7 @@ def review_pass(reply):
              "on_pass": [m.end() for m in on_pass if m.start() in kept],
              "negations": negations, "direct": outside(negations, asides), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign),
              "openers": positions(VERDICT_OPENER, plain), "aside_openers": positions(ASIDE_OPENER, plain), "off_topic": positions(OFF_TOPIC, plain),
-             "named": positions(REVIEW_NAMED, plain), "review_words": positions(REVIEW_WORDS, plain), "mentions": starts, "history": history}
+             "named": positions(REVIEW_NAMED, plain), "mentions": starts, "history": history}
     graded = [(kind, m.start()) for m in mentions if (kind := mention_verdict(plain, m, found))]
     if any(kind == PASS for kind, _ in graded):
         skipped = {f.start() for f in repaired}
