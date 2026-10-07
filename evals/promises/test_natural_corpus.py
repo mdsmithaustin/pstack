@@ -213,6 +213,9 @@ REVIEW_LINE_NATURALS = (
     ("Independent review (README (docs) had nothing to fix): pass", INCONCLUSIVE),
     ("Independent review: pass: 0 blockers", PASS),
     ("Verdict: pass: sonnet", PASS),
+    ("The independent review passed with nothing to fix.", INCONCLUSIVE),
+    ("Independent review: pass because nothing changed since round 1", INCONCLUSIVE),
+    ("The independent review passed as nothing was left to fix.", INCONCLUSIVE),
 )
 
 REVIEW_BLOCK_NEGATED = (
