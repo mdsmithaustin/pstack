@@ -325,6 +325,48 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [])
 
+    def test_a_const_the_file_changes_in_place_gets_trunk_credit(self):
+        absent, tail, joined = "expect(bubble).not.toHaveTextContent(TAIL)", 'const TAIL = "UNIQUE_TAIL"', 'const FULL = parts.join(" ")'
+        for row, lines, present in (("push into an empty array", ["const parts = []", "parts.push(TAIL)", joined], "FULL"),
+                                    ("push into a filled array", ["const parts = ['a']", "parts.push(TAIL)", joined], "FULL"),
+                                    ("unshift", ["const parts = ['a']", "parts.unshift(TAIL)", joined], "FULL"),
+                                    ("splice", ["const parts = ['a']", "parts.splice(1, 0, TAIL)", joined], "FULL"),
+                                    ("index assignment", ["const parts = ['a']", "parts[1] = TAIL", joined], "FULL"),
+                                    ("index assignment with a nested index", ["const parts = ['a']", "parts[parts.length] = TAIL", joined], "FULL"),
+                                    ("set", ["const texts = {}", 'texts.set("long", TAIL)'], 'texts.get("long")'),
+                                    ("Object.assign", ["const texts = {}", "Object.assign(texts, { long: TAIL })"], "texts.long")):
+            with self.subTest(row):
+                self.assertEqual(self.failures(tail, *lines, absent, f"expect(bubble).toHaveTextContent({present})"), [])
+
+    def test_a_regex_the_reader_cannot_read_as_plain_text_gets_trunk_credit(self):
+        absent, tail = "expect(bubble).not.toHaveTextContent(TAIL)", 'const TAIL = "UNIQUE_TAIL"'
+        for row, lines in (("word boundary escapes", [tail, absent, "expect(bubble).toHaveTextContent(/\\bUNIQUE_TAIL\\b/)"]),
+                           ("flag", [tail, absent, "expect(bubble).toHaveTextContent(/unique_tail/i)"]),
+                           ("escaped character", [tail, absent, "expect(bubble).toHaveTextContent(/UNIQUE\\_TAIL/)"]),
+                           ("character class", [tail, absent, "expect(bubble).toHaveTextContent(/UNIQUE_[A-Z]+/)"]),
+                           ("anchors", [tail, absent, "expect(bubble).toHaveTextContent(/^UNIQUE_TAIL$/)"]),
+                           ("alternation", [tail, absent, "expect(bubble).toHaveTextContent(/UNIQUE_TAIL|the end/)"]),
+                           ("group", ['const prompt = "a" + TAIL', absent, "expect(bubble).toHaveTextContent(/Show full (prompt|text)/)"]),
+                           ("RegExp built from a string with escapes", [tail, absent, 'expect(bubble).toHaveTextContent(new RegExp("\\\\bUNIQUE_TAIL\\\\b"))']),
+                           ("constant holding a regex with escapes", [tail, "const SHOWN = /\\bUNIQUE_TAIL\\b/", absent,
+                                                                      "expect(bubble).toHaveTextContent(SHOWN)"]),
+                           ("constant holding a regex with a flag", ['const prompt = "a".repeat(13000) + TAIL', "const EXPAND = /show full prompt/i", absent,
+                                                                     "expect(screen.getByText(EXPAND)).toBeInTheDocument()"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_each_test_file_resolves_only_the_names_it_binds(self):
+        graded = oracle().tests_assert_hidden_text_and_copy
+        shared = {"web/src/a.test.tsx": [self.COPY, 'const HEAD = "chunk"', "expect(x).toHaveTextContent(HEAD)"]}
+        absent = ['const TAIL = "UNIQUE_TAIL"', "expect(bubble).not.toHaveTextContent(TAIL)"]
+        for row, lines in (("name imported in the graded file", ['import { HEAD } from "./fixtures"', *absent, "expect(bubble).toHaveTextContent(HEAD)"]),
+                           ("name the graded file never binds", [*absent, "expect(bubble).toHaveTextContent(HEAD)"])):
+            with self.subTest(row):
+                self.assertEqual(graded({**shared, "web/src/b.test.tsx": lines}), [])
+        with self.subTest("name each file binds by const"):
+            self.assertEqual(graded({**shared, "web/src/b.test.tsx": ['const HEAD = "chunk"', *absent, "expect(bubble).toHaveTextContent(HEAD)"]}),
+                             [self.PRESENT])
+
     def test_a_present_expression_over_the_value_the_absent_one_is_cut_from_counts(self):
         cut = ['const FULL = "x".repeat(500) + " the end"', "const TAIL = FULL.slice(-30)", "expect(bubble).not.toHaveTextContent(TAIL)"]
         for present in ("FULL.trim()", "FULL.slice(0, 100)"):
@@ -361,7 +403,7 @@ class HiddenTailTests(unittest.TestCase):
 
     def test_a_literal_or_an_attribute_does_not_reach_the_absent_value(self):
         absent = "expect(bubble).not.toHaveTextContent(TAIL);"
-        for row, lines in (("regex literal with a group", ['const prompt = "a" + TAIL;', absent, "expect(bubble).toHaveTextContent(/Show full (prompt|text)/);"]),
+        for row, lines in (("plain text regex literal", ['const prompt = "a" + TAIL;', absent, "expect(bubble).toHaveTextContent(/Show full prompt/);"]),
                            ("JSX attribute that shares a constant's name", ['const LONG_TEXT = "x".repeat(500) + TAIL;', 'const text = "Hello";',
                                                                              "render(<Bubble text={LONG_TEXT} />);", absent,
                                                                              "expect(bubble).toHaveTextContent(text);"])):
@@ -370,8 +412,7 @@ class HiddenTailTests(unittest.TestCase):
 
     def test_literal_text_names_no_constants(self):
         absent, prompt = "expect(bubble).not.toHaveTextContent(TAIL)", 'const prompt = "a".repeat(13000) + TAIL'
-        for row, lines in (("regex constant", [prompt, "const EXPAND = /show full prompt/i", absent, "expect(screen.getByText(EXPAND)).toBeInTheDocument()"]),
-                           ("template constant", [prompt, "const EXPAND = `show full prompt`", absent, "expect(screen.getByText(EXPAND)).toBeInTheDocument()"]),
+        for row, lines in (("template constant", [prompt, "const EXPAND = `show full prompt`", absent, "expect(screen.getByText(EXPAND)).toBeInTheDocument()"]),
                            ("template label with a count", [prompt, "const count = 13000", absent, "expect(bubble).toHaveTextContent(`Show full prompt (${count} chars)`)"]),
                            ("flagless regex constant above a definition", ["const SHOW_LESS = /show less/", 'const TAIL = "tail marker"', absent,
                                                                             "expect(screen.getByText(SHOW_LESS)).toBeInTheDocument()"]),
