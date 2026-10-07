@@ -303,6 +303,32 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [])
 
+    def test_a_name_the_file_binds_other_than_by_const_gets_trunk_credit(self):
+        absent, head, tail = "expect(bubble).not.toHaveTextContent(TAIL)", 'const HEAD = "chunk"', 'const TAIL = "UNIQUE_TAIL"'
+        present = "expect(bubble).toHaveTextContent(HEAD)"
+        for row, lines in (("test.each parameter of the same name", [head, tail, 'test.each([[TAIL]])("shows %s", (HEAD) => {', absent, f"  {present}", "})"]),
+                           ("bare arrow parameter", [head, tail, absent, f"[TAIL].forEach(HEAD => {present})"]),
+                           ("function parameter", [head, tail, absent, "function check(HEAD: string) {", f"  {present}", "}"]),
+                           ("destructured parameter", [head, tail, absent, f"const check = ({{ HEAD }}) => {present}"]),
+                           ("object destructuring in a test", [head, 'it("hides the tail", () => {', "  const { HEAD } = makeLong()", absent, f"  {present}", "})"]),
+                           ("array destructuring", [head, tail, 'it("hides the tail", () => {', "  const [HEAD] = [TAIL]", absent, f"  {present}", "})"]),
+                           ("const loop binding", [head, tail, absent, f"for (const HEAD of [TAIL]) {present}"]),
+                           ("let bound once", ['let HEAD = "chunk"', absent, present]),
+                           ("nullish assignment", ['let HEAD = "chunk"', "HEAD ??= LONG_TEXT", absent, present]),
+                           ("logical or assignment", ['let HEAD = "chunk"', "HEAD ||= LONG_TEXT", absent, present]),
+                           ("logical and assignment", ['let HEAD = "chunk"', "HEAD &&= LONG_TEXT", absent, present]),
+                           ("assignment to a const name", [head, "beforeEach(() => {", "  HEAD = LONG_TEXT", "})", absent, present])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_present_expression_over_the_value_the_absent_one_is_cut_from_counts(self):
+        cut = ['const FULL = "x".repeat(500) + " the end"', "const TAIL = FULL.slice(-30)", "expect(bubble).not.toHaveTextContent(TAIL)"]
+        for present in ("FULL.trim()", "FULL.slice(0, 100)"):
+            with self.subTest(present):
+                self.assertEqual(self.failures(*cut, f"expect(bubble).toHaveTextContent({present})"), [])
+        with self.subTest("present constant built from the cut-from value"):
+            self.assertEqual(self.failures(*cut, "const SHOWN = FULL.trim()", "expect(bubble).toHaveTextContent(SHOWN)"), [])
+
     def test_a_present_assertion_with_nothing_asserted_absent_is_still_present(self):
         self.assertEqual(self.failures('const HEAD = "chunk"', "expect(bubble).toHaveTextContent(HEAD)"),
                          ["constraint:C3: no added web test asserts that hidden prompt text is absent"])
