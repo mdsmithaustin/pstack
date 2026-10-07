@@ -956,13 +956,14 @@ def clipboard_reads(source, definitions):
     or a declaration, assignment, or destructuring pattern whose value is not
     one of those. A neutral starting value neither proves nor disproves: any
     string literal, a template with no substitution, a regex literal, 0, [],
-    {}, null, undefined, new Array(), or Array(), with or without type
-    arguments as in Array<string>(), and with or without an as or satisfies
-    cast or a leading <Type> that has no nested type arguments. A template
-    with a substitution, any other number, true or false, a nonempty array or
-    object, a concatenation, a leading cast with nested type arguments such
-    as <Array<string>>[] or <Record<string, string>>{}, and any call other
-    than Array() or Array<T>() are not neutral.
+    {}, null, undefined, new Array(), or Array(), and Array<T>() with a
+    simple type argument such as Array<string>(), with or without an as or
+    satisfies cast or a leading <Type> that has no nested type arguments. A
+    template with a substitution, any other number, true or false, a nonempty
+    array or object, a concatenation, a leading cast with nested type
+    arguments such as <Array<string>>[] or <Record<string, string>>{}, a type
+    argument with a comma such as Array<Map<string, string>>(), and any other
+    call are not neutral.
     rendered is each of clipboard, writeText, and copyText that a declarator,
     or an = or += assignment to a name the file declares with let, var, or no
     value, binds to a value that is neither neutral nor a clipboard value. A
