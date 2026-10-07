@@ -257,7 +257,12 @@ class HiddenTailTests(unittest.TestCase):
                                                                                  "  return `chunk ${i}`", '}).join(" ") + TAIL', absent,
                                                                                  "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
                            ("blank line where the pipeline blanked a comment", ['const LONG_TEXT = "x".repeat(500)', "   ", "  + TAIL", absent,
-                                                                                "expect(bubble).toHaveTextContent(LONG_TEXT)"])):
+                                                                                "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("present in parentheses", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent((LONG_TEXT))"]),
+                           ("present cast to a type", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(LONG_TEXT as string)"]),
+                           ("function declaration builds the present value", ["function makeLong() {", "  return HEAD + TAIL", "}",
+                                                                              "const LONG_TEXT = makeLong()", absent,
+                                                                              "expect(bubble).toHaveTextContent(LONG_TEXT)"])):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [])
 
