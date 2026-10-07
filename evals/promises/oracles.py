@@ -2753,7 +2753,7 @@ def mention_verdict(plain, m, found):
     subject = any_between(found["off_topic"], near, m.start()) or any_between(found["off_topic"], m.end(), split)
     if (subject or not before.strip() and any_between(found["off_topic"], split, stop)) and not (
             any_between(found["named"], near, m.start()) or any_between(found["named"], m.end(), split)):
-        ignored = (subject or plain[split:split + 1] == ":") and not any_between(found["review_words"], near, split if subject else stop)
+        ignored = (subject or plain[split:split + 1] == ":") and not any_between(found["review_words"], near, stop)
         return None if ignored else INCONCLUSIVE
     at = bisect.bisect_left(found["aside_openers"], m.end())
     aside = min(found["aside_openers"][at:at + 1] + [clause_end])
