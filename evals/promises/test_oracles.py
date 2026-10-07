@@ -706,13 +706,14 @@ class SmallSkills(unittest.TestCase):
         return grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"]
 
     def test_a_negation_in_an_earlier_sentence_does_not_void_a_pass(self):
-        for line in ("No findings. The review passed.", "No files edited. Pass.", "There were no blockers; the review passed."):
+        for line in ("No findings. The review passed.", "There were no blockers; the review passed."):
             self.assertEqual(self.review_verdict(line), PASS, line)
+        self.assertEqual(self.review_verdict("No files edited. Pass."), INCONCLUSIVE)
 
     def test_a_failed_review_then_a_passed_re_review_is_a_pass(self):
-        for line in ("The first review failed, then the re-review passed.", "The first review failed; the second passed.",
-                     "The review did not find any issues and passed."):
-            self.assertEqual(self.review_verdict(line), PASS, line)
+        self.assertEqual(self.review_verdict("The first review failed, then the re-review passed."), PASS)
+        for line in ("The first review failed; the second passed.", "The review did not find any issues and passed."):
+            self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
 
     def test_cannot_and_failed_to_pass_are_not_a_pass(self):
         for line in ("The review cannot pass until the README changes.", "The review failed to pass.", "The reviewer was unable to pass it."):
@@ -3097,14 +3098,15 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
 
     def test_review_wording_that_is_not_a_pass(self):
         for line in ("The reviewer refused to pass it.", "The review would pass only with README changes.", "The review is unlikely to pass.",
-                     "The review failed. Tests pass.", "The review did not, in the end, pass.", "No review has passed yet.",
+                     "The review failed. Tests pass.", "No review has passed yet.",
                      "No independent reviewer has said pass.", "Neither review passed.", "The review cannot reasonably be said to have passed."):
             self.assertEqual(self.review_verdict(line), FAIL, line)
+        self.assertEqual(self.review_verdict("The review did not, in the end, pass."), INCONCLUSIVE)
 
-    def test_review_wording_that_ends_in_a_pass(self):
+    def test_review_wording_that_ends_in_an_unlabeled_pass_goes_to_a_judge(self):
         for line in ("Review failed twice before it passed.", "The review did not pass at first, then passed.", "The review did not stall. Pass.",
                      "The review failed then passed.", "The review was not quick but passed."):
-            self.assertEqual(self.review_verdict(line), PASS, line)
+            self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
 
     def candidates_then_status(self, status, events=(), spawns=()):
         def task(n):
@@ -3436,6 +3438,38 @@ class LinearTime(unittest.TestCase):
         self.assert_quick(arena_pick, "no base " * (LONG // 8), "not candidate 1 was selected " * (LONG // 30))
         checkpoint = lambda reply: grade("architect-checkpoint-opt-in", minimal(final_reply=reply), load_case("architect-checkpoint-run"))
         self.assert_quick(checkpoint, "do not approve " * (LONG // 15))
+
+    def test_a_long_review_reply_grades_in_linear_time(self):
+        self.assert_quick(review_line, "PASS" + " " * LONG, " " * LONG + "pass from the reviewer", "pass " * (LONG // 5), "no pass " * (LONG // 8),
+                          "[" * LONG + "pass", "](" * (LONG // 2) + "pass", "\n" * LONG + "Review: pass", "Review: " + "(" * LONG + "pass",
+                          "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass")
+
+
+def review_line(line):
+    trace = minimal(events=[dict(text(1, f"Done. Author result: independent review required. {line}"), turn=0), dict(text(3, "Review mode run."), turn=1)],
+                    spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+    return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))
+
+
+class ReviewVerdictGuard(unittest.TestCase):
+    def test_an_unlabeled_pass_goes_to_a_judge_with_the_reply(self):
+        result = review_line("I ran the independent review and it passed.")
+        self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), result)
+        self.assertIn("and it passed", result["excerpt"])
+
+    def test_a_labeled_pass_decides_beside_an_unlabeled_one(self):
+        self.assertEqual(review_line("Independent review: pass. It passed on the first try.")["verdict"], PASS)
+
+    def test_a_negated_mention_beside_a_labeled_pass_goes_to_a_judge(self):
+        self.assertEqual(review_line("Round 1 review did not pass, round 2 review passed.")["verdict"], INCONCLUSIVE)
+
+    def test_only_negated_or_off_topic_mentions_fail(self):
+        for line in ("The review did not pass. Tests pass.", "Independent review: needs changes. Lint: pass.", "Review: pending (no pass yet)"):
+            self.assertEqual(review_line(line)["verdict"], FAIL, line)
+
+    def test_a_filename_link_or_version_does_not_end_the_label(self):
+        for line in ("Independent review of README.md: pass", "[Independent review](docs/review.md): pass", "Reviewer: PASS (v2.1)"):
+            self.assertEqual(review_line(line)["verdict"], PASS, line)
 
 
 if __name__ == "__main__":
