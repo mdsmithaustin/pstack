@@ -75,7 +75,8 @@ CONSTRAINT_ALIASES = {"newline": (r"\n", "linesep", "endswith"), "trailing": (r"
 CONSTRAINT_SUBJECTS = {"do not remove: the sink needs a trailing newline on every row": ("sink", "row")}
 SCRATCH_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/")
 LOG_NAMES = ("decisions.tsv", ".audit/")
-NOT_TEST_WORDS = re.compile(r"contest|protest|attest|detest|latest|greatest|fastest|shortest|smartest|hottest|cutest|softest|strictest|(?:^|/)pytest\.ini$")
+NOT_TEST_WORDS = re.compile(r"contest|protest|attest|detest|latest|greatest|fastest|shortest|smartest|hottest|cutest|softest|strictest")
+TEST_MARKERS = re.compile(r"\.(?:spec|cy|e2e)\.|_spec\.\w+$|(?:^|/)(?:spec|e2e)/")
 PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
@@ -568,7 +569,7 @@ class View:
             return "scratch"
         if any(tag in rel for tag in LOG_NAMES):
             return "log"
-        if "test" in NOT_TEST_WORDS.sub("", rel.lower()) or ".spec." in rel.lower():
+        if "test" in NOT_TEST_WORDS.sub("", rel.lower()) or TEST_MARKERS.search(rel.lower()):
             return "test"
         if rel.endswith((".md", ".rst")) or rel.lower().startswith("readme"):
             return "doc"
@@ -2972,14 +2973,30 @@ def arena_worktrees(view):
     return passed(*evidence)
 
 
-PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on|based on|went with) (?:candidate|arm) [\w-]+")
+PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|kept|agreed on|went with|rebased onto) (?:candidate|arm) [\w-]+"
+                    r"|\bbased\b[^.;]{0,40}?\bon (?:candidate|arm) [\w-]+")
+
+
+PICK_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
+PICK_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor)\b")
+
+
+def picked(low):
+    cuts = [0] + [m.end() for m in PICK_SPLIT.finditer(low)]
+    words = [m.start() for m in re.finditer(r"\S+", low)]
+    for match in PICKED.finditer(low):
+        clause = cuts[bisect.bisect_right(cuts, match.start()) - 1]
+        sixth = words[max(bisect.bisect_left(words, match.start()) - 6, 0)]
+        if not PICK_NEGATION.search(low, max(clause, sixth), match.start()):
+            return True
+    return False
 
 
 @oracle("arena-fans-out-and-grafts")
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = bool(re.search(r"\bbase(?:line)?\b", low)) or affirmed(PICKED, low)
+    base = bool(re.search(r"\bbase(?:line)?\b", low)) or picked(low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
