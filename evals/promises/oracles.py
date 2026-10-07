@@ -2600,6 +2600,7 @@ REPORT_VERBS = (("came", "back", "with"), ("came", "back", "as"), ("came", "back
                 ("reported",), ("says",), ("said",))
 RECEIPTS = {("got",), ("i", "got"), ("we", "got"), ("received",)}
 VERDICT_SPAN = 200
+NEGATED_LABEL = "NEGATED_LABEL"
 
 
 def positions(pattern, text, skip=()):
@@ -2704,6 +2705,8 @@ def mention_verdict(plain, m, found):
     label_end = found["colons"][at - 1] + 1 if at else 0
     if any_between(found["direct"], max(clause_start, label_end), m.start()) or any_between(found["negations_after"], m.end(), aside):
         return FAIL
+    if any_between(found["direct"], clause_start, label_end):
+        return NEGATED_LABEL
     if any_between(found["negations"], clause_start, m.start()) or any_between(found["negations_after"], aside, clause_end):
         return INCONCLUSIVE
     if (m.start() - clause_start > VERDICT_SPAN or sentence_end - m.end() > VERDICT_SPAN or plain[sentence_end:sentence_end + 1] == "?"
@@ -2743,7 +2746,7 @@ def review_pass(reply):
     verdicts.pop(None, None)
     if verdicts.keys() <= {FAIL}:
         return False, None
-    return (True, None) if PASS in verdicts and FAIL not in verdicts else (None, verdicts.get(INCONCLUSIVE, min(verdicts.values())))
+    return (True, None) if PASS in verdicts and not verdicts.keys() & {FAIL, NEGATED_LABEL} else (None, verdicts.get(INCONCLUSIVE, min(verdicts.values())))
 
 
 @oracle("documentation-impact-independent-review-pass-required")
