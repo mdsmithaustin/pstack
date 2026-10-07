@@ -2574,7 +2574,7 @@ VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before)\b", re.I)
 VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nobody|nothing|neither|nor|cannot|unable|without|refus(?:e|es|ed|ing)"
                               r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n't\b|[❌✗✘🚫⛔]", re.I)
 NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|needed)\b", re.I)
-BENIGN_NEGATION = re.compile(r"\b(?:with\s+)?(?:no|zero|0)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
+BENIGN_NEGATION = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|0)|without(?:\s+any)?)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
                              r"|objections?|items?|changes(?:\s+(?:needed|required|requested))?)\b", re.I)
 VERDICT_OPENER = re.compile(r"[,():|+—–]|\s-\s|\s(?:with|by|from)\b", re.I)
 TRAILER_SPLIT = re.compile(r"[,():|+—–]|\s-\s|\band\b", re.I)
