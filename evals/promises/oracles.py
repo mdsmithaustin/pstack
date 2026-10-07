@@ -1793,7 +1793,7 @@ SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
 CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n't\b")
-NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a|nothing|tbd)\b")
+NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a)\b")
 
 
 def affirmed(pattern, low):
@@ -2246,12 +2246,12 @@ def finished_in_first_turn(view, commits):
 SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|True\b|:|\[)|(?:^|[;&|]\s*)watch\s", re.M)
 SLEEP_LOOP = (re.compile(r"\bdo\b"), re.compile(r"\bsleep\s+\d"), re.compile(r"\bdone\b"))
 SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:\s+[^\s'"]+)+|eval"""
-                        r"""|tmux\s+(?:send-keys|send|new-session|new|new-window|neww|split-window|splitw)(?:\s+[^\s'"]+)*)\s+(['"])(.*?)\1""", re.S)
-SHELL_READERS = {"sh", "bash", "zsh", "dash", "ksh", "ssh", "python", "python3"}
+                        r"""|tmux\s+(?:send-keys|new-session|new)(?:\s+[^\s'"]+)*)\s+(['"])(.*?)\1""", re.S)
+SHELL_READERS = {"bash", "ssh", "python3"}
 
 
 def loop_text(text):
-    found, at = None, 0
+    at = 0
     for step in SLEEP_LOOP:
         found = step.search(text, at)
         if not found:
@@ -2591,10 +2591,9 @@ OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|t
 HEDGE = re.compile(r"\b(?:expect\w*|predict\w*|target|goal|desired|hop(?:e|es|ed|ing)|planned|next|if|whether|unless|until|once|likely|probably|maybe|assum\w*)\b", re.I)
 GENERIC_LABELS = {"result", "status"}
 QUALIFIERS = {"a", "clean", "final", "overall"}
-LABEL_WORDS = QUALIFIERS | {"re-review", "rereview", "round", "independent", "trail", "reviewer", "review", "docs", "doc", "documentation", "verdict"}
-NOUN_WORDS = {"the", "a", "an", "independent", "trail", "docs", "doc", "documentation", "fresh", "final", "second", "round", "code",
-              "review", "reviews", "reviewer", "reviewers", "reviewer's", "verdict", "re-review"}
-NOUN_HEADS = {"review", "reviews", "reviewer", "reviewers", "reviewer's", "verdict", "re-review"}
+LABEL_WORDS = QUALIFIERS | {"re-review", "round", "independent", "trail", "reviewer", "review"}
+NOUN_HEADS = {"review", "reviewer", "verdict", "re-review"}
+NOUN_WORDS = NOUN_HEADS | {"the", "independent", "trail", "docs", "documentation", "round", "reviewer's"}
 REPORT_VERBS = (("came", "back", "with"), ("came", "back", "as"), ("came", "back"), ("gave", "it"), ("is",), ("was",), ("returned",), ("gave",),
                 ("reported",), ("says",), ("said",))
 RECEIPTS = {("got",), ("i", "got"), ("we", "got"), ("received",)}

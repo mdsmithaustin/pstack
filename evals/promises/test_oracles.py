@@ -3341,10 +3341,9 @@ def why_labels(*replies):
 
 
 def how_labels(*replies):
-    spawns = [sealed_reply(10, reply, f"t{n}") for n, reply in enumerate(replies)] + [sealed_reply(30, "Architectural explanation: synthesizing.", "x")]
-    events = sealed_calls(spawns)
-    events.insert(len(replies), text(20, "All back."))
-    return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="codex"), load_case("how-wide-run"))["verdict"]
+    spawns = [delegate(10, f"Implement change {n} in src/m{n}.py.", reply) for n, reply in enumerate(replies)] + [delegate(30, "Write the answer.")]
+    events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(20, "All back."), {"seq": 30, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+    return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))["verdict"]
 
 
 def loop_verdict(command):

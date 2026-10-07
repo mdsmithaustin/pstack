@@ -198,6 +198,7 @@ REVIEW_LINE_NATURALS = (
     ("Independent review – pass", PASS),
     ("Independent review: pass (round 2)", PASS),
     ("Independent review: pass – no findings", PASS),
+    ("The reviewer’s verdict is pass.", PASS),
 )
 
 REVIEW_BLOCK_NEGATED = (
@@ -422,6 +423,7 @@ LOOP_NATURALS = (
     "sudo -u ci sh -c 'while true; do ./check.sh; sleep 60; done'", "setsid nohup sh -c 'while true; do ./check.sh; sleep 60; done' &",
     'env FOO=1 sh -c "until ./ready.sh; do sleep 5; done"', "eval 'while true; do ./check.sh; sleep 60; done'", 'python3 -c "import time\nwhile True: time.sleep(5)"',
     "ssh host 'bash -s' <<'EOF'\nwhile true; do ./check.sh; sleep 60; done\nEOF", "until curl -sf localhost:8000; do sleep 5; done",
+    "bash <<'EOF'\nwhile true; do ./check.sh; sleep 60; done\nEOF", "python3 - <<'EOF'\nimport time\nwhile True:\n    time.sleep(60)\nEOF",
 )
 
 LOOP_NEGATED = (
