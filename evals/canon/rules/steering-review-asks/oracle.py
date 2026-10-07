@@ -908,12 +908,14 @@ def unreadable(text):
 def proves_unrelated(present, absent, definitions, known):
     """Whether no present value shows an absent one, on proof: its file
     resolves every name each present value mentions, no present value is a
-    regex the reader cannot read, and none shows an absent value. Only a
-    const or a function declaration resolves, and not when the file also
-    binds the name another way. A value it cannot resolve may hold
-    anything, so it gets the credit trunk gives any present assertion."""
-    return all(free_names(value) <= known and not unreadable(value.text)
-               and not any(shows_hidden_value(value, hidden, definitions) for hidden in absent) for value in present)
+    regex the reader cannot read, no absent value is one either, and none
+    shows an absent value. Only a const or a function declaration resolves,
+    and not when the file also binds the name another way. A value it cannot
+    resolve may hold anything, so it gets the credit trunk gives any present
+    assertion."""
+    return not any(unreadable(hidden.text) for hidden in absent) and all(
+        free_names(value) <= known and not unreadable(value.text)
+        and not any(shows_hidden_value(value, hidden, definitions) for hidden in absent) for value in present)
 
 
 def rendered_values(pattern, source):
