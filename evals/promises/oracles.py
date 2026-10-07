@@ -2576,8 +2576,9 @@ VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nob
 NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|needed)\b", re.I)
 BENIGN_NEGATION = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|0)|without(?:\s+any)?)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
                              r"|objections?|items?|edits?|changes(?:\s+(?:needed|required|requested))?)\b", re.I)
-ASIDE_OPENER = re.compile(r"[,():|+—–]|\s-\s")
-VERDICT_OPENER = re.compile(ASIDE_OPENER.pattern + r"|\s(?:with|by|from)\b", re.I)
+PUNCT_OPENER = r"[,():|+—–]|\s-\s"
+ASIDE_OPENER = re.compile(PUNCT_OPENER + r"|\s(?:with|because|as)\b", re.I)
+VERDICT_OPENER = re.compile(PUNCT_OPENER + r"|\s(?:with|by|from)\b", re.I)
 TRAILER_SPLIT = re.compile(r"[,():|+—–]|\s-\s|\band\b", re.I)
 TRAILER_ITEM = re.compile(r"(?:with\s+)?(?:\d+\s+(?:[\w-]+\s+)?(?:findings?|blockers?|issues?|nits?|notes?|comments?|suggestions?|items?)|notes?|nits?|comments?|suggestions?)"
                           r"|(?:by|from)\s+(?:the\s+)?(?:(?:independent|trail)\s+)*review(?:er)?s?|round\s+\d+|(?:head\s+)?[0-9a-f]{7,40}|v?\d+(?:\.\d+)+"
