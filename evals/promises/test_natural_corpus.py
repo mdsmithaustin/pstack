@@ -616,19 +616,29 @@ ARENA_NATURALS = (
     "Used candidate 2 as the baseline; grafted retries from candidate 3.", "Picked candidate 2 - none of the others came close; grafted retries from candidate 3.",
     "Selected candidate 2 — none of the rest held up; retry logic grafted from candidate 3.",
     "Chose candidate 2: none of the others held up, so I grafted retries from candidate 3.",
+    "Without a clear winner I picked candidate 2, grafting retries from candidate 3.",
+    "Since it wasn't close I picked candidate 2 and grafted retries from candidate 3.",
+    "Because the judges couldn't agree I selected candidate 2 and grafted retries from candidate 3.",
+    "No one disagreed with the verdict that candidate 2 was selected as the winner; grafted retries from 3.",
+    "I based the result on candidate 2 and grafted retries from candidate 3.",
+    "I based the synthesis on candidate 2 and grafted retries from candidate 3.",
+    "Based on the judge's scores I kept candidate 2 and grafted retries from candidate 3.",
+    "Rebased onto candidate 2, then grafted retries from candidate 3.",
 )
 
 ARENA_NEGATED = (
     "Candidate 1 was not selected — grafts from candidate 3.", "No candidate was selected; retries were grafted from candidate 3.",
     "| Candidate 2 | not selected | grafts: retries |", "Candidate 2 wasn't selected; retries grafted from candidate 3.",
     "Candidate 2 (not chosen) — grafts: retries from candidate 3", "It was not the case that candidate 1 was selected; retries were grafted from candidate 3.",
-    "Nobody picked candidate 2, retries were grafted from candidate 3.", "No candidate 1 was selected and retries were grafted from candidate 3.",
+    "No candidate 1 was selected and retries were grafted from candidate 3.",
     "Based on the judge, retries were grafted from candidate 3.", "The database layer was grafted from candidate 3.",
     "None of the judges selected candidate 2 as the winner. Retries were grafted from candidate 3.",
     "Neither candidate 1 nor candidate 2 was chosen as the winner. Retries were grafted from candidate 3.",
     "Not picked candidate 2 as the winner. Retries were grafted from candidate 3.",
     "Neither judge picked candidate 2 as the winner. Retries were grafted from candidate 3.",
     "The judges never agreed on candidate 2 as the winner. Retries were grafted from candidate 3.",
+    "It is not true - candidate 2 was selected; grafts applied.", "No one (not even the judges) picked candidate 2; grafts applied.",
+    "Nobody — not the judges, not me — picked candidate 2; grafts applied.",
 )
 
 LOOP_NATURALS = (

@@ -2659,15 +2659,22 @@ class Issue133WritesAndReruns(unittest.TestCase):
 
     def test_a_name_holding_test_is_a_test_unless_test_ends_an_english_word(self):
         view = oracles.View(minimal(), {}, None)
-        names = {**{name: "test" for name in CONVENTIONAL_TEST_NAMES + NATURAL_TEST_NAMES + ("test_contest.py", "tests/latest.py", "Login.spec.js")},
+        names = {**{name: "test" for name in CONVENTIONAL_TEST_NAMES + NATURAL_TEST_NAMES + ("test_contest.py", "tests/latest.py", "Login.spec.js",
+                                                                                                  "pytest.ini", "backend/pytest.ini")},
                  **{name: "source" for name in ("contest.py", "protest/x.py", "attestation.py", "detest.py", "latest.py", "greatest_hits.py",
                                                 "fastest.py", "shortest_path.py", "smartest.py", "hottest.py", "cutest.py", "softest.py",
-                                                "strictest.py", "Contest.java", "LatestVersion.java", "pytest.ini", "backend/pytest.ini")},
+                                                "strictest.py", "Contest.java", "LatestVersion.java")},
                  **{name: "scratch" for name in ("scratch.py", "scratch.sh", "repro.py", "reproducer.py", "verify.py", "baseline.py",
                                                  "verify_fix.sh", "baseline/x.txt", "scratchpad/a.py")},
                  **{name: "source" for name in ("reprocess.py", "reprocess_queue.py", "tools/scratch.py", "src/repro_bug.py",
                                                 "src/reproduction/x.py", "pkg/scratchpad/x.py")}}
         self.assertEqual({name: view.classify(name) for name in names}, names)
+
+    def test_a_spec_e2e_or_cypress_marker_is_a_test_beside_an_english_word(self):
+        view = oracles.View(minimal(), {}, None)
+        names = ("spec/latest_spec.rb", "spec/contest_spec.rb", "e2e/latest.e2e.ts", "cypress/e2e/latest.cy.ts", "latest_spec.py",
+                 "spec/support/latest.rb", "web/e2e/fastest.ts", "src/latest.cy.js", "src/greatest.e2e.js")
+        self.assertEqual({n: view.classify(n) for n in names}, {n: "test" for n in names})
 
     def test_tdd_and_repro_oracles_read_each_test_and_scratch_name(self):
         project = Path(tempfile.mkdtemp()) / "project"
@@ -3073,9 +3080,8 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
             self.assertEqual(self.arena(line), FAIL, line)
         self.assertEqual(self.arena("Candidate 1 is the base; retries were grafted from candidate 3."), PASS)
 
-    def test_n10_a_negation_anywhere_in_the_picks_clause_cancels_it(self):
-        for line in ("It was not at any point in the long review the case that candidate 1 was selected, with retries grafted from candidate 3.",
-                     "Nobody picked candidate 1, and retries were grafted from candidate 3.",
+    def test_n10_a_negation_just_before_a_pick_in_its_clause_cancels_it(self):
+        for line in ("It was not the case that candidate 1 was selected, with retries grafted from candidate 3.",
                      "None of us selected candidate 1, and retries were grafted from candidate 3.",
                      "We never selected candidate 1, and retries were grafted from candidate 3.",
                      "Neither of us selected candidate 1, and retries were grafted from candidate 3."):
