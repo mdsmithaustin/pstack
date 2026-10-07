@@ -236,7 +236,10 @@ class HiddenTailTests(unittest.TestCase):
                 ("name destructured from calls held in another name",
                  ["const calls = navigator.clipboard.writeText.mock.calls;", "const [[payload]] = calls;", "expect(payload).toContain(TAIL)"]),
                 ("object pattern over the last call",
-                 ["const writeText = vi.fn();", "const { 0: payload } = writeText.mock.lastCall;", "expect(payload).toContain(TAIL)"])):
+                 ["const writeText = vi.fn();", "const { 0: payload } = writeText.mock.lastCall;", "expect(payload).toContain(TAIL)"]),
+                ("spy implementation chained on the next line",
+                 ["const sent: string[] = [];", 'vi.spyOn(navigator.clipboard, "writeText")', "  .mockImplementation(async (t) => {", "    sent.push(t);",
+                  "  });", "expect(sent[0]).toContain(TAIL)"])):
             with self.subTest(row):
                 self.assertEqual(self.failures_bound(*self.UNRELATED[:1], *lines, *self.UNRELATED[1:]), [self.PRESENT])
 
@@ -250,6 +253,46 @@ class HiddenTailTests(unittest.TestCase):
     def test_a_test_titled_for_the_clipboard_does_not_make_its_variables_clipboard_captures(self):
         self.assertEqual(self.failures('it("hands writeText the full prompt", () => {', "  const shown = bubble.textContent", "  copied = 1",
                                        "  expect(bubble).not.toHaveTextContent(TAIL)", "  expect(shown).toContain(TAIL)", "})"), [])
+
+    def test_rendered_text_from_a_render_that_mentions_the_clipboard_counts(self):
+        stub = ["const writeText = vi.fn();", "Object.assign(navigator, { clipboard: { writeText } });"]
+        for row, lines in (
+                ("container destructured from a render given the spy",
+                 [*stub, "const { container } = render(<PromptBubble text={LONG_TEXT} onCopy={writeText} />);",
+                  "expect(container).not.toHaveTextContent(TAIL);", "expect(container.textContent).toContain(TAIL);"]),
+                ("render result given the spy",
+                 [*stub, "const view = render(<PromptBubble text={LONG_TEXT} copy={writeText} />);",
+                  "expect(view.container).not.toHaveTextContent(TAIL);", "expect(view.container.textContent).toContain(TAIL);"]),
+                ("render result from a setup that stubs the clipboard",
+                 ["const setup = () => {", "  Object.assign(navigator, { clipboard: { writeText: vi.fn() } });",
+                  "  return render(<ChatBubble text={LONG_TEXT} />);", "};", "const view = setup();",
+                  "expect(view.container).not.toHaveTextContent(TAIL);", "expect(view.container.textContent).toContain(TAIL);"]),
+                ("element queried by a clipboard test id",
+                 [*stub, 'const bubble = screen.getByTestId("clipboard-bubble");', "expect(bubble).not.toHaveTextContent(TAIL);",
+                  "expect(bubble.textContent).toContain(TAIL);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_name_the_stub_fills_in_one_test_and_the_render_binds_in_another_is_the_rendered_text(self):
+        rendered = ['it("collapses", () => {', '  const bubble = screen.getByTestId("bubble");', "  expect(bubble).not.toHaveTextContent(TAIL);"]
+        for row, copies, shown in (
+                ("text assigned by the stub",
+                 ['let text = "";', "Object.assign(navigator, { clipboard: { writeText: async (t: string) => { text = t; } } });"],
+                 ['  const text = bubble.textContent ?? "";', "  expect(text).toContain(TAIL);"]),
+                ("content bound to the spy's call",
+                 ["const content = writeText.mock.calls[0][0];", "expect(content).toBe(LONG_TEXT);"],
+                 ["  const content = bubble.textContent;", "  expect(content).toContain(TAIL);"]),
+                ("shown pushed by the stub",
+                 ["const shown: string[] = [];", "Object.assign(navigator, { clipboard: { writeText: vi.fn((t: string) => shown.push(t)) } });"],
+                 ['  const shown = screen.getByTestId("bubble");', "  expect(shown.textContent).toContain(TAIL);"]),
+                ("calls rebuilt by the stub",
+                 ["let calls: string[] = [];", "Object.assign(navigator, { clipboard: { writeText: async (v: string) => { calls = [...calls, v]; } } });"],
+                 ['  const calls = screen.getAllByTestId("bubble");', "  expect(calls[0].textContent).toContain(TAIL);"]),
+                ("text reassigned in the stub body",
+                 ["Object.assign(navigator, { clipboard: { writeText: vi.fn(async (text: string) => { text = text.trim(); }) } });"],
+                 ["  const text = bubble.textContent;", "  expect(text).toContain(TAIL);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures('it("copies", () => {', *copies, "});", *rendered, *shown, "});"), [])
 
     def test_a_thousand_absent_values_against_a_thousand_present_ones_grade_in_seconds(self):
         lines = [f'const T{i} = "absent marker {i}";' for i in range(1000)] + [f'const P{i} = "present text {i}";' for i in range(1000)]
