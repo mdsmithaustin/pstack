@@ -2817,6 +2817,24 @@
    "owners": [
     "skills/poteto-mode/playbooks/opening-a-pr.md"
    ]
+  },
+  "opening-a-pr-gated-publish-init-uses-canonical-path": {
+   "check": "static",
+   "claim": "Initialize no-mistakes from the path Git prints because a case-insensitive disk can preserve a different path spelling.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "On a case-insensitive disk, the likely cause is that `init` ran from a path spelled differently from the main checkout's path, the parent of the directory that `git rev-parse --path-format=absolute --git-common-dir` prints."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "When the repository commits `.no-mistakes.yaml` but has no `no-mistakes` remote, stop and report that `no-mistakes init` must run from the main checkout's path, the parent of the directory that `git rev-parse --path-format=absolute --git-common-dir` prints."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
   }
  },
  "units": {
@@ -8454,15 +8472,6 @@
    ],
    "text": "The [Session pickup playbook](../../skills/poteto-mode/playbooks/session-pickup.md) reads the prior trail for completed work and decisions."
   },
-  "6918480c3779": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-sandbox-commits-and-leaves-push-to-host",
-   "sources": [
-    "port"
-   ],
-   "text": "An agent in a Docker sandbox commits and leaves the push to the host."
-  },
   "43e02298cf4e": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -8501,6 +8510,24 @@
     "port"
    ],
    "text": "It pushes around the gate only after you say \"bypass no-mistakes\" in the session."
+  },
+  "6918480c3779": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-sandbox-commits-and-leaves-push-to-host",
+   "sources": [
+    "port"
+   ],
+   "text": "An agent in a Docker sandbox commits and leaves the push to the host."
+  },
+  "134c056dc17e": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-publish-init-uses-canonical-path",
+   "sources": [
+    "port"
+   ],
+   "text": "Run `no-mistakes init` in your main checkout, from the exact path spelling that git reports, because on a case-insensitive disk no-mistakes matches the spelling `init` used."
   }
  }
 }
