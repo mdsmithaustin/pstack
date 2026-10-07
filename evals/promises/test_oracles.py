@@ -3453,7 +3453,8 @@ class LinearTime(unittest.TestCase):
         self.assert_quick(review_line, "PASS" + " " * LONG, " " * LONG + "pass from the reviewer", "pass " * (LONG // 5), "no pass " * (LONG // 8),
                           "[" * LONG + "pass", "](" * (LONG // 2) + "pass", "\n" * LONG + "Review: pass", "Review: " + "(" * LONG + "pass",
                           "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass",
-                          "a" + "_" * LONG + "b pass", "no" + " " * (LONG // 2) + " pass" * (LONG // 10))
+                          "a" + "_" * LONG + "b pass", "no" + " " * (LONG // 2) + " pass" * (LONG // 10),
+                          "no edits " * (LONG // 9) + "pass", "Docs review (did not run): pass " * (LONG // 31))
 
     def test_a_long_run_of_relative_cds_tracks_the_checkout_in_linear_time(self):
         events = [{"seq": 50 + 2 * n + k, "kind": kind, "name": "Bash", "id": f"cd{n}", "input": {"command": f"cd d{n}"}, "ok": True}
