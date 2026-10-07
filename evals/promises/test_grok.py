@@ -193,6 +193,60 @@ class HarvestCaptures(unittest.TestCase):
             trace = grok.harvest(self.run_)
         self.assertEqual((trace["x_cost_usd_lead"], [s["description"] for s in trace["x_subagents"]]), (0, [None]))
 
+    def vanish_before_copy(self, session):
+        native = self.lead.parent / session / "chat_history.jsonl"
+        stale = self.run_.root / "transcripts" / "sessions" / "cwd" / session / "chat_history.jsonl"
+        stale.parent.mkdir(parents=True)
+        stale.write_text(json.dumps({"type": "assistant", "content": "stale capture"}) + "\n")
+        listing = grok.session_files
+
+        def list_then_vanish(run):
+            found = listing(run)
+            native.unlink()
+            return found
+
+        with mock.patch.object(grok, "session_files", side_effect=list_then_vanish), \
+                mock.patch.object(grok, "host_home", return_value=self.tmp / "host"), \
+                self.assertRaises(GradeRefused) as refused:
+            grok.harvest(self.run_)
+        self.assertEqual(refused.exception.receipt["reason"], "input_changed")
+
+    def test_a_lead_whose_native_chat_vanishes_before_the_copy_is_refused(self):
+        self.vanish_before_copy("lead")
+
+    def test_a_child_whose_native_chat_vanishes_before_the_copy_is_refused(self):
+        self.vanish_before_copy("kid")
+
+    def change_captures_after_copy(self, change):
+        self.lead.joinpath("usage.json").write_text(json.dumps({"session": {"costUsdTicks": 2 * 10 ** 8}}))
+        outside_usage = self.tmp / "outside-usage.json"
+        outside_usage.write_text(json.dumps({"session": {"costUsdTicks": 10 ** 10}}))
+        copy = grok.copy_session
+
+        def copy_then_change(session_dir, destination):
+            copied = copy(session_dir, destination)
+            target = destination / session_dir.parent.name / session_dir.name
+            if session_dir.name == "lead":
+                for name, outside in (("chat_history.jsonl", self.outside_chat), ("usage.json", outside_usage),
+                                      ("subagents/kid/meta.json", self.outside_meta)):
+                    change(target / name, outside)
+            return copied
+
+        with mock.patch.object(grok, "copy_session", side_effect=copy_then_change), \
+                mock.patch.object(grok, "host_home", return_value=self.tmp / "host"):
+            trace = grok.harvest(self.run_)
+        self.assertEqual((trace["final_reply"], trace["x_cost_usd_lead"], [s["description"] for s in trace["x_subagents"]]),
+                         ("native reply", 0.02, ["native kid"]))
+
+    def test_harvest_never_follows_a_capture_linked_out_after_the_copy(self):
+        def link(path, outside):
+            path.unlink()
+            path.symlink_to(outside)
+        self.change_captures_after_copy(link)
+
+    def test_harvest_never_rereads_a_capture_rewritten_after_the_copy(self):
+        self.change_captures_after_copy(lambda path, outside: path.write_bytes(outside.read_bytes()))
+
 
 if __name__ == "__main__":
     unittest.main()
