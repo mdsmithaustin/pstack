@@ -261,6 +261,8 @@ REVIEW_BLOCK_NEGATED = (
 )
 
 REVIEW_LINE_NEGATED = (
+    ('Independent review: pass. The independent review has not yet run: pass.', INCONCLUSIVE),
+    ('Independent review: pass (round 1). The independent review has not (as of 10:42) passed round 2.', INCONCLUSIVE),
     ('The reviewer refused to pass it.', FAIL),
     ('The review would pass only with README changes.', FAIL),
     ('The review is unlikely to pass.', FAIL),
