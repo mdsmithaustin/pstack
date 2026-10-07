@@ -76,7 +76,7 @@ CONSTRAINT_SUBJECTS = {"do not remove: the sink needs a trailing newline on ever
 SCRATCH_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/")
 LOG_NAMES = ("decisions.tsv", ".audit/")
 NOT_TEST_WORDS = re.compile(r"contest|protest|attest|detest|latest|greatest|fastest|shortest|smartest|hottest|cutest|softest|strictest")
-TEST_MARKERS = re.compile(r"\.(?:spec|cy|e2e)\.|_spec\.\w+$")
+TEST_MARKERS = re.compile(r"(?:\.(?:spec|cy|e2e)|_spec)\.(?:py|rb|jsx?|tsx?|mjs|cjs|go|rs|java|kt|swift|cs|php|exs?)$")
 PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
@@ -92,7 +92,8 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
                         r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
-REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|\[[^\]\n]{1,40}\]|[\[*]*[A-Za-z][\w /#()*—–,-]{0,40}:[^\n]*)")
+REPLY_LABEL = re.compile(r"\A\s*(?:[-*>]\s+|\d{1,2}[.)]\s+)?(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|\[[^\]\n]{1,40}\]|\*\*[^*\n]{1,40}\*\*"
+                         r"|[\[*]*[A-Za-z][\w /#()*—–,-]{0,40}:[^\n]*|(?P<cut>[\[*]*[A-Za-z][\w /#()*—–-]{0,40}?)(?:\s[—–-]\s|,\s)[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
 OUTPUT_NOUN = re.compile(r"\b(?:notes?|findings?|summary)\b", re.I)
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
@@ -625,7 +626,7 @@ class View:
         label = REPLY_LABEL.match(str(spawn.get("x_child_first_reply") or ""))
         if not label:
             return ""
-        name = label.group(0).partition(":")[0]
+        name = label.group(0).partition(":")[0] if label.group("cut") is None else label.group("cut")
         if LABEL_KEEPS_BODY.search(name):
             return label.group(0).lower()
         return OUTPUT_NOUN.split(name)[-1].lower()
@@ -1796,7 +1797,8 @@ def why_null(view):
 
 
 SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*sources?(?:\s+(?:searched|consulted|checked|coverage))?\**\s*(?::|$)")
-COMMIT_ONLY = re.compile(r"\s*(?:commit\s+)?`?[0-9a-f]{7,40}`?\.?[^\S\n]*(?:\n|\Z)")
+COMMIT_LINE = r"(?:commit\s+)?`?[0-9a-f]{7,40}`?\.?[^\S\n]*(?:\n|\Z)"
+COMMIT_ONLY = re.compile(rf"\s*{COMMIT_LINE}(?:[^\S\n]*{COMMIT_LINE})*(?=[^\S\n]*(?:\n|\Z)|\s*#)")
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
 CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n['’]t\b")
@@ -2969,6 +2971,7 @@ def arena_worktrees(view):
     return passed(*evidence)
 
 
+BASED_ON = re.compile(r"\b(?:re)?based\b[^.;]{0,40}?\bon(?:to)? (?:candidate|arm)[ #-]+[\w-]+")
 PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on) (?:candidate|arm) [\w-]+")
 PICK_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
 PICK_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor)\b")
@@ -2993,7 +2996,7 @@ def picked(low):
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = bool(re.search(r"\bbase(?:s|line)?\b|\b(?:re)?based\b[^.;]{0,40}?\bon(?:to)? (?:candidate|arm) [\w-]+", low)) or picked(low)
+    base = bool(re.search(r"\bbase(?:s|line)?\b", low) or BASED_ON.search(re.sub(r"[*`]", "", low))) or picked(low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
