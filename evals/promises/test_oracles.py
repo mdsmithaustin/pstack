@@ -3191,6 +3191,11 @@ class Issue133RoundTwo(unittest.TestCase):
         checkpoint = minimal(final_reply="No code was written — waiting for your sign-off on design A.")
         self.assertEqual(grade("architect-checkpoint-opt-in", checkpoint, load_case("architect-checkpoint-run"))["verdict"], PASS)
 
+    def test_a_newline_or_closing_parenthesis_ends_a_negated_clause(self):
+        for line in ("No regressions\nCandidate 2 is the base, with retries grafted from candidate 3.",
+                     "(No blockers) candidate 2 is the base, with retries grafted from candidate 3."):
+            self.assertEqual(self.arena(line), PASS, line)
+
     def test_nor_alone_negates_a_pick(self):
         self.assertEqual(self.arena("The judge raised no blocker, nor picked candidate 1; retries were grafted from candidate 3."), FAIL)
 
