@@ -281,6 +281,33 @@ class HiddenTailTests(unittest.TestCase):
         self.assertEqual(self.failures('it("hides the tail", () => {', '  const TAIL = "tail marker"', "  expect(bubble).not.toHaveTextContent(TAIL)",
                                        '  expect(bubble).toHaveTextContent("tail marker")', "})"), [])
 
+    def test_a_definition_in_any_statement_style_counts(self):
+        absent, present = "expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent(LONG_TEXT);"
+        helper = ["  const head = \"x\".repeat(500);", "  return head + TAIL;"]
+        array = ["Array.from({ length: 50 }, (_, i) => {", "    return `chunk ${i}`;", "  }).join(\" \") + TAIL;"]
+        for row, lines in (("semicolon inside a string", ['const LONG_TEXT = "Hello; world ".repeat(500) + TAIL;']),
+                           ("function of two statements", ["function makeLong() {", *helper, "}", "const LONG_TEXT = makeLong();"]),
+                           ("arrow block of two statements", ["const makeLong = () => {", *helper, "};", "const LONG_TEXT = makeLong();"]),
+                           ("callback ending in a semicolon", ["const LONG_TEXT = " + array[0], *array[1:]]),
+                           ("immediately invoked arrow", ["const LONG_TEXT = (() => {", *helper, "})();"]),
+                           ("hook of two statements", ["let LONG_TEXT: string;", "beforeEach(() => {", *helper[:1], "  LONG_TEXT = head + TAIL;", "});"]),
+                           ("first statement of a test body", ['it("hides the tail", () => {', "  const LONG_TEXT = " + array[0], *array[1:]]),
+                           ("first statement of a hook", ["let LONG_TEXT: string;", "beforeEach(() => {", "  LONG_TEXT = " + array[0], *array[1:]]),
+                           ("exported declaration", ["export const LONG_TEXT = " + array[0], *array[1:]]),
+                           ("async function", ["async function makeLong() {", *helper, "}", "const LONG_TEXT = await makeLong();"]),
+                           ("compound assignment", ['let LONG_TEXT = "x".repeat(500);', "LONG_TEXT += TAIL;"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines, absent, present), [])
+
+    def test_a_literal_or_an_attribute_does_not_reach_the_absent_value(self):
+        absent = "expect(bubble).not.toHaveTextContent(TAIL);"
+        for row, lines in (("regex literal with a group", ['const prompt = "a" + TAIL;', absent, "expect(bubble).toHaveTextContent(/Show full (prompt|text)/);"]),
+                           ("JSX attribute that shares a constant's name", ['const LONG_TEXT = "x".repeat(500) + TAIL;', 'const text = "Hello";',
+                                                                             "render(<Bubble text={LONG_TEXT} />);", absent,
+                                                                             "expect(bubble).toHaveTextContent(text);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [self.PRESENT])
+
     def test_a_name_defined_twice_keeps_both_definitions(self):
         for second in ('const LONG_TEXT = "short";', 'const TAIL = "unrelated";'):
             with self.subTest(second):
