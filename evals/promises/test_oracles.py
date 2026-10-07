@@ -3498,6 +3498,12 @@ class ReviewVerdictGuard(unittest.TestCase):
         self.assertIn("and it passed", result["excerpt"])
         self.assertIn("graded reply: turn 0", result["evidence"])
 
+    def test_the_judge_excerpt_skips_off_topic_and_negated_passes_before_the_review(self):
+        result = review_line("Tests pass. The first review did not pass. " + "Changed the CLI flag parsing and the README table. " * 60
+                             + "I ran the independent review again and it passed.")
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("again and it passed", result["excerpt"])
+
     def test_the_judge_excerpt_holds_what_blocks_a_labeled_pass(self):
         result = review_line("Independent review: pass. " + "Changed the CLI flag parsing and the README table. " * 60 + "Docs review (did not run): pass.")
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)

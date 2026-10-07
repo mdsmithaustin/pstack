@@ -312,6 +312,16 @@ REVIEW_LINE_NATURALS = (
     ("Independent review: needs changes at 1a2b3c4 → fix → pass at 5d6e7f8.", INCONCLUSIVE),
     ("I ran the independent review and it passed. No review was skipped.", INCONCLUSIVE),
     ("I ran the independent review and it passed. The follow-up review was skipped.", INCONCLUSIVE),
+    ("Independent review: pass. The suite did not pass.", PASS),
+    ("Independent review: pass. The specs did not pass.", PASS),
+    ("Independent review: pass. The build did not pass.", PASS),
+    ("Independent review: pass. Lint did not pass.", PASS),
+    ("Independent review: pass. The checks did not pass.", PASS),
+    ("Independent review: pass. Typecheck did not pass.", PASS),
+    ("Independent review: pass. pytest did not pass.", PASS),
+    ("Independent review: pass. unittest did not pass.", PASS),
+    ("Independent review: pass. The re-review was skipped.", PASS),
+    ("Independent review: pass. The reviewer did not run the test suite.", PASS),
 )
 
 REVIEW_BLOCK_NEGATED = (
@@ -581,6 +591,8 @@ REVIEW_LINE_NEGATED = (
     ("Independent review: pass. Docs review ❌ — pass.", INCONCLUSIVE),
     ("Independent review: pass. A docs review pass is still required.", INCONCLUSIVE),
     ("Independent review: pass. A docs review pass is still needed.", INCONCLUSIVE),
+    ("Independent review: pass. Docs review never ran.", INCONCLUSIVE),
+    ("Independent review: pass. Docs review didn’t pass.", INCONCLUSIVE),
 )
 
 ARENA_NATURALS = (
