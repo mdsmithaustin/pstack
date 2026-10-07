@@ -1775,7 +1775,7 @@ def why_null(view):
 
 SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+(?:searched|consulted|checked|coverage))\**\s*(?::|$)")
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
-CLAUSE_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
+CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n't\b")
 
 
@@ -2670,7 +2670,7 @@ def arena_worktrees(view):
     return failed("candidates do not each get their own worktree or directory", *evidence)
 
 
-PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on) (?:candidate|arm) [\w-]+")
+PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on|based on) (?:candidate|arm) [\w-]+")
 
 
 @oracle("arena-fans-out-and-grafts")
