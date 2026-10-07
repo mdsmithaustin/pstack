@@ -2721,11 +2721,11 @@ def negated_on_the_word(plain, m, found):
     return bool(ON_THE_WORD.fullmatch(plain, found["on_pass"][at], m.start())) and not VERDICT_CLAUSE.search(plain, found["on_pass"][at], m.start())
 
 
-def failing_label(plain, f, found, wide=True):
+def failing_label(plain, f, found):
     clause_start = clause_of(plain, found, f.start(), f.end())[1]
     line = bisect.bisect_left(found["newlines"], f.start())
     line_start = found["newlines"][line - 1] + 1 if line else 0
-    context = plain[max(line_start, clause_start - 300):clause_start] + " " + previous_line(plain, found["newlines"], line) if wide else ""
+    context = plain[max(line_start, clause_start - 300):clause_start] + " " + previous_line(plain, found["newlines"], line)
     return label_kind(plain[max(clause_start, f.start() - VERDICT_SPAN):f.start()], context, False)
 
 
@@ -2804,20 +2804,15 @@ def review_pass(reply):
              "openers": positions(VERDICT_OPENER, plain), "aside_openers": positions(ASIDE_OPENER, plain), "off_topic": positions(OFF_TOPIC, plain),
              "named": positions(REVIEW_NAMED, plain), "review_words": positions(REVIEW_WORDS, plain), "mentions": starts, "history": history}
     graded = [(kind, m.start()) for m in mentions if (kind := mention_verdict(plain, m, found))]
-    not_run = list(NOT_RUN.finditer(plain))
-    skipped = {f.start() for f in repaired}
-    failing = [(f, failing_label(plain, f, found)) for f in FAILING_VERDICT.finditer(plain) if f.start() not in skipped]
     if any(kind == PASS for kind, _ in graded):
-        blockers = ([at for kind, at in graded if kind in (FAIL, NEGATED)] + [f.start() for f in not_run]
-                    + [f.start() for f, kind in failing if kind in ("label", "phrase")])
+        skipped = {f.start() for f in repaired}
+        failing = [f.start() for f in FAILING_VERDICT.finditer(plain) if f.start() not in skipped and failing_label(plain, f, found) in ("label", "phrase")]
+        blockers = [at for kind, at in graded if kind in (FAIL, NEGATED)] + [f.start() for f in NOT_RUN.finditer(plain)] + failing
         return (None, min(blockers)) if blockers else (True, None)
-    undecided = [at for kind, at in graded if kind != FAIL]
-    proofs = not_run + [f for f, kind in failing if kind == "label" and failing_label(plain, f, found, wide=False) == "label"]
-    bare = set(outside([f.end() - 1 for f in proofs], asides))
-    settled = [clause_of(plain, found, f.start(), f.end())[2] for f in proofs if f.end() - 1 in bare]
-    if not undecided or max(undecided) < max(settled, default=-1):
+    open_mentions = [m.start() for m in mentions if not negated_on_the_word(plain, m, found)]
+    if not open_mentions:
         return False, None
-    return None, min(undecided)
+    return None, min([at for kind, at in graded if kind != FAIL] or open_mentions)
 
 
 @oracle("documentation-impact-independent-review-pass-required")

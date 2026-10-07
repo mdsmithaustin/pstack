@@ -1707,7 +1707,7 @@ class AuthorResultInWorkRecord(unittest.TestCase):
 
     def test_passing_tests_are_not_the_reviews_verdict(self):
         result = self.review_turn("Verification.\n- All 4 tests passed.\n- The docs are updated.")
-        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), result)
 
     def test_a_plan_to_get_any_required_review_is_not_an_author_result(self):
         todo = {"seq": 40, "kind": "tool_call", "name": "todo_list", "input": {"todos": [
@@ -3097,10 +3097,11 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))["verdict"]
 
     def test_review_wording_that_is_not_a_pass(self):
-        for line in ("The reviewer refused to pass it.", "The review failed. Tests pass.", "Neither review passed."):
+        for line in ("The reviewer refused to pass it.", "Neither review passed."):
             self.assertEqual(self.review_verdict(line), FAIL, line)
-        for line in ("The review did not, in the end, pass.", "The review would pass only with README changes.", "The review is unlikely to pass.",
-                     "No review has passed yet.", "No independent reviewer has said pass.", "The review cannot reasonably be said to have passed."):
+        for line in ("The review failed. Tests pass.", "The review did not, in the end, pass.", "The review would pass only with README changes.",
+                     "The review is unlikely to pass.", "No review has passed yet.", "No independent reviewer has said pass.",
+                     "The review cannot reasonably be said to have passed."):
             self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
 
     def test_review_wording_that_ends_in_an_unlabeled_pass_goes_to_a_judge(self):
@@ -3166,10 +3167,10 @@ class Issue133RoundTwo(unittest.TestCase):
             self.assertEqual(self.review_verdict(line), PASS, line)
 
     def test_a_pass_with_no_review_anchor_is_not_a_pass(self):
-        for line in ("Tests: **pass**", "Lint: `pass`", "Verdict: not a pass.", "The verdict was not pass.", "I got a pass on the lint.",
-                     "No PASS from the trail reviewer."):
+        for line in ("Verdict: not a pass.", "The verdict was not pass.", "No PASS from the trail reviewer."):
             self.assertEqual(self.review_verdict(line), FAIL, line)
-        for line in ("I did not get a PASS from the trail reviewer.", "Neither run got a pass from the reviewer."):
+        for line in ("Tests: **pass**", "Lint: `pass`", "I got a pass on the lint.", "I did not get a PASS from the trail reviewer.",
+                     "Neither run got a pass from the reviewer."):
             self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
 
     def test_each_verdict_negation_word_voids_the_pass(self):
@@ -3508,9 +3509,12 @@ class ReviewVerdictGuard(unittest.TestCase):
     def test_a_negated_mention_beside_a_labeled_pass_goes_to_a_judge(self):
         self.assertEqual(review_line("Round 1 review did not pass, round 2 review passed.")["verdict"], INCONCLUSIVE)
 
-    def test_only_negated_or_off_topic_mentions_fail(self):
-        for line in ("The review did not pass. Tests pass.", "Independent review: needs changes. Lint: pass.", "Review: pending (no pass yet)"):
+    def test_only_a_reply_with_no_pass_or_only_negated_ones_fails(self):
+        for line in ("Docs updated.", "Review: pending (no pass yet)", "The review did not pass.", "Independent review: needs changes."):
             self.assertEqual(review_line(line)["verdict"], FAIL, line)
+        for line in ("The review did not pass. Tests pass.", "Independent review: needs changes. Lint: pass.", "No independent review was run. Pass on tests only."):
+            result = review_line(line)
+            self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
 
     def test_a_free_form_label_before_pass_goes_to_a_judge(self):
         for line in ("The reviewer rejected it: pass.", "The docs reviewer flagged three gaps: pass.", "Review blocked on the README table: pass",
