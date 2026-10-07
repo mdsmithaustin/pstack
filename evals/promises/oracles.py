@@ -2567,30 +2567,140 @@ def doc_impact_before_completion(view):
     return passed(*evidence)
 
 
-VERDICT_NEGATION = re.compile(r"\b(?:not|never|cannot|unable|fail(?:ed|s)?|without|refus(?:e|ed|es)|would|unlikely)\b|n't\b", re.I)
-VERDICT_SUBJECT = re.compile(r"\breview(?:er)?s?\b|\bverdict\b|\bit\b", re.I)
-VERDICT_LABEL = re.compile(r"\breview|\bverdict\b", re.I)
-VERDICT_SOURCE = re.compile(r"\s+from\s+(?:the\s+)?(?:[\w-]+\s+){0,3}review(?:er)?s?\b", re.I)
-MARKUP = re.compile(r"[*`]|(?<!\w)_+|_+(?!\w)")
+VERDICT_WORD = re.compile(r"\bpass(?:ed)?\b", re.I)
+VERDICT_MARKUP = re.compile(r"\]\([^()\[\]\s]{0,300}\)|\[[ xX]\]|[*`\[\]✅✔☑✓🟢\ufe0f]|(?<!\w)_+|_+(?!\w)")
+VERDICT_END = re.compile(r"\n|[.!?;](?=\s|$)")
+VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before|after|although|though|however|whereas|while|so)\b", re.I)
+VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nobody|nothing|neither|nor|cannot|unable|without|refus(?:e|es|ed|ing)"
+                              r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n't\b|[❌✗✘🚫⛔]", re.I)
+VERDICT_UNMET = re.compile(r"\b(?:required|needed)\b", re.I)
+BENIGN_NEGATION = re.compile(r"\b(?:with\s+)?(?:no|zero|0)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
+                             r"|objections?|items?|changes)\b", re.I)
+VERDICT_OPENER = re.compile(r"[,():|+—–]|\s-\s|\s(?:with|by|from)\b", re.I)
+TRAILER_SPLIT = re.compile(r"[,():|+—–]|\s-\s|\band\b", re.I)
+TRAILER_ITEM = re.compile(r"(?:with\s+)?(?:\d+\s+(?:[\w-]+\s+)?(?:findings?|blockers?|issues?|nits?|notes?|comments?|suggestions?|items?)|notes?|nits?|comments?|suggestions?)"
+                          r"|(?:by|from)\s+(?:the\s+)?(?:(?:independent|trail|docs?|documentation|fresh|second)\s+)*(?:re-?)?review(?:er)?s?"
+                          r"|(?:on\s+)?re-?review|round\s+\d+|(?:head\s+)?[0-9a-f]{7,40}|v?\d+(?:\.\d+)+|read-only|verdict"
+                          r"|(?:the\s+)?(?:independent|trail|docs?|documentation)(?:\s+review(?:er)?)?|review(?:er)?"
+                          r"|[a-z][\w.-]*@(?:low|medium|high|xhigh|max)|(?:claude|opus|sonnet|haiku|fable|gpt|grok|gemini|codex)[\w.@-]*", re.I)
+LABEL_AFTER = re.compile(r"(?:by|from)\s", re.I)
+PASS_COMPLEMENT = re.compile(r"verdict|on\s+re-?review|it|them|this|the\s+(?:change|changes|docs|diff|pr|readme|documentation|update|patch)", re.I)
+LEAD_MARKS = re.compile(r"[\s>|#+*-]*(?:\d+[.)]\s+)?")
+LABEL_SEPARATOR = re.compile(r"->|[:|=→—–(]|\s-\s")
+REVIEW_NOUN = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b|\bdocs?\b|\bdocumentation\b", re.I)
+REVIEW_NAMED = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b", re.I)
+OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|typecheck\w*|pytest|unittest|ruff|mypy|smoke|e2e)\b", re.I)
+HEDGE = re.compile(r"\b(?:expect\w*|predict\w*|target|goal|desired|hop(?:e|es|ed|ing)|planned|next|if|whether|unless|until|once|likely|probably|maybe|assum\w*)\b", re.I)
+GENERIC_LABELS = {"result", "status", "outcome"}
+QUALIFIERS = {"a", "an", "the", "clean", "final", "overall", "full"}
+LABEL_WORDS = QUALIFIERS | {"re-review", "rereview", "round", "independent", "trail", "reviewer", "review", "docs", "doc", "documentation", "verdict"}
+NOUN_WORDS = {"the", "a", "an", "independent", "trail", "docs", "doc", "documentation", "fresh", "final", "second", "round", "code",
+              "review", "reviews", "reviewer", "reviewers", "reviewer's", "verdict", "re-review"}
+NOUN_HEADS = {"review", "reviews", "reviewer", "reviewers", "reviewer's", "verdict", "re-review"}
+REPORT_VERBS = (("came", "back", "with"), ("came", "back", "as"), ("came", "back"), ("gave", "it"), ("is",), ("was",), ("returned",), ("gave",),
+                ("reported",), ("says",), ("said",))
+RECEIPTS = {("got",), ("i", "got"), ("we", "got"), ("received",), ("i", "received"), ("we", "received")}
+VERDICT_SPAN = 200
 
 
-def pass_verdict(reply, match):
-    word = list(re.finditer(r"\bpass(?:ed)?\b", match.group(0), re.I))[-1]
-    clause = re.split(r"[.;!?\n]|\b(?:then|and|but)\b", reply[:match.start() + word.start()], flags=re.I)[-1]
-    label, colon, clause = clause.rpartition(":")
-    if colon and not clause.strip():
-        return bool(VERDICT_LABEL.search(label)) and not VERDICT_NEGATION.search(label)
-    if not clause.strip():
-        return True
-    subject = list(VERDICT_SUBJECT.finditer(clause))
-    if subject:
-        before = " ".join(clause[:subject[-1].start()].split()[-2:])
-        return not (VERDICT_NEGATION.search(clause[subject[-1].start():]) or re.search(r"\b(?:no|neither)\b", before, re.I))
-    if word.start():
-        return not VERDICT_NEGATION.search(clause)
-    if VERDICT_SOURCE.match(reply, match.end()):
-        return not (VERDICT_NEGATION.search(clause) or re.search(r"\b(?:no|neither)\b", clause, re.I))
-    return False
+def positions(pattern, text, skip=()):
+    starts = [s for s, _ in skip]
+    found = []
+    for m in pattern.finditer(text):
+        at = bisect.bisect_right(starts, m.start()) - 1
+        if at < 0 or skip[at][1] <= m.start():
+            found.append(m.start())
+    return found
+
+
+def any_between(found, start, end):
+    return bisect.bisect_left(found, start) < bisect.bisect_left(found, end)
+
+
+def label_kind(before, context):
+    text = LEAD_MARKS.sub("", before, count=1).replace("’", "'")
+    if not text.strip():
+        return "bare"
+    closed = re.sub(r"\([^()]*\)", lambda m: " " * len(m.group()), text)
+    cuts = list(LABEL_SEPARATOR.finditer(closed))
+    if cuts:
+        cut = cuts[-1]
+        label, quals = text[:cut.start()].strip(), closed[cut.end():].lower().split()
+        named = REVIEW_NOUN.search(label) or (label.lower() in GENERIC_LABELS and REVIEW_NAMED.search(f"{context} {' '.join(quals)}"))
+        plain_quals = all(q in LABEL_WORDS or q.isdigit() for q in quals)
+        return "label" if named and plain_quals and not HEDGE.search(label) else None
+    words = text.lower().split()
+    while words and words[-1] in QUALIFIERS:
+        words.pop()
+    if tuple(words) in RECEIPTS:
+        return "receipt"
+    verb = next((v for v in REPORT_VERBS if tuple(words[-len(v):]) == v), ())
+    words = words[:len(words) - len(verb)]
+    if 0 < len(words) <= 6 and words[-1] in NOUN_HEADS and all(w in NOUN_WORDS or w.isdigit() for w in words):
+        return "label"
+    return None
+
+
+def trailer_kind(trailer):
+    items = [i.strip() for i in TRAILER_SPLIT.split(trailer) if i.strip()]
+    if not all(TRAILER_ITEM.fullmatch(i) for i in items):
+        return None
+    return "source" if any(LABEL_AFTER.match(i) for i in items) else "notes"
+
+
+def previous_line(plain, newlines, line):
+    for back in range(line - 1, max(line - 4, -1), -1):
+        text = plain[(newlines[back - 1] + 1 if back else 0):newlines[back]][-300:]
+        if text.strip():
+            return text
+    return ""
+
+
+def mention_verdict(plain, m, found):
+    at = bisect.bisect_left(found["ends"], m.start())
+    sentence_start = found["ends"][at - 1] + 1 if at else 0
+    sentence_end = found["ends"][at] if at < len(found["ends"]) else len(plain)
+    cut = bisect.bisect_right(found["clauses"], m.start()) - 1
+    clause_start = max(sentence_start, found["clauses"][cut] if cut >= 0 else 0)
+    near, stop = max(clause_start, m.start() - VERDICT_SPAN), min(sentence_end, m.end() + VERDICT_SPAN)
+    at = bisect.bisect_left(found["openers"], m.end())
+    split = found["openers"][at] if at < len(found["openers"]) and found["openers"][at] < stop else stop
+    before = plain[near:m.start()]
+    off_topic = (any_between(found["off_topic"], near, m.start()) or any_between(found["off_topic"], m.end(), split)
+                 or not before.strip() and any_between(found["off_topic"], split, stop))
+    if off_topic and not (any_between(found["named"], near, m.start()) or any_between(found["named"], m.end(), split)):
+        return None
+    if (any_between(found["negations"], clause_start, m.start()) or any_between(found["negations"], m.end(), split)
+            or any_between(found["unmet"], m.end(), split)):
+        return FAIL
+    if (m.start() - clause_start > VERDICT_SPAN or sentence_end - m.end() > VERDICT_SPAN or plain[sentence_end:sentence_end + 1] == "?"
+            or any_between(found["mentions"], clause_start, m.start())):
+        return INCONCLUSIVE
+    direct = BENIGN_NEGATION.sub(" ", plain[m.end():split]).strip()
+    if direct and not PASS_COMPLEMENT.fullmatch(direct):
+        return INCONCLUSIVE
+    line = bisect.bisect_left(found["newlines"], m.start())
+    previous = previous_line(plain, found["newlines"], line)
+    line_start = found["newlines"][line - 1] + 1 if line else 0
+    kind = label_kind(before, plain[max(line_start, clause_start - 300):clause_start] + " " + previous)
+    tail = trailer_kind(BENIGN_NEGATION.sub(" ", plain[split:stop]))
+    heading = VERDICT_END.split(previous)[-1].strip()
+    if tail and (kind == "label" or kind in ("bare", "receipt") and tail == "source" or kind == "bare" and heading.startswith("#") and REVIEW_NAMED.search(heading)):
+        return PASS
+    return INCONCLUSIVE
+
+
+def review_pass(reply):
+    plain = VERDICT_MARKUP.sub(" ", reply or "")
+    benign = [(m.start(), m.end()) for m in BENIGN_NEGATION.finditer(plain)]
+    mentions = list(VERDICT_WORD.finditer(plain))
+    found = {"ends": positions(VERDICT_END, plain), "clauses": [m.end() for m in VERDICT_CLAUSE.finditer(plain)], "newlines": positions(re.compile("\n"), plain),
+             "negations": positions(VERDICT_NEGATION, plain, benign), "unmet": positions(VERDICT_UNMET, plain, benign), "openers": positions(VERDICT_OPENER, plain),
+             "off_topic": positions(OFF_TOPIC, plain), "named": positions(REVIEW_NAMED, plain), "mentions": [m.start() for m in mentions]}
+    verdicts = {v for v in (mention_verdict(plain, m, found) for m in mentions) if v}
+    if verdicts <= {FAIL}:
+        return False
+    return True if PASS in verdicts and FAIL not in verdicts else None
 
 
 @oracle("documentation-impact-independent-review-pass-required")
@@ -2601,16 +2711,18 @@ def doc_impact_review(view):
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
     result = turn_author_result(view, turn, reply)
     reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
-    plain = MARKUP.sub("", reply or "")
-    verdict_word = next((m for m in re.finditer(r"\bpass\b|\breview\b[^.\n]{0,40}\bpassed\b", plain, re.I) if pass_verdict(plain, m)), None)
-    evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {bool(verdict_word)}"]
+    verdict_pass = review_pass(reply)
+    evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {verdict_pass}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)
     if result == "not required":
         return failed("a documented flag changed yet the author result says review is not required", *evidence)
     if not reviewers:
         return failed("review required but no independent reviewer spawned", *evidence)
-    return passed(*evidence) if verdict_word else failed("reviewer spawned but no `pass` verdict reported before completion", *evidence)
+    if verdict_pass is None:
+        return inconclusive("the reply mentions a pass the wording guard can neither confirm nor rule out", *evidence,
+                            needs_judge=True, excerpt=excerpt_of(reply))
+    return passed(*evidence) if verdict_pass else failed("reviewer spawned but no `pass` verdict reported before completion", *evidence)
 
 
 @oracle("documentation-impact-modes-invocable")
@@ -2740,7 +2852,7 @@ PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|p
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = affirmed(r"\bbase\b", low) or affirmed(PICKED, low)
+    base = affirmed(r"\b(?:base|winner)\b", low) or affirmed(PICKED, low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
