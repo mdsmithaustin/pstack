@@ -3460,6 +3460,7 @@ class ReviewVerdictGuard(unittest.TestCase):
         result = review_line("Changed the CLI flag parsing and the README table. " * 60 + "I ran the independent review and it passed. **Closing notes**")
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)
         self.assertIn("and it passed", result["excerpt"])
+        self.assertIn("graded reply: turn 0", result["evidence"])
 
     def test_a_labeled_pass_decides_beside_an_unlabeled_one(self):
         self.assertEqual(review_line("Independent review: pass. It passed on the first try.")["verdict"], PASS)
