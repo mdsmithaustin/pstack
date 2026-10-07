@@ -1313,6 +1313,20 @@ class EvidenceRefusalControls(_OwnerFixture):
                 for promise in oracles.ORACLES:
                     self.assertEqual(oracles.check(promise, trace, {}, self.project)["verdict"], "INCONCLUSIVE")
 
+    def test_non_string_model_config_from_an_untyped_column_is_incomplete(self):
+        import sqlite3
+        from test_hermes import SESSION_COLUMNS, MESSAGE_COLUMNS
+        path = hermes.profile(self.run) / "state.db"
+        with sqlite3.connect(path) as con:
+            con.execute("create table sessions (" + SESSION_COLUMNS.replace("model_config text", "model_config") + ")")
+            con.execute("create table messages (" + MESSAGE_COLUMNS + ")")
+            con.execute("insert into sessions values ('root',null,7,1,'fixture',?,0,0,0,0)", (str(self.project),))
+            con.execute("insert into messages values (1,'root','user','go',null,null,null)")
+        con.close()
+        trace = hermes.harvest(self.run)
+        self.assertIn("decode-failed", trace["x_harvest_error"])
+        self.assertEqual(trace["events"], [])
+
     def test_authorizer_denies_writes_attach_extensions_and_other_tables(self):
         import sqlite3
         with sqlite3.connect(":memory:") as con:

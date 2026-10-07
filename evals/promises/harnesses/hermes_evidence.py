@@ -920,7 +920,12 @@ class HermesEvidence:
                 ids.add(session["id"])
                 if type(session["started_at"]) not in (int, float) or any(session[k] is not None and not isinstance(session[k], str) for k in ("parent_session_id", "model", "cwd")):
                     raise EvidenceRefused("decode-failed", "invalid native session values")
-                config = json.loads(session["model_config"] or "{}")
+                raw_config = session["model_config"]
+                if raw_config in (None, ""):
+                    raw_config = "{}"
+                if not isinstance(raw_config, str):
+                    raise EvidenceRefused("decode-failed", "model_config must be text")
+                config = json.loads(raw_config)
                 if not isinstance(config, dict) or (config.get("reasoning_config") is not None and not isinstance(config["reasoning_config"], dict)):
                     raise EvidenceRefused("decode-failed", "model_config must be an object")
                 session["model_config"] = config
