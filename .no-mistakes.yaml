@@ -1,0 +1,8 @@
+commands:
+  lint: tools/gate-check.sh lint
+pr:
+  publish_intent: false
+  appendix: collapsed
+protected_paths:
+  - .github/workflows/**
+  - .github/rulesets/**
