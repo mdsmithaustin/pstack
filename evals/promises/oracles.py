@@ -2568,38 +2568,36 @@ def doc_impact_before_completion(view):
 
 
 VERDICT_WORD = re.compile(r"\bpass(?:ed)?\b", re.I)
-VERDICT_MARKUP = re.compile(r"\]\([^()\[\]\s]{0,300}\)|\[[ xX]\]|[*`\[\]✅✔☑✓🟢\ufe0f]|(?<!\w)_+|_+(?!\w)")
+VERDICT_MARKUP = re.compile(r"[*`\[\]✅✔☑✓\ufe0f]|(?<!\w)_+|_+(?!\w)")
 VERDICT_END = re.compile(r"\n|[.!?;](?=\s|$)")
-VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before|after|although|though|however|whereas|while|so)\b", re.I)
+VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before)\b", re.I)
 VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nobody|nothing|neither|nor|cannot|unable|without|refus(?:e|es|ed|ing)"
                               r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n't\b|[❌✗✘🚫⛔]", re.I)
-VERDICT_UNMET = re.compile(r"\b(?:required|needed)\b", re.I)
+NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|needed)\b", re.I)
 BENIGN_NEGATION = re.compile(r"\b(?:with\s+)?(?:no|zero|0)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
-                             r"|objections?|items?|changes)\b", re.I)
+                             r"|objections?|items?|changes(?:\s+(?:needed|required|requested))?)\b", re.I)
 VERDICT_OPENER = re.compile(r"[,():|+—–]|\s-\s|\s(?:with|by|from)\b", re.I)
 TRAILER_SPLIT = re.compile(r"[,():|+—–]|\s-\s|\band\b", re.I)
 TRAILER_ITEM = re.compile(r"(?:with\s+)?(?:\d+\s+(?:[\w-]+\s+)?(?:findings?|blockers?|issues?|nits?|notes?|comments?|suggestions?|items?)|notes?|nits?|comments?|suggestions?)"
-                          r"|(?:by|from)\s+(?:the\s+)?(?:(?:independent|trail|docs?|documentation|fresh|second)\s+)*(?:re-?)?review(?:er)?s?"
-                          r"|(?:on\s+)?re-?review|round\s+\d+|(?:head\s+)?[0-9a-f]{7,40}|v?\d+(?:\.\d+)+|read-only|verdict"
-                          r"|(?:the\s+)?(?:independent|trail|docs?|documentation)(?:\s+review(?:er)?)?|review(?:er)?"
-                          r"|[a-z][\w.-]*@(?:low|medium|high|xhigh|max)|(?:claude|opus|sonnet|haiku|fable|gpt|grok|gemini|codex)[\w.@-]*", re.I)
+                          r"|(?:by|from)\s+(?:the\s+)?(?:(?:independent|trail)\s+)*review(?:er)?s?|round\s+\d+|(?:head\s+)?[0-9a-f]{7,40}|v?\d+(?:\.\d+)+"
+                          r"|(?:the\s+)?(?:independent|trail|docs?|documentation)(?:\s+review(?:er)?)?|(?:claude|opus|sonnet|haiku|fable|gpt|grok|gemini|codex)[\w.@-]*", re.I)
 LABEL_AFTER = re.compile(r"(?:by|from)\s", re.I)
-PASS_COMPLEMENT = re.compile(r"verdict|on\s+re-?review|it|them|this|the\s+(?:change|changes|docs|diff|pr|readme|documentation|update|patch)", re.I)
+PASS_COMPLEMENT = re.compile(r"verdict|on\s+re-?review|it|the\s+(?:change|docs)", re.I)
 LEAD_MARKS = re.compile(r"[\s>|#+*-]*(?:\d+[.)]\s+)?")
 LABEL_SEPARATOR = re.compile(r"->|[:|=→—–(]|\s-\s")
 REVIEW_NOUN = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b|\bdocs?\b|\bdocumentation\b", re.I)
 REVIEW_NAMED = re.compile(r"\b(?:re-?)?review\w*|\bverdicts?\b", re.I)
-OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|typecheck\w*|pytest|unittest|ruff|mypy|smoke|e2e)\b", re.I)
+OFF_TOPIC = re.compile(r"\b(?:tests?|suites?|specs?|ci|builds?|lint\w*|checks?|typecheck\w*|pytest|unittest)\b", re.I)
 HEDGE = re.compile(r"\b(?:expect\w*|predict\w*|target|goal|desired|hop(?:e|es|ed|ing)|planned|next|if|whether|unless|until|once|likely|probably|maybe|assum\w*)\b", re.I)
-GENERIC_LABELS = {"result", "status", "outcome"}
-QUALIFIERS = {"a", "an", "the", "clean", "final", "overall", "full"}
+GENERIC_LABELS = {"result", "status"}
+QUALIFIERS = {"a", "clean", "final", "overall"}
 LABEL_WORDS = QUALIFIERS | {"re-review", "rereview", "round", "independent", "trail", "reviewer", "review", "docs", "doc", "documentation", "verdict"}
 NOUN_WORDS = {"the", "a", "an", "independent", "trail", "docs", "doc", "documentation", "fresh", "final", "second", "round", "code",
               "review", "reviews", "reviewer", "reviewers", "reviewer's", "verdict", "re-review"}
 NOUN_HEADS = {"review", "reviews", "reviewer", "reviewers", "reviewer's", "verdict", "re-review"}
 REPORT_VERBS = (("came", "back", "with"), ("came", "back", "as"), ("came", "back"), ("gave", "it"), ("is",), ("was",), ("returned",), ("gave",),
                 ("reported",), ("says",), ("said",))
-RECEIPTS = {("got",), ("i", "got"), ("we", "got"), ("received",), ("i", "received"), ("we", "received")}
+RECEIPTS = {("got",), ("i", "got"), ("we", "got"), ("received",)}
 VERDICT_SPAN = 200
 
 
@@ -2660,8 +2658,10 @@ def mention_verdict(plain, m, found):
     at = bisect.bisect_left(found["ends"], m.start())
     sentence_start = found["ends"][at - 1] + 1 if at else 0
     sentence_end = found["ends"][at] if at < len(found["ends"]) else len(plain)
-    cut = bisect.bisect_right(found["clauses"], m.start()) - 1
-    clause_start = max(sentence_start, found["clauses"][cut] if cut >= 0 else 0)
+    cut = bisect.bisect_right(found["clause_ends"], m.start()) - 1
+    clause_start = max(sentence_start, found["clause_ends"][cut] if cut >= 0 else 0)
+    cut = bisect.bisect_left(found["clause_starts"], m.end())
+    clause_end = min(sentence_end, found["clause_starts"][cut] if cut < len(found["clause_starts"]) else sentence_end)
     near, stop = max(clause_start, m.start() - VERDICT_SPAN), min(sentence_end, m.end() + VERDICT_SPAN)
     at = bisect.bisect_left(found["openers"], m.end())
     split = found["openers"][at] if at < len(found["openers"]) and found["openers"][at] < stop else stop
@@ -2670,8 +2670,7 @@ def mention_verdict(plain, m, found):
                  or not before.strip() and any_between(found["off_topic"], split, stop))
     if off_topic and not (any_between(found["named"], near, m.start()) or any_between(found["named"], m.end(), split)):
         return None
-    if (any_between(found["negations"], clause_start, m.start()) or any_between(found["negations"], m.end(), split)
-            or any_between(found["unmet"], m.end(), split)):
+    if any_between(found["negations"], clause_start, m.start()) or any_between(found["negations_after"], m.end(), clause_end):
         return FAIL
     if (m.start() - clause_start > VERDICT_SPAN or sentence_end - m.end() > VERDICT_SPAN or plain[sentence_end:sentence_end + 1] == "?"
             or any_between(found["mentions"], clause_start, m.start())):
@@ -2694,8 +2693,10 @@ def review_pass(reply):
     plain = VERDICT_MARKUP.sub(" ", reply or "")
     benign = [(m.start(), m.end()) for m in BENIGN_NEGATION.finditer(plain)]
     mentions = list(VERDICT_WORD.finditer(plain))
-    found = {"ends": positions(VERDICT_END, plain), "clauses": [m.end() for m in VERDICT_CLAUSE.finditer(plain)], "newlines": positions(re.compile("\n"), plain),
-             "negations": positions(VERDICT_NEGATION, plain, benign), "unmet": positions(VERDICT_UNMET, plain, benign), "openers": positions(VERDICT_OPENER, plain),
+    clauses = list(VERDICT_CLAUSE.finditer(plain))
+    found = {"ends": positions(VERDICT_END, plain), "clause_starts": [m.start() for m in clauses], "clause_ends": [m.end() for m in clauses],
+             "newlines": positions(re.compile("\n"), plain),
+             "negations": positions(VERDICT_NEGATION, plain, benign), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign), "openers": positions(VERDICT_OPENER, plain),
              "off_topic": positions(OFF_TOPIC, plain), "named": positions(REVIEW_NAMED, plain), "mentions": [m.start() for m in mentions]}
     verdicts = {v for v in (mention_verdict(plain, m, found) for m in mentions) if v}
     if verdicts <= {FAIL}:

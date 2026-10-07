@@ -195,6 +195,9 @@ REVIEW_LINE_NATURALS = (
     ("We got a pass from the independent reviewer.", PASS),
     ("Received a PASS from the trail reviewer.", PASS),
     ("Independent review ✔️ pass", PASS),
+    ("Independent review – pass", PASS),
+    ("Independent review: pass (round 2)", PASS),
+    ("Independent review: pass – no findings", PASS),
 )
 
 REVIEW_BLOCK_NEGATED = (
