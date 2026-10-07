@@ -2836,35 +2836,36 @@ ARENA_DIRS = (".worktrees/", ".arena/")
 GIT_DIRTY = re.compile(r'(?m)(?:^|")[ \t]?(?:[MADRCU][MADRCU ]?[ \t]+\S|\?\? (?:"([^"\n]+)"|([^\s"]+)))|^[ \t]*(?:modified|deleted|new file|both \w+):\s')
 
 
-def cwd_after(command, cwd):
+def cd_target(command):
     pieces = list(walk_segments(command))
     if not pieces:
-        return cwd
+        return ""
     piece, _, base = pieces[-1]
-    moved = cd_into(piece, base) or base
-    if not moved:
-        return cwd
-    return os.path.normpath(moved if moved.startswith("/") or cwd is None else f"{cwd}/{moved}")
+    return cd_into(piece, base) or base
 
 
 def parent_written(view, candidates):
     start = max(s.get("seq") or 0 for s in candidates)
     end = min((e[0] for e in view.project_edits() if e[0] > start), default=float("inf"))
     parent = cwd = view.trace.get("cwd")
+    lost, unsure = False, None
     for call in view.tool_calls:
         seq, given = call.get("seq") or 0, call.get("input") or {}
         if call.get("name") not in SHELL_TOOLS or seq >= end:
             continue
         command = str(given.get(SHELL_TOOLS[call["name"]]) or "").strip()
-        here = given.get("workdir") or given.get("cwd") or cwd
-        if call["name"] == "Bash":
-            cwd = cwd_after(command, cwd)
-        if seq > start and command.startswith("git status") and here == parent:
+        here, known = given.get("workdir") or given.get("cwd") or cwd, not lost
+        if call["name"] == "Bash" and (moved := cd_target(command)):
+            lost = (view.results_for(call) or {}).get("ok") is False or lost and not moved.startswith("/")
+            cwd = os.path.normpath(moved if moved.startswith("/") or cwd is None else f"{cwd}/{moved}")
+        if seq > start and command.startswith("git status") and (here == parent or not known):
             status = ((view.results_for(call) or {}).get("output_head") or "").replace("\\n", "\n")
             untracked = [m.group(1) or m.group(2) for m in GIT_DIRTY.finditer(status)]
             if any(path is None or (not path.startswith(ARENA_DIRS) and view.classify(path) in PROJECT_CLASSES) for path in untracked):
-                return seq
-    return None
+                if known:
+                    return seq, True
+                unsure = unsure or (seq, False)
+    return unsure
 
 
 @oracle("arena-candidates-own-worktrees")
@@ -2875,15 +2876,17 @@ def arena_worktrees(view):
     evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
-    written = parent_written(view, candidates)
-    if written is not None:
-        return failed(f"the parent checkout changed under the candidates (git status at seq {written}, before any lead edit)", *evidence)
+    seq, parent = parent_written(view, candidates) or (None, False)
+    if parent:
+        return failed(f"the parent checkout changed under the candidates (git status at seq {seq}, before any lead edit)", *evidence)
     if view.encrypted():
-        enough = made >= len(candidates) or len(view.worktrees() or []) > len(candidates)
-        return passed(*evidence) if enough else inconclusive("briefs encrypted, and fewer candidate directories than candidates", *evidence)
-    if len(paths) >= len(candidates) or made >= len(candidates) or len(view.worktrees() or []) > len(candidates):
-        return passed(*evidence)
-    return failed("candidates do not each get their own worktree or directory", *evidence)
+        if not (made >= len(candidates) or len(view.worktrees() or []) > len(candidates)):
+            return inconclusive("briefs encrypted, and fewer candidate directories than candidates", *evidence)
+    elif not (len(paths) >= len(candidates) or made >= len(candidates) or len(view.worktrees() or []) > len(candidates)):
+        return failed("candidates do not each get their own worktree or directory", *evidence)
+    if seq is not None:
+        return inconclusive(f"git status at seq {seq} shows changes, but it ran after a failed cd or pushd, so its checkout is unknown", *evidence)
+    return passed(*evidence)
 
 
 PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on|based on) (?:candidate|arm) [\w-]+")
