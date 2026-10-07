@@ -84,6 +84,7 @@ REVIEW_LINE_NATURALS = (
     ("Review: pass.", PASS),
     ("Docs check: pass", INCONCLUSIVE),
     ("Documentation check: pass", INCONCLUSIVE),
+    ("Doc check: pass", INCONCLUSIVE),
     ("Docs pass: pass", INCONCLUSIVE),
     ("The docs check passed.", INCONCLUSIVE),
     ("Pass: docs check", INCONCLUSIVE),
