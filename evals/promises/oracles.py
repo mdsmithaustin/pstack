@@ -1,3 +1,4 @@
+import bisect
 import json
 import os
 import re
@@ -1796,8 +1797,14 @@ NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a|nothing|tbd)\b")
 
 
 def affirmed(pattern, low):
-    return any(not CLAUSE_NEGATION.search(CLAUSE_SPLIT.split(low[:m.start()])[-1]) and not NAMES_NOTHING.match(low, m.end(), m.end() + 12)
-               for m in re.finditer(pattern, low))
+    cuts = [0] + [m.end() for m in CLAUSE_SPLIT.finditer(low)]
+    negations = [m.start() for m in CLAUSE_NEGATION.finditer(low)]
+    for m in re.finditer(pattern, low):
+        clause = cuts[bisect.bisect_right(cuts, m.start()) - 1]
+        negated = bisect.bisect_left(negations, clause) < bisect.bisect_left(negations, m.start())
+        if not negated and not NAMES_NOTHING.match(low, m.end(), m.end() + 12):
+            return True
+    return False
 
 
 @oracle("how-why-reports-name-sources-searched")
@@ -2673,7 +2680,7 @@ def arm_dirs(command):
 
 
 ARENA_DIRS = (".worktrees/", ".arena/")
-GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?(?:[MADRCU][MADRCU ]?\s+\S|\?\? (?:"([^"\n]+)"|([^\s"]+)))|^\s*(?:modified|deleted|new file|both \w+):\s')
+GIT_DIRTY = re.compile(r'(?m)(?:^|")[ \t]?(?:[MADRCU][MADRCU ]?[ \t]+\S|\?\? (?:"([^"\n]+)"|([^\s"]+)))|^[ \t]*(?:modified|deleted|new file|both \w+):\s')
 
 
 def cwd_after(command, cwd):
