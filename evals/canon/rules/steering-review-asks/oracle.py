@@ -947,9 +947,7 @@ def about_clipboard(subject, captured, definitions):
     """Whether an expectation's subject is what Copy writes, not the rendered
     text: it names the clipboard, starts with a name the clipboard stub fills,
     or names a constant bound to a clipboard value, as
-    payload = writeText.mock.calls[0][0] is. The subject's own names stay
-    unexpanded past that, since a rendered container's definition may mention
-    anything."""
+    payload = writeText.mock.calls[0][0] is."""
     texts = [subject, *(bound for name in names_reached(Rendered(subject, True), definitions) for bound in definitions.get(name, []))]
     return (any(re.search(r"writeText|clipboard|copyText", text) for text in texts)
             or any(re.match(rf"\s*{re.escape(name)}\b", subject) for name in captured))
@@ -959,8 +957,9 @@ def other_expectations(source, captured, definitions):
     """The text each expect( that neither asserts absence nor is about the
     clipboard holds: its subject, its matcher chain, and each definition of a
     name the chain reaches, as LONG_TEXT.length reaches the text LONG_TEXT is
-    built from. The present forms the reader recognizes are among them, and
-    so are the ones it does not."""
+    built from. The subject's own names stay unexpanded, since a rendered
+    container's definition may mention anything. The present forms the reader
+    recognizes are among them, and so are the ones it does not."""
     text, found = statements(source), []
     for start in re.finditer(r"(?<![\w$.])expect\(", text):
         statement = bound_value(text, start.start())[0]
