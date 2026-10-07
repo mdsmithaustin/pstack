@@ -2561,8 +2561,10 @@ def pass_verdict(reply, match):
     if subject:
         before = " ".join(clause[:subject[-1].start()].split()[-2:])
         return not (VERDICT_NEGATION.search(clause[subject[-1].start():]) or re.search(r"\b(?:no|neither)\b", before, re.I))
-    if word.start() or VERDICT_SOURCE.match(reply, match.end()):
+    if word.start():
         return not VERDICT_NEGATION.search(clause)
+    if VERDICT_SOURCE.match(reply, match.end()):
+        return not (VERDICT_NEGATION.search(clause) or re.search(r"\b(?:no|neither)\b", clause, re.I))
     return False
 
 
