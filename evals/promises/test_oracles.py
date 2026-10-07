@@ -3165,7 +3165,7 @@ class Issue133RoundTwo(unittest.TestCase):
 
     def test_a_pass_with_no_review_anchor_is_not_a_pass(self):
         for line in ("Tests: **pass**", "Lint: `pass`", "Verdict: not a pass.", "The verdict was not pass.", "I got a pass on the lint.",
-                     "I did not get a PASS from the trail reviewer."):
+                     "I did not get a PASS from the trail reviewer.", "No PASS from the trail reviewer.", "Neither run got a pass from the reviewer."):
             self.assertEqual(self.review_verdict(line), FAIL, line)
 
     def test_each_verdict_negation_word_voids_the_pass(self):
