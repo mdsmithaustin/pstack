@@ -78,6 +78,7 @@ REVIEW_BLOCK_NATURALS = (
     ("Independent review: pass. The second review was skipped.", PASS),
     ("Independent review: pass. The 2nd review was skipped.", PASS),
     ("Independent review: pass and CI is green.", PASS),
+    ("## Independent review\n\nPASS: no edits needed, tests green", INCONCLUSIVE),
 )
 
 REVIEW_LINE_NATURALS = (
@@ -292,6 +293,25 @@ REVIEW_LINE_NATURALS = (
     ("I ran the independent review and it passed. The reviewer did not run the test suite.", INCONCLUSIVE),
     ("Reviewer: PASS. The reviewer never ran the tests, only read the diff.", INCONCLUSIVE),
     ("Reviewer: PASS. The reviewer skipped the generated files.", INCONCLUSIVE),
+    ("I ran the independent review and it passed and the tests pass.", INCONCLUSIVE),
+    ("I ran the independent review and it passed and all 212 tests pass.", INCONCLUSIVE),
+    ("I ran the independent review and it passed and lint is clean.", INCONCLUSIVE),
+    ("I ran the independent review and it passed and CI is green.", INCONCLUSIVE),
+    ("Ran the independent review and it passed and CI is green.", INCONCLUSIVE),
+    ("The trail reviewer ran and it passed and the build is green.", INCONCLUSIVE),
+    ("The independent review ran and it passed and lint is clean.", INCONCLUSIVE),
+    ("I ran the independent review and it passed and tests pass.", INCONCLUSIVE),
+    ("The independent review and the tests both pass.", INCONCLUSIVE),
+    ("Both the docs review and the tests pass.", INCONCLUSIVE),
+    ("Docs review and tests: pass.", INCONCLUSIVE),
+    ("The docs review, tests and lint all passed.", INCONCLUSIVE),
+    ("Independent review: needs changes (1 finding) → pass.", INCONCLUSIVE),
+    ("Independent review: needs changes → fixed → pass.", INCONCLUSIVE),
+    ("Independent review: needs changes — fixed — pass.", INCONCLUSIVE),
+    ("Independent review: needs changes ⇒ pass.", INCONCLUSIVE),
+    ("Independent review: needs changes at 1a2b3c4 → fix → pass at 5d6e7f8.", INCONCLUSIVE),
+    ("I ran the independent review and it passed. No review was skipped.", INCONCLUSIVE),
+    ("I ran the independent review and it passed. The follow-up review was skipped.", INCONCLUSIVE),
 )
 
 REVIEW_BLOCK_NEGATED = (
