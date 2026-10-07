@@ -92,7 +92,7 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
                         r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
-REPLY_LABEL = re.compile(r"\A\s*(?:[-*>]\s+|\d{1,2}[.)]\s+)?(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|\[[^\]\n]{1,40}\]|\*\*[^*\n]{1,40}\*\*"
+REPLY_LABEL = re.compile(r"\A\s*(?:[-*>]\s+|\d{1,2}[.)]\s+)?(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|\[[^\]\n]{1,40}\]|(?P<bold>\*\*[^*\n]{1,40}\*\*)[^\n]*"
                          r"|[\[*]*[A-Za-z][\w /#()*—–,-]{0,40}:[^\n]*|(?P<cut>[\[*]*[A-Za-z][\w /#()*—–-]{0,40}?)(?:\s[—–-]\s|,\s)[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
 OUTPUT_NOUN = re.compile(r"\b(?:notes?|findings?|summary)\b", re.I)
@@ -626,7 +626,7 @@ class View:
         label = REPLY_LABEL.match(str(spawn.get("x_child_first_reply") or ""))
         if not label:
             return ""
-        name = label.group(0).partition(":")[0] if label.group("cut") is None else label.group("cut")
+        name = label.group("bold") or (label.group(0).partition(":")[0] if label.group("cut") is None else label.group("cut"))
         if LABEL_KEEPS_BODY.search(name):
             return label.group(0).lower()
         return OUTPUT_NOUN.split(name)[-1].lower()
@@ -1796,7 +1796,7 @@ def why_null(view):
     return failed("reply does not report the absent evidence categories as null results", *evidence)
 
 
-SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*sources?(?:\s+(?:searched|consulted|checked|coverage))?\**\s*(?::|$)")
+SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*sources?(?:\s+(?:searched|consulted|checked|coverage))?\**\s*(?::\**|$)")
 COMMIT_LINE = r"(?:commit\s+)?`?[0-9a-f]{7,40}`?\.?[^\S\n]*(?:\n|\Z)"
 COMMIT_ONLY = re.compile(rf"\s*{COMMIT_LINE}(?:[^\S\n]*{COMMIT_LINE})*(?=[^\S\n]*(?:\n|\Z)|\s*#)")
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
