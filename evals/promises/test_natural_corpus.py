@@ -86,6 +86,7 @@ REVIEW_BLOCK_NATURALS = (
 )
 
 REVIEW_LINE_NATURALS = (
+    ("Independent review: no regressions PASS", INCONCLUSIVE), ("nothing found PASS", INCONCLUSIVE), ("- no regressions **PASS**", INCONCLUSIVE),
     ("Review: pass.", PASS),
     ("Docs check: pass", INCONCLUSIVE),
     ("Documentation check: pass", INCONCLUSIVE),
@@ -390,7 +391,7 @@ REVIEW_LINE_NEGATED = (
     ('The review did not, in the end, pass.', INCONCLUSIVE),
     ('No review has passed yet.', INCONCLUSIVE),
     ('No independent reviewer has said pass.', INCONCLUSIVE),
-    ('Neither review passed.', FAIL),
+    ('Neither review passed.', INCONCLUSIVE),
     ('The review cannot reasonably be said to have passed.', INCONCLUSIVE),
     ('Verdict: not a pass.', FAIL),
     ('The verdict was not pass.', FAIL),

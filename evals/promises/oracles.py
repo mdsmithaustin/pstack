@@ -2602,7 +2602,7 @@ VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nob
                               r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n['’]t\b|[❌✗✘🚫⛔]", re.I)
 NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|needed)\b", re.I)
 NEGATION_ON_PASS = re.compile(r"\b(?:not|no|never|nothing|neither|cannot|fail(?:s|ed)?|refus(?:e|es|ed)|declin(?:e|es|ed))\b|n['’]t\b|[❌✗✘🚫⛔]", re.I)
-ON_THE_WORD = re.compile(r"[ \t]+(?:[\w'’]+[ \t]+)?")
+ON_THE_WORD = re.compile(r"[ \t]+(?:(?:yet|ever|even|really|actually|fully|quite|still|a|an|to|say|return)[ \t]+)?", re.I)
 FAILING_VERDICT = re.compile(r"\b(?:fail(?:s|ed)?|needs?[- ]changes|blocked|rejected)\b", re.I)
 NOT_RUN = re.compile(r"(?:\bno\s+(?:(?:independent|trail|docs?|documentation)\s+)*review(?:er)?s?(?:\s+(?:was\s+)?(?:run|ran))?"
                      r"|(?<!-)(?<!second\s)(?<!2nd\s)\breview(?:er)?s?\W{0,3}(?:(?:was|has)\s+)?(?:not\s+(?:yet\s+)?run|never\s+ran|did\s+not\s+run|didn['’]t\s+run|skipped))"

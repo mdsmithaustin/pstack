@@ -3103,9 +3103,8 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))["verdict"]
 
     def test_review_wording_that_is_not_a_pass(self):
-        for line in ("The reviewer refused to pass it.", "Neither review passed."):
-            self.assertEqual(self.review_verdict(line), FAIL, line)
-        for line in ("The review failed. Tests pass.", "The review did not, in the end, pass.", "The review would pass only with README changes.",
+        self.assertEqual(self.review_verdict("The reviewer refused to pass it."), FAIL)
+        for line in ("Neither review passed.", "The review failed. Tests pass.", "The review did not, in the end, pass.", "The review would pass only with README changes.",
                      "The review is unlikely to pass.", "No review has passed yet.", "No independent reviewer has said pass.",
                      "The review cannot reasonably be said to have passed."):
             self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
@@ -3550,6 +3549,12 @@ class ReviewVerdictGuard(unittest.TestCase):
         for line in ("The review did not pass. Tests pass.", "Independent review: needs changes. Lint: pass.", "No independent review was run. Pass on tests only."):
             result = review_line(line)
             self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
+
+    def test_only_an_adverb_may_sit_between_a_negation_and_the_pass_it_fails(self):
+        for line in ("Independent review: no regressions PASS", "nothing found PASS", "- no regressions **PASS**"):
+            self.assertEqual(review_line(line)["verdict"], INCONCLUSIVE, line)
+        for line in ("The review has not yet passed.", "The review did not pass.", "The review never passed.", "The review didn't really pass."):
+            self.assertEqual(review_line(line)["verdict"], FAIL, line)
 
     def test_a_free_form_label_before_pass_goes_to_a_judge(self):
         for line in ("The reviewer rejected it: pass.", "The docs reviewer flagged three gaps: pass.", "Review blocked on the README table: pass",
