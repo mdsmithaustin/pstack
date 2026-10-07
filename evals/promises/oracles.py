@@ -2220,6 +2220,12 @@ def finished_in_first_turn(view, commits):
 
 
 SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|:|\[)|\bdo\b.*?\bsleep\s+\d.*?\bdone\b", re.S)
+SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|ssh(?:\s+[^\s'"]+)+)\s+(['"])(.*?)\1""", re.S)
+
+
+def shell_loop(command):
+    command = strip_heredocs(command)
+    return bool(SHELL_LOOP.search(mask_quoted(command)) or any(SHELL_LOOP.search(body) for _, body in SHELL_BODY.findall(command)))
 
 
 @oracle("autonomous-run-uses-loop-facility")
@@ -2227,7 +2233,7 @@ def loop_facility(view):
     prompt = " ".join(str(t) for t in view.case.get("turns", []))
     loops = [c for c in view.tool_calls if c.get("name") in ("Monitor", "loop", "Loop", "schedule")]
     watchers = view.spawns_where(r"watch\w*", r"wake\w*", r"re-check\w*", r"heartbeat\w*")
-    shell_loops = [c for c in view.commands() if SHELL_LOOP.search(mask_quoted(strip_heredocs(c[1])))]
+    shell_loops = [c for c in view.commands() if shell_loop(c[1])]
     commits = len(view.run_commits()) if view.run_commits() is not None else None
     evidence = [f"loop tool calls: {len(loops)}", f"watcher spawns: {len(watchers)}", f"shell loops: {len(shell_loops)}",
                 f"commits past fixture: {commits}", f"prompt asks for /loop: {'/loop' in prompt}"]
