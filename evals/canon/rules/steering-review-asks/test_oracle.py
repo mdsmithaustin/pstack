@@ -186,6 +186,13 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(after):
                 self.assertEqual(self.failures(*after, "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(TAIL)"), [])
 
+    def test_rendered_text_kept_in_a_variable_after_a_semicolonless_stub_counts(self):
+        stub = ["const writeText = vi.fn()", "Object.assign(navigator, { clipboard: { writeText } })", "render(<PromptBubble text={LONG_TEXT} />)"]
+        for absent, present in (("expect(text).not.toContain(TAIL)", "expect(bubble).toHaveTextContent(TAIL)"),
+                                ("expect(bubble).not.toHaveTextContent(TAIL)", "expect(text).toContain(TAIL)")):
+            with self.subTest(absent=absent):
+                self.assertEqual(self.failures(*stub, "const text = bubble.textContent", absent, present), [])
+
     def test_a_payload_captured_in_each_stub_form_is_not_the_rendered_text(self):
         for stub, name in (("writeText: vi.fn((text) => written.push(text)) } })", "written"),
                            ("writeText: async function (text) { copied = text } } })", "copied"),
