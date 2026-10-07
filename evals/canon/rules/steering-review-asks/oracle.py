@@ -637,12 +637,10 @@ PLAIN_REGEX = r"/([^\\/\[\](){}.*+?^$|]+)/"
 WRAPPED = re.compile(rf"expect\.stringContaining\((.*)\)|`\$\{{\s*([\w$.]+)\s*\}}`|{PLAIN_REGEX}")
 DECLARATION = re.compile(r"\b(const|let|var)\s+")
 DECLARATOR = re.compile(r"\s*([\w$]+)\s*(?::(?:\([^()]*\)|=>|[^=,;\n()])*)?(=(?![=>]))?\s*")
-FUNCTION = re.compile(r"\bfunction\s*\*?\s*([\w$]+)")
 ASSIGNMENT = re.compile(r"(?<![\w$.])([\w$]+)\s*\+?=(?![=>])\s*")
-OPENER = re.compile(rf"{ASSIGNMENT.pattern}|{FUNCTION.pattern}")
+OPENER = ASSIGNMENT
 STRING_AT = re.compile(STRING)
 REGEX_AT = re.compile(REGEX_LITERAL)
-NAME = re.compile(r"[A-Za-z_$][\w$]*")
 FREE_NAME = re.compile(r"(?<![\w$.])[A-Za-z_$][\w$]*|(?<=\.\.\.)[A-Za-z_$][\w$]*")
 PARAMETERS_END = re.compile(r"\s*(?::[^=;{}()]*)?(?:=>|\{)")
 CONTROL_HEAD = re.compile(r"\b(?:if|for|while|switch|with)\s*$")
@@ -711,14 +709,14 @@ def reaches(value, targets, definitions):
     mentions a target. A literal names no constants; an expression does, and
     so does each definition outside its quoted strings."""
     texts, seen = [value.text], set()
-    names = NAME.findall(code(value.text)) if value.expression else []
+    names = FREE_NAME.findall(code(value.text)) if value.expression else []
     while texts:
         if any(re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", text) for text in texts for target in targets):
             return True
         fresh = set(names) - seen
         seen |= fresh
         texts = [text for name in fresh for text in definitions.get(name, [])]
-        names = [name for text in texts for name in NAME.findall(code(text))]
+        names = [name for text in texts for name in FREE_NAME.findall(code(text))]
     return False
 
 
@@ -736,6 +734,12 @@ def names_reached(value, definitions):
     return seen
 
 
+def held(value, definitions):
+    """A value's text and each string literal bound to a name it mentions."""
+    return {value.text} | {unquoted(text) for name in names_reached(value, definitions) for text in definitions.get(name, [])
+                           if re.fullmatch(STRING, text)}
+
+
 def shows_hidden_value(present, absent, definitions):
     """The present value is the absent one under another name; or the present
     value reaches the absent one through the names it mentions, as
@@ -743,8 +747,8 @@ def shows_hidden_value(present, absent, definitions):
     reaches the present one, as LONG_TEXT.slice(-40) does; or both reach one
     name, as FULL.trim() and TAIL = FULL.slice(-30) do."""
     hidden = aliases(absent.text, definitions)
-    return (bool(aliases(present.text, definitions) & hidden) or reaches(present, hidden, definitions)
-            or reaches(absent, {present.text}, definitions)
+    return (bool({present.text} & hidden) or reaches(present, hidden, definitions)
+            or reaches(absent, held(present, definitions), definitions)
             or bool(names_reached(present, definitions) & names_reached(absent, definitions)))
 
 
@@ -833,7 +837,7 @@ def bound_value(statement, start, end=None):
 
 def definitions_in(source):
     """Every value bound to each name: each declarator of a const, let, or var
-    list, function declarations, and assignments to a name the file declares
+    list, and assignments to a name the file declares
     with let, var, or a const with no value. Also the names the file may bind
     to a value it does not know: those names, each one bound to a regex
     unreadable() rejects, and each one unknown_names finds."""
@@ -852,8 +856,6 @@ def definitions_in(source):
             if not text.startswith(",", at):
                 break
             at += 1
-    for head in FUNCTION.finditer(text):
-        definitions[head.group(1)].append(bound_value(text, head.end())[0])
     for head in ASSIGNMENT.finditer(text):
         if head.group(1) in mutable:
             definitions[head.group(1)].append(bound_value(text, head.end())[0])
@@ -880,42 +882,28 @@ def unknown_names(text, initialized):
     return names | {name for name, count in assigned.items() if count > initialized[name]}
 
 
-def resolved_names(definitions):
-    """The names whose every definition the reader resolves: each name a
-    definition mentions outside literals and property access is resolved in
-    turn. A name with no definition here, such as an import, a parameter, a
-    global, or a class, is not, and neither is one on a cycle."""
-    needs = {name: {use for text in texts for use in FREE_NAME.findall(code(text))} for name, texts in definitions.items()}
-    users = collections.defaultdict(list)
-    for name, uses in needs.items():
-        for use in uses:
-            users[use].append(name)
-    known = [name for name, uses in needs.items() if not uses]
-    for name in known:
-        for user in users[name]:
-            needs[user].discard(name)
-            if not needs[user]:
-                known.append(user)
-    return set(known)
-
-
 def unreadable(text):
     """Whether text is a regex literal that is more than plain text: a flag,
     an escape, a class, a group, an anchor, a quantifier, or alternation."""
     return bool(REGEX_AT.fullmatch(text)) and not re.fullmatch(PLAIN_REGEX, text)
 
 
+def resolves(value, known):
+    """Whether the reader can read a rendered value: every name it mentions,
+    and in turn each name their definitions mention, has a definition in
+    known, and it is not a regex the reader cannot read."""
+    return names_reached(value, known) <= known.keys() and not unreadable(value.text)
+
+
 def proves_unrelated(present, absent, definitions, known):
-    """Whether no present value shows an absent one, on proof: its file
+    """Whether no present value shows an absent one, on proof: the file
     resolves every name each present value mentions, no present value is a
-    regex the reader cannot read, no absent value is one either, and none
-    shows an absent value. Only a const or a function declaration resolves,
-    and not when the file also binds the name another way. A value it cannot
-    resolve may hold anything, so it gets the credit trunk gives any present
-    assertion."""
-    return not any(unreadable(hidden.text) for hidden in absent) and all(
-        free_names(value) <= known and not unreadable(value.text)
-        and not any(shows_hidden_value(value, hidden, definitions) for hidden in absent) for value in present)
+    regex the reader cannot read, and none shows an absent value. Only a const
+    resolves, and not when the file also binds the name another way. A value it
+    cannot resolve may hold anything, so it gets the credit trunk gives any
+    present assertion."""
+    return all(resolves(value, known) and not any(shows_hidden_value(value, hidden, definitions) for hidden in absent)
+               for value in present)
 
 
 def rendered_values(pattern, source):
@@ -946,17 +934,20 @@ def tests_assert_hidden_text_and_copy(added):
     import or a name another test file declares holds a value it does not
     see."""
     sources = ["\n".join(found) for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path)]
-    source = "\n".join(sources)
-    absent = rendered_values(ABSENT, source)
-    readings = [(rendered_values(PRESENT, text), *definitions_in(text)) for text in sources]
+    readings = []
+    for text in sources:
+        own, unknown = definitions_in(text)
+        readings.append((rendered_values(PRESENT, text), rendered_values(ABSENT, text),
+                         {name: texts for name, texts in own.items() if name not in unknown}, own))
+    absent = set().union(*(values for _, values, _, _ in readings))
     definitions = collections.defaultdict(list)
-    for _, own, _ in readings:
+    for _, _, _, own in readings:
         for name, texts in own.items():
             definitions[name] += texts
-    present = any(values for values, _, _ in readings)
-    unrelated = absent and all(
-        proves_unrelated(values, absent, definitions, resolved_names({name: texts for name, texts in own.items() if name not in unknown}))
-        for values, own, unknown in readings)
+    present = any(values for values, _, _, _ in readings)
+    unrelated = absent and all(resolves(hidden, known) for _, values, known, _ in readings for hidden in values) and all(
+        proves_unrelated(values, absent, definitions, known) for values, _, known, _ in readings)
+    source = "\n".join(sources)
     missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
                                         ("that hidden prompt text is absent", absent),
                                         ("that hidden prompt text is present", present and not unrelated))

@@ -147,12 +147,18 @@ class HiddenTailTests(unittest.TestCase):
     COPY = "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);"
     PRESENT = "constraint:C3: no added web test asserts that hidden prompt text is present"
 
+    BOUND = 'const TAIL = "UNIQUE_TAIL"'
+
     def failures(self, *lines):
         return oracle().tests_assert_hidden_text_and_copy({"web/src/chat.test.tsx": [self.COPY, *lines]})
 
+    def failures_bound(self, *lines):
+        """The failures when the file binds the absent value, as an unrelated present value needs to fail."""
+        return self.failures(*(lines if any(line.startswith("const TAIL") for line in lines) else (self.BOUND, *lines)))
+
     def test_an_unrelated_present_assertion_does_not_count(self):
-        self.assertEqual(self.failures('const SHORT_TEXT = "Hello";', "expect(bubble).not.toHaveTextContent(TAIL);",
-                                       "expect(bubble).toHaveTextContent(SHORT_TEXT);"), [self.PRESENT])
+        self.assertEqual(self.failures_bound('const SHORT_TEXT = "Hello";', "expect(bubble).not.toHaveTextContent(TAIL);",
+                                             "expect(bubble).toHaveTextContent(SHORT_TEXT);"), [self.PRESENT])
 
     def test_the_copied_payload_holding_the_tail_is_not_the_rendered_text(self):
         self.assertEqual(self.failures(
@@ -262,10 +268,7 @@ class HiddenTailTests(unittest.TestCase):
                                                                                 "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
                            ("present in parentheses", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent((LONG_TEXT))"]),
                            ("present cast to a type", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(LONG_TEXT as string)"]),
-                           ("present template holding the constant", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(`Prompt: ${LONG_TEXT}`)"]),
-                           ("function declaration builds the present value", ["function makeLong() {", "  return HEAD + TAIL", "}",
-                                                                              "const LONG_TEXT = makeLong()", absent,
-                                                                              "expect(bubble).toHaveTextContent(LONG_TEXT)"])):
+                           ("present template holding the constant", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(`Prompt: ${LONG_TEXT}`)"])):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [])
 
@@ -282,7 +285,7 @@ class HiddenTailTests(unittest.TestCase):
                            ("condition that names the present value", ['const HEAD = "chunk"', "if (HEAD) {", "  render(<Bubble />)", "}", absent,
                                                                        "expect(bubble).toHaveTextContent(HEAD)"])):
             with self.subTest(row):
-                self.assertEqual(self.failures(*lines), [self.PRESENT])
+                self.assertEqual(self.failures_bound(*lines), [self.PRESENT])
 
     def test_a_present_value_the_file_does_not_resolve_gets_trunk_credit(self):
         absent, tail = "expect(bubble).not.toHaveTextContent(TAIL)", 'const TAIL = "UNIQUE_TAIL"'
@@ -446,7 +449,7 @@ class HiddenTailTests(unittest.TestCase):
                                                                              "render(<Bubble text={LONG_TEXT} />);", absent,
                                                                              "expect(bubble).toHaveTextContent(text);"])):
             with self.subTest(row):
-                self.assertEqual(self.failures(*lines), [self.PRESENT])
+                self.assertEqual(self.failures_bound(*lines), [self.PRESENT])
 
     def test_literal_text_names_no_constants(self):
         absent, prompt = "expect(bubble).not.toHaveTextContent(TAIL)", 'const prompt = "a".repeat(13000) + TAIL'
@@ -457,7 +460,7 @@ class HiddenTailTests(unittest.TestCase):
                            ("block body statements", ["function setup() {", '  const label = "Show more"', "  render(<Bubble text={LONG_TEXT} />)", "}",
                                                       'const LONG_TEXT = "a".repeat(9) + TAIL', absent, "expect(screen.getByText(label)).toBeInTheDocument()"])):
             with self.subTest(row):
-                self.assertEqual(self.failures(*lines), [self.PRESENT])
+                self.assertEqual(self.failures_bound(*lines), [self.PRESENT])
 
     def test_each_declarator_in_a_list_is_a_definition(self):
         absent, present = "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(LONG_TEXT)"
@@ -489,11 +492,11 @@ class HiddenTailTests(unittest.TestCase):
                 ("stray backtick in a comment", ["// a ` stray", 'const HEAD = "chunk"', absent,
                                                  "expect(bubble).toHaveTextContent(HEAD)"], [self.PRESENT])):
             with self.subTest(row):
-                self.assertEqual(self.failures(*lines), expected)
+                self.assertEqual(self.failures_bound(*lines), expected)
 
     def test_a_present_constant_not_built_from_the_absent_value_does_not_count(self):
-        self.assertEqual(self.failures('const HEAD = "chunk ".repeat(900);', "const LONG_TEXT = HEAD + TAIL;",
-                                       "expect(container).not.toHaveTextContent(TAIL);", "expect(container).toHaveTextContent(HEAD);"),
+        self.assertEqual(self.failures_bound('const HEAD = "chunk ".repeat(900);', "const LONG_TEXT = HEAD + TAIL;",
+                                             "expect(container).not.toHaveTextContent(TAIL);", "expect(container).toHaveTextContent(HEAD);"),
                          [self.PRESENT])
 
     def test_a_constant_and_its_literal_name_the_same_value(self):
@@ -522,7 +525,8 @@ class HiddenTailTests(unittest.TestCase):
 
     def test_multiline_assertions_compare_their_values(self):
         absent = ["expect(bubble).not.toHaveTextContent(", "  TAIL,", ");"]
-        self.assertEqual(self.failures('const SHORT_TEXT = "Hello";', *absent, "expect(bubble).toHaveTextContent(", "  SHORT_TEXT,", ");"), [self.PRESENT])
+        self.assertEqual(self.failures_bound('const SHORT_TEXT = "Hello";', *absent, "expect(bubble).toHaveTextContent(", "  SHORT_TEXT,", ");"),
+                         [self.PRESENT])
         self.assertEqual(self.failures(*absent, "expect(bubble).toHaveTextContent(", "  TAIL", ");"), [])
 
     def test_the_same_value_absent_then_present_counts_across_assertion_forms(self):
