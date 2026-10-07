@@ -91,6 +91,7 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
 REPLY_HEAD = 300
 REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*[Ss]ources?\s*\n+[^\n]*|#{1,6}[^\n]+|[A-Za-z][\w /-]{0,30}:[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
+LABEL_QUALIFIER = re.compile(r"(?:\s*(?:#?\d+|\([^)]*\)|[—–-]\s.*))+\s*$")
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -596,10 +597,6 @@ class View:
         given = (call or {}).get("input") or {}
         extra = [str(given.get(k) or "") for k in ("description", "task_name", "name")] if isinstance(given, dict) else []
         said = str(spawn.get("x_child_first_reply") or "")
-        if reply == "label":
-            label = REPLY_LABEL.match(said)
-            name = label.group(0).partition(":")[0] if label else ""
-            said = label.group(0) if label and LABEL_KEEPS_BODY.search(name) else name
         text = " ".join([str(spawn.get(k) or "") for k in ("persona", "subagent_type", "description", "prompt_head", "task_name", "role")] + extra
                         + [said[:REPLY_HEAD] if reply else ""]).lower()
         return LEAD_ROLE.sub("", text)
@@ -618,10 +615,25 @@ class View:
         brief = brief.replace("\\n", "\n")
         return bool(READ_ONLY_BRIEF.search(brief)) and not EDIT_ORDER.search(brief)
 
+    def reply_label(self, spawn):
+        label = REPLY_LABEL.match(str(spawn.get("x_child_first_reply") or ""))
+        if not label:
+            return "", False
+        name = label.group(0).partition(":")[0]
+        if LABEL_KEEPS_BODY.search(name):
+            return label.group(0).lower(), False
+        return LABEL_QUALIFIER.sub("", name).lower(), True
+
     def spawns_where(self, *needles, turn=None, reply=True):
-        pattern = re.compile("|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles))
-        return [s for s in self.spawns
-                if (turn is None or self.turn_of(s.get("seq")) == turn) and pattern.search(self.spawn_text(s, reply))]
+        alternatives = "|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles)
+        pattern, role = re.compile(alternatives), re.compile(rf"(?:{alternatives})[^a-z0-9]*$")
+
+        def named(spawn):
+            if reply != "label":
+                return pattern.search(self.spawn_text(spawn, reply))
+            label, ends_in_role = self.reply_label(spawn)
+            return pattern.search(self.spawn_text(spawn, reply=False)) or (role if ends_in_role else pattern).search(label)
+        return [s for s in self.spawns if (turn is None or self.turn_of(s.get("seq")) == turn) and named(s)]
 
     def supports(self, spawn):
         text = self.spawn_text(spawn, reply=False)
@@ -1630,7 +1642,7 @@ def how_evidence(view):
     seq = view.read_seq("how/SKILL.md")
     if seq is not None:
         seqs.append(seq)
-    seqs += [s.get("seq") for s in view.spawns_where("explainer", "explorer", "architectural explanation", "how explainer", "how skill")]
+    seqs += [s.get("seq") for s in view.spawns_where("explainer", "explorer", "architectural explanation", "how explainer", "how skill", reply="label")]
     return min(seqs) if seqs else None
 
 
@@ -1639,7 +1651,7 @@ def why_evidence(view):
     seq = view.read_seq("why/SKILL.md")
     if seq is not None:
         seqs.append(seq)
-    seqs += [s.get("seq") for s in view.spawns_where("investigator", "synthesizer", "historical context", "source[- ]control", "git history")]
+    seqs += [s.get("seq") for s in view.spawns_where("investigator", "synthesizer", "historical context", "source[- ]control", "git history", reply="label")]
     return min(seqs) if seqs else None
 
 
