@@ -122,6 +122,13 @@ class CopySession(unittest.TestCase):
             grok.copy_session(self.session, self.captured)
         self.assertEqual(list(external.iterdir()), [])
 
+    def test_a_chat_that_vanishes_between_the_exists_check_and_the_read_is_refused(self):
+        self.chat.write_bytes(b"native transcript\n")
+        with mock.patch.object(grok, "copy_file", side_effect=FileNotFoundError(self.chat)), \
+                self.assertRaises(GradeRefused) as refused:
+            grok.copy_session(self.session, self.captured)
+        self.assertEqual(refused.exception.receipt["reason"], "input_changed")
+
     def test_session_files_and_subagent_meta_are_copied(self):
         self.chat.write_bytes(b"native transcript\n")
         (self.session / "subagents" / "kid").mkdir(parents=True)

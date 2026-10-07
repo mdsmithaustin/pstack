@@ -387,7 +387,12 @@ def copy_session(session_dir, destination):
     copied = {}
     for name in SESSION_FILES:
         if (session_dir / name).exists(follow_symlinks=False):
-            copied[target / name] = copy_file(session_dir / name, target / name)
+            try:
+                copied[target / name] = copy_file(session_dir / name, target / name)
+            except FileNotFoundError as error:
+                if name != "chat_history.jsonl":
+                    raise
+                raise GradeRefused("input_changed", f"session chat vanished before its copy: {session_dir / name}") from error
     for meta in sorted(session_dir.glob("subagents/*/meta.json")):
         out = target / "subagents" / meta.parent.name / "meta.json"
         copied[out] = copy_file(meta, out)
