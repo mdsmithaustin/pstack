@@ -141,7 +141,9 @@ class CopyAssertionTests(unittest.TestCase):
 
 class HiddenTailTests(unittest.TestCase):
     """C3 wants the text past the cut asserted absent while collapsed and present
-    after, so the absent and present assertions must name the same value."""
+    after. The present ask fails only on proof: some value is asserted absent,
+    the file resolves every present value, and none shows an absent one. A
+    present value the file does not resolve gets the credit trunk gives."""
     COPY = "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);"
     PRESENT = "constraint:C3: no added web test asserts that hidden prompt text is present"
 
@@ -276,7 +278,9 @@ class HiddenTailTests(unittest.TestCase):
                            ("open test body after a declaration", ['it("hides the tail", () => {', '  const HEAD = "chunk"', absent,
                                                                    "  expect(bubble).toHaveTextContent(HEAD)", "})"]),
                            ("button label that shares a constant's name", ['const prompt = "a".repeat(9000) + TAIL', absent,
-                                                                           'expect(screen.getByText("Show full prompt")).toBeInTheDocument()'])):
+                                                                           'expect(screen.getByText("Show full prompt")).toBeInTheDocument()']),
+                           ("condition that names the present value", ['const HEAD = "chunk"', "if (HEAD) {", "  render(<Bubble />)", "}", absent,
+                                                                       "expect(bubble).toHaveTextContent(HEAD)"])):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [self.PRESENT])
 
