@@ -244,6 +244,36 @@ class HiddenTailTests(unittest.TestCase):
                 self.assertEqual(self.failures(*definition, "expect(bubble).not.toHaveTextContent(TAIL)",
                                                "expect(bubble).toHaveTextContent(LONG_TEXT)"), [])
 
+    def test_a_present_value_that_reaches_the_absent_one_through_names_counts(self):
+        absent = "expect(bubble).not.toHaveTextContent(TAIL)"
+        for row, lines in (("present wrapped in a method call", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(LONG_TEXT.trim())"]),
+                           ("present wrapped in a function call", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(String(LONG_TEXT))"]),
+                           ("present text compared with a wrapped value", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble.textContent).toBe(LONG_TEXT.trim())"]),
+                           ("definition two names away", ["const makeLong = () => HEAD + TAIL", "const LONG_TEXT = makeLong()", absent,
+                                                          "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("let assigned in a hook", ["let LONG_TEXT: string", "beforeEach(() => {", "  LONG_TEXT = HEAD + TAIL", "})", absent,
+                                                       "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("declaration whose brackets close on a later line", ["const LONG_TEXT = Array.from({ length: 50 }, (_, i) => {",
+                                                                                 "  return `chunk ${i}`", '}).join(" ") + TAIL', absent,
+                                                                                 "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("blank line where the pipeline blanked a comment", ['const LONG_TEXT = "x".repeat(500)', "   ", "  + TAIL", absent,
+                                                                                "expect(bubble).toHaveTextContent(LONG_TEXT)"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_present_value_that_does_not_reach_the_absent_one_does_not_count(self):
+        absent = "expect(bubble).not.toHaveTextContent(TAIL)"
+        for row, lines in (("unrelated value wrapped in a call", ['const HEAD = "chunk ".repeat(900)', "const LONG_TEXT = HEAD + TAIL", absent,
+                                                                  "expect(bubble).toHaveTextContent(HEAD.trim())"]),
+                           ("open test body after a declaration", ['it("hides the tail", () => {', '  const HEAD = "chunk"', absent,
+                                                                   "  expect(bubble).toHaveTextContent(HEAD)", "})"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [self.PRESENT])
+
+    def test_a_constant_declared_in_an_open_test_body_keeps_its_literal(self):
+        self.assertEqual(self.failures('it("hides the tail", () => {', '  const TAIL = "tail marker"', "  expect(bubble).not.toHaveTextContent(TAIL)",
+                                       '  expect(bubble).toHaveTextContent("tail marker")', "})"), [])
+
     def test_a_name_defined_twice_keeps_both_definitions(self):
         for second in ('const LONG_TEXT = "short";', 'const TAIL = "unrelated";'):
             with self.subTest(second):
