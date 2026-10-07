@@ -76,7 +76,7 @@ CONSTRAINT_SUBJECTS = {"do not remove: the sink needs a trailing newline on ever
 SCRATCH_PREFIXES = ("/tmp/", "/private/tmp/", "/var/folders/")
 LOG_NAMES = ("decisions.tsv", ".audit/")
 NOT_TEST_WORDS = re.compile(r"contest|protest|attest|detest|latest|greatest|fastest|shortest|smartest|hottest|cutest|softest|strictest")
-TEST_MARKERS = re.compile(r"\.(?:spec|cy|e2e)\.|_spec\.\w+$|(?:^|/)(?:spec|e2e)/")
+TEST_MARKERS = re.compile(r"\.(?:spec|cy|e2e)\.|_spec\.\w+$")
 PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
@@ -92,11 +92,9 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
                         r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
-REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|[\[*]*[A-Za-z][\w /#()*—–,-]{0,40}:[^\n]*)")
+REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|\[[^\]\n]{1,40}\]|[\[*]*[A-Za-z][\w /#()*—–,-]{0,40}:[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
-LABEL_QUALIFIER = re.compile(r"#?\d+(?:/\d+)?|[A-Z]|[IVX]+|of|(?i:report|agent)")
-LABEL_ANGLE = re.compile(r"\s-+\s|[—–,]|\sfor\s")
-OUTPUT_NOUN = re.compile(r"[\s*\[]*(?:notes?|findings?|summary)\b", re.I)
+OUTPUT_NOUN = re.compile(r"\b(?:notes?|findings?|summary)\b", re.I)
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -542,7 +540,10 @@ class View:
     def inside_project(self, path):
         if not self.project:
             return True
-        return (self.project / path).resolve().is_relative_to(self.project.resolve())
+        if not path.startswith("/"):
+            root = os.path.normpath(self.project)
+            return os.path.commonpath([root, os.path.normpath(os.path.join(root, path))]) == root
+        return Path(path).resolve().is_relative_to(self.project.resolve())
 
     def tree_rel(self, path):
         if not self.project:
@@ -623,25 +624,19 @@ class View:
     def reply_label(self, spawn):
         label = REPLY_LABEL.match(str(spawn.get("x_child_first_reply") or ""))
         if not label:
-            return "", False
+            return ""
         name = label.group(0).partition(":")[0]
         if LABEL_KEEPS_BODY.search(name):
-            return label.group(0).lower(), False
-        head, *angle = LABEL_ANGLE.split(name, maxsplit=1)
-        words = re.sub(r"\([^()]*\)|[*\[\]]|-(?=\d)", " ", name if angle and OUTPUT_NOUN.match(angle[0]) else head).split()
-        while words and LABEL_QUALIFIER.fullmatch(words[-1]):
-            words.pop()
-        return " ".join(words).lower(), True
+            return label.group(0).lower()
+        return OUTPUT_NOUN.split(name)[-1].lower()
 
     def spawns_where(self, *needles, turn=None, reply=True):
-        alternatives = "|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles)
-        pattern, role = re.compile(alternatives), re.compile(rf"(?:{alternatives})[^a-z0-9]*$")
+        pattern = re.compile("|".join(rf"(?<![a-z0-9])(?:{n.lower()})(?:e?s)?(?![a-z0-9])" for n in needles))
 
         def named(spawn):
             if reply != "label":
                 return pattern.search(self.spawn_text(spawn, reply))
-            label, ends_in_role = self.reply_label(spawn)
-            return pattern.search(self.spawn_text(spawn, reply=False)) or (role if ends_in_role else pattern).search(label)
+            return pattern.search(self.spawn_text(spawn, reply=False)) or pattern.search(self.reply_label(spawn))
         return [s for s in self.spawns if (turn is None or self.turn_of(s.get("seq")) == turn) and named(s)]
 
     def supports(self, spawn):
@@ -1800,7 +1795,8 @@ def why_null(view):
     return failed("reply does not report the absent evidence categories as null results", *evidence)
 
 
-SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+(?:searched|consulted|checked|coverage))\**\s*(?::|$)")
+SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*sources?(?:\s+(?:searched|consulted|checked|coverage))?\**\s*(?::|$)")
+COMMIT_ONLY = re.compile(r"\s*(?:commit\s+)?`?[0-9a-f]{7,40}`?\.?[^\S\n]*(?:\n|\Z)")
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
 CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n['’]t\b")
@@ -1822,7 +1818,7 @@ def sources_named(view):
     if gate:
         return gate
     low = view.final_reply.lower()
-    section = SOURCES_SECTION.search(low) or affirmed(SOURCES_LISTED, low)
+    section = any(not COMMIT_ONLY.match(low, m.end()) for m in SOURCES_SECTION.finditer(low)) or affirmed(SOURCES_LISTED, low)
     git = re.search(r"\bgit\b|commit", low)
     evidence = [f"sources section: {bool(section)}", f"git named: {bool(git)}"]
     return passed(*evidence) if section and git else failed("reply has no sources section naming what was searched", *evidence)
@@ -2973,21 +2969,23 @@ def arena_worktrees(view):
     return passed(*evidence)
 
 
-PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:(?:was|is) (?:selected|chosen|picked)|won)\b|\b(?:selected|chose|picked|kept|agreed on|went with) (?:candidate|arm) [\w-]+")
-
-
+PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|agreed on) (?:candidate|arm) [\w-]+")
 PICK_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
 PICK_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor)\b")
+WENT_WITH = re.compile(r"\bwent with (?:candidate|arm) [\w-]+")
+WENT_NEGATION = re.compile(PICK_NEGATION.pattern + r"|\bnobody\b|n['’]t\b")
+WENT_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|then|which)\b")
 
 
 def picked(low):
-    cuts = [0] + [m.end() for m in PICK_SPLIT.finditer(low)]
     words = [m.start() for m in re.finditer(r"\S+", low)]
-    for match in PICKED.finditer(low):
-        clause = cuts[bisect.bisect_right(cuts, match.start()) - 1]
-        sixth = words[max(bisect.bisect_left(words, match.start()) - 6, 0)]
-        if not PICK_NEGATION.search(low, max(clause, sixth), match.start()):
-            return True
+    for pick, negation, split in ((PICKED, PICK_NEGATION, PICK_SPLIT), (WENT_WITH, WENT_NEGATION, WENT_SPLIT)):
+        cuts = [0] + [m.end() for m in split.finditer(low)]
+        for match in pick.finditer(low):
+            clause = cuts[bisect.bisect_right(cuts, match.start()) - 1]
+            sixth = words[max(bisect.bisect_left(words, match.start()) - 6, 0)]
+            if not negation.search(low, max(clause, sixth), match.start()):
+                return True
     return False
 
 
@@ -2995,7 +2993,7 @@ def picked(low):
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = bool(re.search(r"\bbase(?:line)?\b|\b(?:re)?based\b[^.;]{0,40}?\bon(?:to)? (?:candidate|arm) [\w-]+", low)) or picked(low)
+    base = bool(re.search(r"\bbase(?:s|line)?\b|\b(?:re)?based\b[^.;]{0,40}?\bon(?:to)? (?:candidate|arm) [\w-]+", low)) or picked(low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:

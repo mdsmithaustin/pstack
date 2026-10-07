@@ -2673,7 +2673,7 @@ class Issue133WritesAndReruns(unittest.TestCase):
     def test_a_spec_e2e_or_cypress_marker_is_a_test_beside_an_english_word(self):
         view = oracles.View(minimal(), {}, None)
         names = ("spec/latest_spec.rb", "spec/contest_spec.rb", "e2e/latest.e2e.ts", "cypress/e2e/latest.cy.ts", "latest_spec.py",
-                 "spec/support/latest.rb", "web/e2e/fastest.ts", "src/latest.cy.js", "src/greatest.e2e.js")
+                 "src/latest.cy.js", "src/greatest.e2e.js")
         self.assertEqual({n: view.classify(n) for n in names}, {n: "test" for n in names})
 
     def test_a_spec_or_e2e_directory_alone_does_not_make_a_test(self):
