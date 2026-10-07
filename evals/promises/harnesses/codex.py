@@ -316,8 +316,8 @@ def merge_stream_plans(lead, streams):
     k-th todo_list event to the k-th update_plan call. The stream carries only
     a completed flag, so a step is completed or pending there."""
     snapshots = []
-    for stream in streams:
-        for record in records(read_file(stream)):
+    for data in streams:
+        for record in records(data):
             item = record.get("item") or {}
             if record.get("type") in ("item.started", "item.updated", "item.completed") and item.get("type") == "todo_list":
                 snapshots.append([{"text": s.get("text", ""), "state": "completed" if s.get("completed") else "pending"}
@@ -370,14 +370,14 @@ def copy_into(rollouts, destination):
 
 def harvest(run):
     store = run.root / "codex-home" / "sessions"
-    streams = [Path(t["stream"]) for t in run.turns if Path(t.get("stream", "")).is_file()]
+    streams = live.read_streams(run.turns)
     threads = {t["session_id"] for t in run.turns if t.get("session_id")}
     leads, children = find_rollouts(store, threads)
     prompts = [t["argv"][-1] for t in run.turns if t.get("argv")]
     lead = harvest_rollout(next(iter(leads.values())), prompts) if leads else {
         "meta": {}, "context": {}, "events": [], "files_read": [], "worklist": [], "plan_calls": [], "spawns": [],
         "final_reply": "", "injected": [], "usage": None}
-    merge_stream_plans(lead, streams)
+    merge_stream_plans(lead, streams.values())
     launch = json.loads((run.root / "launch.json").read_text())
     context = lead["context"]
     rollouts = copy_into({**leads, **children}, run.root / "transcripts" / "rollouts")
@@ -397,7 +397,7 @@ def harvest(run):
         "worklist": lead["worklist"],
         "spawns": lead["spawns"],
         "final_reply": lead["final_reply"],
-        "transcript_paths": rollouts + [str(s) for s in streams],
+        "transcript_paths": [*rollouts, *streams],
         "x_binary": {"path": launch["path"], "source": launch["source"], "version": launch["version"], "rejected": launch["rejected"]},
         "x_turns": [{k: t.get(k) for k in ("index", "session_id", "argv", "exit_code", "timed_out", "duration_s")} for t in run.turns],
         "x_entry_injections": lead["injected"],

@@ -10,7 +10,7 @@ import uuid
 from pathlib import Path
 
 import live
-from grade_boundary import GradeRefused, copy_file, read_file
+from grade_boundary import GradeRefused, copy_file
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/"]
@@ -481,12 +481,7 @@ def harvest(run):
             spawn.pop(key, None)
 
     last = run.turns[-1] if run.turns else {}
-    streams = {}
-    for stream in (t["stream"] for t in run.turns if t.get("stream")):
-        try:
-            streams[stream] = read_file(Path(stream))
-        except FileNotFoundError:
-            continue
+    streams = live.read_streams(run.turns)
     return {
         "harness": "grok",
         "cli_version": launch.get("cli_version") or launch.get("version"),

@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from grade_boundary import create_file, grade, GradeRefused, _before_turns, _lookup, _seal, _write_record
+from grade_boundary import create_file, grade, GradeRefused, read_file, _before_turns, _lookup, _seal, _write_record
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -123,6 +123,17 @@ def execute(argv, cwd, env, timeout_s, stdout, stderr, stdin=None):
             code, timed_out = proc.wait(), True
     return {"argv": [str(a) for a in argv], "exit_code": code, "timed_out": timed_out,
             "duration_s": round(time.monotonic() - started, 1)}
+
+
+def read_streams(turns):
+    streams = {}
+    for record in turns:
+        if record.get("stream"):
+            try:
+                streams[record["stream"]] = read_file(Path(record["stream"]))
+            except FileNotFoundError as error:
+                raise GradeRefused("input_changed", f"turn stream vanished before harvest: {record['stream']}") from error
+    return streams
 
 
 def install_tree(ref, dest):
