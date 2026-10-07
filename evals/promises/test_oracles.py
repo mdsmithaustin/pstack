@@ -3323,6 +3323,94 @@ class Issue133RoundTwo(unittest.TestCase):
                                                           harness="hermes", final_reply="x"), load_case("how-run"))
         self.assertLess(time.monotonic() - started, 1)
 
+
+def sealed_reply(seq, reply, task):
+    return {"seq": seq, "tool": "spawn_agent", "model": "gpt-6.1-sol", "prompt_head": None, "x_prompt_encrypted": True,
+            "x_child_first_reply": reply, "task_name": task}
+
+
+def sealed_calls(spawns):
+    return [{"seq": s["seq"], "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": s["task_name"]}} for s in spawns]
+
+
+def why_labels(*replies):
+    spawns = [sealed_reply(10, reply, f"t{n}") for n, reply in enumerate(replies)]
+    return grade("why-queries-evidence-categories-in-parallel", minimal(events=sealed_calls(spawns), spawns=spawns, harness="codex"), load_case("why-run"))["verdict"]
+
+
+def how_labels(*replies):
+    spawns = [sealed_reply(10, reply, f"t{n}") for n, reply in enumerate(replies)] + [sealed_reply(30, "Architectural explanation: synthesizing.", "x")]
+    events = sealed_calls(spawns)
+    events.insert(len(replies), text(20, "All back."))
+    return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="codex"), load_case("how-wide-run"))["verdict"]
+
+
+def loop_verdict(command):
+    return grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, command)), load_case("overnight-run"))["verdict"]
+
+
+def arena_pick(line):
+    candidates = [{"seq": 43, "tool": "delegate_task", "prompt_head": f"Design one candidate {n}. Write under /tmp/k/candidate-{n}/"} for n in range(1, 6)]
+    judge = {"seq": 49, "tool": "delegate_task", "prompt_head": "Independently cross-judge all five candidates. Read-only."}
+    events = [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {}}, {"seq": 49, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+    trace = minimal(events=events, spawns=candidates + [judge], final_reply=f"Arena result\n- {line}\n- Verified: 8 unit tests passed.", harness="hermes")
+    return grade("arena-fans-out-and-grafts", trace, load_case("arena-run"))["verdict"]
+
+
+def status_after(commands, status=" M relay/cache.py"):
+    def task(n):
+        return {"description": "candidate", "prompt": f"Design one cache-key candidate. Write only under /tmp/arena/candidate-{n}/: cache.py, rationale.md."}
+    events = [{"seq": 43 + n, "kind": "tool_call", "name": "Agent", "input": task(n)} for n in range(1, 6)]
+    for n, command in enumerate(commands):
+        events += bash(50 + 2 * n, command)
+    events += bash(60, "git status --short", head=status)
+    spawns = [{"seq": 43 + n, "tool": "Agent", "prompt_head": task(n)["prompt"]} for n in range(1, 6)]
+    return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, cwd="/w/relay"), load_case("arena-run"))["verdict"]
+
+
+class Issue133RoundThree(unittest.TestCase):
+    def test_a_role_label_may_carry_parentheses_dashes_markup_and_ordinals(self):
+        for pair in (("Why investigator (git): the cap came in 12d7ece.", "Why investigator (issues): ticket 41."),
+                     ("Investigator — source control: 12d7ece.", "Investigator — issue tracker: #41."),
+                     ("Investigator – git: 12d7ece.", "Investigator – tickets: #41."),
+                     ("**Investigator 1**: 12d7ece.", "**Investigator 2**: #41."),
+                     ("[Investigator: git] 12d7ece.", "[Investigator: tickets] #41."),
+                     ("Investigator #1 (git): 12d7ece.", "Investigator #2 (issues): #41."),
+                     ("Git history investigator report: 12d7ece.", "Issue investigator report: #41.")):
+            self.assertEqual(why_labels(*pair), PASS, pair)
+        for trio in (("Explorer 2 (parser): tracing.", "Explorer 3 (emitter): tracing.", "Explorer 4 (cli): tracing."),
+                     ("Explorer A: tracing.", "Explorer B: tracing.", "Explorer C: tracing."),
+                     ("Explorer 1 of 3: tracing.", "Explorer 2 of 3: tracing.", "Explorer 3 of 3: tracing.")):
+            self.assertEqual(how_labels(*trio), PASS, trio)
+
+    def test_a_loop_handed_to_tmux_eval_a_remote_shell_watch_or_python_is_a_loop(self):
+        for command in ("tmux send-keys -t loop 'while true; do ./check.sh; sleep 60; done' Enter",
+                        "tmux new -d 'while true; do ./check.sh; sleep 60; done'",
+                        "tmux new-session -d -s watch 'until test -f done; do sleep 5; done'",
+                        "eval 'while true; do ./check.sh; sleep 60; done'",
+                        "ssh host 'bash -s' <<'EOF'\nwhile true; do ./check.sh; sleep 60; done\nEOF",
+                        "watch -n 60 ./check.sh",
+                        'python3 -c "import time\nwhile True: time.sleep(5)"'):
+            self.assertEqual(loop_verdict(command), PASS, command)
+
+    def test_a_commented_or_written_loop_is_not_a_loop(self):
+        for command in ("sed -n '1,20p' watch.sh # while true; do sleep 5; done",
+                        "cat <<'EOF' > loop.sh\nwhile true; do ./check.sh; sleep 60; done\nEOF",
+                        "git commit -m 'wrap while true loop'", "grep -n 'watch -n 5' notes.md"):
+            self.assertEqual(loop_verdict(command), FAIL, command)
+
+    def test_a_status_after_a_pushd_into_a_candidate_is_not_the_parent(self):
+        self.assertEqual(status_after(["pushd /w/relay-wt/candidate-1 >/dev/null"]), PASS)
+        self.assertEqual(status_after([]), FAIL)
+
+    def test_without_and_a_base_of_none_name_no_base(self):
+        for line in ("Without a base, retries were grafted from candidate 3.", "Base: none; grafts from candidate 3.",
+                     "Base — none; grafts from candidate 3.", "Base (none): retries grafted from candidate 3.",
+                     "Base: n/a | Grafts: retries from candidate 3"):
+            self.assertEqual(arena_pick(line), FAIL, line)
+        self.assertEqual(arena_pick("Base: candidate 2; grafts from candidate 3."), PASS)
+
+
 if __name__ == "__main__":
     unittest.main()
 
