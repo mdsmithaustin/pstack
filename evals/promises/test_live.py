@@ -4,6 +4,7 @@ import os
 import platform
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -37,6 +38,50 @@ class ChatWorklist(unittest.TestCase):
     def test_bare_checkbox_lines_parse(self):
         self.assertEqual([i["state"] for i in live.chat_worklist("[x] one\n[ ] two\n- [~] three")],
                          ["completed", "pending", "in progress"])
+
+    def test_parenthesized_state_with_an_explanation_parses(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("1. Read source (done: inspected)\n2. Run check (done: passed)")],
+                         ["completed", "completed"])
+
+    def test_parentheses_inside_a_state_explanation_parse(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("1. Fix parser (done: checked parse())\n2. Run tests (done: 3 cases (all passed))")],
+                         ["completed", "completed"])
+
+    def test_underscore_italic_state_annotations_parse(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("1. Read source _(done: inspected)_\n2. Run check _(done: passed)_")],
+                         ["completed", "completed"])
+
+    def test_emphasized_done_and_blocked_annotations_parse(self):
+        reply = ("4. Delegate code-writing on the `feature` role. *(done: commit `3f31bec`, reviewed by me)*\n"
+                 "8. Opening a PR. *(blocked: `git remote -v` is empty)*")
+        self.assertEqual([i["state"] for i in live.chat_worklist(reply)], ["completed", "blocked"])
+
+    def test_a_mid_sentence_state_word_with_a_colon_is_not_a_state(self):
+        self.assertIsNone(live.chat_worklist("1. Mark it done: later\n2. Note the pending: queue"))
+
+    def test_prose_lists_that_mention_blocked_or_call_signatures_are_not_worklists(self):
+        for reply in ("The sandbox rules:\n- Network access is blocked.\n- Writes outside the project are blocked.",
+                      "Notes:\n- Blocked users cannot log in\n- Blocked IPs are listed in the config",
+                      "API:\n1. Call run(done: bool)\n2. Call stop(pending: int)",
+                      "1. Use run(done: true)\n2. Use stop(pending: false)"):
+            with self.subTest(reply=reply):
+                self.assertIsNone(live.chat_worklist(reply))
+
+    def test_leading_state_labels_and_trailing_complete_parse(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("- Done: wrote the parser\n- Blocked: no creds for CI\n- Pending: docs")],
+                         ["completed", "blocked", "pending"])
+        self.assertEqual([i["state"] for i in live.chat_worklist("Status:\n- The migration is complete.\n- The rollout is complete.")],
+                         ["completed", "completed"])
+
+    def test_a_long_item_of_repeated_annotations_parses_in_linear_time(self):
+        item = "1. text " + "(done: x) " * 20000 + "tail"
+        for reply, states in ((item + "\n2. (done: y)", None), (item + " (done: z)\n2. (done: y)", ["completed", "completed"])):
+            started = time.perf_counter()
+            worklist = live.chat_worklist(reply)
+            elapsed = time.perf_counter() - started
+            with self.subTest(states=states):
+                self.assertEqual(worklist and [i["state"] for i in worklist], states)
+                self.assertLess(elapsed, 0.1)
 
 
 class FixtureCommits(unittest.TestCase):

@@ -1334,10 +1334,7 @@ class OracleFalseVerdicts(unittest.TestCase):
     GROK_PROMPTS = ["/poteto-mode add a --json flag.", "continue", "/poteto-mode do it", "/poteto-mode new task. figure out why the cache survives."]
 
     def grok_lead(self, records):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        chat = Path(tmp.name) / "chat_history.jsonl"
-        chat.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+        chat = ("\n".join(json.dumps(r) for r in records) + "\n").encode()
         return grok.parse_session(chat, "/w", "poteto-mode", lead=True, prompts=self.GROK_PROMPTS)
 
     def compacted_records(self, user_extra=None):

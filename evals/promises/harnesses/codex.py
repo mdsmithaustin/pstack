@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import live
+from grade_boundary import GradeRefused, copy_file, read_file
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/", ".codex/"]
@@ -111,7 +112,7 @@ def turn(run, text, index):
 
 
 def records(path):
-    for line in Path(path).read_text(errors="replace").splitlines():
+    for line in read_file(Path(path)).decode(errors="replace").splitlines():
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
@@ -128,6 +129,9 @@ def session_meta(path):
 
 
 def find_rollouts(store, threads):
+    linked = next((p for p in store.rglob("*") if p.is_symlink() and p.is_dir()), None)
+    if linked:
+        raise GradeRefused("unsafe_link", linked)
     metas = {path: session_meta(path) for path in sorted(store.rglob("rollout-*.jsonl"))}
     leads = [p for p, m in metas.items() if m.get("id") in threads or any(p.name.endswith(f"-{t}.jsonl") for t in threads)]
     if not threads:
@@ -355,11 +359,10 @@ def turn_entries(run, lead):
 
 
 def copy_into(sources, destination):
-    destination.mkdir(parents=True, exist_ok=True)
     copied = []
     for source in sources:
         target = destination / source.name
-        shutil.copy2(source, target)
+        copy_file(source, target)
         copied.append(str(target))
     return copied
 

@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 
 import live
+from grade_boundary import GradeRefused, copy_file
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/"]
@@ -200,14 +201,13 @@ def turn(run, text, index):
     return record
 
 
-def load_jsonl(path):
+def load_jsonl(data):
     rows = []
-    if Path(path).is_file():
-        for line in Path(path).read_text(errors="replace").splitlines():
-            try:
-                rows.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+    for line in data.decode(errors="replace").splitlines():
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
     return rows
 
 
@@ -298,7 +298,7 @@ def todo_snapshot(args, previous):
     return [merged[k] for k in order]
 
 
-def parse_session(chat_path, cwd, entry_skill, lead=False, prompts=()):
+def parse_session(chat, cwd, entry_skill, lead=False, prompts=()):
     events, files, worklist, spawns, names = [], [], [], [], {}
     model = effort = final = first_reply = None
     turn, turn_skills = 0, []
@@ -316,7 +316,7 @@ def parse_session(chat_path, cwd, entry_skill, lead=False, prompts=()):
         events.append(event)
         return event["seq"]
 
-    for rec in load_jsonl(chat_path):
+    for rec in load_jsonl(chat):
         kind = rec.get("type")
         if kind == "user" and not rec.get("synthetic_reason") and lead and (
                 "prompt_index" in rec or USER_QUERY.search(text_of(rec.get("content")))):
@@ -384,17 +384,18 @@ def decoded_cwd(chat_path):
 
 def copy_session(session_dir, destination):
     target = destination / session_dir.parent.name / session_dir.name
-    target.mkdir(parents=True, exist_ok=True)
-    copied = []
+    copied = {}
     for name in SESSION_FILES:
-        if (session_dir / name).is_file():
-            shutil.copy2(session_dir / name, target / name)
-            copied.append(str(target / name))
+        if (session_dir / name).exists(follow_symlinks=False):
+            try:
+                copied[target / name] = copy_file(session_dir / name, target / name)
+            except FileNotFoundError as error:
+                if name != "chat_history.jsonl":
+                    raise
+                raise GradeRefused("input_changed", f"session chat vanished before its copy: {session_dir / name}") from error
     for meta in sorted(session_dir.glob("subagents/*/meta.json")):
-        out = target / "subagents" / meta.parent.name
-        out.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(meta, out / "meta.json")
-        copied.append(str(out / "meta.json"))
+        out = target / "subagents" / meta.parent.name / "meta.json"
+        copied[out] = copy_file(meta, out)
     return copied
 
 
@@ -425,9 +426,9 @@ def turn_entries(run, lead):
     return found
 
 
-def host_skill_hits(paths):
+def host_skill_hits(contents):
     roots = [str(host_home() / d) for d in (".claude/skills", ".agents/skills", ".grok/skills", ".cursor/skills", ".codex/skills")]
-    return sorted({root for p in paths if Path(p).is_file() for root in roots if root in Path(p).read_text(errors="replace")})
+    return sorted({root for data in contents for root in roots if root in data.decode(errors="replace")})
 
 
 def harvest(run):
@@ -436,22 +437,26 @@ def harvest(run):
     leads = [c for c in chats if c.parent.name in lead_ids]
     children = [c for c in chats if c not in leads]
     transcripts = run.root / "transcripts" / "sessions"
-    copied = [p for c in [*leads, *children] for p in copy_session(c.parent, transcripts)]
+    evidence = {path: data for c in [*leads, *children] for path, data in copy_session(c.parent, transcripts).items()}
+    leads, children = ([transcripts / c.parent.parent.name / c.parent.name / c.name for c in group] for group in (leads, children))
+    missing = next((chat for chat in [*leads, *children] if chat not in evidence), None)
+    if missing:
+        raise GradeRefused("input_changed", f"session chat vanished before its copy: {missing}")
     entry = run.case.get("entry")
     cwd = str(run.project)
     empty = {"events": [], "files_read": [], "worklist": [], "spawns": [], "final_reply": None,
              "model": None, "effort": None, "injected": False, "read_entry": False,
              "first_reply": None, "turn_skills": []}
-    lead = parse_session(leads[0], decoded_cwd(leads[0]), entry, lead=True, prompts=turn_prompts(run)) if leads else empty
+    lead = parse_session(evidence[leads[0]], decoded_cwd(leads[0]), entry, lead=True, prompts=turn_prompts(run)) if leads else empty
     launch = json.loads((run.root / "launch.json").read_text()) if (run.root / "launch.json").is_file() else {}
 
     metas = {}
     for lead_chat in leads:
-        for meta_path in lead_chat.parent.glob("subagents/*/meta.json"):
-            metas[meta_path] = json.loads(meta_path.read_text())
+        for meta_path in sorted(p for p in evidence if p.name == "meta.json" and p.parents[2] == lead_chat.parent):
+            metas[meta_path] = json.loads(evidence[meta_path])
     subagents, matched, first_replies = [], set(), {}
     for chat in children:
-        child = parse_session(chat, decoded_cwd(chat), entry)
+        child = parse_session(evidence[chat], decoded_cwd(chat), entry)
         first_replies[chat.parent.name] = child["first_reply"]
         meta = next((m for m in metas.values() if m.get("child_session_id") == chat.parent.name), {})
         matched.add(chat.parent.name)
@@ -480,7 +485,7 @@ def harvest(run):
             spawn.pop(key, None)
 
     last = run.turns[-1] if run.turns else {}
-    all_paths = [Path(p) for p in copied] + [Path(t["stream"]) for t in run.turns if t.get("stream")]
+    streams = [Path(t["stream"]) for t in run.turns if t.get("stream") and Path(t["stream"]).is_file()]
     return {
         "harness": "grok",
         "cli_version": launch.get("cli_version") or launch.get("version"),
@@ -496,7 +501,7 @@ def harvest(run):
         "worklist": lead["worklist"],
         "spawns": lead["spawns"],
         "final_reply": lead["final_reply"],
-        "transcript_paths": [str(p) for p in all_paths if p.is_file()],
+        "transcript_paths": [str(p) for p in [*evidence, *streams]],
         "x_binary": {k: launch.get(k) for k in ("path", "source", "version", "rejected")},
         "x_turns": [{k: t.get(k) for k in ("index", "session_id", "argv", "exit_code", "timed_out", "duration_s")}
                     for t in run.turns],
@@ -506,19 +511,19 @@ def harvest(run):
         "x_turns_without_events": turns_without_events(lead["events"], len(run.turns)),
         "x_subagents": subagents,
         "x_unlinked_children": sorted(s["session_id"] for s in subagents if not s["parent_session_id"]),
-        "x_host_skill_hits": host_skill_hits(all_paths),
-        "x_cost_usd_lead": lead_cost(leads),
+        "x_host_skill_hits": host_skill_hits([*evidence.values(), *(p.read_bytes() for p in streams)]),
+        "x_cost_usd_lead": lead_cost(leads, evidence),
         "x_timed_out": any(t.get("timed_out") for t in run.turns),
     }
 
 
-def lead_cost(leads):
+def lead_cost(leads, evidence):
     ticks = 0
     for chat in leads:
         usage = chat.parent / "usage.json"
-        if usage.is_file():
+        if usage in evidence:
             try:
-                ticks += json.loads(usage.read_text()).get("session", {}).get("costUsdTicks", 0) or 0
+                ticks += json.loads(evidence[usage]).get("session", {}).get("costUsdTicks", 0) or 0
             except (json.JSONDecodeError, AttributeError):
                 pass
     return round(ticks / 1e10, 4)

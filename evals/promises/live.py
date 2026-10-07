@@ -64,11 +64,15 @@ def load_case(case_id):
 
 CHAT_ITEM = re.compile(r"^\s*(?:(?:\d+[.)]|[-*])\s+(.*)|(\[[ xX~>-]\]\s+.*))$")
 CHAT_STATE_WORDS = {"completed": "completed", "complete": "completed", "done": "completed", "in progress": "in progress",
-                    "in_progress": "in progress", "in-progress": "in progress", "pending": "pending", "not started": "pending"}
+                    "in_progress": "in progress", "in-progress": "in progress", "pending": "pending", "not started": "pending",
+                    "blocked": "blocked"}
 CHAT_MARKS = {"[x]": "completed", "[X]": "completed", "✅": "completed", "[~]": "in progress", "[>]": "in progress",
               "⏳": "in progress", "🔄": "in progress", "[ ]": "pending", "[-]": "skipped: marked"}
-CHAT_EDGE_WORD = re.compile(r"^[\s*_(\[]*(completed?|done|in[ _-]progress|pending|not started)\b[\s*_)\]]*[.:,-]?"
-                            r"|[\s(*_\[-]+(completed?|done|in[ _-]progress|pending|not started)[\s*_)\].]*$", re.I)
+CHAT_STATE_WORD = r"completed?|done|in[ _-]progress|pending|not started"
+CHAT_EDGE_WORD = re.compile(rf"^[\s*_(\[]*({CHAT_STATE_WORD})\b[\s*_)\]]*[.:,-]?"
+                            rf"|^[\s*_(\[]*(blocked)[\s*_)\]]*:"
+                            rf"|[\s(*_\[-]+({CHAT_STATE_WORD})[\s*_)\].]*$"
+                            rf"|(?<![^\W_])\(({CHAT_STATE_WORD}|blocked):[^()]*(?:\([^()]*\)[^()]*)*\)[\s*_.]*$", re.I)
 CHAT_SKIP = re.compile(r"\bskipped\b:?\s*(.*)", re.I)
 
 
@@ -83,7 +87,7 @@ def chat_state(body):
         return f"skipped: {body.lstrip('⏭️ ').strip()}"
     edge = CHAT_EDGE_WORD.search(body)
     if edge:
-        return CHAT_STATE_WORDS[(edge.group(1) or edge.group(2)).lower()]
+        return CHAT_STATE_WORDS[next(word for word in edge.groups() if word).lower()]
     return None
 
 

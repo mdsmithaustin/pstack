@@ -52,14 +52,21 @@ class _Root:
     inode: int
 
     @classmethod
-    def open(cls, path, identity=None):
+    def open(cls, path, identity=None, create=False):
         path = Path(path)
         if not path.is_absolute() or ".." in path.parts:
             raise GradeRefused("unsafe_path", path)
         fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
         try:
             for part in path.parts[1:]:
-                child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                try:
+                    child = os.open(part, flags, dir_fd=fd)
+                except FileNotFoundError:
+                    if not create:
+                        raise
+                    os.mkdir(part, 0o700, dir_fd=fd)
+                    child = os.open(part, flags, dir_fd=fd)
                 os.close(fd)
                 fd = child
             info = os.fstat(fd)
@@ -232,6 +239,24 @@ def _copy_tree(source, destination):
             target.write_bytes(root.read(rel))
     finally:
         root.close()
+
+
+def read_file(path):
+    root = _Root.open(path.parent)
+    try:
+        return root.read(path.name)
+    finally:
+        root.close()
+
+
+def copy_file(source, target):
+    data = read_file(source)
+    root = _Root.open(target.parent, create=True)
+    try:
+        root.write(target.name, data)
+    finally:
+        root.close()
+    return data
 
 
 def _snapshot(path):
