@@ -2,8 +2,9 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
-from harnesses import hermes
+from harnesses import hermes, hermes_evidence
 from test_hermes import HermesDatabase, bind_legacy, owned_directory
 
 
@@ -61,14 +62,20 @@ class HarvestCustodyRegression(unittest.TestCase):
         return hermes.harvest(self.run)
 
     def test_non_string_tool_arguments_are_retained_incomplete(self):
-        for arguments, kind in (({"path": "x"}, "dict"), ({}, "dict"), ([], "list"), (0, "int"), (False, "bool")):
+        for arguments in ({"path": "x"}, {}, [], 0, 1.5, False):
             with self.subTest(arguments=arguments):
                 trace = self.harvest_with_arguments(arguments)
                 self.assertEqual(trace.get("x_harvest_error"),
-                                 f"decode-failed: TypeError: the JSON object must be str, bytes or bytearray, not {kind}")
+                                 "decode-failed: EvidenceRefused: invalid native tool arguments")
                 self.assertEqual(trace["events"], [])
                 result = self.run._hermes_evidence.private_root / "acquisitions" / trace["x_acquisition"] / "result.json"
                 self.assertEqual(json.loads(result.read_text())["reason"], "decode-failed")
+
+    def test_unrelated_type_error_during_acquisition_propagates(self):
+        self.database()
+        with mock.patch.object(hermes_evidence.HermesEvidence, "_read_fd", side_effect=TypeError("owned acquisition bug")):
+            with self.assertRaisesRegex(TypeError, "^owned acquisition bug$"):
+                hermes.harvest(self.run)
 
     def test_null_or_empty_tool_arguments_read_as_none(self):
         for arguments in (None, ""):
