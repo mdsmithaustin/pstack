@@ -624,7 +624,7 @@ ARENA_NEGATED = (
     "It was not the case that candidate 1 was selected; retries were grafted from candidate 3.", "Nobody picked candidate 2, retries were grafted from candidate 3.",
     "No candidate 1 was selected and retries were grafted from candidate 3.", "Based on the judge, retries were grafted from candidate 3.",
     "The database layer was grafted from candidate 3.", "I didn’t pick candidate 2 as the base; grafted retries from candidate 3.",
-    "There isn’t a base; grafted retries from candidate 3.",
+    "There isn’t a base; grafted retries from candidate 3.", "Not the winner or the base; grafts from candidate 3.",
 )
 
 LOOP_NATURALS = (

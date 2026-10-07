@@ -1804,18 +1804,21 @@ SOURCES_SECTION = re.compile(r"(?m)(?:^|[.!?]\s+)[\s>*#-]*(?:sources|sources?\s+
 SOURCES_LISTED = re.compile(r"\bsources\s+(?:consulted|searched|checked)\b")
 CLAUSE_SPLIT = re.compile(r"[.,;:\n—–|()]|\s-\s|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
 CLAUSE_NEGATION = re.compile(r"\b(?:no|not|none|never|neither|nor|nobody|without|cannot|unable|refus(?:e|ed|es)|declin(?:e|ed|es))\b|n['’]t\b")
+OR_JOIN = re.compile(r"\s+or\s+(?:the\s+|a\s+)?")
 NAMES_NOTHING = re.compile(r"[\s:=(|—–-]*(?:none|n/a)\b")
 
 
 def mention_states(pattern, low):
     cuts = [0] + [m.end() for m in CLAUSE_SPLIT.finditer(low)]
     negations = [m.start() for m in CLAUSE_NEGATION.finditer(low)]
-    targets = []
+    targets, last_end = [], None
     for m in re.finditer(pattern, low):
         clause = cuts[bisect.bisect_right(cuts, m.start()) - 1]
         at = bisect.bisect_left(negations, m.start())
-        bound = at > bisect.bisect_left(negations, clause) and not any_between(targets, negations[at - 1], m.start())
+        bound = at > bisect.bisect_left(negations, clause) and (
+            not any_between(targets, negations[at - 1], m.start()) or bool(OR_JOIN.fullmatch(low, last_end, m.start())))
         targets.append(m.start())
+        last_end = m.end()
         yield "nothing" if NAMES_NOTHING.match(low, m.end(), m.end() + 12) else "negated" if bound else "affirmed"
 
 
