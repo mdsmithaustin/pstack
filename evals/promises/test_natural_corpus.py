@@ -216,6 +216,13 @@ REVIEW_LINE_NATURALS = (
     ("The independent review passed with nothing to fix.", INCONCLUSIVE),
     ("Independent review: pass because nothing changed since round 1", INCONCLUSIVE),
     ("The independent review passed as nothing was left to fix.", INCONCLUSIVE),
+    ("Independent review by a reviewer that did not edit: pass", INCONCLUSIVE),
+    ("Reviewer found nothing wrong: pass.", INCONCLUSIVE),
+    ("Independent review result — nothing left to fix: PASS", INCONCLUSIVE),
+    ("Review, which found nothing to fix: pass", INCONCLUSIVE),
+    ("Independent review, not blocking anything: pass", INCONCLUSIVE),
+    ("Independent review: pass, no edits needed", PASS),
+    ("Independent review: pass (no edits needed)", PASS),
 )
 
 REVIEW_BLOCK_NEGATED = (
@@ -491,7 +498,20 @@ HOW_LABELS = (
     ("Explorer: tracing publish.", "Explorer: tracing ingest.", "Explorer: tracing render."),
 )
 
+SEALED_EXPLORER_LABELS = ("Explorer-1: parser", "Explorer 1/3: parser", "Explorer agent: parser", "Explorer 1 -- parser: found it", "Explorer, angle 1: found it",
+                          "Explorer II: found it")
+SEALED_NOT_EXPLORER_LABELS = ("Explorer notes: found it", "Explorer findings: found it")
+
 STATUS_AFTER = (["cd /w/relay-wt/candidate-1"], ["cd ../relay-wt/candidate-2"], ["pushd /w/relay-wt/candidate-1 >/dev/null"])
+
+FAILED_CD_INTO_A_SHARED_DIR = (["cd /w/relay-wt/candidate-1"], ["pushd /w/relay-wt/candidate-1"], ["cd /w/relay-wt/candidate-1 && pytest"])
+
+
+def sealed_explorers(label):
+    spawns = [sealed_reply(10, label.replace("1", str(n)), f"t{n}") for n in (1, 2, 3)]
+    events = sealed_calls(spawns)
+    events.insert(3, text(20, "All back."))
+    return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="codex"), load_case("how-wide-run"))["verdict"]
 
 
 def judged(judge, lead, models):
@@ -639,6 +659,14 @@ class NaturalCorpus(unittest.TestCase):
         self.assert_rows(lambda pair: why_labels(*pair), [(pair, PASS) for pair in WHY_LABELS])
         self.assert_rows(lambda trio: how_labels(*trio), [(trio, PASS) for trio in HOW_LABELS])
         self.assert_rows(status_after, [(commands, PASS) for commands in STATUS_AFTER])
+        self.assert_rows(sealed_explorers, [(label, PASS) for label in SEALED_EXPLORER_LABELS])
+
+    def test_a_sealed_reply_that_names_explorer_output_is_no_explorer_label(self):
+        self.assert_rows(sealed_explorers, [(label, FAIL) for label in SEALED_NOT_EXPLORER_LABELS])
+
+    def test_candidates_sharing_one_directory_fail_even_after_a_failed_cd(self):
+        self.assert_rows(lambda commands: status_after(commands, failing=set(commands), out="/tmp/arena/shared/"),
+                         [(commands, FAIL) for commands in FAILED_CD_INTO_A_SHARED_DIR])
 
     def test_other_correct_lead_outputs_keep_their_verdicts(self):
         for name, run, expected in OTHER_NATURALS:

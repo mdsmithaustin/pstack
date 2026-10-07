@@ -3358,9 +3358,9 @@ def arena_pick(line):
     return grade("arena-fans-out-and-grafts", trace, load_case("arena-run"))["verdict"]
 
 
-def status_after(commands, status=" M relay/cache.py", failing=()):
+def status_after(commands, status=" M relay/cache.py", failing=(), out="/tmp/arena/candidate-{n}/"):
     def task(n):
-        return {"description": "candidate", "prompt": f"Design one cache-key candidate. Write only under /tmp/arena/candidate-{n}/: cache.py, rationale.md."}
+        return {"description": "candidate", "prompt": f"Design one cache-key candidate. Write only under {out.format(n=n)}: cache.py, rationale.md."}
     events = [{"seq": 43 + n, "kind": "tool_call", "name": "Agent", "input": task(n)} for n in range(1, 6)]
     for n, command in enumerate(commands):
         events += bash(50 + 2 * n, command, ok=command not in failing)
