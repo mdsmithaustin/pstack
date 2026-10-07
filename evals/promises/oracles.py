@@ -2973,7 +2973,7 @@ def arena_worktrees(view):
     return passed(*evidence)
 
 
-PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:was|is) (?:selected|chosen|picked)\b|\b(?:selected|chose|picked|kept|agreed on|went with|rebased onto) (?:candidate|arm) [\w-]+"
+PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:(?:was|is) (?:selected|chosen|picked)|won)\b|\b(?:selected|chose|picked|kept|agreed on|went with|rebased onto) (?:candidate|arm) [\w-]+"
                     r"|\bbased\b[^.;]{0,40}?\bon (?:candidate|arm) [\w-]+")
 
 
