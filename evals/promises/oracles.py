@@ -2255,8 +2255,8 @@ def finished_in_first_turn(view, commits):
 SHELL_LOOP = re.compile(r"\bwhile\s+(?:true|True\b|:|\[)|(?:^|[;&|]\s*)watch\s", re.M)
 SLEEP_LOOP = (re.compile(r"\bdo\b"), re.compile(r"\bsleep\s+\d"), re.compile(r"\bdone\b"))
 SHELL_ARG = r"""\s+(?!(?:ssh|tmux)\b)[^\s'"]+"""
-SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:""" + SHELL_ARG + r""")++|eval"""
-                        r"""|tmux\s+(?:send-keys|new-session|new)(?:""" + SHELL_ARG + r""")*+)\s+(['"])(.*?)\1""", re.S)
+SHELL_BODY = re.compile(r"""\b(?:(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-\w*c|python[0-9.]*\s+(?:-\w+\s+)*-c|ssh(?:""" + SHELL_ARG + r""")+|eval"""
+                        r"""|tmux\s+(?:send-keys|new-session|new)(?:""" + SHELL_ARG + r""")*)\s+(['"])(.*?)\1""", re.S)
 SHELL_READERS = {"bash", "ssh", "python3"}
 
 

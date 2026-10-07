@@ -73,6 +73,10 @@ REVIEW_BLOCK_NATURALS = (
     ("Independent review passes.", PASS),
     ("Docs review: passes", PASS),
     ("Independent review: passing", PASS),
+    ("Independent review: needs changes – pass.", PASS),
+    ("Independent review: needs changes - pass.", PASS),
+    ("Independent review: pass. The second review was skipped.", PASS),
+    ("Independent review: pass. The 2nd review was skipped.", PASS),
 )
 
 REVIEW_LINE_NATURALS = (
@@ -323,6 +327,8 @@ REVIEW_BLOCK_NEGATED = (
     ("Independent review: skipped.\nTests pass.", FAIL),
     ("Independent review: not passing.", FAIL),
     ("Independent review never passes.", FAIL),
+    ("Independent review: pass. The review was skipped.", INCONCLUSIVE),
+    ("Independent review: pass and the tests re-review is still open.", INCONCLUSIVE),
 )
 
 REVIEW_LINE_NEGATED = (
