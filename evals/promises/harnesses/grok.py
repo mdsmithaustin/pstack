@@ -384,18 +384,14 @@ def decoded_cwd(chat_path):
 
 def copy_session(session_dir, destination):
     target = destination / session_dir.parent.name / session_dir.name
+    sources = [session_dir / name for name in SESSION_FILES if (session_dir / name).exists(follow_symlinks=False)]
     copied = {}
-    for name in SESSION_FILES:
-        if (session_dir / name).exists(follow_symlinks=False):
-            try:
-                copied[target / name] = copy_file(session_dir / name, target / name)
-            except FileNotFoundError as error:
-                if name != "chat_history.jsonl":
-                    raise
-                raise GradeRefused("input_changed", f"session chat vanished before its copy: {session_dir / name}") from error
-    for meta in sorted(session_dir.glob("subagents/*/meta.json")):
-        out = target / "subagents" / meta.parent.name / "meta.json"
-        copied[out] = copy_file(meta, out)
+    for source in [*sources, *sorted(session_dir.glob("subagents/*/meta.json"))]:
+        out = target / source.relative_to(session_dir)
+        try:
+            copied[out] = copy_file(source, out)
+        except FileNotFoundError as error:
+            raise GradeRefused("input_changed", f"session file vanished before its copy: {source}") from error
     return copied
 
 
@@ -485,7 +481,7 @@ def harvest(run):
             spawn.pop(key, None)
 
     last = run.turns[-1] if run.turns else {}
-    streams = [Path(t["stream"]) for t in run.turns if t.get("stream") and Path(t["stream"]).is_file()]
+    streams = live.read_streams(run.turns)
     return {
         "harness": "grok",
         "cli_version": launch.get("cli_version") or launch.get("version"),
@@ -501,7 +497,7 @@ def harvest(run):
         "worklist": lead["worklist"],
         "spawns": lead["spawns"],
         "final_reply": lead["final_reply"],
-        "transcript_paths": [str(p) for p in [*evidence, *streams]],
+        "transcript_paths": [*map(str, evidence), *streams],
         "x_binary": {k: launch.get(k) for k in ("path", "source", "version", "rejected")},
         "x_turns": [{k: t.get(k) for k in ("index", "session_id", "argv", "exit_code", "timed_out", "duration_s")}
                     for t in run.turns],
@@ -511,7 +507,7 @@ def harvest(run):
         "x_turns_without_events": turns_without_events(lead["events"], len(run.turns)),
         "x_subagents": subagents,
         "x_unlinked_children": sorted(s["session_id"] for s in subagents if not s["parent_session_id"]),
-        "x_host_skill_hits": host_skill_hits([*evidence.values(), *(p.read_bytes() for p in streams)]),
+        "x_host_skill_hits": host_skill_hits([*evidence.values(), *streams.values()]),
         "x_cost_usd_lead": lead_cost(leads, evidence),
         "x_timed_out": any(t.get("timed_out") for t in run.turns),
     }

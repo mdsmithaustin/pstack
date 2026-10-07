@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from grade_boundary import grade, GradeRefused, _before_turns, _lookup, _seal, _write_record
+from grade_boundary import create_file, grade, GradeRefused, read_file, _before_turns, _lookup, _seal, _write_record
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -71,7 +71,7 @@ CHAT_MARKS = {"[x]": "completed", "[X]": "completed", "✅": "completed", "[~]":
 CHAT_STATE_WORD = r"completed?|done|in[ _-]progress|pending|not started"
 CHAT_EDGE_WORD = re.compile(rf"^[\s*_(\[]*({CHAT_STATE_WORD})\b[\s*_)\]]*[.:,-]?"
                             rf"|^[\s*_(\[]*(blocked)[\s*_)\]]*:"
-                            rf"|[\s(*_\[-]+({CHAT_STATE_WORD})[\s*_)\].]*$"
+                            rf"|(?<![\s(*_\[-])[\s(*_\[-]+({CHAT_STATE_WORD})[\s*_)\].]*$"
                             rf"|(?<![^\W_])\(({CHAT_STATE_WORD}|blocked):[^()]*(?:\([^()]*\)[^()]*)*\)[\s*_.]*$", re.I)
 CHAT_SKIP = re.compile(r"\bskipped\b:?\s*(.*)", re.I)
 
@@ -113,7 +113,7 @@ def timeout_for(case, harness):
 
 def execute(argv, cwd, env, timeout_s, stdout, stderr, stdin=None):
     started = time.monotonic()
-    with open(stdout, "wb") as out, open(stderr, "wb") as err:
+    with create_file(stdout) as out, create_file(stderr) as err:
         proc = subprocess.Popen([str(a) for a in argv], cwd=cwd, env=env, stdout=out, stderr=err,
                                 stdin=subprocess.DEVNULL if stdin is None else stdin, start_new_session=True)
         try:
@@ -123,6 +123,17 @@ def execute(argv, cwd, env, timeout_s, stdout, stderr, stdin=None):
             code, timed_out = proc.wait(), True
     return {"argv": [str(a) for a in argv], "exit_code": code, "timed_out": timed_out,
             "duration_s": round(time.monotonic() - started, 1)}
+
+
+def read_streams(turns):
+    streams = {}
+    for record in turns:
+        if record.get("stream"):
+            try:
+                streams[record["stream"]] = read_file(Path(record["stream"]))
+            except FileNotFoundError as error:
+                raise GradeRefused("input_changed", f"turn stream vanished before harvest: {record['stream']}") from error
+    return streams
 
 
 def install_tree(ref, dest):
@@ -193,7 +204,8 @@ def split_entry(case, text, index):
 
 
 def fixture_lock(fixture):
-    handle = open(Path(tempfile.gettempdir()) / f"pstack-live-{fixture}.lock", "w")
+    path = Path(tempfile.gettempdir()) / f"pstack-live-{fixture}.lock"
+    handle = os.fdopen(os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600), "rb+")
     fcntl.flock(handle, fcntl.LOCK_EX)
     return handle
 
