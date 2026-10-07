@@ -2973,8 +2973,7 @@ def arena_worktrees(view):
     return passed(*evidence)
 
 
-PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:(?:was|is) (?:selected|chosen|picked)|won)\b|\b(?:selected|chose|picked|kept|agreed on|went with|rebased onto) (?:candidate|arm) [\w-]+"
-                    r"|\bbased\b[^.;]{0,40}?\bon (?:candidate|arm) [\w-]+")
+PICKED = re.compile(r"\b(?:candidate|arm) [\w-]+ (?:(?:was|is) (?:selected|chosen|picked)|won)\b|\b(?:selected|chose|picked|kept|agreed on|went with) (?:candidate|arm) [\w-]+")
 
 
 PICK_SPLIT = re.compile(r"[.,;:\n]|\b(?:but|and|so|because|since|although|though|while|yet|then|which)\b")
@@ -2996,7 +2995,7 @@ def picked(low):
 def arena_grafts(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
     low = view.final_reply.lower()
-    base = bool(re.search(r"\bbase(?:line)?\b", low)) or picked(low)
+    base = bool(re.search(r"\bbase(?:line)?\b|\b(?:re)?based\b[^.;]{0,40}?\bon(?:to)? (?:candidate|arm) [\w-]+", low)) or picked(low)
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
