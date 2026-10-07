@@ -3472,6 +3472,16 @@ class ReviewVerdictGuard(unittest.TestCase):
         for line in ("The review did not pass. Tests pass.", "Independent review: needs changes. Lint: pass.", "Review: pending (no pass yet)"):
             self.assertEqual(review_line(line)["verdict"], FAIL, line)
 
+    def test_a_free_form_label_before_pass_goes_to_a_judge(self):
+        for line in ("The reviewer rejected it: pass.", "The docs reviewer flagged three gaps: pass.", "Review blocked on the README table: pass",
+                     "Verdict overturned by the second reviewer: pass"):
+            result = review_line(line)
+            self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
+
+    def test_a_table_cell_takes_its_label_from_the_column_header(self):
+        self.assertEqual(review_line("\n| Gate | Verdict |\n|---|---|\n| docs | pass |")["verdict"], PASS)
+        self.assertEqual(review_line("\n| Gate | Notes |\n|---|---|\n| docs | pass |")["verdict"], INCONCLUSIVE)
+
     def test_a_filename_link_or_version_does_not_end_the_label(self):
         for line in ("Independent review of README.md: pass", "[Independent review](docs/review.md): pass", "Reviewer: PASS (v2.1)"):
             self.assertEqual(review_line(line)["verdict"], PASS, line)
