@@ -355,6 +355,19 @@ class HiddenTailTests(unittest.TestCase):
             with self.subTest(row):
                 self.assertEqual(self.failures(*lines), [])
 
+    def test_an_absent_regex_the_reader_cannot_read_as_plain_text_gets_trunk_credit(self):
+        present = 'expect(bubble).toHaveTextContent("UNIQUE_TAIL")'
+        for row, absent in (("word boundary escapes", "expect(bubble).not.toHaveTextContent(/\\bUNIQUE_TAIL\\b/)"),
+                            ("flag", "expect(bubble).not.toHaveTextContent(/unique_tail/i)"),
+                            ("alternation", "expect(bubble).not.toHaveTextContent(/UNIQUE_TAIL|the end/)"),
+                            ("group", "expect(bubble).not.toHaveTextContent(/UNIQUE_(TAIL)/)"),
+                            ("anchors", "expect(bubble).not.toHaveTextContent(/^UNIQUE_TAIL$/)")):
+            with self.subTest(row):
+                self.assertEqual(self.failures(absent, present), [])
+        with self.subTest("plain text regex against an unrelated present value"):
+            self.assertEqual(self.failures('const HEAD = "chunk"', "expect(bubble).not.toHaveTextContent(/UNIQUE_TAIL/)",
+                                           "expect(bubble).toHaveTextContent(HEAD)"), [self.PRESENT])
+
     def test_each_test_file_resolves_only_the_names_it_binds(self):
         graded = oracle().tests_assert_hidden_text_and_copy
         shared = {"web/src/a.test.tsx": [self.COPY, 'const HEAD = "chunk"', "expect(x).toHaveTextContent(HEAD)"]}
