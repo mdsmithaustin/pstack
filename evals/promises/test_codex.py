@@ -87,6 +87,22 @@ class HarvestCopies(unittest.TestCase):
         retained = Path(trace["transcript_paths"][0]).read_text()
         self.assertEqual((trace["final_reply"], retained), ("native reply", self.reply("native reply")))
 
+    def test_harvest_refuses_a_linked_or_vanished_turn_stream(self):
+        outside = self.run_.root / "outside.jsonl"
+        outside.write_text(json.dumps({"type": "item.completed", "item": {"type": "todo_list", "items": []}}) + "\n")
+        stream = self.run_.root / "transcripts" / "turn-0.jsonl"
+        stream.parent.mkdir()
+        self.run_.turns[0]["stream"] = str(stream)
+        for plant, reason in ((lambda: stream.symlink_to(outside), "unsafe_link"),
+                              (lambda: stream.symlink_to(self.run_.root / "missing"), "unsafe_link"),
+                              (lambda: None, "input_changed")):
+            with self.subTest(reason=reason):
+                stream.unlink(missing_ok=True)
+                plant()
+                with self.assertRaises(GradeRefused) as refused:
+                    codex.harvest(self.run_)
+                self.assertEqual(refused.exception.receipt["reason"], reason)
+
 
 class FindRollouts(unittest.TestCase):
     def setUp(self):

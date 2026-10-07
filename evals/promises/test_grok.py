@@ -229,6 +229,11 @@ class HarvestCaptures(unittest.TestCase):
                     self.harvest_with_stream(lambda stream: (stream.unlink(missing_ok=True), stream.symlink_to(target)))
                 self.assertEqual(refused.exception.receipt["reason"], "unsafe_link")
 
+    def test_harvest_refuses_a_turn_stream_that_vanished(self):
+        with self.assertRaises(GradeRefused) as refused:
+            self.harvest_with_stream(lambda stream: None)
+        self.assertEqual(refused.exception.receipt["reason"], "input_changed")
+
     def test_harvest_refuses_a_dangling_lead_chat(self):
         self.chat.unlink()
         self.chat.symlink_to(self.tmp / "missing")

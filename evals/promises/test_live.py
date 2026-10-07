@@ -195,6 +195,7 @@ class GradeRun(unittest.TestCase):
                             "source": "test", "version": "test", "rejected": []}))
 
                     def turn(run, text, index):
+                        (run.root / f"turn-{index}.jsonl").write_bytes(b"")
                         return {"index": index, "session_id": "owned-session", "argv": [harness, text],
                             "exit_code": 0 if index == 0 else -9, "timed_out": index == 1, "duration_s": 0.25,
                             "stream": str(run.root / f"turn-{index}.jsonl"), "stderr": str(run.root / f"turn-{index}.err"),
