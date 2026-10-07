@@ -2689,7 +2689,7 @@ def mention_verdict(plain, m, found):
 
 
 def review_pass(reply):
-    plain = VERDICT_MARKUP.sub(" ", reply or "")
+    plain = VERDICT_MARKUP.sub(lambda m: " " * len(m.group()), reply or "")
     benign = [(m.start(), m.end()) for m in BENIGN_NEGATION.finditer(plain)]
     mentions = list(VERDICT_WORD.finditer(plain))
     clauses = list(VERDICT_CLAUSE.finditer(plain))
@@ -2697,10 +2697,13 @@ def review_pass(reply):
              "newlines": positions(re.compile("\n"), plain),
              "negations": positions(VERDICT_NEGATION, plain, benign), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign), "openers": positions(VERDICT_OPENER, plain),
              "off_topic": positions(OFF_TOPIC, plain), "named": positions(REVIEW_NAMED, plain), "mentions": [m.start() for m in mentions]}
-    verdicts = {v for v in (mention_verdict(plain, m, found) for m in mentions) if v}
-    if verdicts <= {FAIL}:
-        return False
-    return True if PASS in verdicts and FAIL not in verdicts else None
+    verdicts = {}
+    for m in mentions:
+        verdicts.setdefault(mention_verdict(plain, m, found), m.start())
+    verdicts.pop(None, None)
+    if verdicts.keys() <= {FAIL}:
+        return False, None
+    return (True, None) if PASS in verdicts and FAIL not in verdicts else (None, verdicts.get(INCONCLUSIVE, min(verdicts.values())))
 
 
 @oracle("documentation-impact-independent-review-pass-required")
@@ -2711,7 +2714,7 @@ def doc_impact_review(view):
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
     result = turn_author_result(view, turn, reply)
     reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
-    verdict_pass = review_pass(reply)
+    verdict_pass, undecided = review_pass(reply)
     evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {verdict_pass}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)
@@ -2721,7 +2724,7 @@ def doc_impact_review(view):
         return failed("review required but no independent reviewer spawned", *evidence)
     if verdict_pass is None:
         return inconclusive("the reply mentions a pass the wording guard can neither confirm nor rule out", *evidence,
-                            needs_judge=True, excerpt=excerpt_of(reply))
+                            needs_judge=True, excerpt=excerpt_of(reply[max(0, undecided - 750):]))
     return passed(*evidence) if verdict_pass else failed("reviewer spawned but no `pass` verdict reported before completion", *evidence)
 
 
