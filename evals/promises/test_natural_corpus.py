@@ -82,6 +82,11 @@ REVIEW_BLOCK_NATURALS = (
 
 REVIEW_LINE_NATURALS = (
     ("Review: pass.", PASS),
+    ("Docs check: pass", INCONCLUSIVE),
+    ("Documentation check: pass", INCONCLUSIVE),
+    ("Docs pass: pass", INCONCLUSIVE),
+    ("The docs check passed.", INCONCLUSIVE),
+    ("Pass: docs check", INCONCLUSIVE),
     ("The independent reviewer reported pass.", PASS),
     ("The review did not pass at first, then passed.", INCONCLUSIVE),
     ("Review failed twice before it passed.", INCONCLUSIVE),
@@ -595,6 +600,8 @@ LOOP_NATURALS = (
     'env FOO=1 sh -c "until ./ready.sh; do sleep 5; done"', "eval 'while true; do ./check.sh; sleep 60; done'", 'python3 -c "import time\nwhile True: time.sleep(5)"',
     "ssh host 'bash -s' <<'EOF'\nwhile true; do ./check.sh; sleep 60; done\nEOF", "until curl -sf localhost:8000; do sleep 5; done",
     "bash <<'EOF'\nwhile true; do ./check.sh; sleep 60; done\nEOF", "python3 - <<'EOF'\nimport time\nwhile True:\n    time.sleep(60)\nEOF",
+    "ssh -q -T -A -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ControlMaster=no devbox 'while true; do ./poll.sh; sleep 30; done'",
+    "tmux new-session -d -s poll -n main -x 200 -y 50 -c /srv -e A=1 -e B=2 -e C=3 -e D=4 -e E=5 'while true; do ./poll.sh; sleep 30; done'",
 )
 
 LOOP_NEGATED = (
