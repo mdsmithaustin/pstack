@@ -3486,6 +3486,52 @@ class Issue133RoundThree(unittest.TestCase):
             self.assertEqual(grade("architect-checkpoint-opt-in", minimal(final_reply=reply), load_case("architect-checkpoint-run"))["verdict"],
                              INCONCLUSIVE, reply)
 
+    def test_round16_a_spec_marker_before_a_non_code_extension_is_what_main_calls_it(self):
+        view = oracles.View(minimal(), {}, None)
+        names = {"docs/tech_spec.md": "doc", "product_spec.md": "doc", "docs/design.spec.md": "doc", "README.spec.md": "doc",
+                 "docs/openapi.spec.json": "data", "feature_spec.txt": "data", "api_spec.yaml": "source", "openapi.spec.yaml": "source",
+                 "src/a.spec.mjs": "test", "src/a.spec.cjs": "test", "lib/a_spec.exs": "test", "app/A.e2e.kt": "test", "app/A.cy.swift": "test",
+                 "app/A.spec.cs": "test", "app/a_spec.php": "test", "a.spec.rs": "test", "a.e2e.go": "test", "A.spec.java": "test"}
+        self.assertEqual({name: view.classify(name) for name in names}, names)
+
+    def test_round16_a_role_label_ends_at_a_dash_or_comma_as_well_as_a_colon(self):
+        for template in ("Explorer {n} - found it", "Explorer {n} \u2014 found it", "Explorer {n} \u2013 found it", "Explorer {n}, found it",
+                         "Explorer angle {n}, found it", "Explorer {n} of 3 - found it", "Explorer ({n}), found it", "Explorer (parser {n}), found it",
+                         "Explorer output - found it", "**Explorer {n}**", "**Explorer {n}** - found it", "- Explorer {n}: found it",
+                         "1. Explorer {n}: found it", "* Explorer {n} - found it", "> Explorer {n}: found it"):
+            for names in (("1", "2", "3"), ("A", "B", "C"), ("One", "Two", "Three")):
+                trio = [template.format(n=n) + ("\nfound it" if template.endswith("**") else "") for n in names]
+                self.assertEqual(how_labels(*trio), PASS, trio[0])
+
+    def test_round16_a_notes_or_findings_label_ended_by_a_dash_or_comma_is_not_an_explorer(self):
+        for template in ("Explorer notes: found it", "Explorer findings: found it", "Explorer notes - found it", "Explorer findings \u2014 found it",
+                         "Explorer notes, found it", "Explorer {n} findings, found it", "Explorer {n} notes - found it",
+                         "Done. Using the explorer notes, I implemented the parser."):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), FAIL, trio[0])
+
+    def test_round16_an_arena_base_may_wear_markdown_or_a_number_sign(self):
+        for line in ("I based the design on **candidate 2**, with retries grafted from candidate 3.",
+                     "Rebased onto `candidate 2`, with retries grafted from candidate 3.",
+                     "Based on candidate #2, with retries grafted from candidate 3.",
+                     "Based on candidate-2, with retries grafted from candidate 3.",
+                     "Based on **candidate #2**, with retries grafted from candidate 3.",
+                     "I rebased onto `arm-2`, with retries grafted from candidate 3."):
+            self.assertEqual(arena_pick(line), PASS, line)
+        for line in ("Based on the judge, retries were grafted from candidate 3.", "Based on `the judges` I grafted retries from candidate 3.",
+                     "Based on candidates alone, retries were grafted from candidate 3."):
+            self.assertEqual(arena_pick(line), FAIL, line)
+
+    def test_round16_a_commit_only_source_label_is_judged_on_its_whole_section(self):
+        def sources(reply):
+            return grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))["verdict"]
+        for reply in ("Source: commit 12d7ece\nSee also the PR.", "Source: commit 12d7ece.\nSee also the PR #12.", "## Source\ncommit 12d7ece\nand the PR thread",
+                      "Source: 12d7ece\nCommit 12d7ece was reviewed in PR #12."):
+            self.assertEqual(sources(reply), PASS, reply)
+        for reply in ("Source: commit 12d7ece.", "Source: commit 12d7ece", "Source: commit 12d7ece.\n", "Source: commit 12d7ece.\n\nThe cap came from it.",
+                      "## Source\ncommit 12d7ece\n\nThe cap came from it.", "Sources:\ncommit 12d7ece\n3a4b5c6", "Source: commit 12d7ece\n## Notes\nThe cap came from it."):
+            self.assertEqual(sources(reply), FAIL, reply)
+
 
 LONG = 200_000
 
@@ -3503,7 +3549,16 @@ class LinearTime(unittest.TestCase):
             events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}]
             grade("how-narrow-question-no-explorers", minimal(events=events, spawns=spawns, harness="hermes", final_reply="x"), load_case("how-run"))
         self.assert_quick(narrow, "## Explorer " + "(" * LONG, "## Explorer " + " " * LONG + "1", "## Explorer" + " 1" * (LONG // 2),
-                          "## Explorer " + " -" * (LONG // 2) + " x", "Explorer " + "(" * LONG)
+                          "## Explorer " + " -" * (LONG // 2) + " x", "Explorer " + "(" * LONG, "- " + " " * LONG + "x", "1." + " " * LONG + "x",
+                          "Explorer " + "(1), " * (LONG // 5), "Explorer" + " 1," * (LONG // 3), "**" + "a" * LONG, "Explorer " + "- " * (LONG // 2) + "x",
+                          "Explorer " + " \u2014" * (LONG // 2), "* " * (LONG // 2) + "Explorer")
+
+    def test_a_long_commit_only_source_section_grades_in_linear_time(self):
+        def sources(reply):
+            grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))
+        self.assert_quick(sources, "Source:\n" + "12d7ece\n" * (LONG // 8) + "x", "Source: commit 12d7ece\n\n" * (LONG // 24), "Source:" + " " * LONG + "12d7ece",
+                          "Source: " + "12d7ece\n" * (LONG // 8), "Source:\n" + "12d7ece\n \n" * (LONG // 10) + "source:")
+        self.assert_quick(arena_pick, "based on " * (LONG // 9) + "candidate", "Based " + "** " * (LONG // 3) + "on candidate 1")
 
     def test_a_long_relative_write_path_grades_in_linear_time(self):
         project = tempfile.TemporaryDirectory()
