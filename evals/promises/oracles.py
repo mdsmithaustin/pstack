@@ -90,9 +90,9 @@ EDIT_ORDER = re.compile(r"(?:^|[\"'\n]|[.!?:;]\s+|\b(?:then|and|also|first)\s+|\
                         r"(?:add|change|update|create|write|rewrite|overwrite|implement|fix|patch|modify|refactor|remove|delete|rename|"
                         r"edit|replace|insert|append|apply|move)\b")
 REPLY_HEAD = 300
-REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|[\[*]*[A-Za-z][\w /#()*—–-]{0,40}:[^\n]*)")
+REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|[\[*]*[A-Za-z][\w /#()*—–,-]{0,40}:[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
-LABEL_QUALIFIER = re.compile(r"#?\d+|[A-Z]|of|(?i:report)")
+LABEL_QUALIFIER = re.compile(r"#?\d+(?:/\d+)?|[A-Z]|[IVX]+|of|(?i:report|agent)")
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -623,7 +623,7 @@ class View:
         name = label.group(0).partition(":")[0]
         if LABEL_KEEPS_BODY.search(name):
             return label.group(0).lower(), False
-        words = re.sub(r"\([^()]*\)|[*\[\]]", " ", re.split(r"\s-\s|[—–]", name, maxsplit=1)[0]).split()
+        words = re.sub(r"\([^()]*\)|[*\[\]]|-(?=\d)", " ", re.split(r"\s-+\s|[—–,]", name, maxsplit=1)[0]).split()
         while words and LABEL_QUALIFIER.fullmatch(words[-1]):
             words.pop()
         return " ".join(words).lower(), True
@@ -2575,7 +2575,7 @@ VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nob
                               r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n't\b|[❌✗✘🚫⛔]", re.I)
 NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|needed)\b", re.I)
 BENIGN_NEGATION = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|0)|without(?:\s+any)?)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
-                             r"|objections?|items?|edits?|changes(?:\s+(?:needed|required|requested))?)\b", re.I)
+                             r"|objections?|items?|(?:edits?|changes)(?:\s+(?:needed|required|requested))?)\b", re.I)
 PUNCT_OPENER = r"[,():|+—–]|\s-\s"
 ASIDE_OPENER = re.compile(PUNCT_OPENER + r"|\s(?:with|because|as)\b", re.I)
 VERDICT_OPENER = re.compile(PUNCT_OPENER + r"|\s(?:with|by|from)\b", re.I)
@@ -2700,7 +2700,9 @@ def mention_verdict(plain, m, found):
         return None
     at = bisect.bisect_left(found["aside_openers"], m.end())
     aside = min(found["aside_openers"][at:at + 1] + [clause_end])
-    if any_between(found["direct"], clause_start, m.start()) or any_between(found["negations_after"], m.end(), aside):
+    at = bisect.bisect_left(found["colons"], m.start())
+    label_end = found["colons"][at - 1] + 1 if at else 0
+    if any_between(found["direct"], max(clause_start, label_end), m.start()) or any_between(found["negations_after"], m.end(), aside):
         return FAIL
     if any_between(found["negations"], clause_start, m.start()) or any_between(found["negations_after"], aside, clause_end):
         return INCONCLUSIVE
@@ -2731,7 +2733,7 @@ def review_pass(reply):
     clauses = list(VERDICT_CLAUSE.finditer(plain))
     starts, negations = [m.start() for m in mentions], positions(VERDICT_NEGATION, plain, benign)
     found = {"ends": positions(VERDICT_END, plain), "clause_starts": [m.start() for m in clauses], "clause_ends": [m.end() for m in clauses],
-             "newlines": positions(re.compile("\n"), plain), "pipes": positions(re.compile(r"\|"), plain), "headers": table_headers(plain),
+             "newlines": positions(re.compile("\n"), plain), "pipes": positions(re.compile(r"\|"), plain), "colons": positions(re.compile(":"), plain), "headers": table_headers(plain),
              "negations": negations, "direct": outside(negations, parentheticals(plain, starts)), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign),
              "openers": positions(VERDICT_OPENER, plain), "aside_openers": positions(ASIDE_OPENER, plain), "off_topic": positions(OFF_TOPIC, plain),
              "named": positions(REVIEW_NAMED, plain), "mentions": starts}
