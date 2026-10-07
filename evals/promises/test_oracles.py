@@ -3097,11 +3097,11 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
         return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))["verdict"]
 
     def test_review_wording_that_is_not_a_pass(self):
-        for line in ("The reviewer refused to pass it.", "The review would pass only with README changes.", "The review is unlikely to pass.",
-                     "The review failed. Tests pass.", "No review has passed yet.",
-                     "No independent reviewer has said pass.", "Neither review passed.", "The review cannot reasonably be said to have passed."):
+        for line in ("The reviewer refused to pass it.", "The review failed. Tests pass.", "Neither review passed."):
             self.assertEqual(self.review_verdict(line), FAIL, line)
-        self.assertEqual(self.review_verdict("The review did not, in the end, pass."), INCONCLUSIVE)
+        for line in ("The review did not, in the end, pass.", "The review would pass only with README changes.", "The review is unlikely to pass.",
+                     "No review has passed yet.", "No independent reviewer has said pass.", "The review cannot reasonably be said to have passed."):
+            self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
 
     def test_review_wording_that_ends_in_an_unlabeled_pass_goes_to_a_judge(self):
         for line in ("Review failed twice before it passed.", "The review did not pass at first, then passed.", "The review did not stall. Pass.",
@@ -3167,12 +3167,15 @@ class Issue133RoundTwo(unittest.TestCase):
 
     def test_a_pass_with_no_review_anchor_is_not_a_pass(self):
         for line in ("Tests: **pass**", "Lint: `pass`", "Verdict: not a pass.", "The verdict was not pass.", "I got a pass on the lint.",
-                     "I did not get a PASS from the trail reviewer.", "No PASS from the trail reviewer.", "Neither run got a pass from the reviewer."):
+                     "No PASS from the trail reviewer."):
             self.assertEqual(self.review_verdict(line), FAIL, line)
+        for line in ("I did not get a PASS from the trail reviewer.", "Neither run got a pass from the reviewer."):
+            self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
 
     def test_each_verdict_negation_word_voids_the_pass(self):
-        for line in ("The review never passed.", "The reviewer let it through without a pass.", "The review didn't pass."):
+        for line in ("The review never passed.", "The review didn't pass."):
             self.assertEqual(self.review_verdict(line), FAIL, line)
+        self.assertEqual(self.review_verdict("The reviewer let it through without a pass."), INCONCLUSIVE)
 
     def arena(self, line):
         candidates = [{"seq": 43, "tool": "delegate_task", "prompt_head": f"Design one candidate {n}. Write under /tmp/k/candidate-{n}/"} for n in range(1, 6)]
@@ -3263,6 +3266,8 @@ class Issue133RoundTwo(unittest.TestCase):
         self.assertEqual(self.candidates_then_status(["cd /w/relay-wt/candidate-1"]), PASS)
         self.assertEqual(self.candidates_then_status(["cd ../relay-wt/candidate-1 && ls"]), PASS)
         self.assertEqual(self.candidates_then_status(["cd /w/relay-wt/candidate-1", "cd /w/relay"]), FAIL)
+        self.assertEqual(self.candidates_then_status(["cd /w/relay-wt/candidate-1", "cd ../../relay"]), FAIL)
+        self.assertEqual(self.candidates_then_status(["cd /w/relay-wt/candidate-1", "cd ../../../../w/./relay"]), FAIL)
         self.assertEqual(self.candidates_then_status(["(cd /w/relay-wt/candidate-1 && ls)"]), FAIL)
 
     def test_a_status_in_a_candidate_workdir_is_not_the_parent(self):
@@ -3448,10 +3453,16 @@ class LinearTime(unittest.TestCase):
         self.assert_quick(review_line, "PASS" + " " * LONG, " " * LONG + "pass from the reviewer", "pass " * (LONG // 5), "no pass " * (LONG // 8),
                           "[" * LONG + "pass", "](" * (LONG // 2) + "pass", "\n" * LONG + "Review: pass", "Review: " + "(" * LONG + "pass",
                           "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass",
-                          "a" + "_" * LONG + "b pass")
+                          "a" + "_" * LONG + "b pass", "no" + " " * (LONG // 2) + " pass" * (LONG // 10))
 
-    def test_a_long_run_of_relative_cds_grades_in_linear_time(self):
-        self.assert_quick(status_after, [f"cd d{n}" for n in range(40_000)])
+    def test_a_long_run_of_relative_cds_tracks_the_checkout_in_linear_time(self):
+        events = [{"seq": 50 + 2 * n + k, "kind": kind, "name": "Bash", "id": f"cd{n}", "input": {"command": f"cd d{n}"}, "ok": True}
+                  for n in range(40_000) for k, kind in enumerate(("tool_call", "tool_result"))]
+        candidates = [{"seq": 44, "tool": "Agent", "prompt_head": "Design one cache-key candidate."}]
+        view = oracles.View(minimal(events=events + bash(90_000, "git status --short", head=" M relay/cache.py"), spawns=candidates, cwd="/w/relay"),
+                            load_case("arena-run"), None)
+        view.project_edits = lambda turn=None: []
+        self.assert_quick(lambda found: oracles.parent_written(view, found), candidates)
 
 
 def review_line(line):
@@ -3471,6 +3482,11 @@ class ReviewVerdictGuard(unittest.TestCase):
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)
         self.assertIn("and it passed", result["excerpt"])
         self.assertIn("graded reply: turn 0", result["evidence"])
+
+    def test_the_judge_excerpt_holds_what_blocks_a_labeled_pass(self):
+        result = review_line("Independent review: pass. " + "Changed the CLI flag parsing and the README table. " * 60 + "Docs review (did not run): pass.")
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("(did not run)", result["excerpt"])
 
     def test_a_labeled_pass_decides_beside_an_unlabeled_one(self):
         self.assertEqual(review_line("Independent review: pass. It passed on the first try.")["verdict"], PASS)

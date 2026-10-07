@@ -93,6 +93,8 @@ REPLY_HEAD = 300
 REPLY_LABEL = re.compile(r"\A\s*(?:#{1,6}\s*(?i:sources?)\s*\n+[^\n]*|#{1,6}[^\n]+|[\[*]*[A-Za-z][\w /#()*—–,-]{0,40}:[^\n]*)")
 LABEL_KEEPS_BODY = re.compile(r"\b(?:sources?|role|persona)\b", re.I)
 LABEL_QUALIFIER = re.compile(r"#?\d+(?:/\d+)?|[A-Z]|[IVX]+|of|(?i:report|agent)")
+LABEL_ANGLE = re.compile(r"\s-+\s|[—–,]|\sfor\s")
+OUTPUT_NOUN = re.compile(r"[\s*\[]*(?:notes?|findings?|summary)\b", re.I)
 LEAD_ROLE = re.compile(r"\bthe (?:lead|parent|coordinator)(?: agent)? (?:handles|does|owns|will (?:handle|do|own)) (?:the )?(?:final )?(?:synthesis|judging)\b")
 WHY_ROSTER = ("source[- ]control", "issue ?/ ?ticket", "long-form documents?", "real-time (?:team )?chat", "infrastructure observability",
               "error ?/ ?exception tracking", "product analytics")
@@ -623,7 +625,8 @@ class View:
         name = label.group(0).partition(":")[0]
         if LABEL_KEEPS_BODY.search(name):
             return label.group(0).lower(), False
-        words = re.sub(r"\([^()]*\)|[*\[\]]|-(?=\d)", " ", re.split(r"\s-+\s|[—–,]", name, maxsplit=1)[0]).split()
+        head, *angle = LABEL_ANGLE.split(name, maxsplit=1)
+        words = re.sub(r"\([^()]*\)|[*\[\]]|-(?=\d)", " ", name if angle and OUTPUT_NOUN.match(angle[0]) else head).split()
         while words and LABEL_QUALIFIER.fullmatch(words[-1]):
             words.pop()
         return " ".join(words).lower(), True
@@ -2574,6 +2577,11 @@ VERDICT_CLAUSE = re.compile(r",(?=\s)|\b(?:and|then|but|before|since|after)\b", 
 VERDICT_NEGATION = re.compile(r"\b(?:fail(?:s|ed|ing|ure)?|not|no|never|none|nobody|nothing|neither|nor|cannot|unable|without|refus(?:e|es|ed|ing)"
                               r"|declin(?:e|es|ed|ing)|unlikely|pending|awaiting|await|will|would|should|must|could)\b|n't\b|[❌✗✘🚫⛔]", re.I)
 NEGATION_AFTER_PASS = re.compile(VERDICT_NEGATION.pattern + r"|\b(?:required|needed)\b", re.I)
+NEGATION_ON_PASS = re.compile(r"\b(?:not|no|never|nothing|neither|cannot|fail(?:s|ed)?|refus(?:e|es|ed)|declin(?:e|es|ed))\b|n['’]t\b|[❌✗✘🚫⛔]", re.I)
+ON_THE_WORD = re.compile(r"\s+(?:[\w'’]+\s+)?")
+FAILING_VERDICT = re.compile(r"\b(?:fail(?:s|ed)?|needs?[- ]changes|blocked|rejected)\b", re.I)
+NOT_RUN = re.compile(r"\bno\s+(?:(?:independent|trail|docs?|documentation)\s+)*review(?:er)?s?(?=\s*(?:[.,;:!?)|—–\n]|-\s|$)|\s+(?:was\s+)?(?:run|ran)\b)"
+                     r"|\breview(?:er)?s?\W{0,3}(?:(?:was|has)\s+)?(?:not\s+(?:yet\s+)?run|never\s+ran|did\s+not\s+run|didn['’]t\s+run|skipped)\b", re.I)
 BENIGN_NEGATION = re.compile(r"\b(?:(?:with\s+)?(?:no|zero|0)|without(?:\s+any)?)\s+(?:[\w-]+\s+){0,2}?(?:findings?|blockers?|issues?|nits?|comments?|problems?|concerns?"
                              r"|objections?|items?|(?:edits?|changes)(?:\s+(?:needed|required|requested))?)\b", re.I)
 PUNCT_OPENER = r"[,():|+—–]|\s-\s"
@@ -2583,6 +2591,7 @@ TRAILER_SPLIT = re.compile(r"[,():|+—–]|\s-\s|\band\b", re.I)
 TRAILER_ITEM = re.compile(r"(?:with\s+)?(?:\d+\s+(?:[\w-]+\s+)?(?:findings?|blockers?|issues?|nits?|notes?|comments?|suggestions?|items?)|notes?|nits?|comments?|suggestions?)"
                           r"|(?:by|from)\s+(?:the\s+)?(?:(?:independent|trail)\s+)*review(?:er)?s?|round\s+\d+|(?:head\s+)?[0-9a-f]{7,40}|v?\d+(?:\.\d+)+"
                           r"|(?:the\s+)?(?:independent|trail|docs?|documentation)(?:\s+review(?:er)?)?|(?:claude|opus|sonnet|haiku|fable|gpt|grok|gemini|codex)[\w.@-]*", re.I)
+PLAIN_ASIDE = re.compile(TRAILER_ITEM.pattern + r"|read[- ]only|(?:see\s+)?(?:https?://\S+|[\w.-]*/[\w./#-]*|[\w-]+\.\w{1,5})", re.I)
 LABEL_AFTER = re.compile(r"(?:by|from)\s", re.I)
 PASS_COMPLEMENT = re.compile(r"verdict|on\s+re-?review|it|the\s+(?:change|docs)", re.I)
 LEAD_MARKS = re.compile(r"[\s>|#+*-]*(?:\d+[.)]\s+)?(?:[xX]\s+)?")
@@ -2600,7 +2609,7 @@ REPORT_VERBS = (("came", "back", "with"), ("came", "back", "as"), ("came", "back
                 ("reported",), ("says",), ("said",))
 RECEIPTS = {("got",), ("i", "got"), ("we", "got"), ("received",)}
 VERDICT_SPAN = 200
-NEGATED_LABEL = "NEGATED_LABEL"
+NEGATED = "NEGATED"
 
 
 def positions(pattern, text, skip=()):
@@ -2636,6 +2645,7 @@ def label_kind(before, context, header):
     text = LEAD_MARKS.sub("", before, count=1).replace("’", "'")
     if not text.strip():
         return "bare"
+    asides = re.findall(r"\(([^()]*)\)", text)
     closed = re.sub(r"\([^()]*\)", lambda m: " " * len(m.group()), text)
     cuts = list(LABEL_SEPARATOR.finditer(closed))
     if cuts:
@@ -2643,7 +2653,8 @@ def label_kind(before, context, header):
         label, quals = " ".join(closed[:cut.start()].lower().split()), closed[cut.end():].lower().split()
         named = header or CLOSED_LABEL.fullmatch(label) or (label in GENERIC_LABELS and REVIEW_NAMED.search(f"{context} {' '.join(quals)}"))
         plain_quals = all(q in LABEL_WORDS or q.isdigit() for q in quals)
-        return "label" if named and plain_quals and not HEDGE.search(text[:cut.start()]) else None
+        plain_asides = all(PLAIN_ASIDE.fullmatch(a.strip()) or BENIGN_NEGATION.fullmatch(a.strip()) for a in asides)
+        return "label" if named and plain_quals and plain_asides and not HEDGE.search(text[:cut.start()]) else None
     words = text.lower().split()
     while words and words[-1] in QUALIFIERS:
         words.pop()
@@ -2652,7 +2663,7 @@ def label_kind(before, context, header):
     verb = next((v for v in REPORT_VERBS if tuple(words[-len(v):]) == v), ())
     words = words[:len(words) - len(verb)]
     if 0 < len(words) <= 6 and words[-1] in NOUN_HEADS and all(w in NOUN_WORDS or w.isdigit() for w in words):
-        return "label"
+        return "phrase"
     return None
 
 
@@ -2683,14 +2694,34 @@ def previous_line(plain, newlines, line):
     return ""
 
 
-def mention_verdict(plain, m, found):
-    at = bisect.bisect_left(found["ends"], m.start())
+def clause_of(plain, found, start, end):
+    at = bisect.bisect_left(found["ends"], start)
     sentence_start = found["ends"][at - 1] + 1 if at else 0
     sentence_end = found["ends"][at] if at < len(found["ends"]) else len(plain)
-    cut = bisect.bisect_right(found["clause_ends"], m.start()) - 1
+    cut = bisect.bisect_right(found["clause_ends"], start) - 1
     clause_start = max(sentence_start, found["clause_ends"][cut] if cut >= 0 else 0)
-    cut = bisect.bisect_left(found["clause_starts"], m.end())
+    cut = bisect.bisect_left(found["clause_starts"], end)
     clause_end = min(sentence_end, found["clause_starts"][cut] if cut < len(found["clause_starts"]) else sentence_end)
+    return sentence_end, clause_start, clause_end
+
+
+def negated_on_the_word(plain, m, found):
+    at = bisect.bisect_right(found["on_pass"], m.start()) - 1
+    if at < 0 or m.start() - found["on_pass"][at] > 40:
+        return False
+    return bool(ON_THE_WORD.fullmatch(plain, found["on_pass"][at], m.start())) and not VERDICT_CLAUSE.search(plain, found["on_pass"][at], m.start())
+
+
+def failing_label(plain, f, found):
+    clause_start = clause_of(plain, found, f.start(), f.end())[1]
+    line = bisect.bisect_left(found["newlines"], f.start())
+    line_start = found["newlines"][line - 1] + 1 if line else 0
+    context = plain[max(line_start, clause_start - 300):clause_start] + " " + previous_line(plain, found["newlines"], line)
+    return label_kind(plain[max(clause_start, f.start() - VERDICT_SPAN):f.start()], context, False)
+
+
+def mention_verdict(plain, m, found):
+    sentence_end, clause_start, clause_end = clause_of(plain, found, m.start(), m.end())
     near, stop = max(clause_start, m.start() - VERDICT_SPAN), min(sentence_end, m.end() + VERDICT_SPAN)
     at = bisect.bisect_left(found["openers"], m.end())
     split = found["openers"][at] if at < len(found["openers"]) and found["openers"][at] < stop else stop
@@ -2701,12 +2732,10 @@ def mention_verdict(plain, m, found):
         return None
     at = bisect.bisect_left(found["aside_openers"], m.end())
     aside = min(found["aside_openers"][at:at + 1] + [clause_end])
-    at = bisect.bisect_left(found["colons"], m.start())
-    label_end = found["colons"][at - 1] + 1 if at else 0
-    if any_between(found["direct"], max(clause_start, label_end), m.start()) or any_between(found["negations_after"], m.end(), aside):
+    if negated_on_the_word(plain, m, found):
         return FAIL
-    if any_between(found["direct"], clause_start, label_end):
-        return NEGATED_LABEL
+    if any_between(found["direct"], clause_start, m.start()) or any_between(found["negations_after"], m.end(), aside):
+        return NEGATED
     if any_between(found["negations"], clause_start, m.start()) or any_between(found["negations_after"], aside, clause_end):
         return INCONCLUSIVE
     if (m.start() - clause_start > VERDICT_SPAN or sentence_end - m.end() > VERDICT_SPAN or plain[sentence_end:sentence_end + 1] == "?"
@@ -2724,7 +2753,7 @@ def mention_verdict(plain, m, found):
     kind = label_kind(before, plain[max(line_start, clause_start - 300):clause_start] + " " + previous, named_column)
     tail = trailer_kind(BENIGN_NEGATION.sub(" ", plain[split:stop]))
     heading = VERDICT_END.split(previous)[-1].strip()
-    if tail and (kind == "label" or kind in ("bare", "receipt") and tail == "source" or kind == "bare" and heading.startswith("#") and REVIEW_NAMED.search(heading)):
+    if tail and (kind in ("label", "phrase") or kind in ("bare", "receipt") and tail == "source" or kind == "bare" and heading.startswith("#") and REVIEW_NAMED.search(heading)):
         return PASS
     return INCONCLUSIVE
 
@@ -2735,18 +2764,26 @@ def review_pass(reply):
     mentions = list(VERDICT_WORD.finditer(plain))
     clauses = list(VERDICT_CLAUSE.finditer(plain))
     starts, negations = [m.start() for m in mentions], positions(VERDICT_NEGATION, plain, benign)
+    asides = parentheticals(plain, starts)
     found = {"ends": positions(VERDICT_END, plain), "clause_starts": [m.start() for m in clauses], "clause_ends": [m.end() for m in clauses],
-             "newlines": positions(re.compile("\n"), plain), "pipes": positions(re.compile(r"\|"), plain), "colons": positions(re.compile(":"), plain), "headers": table_headers(plain),
-             "negations": negations, "direct": outside(negations, parentheticals(plain, starts)), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign),
+             "newlines": positions(re.compile("\n"), plain), "pipes": positions(re.compile(r"\|"), plain), "headers": table_headers(plain),
+             "on_pass": [m.end() for m in NEGATION_ON_PASS.finditer(plain) if outside([m.start()], benign)],
+             "negations": negations, "direct": outside(negations, asides), "negations_after": positions(NEGATION_AFTER_PASS, plain, benign),
              "openers": positions(VERDICT_OPENER, plain), "aside_openers": positions(ASIDE_OPENER, plain), "off_topic": positions(OFF_TOPIC, plain),
              "named": positions(REVIEW_NAMED, plain), "mentions": starts}
-    verdicts = {}
-    for m in mentions:
-        verdicts.setdefault(mention_verdict(plain, m, found), m.start())
-    verdicts.pop(None, None)
-    if verdicts.keys() <= {FAIL}:
+    graded = [(kind, m.start()) for m in mentions if (kind := mention_verdict(plain, m, found))]
+    not_run = [f for f in NOT_RUN.finditer(plain) if outside([f.start()], benign)]
+    failing = [(f, failing_label(plain, f, found)) for f in FAILING_VERDICT.finditer(plain)]
+    if any(kind == PASS for kind, _ in graded):
+        blockers = ([at for kind, at in graded if kind in (FAIL, NEGATED)] + [f.start() for f in not_run]
+                    + [f.start() for f, kind in failing if kind in ("label", "phrase")])
+        return (None, min(blockers)) if blockers else (True, None)
+    undecided = [at for kind, at in graded if kind != FAIL]
+    proofs = not_run + [f for f, kind in failing if kind == "label"]
+    settled = [clause_of(plain, found, f.start(), f.end())[2] for f in proofs if outside([f.end() - 1], asides)]
+    if not undecided or max(undecided) < max(settled, default=-1):
         return False, None
-    return (True, None) if PASS in verdicts and not verdicts.keys() & {FAIL, NEGATED_LABEL} else (None, verdicts.get(INCONCLUSIVE, min(verdicts.values())))
+    return None, min(undecided)
 
 
 @oracle("documentation-impact-independent-review-pass-required")
@@ -2850,21 +2887,33 @@ def cd_target(command):
     return cd_into(piece, base) or base
 
 
+def walk_path(parts, path):
+    if path.startswith("/") or parts is None:
+        parts = [""] if path.startswith("/") else []
+    for part in path.split("/"):
+        if part == ".." and len(parts) > 1:
+            parts.pop()
+        elif part not in ("", ".", ".."):
+            parts.append(part)
+    return parts
+
+
 def parent_written(view, candidates):
     start = max(s.get("seq") or 0 for s in candidates)
     end = min((e[0] for e in view.project_edits() if e[0] > start), default=float("inf"))
-    parent = cwd = view.trace.get("cwd")
-    lost, unsure = False, None
+    parent = walk_path(None, view.trace["cwd"]) if view.trace.get("cwd") else None
+    cwd, lost, unsure = list(parent) if parent else None, False, None
     for call in view.tool_calls:
         seq, given = call.get("seq") or 0, call.get("input") or {}
         if call.get("name") not in SHELL_TOOLS or seq >= end:
             continue
         command = str(given.get(SHELL_TOOLS[call["name"]]) or "").strip()
-        here, known = given.get("workdir") or given.get("cwd") or cwd, not lost
+        workdir = given.get("workdir") or given.get("cwd")
+        at_parent, known = (walk_path(None, workdir) if workdir else cwd) == parent, not lost
         if call["name"] == "Bash" and (moved := cd_target(command)):
             lost = (view.results_for(call) or {}).get("ok") is False or lost and not moved.startswith("/")
-            cwd = os.path.normpath(moved if moved.startswith("/") or cwd is None else f"{cwd}/{moved}")
-        if seq > start and command.startswith("git status") and (here == parent or not known):
+            cwd = walk_path(cwd, moved)
+        if seq > start and command.startswith("git status") and (at_parent or not known):
             status = ((view.results_for(call) or {}).get("output_head") or "").replace("\\n", "\n")
             untracked = [m.group(1) or m.group(2) for m in GIT_DIRTY.finditer(status)]
             if any(path is None or (not path.startswith(ARENA_DIRS) and view.classify(path) in PROJECT_CLASSES) for path in untracked):
