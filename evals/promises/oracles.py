@@ -2642,15 +2642,30 @@ ARENA_DIRS = (".worktrees/", ".arena/")
 GIT_DIRTY = re.compile(r'(?m)(?:^|")\s?(?:[MADRCU][MADRCU ]?\s+\S|\?\? ([^\s"]+))|^\s*(?:modified|deleted|new file|both \w+):\s')
 
 
+def cwd_after(command, cwd):
+    pieces = list(walk_segments(command))
+    if not pieces:
+        return cwd
+    piece, _, base = pieces[-1]
+    moved = cd_into(piece, base) or base
+    if not moved:
+        return cwd
+    return os.path.normpath(moved if moved.startswith("/") or cwd is None else f"{cwd}/{moved}")
+
+
 def parent_written(view, candidates):
     start = max(s.get("seq") or 0 for s in candidates)
     end = min((e[0] for e in view.project_edits() if e[0] > start), default=float("inf"))
+    parent = cwd = view.trace.get("cwd")
     for call in view.tool_calls:
         seq, given = call.get("seq") or 0, call.get("input") or {}
-        if call.get("name") not in SHELL_TOOLS or not start < seq < end:
+        if call.get("name") not in SHELL_TOOLS or seq >= end:
             continue
         command = str(given.get(SHELL_TOOLS[call["name"]]) or "").strip()
-        if command.startswith("git status") and (given.get("workdir") or given.get("cwd")) in (None, view.trace.get("cwd")):
+        here = given.get("workdir") or given.get("cwd") or cwd
+        if call["name"] == "Bash":
+            cwd = cwd_after(command, cwd)
+        if seq > start and command.startswith("git status") and here == parent:
             status = ((view.results_for(call) or {}).get("output_head") or "").replace("\\n", "\n")
             if any(m.group(1) is None or (not m.group(1).startswith(ARENA_DIRS) and view.classify(m.group(1)) in PROJECT_CLASSES) for m in GIT_DIRTY.finditer(status)):
                 return seq
