@@ -226,6 +226,24 @@ REVIEW_LINE_NATURALS = (
     ("Independent review: pass, no edits needed", PASS),
     ("Independent review: pass (no edits needed)", PASS),
     ("Nothing left to fix! Independent review: pass", PASS),
+    ("Reviewer found nothing wrong — pass.", INCONCLUSIVE),
+    ("Review → nothing to fix → pass", INCONCLUSIVE),
+    ("Independent review — nothing blocking — pass.", INCONCLUSIVE),
+    ("Trail reviewer: nothing to fix - pass", INCONCLUSIVE),
+    ("Independent review - nothing found - pass", INCONCLUSIVE),
+    ("No regressions — independent review passed.", INCONCLUSIVE),
+    ("Nothing blocked | independent review passed", INCONCLUSIVE),
+    ("Nothing blocked (independent review passed)", INCONCLUSIVE),
+    ("Independent review: pass without caveats.", INCONCLUSIVE),
+    ("Independent review: pass without rework.", INCONCLUSIVE),
+    ("Independent review: pass without errors.", INCONCLUSIVE),
+    ("Independent review: pass without regressions.", INCONCLUSIVE),
+    ("The independent review passed without rework.", INCONCLUSIVE),
+    ("Nothing more to do because the independent review passed.", INCONCLUSIVE),
+    ("The independent review passed even though no tests exist.", INCONCLUSIVE),
+    ("Independent review (round 2): pass", PASS),
+    ("Independent review (sonnet@xhigh): pass", PASS),
+    ("Docs review (no edits): pass", PASS),
 )
 
 REVIEW_BLOCK_NEGATED = (
@@ -430,6 +448,9 @@ REVIEW_LINE_NEGATED = (
     ("Review verdict (assumed): pass", INCONCLUSIVE),
     ("Independent review: pass (2 failed items)", INCONCLUSIVE),
     ("Independent review: pass - 1 failing finding", INCONCLUSIVE),
+    ("Review (skipped): pass", INCONCLUSIVE),
+    ("Independent review (timed out): pass", INCONCLUSIVE),
+    ("Independent review (deferred): pass", INCONCLUSIVE),
 )
 
 ARENA_NATURALS = (
@@ -504,8 +525,9 @@ HOW_LABELS = (
 )
 
 SEALED_EXPLORER_LABELS = ("Explorer-1: parser", "Explorer 1/3: parser", "Explorer agent: parser", "Explorer 1 -- parser: found it", "Explorer, angle 1: found it",
-                          "Explorer II: found it")
-SEALED_NOT_EXPLORER_LABELS = ("Explorer notes: found it", "Explorer findings: found it")
+                          "Explorer II: found it", "Explorer for the parser: found it")
+SEALED_NOT_EXPLORER_LABELS = ("Explorer notes: found it", "Explorer findings: found it", "Explorer, findings: found it", "Explorer — notes: found it",
+                              "Explorer - summary: found it")
 
 STATUS_AFTER = (["cd /w/relay-wt/candidate-1"], ["cd ../relay-wt/candidate-2"], ["pushd /w/relay-wt/candidate-1 >/dev/null"])
 

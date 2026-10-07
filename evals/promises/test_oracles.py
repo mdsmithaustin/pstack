@@ -3450,6 +3450,9 @@ class LinearTime(unittest.TestCase):
                           "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass",
                           "a" + "_" * LONG + "b pass")
 
+    def test_a_long_run_of_relative_cds_grades_in_linear_time(self):
+        self.assert_quick(status_after, [f"cd d{n}" for n in range(40_000)])
+
 
 def review_line(line):
     trace = minimal(events=[dict(text(1, f"Done. Author result: independent review required. {line}"), turn=0), dict(text(3, "Review mode run."), turn=1)],
