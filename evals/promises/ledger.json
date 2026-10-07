@@ -2817,6 +2817,24 @@
    "owners": [
     "skills/poteto-mode/playbooks/opening-a-pr.md"
    ]
+  },
+  "opening-a-pr-gated-publish-worktree-uses-main-checkout": {
+   "check": "static",
+   "claim": "In a gated repository, an agent in a linked worktree publishes from the main checkout when the gate works there, and switches the main checkout back afterward.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "Run `no-mistakes axi` in the main checkout, the first path that `git worktree list` prints."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "switch the main checkout to the branch, run the gate there, and switch the main checkout back to its previous branch when the run returns."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
   }
  },
  "units": {
@@ -8454,15 +8472,6 @@
    ],
    "text": "The [Session pickup playbook](../../skills/poteto-mode/playbooks/session-pickup.md) reads the prior trail for completed work and decisions."
   },
-  "6918480c3779": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-sandbox-commits-and-leaves-push-to-host",
-   "sources": [
-    "port"
-   ],
-   "text": "An agent in a Docker sandbox commits and leaves the push to the host."
-  },
   "43e02298cf4e": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -8501,6 +8510,18 @@
     "port"
    ],
    "text": "It pushes around the gate only after you say \"bypass no-mistakes\" in the session."
+  },
+  "50fffb9a9dcd": {
+   "also": [
+    "opening-a-pr-gated-publish-worktree-uses-main-checkout"
+   ],
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-sandbox-commits-and-leaves-push-to-host",
+   "sources": [
+    "port"
+   ],
+   "text": "An agent in a Docker sandbox commits and leaves the push to the host. no-mistakes recognizes only the checkout where you ran `init`, so an agent working in a linked worktree switches your main checkout to its branch to publish, then switches it back."
   }
  }
 }
