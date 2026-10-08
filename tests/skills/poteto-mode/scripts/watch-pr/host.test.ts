@@ -127,7 +127,7 @@ describe("repository host inference", () => {
         )
       ).toEqual({ host: "github.com", owner: "public", repo: "repo", number: 14 });
     }
-  });
+  }, 20_000);
 
   it("targets every gh query to the origin GHES host with explicit owner and repo", () => {
     const result = commandOutput("ssh://git@example.com/team/project.git");

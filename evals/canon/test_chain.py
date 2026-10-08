@@ -334,6 +334,8 @@ def make_run(directory, agent, fixture, transcripts=True, tree=TREE, case="sessi
     run = work / "runs" / case / "with_skill"
     run.mkdir(parents=True)
     shutil.copy(source / "run" / "trace.jsonl", run / "trace.jsonl")
+    if (source / "run" / "output.md").is_file():
+        shutil.copy(source / "run" / "output.md", run / "output.md")
     harvest = work / "harvest" / case / "with_skill"
     harvest.mkdir(parents=True)
     if transcripts:
@@ -1020,6 +1022,184 @@ class WorklistCarrierTests(unittest.TestCase):
 
     def test_no_list_is_no_valid_carrier(self):
         self.assertFalse(self.worklist(None, [])["valid_carrier"])
+
+
+class FinalReplyTests(unittest.TestCase):
+    def test_a_final_reply_recap_is_not_the_worklist(self):
+        worklist = analyze("claude-final-recap", "claude", transcripts=False)["worklist"]
+
+        self.assertEqual((worklist["carrier"], worklist["steps_listed"]), ("none", 0))
+
+    def test_a_principle_named_only_in_output_md_is_cited(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trace_path = make_run(directory, "claude", "claude-final-recap", transcripts=False)
+            with (trace_path.parent / "output.md").open("a") as output:
+                output.write("Prove It Works shaped the check.\n")
+            row = chain.analyze(trace_path, PRINCIPLES)
+
+        self.assertEqual(row["citations"]["cited"], ["principle-prove-it-works"])
+
+
+def playbook_text(name):
+    return (SKILLS / "poteto-mode" / "playbooks" / f"{name}.md").read_text()
+
+
+def numbered_steps(text):
+    return [re.sub(r"^\d+\.\s+", "", line) for line in text.splitlines() if re.match(r"^\d+\.\s", line)]
+
+
+class PlaybookOpeningTests(unittest.TestCase):
+    def test_a_bold_lead_and_the_prose_after_it_are_each_an_identity(self):
+        names = ("feature", "bug-fix", "refactoring", "orchestrate", "multi-phase-plan", "research")
+        self.assertEqual([chain.playbook_opening(playbook_text(name)) for name in names], [
+            ("you own the design", "delegate implementation"),
+            ("you own this task", "delegate investigation and the fix"),
+            ("you own the contract", "distinct from feature"),
+            ("you own the program", "for a whole project handed"),
+            ("you own the plan", "the plan is the deliverable"),
+            ("use for external",),
+        ])
+
+    def test_a_bold_lead_with_nothing_after_it_is_the_only_identity(self):
+        self.assertEqual(chain.playbook_opening(playbook_text("authoring-a-skill")), ("you own the skill's voice",))
+
+    def test_a_playbook_without_a_bold_lead_opens_with_its_first_clause(self):
+        self.assertEqual([chain.playbook_opening("Use for X, then Y. More.\n" + FEATURE), chain.playbook_opening(FEATURE)],
+                         [("use for x",), None])
+
+    def test_steps_with_nothing_before_them_have_no_opening(self):
+        self.assertEqual([chain.playbook_opening(FEATURE), chain.playbook_opening("Lead.\n" + FEATURE)], [None, ("lead",)])
+
+    def test_punctuation_outside_the_bold_span_is_skipped_before_the_trailing_clause(self):
+        self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (". Delegate the fix.", ": delegate the fix.", " Delegate the fix.")],
+                         [("you own x", "delegate the fix")] * 3)
+
+    def test_a_bold_lead_followed_only_by_punctuation_has_no_empty_identity(self):
+        self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (".", ":", " . ")], [("you own x",)] * 3)
+
+    def test_a_dash_or_ellipsis_between_the_bold_span_and_the_trailing_clause_is_skipped(self):
+        self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (" \u2014 Delegate the fix.", " \u2013 Delegate the fix.", "\u2026 Delegate the fix.")],
+                         [("you own x", "delegate the fix")] * 3)
+
+    def test_a_bold_lead_followed_only_by_a_dash_or_ellipsis_has_no_wordless_identity(self):
+        self.assertEqual([chain.playbook_opening(f"**You own X**{tail}\n" + FEATURE) for tail in (" \u2014", " \u2013", "\u2026", " $$")],
+                         [("you own x",)] * 4)
+
+    def test_an_exclamation_or_question_mark_ends_the_opening_clause(self):
+        self.assertEqual([chain.playbook_opening(f"{line}\n" + FEATURE) for line in ("**You own this task! Plan, review.**", "**You own this task? Plan, review.**", "Use for X! More.")],
+                         [("you own this task",), ("you own this task",), ("use for x",)])
+
+    def test_a_spaced_em_dash_ends_the_opening_clause(self):
+        self.assertEqual(chain.first_clause("you own this task \u2014 plan, review"), "you own this task")
+
+    def test_a_worklist_without_the_trailing_clause_fails_item_zero_when_punctuation_trails_the_bold_span(self):
+        text = "**You own X**. Delegate the fix.\n" + FEATURE
+        trace = lambda item: chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md"),
+                                                 chain.Event(1, "main", "worklist", text=f"{item}\n" + "\n".join(numbered_steps(text)))])
+        kept = [shipped_stages(trace(item), "sessions-by-tag", "poteto-mode/playbooks/feature.md", {"feature": text})["worklist"]["opening"]
+                for item in ("You own X.", "You own X. Delegate the fix.")]
+
+        self.assertEqual(kept, [{"identities": ["you own x", "delegate the fix"], "kept": False},
+                                {"identities": ["you own x", "delegate the fix"], "kept": True}])
+
+    def test_curly_quotes_fold_to_ascii_on_both_sides(self):
+        self.assertEqual([chain.normalize("The skill\u2019s \u201cvoice\u201d"), chain.normalize("The skill's \"voice\"")],
+                         ["the skill's \"voice\"", "the skill's \"voice\""])
+
+    def test_no_shipped_playbook_opens_with_the_read_in_full_sentence(self):
+        names = sorted(path.stem for path in (SKILLS / "poteto-mode" / "playbooks").glob("*.md"))
+        openings = {name: chain.playbook_opening(playbook_text(name)) for name in names}
+
+        self.assertEqual([name for name, opening in openings.items()
+                          if not opening or any(identity.startswith("read this playbook") for identity in opening)], [])
+
+
+class WorklistOpeningTests(unittest.TestCase):
+    """Item 0 of a worklist is the matched playbook's opening prose. A run can
+    copy every numbered step and still drop it, which the step stages score as
+    a full list."""
+
+    def worklist(self, name, lines, carrier="tool"):
+        text = playbook_text(name)
+        trace = chain.Trace(events=[chain.Event(0, "main", "read", f"poteto-mode/playbooks/{name}.md"),
+                                    chain.Event(1, "main", "worklist" if carrier == "tool" else "message", text="\n".join(lines))])
+        return shipped_stages(trace, "sessions-by-tag", f"poteto-mode/playbooks/{name}.md", {name: text})["worklist"]
+
+    def test_every_step_without_the_opening_prose_fails_item_zero(self):
+        worklist = self.worklist("feature", numbered_steps(playbook_text("feature")))
+
+        self.assertEqual((worklist["steps_listed"], worklist["steps_total"], worklist["opening"]),
+                         (8, 8, {"identities": ["you own the design", "delegate implementation"], "kept": False}))
+
+    def test_the_opening_line_ahead_of_every_step_passes_item_zero(self):
+        text = playbook_text("feature")
+        opening = next(line for line in text.splitlines() if line.startswith("**You own"))
+        worklist = self.worklist("feature", [opening, *numbered_steps(text)])
+
+        self.assertEqual((worklist["steps_listed"], worklist["opening"]),
+                         (8, {"identities": ["you own the design", "delegate implementation"], "kept": True}))
+
+    def test_a_lead_that_drops_the_delegate_sentence_fails_item_zero(self):
+        text = playbook_text("bug-fix")
+        steps = numbered_steps(text)
+        lead = "**You own this task. Plan, review, verify.**"
+        full = f"{lead} Delegate investigation and the fix to subagents, stay in the lead."
+
+        self.assertEqual([self.worklist("bug-fix", [line, *steps])["opening"]["kept"] for line in (lead, full)], [False, True])
+
+    def test_a_reworded_item_that_keeps_both_clauses_passes(self):
+        worklist = self.worklist("bug-fix", ["Worklist:", "0. You own this task: plan, review, verify. Delegate investigation and the fix, stay lead.",
+                                             "1. Reproduce it yourself"], carrier="message")
+
+        self.assertEqual(worklist["opening"], {"identities": ["you own this task", "delegate investigation and the fix"], "kept": True})
+
+    def test_curly_quotes_in_the_worklist_still_name_the_lead(self):
+        worklist = self.worklist("authoring-a-skill", ["You own the skill\u2019s voice."])
+
+        self.assertEqual(worklist["opening"], {"identities": ["you own the skill's voice"], "kept": True})
+
+    def test_no_worklist_fails_item_zero(self):
+        trace = chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md")])
+
+        self.assertEqual(shipped_stages(trace, "sessions-by-tag", "poteto-mode/playbooks/feature.md")["worklist"]["opening"],
+                         {"identities": ["you own the design", "delegate implementation"], "kept": False})
+
+    def test_a_playbook_with_no_numbered_steps_has_no_worklist_to_open(self):
+        openings = [self.worklist(name, ["Use when the matched playbook produces a PR."])["opening"] for name in ("opening-a-pr", "research")]
+
+        self.assertEqual(openings, [None, {"identities": ["use for external"], "kept": False}])
+
+    def test_a_playbook_with_nothing_before_step_one_has_no_item_zero(self):
+        trace = chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md")])
+
+        def opening(text):
+            return chain.stages(trace, case="session-tree", owner="poteto-mode/playbooks/feature.md", injected=True,
+                                playbook_texts={"feature": text}, principles=PRINCIPLES, workspace=True)["worklist"]["opening"]
+
+        self.assertEqual([opening(FEATURE), opening("Lead.\n" + FEATURE)], [None, {"identities": ["lead"], "kept": False}])
+
+    def test_a_run_that_read_no_playbook_has_no_item_zero(self):
+        text = playbook_text("feature")
+        read = chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md")])
+        unread = chain.Trace(events=[chain.Event(0, "main", "read", "how/SKILL.md")])
+
+        self.assertEqual([shipped_stages(trace, "sessions-by-tag", "poteto-mode/playbooks/feature.md", {"feature": text})["worklist"]["opening"]
+                          for trace in (read, unread)],
+                         [{"identities": ["you own the design", "delegate implementation"], "kept": False}, None])
+
+    def test_a_playbook_missing_from_the_tree_has_no_item_zero(self):
+        text = playbook_text("feature")
+        trace = chain.Trace(events=[chain.Event(0, "main", "read", "poteto-mode/playbooks/feature.md")])
+
+        self.assertEqual([shipped_stages(trace, "sessions-by-tag", "poteto-mode/playbooks/feature.md", texts)["worklist"]["opening"]
+                          for texts in ({"feature": text}, {})],
+                         [{"identities": ["you own the design", "delegate implementation"], "kept": False}, None])
+
+    def test_the_stage_reads_the_item_zero_verdict_and_skips_runs_without_one(self):
+        stage = chain.STAGES["playbook opening prose listed"]
+
+        self.assertEqual([stage({"worklist": {"opening": opening}}) for opening in ({"identities": ["x"], "kept": True}, {"identities": ["x"], "kept": False}, None)],
+                         [True, False, None])
 
 
 class NoTranscriptsTests(unittest.TestCase):

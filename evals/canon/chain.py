@@ -264,6 +264,7 @@ class Child:
 class Trace:
     events: list = field(default_factory=list)
     final: str = ""
+    output_md: str = ""
     slash_commands: tuple = ()
     worklist_tool_offered: bool = None  # None when the trace neither lists tools nor calls one
     result_events: int = None
@@ -990,8 +991,11 @@ def attach_transcripts(trace, agent, transcripts, tree, lead_lines=()):
     return attach(trace, children, lead_clock(trace, lead) if lead else None)
 
 
+CURLY = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"'})
+
+
 def normalize(text):
-    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text.translate(CURLY))
     text = re.sub(r"[*`_]", "", text).lower()
     return re.sub(r"\s+", " ", text).strip()
 
@@ -1020,7 +1024,7 @@ class Step:
 def first_clause(text, words=5):
     """The opening clause, cut at its first punctuation mark and at five
     words, so a paraphrase of the rest of the clause still names the step."""
-    clause = re.split(r"[.,;:(]\s|[.,;:(]$|\s[-–]\s", text + " ", maxsplit=1)[0]
+    clause = re.split(r"[.,;:!?(]\s|[.,;:!?(]$|\s[-–—]\s", text + " ", maxsplit=1)[0]
     return " ".join(clause.split()[:words])
 
 
@@ -1047,6 +1051,29 @@ def step_specs(text, skill_names):
                 pointers.append(name)
         steps.append(Step(identity, tuple(pointers)))
     return steps
+
+
+def playbook_opening(text):
+    """The identities of a playbook's opening prose, from the first line the
+    extractor prints before step 1. A bold lead gives its first clause and, when
+    prose follows the bold span, that prose's first clause too, because the
+    verbatim-worklist contract copies the whole opening line, and the prose
+    can carry a rule (Bug fix's "Delegate investigation") or a scope
+    (Refactoring's "Distinct from Feature"). Spaces and any of `.`, `,`,
+    `;`, `:`, `!`, `?`, a hyphen, an en dash, an em dash, or `…` between the
+    bold span and that prose are skipped, and a part with no word character
+    gives no identity, because a wordless identity matches every worklist. A
+    line with no bold lead gives its first clause. Each is five words at most.
+    None when no prose precedes step 1 or the line has no words."""
+    for line in text.splitlines():
+        if re.match(r"^\d+\.\s", line):
+            return None
+        if line.strip() and not line.startswith("#"):
+            lead = re.match(r"\*\*(.+?)\*\*(.*)", line)
+            parts = lead.groups() if lead else (line,)
+            identities = (first_clause(normalize(part).lstrip(" .,;:!?-–—…")) for part in parts)
+            return tuple(i for i in identities if re.search(r"\w", i)) or None
+    return None
 
 
 def message_items(text):
@@ -1286,6 +1313,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
     fidelity = step_fidelity(specs, items)
     pointer_total = sum(len(step["pointers"]) for step in fidelity)
     blob = normalize("\n".join(tool_lists or text_lists))
+    opening = playbook_opening(playbook_texts.get(matched, "")) if specs else None
     steps = playbook_steps(playbook_texts.get(matched, "")) if matched else []
     def share(keys):
         return (round(sum(key in blob for key in keys) / len(keys), 2) if blob else 0.0) if keys else None
@@ -1316,7 +1344,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
         counts["prescribed"] += bool(spawn.prescribed)
         counts["persona"] += spawn.persona
         counts["implementation_misses"] += spawn in implementers and not spawn.persona
-    cited = cited_principles(trace.final, principles)
+    cited = cited_principles(trace.output_md + "\n" + trace.final, principles)
     unread = [slug for slug in cited if f"{slug}/SKILL.md" not in first_read]
     delegate_edits = sorted({event.path for event in edits if event.actor == "delegate"})
     return {
@@ -1332,6 +1360,7 @@ def stages(trace, *, case, owner, injected, playbook_texts, principles, workspac
             "carrier": carrier,
             "tool_rejected": rejected,
             "valid_carrier": valid_carrier(carrier, trace.worklist_tool_offered, rejected),
+            "opening": {"identities": list(opening), "kept": all(identity in blob for identity in opening)} if opening else None,
             "steps": fidelity,
             "steps_listed": sum(step["listed"] for step in fidelity) if fidelity else None,
             "steps_total": len(fidelity) if fidelity else None,
@@ -1552,7 +1581,7 @@ def analyze(trace_path, principles):
         attach_transcripts(trace, run.agent, harvest / "transcripts", tree, lines)
     output = run.path / "output.md"
     if output.is_file():
-        trace.final = output.read_text(errors="replace") + "\n" + trace.final
+        trace.output_md = output.read_text(errors="replace")
     injected = injection(run, run.agent, entry, trace)
     playbook_texts = {PLAYBOOK.match(path).group(1): source.read_text(errors="replace") for path, source in files.items() if PLAYBOOK.match(path)}
     workspace = "workspace" in build_info.get("cases", {}).get(run.case, {})
@@ -1613,6 +1642,7 @@ STAGES = {
     "worklist carried in messages": lambda row: row["worklist"]["carrier"] == "message",
     "worklist present via a valid carrier": lambda row: row["worklist"]["valid_carrier"],
     "every playbook step listed": lambda row: None if row["worklist"]["steps_total"] is None else row["worklist"]["steps_listed"] == row["worklist"]["steps_total"],
+    "playbook opening prose listed": lambda row: None if row["worklist"]["opening"] is None else row["worklist"]["opening"]["kept"],
     "step pointers preserved (fraction)": lambda row: row["worklist"]["pointer_fraction"],
     "owner file read or injected": lambda row: row["owner_read"],
     "owner read in full": lambda row: row["owner_read_full"],

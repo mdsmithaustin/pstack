@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import live
+from grade_boundary import GradeRefused, read_file, write_file
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/", ".codex/"]
@@ -84,7 +85,7 @@ def config_flags(run):
 
 
 def thread_id(stream):
-    for record in records(stream):
+    for record in records(read_file(stream)):
         if record.get("type") == "thread.started":
             return record.get("thread_id")
     return None
@@ -110,8 +111,8 @@ def turn(run, text, index):
     return record
 
 
-def records(path):
-    for line in Path(path).read_text(errors="replace").splitlines():
+def records(data):
+    for line in data.decode(errors="replace").splitlines():
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
@@ -120,15 +121,19 @@ def records(path):
             yield record
 
 
-def session_meta(path):
-    for record in records(path):
+def session_meta(data):
+    for record in records(data):
         if record.get("type") == "session_meta":
             return record.get("payload") or {}
     return {}
 
 
 def find_rollouts(store, threads):
-    metas = {path: session_meta(path) for path in sorted(store.rglob("rollout-*.jsonl"))}
+    linked = next((p for p in store.rglob("*") if p.is_symlink() and p.is_dir()), None)
+    if linked:
+        raise GradeRefused("unsafe_link", linked)
+    contents = {path: read_file(path) for path in sorted(store.rglob("rollout-*.jsonl"))}
+    metas = {path: session_meta(data) for path, data in contents.items()}
     leads = [p for p, m in metas.items() if m.get("id") in threads or any(p.name.endswith(f"-{t}.jsonl") for t in threads)]
     if not threads:
         leads = [p for p, m in metas.items() if not m.get("parent_thread_id")]
@@ -136,7 +141,7 @@ def find_rollouts(store, threads):
     while True:
         children = [p for p, m in metas.items() if p not in chosen and m.get("parent_thread_id") in seen]
         if not children:
-            return leads, chosen[len(leads):]
+            return {p: contents[p] for p in leads}, {p: contents[p] for p in chosen[len(leads):]}
         chosen += children
         seen |= {metas[p].get("id") for p in children}
 
@@ -209,10 +214,10 @@ def js_update_plan_calls(code):
     return calls
 
 
-def harvest_rollout(path, prompts=None):
+def harvest_rollout(data, prompts=None):
     events, files, worklist, spawns = [], [], [], []
     final, injected, context, usage = "", [], {}, None
-    meta = session_meta(path)
+    meta = session_meta(data)
     cwd = Path(meta.get("cwd") or ".")
     names, plan_calls, spawn_by_call = {}, [], {}
     turn, upcoming = 0, list(enumerate(prompts or []))
@@ -224,7 +229,7 @@ def harvest_rollout(path, prompts=None):
         events.append(event)
         return event["seq"]
 
-    for record in records(path):
+    for record in records(data):
         kind, payload = record.get("type"), record.get("payload") or {}
         if kind == "turn_context" and not context:
             context = payload
@@ -311,8 +316,8 @@ def merge_stream_plans(lead, streams):
     k-th todo_list event to the k-th update_plan call. The stream carries only
     a completed flag, so a step is completed or pending there."""
     snapshots = []
-    for stream in streams:
-        for record in records(stream):
+    for data in streams:
+        for record in records(data):
             item = record.get("item") or {}
             if record.get("type") in ("item.started", "item.updated", "item.completed") and item.get("type") == "todo_list":
                 snapshots.append([{"text": s.get("text", ""), "state": "completed" if s.get("completed") else "pending"}
@@ -354,30 +359,28 @@ def turn_entries(run, lead):
     return found
 
 
-def copy_into(sources, destination):
-    destination.mkdir(parents=True, exist_ok=True)
+def copy_into(rollouts, destination):
     copied = []
-    for source in sources:
+    for source, data in rollouts.items():
         target = destination / source.name
-        shutil.copy2(source, target)
+        write_file(target, data)
         copied.append(str(target))
     return copied
 
 
 def harvest(run):
     store = run.root / "codex-home" / "sessions"
-    streams = [Path(t["stream"]) for t in run.turns if Path(t.get("stream", "")).is_file()]
+    streams = live.read_streams(run.turns)
     threads = {t["session_id"] for t in run.turns if t.get("session_id")}
-    leads, child_paths = find_rollouts(store, threads)
-    lead_path = leads[0] if leads else None
+    leads, children = find_rollouts(store, threads)
     prompts = [t["argv"][-1] for t in run.turns if t.get("argv")]
-    lead = harvest_rollout(lead_path, prompts) if lead_path else {
+    lead = harvest_rollout(next(iter(leads.values())), prompts) if leads else {
         "meta": {}, "context": {}, "events": [], "files_read": [], "worklist": [], "plan_calls": [], "spawns": [],
         "final_reply": "", "injected": [], "usage": None}
-    merge_stream_plans(lead, streams)
+    merge_stream_plans(lead, streams.values())
     launch = json.loads((run.root / "launch.json").read_text())
     context = lead["context"]
-    rollouts = copy_into([*leads, *child_paths], run.root / "transcripts" / "rollouts")
+    rollouts = copy_into({**leads, **children}, run.root / "transcripts" / "rollouts")
     last = run.turns[-1] if run.turns else {}
     trace = {
         "harness": "codex",
@@ -394,7 +397,7 @@ def harvest(run):
         "worklist": lead["worklist"],
         "spawns": lead["spawns"],
         "final_reply": lead["final_reply"],
-        "transcript_paths": rollouts + [str(s) for s in streams],
+        "transcript_paths": [*rollouts, *streams],
         "x_binary": {"path": launch["path"], "source": launch["source"], "version": launch["version"], "rejected": launch["rejected"]},
         "x_turns": [{k: t.get(k) for k in ("index", "session_id", "argv", "exit_code", "timed_out", "duration_s")} for t in run.turns],
         "x_entry_injections": lead["injected"],
@@ -403,8 +406,8 @@ def harvest(run):
         "x_token_usage": lead["usage"],
         "x_subagents": [],
     }
-    for path in child_paths:
-        child = harvest_rollout(path)
+    for path, data in children.items():
+        child = harvest_rollout(data)
         first = next((e["text"] for e in child["events"] if e["kind"] == "text"), "")
         line = REPLY_PERSONA_LINE.search(first)
         trace["x_subagents"].append({

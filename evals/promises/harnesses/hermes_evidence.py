@@ -903,7 +903,12 @@ class HermesEvidence:
                         if not isinstance(call, dict) or not isinstance(call.get("function"), dict):
                             raise EvidenceRefused("decode-failed", "invalid native tool call")
                         fn = call["function"]
-                        args = json.loads(fn.get("arguments") or "{}")
+                        arguments = fn.get("arguments")
+                        if arguments in (None, ""):
+                            arguments = "{}"
+                        if not isinstance(arguments, str):
+                            raise EvidenceRefused("decode-failed", "invalid native tool arguments")
+                        args = json.loads(arguments)
                         if not isinstance(args, dict) or not isinstance(fn.get("name"), str):
                             raise EvidenceRefused("decode-failed", "invalid native tool arguments")
                 grouped.setdefault(message["session_id"], []).append(freeze({key: message[key] for key in required}))
@@ -915,7 +920,12 @@ class HermesEvidence:
                 ids.add(session["id"])
                 if type(session["started_at"]) not in (int, float) or any(session[k] is not None and not isinstance(session[k], str) for k in ("parent_session_id", "model", "cwd")):
                     raise EvidenceRefused("decode-failed", "invalid native session values")
-                config = json.loads(session["model_config"] or "{}")
+                raw_config = session["model_config"]
+                if raw_config in (None, ""):
+                    raw_config = "{}"
+                if not isinstance(raw_config, str):
+                    raise EvidenceRefused("decode-failed", "model_config must be text")
+                config = json.loads(raw_config)
                 if not isinstance(config, dict) or (config.get("reasoning_config") is not None and not isinstance(config["reasoning_config"], dict)):
                     raise EvidenceRefused("decode-failed", "model_config must be an object")
                 session["model_config"] = config

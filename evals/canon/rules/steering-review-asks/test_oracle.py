@@ -3,6 +3,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -54,7 +55,7 @@ class SkippedGraderTests(unittest.TestCase):
 
 class CopyAssertionTests(unittest.TestCase):
     """C3 wants an assertion on what Copy writes, not a mention of the clipboard."""
-    BUBBLE = ["expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent(HEAD);"]
+    BUBBLE = ["expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent(TAIL);"]
 
     def failures(self, *lines):
         return oracle().tests_assert_hidden_text_and_copy({"web/src/chat.test.tsx": [*self.BUBBLE, *lines]})
@@ -89,6 +90,46 @@ class CopyAssertionTests(unittest.TestCase):
             "expect(written[0]).toBe(LONG_TEXT);",
         ), [])
 
+    CAPTURE_FORMS = (
+        ("const writeText = vi.fn(); writeText.mockImplementation(async (t: string) => { written = t; });", "expect(written).toBe(LONG_TEXT);"),
+        ("vi.mocked(navigator.clipboard.writeText).mockImplementation(async (t) => { written = t })", "expect(written).toBe(LONG_TEXT);"),
+        ('vi.spyOn(navigator.clipboard, "writeText").mockImplementationOnce(async (t) => { written = t; });', "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn<(text: string) => Promise<void>>(async (t) => { written = t }) } });",
+         "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn(async text => { written = text }) } });", "expect(written).toBe(LONG_TEXT);"),
+        ('vi.spyOn(navigator.clipboard, "writeText").mockImplementation(text => { written = text })', "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn(async (t: string): Promise<void> => { written = t }) } });",
+         "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn((t) => (written = t)) } });", "expect(written).toBe(LONG_TEXT);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn(text => written.push(text)) } });", "expect(written).toEqual([LONG_TEXT]);"),
+        ("vi.spyOn(navigator.clipboard, 'writeText').mockImplementation(t => { written.push(t); return Promise.resolve(); });",
+         "expect(written).toEqual([LONG_TEXT]);"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn().mockImplementation(async (text: string) => { written = text; }) } });",
+         "expect(written).toBe(LONG_TEXT);"),
+        ('vi.spyOn(navigator.clipboard, "writeText").mockImplementation(async (text) => { written = text })', "expect(written).toBe(LONG_TEXT);"),
+        ('vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn((t) => Promise.resolve(written.push(t))) } });',
+         "expect(written).toEqual([LONG_TEXT]);"),
+        ('vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn(async (text: string) => void written.push(text)) } });',
+         "expect(written).toEqual([LONG_TEXT]);"),
+        ('vi.spyOn(navigator.clipboard, "writeText")\n  .mockImplementation(async (t) => { written = t })', "expect(written).toBe(LONG_TEXT)"),
+        ("Object.assign(navigator.clipboard, {\n  writeText: (t) =>\n    written.push(t),\n})", "expect(written).toEqual([LONG_TEXT])"),
+        ("Object.assign(navigator.clipboard, {\n  writeText:\n    vi.fn((t) => { written = t }),\n})", "expect(written).toBe(LONG_TEXT)"),
+        ("Object.assign(navigator.clipboard, {\r\n  writeText: (t) =>\r\n    written.push(t),\r\n})", "expect(written).toEqual([LONG_TEXT])"),
+        ("Object.assign(navigator, { clipboard: { writeText: vi.fn<\n(text: string) => Promise<void>\n>(async (t) => { written = t }) } });",
+         "expect(written).toBe(LONG_TEXT);"),
+        ("it('copies', () => {\n  expect(screen.getByText(/don't/i)).toBeInTheDocument()\n"
+         "  Object.assign(navigator, { clipboard: { writeText: vi.fn((t) => { written = t }) } })",
+         "  expect(written).toBe(LONG_TEXT)\n})\nit('collapses', () => {})"),
+        ("", "expect((navigator.clipboard.writeText as jest.Mock).mock.calls[0][0]).toBe(LONG_TEXT);"),
+        ("", "expect(vi.mocked(navigator.clipboard.writeText).mock.lastCall).toEqual([LONG_TEXT]);"),
+        ("", "expect(jest.mocked(writeText).mock.calls[0]).toEqual([LONG_TEXT]);"),
+    )
+
+    def test_each_payload_check_trunk_credits_counts(self):
+        for stub, compared in self.CAPTURE_FORMS:
+            with self.subTest(stub):
+                self.assertEqual(self.failures(stub, compared), [])
+
     def test_a_captured_payload_that_is_never_compared_does_not_count(self):
         self.assertEqual(self.failures(
             "const written: string[] = [];",
@@ -97,6 +138,667 @@ class CopyAssertionTests(unittest.TestCase):
             "}) } });",
             "expect(bubble).toBeDefined();",
         ), ["constraint:C3: no added web test asserts what Copy writes"])
+
+
+class HiddenTailTests(unittest.TestCase):
+    """C3 wants the text past the cut asserted absent while collapsed and present
+    after. The present ask fails only on proof: some value is asserted absent,
+    the file holds each absent value as a literal, or a name bound only to
+    literals, resolves every present value, no present value shows an absent
+    one, and no other expectation outside the clipboard mentions an absent
+    value. A value the file does not resolve gets the credit trunk gives."""
+    COPY = "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);"
+    PRESENT = "constraint:C3: no added web test asserts that hidden prompt text is present"
+
+    BOUND = 'const TAIL = "UNIQUE_TAIL"'
+
+    def failures(self, *lines):
+        return oracle().tests_assert_hidden_text_and_copy({"web/src/chat.test.tsx": [self.COPY, *lines]})
+
+    def failures_bound(self, *lines):
+        """The failures when the file binds the absent value, as an unrelated present value needs to fail."""
+        return self.failures(*(lines if any(line.startswith("const TAIL") for line in lines) else (self.BOUND, *lines)))
+
+    def test_an_unrelated_present_assertion_does_not_count(self):
+        self.assertEqual(self.failures_bound('const SHORT_TEXT = "Hello";', "expect(bubble).not.toHaveTextContent(TAIL);",
+                                             "expect(bubble).toHaveTextContent(SHORT_TEXT);"), [self.PRESENT])
+
+    def test_the_copied_payload_holding_the_tail_is_not_the_rendered_text(self):
+        self.assertEqual(self.failures(
+            "const written: string[] = [];",
+            "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });",
+            "expect(bubble).not.toHaveTextContent(TAIL);",
+            "expect(written[0]).toContain(TAIL);",
+        ), [self.PRESENT])
+
+    def test_the_tail_absent_from_the_copied_payload_is_not_hidden_text(self):
+        self.assertEqual(self.failures(
+            "const written: string[] = [];",
+            "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });",
+            "expect(written).not.toContain(TAIL);",
+            "expect(bubble).toHaveTextContent(TAIL);",
+        ), ["constraint:C3: no added web test asserts that hidden prompt text is absent"])
+
+    def test_a_multiline_assertion_on_the_copied_payload_is_not_the_rendered_text(self):
+        stub = ["const written: string[] = [];",
+                "vi.stubGlobal(\"navigator\", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });",
+                'it("copies", () => {', "  expect(bubble).not.toHaveTextContent(TAIL);"]
+        for copied in (["  expect(written[0])", "    .toContain(TAIL);"], ["  expect(", "    written[0],", "  ).toContain(TAIL);"]):
+            with self.subTest(copied):
+                self.assertEqual(self.failures(*stub, *copied, "});"), [self.PRESENT])
+
+    def test_a_variable_assigned_after_a_semicolonless_spy_is_not_a_clipboard_capture(self):
+        for after in (["const writeText = vi.fn()", "const bubble = renderPrompt()"],
+                      ["const writeText = vi.fn()", "bubble = renderPrompt()"],
+                      ["const writeText = vi.fn()", "beforeEach(() => {", "  bubble = renderPrompt()", "})"],
+                      ['vi.stubGlobal("navigator", { clipboard: { writeText } })', "beforeEach(() => {", "  bubble = renderPrompt()", "})"],
+                      ['const writeText = vi.fn(() => log(":-("))', "bubble = renderPrompt()"],
+                      ['it("writeText receives the full prompt", () => {', "  bubble = renderPrompt()"]):
+            with self.subTest(after):
+                self.assertEqual(self.failures(*after, "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(TAIL)"), [])
+
+    def test_rendered_text_kept_in_a_variable_after_a_semicolonless_stub_counts(self):
+        stub = ["const writeText = vi.fn()", "Object.assign(navigator, { clipboard: { writeText } })", "render(<PromptBubble text={LONG_TEXT} />)"]
+        for absent, present in (("expect(text).not.toContain(TAIL)", "expect(bubble).toHaveTextContent(TAIL)"),
+                                ("expect(bubble).not.toHaveTextContent(TAIL)", "expect(text).toContain(TAIL)")):
+            with self.subTest(absent=absent):
+                self.assertEqual(self.failures(*stub, "const text = bubble.textContent", absent, present), [])
+
+    def test_a_payload_captured_in_each_stub_form_is_not_the_rendered_text(self):
+        for stub, name in (("writeText: vi.fn((text) => written.push(text)) } })", "written"),
+                           ("writeText: async function (text) { copied = text } } })", "copied"),
+                           ("writeText(text) { written.push(text) } } })", "written")):
+            with self.subTest(stub):
+                self.assertEqual(self.failures("vi.stubGlobal(\"navigator\", { clipboard: {", stub,
+                                               "expect(bubble).not.toHaveTextContent(TAIL)", f"expect({name}).toContain(TAIL)"),
+                                 [self.PRESENT])
+
+    UNRELATED = ['const SHORT_TEXT = "Hello, world!"', "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(SHORT_TEXT)"]
+
+    def test_a_copied_payload_assertion_is_not_the_rendered_text_whatever_the_stub_spans(self):
+        for row, lines in (
+                ("array filled on a later line of a multi-line stub",
+                 ["const writtenTexts: string[] = [];", 'vi.stubGlobal("navigator", {', "  clipboard: {", "    writeText: vi.fn((text: string) => {",
+                  "      writtenTexts.push(text);", "      return Promise.resolve();", "    }),", "  },", "});", "expect(writtenTexts[0]).toContain(TAIL)"]),
+                ("let assigned on a later line of a multi-line stub",
+                 ["let copied = '';", "Object.assign(navigator, {", "  clipboard: {", "    writeText: async (text: string) => {", "      await Promise.resolve();",
+                  "      copied = text;", "    },", "  },", "});", "expect(copied).toContain(TAIL)"]),
+                ("push after another statement in a spy implementation",
+                 ["const written: string[] = [];", 'vi.spyOn(navigator.clipboard, "writeText").mockImplementation(async (t) => {', "  log(t);",
+                  "  written.push(t);", "});", "expect(written[0]).toContain(TAIL)"]),
+                ("assignment in a mockImplementation on a spy declared above",
+                 ["let written = '';", "const writeText = vi.fn();", "writeText.mockImplementation(async (t) => {", "  written = t", "})",
+                  "expect(written).toContain(TAIL)"]),
+                ("name bound to a call argument",
+                 ["const writeText = vi.fn();", "const payload = writeText.mock.calls[0][0];", "expect(payload).toContain(TAIL)"]),
+                ("name destructured from the calls",
+                 ["const writeText = vi.fn();", "const [[payload]] = writeText.mock.calls;", "expect(payload).toContain(TAIL)"]),
+                ("name destructured from calls held in another name",
+                 ["const calls = navigator.clipboard.writeText.mock.calls;", "const [[payload]] = calls;", "expect(payload).toContain(TAIL)"]),
+                ("object pattern over the last call",
+                 ["const writeText = vi.fn();", "const { 0: payload } = writeText.mock.lastCall;", "expect(payload).toContain(TAIL)"]),
+                ("spy implementation chained on the next line",
+                 ["const sent: string[] = [];", 'vi.spyOn(navigator.clipboard, "writeText")', "  .mockImplementation(async (t) => {", "    sent.push(t);",
+                  "  });", "expect(sent[0]).toContain(TAIL)"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures_bound(*self.UNRELATED[:1], *lines, *self.UNRELATED[1:]), [self.PRESENT])
+
+    def test_rendered_text_beside_a_multiline_clipboard_stub_still_counts(self):
+        stub = ["const written: string[] = [];", "Object.assign(navigator, {", "  clipboard: {", "    writeText: (t) => {", "      written.push(t);", "    },", "  },", "});",
+                "const shown = bubble.textContent", "expect(bubble).not.toHaveTextContent(TAIL)"]
+        for present in ("expect(shown).toContain(TAIL)", "expect(bubble.textContent).toContain(TAIL)"):
+            with self.subTest(present):
+                self.assertEqual(self.failures(*stub, present), [])
+
+    def test_a_test_titled_for_the_clipboard_does_not_make_its_variables_clipboard_captures(self):
+        self.assertEqual(self.failures('it("hands writeText the full prompt", () => {', "  const shown = bubble.textContent", "  copied = 1",
+                                       "  expect(bubble).not.toHaveTextContent(TAIL)", "  expect(shown).toContain(TAIL)", "})"), [])
+
+    def test_rendered_text_from_a_render_that_mentions_the_clipboard_counts(self):
+        stub = ["const writeText = vi.fn();", "Object.assign(navigator, { clipboard: { writeText } });"]
+        for row, lines in (
+                ("container destructured from a render given the spy",
+                 [*stub, "const { container } = render(<PromptBubble text={LONG_TEXT} onCopy={writeText} />);",
+                  "expect(container).not.toHaveTextContent(TAIL);", "expect(container.textContent).toContain(TAIL);"]),
+                ("render result given the spy",
+                 [*stub, "const view = render(<PromptBubble text={LONG_TEXT} copy={writeText} />);",
+                  "expect(view.container).not.toHaveTextContent(TAIL);", "expect(view.container.textContent).toContain(TAIL);"]),
+                ("render result from a setup that stubs the clipboard",
+                 ["const setup = () => {", "  Object.assign(navigator, { clipboard: { writeText: vi.fn() } });",
+                  "  return render(<ChatBubble text={LONG_TEXT} />);", "};", "const view = setup();",
+                  "expect(view.container).not.toHaveTextContent(TAIL);", "expect(view.container.textContent).toContain(TAIL);"]),
+                ("element queried by a clipboard test id",
+                 [*stub, 'const bubble = screen.getByTestId("clipboard-bubble");', "expect(bubble).not.toHaveTextContent(TAIL);",
+                  "expect(bubble.textContent).toContain(TAIL);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_name_the_stub_fills_in_one_test_and_the_render_binds_in_another_is_the_rendered_text(self):
+        rendered = ['it("collapses", () => {', '  const bubble = screen.getByTestId("bubble");', "  expect(bubble).not.toHaveTextContent(TAIL);"]
+        for row, copies, shown in (
+                ("text assigned by the stub",
+                 ['let text = "";', "Object.assign(navigator, { clipboard: { writeText: async (t: string) => { text = t; } } });"],
+                 ['  const text = bubble.textContent ?? "";', "  expect(text).toContain(TAIL);"]),
+                ("content bound to the spy's call",
+                 ["const content = writeText.mock.calls[0][0];", "expect(content).toBe(LONG_TEXT);"],
+                 ["  const content = bubble.textContent;", "  expect(content).toContain(TAIL);"]),
+                ("shown pushed by the stub",
+                 ["const shown: string[] = [];", "Object.assign(navigator, { clipboard: { writeText: vi.fn((t: string) => shown.push(t)) } });"],
+                 ['  const shown = screen.getByTestId("bubble");', "  expect(shown.textContent).toContain(TAIL);"]),
+                ("calls rebuilt by the stub",
+                 ["let calls: string[] = [];", "Object.assign(navigator, { clipboard: { writeText: async (v: string) => { calls = [...calls, v]; } } });"],
+                 ['  const calls = screen.getAllByTestId("bubble");', "  expect(calls[0].textContent).toContain(TAIL);"]),
+                ("text reassigned in the stub body",
+                 ["Object.assign(navigator, { clipboard: { writeText: vi.fn(async (text: string) => { text = text.trim(); }) } });"],
+                 ["  const text = bubble.textContent;", "  expect(text).toContain(TAIL);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures('it("copies", () => {', *copies, "});", *rendered, *shown, "});"), [])
+
+    STUB_FILLS_TEXT = ['let text = "";', "Object.assign(navigator, { clipboard: { writeText: async (t: string) => { text = t; } } });"]
+
+    def test_a_name_another_test_binds_in_a_loop_head_is_the_rendered_text(self):
+        for row, loop in (
+                ("for of", "for (const text of texts) {"),
+                ("for in", "for (var text in texts) {"),
+                ("for of with let", "for (let text of texts) {"),
+                ("for await", "for await (const text of texts) {"),
+                ("array pattern", "for (const [text] of pairs) {"),
+                ("object pattern", "for (const { text } of rows) {"),
+                ("bare name", "for (text of texts) {")):
+            for what, absent, present in (("present", ["  expect(bubble).not.toHaveTextContent(TAIL);"], "  expect(text).toContain(TAIL);"),
+                                          ("absent", ["  expect(bubble).toHaveTextContent(TAIL);"], "  expect(text).not.toContain(TAIL);")):
+                with self.subTest(row=row, what=what):
+                    self.assertEqual(self.failures('it("copies", () => {', *self.STUB_FILLS_TEXT, "});", 'it("renders", () => {', *absent,
+                                                   f"  {loop}", present, "  }", "});"), [])
+
+    def test_a_name_another_test_assigns_by_destructuring_is_the_rendered_text(self):
+        for row, binding in (
+                ("object pattern", "({ text } = view);"),
+                ("object pattern with a rename", "({ shown: text } = view);"),
+                ("array pattern", "[text] = parts;"),
+                ("array pattern after a name", "[first, text] = parts;"),
+                ("nested pattern", "[{ text }] = rows;"),
+                ("pattern with a default", '({ text = "" } = view);'),
+                ("pattern declared by const", "const { text } = view;")):
+            with self.subTest(row):
+                self.assertEqual(self.failures('it("copies", () => {', *self.STUB_FILLS_TEXT, "});", 'it("renders", () => {', "  let text;", f"  {binding}",
+                                               "  expect(bubble).not.toHaveTextContent(TAIL);", "  expect(text).toContain(TAIL);", "});"), [])
+
+    def test_a_name_the_file_imports_is_the_rendered_text(self):
+        for row, statement in (
+                ("named import", 'import { text } from "./fixtures";'),
+                ("default import", 'import text from "./text";'),
+                ("namespace import", 'import * as text from "./text";'),
+                ("renamed import", 'import { shown as text } from "./fixtures";'),
+                ("default beside named", 'import text, { other } from "./fixtures";'),
+                ("type import", 'import type { text } from "./fixtures";'),
+                ("multi-line import", 'import {\n  other,\n  text\n} from "./fixtures";')):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*statement.split("\n"), *self.STUB_FILLS_TEXT, "expect(bubble).not.toHaveTextContent(TAIL);",
+                                               "expect(text).toContain(TAIL);"), [])
+
+    def test_a_name_the_file_imports_under_another_name_stays_the_clipboard(self):
+        self.assertEqual(self.failures('import { text as shown } from "./fixtures";', *self.STUB_FILLS_TEXT,
+                                       "expect(bubble).not.toHaveTextContent(TAIL);", "expect(text).toContain(TAIL);"), [self.PRESENT])
+
+    def test_a_name_the_file_declares_as_a_function_or_a_class_is_the_rendered_text(self):
+        for row, declaration in (("function", "function text() { return bubble.textContent; }"),
+                                 ("generator", "function* text() { yield bubble.textContent; }"),
+                                 ("async function", "async function text() { return bubble.textContent; }"),
+                                 ("class", "class text {}"),
+                                 ("enum", "enum text { Tail }")):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*self.STUB_FILLS_TEXT, declaration, "expect(bubble).not.toHaveTextContent(TAIL);",
+                                               "expect(text).toContain(TAIL);"), [])
+
+    def test_a_name_assigned_by_an_index_or_a_property_is_not_a_pattern_binding(self):
+        for assigned in ("parts[0] = view;", "view[text] = parts;", "view.text = parts;", "const other = [text] == parts;"):
+            with self.subTest(assigned):
+                self.assertEqual(self.failures(*self.STUB_FILLS_TEXT, assigned, "expect(bubble).not.toHaveTextContent(TAIL);",
+                                               "expect(text).toContain(TAIL);"), [self.PRESENT])
+
+    def test_a_cast_empty_starting_value_leaves_the_stub_filled_name_the_clipboard(self):
+        for start in ("let copied = [] as string[];", 'let copied = "" as string;', "let copied = new Array<string>();", "let copied = new Array();",
+                      "let copied = <string[]>[];", "let copied = {} as Record<string, string>;", "let copied = [] satisfies string[];",
+                      "let copied = null as string | null;", "let copied = undefined as string | undefined;"):
+            with self.subTest(start):
+                self.assertEqual(self.failures(start,
+                                               "Object.assign(navigator, { clipboard: { writeText: async (t: string) => { copied = t; } } });",
+                                               "expect(bubble).not.toHaveTextContent(TAIL);", "expect(copied).toContain(TAIL);"), [self.PRESENT])
+
+    def test_a_rendered_element_named_for_the_clipboard_is_the_rendered_text(self):
+        for row, lines in (
+                ("element named clipboard", ['const clipboard = screen.getByTestId("bubble");', "expect(clipboard.textContent).toContain(TAIL);"]),
+                ("text named copyText", ['const copyText = screen.getByTestId("bubble").textContent;', "expect(copyText).toContain(TAIL);"]),
+                ("text named writeText", ['const writeText = screen.getByTestId("bubble").textContent ?? "";', "expect(writeText).toContain(TAIL);"]),
+                ("within a render", ['const clipboard = within(container).getByTestId("bubble");', "expect(clipboard).toHaveTextContent(TAIL);"]),
+                ("render result", ["const clipboard = render(<PromptBubble text={LONG_TEXT} />);", "expect(clipboard.container.textContent).toContain(TAIL);"]),
+                ("assigned later", ["let clipboard;", 'clipboard = screen.getByTestId("bubble");', "expect(clipboard.textContent).toContain(TAIL);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures("expect(bubble).not.toHaveTextContent(TAIL);", *lines), [])
+
+    def test_a_clipboard_named_value_the_file_binds_to_a_spy_stays_the_clipboard(self):
+        for row, lines in (
+                ("spy", ["const copyText = vi.fn();", "expect(copyText).toContain(TAIL);"]),
+                ("spy with a resolved value", ["const writeText = jest.fn().mockResolvedValue(undefined);", "expect(writeText).toContain(TAIL);"]),
+                ("spy assigned later", ["let writeText;", "writeText = vi.fn();", "expect(writeText).toContain(TAIL);"]),
+                ("clipboard stub object", ["const clipboard = { writeText: vi.fn() };", "expect(clipboard).toContain(TAIL);"]),
+                ("spy on the clipboard", ['const clipboard = vi.spyOn(navigator, "clipboard", "get");', "expect(clipboard).toContain(TAIL);"]),
+                ("member of the navigator", ["expect(navigator.clipboard).toContain(TAIL);"]),
+                ("name bound nowhere", ["expect(clipboard).toContain(TAIL);"]),
+                ("name imported", ['import { writeText } from "./spies";', "expect(writeText).toContain(TAIL);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures("expect(bubble).not.toHaveTextContent(TAIL);", *lines), [self.PRESENT])
+
+    def test_a_present_definition_written_with_escapes_shows_the_absent_text_it_spells(self):
+        for row, definition, absent in (
+                ("escaped quote", r'''const LONG = "a".repeat(9) + 'it\'s the end';''', '"it\'s the end"'),
+                ("escaped quote on both sides", r'''const LONG = "a".repeat(9) + 'it\'s the end';''', r"'it\'s the end'"),
+                ("newline", r'''const LONG = "a".repeat(9) + "line\nbreak end";''', r'"line\nbreak end"'),
+                ("unicode escape", r'''const LONG = "a".repeat(9) + "caf\u00e9 end";''', '"café end"'),
+                ("unicode escape on both sides", r'''const LONG = "a".repeat(9) + "caf\u00e9 end";''', r'"caf\u00e9 end"'),
+                ("hex escape", r'''const LONG = "a".repeat(9) + "A\x41 end";''', '"AA end"'),
+                ("backslash", r'''const LONG = "a".repeat(9) + "C:\\dir end";''', r'"C:\\dir end"')):
+            with self.subTest(row):
+                self.assertEqual(self.failures(definition, f"expect(bubble).not.toHaveTextContent({absent});", "expect(bubble).toHaveTextContent(LONG);"), [])
+
+    def test_a_present_definition_that_spells_other_text_with_escapes_does_not_count(self):
+        self.assertEqual(self.failures(r"""const LONG = "a".repeat(9) + "line\nbreak end";""", r"""expect(bubble).not.toHaveTextContent("line\tbreak end");""",
+                                       "expect(bubble).toHaveTextContent(LONG);"), [self.PRESENT])
+
+    def test_a_named_clipboard_spy_checked_for_the_prompt_is_not_the_rendered_text(self):
+        for spy in ('vi.spyOn(navigator.clipboard, "writeText")', 'jest.spyOn(navigator.clipboard, "writeText")',
+                    "vi.mocked(navigator.clipboard.writeText)"):
+            with self.subTest(spy):
+                self.assertEqual(self.failures('const TAIL = "UNIQUE_TAIL";', 'const LONG_TEXT = "filler ".repeat(400) + TAIL;', f"const spy = {spy};",
+                                               "expect(bubble).not.toHaveTextContent(TAIL);", "expect(spy).toHaveBeenCalledWith(LONG_TEXT);"),
+                                 [self.PRESENT])
+
+    def test_a_thousand_absent_values_against_a_thousand_present_ones_grade_in_seconds(self):
+        lines = [f'const T{i} = "absent marker {i}";' for i in range(1000)] + [f'const P{i} = "present text {i}";' for i in range(1000)]
+        lines += [f"expect(bubble).not.toHaveTextContent(T{i});" for i in range(1000)]
+        lines += [f"expect(bubble).toHaveTextContent(P{i});" for i in range(1000)]
+        start = time.monotonic()
+        failures = self.failures(*lines)
+        elapsed = time.monotonic() - start
+        self.assertEqual(failures, [self.PRESENT])
+        self.assertLess(elapsed, 2, f"graded in {elapsed:.1f}s")
+
+    def test_an_open_paren_inside_a_string_does_not_join_the_next_assertions(self):
+        self.assertEqual(self.failures('expect(bubble).not.toHaveTextContent("tail (end")', 'expect(bubble).toHaveTextContent("tail (end")',
+                                       "expect(writeText).toHaveBeenCalledWith(LONG_TEXT)"), [])
+
+    def test_a_present_constant_built_from_the_absent_value_counts(self):
+        for definitions in (["const LONG_TEXT = `${HEAD}${TAIL}`;"], ["const LONG_TEXT = HEAD + TAIL;"],
+                            ['const LONG_TEXT: string = "chunk ".repeat(900) + TAIL;'],
+                            ['const TAIL = "the ending";', 'const LONG_TEXT = "r ".repeat(2500) + "the ending";']):
+            for present in ("expect(container).toHaveTextContent(LONG_TEXT);", "expect(container.textContent).toBe(LONG_TEXT);"):
+                with self.subTest(definitions=definitions, present=present):
+                    self.assertEqual(self.failures(*definitions, "expect(container).not.toHaveTextContent(TAIL);", present), [])
+
+    def test_a_present_value_tied_to_the_absent_one_counts(self):
+        long_from_tail = 'const LONG_TEXT = "a".repeat(9000) + TAIL;'
+        for row, lines in (("inline concatenation", ["expect(bubble).not.toHaveTextContent(TAIL);",
+                                                     "expect(bubble).toHaveTextContent(HEAD + TAIL);"]),
+                           ("inline template", ["expect(bubble).not.toHaveTextContent(TAIL);",
+                                                "expect(bubble).toHaveTextContent(`${HEAD}${TAIL}`);"]),
+                           ("tail sliced from the present value", ["const TAIL = LONG_TEXT.slice(-40);",
+                                                                   "expect(bubble).not.toHaveTextContent(TAIL);",
+                                                                   "expect(bubble).toHaveTextContent(LONG_TEXT);"]),
+                           ("definition continued on the next line", ['const LONG_TEXT = "chunk ".repeat(2500) +', "  TAIL;",
+                                                                      "expect(bubble).not.toHaveTextContent(TAIL);",
+                                                                      "expect(bubble).toHaveTextContent(LONG_TEXT);"]),
+                           ("absent literal of a constant the present one holds", ['const TAIL = "UNIQUE_TAIL";', long_from_tail,
+                                                                                    'expect(bubble).not.toHaveTextContent("UNIQUE_TAIL");',
+                                                                                    "expect(bubble).toHaveTextContent(LONG_TEXT);"]),
+                           ("absent cut inline from the present value", ["expect(bubble).not.toHaveTextContent(LONG_TEXT.slice(-40));",
+                                                                          "expect(bubble).toHaveTextContent(LONG_TEXT);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_definition_continued_as_javascript_continues_a_statement_counts(self):
+        for row, definition in (("next line opens with an operator", ['const LONG_TEXT = "a".repeat(9000)', "  + TAIL"]),
+                                ("next line opens with a method call", ['const LONG_TEXT = "a".repeat(9000)', "  .concat(TAIL)"]),
+                                ("line ends with an arrow", ["const LONG_TEXT = () =>", "  TAIL"]),
+                                ("line ends with a division", ["const LONG_TEXT = 1 /", "  TAIL"]),
+                                ("template literal across lines", ["const LONG_TEXT = `a", "${TAIL}`"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*definition, "expect(bubble).not.toHaveTextContent(TAIL)",
+                                               "expect(bubble).toHaveTextContent(LONG_TEXT)"), [])
+
+    def test_a_present_value_that_reaches_the_absent_one_through_names_counts(self):
+        absent = "expect(bubble).not.toHaveTextContent(TAIL)"
+        for row, lines in (("present wrapped in a method call", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(LONG_TEXT.trim())"]),
+                           ("present wrapped in a function call", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(String(LONG_TEXT))"]),
+                           ("present text compared with a wrapped value", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble.textContent).toBe(LONG_TEXT.trim())"]),
+                           ("definition two names away", ["const makeLong = () => HEAD + TAIL", "const LONG_TEXT = makeLong()", absent,
+                                                          "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("let assigned in a hook", ["let LONG_TEXT: string", "beforeEach(() => {", "  LONG_TEXT = HEAD + TAIL", "})", absent,
+                                                       "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("declaration whose brackets close on a later line", ["const LONG_TEXT = Array.from({ length: 50 }, (_, i) => {",
+                                                                                 "  return `chunk ${i}`", '}).join(" ") + TAIL', absent,
+                                                                                 "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("blank line where the pipeline blanked a comment", ['const LONG_TEXT = "x".repeat(500)', "   ", "  + TAIL", absent,
+                                                                                "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("present in parentheses", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent((LONG_TEXT))"]),
+                           ("present cast to a type", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(LONG_TEXT as string)"]),
+                           ("present template holding the constant", ["const LONG_TEXT = HEAD + TAIL", absent, "expect(bubble).toHaveTextContent(`Prompt: ${LONG_TEXT}`)"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_present_value_that_does_not_reach_the_absent_one_does_not_count(self):
+        absent = "expect(bubble).not.toHaveTextContent(TAIL)"
+        for row, lines in (("unrelated value wrapped in a call", ['const HEAD = "chunk ".repeat(900)', "const LONG_TEXT = HEAD + TAIL", absent,
+                                                                  "expect(bubble).toHaveTextContent(HEAD.trim())"]),
+                           ("unrelated value two names away", ['const HEAD = "chunk"', "const LABEL = HEAD.repeat(2)", absent,
+                                                               "expect(bubble).toHaveTextContent(LABEL)"]),
+                           ("open test body after a declaration", ['it("hides the tail", () => {', '  const HEAD = "chunk"', absent,
+                                                                   "  expect(bubble).toHaveTextContent(HEAD)", "})"]),
+                           ("button label that shares a constant's name", ['const prompt = "a".repeat(9000) + TAIL', absent,
+                                                                           'expect(screen.getByText("Show full prompt")).toBeInTheDocument()']),
+                           ("condition that names the present value", ['const HEAD = "chunk"', "if (HEAD) {", "  render(<Bubble />)", "}", absent,
+                                                                       "expect(bubble).toHaveTextContent(HEAD)"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures_bound(*lines), [self.PRESENT])
+
+    def test_a_present_value_the_file_does_not_resolve_gets_trunk_credit(self):
+        absent, tail = "expect(bubble).not.toHaveTextContent(TAIL)", 'const TAIL = "UNIQUE_TAIL"'
+        for row, lines in (("name the file never binds", [absent, "expect(bubble).toHaveTextContent(SHORT_TEXT)"]),
+                           ("values imported from a fixture module", ['import { TAIL, LONG_TEXT } from "./fixtures"', absent,
+                                                                      "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("test.each row", [tail, 'test.each([[TAIL]])("shows %s", (text) => {', absent,
+                                              "  expect(bubble).toHaveTextContent(text)", "})"]),
+                           ("static class field", ['class P { static TAIL = "UNIQUE_TAIL"; static LONG = "a".repeat(500) + P.TAIL }',
+                                                   "expect(bubble).not.toHaveTextContent(P.TAIL)", "expect(bubble).toHaveTextContent(P.LONG)"]),
+                           ("type annotation with a comma", [tail, 'const TEXTS: Record<string, string> = { long: "x".repeat(500) + TAIL }', absent,
+                                                             "expect(bubble).toHaveTextContent(TEXTS.long)"]),
+                           ("argument nested past two parentheses", [tail, absent, "expect(bubble).toHaveTextContent(new RegExp(escapeRegExp(String(TAIL))))"]),
+                           ("literal prefix before deep parentheses", [tail, 'const HEAD = "chunk"', absent,
+                                                                       "expect(bubble).toHaveTextContent(HEAD + (((TAIL))))"]),
+                           ("array argument with a comma", [tail, 'const HEAD = "chunk"', absent, 'expect(bubble).toHaveTextContent([HEAD, TAIL].join(""))']),
+                           ("escaped backtick in a multi-line template", ["const LONG_TEXT = `it\\`s", "${TAIL}`", absent,
+                                                                          "expect(bubble).toHaveTextContent(LONG_TEXT)"]),
+                           ("property of an object the file does not bind", [absent, "expect(bubble).toHaveTextContent(fixtures.LONG_TEXT)"]),
+                           ("spread of a name the file does not bind", [absent, 'expect(bubble).toHaveTextContent([...PARTS].join(""))']),
+                           ("names bound only by each other", ["let A = B", "let B = A", absent, "expect(bubble).toHaveTextContent(A)"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_name_the_file_binds_other_than_by_const_gets_trunk_credit(self):
+        absent, head, tail = "expect(bubble).not.toHaveTextContent(TAIL)", 'const HEAD = "chunk"', 'const TAIL = "UNIQUE_TAIL"'
+        present = "expect(bubble).toHaveTextContent(HEAD)"
+        for row, lines in (("test.each parameter of the same name", [head, tail, 'test.each([[TAIL]])("shows %s", (HEAD) => {', absent, f"  {present}", "})"]),
+                           ("bare arrow parameter", [head, tail, absent, f"[TAIL].forEach(HEAD => {present})"]),
+                           ("function parameter", [head, tail, absent, "function check(HEAD: string) {", f"  {present}", "}"]),
+                           ("destructured parameter", [head, tail, absent, f"const check = ({{ HEAD }}) => {present}"]),
+                           ("object destructuring in a test", [head, 'it("hides the tail", () => {', "  const { HEAD } = makeLong()", absent, f"  {present}", "})"]),
+                           ("array destructuring", [head, tail, 'it("hides the tail", () => {', "  const [HEAD] = [TAIL]", absent, f"  {present}", "})"]),
+                           ("const loop binding", [head, tail, absent, f"for (const HEAD of [TAIL]) {present}"]),
+                           ("let bound once", ['let HEAD = "chunk"', absent, present]),
+                           ("nullish assignment", ['let HEAD = "chunk"', "HEAD ??= LONG_TEXT", absent, present]),
+                           ("logical or assignment", ['let HEAD = "chunk"', "HEAD ||= LONG_TEXT", absent, present]),
+                           ("logical and assignment", ['let HEAD = "chunk"', "HEAD &&= LONG_TEXT", absent, present]),
+                           ("assignment to a const name", [head, "beforeEach(() => {", "  HEAD = LONG_TEXT", "})", absent, present])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_a_const_the_file_changes_in_place_gets_trunk_credit(self):
+        absent, tail, joined = "expect(bubble).not.toHaveTextContent(TAIL)", 'const TAIL = "UNIQUE_TAIL"', 'const FULL = parts.join(" ")'
+        for row, lines, present in (("push into an empty array", ["const parts = []", "parts.push(TAIL)", joined], "FULL"),
+                                    ("push into a filled array", ["const parts = ['a']", "parts.push(TAIL)", joined], "FULL"),
+                                    ("unshift", ["const parts = ['a']", "parts.unshift(TAIL)", joined], "FULL"),
+                                    ("splice", ["const parts = ['a']", "parts.splice(1, 0, TAIL)", joined], "FULL"),
+                                    ("index assignment", ["const parts = ['a']", "parts[1] = TAIL", joined], "FULL"),
+                                    ("index assignment with a nested index", ["const parts = ['a']", "parts[parts.length] = TAIL", joined], "FULL"),
+                                    ("set", ["const texts = {}", 'texts.set("long", TAIL)'], 'texts.get("long")'),
+                                    ("Object.assign", ["const texts = {}", "Object.assign(texts, { long: TAIL })"], "texts.long")):
+            with self.subTest(row):
+                self.assertEqual(self.failures(tail, *lines, absent, f"expect(bubble).toHaveTextContent({present})"), [])
+
+    def test_a_regex_the_reader_cannot_read_as_plain_text_gets_trunk_credit(self):
+        absent, tail = "expect(bubble).not.toHaveTextContent(TAIL)", 'const TAIL = "UNIQUE_TAIL"'
+        for row, lines in (("word boundary escapes", [tail, absent, "expect(bubble).toHaveTextContent(/\\bUNIQUE_TAIL\\b/)"]),
+                           ("flag", [tail, absent, "expect(bubble).toHaveTextContent(/unique_tail/i)"]),
+                           ("escaped character", [tail, absent, "expect(bubble).toHaveTextContent(/UNIQUE\\_TAIL/)"]),
+                           ("character class", [tail, absent, "expect(bubble).toHaveTextContent(/UNIQUE_[A-Z]+/)"]),
+                           ("anchors", [tail, absent, "expect(bubble).toHaveTextContent(/^UNIQUE_TAIL$/)"]),
+                           ("alternation", [tail, absent, "expect(bubble).toHaveTextContent(/UNIQUE_TAIL|the end/)"]),
+                           ("group", ['const prompt = "a" + TAIL', absent, "expect(bubble).toHaveTextContent(/Show full (prompt|text)/)"]),
+                           ("RegExp built from a string with escapes", [tail, absent, 'expect(bubble).toHaveTextContent(new RegExp("\\\\bUNIQUE_TAIL\\\\b"))']),
+                           ("constant holding a regex with escapes", [tail, "const SHOWN = /\\bUNIQUE_TAIL\\b/", absent,
+                                                                      "expect(bubble).toHaveTextContent(SHOWN)"]),
+                           ("constant holding a regex with a flag", ['const prompt = "a".repeat(13000) + TAIL', "const EXPAND = /show full prompt/i", absent,
+                                                                     "expect(screen.getByText(EXPAND)).toBeInTheDocument()"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+
+    def test_an_absent_regex_the_reader_cannot_read_as_plain_text_gets_trunk_credit(self):
+        present = 'expect(bubble).toHaveTextContent("UNIQUE_TAIL")'
+        for row, absent in (("word boundary escapes", "expect(bubble).not.toHaveTextContent(/\\bUNIQUE_TAIL\\b/)"),
+                            ("flag", "expect(bubble).not.toHaveTextContent(/unique_tail/i)"),
+                            ("alternation", "expect(bubble).not.toHaveTextContent(/UNIQUE_TAIL|the end/)"),
+                            ("group", "expect(bubble).not.toHaveTextContent(/UNIQUE_(TAIL)/)"),
+                            ("anchors", "expect(bubble).not.toHaveTextContent(/^UNIQUE_TAIL$/)")):
+            with self.subTest(row):
+                self.assertEqual(self.failures(absent, present), [])
+        with self.subTest("plain text regex against an unrelated present value"):
+            self.assertEqual(self.failures('const HEAD = "chunk"', "expect(bubble).not.toHaveTextContent(/UNIQUE_TAIL/)",
+                                           "expect(bubble).toHaveTextContent(HEAD)"), [self.PRESENT])
+
+    def test_each_test_file_resolves_only_the_names_it_binds(self):
+        graded = oracle().tests_assert_hidden_text_and_copy
+        shared = {"web/src/a.test.tsx": [self.COPY, 'const HEAD = "chunk"', "expect(x).toHaveTextContent(HEAD)"]}
+        absent = ['const TAIL = "UNIQUE_TAIL"', "expect(bubble).not.toHaveTextContent(TAIL)"]
+        for row, lines in (("name imported in the graded file", ['import { HEAD } from "./fixtures"', *absent, "expect(bubble).toHaveTextContent(HEAD)"]),
+                           ("name the graded file never binds", [*absent, "expect(bubble).toHaveTextContent(HEAD)"])):
+            with self.subTest(row):
+                self.assertEqual(graded({**shared, "web/src/b.test.tsx": lines}), [])
+        with self.subTest("name each file binds by const"):
+            self.assertEqual(graded({**shared, "web/src/b.test.tsx": ['const HEAD = "chunk"', *absent, "expect(bubble).toHaveTextContent(HEAD)"]}),
+                             [self.PRESENT])
+
+    def test_an_absent_value_cut_from_a_constant_the_present_value_names_counts(self):
+        long, tail = 'const LONG_TEXT = "a".repeat(12000) + "UNIQUE_TAIL"', 'const TAIL = "UNIQUE_TAIL"'
+        for row, setup, absent in (("slice from the front", [], "LONG_TEXT.slice(12000)"),
+                                   ("slice from the end", [], "LONG_TEXT.slice(-11)"),
+                                   ("constant holding the slice", ["const HIDDEN = LONG_TEXT.slice(12000)"], "HIDDEN")):
+            for form, present in (("name", "TAIL"), ("stringContaining", "expect.stringContaining(TAIL)")):
+                with self.subTest(f"{row}, present {form}"):
+                    self.assertEqual(self.failures(long, tail, *setup, f"expect(bubble).not.toHaveTextContent({absent})",
+                                                   f"expect(bubble).toHaveTextContent({present})"), [])
+
+    def test_an_absent_value_cut_from_a_constant_holding_the_present_literal_counts(self):
+        self.assertEqual(self.failures('const LONG = "a".repeat(100) + "ZZZZZ"', "expect(bubble).not.toHaveTextContent(LONG.slice(-5))",
+                                       'expect(bubble).toHaveTextContent("ZZZZZ")'), [])
+
+    def test_an_absent_value_the_file_does_not_resolve_gets_trunk_credit(self):
+        present = 'expect(bubble).toHaveTextContent("a".repeat(100) + "UNIQUE_TAIL")'
+        for row, lines in (("name the file never binds", ["expect(bubble).not.toHaveTextContent(TAIL)", present]),
+                           ("name imported from a fixture module", ['import { TAIL } from "./fixtures"', "expect(bubble).not.toHaveTextContent(TAIL)", present]),
+                           ("constant built from an imported name", ['import { LONG_TEXT } from "./fixtures"', "const TAIL = LONG_TEXT.slice(-11)",
+                                                                     "expect(bubble).not.toHaveTextContent(TAIL)", present])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines), [])
+        with self.subTest("name the file binds to a literal"):
+            self.assertEqual(self.failures('const TAIL = "UNIQUE_TAIL"', "expect(bubble).not.toHaveTextContent(TAIL)", present), [])
+
+    GOOD_SHAPE = ["const COLLAPSE_THRESHOLD = 12000", 'const TAIL = "UNIQUE_TAIL"', 'const LONG_TEXT = "a".repeat(COLLAPSE_THRESHOLD) + TAIL',
+                  'const SHORT_TEXT = "Hello, world!"', 'const bubble = screen.getByTestId("message-bubble")',
+                  "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(SHORT_TEXT)"]
+
+    def test_an_expectation_that_mentions_the_absent_value_is_present_whatever_its_form(self):
+        for form in ("expect(bubble.textContent).toMatch(TAIL)",
+                     "expect(screen.queryByText(TAIL, { exact: false })).toBeInTheDocument()",
+                     "expect(screen.queryByText(/UNIQUE_TAIL/)).not.toBeNull()",
+                     "expect(within(bubble).queryByText(/UNIQUE_TAIL/)).toBeTruthy()",
+                     "expect(bubble.textContent?.endsWith(TAIL)).toBe(true)",
+                     "expect(bubble.textContent).toHaveLength(LONG_TEXT.length)",
+                     "expect(bubble.textContent).toStrictEqual(TAIL)"):
+            with self.subTest(form):
+                self.assertEqual(self.failures(*self.GOOD_SHAPE, form), [])
+
+    def test_a_mention_credits_with_no_assertion_the_reader_recognizes_as_present(self):
+        self.assertEqual(self.failures(*self.GOOD_SHAPE[:-1], "expect(bubble.textContent).toMatch(TAIL)"), [])
+
+    def test_the_issue_shape_with_nothing_present_that_mentions_the_absent_value_still_fails(self):
+        self.assertEqual(self.failures(*self.GOOD_SHAPE), [self.PRESENT])
+        self.assertEqual(self.failures(*self.GOOD_SHAPE, "expect(bubble.textContent).toMatch(SHORT_TEXT)", 'expect(bubble.textContent).toHaveLength(12)'),
+                         [self.PRESENT])
+
+    def test_a_clipboard_expectation_that_mentions_the_absent_value_is_not_the_rendered_text(self):
+        stub = ["const written: string[] = [];", 'vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn((text: string) => { written.push(text); }) } });']
+        for form in ("expect(written[0]).toBe(LONG_TEXT)", "expect(written[0]).toContain(TAIL)", "expect(written).toHaveLength(1)",
+                     "expect(writeText).toHaveBeenCalledWith(LONG_TEXT)"):
+            with self.subTest(form):
+                self.assertEqual(self.failures(*stub, *self.GOOD_SHAPE, form), [self.PRESENT])
+
+    def test_an_absent_value_the_reader_cannot_evaluate_gets_trunk_credit(self):
+        hidden = "expect(bubble).not.toHaveTextContent(TAIL)"
+        for row, lines, shown in (("concatenation", ['const TAIL = "UNIQUE_" + "TAIL"', hidden], "UNIQUE_TAIL"),
+                                  ("repeat", ['const TAIL = "ab".repeat(3)', hidden], "ababab"),
+                                  ("template with an expression", ['const WORD = "TAIL"', "const TAIL = `UNIQUE_${WORD}`", hidden], "UNIQUE_TAIL"),
+                                  ("join", ['const TAIL = ["UNIQUE", "TAIL"].join("_")', hidden], "UNIQUE_TAIL"),
+                                  ("slice of a literal", ['const TAIL = "xxUNIQUE_TAIL".slice(2)', hidden], "UNIQUE_TAIL"),
+                                  ("inline concatenation", ['expect(bubble).not.toHaveTextContent("UNIQUE_" + "TAIL")'], "UNIQUE_TAIL"),
+                                  ("inline repeat", ['expect(bubble).not.toHaveTextContent("ab".repeat(3))'], "ababab")):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines, f'expect(bubble).toHaveTextContent("{shown}")'), [])
+
+    def test_a_computed_absent_value_beside_a_plain_one_is_still_unresolved(self):
+        self.assertEqual(self.failures('const TAIL = "UNIQUE_TAIL"', 'const HEAD = "chunk"', "expect(bubble).not.toHaveTextContent(TAIL)",
+                                       'expect(bubble).not.toHaveTextContent("a".repeat(3))', "expect(bubble).toHaveTextContent(HEAD)"), [])
+
+    def test_a_present_expression_over_the_value_the_absent_one_is_cut_from_counts(self):
+        cut = ['const FULL = "x".repeat(500) + " the end"', "const TAIL = FULL.slice(-30)", "expect(bubble).not.toHaveTextContent(TAIL)"]
+        for present in ("FULL.trim()", "FULL.slice(0, 100)"):
+            with self.subTest(present):
+                self.assertEqual(self.failures(*cut, f"expect(bubble).toHaveTextContent({present})"), [])
+        with self.subTest("present constant built from the cut-from value"):
+            self.assertEqual(self.failures(*cut, "const SHOWN = FULL.trim()", "expect(bubble).toHaveTextContent(SHOWN)"), [])
+
+    def test_a_present_assertion_with_nothing_asserted_absent_is_still_present(self):
+        self.assertEqual(self.failures('const HEAD = "chunk"', "expect(bubble).toHaveTextContent(HEAD)"),
+                         ["constraint:C3: no added web test asserts that hidden prompt text is absent"])
+
+    def test_a_constant_declared_in_an_open_test_body_keeps_its_literal(self):
+        self.assertEqual(self.failures('it("hides the tail", () => {', '  const TAIL = "tail marker"', "  expect(bubble).not.toHaveTextContent(TAIL)",
+                                       '  expect(bubble).toHaveTextContent("tail marker")', "})"), [])
+
+    def test_a_definition_in_any_statement_style_counts(self):
+        absent, present = "expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent(LONG_TEXT);"
+        helper = ["  const head = \"x\".repeat(500);", "  return head + TAIL;"]
+        array = ["Array.from({ length: 50 }, (_, i) => {", "    return `chunk ${i}`;", "  }).join(\" \") + TAIL;"]
+        for row, lines in (("semicolon inside a string", ['const LONG_TEXT = "Hello; world ".repeat(500) + TAIL;']),
+                           ("function of two statements", ["function makeLong() {", *helper, "}", "const LONG_TEXT = makeLong();"]),
+                           ("arrow block of two statements", ["const makeLong = () => {", *helper, "};", "const LONG_TEXT = makeLong();"]),
+                           ("callback ending in a semicolon", ["const LONG_TEXT = " + array[0], *array[1:]]),
+                           ("immediately invoked arrow", ["const LONG_TEXT = (() => {", *helper, "})();"]),
+                           ("hook of two statements", ["let LONG_TEXT: string;", "beforeEach(() => {", *helper[:1], "  LONG_TEXT = head + TAIL;", "});"]),
+                           ("first statement of a test body", ['it("hides the tail", () => {', "  const LONG_TEXT = " + array[0], *array[1:]]),
+                           ("first statement of a hook", ["let LONG_TEXT: string;", "beforeEach(() => {", "  LONG_TEXT = " + array[0], *array[1:]]),
+                           ("exported declaration", ["export const LONG_TEXT = " + array[0], *array[1:]]),
+                           ("async function", ["async function makeLong() {", *helper, "}", "const LONG_TEXT = await makeLong();"]),
+                           ("compound assignment", ['let LONG_TEXT = "x".repeat(500);', "LONG_TEXT += TAIL;"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines, absent, present), [])
+
+    def test_a_literal_or_an_attribute_does_not_reach_the_absent_value(self):
+        absent = "expect(bubble).not.toHaveTextContent(TAIL);"
+        for row, lines in (("plain text regex literal", ['const prompt = "a" + TAIL;', absent, "expect(bubble).toHaveTextContent(/Show full prompt/);"]),
+                           ("JSX attribute that shares a constant's name", ['const LONG_TEXT = "x".repeat(500) + TAIL;', 'const text = "Hello";',
+                                                                             "render(<Bubble text={LONG_TEXT} />);", absent,
+                                                                             "expect(bubble).toHaveTextContent(text);"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures_bound(*lines), [self.PRESENT])
+
+    def test_literal_text_names_no_constants(self):
+        absent, prompt = "expect(bubble).not.toHaveTextContent(TAIL)", 'const prompt = "a".repeat(13000) + TAIL'
+        for row, lines in (("template constant", [prompt, "const EXPAND = `show full prompt`", absent, "expect(screen.getByText(EXPAND)).toBeInTheDocument()"]),
+                           ("template label with a count", [prompt, "const count = 13000", absent, "expect(bubble).toHaveTextContent(`Show full prompt (${count} chars)`)"]),
+                           ("flagless regex constant above a definition", ["const SHOW_LESS = /show less/", 'const TAIL = "tail marker"', absent,
+                                                                            "expect(screen.getByText(SHOW_LESS)).toBeInTheDocument()"]),
+                           ("block body statements", ["function setup() {", '  const label = "Show more"', "  render(<Bubble text={LONG_TEXT} />)", "}",
+                                                      'const LONG_TEXT = "a".repeat(9) + TAIL', absent, "expect(screen.getByText(label)).toBeInTheDocument()"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures_bound(*lines), [self.PRESENT])
+
+    def test_each_declarator_in_a_list_is_a_definition(self):
+        absent, present = "expect(bubble).not.toHaveTextContent(TAIL)", "expect(bubble).toHaveTextContent(LONG_TEXT)"
+        for row, lines in (("const list", ['const HEAD = "x".repeat(9), TAIL = "the end", LONG_TEXT = HEAD + TAIL']),
+                           ("let list assigned in a hook", ["let TAIL, LONG_TEXT", "beforeEach(() => {", '  TAIL = "the end"', '  LONG_TEXT = "x".repeat(9) + TAIL', "})"]),
+                           ("let list with a value", ['let HEAD = "x".repeat(9), LONG_TEXT', "beforeEach(() => {", "  LONG_TEXT = HEAD + TAIL", "})"]),
+                           ("function type annotation", ["const makeLong: (n: number) => string = (n) => HEAD + TAIL", "const LONG_TEXT = makeLong(9)"])):
+            with self.subTest(row):
+                self.assertEqual(self.failures(*lines, absent, present), [])
+
+    def test_an_escape_past_the_last_code_point_is_kept_as_written(self):
+        self.assertEqual(self.failures('const TAIL = "\\u{110000}";', "expect(container).not.toHaveTextContent(TAIL);",
+                                       "expect(container).toHaveTextContent(TAIL);"), [])
+
+    def test_a_name_defined_twice_keeps_both_definitions(self):
+        for second in ('const LONG_TEXT = "short";', 'const TAIL = "unrelated";'):
+            with self.subTest(second):
+                self.assertEqual(self.failures('it("hides the tail", () => {', "  const LONG_TEXT = HEAD + TAIL;",
+                                               "  expect(bubble).not.toHaveTextContent(TAIL);", "  expect(bubble).toHaveTextContent(LONG_TEXT);",
+                                               "});", 'it("renders a short prompt", () => {', f"  {second}", "});"), [])
+
+    def test_a_joined_line_keeps_each_definition_its_own(self):
+        absent = "expect(bubble).not.toHaveTextContent(TAIL)"
+        for row, lines, expected in (
+                ("regex literal above a string constant", ["const RE = /chunk/", 'const TAIL = "tail marker"', absent,
+                                                           'expect(bubble).toHaveTextContent("tail marker")'], []),
+                ("declaration word inside a string", ["const RE = /chunk/", 'const TAIL = "let it end"', absent,
+                                                      'expect(bubble).toHaveTextContent("let it end")'], []),
+                ("stray backtick in a comment", ["// a ` stray", 'const HEAD = "chunk"', absent,
+                                                 "expect(bubble).toHaveTextContent(HEAD)"], [self.PRESENT])):
+            with self.subTest(row):
+                self.assertEqual(self.failures_bound(*lines), expected)
+
+    def test_a_present_constant_not_built_from_the_absent_value_does_not_count(self):
+        self.assertEqual(self.failures_bound('const HEAD = "chunk ".repeat(900);', "const LONG_TEXT = HEAD + TAIL;",
+                                             "expect(container).not.toHaveTextContent(TAIL);", "expect(container).toHaveTextContent(HEAD);"),
+                         [self.PRESENT])
+
+    def test_a_constant_and_its_literal_name_the_same_value(self):
+        for absent, present in (("TAIL", '"the end of it"'), ('"the end of it"', "TAIL"), ("/the end of it/", '"the end of it"'),
+                                ("new RegExp(TAIL)", "TAIL"), ("TAIL", "expect.stringContaining(TAIL)"), ("TAIL", "`${TAIL}`")):
+            with self.subTest(absent=absent, present=present):
+                self.assertEqual(self.failures('const TAIL = "the end of it";', f"expect(container).not.toHaveTextContent({absent});",
+                                               f"expect(container).toHaveTextContent({present});"), [])
+
+    def test_a_constant_and_a_literal_that_spell_the_same_text_with_escapes_match(self):
+        for constant, literal in ((r'"\x41\u0042\u{43}"', '"ABC"'), (r"'it\'s'", '"it\'s"'), (r'"tab\there"', r"'tab\u0009here'"),
+                                  (r'"caf\u00e9"', '"café"'), (r'"\uD83D\uDD25"', '"🔥"')):
+            with self.subTest(constant):
+                self.assertEqual(self.failures(f"const TAIL = {constant};", "expect(container).not.toHaveTextContent(TAIL);",
+                                               f"expect(container).toHaveTextContent({literal});"), [])
+
+    def test_a_bare_query_after_a_clipboard_assertion_is_the_rendered_text(self):
+        for query in ("screen.getByText(TAIL);", "await screen.findByText(TAIL)"):
+            with self.subTest(query):
+                self.assertEqual(self.failures("expect(bubble).not.toHaveTextContent(TAIL);", "fireEvent.click(expand);",
+                                               "expect(writeText).toHaveBeenCalledWith(LONG_TEXT);", query), [])
+
+    def test_assertions_without_semicolons_still_count(self):
+        self.assertEqual(self.failures('it("hides", () => {', "  expect(bubble).not.toHaveTextContent(TAIL)",
+                                       "  expect(bubble).toHaveTextContent(TAIL)", "})"), [])
+
+    def test_multiline_assertions_compare_their_values(self):
+        absent = ["expect(bubble).not.toHaveTextContent(", "  TAIL,", ");"]
+        self.assertEqual(self.failures_bound('const SHORT_TEXT = "Hello";', *absent, "expect(bubble).toHaveTextContent(", "  SHORT_TEXT,", ");"),
+                         [self.PRESENT])
+        self.assertEqual(self.failures(*absent, "expect(bubble).toHaveTextContent(", "  TAIL", ");"), [])
+
+    def test_the_same_value_absent_then_present_counts_across_assertion_forms(self):
+        for absent, present in (("expect(bubble).not.toHaveTextContent(TAIL);", "expect(bubble).toHaveTextContent( TAIL );"),
+                                ("expect(screen.queryByText(TAIL)).toBeNull();", "expect(screen.getByText(TAIL)).toBeTruthy();"),
+                                ("expect(bubble).not.toHaveTextContent(TAIL);", "expect(await screen.findByText(TAIL)).toBeInTheDocument();"),
+                                ("expect(bubble.textContent).not.toContain(TAIL);", "expect(bubble.textContent).toContain(TAIL);"),
+                                ('expect(bubble).not.toHaveTextContent("the end");', "expect(bubble).toHaveTextContent('the end');"),
+                                ("expect(bubble).not.toHaveTextContent(/it's the end/);", "expect(bubble).toHaveTextContent(/it's the end/);"),
+                                (r'expect(bubble).not.toHaveTextContent("say \"hi\" now");', """expect(bubble).toHaveTextContent('say "hi" now');""")):
+            with self.subTest(absent):
+                self.assertEqual(self.failures(absent, present), [])
 
 
 class KnownIssueProseTests(unittest.TestCase):
@@ -118,6 +820,48 @@ class KnownIssueProseTests(unittest.TestCase):
     def test_a_structured_record_keeps_prose_and_drops_short_metadata(self):
         self.assertEqual(self.prose({"kind": "embedded", "severity": "high", "summary": "Embedded mode loops on this pin."}),
                          ["Embedded mode loops on this pin."])
+
+    def test_a_record_whose_prose_is_short_prefers_more_words_to_a_longer_label(self):
+        self.assertEqual(self.prose({"kind": "unsupported-platform", "summary": "Install loops."}), ["Install loops."])
+
+    def test_a_record_whose_prose_is_short_keeps_its_longest_string(self):
+        self.assertEqual(self.prose({"kind": "embedded", "severity": "high", "summary": "Embedded mode loops."}),
+                         ["Embedded mode loops."])
+
+
+class LiveEntryPinTests(unittest.TestCase):
+    """C6: the agent's own tests still pass once the edited catalog entry is restored."""
+    ENTRY = "plugin-catalog/hindsight.yaml"
+    DIFF = (f"diff --git a/{ENTRY} b/{ENTRY}\n--- a/{ENTRY}\n+++ b/{ENTRY}\n@@ -1 +1 @@\n-sha: old\n+sha: new\n"
+            "diff --git a/tests/hermes_cli/test_own.py b/tests/hermes_cli/test_own.py\nnew file mode 100644\n"
+            "--- /dev/null\n+++ b/tests/hermes_cli/test_own.py\n@@ -0,0 +1 @@\n+def test_a(): pass\n")
+
+    def failures(self, edited, restored):
+        module = oracle()
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(module, "project_test_results", side_effect=[edited, restored]):
+            (Path(directory) / "plugin-catalog").mkdir()
+            (Path(directory) / self.ENTRY).write_text("sha: old\n")
+            return module.own_tests_pin_the_live_entry(Workspace(Path(directory), self.DIFF, None))
+
+    def test_a_test_that_skips_once_the_entry_is_restored_fails(self):
+        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a": "passed"},
+                                       {"tests.hermes_cli.test_own::test_a": "skipped"}),
+                         [f"constraint:C6: tests.hermes_cli.test_own::test_a skipped with {self.ENTRY} restored"])
+
+    def test_a_failure_under_a_label_the_edited_run_lacks_fails(self):
+        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a[new]": "passed"},
+                                       {"tests.hermes_cli.test_own::test_a[old]": "failed"}),
+                         [f"constraint:C6: tests.hermes_cli.test_own::test_a[old] failed with {self.ENTRY} restored"])
+
+    def test_a_collection_error_once_the_entry_is_restored_fails(self):
+        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a": "passed"},
+                                       {"tests.hermes_cli.test_own": "failed"}),
+                         [f"constraint:C6: tests.hermes_cli.test_own failed with {self.ENTRY} restored"])
+
+    def test_a_test_that_skips_or_fails_either_way_does_not_pin_the_entry(self):
+        both = {"tests.hermes_cli.test_own::test_windows": "skipped", "tests.hermes_cli.test_own::test_broken": "failed"}
+        self.assertEqual(self.failures(both, both), [])
 
 
 class WindowsTestTests(unittest.TestCase):
@@ -177,6 +921,14 @@ class WindowsTestTests(unittest.TestCase):
             'monkeypatch.setattr(main_desktop.sys, "platform", "win32")',
         ), [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
 
+    def test_a_module_qualified_platform_patch_is_caught(self):
+        for patch in ('patch("hermes_cli.main_desktop.sys.platform", "win32")',
+                      "monkeypatch.setattr('hermes_cli.main_desktop.sys.platform', 'win32')",
+                      'mock.patch.object(main_desktop.sys, "platform", "win32")'):
+            with self.subTest(patch):
+                self.assertEqual(self.failures('@pytest.mark.platforms("windows")', patch),
+                                 [f"constraint:C3: {self.FILE} patches sys.platform on 1 added line(s)"])
+
 
 def new_file(path, content):
     """(diff, files) for a file that a diff adds whole."""
@@ -230,18 +982,23 @@ class ExecutableOnlyTests(unittest.TestCase):
         self.assertEqual(self.run_static("tests_never_patch_the_host", self.PY,
                                          'def test_a():\n    """@pytest.mark.platforms("windows")"""'), [self.NO_MARK])
 
+    def test_an_unparseable_file_earns_no_credit_from_a_docstring(self):
+        mark = 'def test_x(:\n    """@pytest.mark.platforms("windows")"""'
+        self.assertEqual(self.run_static("tests_never_patch_the_host", self.PY, mark), [self.NO_MARK])
+        self.assertEqual(self.run_static("adds_minimal_fixture", self.PY, f'def test_x(:\n    """{self.FIXTURE}"""'), self.K4)
+
     def test_hidden_text_and_copy_assertions_in_js_comments_do_not_count(self):
         content = ("// expect(writeText).toHaveBeenCalledWith(LONG_TEXT);\n"
-                   "/* expect(bubble).not.toHaveTextContent(TAIL);\n   expect(bubble).toHaveTextContent(HEAD); */")
+                   "/* expect(bubble).not.toHaveTextContent(TAIL);\n   expect(bubble).toHaveTextContent(TAIL); */")
         self.assertEqual(self.run_static("tests_assert_hidden_text_and_copy", self.TS, content), [
             "constraint:C3: no added web test asserts what Copy writes",
             "constraint:C3: no added web test asserts that hidden prompt text is absent",
-            "constraint:C3: no added web test asserts that prompt text is present",
+            "constraint:C3: no added web test asserts that hidden prompt text is present",
         ])
 
     def test_hidden_text_and_copy_assertions_in_code_still_count(self):
         content = ("expect(writeText).toHaveBeenCalledWith(LONG_TEXT);\n"
-                   "expect(bubble).not.toHaveTextContent(TAIL);\nexpect(bubble).toHaveTextContent(HEAD);")
+                   "expect(bubble).not.toHaveTextContent(TAIL);\nexpect(bubble).toHaveTextContent(TAIL);")
         self.assertEqual(self.run_static("tests_assert_hidden_text_and_copy", self.TS, content), [])
 
 
@@ -281,6 +1038,15 @@ class DesktopSkipTests(ReplayedPullRequest):
         ])
 
 
+    def test_an_early_windows_skip_alone_leaves_the_helper_stopping_its_own_desktop(self):
+        def keep_the_posix_only_spare(diff):
+            return re.sub(r"(?ms)^@@ -428,13 .*?(?=^@@ -1249,)", "", diff, count=1)
+
+        self.assertEqual(self.grade_sample("good", keep_the_posix_only_spare)[0], [
+            "functional: tests/hermes_cli/test_desktop_update_tail.py"
+            "::test_windows_stop_spares_its_own_desktop_and_stops_an_unrelated_one failed",
+        ])
+
     def test_an_unparseable_extra_test_file_cannot_hide_a_platform_patch(self):
         extra = "tests/hermes_cli/test_extra.py"
         broken = f'def test_x(:\n    # a comment\n    monkeypatch.setattr(sys, "platform", "win32")'
@@ -305,7 +1071,7 @@ class KnownIssuesTests(ReplayedPullRequest):
             f"constraint:C5: {checks}::test_validator_accepts_the_hindsight_entry failed",
             f"constraint:C8: {checks}::test_dashboard_result_fits_the_plugins_manage_contract failed",
             "constraint:C6: tests.hermes_cli.test_124037_catalog_known_issues_gate.TestCatalogParsing"
-            "::test_live_catalog_hindsight_declares_known_issues passes only with the edited plugin-catalog/hindsight.yaml",
+            "::test_live_catalog_hindsight_declares_known_issues failed with plugin-catalog/hindsight.yaml restored",
         ], {"outside_footprint": ["tests/hermes_cli/test_124037_catalog_known_issues_gate.py"], "added": 213, "merged_added": 130}))
 
 
@@ -386,6 +1152,10 @@ class LongPromptTests(ReplayedPullRequest):
 
     def test_merged_preview_trims_a_split_surrogate_and_tests_what_copy_writes(self):
         self.assertEqual(self.grade_sample("good"), ([], {"outside_footprint": [], "added": 253, "merged_added": 253}))
+
+    def test_the_merged_tests_with_the_tied_present_swapped_for_an_unrelated_one_fail_the_present_ask(self):
+        swapped = self.grade_sample("good", lambda diff: diff.replace("+    expect(bubble).toHaveTextContent(TAIL);", "+    expect(bubble).toHaveTextContent(SHORT_TEXT);"))[0]
+        self.assertEqual(swapped, ["constraint:C3: no added web test asserts that hidden prompt text is present"])
 
     def test_pre_review_preview_cuts_utf16_units_and_tests_only_labels(self):
         self.assertEqual(self.grade_sample("bad")[0], [

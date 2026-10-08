@@ -2,8 +2,9 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
-from harnesses import hermes
+from harnesses import hermes, hermes_evidence
 from test_hermes import HermesDatabase, bind_legacy, owned_directory
 
 
@@ -48,6 +49,39 @@ class HarvestCustodyRegression(unittest.TestCase):
         trace = hermes.harvest(self.run)
         self.assertEqual(outside.read_bytes(), b"owned-outside-write-canary\n")
         self.assertEqual(trace["final_reply"], "owned native reply")
+
+    def harvest_with_arguments(self, arguments):
+        path = hermes.profile(self.run) / "state.db"
+        path.unlink(missing_ok=True)
+        db = HermesDatabase(path)
+        db.session("root")
+        db.message("root", "user", "go")
+        db.message("root", "assistant", "owned native reply",
+                   calls=[{"id": "c1", "function": {"name": "read_file", "arguments": arguments}}])
+        db.done()
+        return hermes.harvest(self.run)
+
+    def test_non_string_tool_arguments_are_retained_incomplete(self):
+        for arguments in ({"path": "x"}, {}, [], 0, 1.5, False):
+            with self.subTest(arguments=arguments):
+                trace = self.harvest_with_arguments(arguments)
+                self.assertEqual(trace.get("x_harvest_error"),
+                                 "decode-failed: EvidenceRefused: invalid native tool arguments")
+                self.assertEqual(trace["events"], [])
+                result = self.run._hermes_evidence.private_root / "acquisitions" / trace["x_acquisition"] / "result.json"
+                self.assertEqual(json.loads(result.read_text())["reason"], "decode-failed")
+
+    def test_unrelated_type_error_during_acquisition_propagates(self):
+        self.database()
+        with mock.patch.object(hermes_evidence.HermesEvidence, "_read_fd", side_effect=TypeError("owned acquisition bug")):
+            with self.assertRaisesRegex(TypeError, "^owned acquisition bug$"):
+                hermes.harvest(self.run)
+
+    def test_null_or_empty_tool_arguments_read_as_none(self):
+        for arguments in (None, ""):
+            with self.subTest(arguments=arguments):
+                trace = self.harvest_with_arguments(arguments)
+                self.assertEqual((trace.get("x_harvest_error"), trace["final_reply"]), (None, "owned native reply"))
 
     def test_missing_main_cannot_reuse_previous_acquisition(self):
         path = self.database()
@@ -1278,6 +1312,20 @@ class EvidenceRefusalControls(_OwnerFixture):
                 self.assertEqual(trace["events"], [])
                 for promise in oracles.ORACLES:
                     self.assertEqual(oracles.check(promise, trace, {}, self.project)["verdict"], "INCONCLUSIVE")
+
+    def test_non_string_model_config_from_an_untyped_column_is_incomplete(self):
+        import sqlite3
+        from test_hermes import SESSION_COLUMNS, MESSAGE_COLUMNS
+        path = hermes.profile(self.run) / "state.db"
+        with sqlite3.connect(path) as con:
+            con.execute("create table sessions (" + SESSION_COLUMNS.replace("model_config text", "model_config") + ")")
+            con.execute("create table messages (" + MESSAGE_COLUMNS + ")")
+            con.execute("insert into sessions values ('root',null,7,1,'fixture',?,0,0,0,0)", (str(self.project),))
+            con.execute("insert into messages values (1,'root','user','go',null,null,null)")
+        con.close()
+        trace = hermes.harvest(self.run)
+        self.assertIn("decode-failed", trace["x_harvest_error"])
+        self.assertEqual(trace["events"], [])
 
     def test_authorizer_denies_writes_attach_extensions_and_other_tables(self):
         import sqlite3

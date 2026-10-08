@@ -5,6 +5,8 @@ when it meets what the maintainer asked for in review (constraint:<id>).
 Scope against the merged diff is reported, never failed: the check writes
 scope.json beside the harvested workspace.diff."""
 import ast
+import collections
+import functools
 import io
 import json
 import re
@@ -134,12 +136,18 @@ def executable_js(source):
     return "".join(out).split("\n")
 
 
+class Unparsed(list):
+    """The added lines of a Python file that does not parse. pytest cannot
+    collect it, so a check may fail on these lines but never credits them."""
+
+
 def executable_added(diff, files):
     """added_lines with the non-code text of each added Python or JS/TS line
     blanked, so a static check never credits a comment or a docstring as a
     test. files is apply_diff's {path: bytes or None}, the patched files the
     added line numbers index into. A Python file that does not parse fails
-    closed: its raw added lines count, minus those that start with #."""
+    closed: its raw added lines, minus those that start with #, come back
+    as Unparsed."""
     executable = {}
     for path, found in added_numbered(diff).items():
         data = files.get(path)
@@ -149,7 +157,7 @@ def executable_added(diff, files):
         source = data.decode("utf-8", errors="replace")
         lines = executable_python(source) if path.endswith(".py") else executable_js(source)
         if lines is None:
-            executable[path] = ["" if line.lstrip().startswith("#") else line for _, line in found]
+            executable[path] = Unparsed("" if line.lstrip().startswith("#") else line for _, line in found)
         else:
             executable[path] = [lines[number - 1] for number, _ in found]
     return executable
@@ -492,7 +500,7 @@ def adds_minimal_fixture(added):
     <status>, which only the agent's own tests can hold: some payload the diff
     adds to a test file has no <tool-use-id>."""
     for path, lines in added.items():
-        if not is_test_file(path):
+        if not is_test_file(path) or isinstance(lines, Unparsed):
             continue
         for payload in re.findall(r"<task-notification>(.*?)</task-notification>", "\n".join(lines), re.S):
             if "<tool-use-id>" not in payload:
@@ -621,8 +629,43 @@ PAYLOAD_MATCHER = r"\.(?:toBe|toEqual|toStrictEqual|toContain|toMatch)\("
 COPIED_VALUE = re.compile(
     r"expect\([^;]*?(?:writeText|clipboard|copyText)[^;]*?\)\s*(?:\.toHaveBeen(?:Last|Nth)?CalledWith\(|" + PAYLOAD_MATCHER + ")")
 CAPTURED_BY_STUB = re.compile(r"(?:writeText|copyText)[^;]*?(\w+)(?:\.push\(|\s*=(?![=>]))")
-ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?:[^()]|\([^()]*\))*\)\)\.(toBeNull|not\.toBeInTheDocument)")
-PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|getByText\(")
+QUOTED_METHOD = re.compile(r"""(["'`])(writeText|copyText)\1""")
+FILLED_BY = re.compile(r"(\w+)(?:\.push\(|\s*=(?![=>]))")
+LOOP_BINDING = re.compile(r"\bfor\s*(?:await\s*)?\(\s*(?:(?:const|let|var)\s+)?([\[{][^;]*?[\]}]|[\w$]+)\s*(?:of|in)\b")
+DECLARED_NAME = re.compile(r"\b(?:function\s*\*?|class|enum)\s*([\w$]+)")
+IMPORT_CLAUSE = re.compile(r"\bimport\s+(?:type\s+)?([^;\"'`]*?)\s+from\s*[\"'`]")
+IMPORT_ALIAS = re.compile(r"[\w$]+\s+as\s+")
+INDEXED = re.compile(r"[\w$)\]]\s*$")
+DECLARING = re.compile(r"\b(?:const|let|var)\s*$")
+CHAINED = re.compile(r"\)[ \t]*\.")
+CLIPBOARD_READ = re.compile(r"\bmock\s*\.\s*(?:calls|lastCall|results)\b|\breadText\s*\(|\b(?:writeText|copyText)\s*\.\s*mock\b"
+                            r"|\b(?:spyOn|mocked)\s*\([^()]*(?<![\w$])(?:clipboard|writeText|copyText)(?![\w$])")
+CLIPBOARD_SUBJECT = re.compile(CLIPBOARD_READ.pattern + r"|\.\s*(?:writeText|copyText|clipboard)(?![\w$])")
+CLIPBOARD_NAME = re.compile(r"(?<![\w$.])(writeText|copyText|clipboard)(?![\w$])")
+CLIPBOARD_VALUE = re.compile(CLIPBOARD_SUBJECT.pattern + r"|(?<![\w$.])(?:writeText|copyText|clipboard)(?![\w$])|\b(?:fn|spy|spyOn|stub|mocked?)\b|\bMock")
+PLACEHOLDER = re.compile(r"(?:<[^<>]*>\s*)?(?:0|\[\s*\]|\{\s*\}|null|undefined|(?:new\s+)?Array\s*(?:<[^()]*>)?\s*\(\s*\))(?:\s+(?:as|satisfies)\s.*)?")
+ABSENT = re.compile(r"not\.toHaveTextContent\(|not\.toContain\(|queryByText\((?=(?:[^()]|\([^()]*\))*\)\)\.(?:toBeNull|not\.toBeInTheDocument))")
+PRESENT = re.compile(r"(?<!not\.)toHaveTextContent\(|(?<!not\.)toContain\(|(?:get|find)(?:All)?ByText\(|textContent\s*\)\s*\.(?:toBe|toEqual)\(")
+STRING = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)"""
+REGEX_LITERAL = r"/(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\[\n])+/[a-z]*"
+PLAIN_REGEX = r"/([^\\/\[\](){}.*+?^$|]+)/"
+WRAPPED = re.compile(rf"expect\.stringContaining\((.*)\)|`\$\{{\s*([\w$.]+)\s*\}}`|{PLAIN_REGEX}")
+DECLARATION = re.compile(r"\b(const|let|var)\s+")
+DECLARATOR = re.compile(r"\s*([\w$]+)\s*(?::(?:\([^()]*\)|=>|[^=,;\n()])*)?(=(?![=>]))?\s*")
+ASSIGNMENT = re.compile(r"(?<![\w$.])([\w$]+)\s*\+?=(?![=>])\s*")
+STRING_AT = re.compile(STRING)
+REGEX_AT = re.compile(REGEX_LITERAL)
+FREE_NAME = re.compile(r"(?<![\w$.])[A-Za-z_$][\w$]*|(?<=\.\.\.)[A-Za-z_$][\w$]*")
+PARAMETERS_END = re.compile(r"\s*(?::[^=;{}()]*)?(?:=>|\{)")
+CONTROL_HEAD = re.compile(r"\b(?:if|for|while|switch|with)\s*$")
+BARE_PARAMETER = re.compile(r"(?<![\w$.])([\w$]+)\s*=>")
+PATTERN_END = re.compile(r"\s*=(?![=>])")
+CHANGED_IN_PLACE = re.compile(r"(?<![\w$.])([\w$]+)(?:\s*\.\s*(?:push|unshift|splice|set)\s*\(|\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*=(?![=>]))"
+                              r"|\bObject\.assign\(\s*([\w$]+)")
+REBINDING = re.compile(r"(?<![\w$.])([\w$]+)\s*(?:\?\?|\|\||&&|\*\*|<<|>>>?|[-+*/%&|^])?=(?![=>])")
+JSX_TAG = re.compile(r"<[A-Za-z][\w$.]*\s[^<>]*>")
+Rendered = collections.namedtuple("Rendered", "text expression")
+Reads = collections.namedtuple("Reads", "proven rendered")
 
 
 def asserts_copied_value(source):
@@ -635,14 +678,473 @@ def asserts_copied_value(source):
     return any(re.search(rf"expect\(\s*{re.escape(name)}\b[^;]*?\)\s*" + PAYLOAD_MATCHER, source) for name in captured)
 
 
+ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
+
+
+def unquoted(value):
+    """A string literal's text, with its JavaScript escapes decoded and each
+    UTF-16 surrogate pair joined into its character."""
+    if not re.fullmatch(STRING, value):
+        return value
+    text = re.sub(r"\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|(.))", decoded, value[1:-1])
+    return text.encode("utf-16", "surrogatepass").decode("utf-16", "surrogatepass")
+
+
+def decoded(escape):
+    digits = escape.group(1) or escape.group(2) or escape.group(3)
+    if not digits:
+        return ESCAPES.get(escape.group(4), escape.group(4))
+    point = int(digits, 16)
+    return chr(point) if point <= 0x10FFFF else escape.group()
+
+
+def named(argument):
+    """The text or name an assertion argument stands for: a string's contents,
+    or what stringContaining, a lone ${} template, or a regex with no special
+    characters or flags wraps. A string is text, and so is a template until
+    it substitutes; anything else, a RegExp built at runtime among them, is
+    an expression, whose code names constants."""
+    argument = " ".join(argument.split())
+    wrapped = WRAPPED.fullmatch(argument)
+    if wrapped and wrapped.group(3) is not None:
+        return Rendered(wrapped.group(3), False)
+    if wrapped:
+        return named(next(group for group in wrapped.groups() if group is not None))
+    literal = re.fullmatch(STRING, argument) and "${" not in argument
+    return Rendered(unquoted(argument), False) if literal else Rendered(argument, True)
+
+
+@functools.lru_cache(maxsize=None)
+def spelled(text):
+    """The text with the escapes of each string literal decoded and its quotes
+    kept, so a definition spelled with an escape meets the text it spells."""
+    return re.sub(STRING, lambda found: found.group()[0] + unquoted(found.group()) + found.group()[0], text)
+
+
+def aliases(value, definitions):
+    """A value and every string literal a constant of that name holds."""
+    return {value} | {unquoted(text) for text in definitions.get(value, []) if re.fullmatch(STRING, text)}
+
+
+def reaches(value, targets, definitions):
+    """Whether a rendered value, or a definition of a name it leads to,
+    mentions a target. A literal names no constants; an expression does, and
+    so does each definition outside its quoted strings."""
+    texts = [value.text, *(text for name in names_reached(value, definitions) for text in definitions.get(name, []))]
+    return any(target in text and re.search(rf"(?<![\w$]){re.escape(target)}(?![\w$])", text)
+               for text in {*texts, *map(spelled, texts)} for target in targets)
+
+
+Hidden = collections.namedtuple("Hidden", "search code names")
+
+
+def hidden_values(absent, definitions):
+    """The absent values pooled, so each present value is checked against all
+    of them at once: one search for any text they stand for (each one's own
+    and every string literal a constant of that name holds), the code of each
+    and of the definitions of the names it reaches, joined, and those names."""
+    reached = [names_reached(value, definitions) for value in absent]
+    targets = sorted(set().union(*(aliases(value.text, definitions) for value in absent)), key=len, reverse=True)
+    search = re.compile(rf"(?<![\w$])(?:{'|'.join(map(re.escape, targets))})(?![\w$])" if targets else r"(?!)").search
+    texts = (text for value, names in zip(absent, reached) for text in (value.text, *(bound for name in names for bound in definitions.get(name, []))))
+    return Hidden(search, Rendered("\n".join(texts), False), set().union(*reached))
+
+
+def names_reached(value, definitions):
+    """Each name a rendered value mentions outside literals and property
+    access, and in turn each name their definitions mention."""
+    seen, fresh = set(), set(FREE_NAME.findall(code(value.text))) if value.expression else set()
+    while fresh:
+        seen |= fresh
+        fresh = {use for name in fresh for text in definitions.get(name, []) for use in FREE_NAME.findall(code(text))} - seen
+    return seen
+
+
+def held(value, definitions):
+    """A value's text and each string literal bound to a name it mentions."""
+    return {value.text} | {unquoted(text) for name in names_reached(value, definitions) for text in definitions.get(name, [])
+                           if re.fullmatch(STRING, text)}
+
+
+def shows_hidden_value(present, hidden, definitions):
+    """The present value is an absent one under another name; or the present
+    value reaches an absent one through the names it mentions, as
+    LONG_TEXT.trim() does when LONG_TEXT = HEAD + TAIL; or an absent value
+    reaches the present one, as LONG_TEXT.slice(-40) does; or both reach one
+    name, as FULL.trim() and TAIL = FULL.slice(-30) do."""
+    names = names_reached(present, definitions)
+    texts = (present.text, *(bound for name in names for bound in definitions.get(name, [])))
+    return (any(hidden.search(text) for text in (*texts, *map(spelled, texts)))
+            or reaches(hidden.code, held(present, definitions), definitions) or bool(names & hidden.names))
+
+
+def statements(source):
+    """The source with each statement on one line. JavaScript carries a
+    statement past a newline inside a template literal, after a line that ends
+    in an operator or an opening bracket, and before a line that opens with an
+    operator, a dot, a comma, a ) or a ]. A binding whose brackets are still
+    open takes the next line as its next statement. A blank or full-line
+    comment line holds no code."""
+    joined, depth, ticks, previous = [], 0, 0, ""
+    for line in source.split("\n"):
+        if not line.strip() or line.lstrip().startswith(("//", "/*", "*")):
+            continue
+        if joined and ticks % 2:
+            joined[-1] += " " + line.strip()
+        elif joined and (re.search(r"[-+*/%&|^?:,=<>(\[{]\s*$", code(previous)) or re.match(r"\s*[-+%&|^?:.,=)\]]", line)):
+            joined[-1] += " " + line.strip()
+            depth = depth + balance(line) if depth else open_depth(joined[-1])
+        elif depth > 0:
+            joined[-1] += "; " + line.strip()
+            depth += balance(line)
+        else:
+            joined.append(line)
+            depth, ticks = open_depth(line), 0
+        ticks += code(line).count("`")
+        previous = line
+    return "\n".join(joined)
+
+
+def open_depth(statement):
+    """How many brackets the earliest open binding in a statement leaves open."""
+    return max((bound_value(statement, head.end())[1] for head in ASSIGNMENT.finditer(statement)), default=0)
+
+
+def balance(line):
+    text = code(line)
+    return sum(text.count(c) for c in "([{") - sum(text.count(c) for c in ")]}")
+
+
+def literal_end(text, at, end=None):
+    """Where a string, template, or regex literal starting at `at` ends."""
+    end = len(text) if end is None else end
+    pattern = REGEX_AT if text[at] == "/" else STRING_AT if text[at] in "\"'`" else None
+    found = pattern and pattern.match(text, at, end)
+    return found.end() if found else None
+
+
+def code(text):
+    """The text with each string and regex literal replaced by 0, and each
+    template by its ${} contents, so only code is left to name constants."""
+    out, at = [], 0
+    while at < len(text):
+        end = literal_end(text, at)
+        if end is None:
+            out.append(text[at])
+            at += 1
+            continue
+        literal = text[at:end]
+        substitutions = re.findall(r"\$\{([^}]*)\}", literal) if literal.startswith("`") else []
+        out.append("(" + " ".join(code(part) for part in substitutions) + ")" if substitutions else "0")
+        at = end
+    return "".join(out)
+
+
+def bound_value(statement, start, end=None):
+    """The value a binding or argument starts at start, up to end (by default
+    the line end), or the semicolon, comma, or closing bracket that ends it
+    outside literals; how many of its brackets are open if it reaches end;
+    and where it ends."""
+    if end is None:
+        end = statement.find("\n", start)
+        end = len(statement) if end < 0 else end
+    depth, at = 0, start
+    while at < end:
+        literal = literal_end(statement, at, end)
+        if literal:
+            at = literal
+            continue
+        depth += (statement[at] in "([{") - (statement[at] in ")]}")
+        if depth < 0 or depth == 0 and statement[at] in ";,":
+            break
+        at += 1
+    return statement[start:at].strip(), depth if at == end else 0, at
+
+
+def definitions_in(source):
+    """Every value bound to each name: each declarator of a const, let, or var
+    list, and assignments to a name the file declares with let, var, or a
+    const with no value. Also the names the file may bind
+    to a value it does not know: those names, each one bound to a regex
+    unreadable() rejects, and each one unknown_names finds."""
+    text = statements(source)
+    definitions, mutable, initialized = collections.defaultdict(list), set(), collections.Counter()
+    for declaration in DECLARATION.finditer(text):
+        at = declaration.end()
+        while declarator := DECLARATOR.match(text, at):
+            name, at = declarator.group(1), declarator.end()
+            if declaration.group(1) != "const" or not declarator.group(2):
+                mutable.add(name)
+            if declarator.group(2):
+                initialized[name] += 1
+                value, _, at = bound_value(text, at)
+                definitions[name].append(value)
+            if not text.startswith(",", at):
+                break
+            at += 1
+    for head in ASSIGNMENT.finditer(text):
+        if head.group(1) in mutable:
+            definitions[head.group(1)].append(bound_value(text, head.end())[0])
+    unreadable_regexes = {name for name, texts in definitions.items() if any(map(unreadable, texts))}
+    return definitions, mutable | unreadable_regexes | unknown_names(code(text), initialized)
+
+
+def unknown_names(text, initialized):
+    """Each name a parameter list or a destructuring pattern binds, each name
+    assigned more often than a declaration gives it a value, and each name
+    whose value a method, an index assignment, or Object.assign changes in
+    place. A JSX attribute is not an assignment."""
+    names = set(BARE_PARAMETER.findall(text)) | {name for found in CHANGED_IN_PLACE.findall(text) for name in found if name}
+    opens = []
+    for at, char in enumerate(text):
+        if char in "([{":
+            opens.append(at)
+        elif char in ")]}" and opens:
+            start = opens.pop()
+            parameters = char == ")" and PARAMETERS_END.match(text, at + 1) and not CONTROL_HEAD.search(text[max(0, start - 8):start])
+            if parameters or char in "]}" and PATTERN_END.match(text, at + 1):
+                names.update(FREE_NAME.findall(text[start + 1:at]))
+    assigned = collections.Counter(REBINDING.findall(JSX_TAG.sub(" ", text)))
+    return names | {name for name, count in assigned.items() if count > initialized[name]}
+
+
+def unreadable(text):
+    """Whether text is a regex literal that is more than plain text: a flag,
+    an escape, a class, a group, an anchor, a quantifier, or alternation."""
+    return bool(REGEX_AT.fullmatch(text)) and not re.fullmatch(PLAIN_REGEX, text)
+
+
+def resolves(value, known):
+    """Whether the reader can read a rendered value: every name it mentions,
+    and in turn each name their definitions mention, has a definition in
+    known, and it is not a regex the reader cannot read."""
+    return names_reached(value, known) <= known.keys() and not unreadable(value.text)
+
+
+def evaluable(value, known):
+    """Whether the reader holds an absent value's exact text: a literal, or a
+    name the file binds only to literals. A computed value, such as a
+    concatenation, a repeat, a join, a slice, or a template with an
+    expression, is text the reader cannot evaluate."""
+    if not value.expression:
+        return True
+    texts = known.get(value.text)
+    return bool(texts) and all(re.fullmatch(STRING, text) and "${" not in text for text in texts)
+
+
+def proves_unrelated(present, hidden, definitions, known):
+    """Whether no present value shows an absent one, on proof: the file
+    resolves every name each present value mentions, no present value is a
+    regex the reader cannot read, and none shows an absent value. Only a const
+    resolves, and not when the file also binds the name another way. A value it
+    cannot resolve may hold anything, so it gets the credit trunk gives any
+    present assertion."""
+    return all(resolves(value, known) and not shows_hidden_value(value, hidden, definitions) for value in present)
+
+
+def clipboard_reads(source, definitions):
+    """Reads(proven, rendered). proven is each name the file binds only to what
+    Copy writes, on proof: a value a writeText or copyText stub assigns or
+    pushes, a value read from a mock's calls, lastCall, or results or from
+    readText(), a spyOn or mocked spy on the clipboard, or a value built from
+    names already proven. A stub runs from a writeText or copyText in code,
+    or a spy's quoted method name, to the end of its statement, across lines
+    while a bracket is open and through a method chained onto the call it
+    sits in, on the same line or the next. A JSX tag and a test title hold no
+    stub. Any other binding leaves the name unproven: a parameter outside a
+    stub, a loop variable, an import, a function, class, or enum declaration,
+    or a declaration, assignment, or destructuring pattern whose value is not
+    one of those. A neutral starting value neither proves nor disproves: any
+    string literal, a template with no substitution, a regex literal, 0, [],
+    {}, null, undefined, new Array(), or Array(), and Array<T>() with a
+    simple type argument such as Array<string>(), with or without an as or
+    satisfies cast or a leading <Type> that has no nested type arguments. A
+    template with a substitution, any other number, true or false, a nonempty
+    array or object, a concatenation, a leading cast with nested type
+    arguments such as <Array<string>>[] or <Record<string, string>>{}, a type
+    argument with a comma such as Array<Map<string, string>>(), and any other
+    call are not neutral.
+    rendered is each of clipboard, writeText, and copyText that a declarator,
+    or an = or += assignment to a name the file declares with let, var, or no
+    value, binds to a value that is neither neutral nor a clipboard value. A
+    clipboard value reads a mock's calls, lastCall, or results or readText(),
+    reaches a member or names a bare clipboard, writeText, or copyText, holds
+    one of the words fn, spy, spyOn, stub, or mocked, starts a word with
+    Mock, or is built only from proven names. A rendered element is none of
+    these. A fake the pattern does not recognize, such as
+    new FakeClipboard(), mockClipboard(), or createWriteTextMock(), is
+    rendered, as trunk reads it. A destructuring pattern, a loop binding, an
+    import, a parameter, a declaration of the name as a function or class, an
+    assignment to a const the file declares with a value, and an assignment
+    with any operator but = and +=, such as ??=, &&=, or ||=, never make it
+    rendered, so it stays the clipboard."""
+    text = JSX_TAG.sub(lambda tag: " " * len(tag.group()), code(QUOTED_METHOD.sub(r"\2", statements(source))))
+    filled, outside = set(), list(text)
+    for found in re.finditer(r"writeText|copyText", text):
+        depth, at = 0, found.end()
+        while at < len(text):
+            depth += (text[at] in "([{") - (text[at] in ")]}")
+            if depth < 0 and CHAINED.match(text, at):
+                depth = 0
+            elif depth < 0 or depth == 0 and text[at] in ";,\n":
+                break
+            at += 1
+        filled.update(FILLED_BY.findall(text[found.end():at]))
+        outside[found.start():at] = " " * (at - found.start())
+    outside = "".join(outside)
+    sites = [(name, None) for name in parameter_names(outside)]
+    for declaration in DECLARATION.finditer(outside):
+        at = declaration.end()
+        while (declarator := DECLARATOR.match(outside, at)) and declarator.group(2):
+            value, _, at = bound_value(text, declarator.end(2))
+            sites.append((declarator.group(1), value))
+            if not outside.startswith(",", at):
+                break
+            at += 1
+    for head in (*REBINDING.finditer(outside), *CHANGED_IN_PLACE.finditer(outside)):
+        sites.append((head.group(1) or head.group(2), bound_value(text, head.end())[0]))
+    for names, value_at in destructured(outside):
+        sites += [(name, bound_value(text, value_at)[0]) for name in names]
+    sites += [(name, None) for loop in LOOP_BINDING.finditer(outside) for name in FREE_NAME.findall(loop.group(1))]
+    sites += [(declared.group(1), None) for declared in DECLARED_NAME.finditer(outside)]
+    for clause in IMPORT_CLAUSE.finditer(source):
+        sites += [(name, None) for name in FREE_NAME.findall(IMPORT_ALIAS.sub("", clause.group(1)))]
+    proven = set()
+    while True:
+        read, other = set(filled), set()
+        for name, value in sites:
+            if value is not None and reads_clipboard(value, proven):
+                read.add(name)
+            elif value is None or not PLACEHOLDER.fullmatch(value):
+                other.add(name)
+        if read - other == proven:
+            break
+        proven = read - other
+    values = {name: [code(value) for value in values] for name, values in definitions.items() if CLIPBOARD_NAME.fullmatch(name)}
+    rendered = {name for name, values in values.items() for value in values
+                if not (PLACEHOLDER.fullmatch(value) or CLIPBOARD_VALUE.search(value) or reads_clipboard(value, proven))}
+    return Reads(proven, rendered)
+
+
+def destructured(text):
+    """Each destructuring pattern in text that an = follows, declared or
+    assigned, as the names it mentions and where its value starts. A bracket
+    pair after a name, a call, or an index is an index access."""
+    opens, found = [], []
+    for at, char in enumerate(text):
+        if char in "([{":
+            opens.append(at)
+        elif char in ")]}" and opens:
+            start = opens.pop()
+            before, end = text[max(0, start - 12):start], PATTERN_END.match(text, at + 1)
+            if char in "]}" and end and not (INDEXED.search(before) and not DECLARING.search(before)):
+                found.append((FREE_NAME.findall(text[start + 1:at]), end.end()))
+    return found
+
+
+def parameter_names(text):
+    """Each name a parameter list binds."""
+    names, opens = set(BARE_PARAMETER.findall(text)), []
+    for at, char in enumerate(text):
+        if char == "(":
+            opens.append(at)
+        elif char == ")" and opens:
+            start = opens.pop()
+            if PARAMETERS_END.match(text, at + 1) and not CONTROL_HEAD.search(text[max(0, start - 8):start]):
+                names.update(FREE_NAME.findall(text[start + 1:at]))
+    return names
+
+
+def reads_clipboard(value, proven):
+    """Whether a bound value, in code() form, is what Copy writes: a read of a
+    mock's calls, lastCall, or results or of readText(), a spyOn or mocked spy
+    on the clipboard, or built only from names proven to hold it."""
+    names = set(FREE_NAME.findall(value)) - {"await"}
+    return bool(CLIPBOARD_READ.search(value) or names and names <= proven)
+
+
+def about_clipboard(subject, reads):
+    """Whether an expectation's subject is what Copy writes, not the rendered
+    text, on proof: it reads a mock's calls, lastCall, or results, calls
+    readText(), spies on the clipboard, or reaches a member named clipboard,
+    writeText, or copyText; it names a bare clipboard, writeText, or copyText
+    that clipboard_reads does not report as rendered, so a declarator or an =
+    or += assignment to a let, var, or valueless name must bind it to a value
+    that is neither neutral nor a clipboard value, such as a rendered
+    element, and a destructuring pattern, a loop binding, or a ??=, &&=, or
+    ||= assignment of the name does not; or every
+    name it mentions is one clipboard_reads proves. A name the file also
+    binds to anything else may hold the rendered text, so its expectation
+    stays."""
+    text = code(subject)
+    return (bool(CLIPBOARD_SUBJECT.search(text)) or any(name not in reads.rendered for name in CLIPBOARD_NAME.findall(text))
+            or reads_clipboard(text, reads.proven))
+
+
+def other_expectations(source, reads, definitions):
+    """The text each expect( that neither asserts absence nor is about the
+    clipboard holds: its subject, its matcher chain, and each definition of a
+    name the chain reaches, as LONG_TEXT.length reaches the text LONG_TEXT is
+    built from. The subject's own names stay unexpanded, since a rendered
+    container's definition may mention anything. The present forms the reader
+    recognizes are among them, and so are the ones it does not."""
+    text, found = statements(source), []
+    for start in re.finditer(r"(?<![\w$.])expect\(", text):
+        statement = bound_value(text, start.start())[0]
+        subject, _, close = bound_value(statement, len("expect("))
+        if not (ABSENT.search(statement) or about_clipboard(subject, reads)):
+            arguments = Rendered(statement[close + 1:], True)
+            found += [subject, arguments.text, *(bound for name in names_reached(arguments, definitions) for bound in definitions.get(name, []))]
+    return found
+
+
+def rendered_values(pattern, source, reads):
+    """What the first argument of each assertion pattern finds names. A
+    toContain on what Copy writes checks the payload, not the rendered text.
+    A semicolonless file has no other statement end a regex can find."""
+    values = set()
+    for found in pattern.finditer(source):
+        subject = source[source.rfind("expect(", 0, found.start()) + len("expect("):found.start()]
+        if "toContain" in found.group() and about_clipboard(subject, reads):
+            continue
+        value = named(bound_value(source, found.end(), len(source))[0])
+        if value.text:
+            values.add(value)
+    return values
+
+
 def tests_assert_hidden_text_and_copy(added):
     """The reviewer asked for tests of the collapsed text and the Copy payload,
     not only the button labels. A regex over the added web test lines is a
-    proxy, so it looks only for each kind of assertion somewhere."""
-    lines = [line for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path) for line in found]
-    missing = [what for what, found in (("what Copy writes", asserts_copied_value("\n".join(lines))),
-                                        ("that hidden prompt text is absent", any(ABSENT.search(line) for line in lines)),
-                                        ("that prompt text is present", any(PRESENT.search(line) for line in lines)))
+    proxy: some value must be asserted absent, some value present in the
+    rendered text, and the Copy payload asserted. The present check fails
+    only when the reader proves no present value shows an absent one, and
+    any other expectation that mentions an absent value credits it. Each
+    file resolves its absent and present values with only the names it binds,
+    since an import or a name another test file declares holds a value it
+    does not see. The absent values are pooled once, since a stress file
+    holds thousands of absent values and expectations."""
+    sources = ["\n".join(found) for path, found in added.items() if re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", path)]
+    readings = []
+    for text in sources:
+        own, unknown = definitions_in(text)
+        reads = clipboard_reads(text, own)
+        readings.append((rendered_values(PRESENT, text, reads), rendered_values(ABSENT, text, reads),
+                         {name: texts for name, texts in own.items() if name not in unknown}, own, other_expectations(text, reads, own)))
+    absent = set().union(*(values for _, values, *_ in readings))
+    definitions = collections.defaultdict(list)
+    for *_, own, _ in readings:
+        for name, texts in own.items():
+            definitions[name] += texts
+    hidden = hidden_values(absent, definitions)
+    present = any(values for values, *_ in readings)
+    unrelated = absent and all(evaluable(value, known) for _, values, known, *_ in readings for value in values) and all(
+        proves_unrelated(values, hidden, definitions, known) for values, _, known, *_ in readings)
+    shown = present and not unrelated or any(hidden.search(text) for *_, others in readings for text in others)
+    source = "\n".join(sources)
+    missing = [what for what, found in (("what Copy writes", asserts_copied_value(source)),
+                                        ("that hidden prompt text is absent", absent),
+                                        ("that hidden prompt text is present", shown))
                if not found]
     return [f"constraint:C3: no added web test asserts {what}" for what in missing]
 
@@ -732,17 +1234,19 @@ def shipped_issues():
 
 
 def prose(issue):
-    """The whitespace-normalized sentences of one parsed issue, whatever its shape."""
+    """The whitespace-normalized sentences of one parsed issue, whatever its
+    shape. A record with no string of four or more words keeps its string of
+    the most words, a label such as unsupported-platform being one word."""
     if isinstance(issue, str):
         return [" ".join(issue.split())] if issue.split() else []
-    return record_prose(issue)
+    return record_prose(issue) or sorted(record_prose(issue, words=1), key=lambda text: (len(text.split()), len(text)))[-1:]
 
 
-def record_prose(value):
-    """The prose inside a structured record; a string of fewer than four words
-    there is metadata such as a kind or severity, not a sentence."""
+def record_prose(value, words=4):
+    """The prose inside a structured record; a string of fewer than `words`
+    words there is metadata such as a kind or severity, not a sentence."""
     if isinstance(value, str):
-        return [" ".join(value.split())] if len(value.split()) >= 4 else []
+        return [" ".join(value.split())] if len(value.split()) >= words else []
     if dataclasses.is_dataclass(value):
         value = dataclasses.asdict(value)
     elif hasattr(value, "model_dump"):
@@ -750,7 +1254,7 @@ def record_prose(value):
     elif hasattr(value, "__dict__"):
         value = vars(value)
     items = value.values() if isinstance(value, dict) else value if isinstance(value, (list, tuple)) else []
-    return [text for item in items for text in record_prose(item)]
+    return [text for item in items for text in record_prose(item, words)]
 
 
 class Installs(list):
@@ -849,8 +1353,9 @@ def test_dashboard_result_fits_the_plugins_manage_contract(installs):
 def own_tests_pin_the_live_entry(workspace):
     """The reviewer asked to drop a test that pins the live hindsight entry,
     which the re-pin that fixes the trap will change. So the agent's own test
-    files run again with that entry restored; a test that passed and now
-    fails pinned it."""
+    files run again with that entry restored, and a result there that is not
+    passed pinned it. A label the edited run lacks, such as a collection
+    error, counts; one the edited run already had not passed does not."""
     entry = "plugin-catalog/hindsight.yaml"
     changed = apply_diff(workspace.checkout, workspace.diff)
     own = sorted(path for path, data in changed.items() if data is not None and path.startswith("tests/")
@@ -859,8 +1364,8 @@ def own_tests_pin_the_live_entry(workspace):
         return []
     edited = project_test_results("hermes-8afaab3703e3", workspace.checkout, changed, own)
     restored = project_test_results("hermes-8afaab3703e3", workspace.checkout, {**changed, entry: (workspace.checkout / entry).read_bytes()}, own)
-    return [f"constraint:C6: {test} passes only with the edited {entry}" for test, status in restored.items()
-            if status == "failed" and edited.get(test) == "passed"]
+    return [f"constraint:C6: {test} {status} with {entry} restored" for test, status in restored.items()
+            if status != "passed" and edited.get(test) in (None, "passed")]
 
 
 def check_known_issues(answer, workspace):
@@ -890,9 +1395,10 @@ def check_known_issues(answer, workspace):
 # unrelated main changes. Its Windows tests skip on a Linux host and call
 # _stop_desktop_processes_locking_build under a Desktop ancestor, which a build
 # that skips first never reaches. So the functional set drives the Windows skip
-# through the update tail, build_update_products, and runs the PR's dropped
-# POSIX-still-packs test, with the host faked. The repo forbids that fake in its
-# own tests (C3), not here.
+# through the update tail, build_update_products, calls the helper directly at
+# both its pack and swap call sites, and runs the PR's dropped POSIX-still-packs
+# test, with the host faked. The repo forbids that fake in its own tests (C3),
+# not here.
 DESKTOP_SKIP_PR_TESTS = r'''
 
 def _stop_spares_the_desktop_driving_this_update(tmp_path, monkeypatch, *, also_posix):
@@ -1020,6 +1526,12 @@ def test_windows_update_tail_under_its_own_desktop_finishes_without_stopping_it(
             windows_tree.live_exe.read_text(encoding="utf-8"), leftovers) == ([], [], "old", ["package.json", "release"])
 
 
+@pytest.mark.parametrize("also_posix", [False, True], ids=["pack", "swap"])
+def test_windows_stop_spares_its_own_desktop_and_stops_an_unrelated_one(windows_tree, also_posix):
+    stopped = main_desktop._stop_desktop_processes_locking_build(windows_tree.desktop_dir, also_posix=also_posix)
+    assert (stopped, windows_tree.stopped) == ([UNRELATED], [UNRELATED])
+
+
 def test_posix_packaged_build_under_its_desktop_still_packs(windows_tree, monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     # Promotion fails without a real packed app; only whether it packed matters.
@@ -1067,8 +1579,8 @@ def test_hermes_desktop_reopens_the_app_it_did_not_rebuild(windows_tree, monkeyp
     assert (outcome, "no launchable app was found" in out, ANCESTOR in windows_tree.stopped) == (True, False, False), out
 '''
 
-PLATFORM_PATCH = re.compile(r"""setattr\(\s*["']sys\.platform["']|setattr\([^)]*\bsys\b[^)]*["']platform["']|\bsys\.platform\s*=(?!=)"""
-                            r"""|patch(?:\.object)?\(\s*(?:["']sys\.platform["']|sys\s*,\s*["']platform["'])""")
+PLATFORM_PATCH = re.compile(r"""setattr\(\s*["'](?:[\w.]+\.)?sys\.platform["']|setattr\([^)]*\bsys\b[^)]*["']platform["']|\bsys\.platform\s*=(?!=)"""
+                            r"""|patch(?:\.object)?\(\s*(?:["'](?:[\w.]+\.)?sys\.platform["']|(?:[\w.]+\.)?sys\s*,\s*["']platform["'])""")
 
 
 WINDOWS_MARK = re.compile(r"""pytest\.mark\.platforms\([^)]*["']windows["']""")
@@ -1084,7 +1596,7 @@ def tests_never_patch_the_host(added):
     patched = {path: len({source.count("\n", 0, found.start()) for found in PLATFORM_PATCH.finditer(source)})
                for path, source in sources.items()}
     failures = [f"constraint:C3: {path} patches sys.platform on {count} added line(s)" for path, count in patched.items() if count]
-    if not any(WINDOWS_MARK.search(source) for source in sources.values()):
+    if not any(WINDOWS_MARK.search(source) for path, source in sources.items() if not isinstance(added[path], Unparsed)):
         failures.append('constraint:C3: no added test is marked @pytest.mark.platforms("windows")')
     return failures
 
@@ -1094,6 +1606,7 @@ def check_desktop_skip(answer, workspace):
     return graded(workspace, "hermes-8afaab3703e3", {pr_tests: DESKTOP_SKIP_PR_TESTS, checks: DESKTOP_SKIP_CHECKS}, {
         f"{pr_tests}::test_posix_swap_spares_the_desktop_driving_this_update": "functional",
         f"{checks}::test_windows_update_tail_under_its_own_desktop_finishes_without_stopping_it": "functional",
+        f"{checks}::test_windows_stop_spares_its_own_desktop_and_stops_an_unrelated_one": "functional",
         f"{checks}::test_posix_packaged_build_under_its_desktop_still_packs": "functional",
         f"{checks}::test_hermes_desktop_reopens_the_app_it_did_not_rebuild": "constraint:C2",
     }, {"hermes_cli/main_desktop.py": 61, "tests/hermes_cli/test_gui_command.py": 46, "website/docs/getting-started/updating.md": 1},

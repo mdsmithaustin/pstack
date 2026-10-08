@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "poteto-help-finds-need-and-routes"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-help",
+ "turns": [
+  "which skill should i use to review this branch?"
+ ],
+ "timeout_s": {
+  "default": 600,
+  "codex": 900
+ },
+ "expect": {
+  "names_any": [
+   "/interrogate",
+   "code review"
+  ]
+ },
+ "tmp_lock": false
+}

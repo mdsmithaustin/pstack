@@ -77,7 +77,7 @@ The default mapping is `examples/pstack-models.md` next to this skill. Read both
 
 ### 3. Budget, map, and confirm
 
-**(a) Ask for a budget.** Prefer AskQuestion over free text. Offer these five options with these exact labels, and name the current budget when the file records one. The first is a port addition. `unlimited` is upstream's `keep max` under a port label, and the other three match upstream.
+**(a) Ask for a budget.** Prefer AskQuestion over free text. Offer these five options with these exact labels, and name the current budget when the file records one. With no file, say that `default` keeps the shipped defaults. The first is a port addition, and the other four match upstream.
 
 - `default — keep as written`
 - `unlimited — max reasoning`

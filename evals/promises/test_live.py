@@ -1,9 +1,11 @@
+import fcntl
 import json
 import io
 import os
 import platform
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -11,7 +13,7 @@ from contextlib import redirect_stdout
 from contextlib import nullcontext
 
 import live
-from grade_boundary import _authorize_fixture
+from grade_boundary import GradeRefused, _authorize_fixture
 
 CODEX_CHAT = """I'm using `poteto-mode`. I'll identify the command first.
 
@@ -37,6 +39,118 @@ class ChatWorklist(unittest.TestCase):
     def test_bare_checkbox_lines_parse(self):
         self.assertEqual([i["state"] for i in live.chat_worklist("[x] one\n[ ] two\n- [~] three")],
                          ["completed", "pending", "in progress"])
+
+    def test_parenthesized_state_with_an_explanation_parses(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("1. Read source (done: inspected)\n2. Run check (done: passed)")],
+                         ["completed", "completed"])
+
+    def test_parentheses_inside_a_state_explanation_parse(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("1. Fix parser (done: checked parse())\n2. Run tests (done: 3 cases (all passed))")],
+                         ["completed", "completed"])
+
+    def test_underscore_italic_state_annotations_parse(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("1. Read source _(done: inspected)_\n2. Run check _(done: passed)_")],
+                         ["completed", "completed"])
+
+    def test_emphasized_done_and_blocked_annotations_parse(self):
+        reply = ("4. Delegate code-writing on the `feature` role. *(done: commit `3f31bec`, reviewed by me)*\n"
+                 "8. Opening a PR. *(blocked: `git remote -v` is empty)*")
+        self.assertEqual([i["state"] for i in live.chat_worklist(reply)], ["completed", "blocked"])
+
+    def test_a_mid_sentence_state_word_with_a_colon_is_not_a_state(self):
+        self.assertIsNone(live.chat_worklist("1. Mark it done: later\n2. Note the pending: queue"))
+
+    def test_prose_lists_that_mention_blocked_or_call_signatures_are_not_worklists(self):
+        for reply in ("The sandbox rules:\n- Network access is blocked.\n- Writes outside the project are blocked.",
+                      "Notes:\n- Blocked users cannot log in\n- Blocked IPs are listed in the config",
+                      "API:\n1. Call run(done: bool)\n2. Call stop(pending: int)",
+                      "1. Use run(done: true)\n2. Use stop(pending: false)"):
+            with self.subTest(reply=reply):
+                self.assertIsNone(live.chat_worklist(reply))
+
+    def test_leading_state_labels_and_trailing_complete_parse(self):
+        self.assertEqual([i["state"] for i in live.chat_worklist("- Done: wrote the parser\n- Blocked: no creds for CI\n- Pending: docs")],
+                         ["completed", "blocked", "pending"])
+        self.assertEqual([i["state"] for i in live.chat_worklist("Status:\n- The migration is complete.\n- The rollout is complete.")],
+                         ["completed", "completed"])
+
+    def test_a_long_item_of_repeated_annotations_parses_in_linear_time(self):
+        item = "1. text " + "(done: x) " * 40000 + "tail"
+        for reply, states in ((item + "\n2. (done: y)", None), (item + " (done: z)\n2. (done: y)", ["completed", "completed"])):
+            started = time.perf_counter()
+            worklist = live.chat_worklist(reply)
+            elapsed = time.perf_counter() - started
+            with self.subTest(states=states):
+                self.assertEqual(worklist and [i["state"] for i in worklist], states)
+                self.assertLess(elapsed, 2)
+
+    def test_a_long_run_of_separators_before_a_trailing_state_parses_in_linear_time(self):
+        for separator in (" ", "-", "*", "(", "_", "["):
+            for tail, states in (("x", None), ("done", ["completed", "completed"])):
+                reply = "1. text" + separator * 40000 + tail + "\n2. (done: y)"
+                started = time.perf_counter()
+                worklist = live.chat_worklist(reply)
+                elapsed = time.perf_counter() - started
+                with self.subTest(separator=separator, tail=tail):
+                    self.assertEqual(worklist and [i["state"] for i in worklist], states)
+                    self.assertLess(elapsed, 2)
+
+
+class Custody(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-live-custody-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+        self.canary = self.tmp / "canary.txt"
+        self.canary.write_bytes(b"CANARY\n")
+        self.ran = self.tmp / "ran"
+        self.argv = ["/bin/sh", "-c", f"echo out; echo err >&2; touch {self.ran}"]
+
+    def test_execute_refuses_a_planted_stream_link_without_writing_through_it(self):
+        for name, target in (("stdout", self.canary), ("stderr", self.canary), ("stdout", self.tmp / "missing")):
+            with self.subTest(name=name, target=target.name):
+                streams = self.tmp / f"streams-{name}-{target.name}"
+                streams.mkdir()
+                paths = {"stdout": streams / "turn-1.jsonl", "stderr": streams / "turn-1.err"}
+                paths[name].symlink_to(target)
+                with self.assertRaises(GradeRefused) as refused:
+                    live.execute(self.argv, self.tmp, {}, 5, paths["stdout"], paths["stderr"])
+                self.assertEqual((refused.exception.receipt["reason"], self.canary.read_bytes(), self.ran.exists(),
+                                  (self.tmp / "missing").exists()), ("output_unsafe", b"CANARY\n", False, False))
+
+    def test_execute_refuses_a_linked_stream_directory_without_creating_outside(self):
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        (self.tmp / "transcripts").symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(GradeRefused):
+            live.execute(self.argv, self.tmp, {}, 5, self.tmp / "transcripts" / "turn-0.jsonl",
+                         self.tmp / "transcripts" / "turn-0.err")
+        self.assertEqual((list(outside.iterdir()), self.ran.exists()), ([], False))
+
+    def test_execute_captures_both_streams_in_fresh_files(self):
+        record = live.execute(self.argv, self.tmp, {}, 5, self.tmp / "turn-0.jsonl", self.tmp / "turn-0.err")
+        self.assertEqual((record["exit_code"], (self.tmp / "turn-0.jsonl").read_bytes(), (self.tmp / "turn-0.err").read_bytes()),
+                         (0, b"out\n", b"err\n"))
+
+    def test_fixture_lock_refuses_a_planted_link_without_truncating_its_target(self):
+        for target in (self.canary, self.tmp / "missing"):
+            with self.subTest(target=target.name):
+                lock = self.tmp / "pstack-live-fx.lock"
+                lock.unlink(missing_ok=True)
+                lock.symlink_to(target)
+                with mock.patch.object(live.tempfile, "gettempdir", return_value=str(self.tmp)), \
+                        self.assertRaises(OSError):
+                    live.fixture_lock("fx").close()
+                self.assertEqual((self.canary.read_bytes(), (self.tmp / "missing").exists()), (b"CANARY\n", False))
+
+    def test_fixture_lock_excludes_a_second_holder(self):
+        with mock.patch.object(live.tempfile, "gettempdir", return_value=str(self.tmp)):
+            held = live.fixture_lock("fx")
+            try:
+                with open(self.tmp / "pstack-live-fx.lock", "rb") as other, self.assertRaises(BlockingIOError):
+                    fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                held.close()
 
 
 class FixtureCommits(unittest.TestCase):
@@ -81,6 +195,7 @@ class GradeRun(unittest.TestCase):
                             "source": "test", "version": "test", "rejected": []}))
 
                     def turn(run, text, index):
+                        (run.root / f"turn-{index}.jsonl").write_bytes(b"")
                         return {"index": index, "session_id": "owned-session", "argv": [harness, text],
                             "exit_code": 0 if index == 0 else -9, "timed_out": index == 1, "duration_s": 0.25,
                             "stream": str(run.root / f"turn-{index}.jsonl"), "stderr": str(run.root / f"turn-{index}.err"),

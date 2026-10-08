@@ -3,6 +3,7 @@ import sys
 import re
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -286,7 +287,7 @@ class BoundaryGuard(unittest.TestCase):
         case = load_case("feature-boundary-run")
         pid = "poteto-mode-triggers-architect-on-boundary-crossing"
         designed = minimal(events=[read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/SKILL.md"),
-                                   read(2, "architect/references/runner-prompt.md")], final_reply="done")
+                                   read(2, "architect/references/runner-prompt.md")], spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], final_reply="done")
         self.assertEqual(grade(pid, designed, case)["verdict"], PASS)
         skipped = minimal(events=[read(0, "poteto-mode/playbooks/feature.md")] + bash(1, "python3 -m relay import feeds/sample.json"),
                           final_reply="done")
@@ -446,7 +447,7 @@ class FailedReads(unittest.TestCase):
     def trace(self, ok, **extra):
         events = [read(0, "poteto-mode/playbooks/feature.md"), {"seq": 1, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "x"},
                   read(2, self.BRIEF), {"seq": 3, "kind": "tool_result", "name": "Read", "ok": ok, "output_head": "x" if ok else "File does not exist"}]
-        return minimal(events=events, final_reply="done", **extra)
+        return minimal(events=events, final_reply="done", spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], **extra)
 
     def test_a_read_whose_result_failed_is_not_evidence(self):
         case = load_case("feature-boundary-run")
@@ -488,7 +489,7 @@ class HostSkillContamination(unittest.TestCase):
     def test_empty_hits_do_not_block_grading(self):
         case = load_case("feature-boundary-run")
         events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
-        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, final_reply="done", x_host_skill_hits=[]), case)
+        result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], final_reply="done", x_host_skill_hits=[]), case)
         self.assertEqual(result["verdict"], PASS)
 
 
@@ -705,13 +706,14 @@ class SmallSkills(unittest.TestCase):
         return grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"]
 
     def test_a_negation_in_an_earlier_sentence_does_not_void_a_pass(self):
-        for line in ("No findings. The review passed.", "No files edited. Pass.", "There were no blockers; the review passed."):
+        for line in ("No findings. The review passed.", "There were no blockers; the review passed."):
             self.assertEqual(self.review_verdict(line), PASS, line)
+        self.assertEqual(self.review_verdict("No files edited. Pass."), INCONCLUSIVE)
 
     def test_a_failed_review_then_a_passed_re_review_is_a_pass(self):
-        for line in ("The first review failed, then the re-review passed.", "The first review failed; the second passed.",
-                     "The review did not find any issues and passed."):
-            self.assertEqual(self.review_verdict(line), PASS, line)
+        self.assertEqual(self.review_verdict("The first review failed, then the re-review passed."), PASS)
+        for line in ("The first review failed; the second passed.", "The review did not find any issues and passed."):
+            self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
 
     def test_cannot_and_failed_to_pass_are_not_a_pass(self):
         for line in ("The review cannot pass until the README changes.", "The review failed to pass.", "The reviewer was unable to pass it."):
@@ -724,12 +726,30 @@ class SmallSkills(unittest.TestCase):
                         spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
         self.assertNotEqual(grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"], PASS)
 
-    def test_ts_autoload(self):
-        case = load_case("ts-autoload")
-        loaded = minimal(events=[edit(0, "/w/src/cli.ts"), read(1, "typescript-best-practices/SKILL.md")])
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", loaded, case)["verdict"], PASS)
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", minimal(events=[edit(0, "/w/src/cli.ts")]), case)["verdict"], FAIL)
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", minimal(exit_code=-9), case)["verdict"], INCONCLUSIVE)
+    def test_poteto_help_routes_a_named_need(self):
+        case = load_case("poteto-help-run")
+        answer = ("Use `/interrogate`. It has different models try to break the diff.\n\n"
+                  "```text\n/interrogate the whole branch, but skeptically.\n```\n\n"
+                  "Source: https://github.com/mdsmithaustin/pstack/blob/main/skills/interrogate/SKILL.md")
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", minimal(final_reply=answer), case)["verdict"], PASS)
+        started = minimal(events=[edit(0, "/w/tally.py")], final_reply=answer)
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", started, case)["verdict"], FAIL)
+        spawned = minimal(spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Review the branch."}], final_reply=answer)
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", spawned, case)["verdict"], FAIL)
+        no_prompt = minimal(final_reply="Use /interrogate. See https://github.com/mdsmithaustin/pstack/blob/main/skills/interrogate/SKILL.md")
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", no_prompt, case)["verdict"], FAIL)
+
+    def test_poteto_help_asks_when_the_need_is_unclear(self):
+        case = load_case("poteto-help-unclear-run")
+        menu = ("What do you want help with?\n\n1. Get set up\n2. Start a task with `/poteto-mode`\n"
+                "3. Pick a skill for a situation\n4. Fix a run that went wrong\n5. Make pstack my own")
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", minimal(final_reply=menu), case)["verdict"], PASS)
+        ask = {"seq": 0, "kind": "tool_call", "name": "AskUserQuestion",
+               "input": {"questions": [{"question": "What do you need?", "options": [
+                   {"label": "Get set up"}, {"label": "Pick a skill for a situation"}, {"label": "Fix a run that went wrong"}]}]}}
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", minimal(events=[ask]), case)["verdict"], PASS)
+        guessed = minimal(final_reply="Run `/setup-pstack`, then start a task with `/poteto-mode`.")
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", guessed, case)["verdict"], FAIL)
 
     def test_technical_writing_mode_first(self):
         case = load_case("technical-writing-run")
@@ -1334,10 +1354,7 @@ class OracleFalseVerdicts(unittest.TestCase):
     GROK_PROMPTS = ["/poteto-mode add a --json flag.", "continue", "/poteto-mode do it", "/poteto-mode new task. figure out why the cache survives."]
 
     def grok_lead(self, records):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        chat = Path(tmp.name) / "chat_history.jsonl"
-        chat.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+        chat = ("\n".join(json.dumps(r) for r in records) + "\n").encode()
         return grok.parse_session(chat, "/w", "poteto-mode", lead=True, prompts=self.GROK_PROMPTS)
 
     def compacted_records(self, user_extra=None):
@@ -1708,7 +1725,7 @@ class AuthorResultInWorkRecord(unittest.TestCase):
 
     def test_passing_tests_are_not_the_reviews_verdict(self):
         result = self.review_turn("Verification.\n- All 4 tests passed.\n- The docs are updated.")
-        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), result)
 
     def test_a_plan_to_get_any_required_review_is_not_an_author_result(self):
         todo = {"seq": 40, "kind": "tool_call", "name": "todo_list", "input": {"todos": [
@@ -2626,6 +2643,1118 @@ class GatedPublish(unittest.TestCase):
                 self.assertEqual(self.grade(command)["verdict"], FAIL, command)
         flagged = "no-mistakes axi run --base-branch feat/parent --intent-file /tmp/i.md --no-publish-intent"
         self.assertEqual(self.grade(flagged)["verdict"], PASS)
+
+
+class Issue133WritesAndReruns(unittest.TestCase):
+    def test_n5_a_cd_inside_command_substitution_scopes_its_writes(self):
+        self.assertEqual(oracles.shell_writes("x=$(cd /tmp/s && echo hi > a.txt); echo x > b.txt"), ["/tmp/s/a.txt", "b.txt"])
+        self.assertEqual(oracles.shell_writes("echo $(cd /tmp/s && pwd) > where.txt"), ["where.txt"])
+
+    def test_copilot_a_quoted_command_substitution_scopes_its_writes(self):
+        self.assertEqual(oracles.shell_writes('echo "$(cd /tmp/s && echo hi > a.txt)" > b.txt'), ["/tmp/s/a.txt", "b.txt"])
+        self.assertEqual(oracles.shell_writes('echo "\\$(cd /tmp/s && echo hi > a.txt)"; echo \'$(echo > c.txt)\''), [])
+
+    def test_n5_spaced_nested_subshells_scope_their_writes(self):
+        self.assertEqual(oracles.shell_writes("( (cd /tmp/s && echo hi > a.txt) ; echo x > b.txt)"), ["/tmp/s/a.txt", "b.txt"])
+
+    def test_n7_a_redirect_on_cd_writes_in_the_directory_it_leaves(self):
+        self.assertEqual(oracles.shell_writes("cd /tmp/s > moved.log && echo x > a.txt"), ["moved.log", "/tmp/s/a.txt"])
+
+    def test_f12_english_words_and_reprocess_are_source(self):
+        view = oracles.View(minimal(), {}, None)
+        names = ("verify.py", "scratch.py", "reprocess.py", "contest.py", "latest.py", "attestation.py",
+                 "verify_tally_json.py", "repro-retry.sh", "scratchpad/a.py", "tests/test_x.py", "pkg/x_test.go", "__tests__/a.js")
+        self.assertEqual({n: view.classify(n) for n in names},
+                         {"verify.py": "scratch", "scratch.py": "scratch", "reprocess.py": "source", "contest.py": "source",
+                          "latest.py": "source", "attestation.py": "source", "verify_tally_json.py": "scratch",
+                          "repro-retry.sh": "scratch", "scratchpad/a.py": "scratch", "tests/test_x.py": "test",
+                          "pkg/x_test.go": "test", "__tests__/a.js": "test"})
+
+    def test_natural_test_file_names_are_tests(self):
+        view = oracles.View(minimal(), {}, None)
+        for name in NATURAL_TEST_NAMES:
+            self.assertEqual(view.classify(name), "test", name)
+
+    def test_a_name_holding_test_is_a_test_unless_test_ends_an_english_word(self):
+        view = oracles.View(minimal(), {}, None)
+        names = {**{name: "test" for name in CONVENTIONAL_TEST_NAMES + NATURAL_TEST_NAMES + ("test_contest.py", "tests/latest.py", "Login.spec.js",
+                                                                                                  "pytest.ini", "backend/pytest.ini")},
+                 **{name: "source" for name in ("contest.py", "protest/x.py", "attestation.py", "detest.py", "latest.py", "greatest_hits.py",
+                                                "fastest.py", "shortest_path.py", "smartest.py", "hottest.py", "cutest.py", "softest.py",
+                                                "strictest.py", "Contest.java", "LatestVersion.java")},
+                 **{name: "scratch" for name in ("scratch.py", "scratch.sh", "repro.py", "reproducer.py", "verify.py", "baseline.py",
+                                                 "verify_fix.sh", "baseline/x.txt", "scratchpad/a.py")},
+                 **{name: "source" for name in ("reprocess.py", "reprocess_queue.py", "tools/scratch.py", "src/repro_bug.py",
+                                                "src/reproduction/x.py", "pkg/scratchpad/x.py")}}
+        self.assertEqual({name: view.classify(name) for name in names}, names)
+
+    def test_a_spec_e2e_or_cypress_marker_is_a_test_beside_an_english_word(self):
+        view = oracles.View(minimal(), {}, None)
+        names = ("spec/latest_spec.rb", "spec/contest_spec.rb", "e2e/latest.e2e.ts", "cypress/e2e/latest.cy.ts", "latest_spec.py",
+                 "src/latest.cy.js", "src/greatest.e2e.js")
+        self.assertEqual({n: view.classify(n) for n in names}, {n: "test" for n in names})
+
+    def test_a_spec_or_e2e_directory_alone_does_not_make_a_test(self):
+        view = oracles.View(minimal(), {}, None)
+        names = {"src/spec/parser.rs": "source", "lib/spec/loader.py": "source", "docs/spec/api.md": "doc", "api/spec/openapi.json": "data",
+                 "packages/spec/src/index.ts": "source", "src/e2e/runner.go": "source", "spec/latest_spec.rb": "test"}
+        self.assertEqual({name: view.classify(name) for name in names}, names)
+
+    def test_tdd_and_repro_oracles_read_each_test_and_scratch_name(self):
+        project = Path(tempfile.mkdtemp()) / "project"
+        project.mkdir()
+        write = lambda seq, rel: {"seq": seq, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/{rel}", "content": "x"}}
+        red_green = lambda seq: (bash(seq, "python3 -m unittest discover -s tests", ok=False, head="FAIL: test_retry\nFAILED (failures=1)")
+                                 + [write(seq + 3, "rollup/export.py")] + bash(seq + 4, "python3 -m unittest discover -s tests", head="Ran 3 tests\n\nOK"))
+        for name in CONVENTIONAL_TEST_NAMES:
+            events = [write(4, name)] + red_green(5)
+            self.assertEqual([grade(pid, minimal(events=events), load_case(case), project)["verdict"]
+                              for pid, case in (("poteto-tdd-failing-test-first", "tdd-run"), ("bug-fix-uses-poteto-tdd-when-cheap", "bug-fix-run"))],
+                             [PASS, PASS], name)
+        for name in ("scratch.py", "scratch.sh", "reproducer.py", "repro.py"):
+            repro = [write(1, name)] + bash(2, f"ROLLUP_BUSY_AFTER=2 python3 {name}", ok=False, head="duplicate rows")
+            fixed = repro + [{"seq": 6, "kind": "tool_call", "name": "Edit", "input": {"file_path": f"{project}/rollup/export.py"}}]
+            self.assertEqual(grade("bug-fix-reproduces-before-fixing", minimal(events=fixed + bash(7, "python3 -m rollup data/orders.csv /tmp/out.csv", head="ok")),
+                                   load_case("bug-fix-run"), project)["verdict"], PASS, name)
+            tdd = repro + [write(4, "tests/test_export.py")] + red_green(5)
+            self.assertEqual(grade("poteto-tdd-failing-test-first", minimal(events=tdd), load_case("tdd-run"), project)["verdict"], PASS, name)
+
+    def test_f13_copy_install_perl_dd_and_ed_write_their_targets(self):
+        for command, want in (("cp a.py b.py", ["b.py"]), ("cp -r notes/a.md notes/b.md out/", ["out/"]),
+                              ("install -m 644 a.py bin/a.py", ["bin/a.py"]), ("perl -pi -e 's/a/b/' x.py", ["x.py"]),
+                              ("dd if=a.bin of=b.bin bs=1", ["b.bin"]), ("ed -s x.py <<'EOF'\n1d\nw\nEOF", ["x.py"]),
+                              ("pip install requests", []), ("java -cp lib/a.jar Main", []), ("perl -ne 'print' x.py", [])):
+            self.assertEqual(oracles.shell_writes(command), want, command)
+
+    def test_copilot_perl_in_place_writes_every_file_operand(self):
+        for command, want in (("perl -pi -e 's/a/b/' a.py b.py", ["a.py", "b.py"]),
+                              ("perl -i -pe 's/a b/c/' -e 's/d/e/' src/a.py \"my notes.md\" 2>/dev/null", ["src/a.py", "my notes.md"]),
+                              ("perl -pi fix.pl x.py", ["x.py"])):
+            self.assertEqual(oracles.shell_writes(command), want, command)
+
+    def test_f13_a_patch_writes_the_files_it_names(self):
+        body = "--- a/rollup/export.py\n+++ b/rollup/export.py\n@@ -1 +1 @@\n-x\n+y\nEOF"
+        self.assertEqual(oracles.shell_writes("git apply <<'EOF'\n" + body), ["rollup/export.py"])
+        self.assertEqual(oracles.shell_writes("cat > /tmp/f.diff <<'EOF'\n" + body + "\ncd /w && patch -p1 < /tmp/f.diff"),
+                         ["/tmp/f.diff", "/w/rollup/export.py"])
+        self.assertEqual(oracles.shell_writes("git apply --check <<'EOF'\n" + body), [])
+        self.assertEqual(oracles.shell_writes("git apply fix.patch"), [])
+
+    def test_copilot_a_target_directory_option_is_the_copy_destination(self):
+        for command, want in (("cp -t /tmp/out a.py", ["/tmp/out"]), ("cp --target-directory=/tmp/out a.py b.py", ["/tmp/out"]),
+                              ("install -m 644 -t bin a.py", ["bin"]), ("cp -rt out notes/a.md", ["out"])):
+            self.assertEqual(oracles.shell_writes(command), want, command)
+
+    def test_copilot_a_patch_writes_its_old_and_new_paths(self):
+        deletion = "--- a/rollup/old.py\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\nEOF"
+        rename = "--- a/rollup/old.py\n+++ b/rollup/new.py\n@@ -1 +1 @@\n--- x\n+y\nEOF"
+        self.assertEqual(oracles.shell_writes("git apply <<'EOF'\n" + deletion), ["rollup/old.py"])
+        self.assertEqual(oracles.shell_writes("git apply <<'EOF'\n" + rename), ["rollup/old.py", "rollup/new.py"])
+        self.assertEqual(oracles.shell_writes("git apply -R <<'EOF'\n" + rename), ["rollup/old.py", "rollup/new.py"])
+
+    def test_copilot_each_patch_writes_only_its_own_body(self):
+        def body(name):
+            return f"--- a/{name}\n+++ b/{name}\n@@ -1 +1 @@\n-x\n+y\nEOF"
+        command = "cd /a && git apply <<'EOF'\n" + body("x.py") + "\ncd /b && git apply <<'EOF'\n" + body("y.py")
+        self.assertEqual(oracles.shell_writes(command), ["/a/x.py", "/b/y.py"])
+        saved = "cat > /tmp/x.diff <<'EOF'\n" + body("x.py") + "\ncat > /tmp/y.diff <<'EOF'\n" + body("y.py") + "\ncd /b && patch -p1 < /tmp/y.diff"
+        self.assertEqual(oracles.shell_writes(saved), ["/tmp/x.diff", "/tmp/y.diff", "/b/y.py"])
+
+    def test_f13_copies_into_rationale_paths_are_not_rationale_reads(self):
+        brief = "Write `rationale.md` in your directory."
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        for n in range(1, 6):
+            events += bash(18 + 2 * n, f"cp /tmp/template.md /tmp/c{n}/rationale.md")
+        events += bash(40, "cat /tmp/c1/relay/cache.py")
+        result = grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 0")
+
+    def test_copilot_a_relative_cd_out_of_the_project_is_not_a_project_edit(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/export.py": "x = 0\n"})
+        def edits(command):
+            return oracles.View(minimal(events=bash(1, command)), {}, project).edits()
+        self.assertEqual(edits("cd ../scratch && python3 -c \"open('x.py','w').write('1')\""), [])
+        self.assertEqual(edits("cd rollup && python3 -c \"open('x.py','w').write('1')\""), [(1, "rollup/x.py", "source")])
+        self.assertEqual(edits("cd ../scratch && echo x > x.py"), [])
+        self.assertEqual(edits("cd rollup && echo x > x.py"), [(1, "rollup/x.py", "source")])
+
+    def test_n15_a_path_write_text_call_is_the_write(self):
+        write = "python3 -c \"from pathlib import Path; Path('rollup/export.py').write_text('x')\""
+        self.assertFalse(oracles.runs_after_write(f"cat rollup/export.py; python3 -m unittest; {write}", "rollup/export.py"))
+        self.assertTrue(oracles.runs_after_write(f"{write}; python3 -m unittest", "rollup/export.py"))
+
+    def test_n15_each_write_form_orders_against_the_rerun(self):
+        for write in ("echo x | tee rollup/export.py", "sed -i 's/a/b/' rollup/export.py",
+                      "python3 -c \"open('rollup/export.py', 'w').write('x')\"", "cp /tmp/export.py rollup/export.py"):
+            self.assertTrue(oracles.runs_after_write(f"{write}; python3 -m unittest", "rollup/export.py"), write)
+            self.assertFalse(oracles.runs_after_write(f"python3 -m unittest; {write}", "rollup/export.py"), write)
+
+    def test_a_second_write_after_the_run_is_not_rerun(self):
+        self.assertFalse(oracles.runs_after_write("echo a > rollup/export.py; python3 -m unittest; echo b > rollup/export.py", "rollup/export.py"))
+        self.assertTrue(oracles.runs_after_write("echo a > rollup/export.py; echo b > rollup/export.py; python3 -m unittest", "rollup/export.py"))
+
+    def test_copilot_a_write_matches_its_own_path_not_its_basename(self):
+        command = "echo a > src/index.py; python3 -m unittest; echo b > lib/index.py"
+        self.assertTrue(oracles.runs_after_write(command, "src/index.py"))
+        self.assertFalse(oracles.runs_after_write(command, "lib/index.py"))
+        self.assertTrue(oracles.runs_after_write("cd /w && echo a > src/a.py && python3 -m pytest", "/w/src/a.py"))
+
+    def tdd(self, events):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/__main__.py": "x = 0\n"})
+        events = ([{"seq": 8, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/tests/test_main.py", "content": "x"}}]
+                  + bash(10, "python3 -m unittest tests.test_main", ok=False, head="FAIL: test_limit\nFAILED (failures=1)")
+                  + [{"seq": 12, "kind": "tool_call", "name": "Edit", "input": {"file_path": f"{project}/rollup/__main__.py"}}] + events)
+        return grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)["verdict"]
+
+    def test_f15_a_comment_naming_a_test_runner_is_not_a_green_rerun(self):
+        self.assertEqual(self.tdd(bash(14, "git status --short  # rerun unittest next", head="Looks ok")), INCONCLUSIVE)
+        self.assertEqual(self.tdd(bash(14, "python3 -m unittest -v tests.test_main", head="test_limit (tests.test_main.T) ... ok")), PASS)
+
+    def test_copilot_a_bare_ok_is_not_a_green_rerun(self):
+        self.assertEqual(self.tdd(bash(14, "python3 -m unittest tests.test_main >/dev/null 2>&1; echo ok", head="ok")), INCONCLUSIVE)
+        self.assertEqual(self.tdd(bash(14, "python3 -m pytest -p tap tests/test_main.py", head="ok 1 tests/test_main.py::test_limit")), PASS)
+
+    def test_f15_a_comment_is_not_a_delegates_green_run(self):
+        spawn = {"seq": 3, "tool": "Agent", "persona": "poteto-agent", "prompt_head": "Implement the retry fix"}
+        events = ([{"seq": 3, "kind": "tool_call", "name": "Agent", "input": {}}]
+                  + bash(5, "python3 -m unittest", ok=False, head="FAIL: test_retry")
+                  + bash(7, "git log --oneline -1  # unittest is green in the delegate", head="ok"))
+        result = grade("bug-fix-uses-poteto-tdd-when-cheap", minimal(events=events, spawns=[spawn]), load_case("bug-fix-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_copilot_the_rerun_must_follow_the_latest_source_edit(self):
+        green = bash(14, "python3 -m unittest tests.test_main", head="Ran 1 test\n\nOK")
+        self.assertEqual(self.tdd(green), PASS)
+        self.assertEqual(self.tdd(green + [{"seq": 16, "kind": "tool_call", "name": "Edit", "input": {"file_path": "rollup/__main__.py"}}]), INCONCLUSIVE)
+
+    def test_a_dir_the_command_made_and_removed_is_not_a_source_edit(self):
+        smoke = "T=./.smoke; mkdir -p $T; python3 -m rollup data/orders.csv $T/a.csv; rm -rf $T; git status --short"
+        self.assertEqual(oracles.shell_writes(smoke), [])
+        self.assertEqual(oracles.shell_writes("rm -rf build; mkdir -p build"), ["build"])
+        green = bash(14, "python3 -m unittest discover -s tests -v 2>&1 | tail -8", head="Ran 3 tests in 0.004s\n\nOK")
+        self.assertEqual(self.tdd(green + bash(20, smoke, head=" M rollup/__main__.py")), PASS)
+
+    def test_an_artifact_run_later_in_the_writing_command_proves_it_works(self):
+        case = load_case("bug-fix-run")
+        restore = "cp /tmp/final/export.py rollup/export.py"
+        run = "python3 -m rollup data/orders.csv /tmp/out.csv"
+        self.assertEqual(grade("prove-it-works-checks-real-artifact", minimal(events=bash(5, f"{restore}\n{run}")), case)["verdict"], PASS)
+        self.assertEqual(grade("prove-it-works-checks-real-artifact", minimal(events=bash(5, f"{run}\n{restore}"), final_reply="done"), case)["verdict"], FAIL)
+
+    def author_turn(self, *events, pid="poteto-runs-documentation-impact-before-completion"):
+        trace_events = (in_turn(0, [{"seq": 0, "kind": "user", "text": "add --json"}, read(1, "documentation-impact/SKILL.md"), *events, text(50, "Done.")])
+                        + in_turn(1, [{"seq": 60, "kind": "user", "text": "review"}, text(61, "x")]))
+        return grade(pid, minimal(events=trace_events, final_reply="x"), load_case("doc-impact-run"))
+
+    def test_n3_a_labeled_result_in_pending_work_is_not_an_author_result(self):
+        label = "Result: independent review required"
+        pending = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [{"content": f"Record {label}", "status": "pending"}]}}
+        plan = {"seq": 2, "kind": "tool_call", "name": "update_plan", "input": {"plan": [{"step": f"Record {label}", "status": "pending"}]}}
+        brief = {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {"prompt": f"Review the docs. Report `{label}` or `Result: independent review not required`."}}
+        done = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [{"content": f"Record {label}", "status": "completed"}]}}
+        handoff = {"seq": 2, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [{"context": "Author result: `independent review required` because the README changed."}]}}
+        self.assertEqual(self.author_turn(pending)["verdict"], FAIL)
+        self.assertEqual(self.author_turn(plan)["verdict"], FAIL)
+        self.assertEqual(self.author_turn(brief)["verdict"], FAIL)
+        self.assertEqual(self.author_turn(*bash(3, f"grep -n '{label}' skills/documentation-impact/SKILL.md"))["verdict"], FAIL)
+        self.assertEqual(self.author_turn(done)["verdict"], PASS)
+        self.assertEqual(self.author_turn(handoff)["verdict"], PASS)
+
+    def test_copilot_a_brief_prescribing_one_label_is_not_an_author_result(self):
+        for prompt in ("Review the docs. Report `Result: independent review required`.", "Return the author result: independent review required."):
+            brief = {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {"prompt": prompt}}
+            self.assertEqual(self.author_turn(brief)["verdict"], FAIL, prompt)
+        handoff = {"seq": 2, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [{"context": "Role: trail reviewer.\n"
+                   "- README was updated. Direct CLI and unit checks passed.\n- Author result: `independent review required` because the CLI changed."}]}}
+        self.assertEqual(self.author_turn(handoff)["verdict"], PASS)
+
+    def test_n7_a_recorded_not_required_result_reads_as_not_required(self):
+        done = {"seq": 2, "kind": "tool_call", "name": "TodoWrite", "input": {"todos": [
+            {"content": "Author result: independent review not required.", "status": "completed"}]}}
+        result = self.author_turn(done, pid="documentation-impact-independent-review-pass-required")
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "author result: not required")
+
+    def test_n7_a_slash_prefixed_skill_load_reads_the_bare_skill(self):
+        events = [{"seq": 1, "kind": "tool_call", "name": "Skill", "input": {"skill": "/how"}}]
+        self.assertEqual(oracles.View(minimal(events=events), load_case("how-run"), None).lead_reads(), ["how/SKILL.md"])
+
+    def worklist_at(self, list_seq):
+        events = ([read(1, "poteto-mode/playbooks/feature.md"), read(2, "unslop/SKILL.md"),
+                   {"seq": 3, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "### Feature"},
+                   {"seq": 4, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "name: unslop"}]
+                  + bash(6, "ls") + bash(8, "cat tally/__main__.py") + [text(list_seq, "Worklist")])
+        trace = minimal(events=events, worklist=[{"seq": list_seq, "carrier": "text", "items": feature_items()}])
+        return grade("worklist-falls-back-to-numbered-list", trace, feature_case(env={"todo_tools": False}))
+
+    def test_worklist_lands_after_the_playbook_read_and_before_the_next_tool_call(self):
+        self.assertEqual(self.worklist_at(5)["verdict"], PASS)
+        late = self.worklist_at(30)
+        self.assertEqual(late["verdict"], FAIL, late)
+        self.assertEqual(late["failures"], ["first numbered list at seq 30 is not between the playbook read (answered at seq 3) and the next tool call (seq 6)"])
+
+    def test_runtime_encoding_needs_a_curated_subject(self):
+        constraint = "do not remove: the sink needs a trailing newline on every row"
+        reply = "the trailing newline is gone"
+        for line in ('    do = "\\n"', '    for every in "\\n":', '    needs = "\\n"'):
+            self.assertIsNone(oracles.encoding_landed({"rollup/export.py": line}, constraint, reply), line)
+        self.assertEqual(oracles.encoding_landed({"rollup/sink.py": '        self.handle.write(row + "\\n")'}, constraint, reply),
+                         "runtime: rollup/sink.py")
+        self.assertIsNone(oracles.encoding_landed({"tests/test_export.py": "def test_done(): pass"}, constraint))
+        self.assertEqual(oracles.encoding_landed({"tests/test_export.py": "assert out.endswith('\\n')"}, constraint), "tests/test_export.py")
+
+    def sicko(self, reply):
+        events = [{"seq": 3, "kind": "tool_call", "name": "Agent", "input": {"subagent_type": "comment-sicko"}, "id": "a"},
+                  {"seq": 4, "kind": "tool_result", "name": "Agent", "ok": True, "output_head": "HA HA HA. Deleted 20 comments.", "id": "a"}]
+        spawns = [{"seq": 3, "tool": "Agent", "subagent_type": "comment-sicko", "prompt_head": "Clean the diff."}]
+        return grade("no-comments-spawns-comment-sicko", minimal(events=events, spawns=spawns, final_reply=reply), load_case("no-comments-run"))
+
+    def test_batch9_an_empty_encoding_offers_line_is_not_an_offer(self):
+        none = self.sicko("Removed 20 comments.\n- Architect sketch, reruns, encoding offers, encodings, and open work: none.")
+        self.assertEqual(none["verdict"], INCONCLUSIVE, none)
+        self.assertIn("encoding offer in reply: False", none["evidence"])
+        offer = self.sicko("Removed 20 comments. The cheapest encoding is a sink test; say yes and I'll add it.")
+        self.assertEqual(offer["verdict"], PASS, offer)
+
+    def test_batch9_a_failing_assertion_is_a_check_that_ran(self):
+        failing = bash(10, "python3 -m unittest tests.test_export", ok=False, head="FAIL: test_retry\nAssertionError: 8 != 7\nFAILED (failures=1)")
+        green = bash(20, "python3 -m unittest tests.test_export", head="Ran 1 test\n\nOK")
+        result = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=failing + green, final_reply="Fixed and verified."), load_case("bug-fix-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_batch9_a_later_script_check_clears_a_check_that_could_not_run(self):
+        case = load_case("bug-fix-run")
+        cannot = bash(10, "python3 -m rollup data/orders.csv /tmp/out.csv", ok=False, head="ModuleNotFoundError: No module named 'rollup'")
+        script = bash(20, "python3 /private/tmp/rollup-retry-check.py", head="ids 1001..1007 match")
+        recovered = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=cannot + script, final_reply="Fixed and verified."), case)
+        self.assertEqual(recovered["verdict"], INCONCLUSIVE, recovered)
+        stuck = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=cannot, final_reply="Fixed and verified."), case)
+        self.assertEqual(stuck["verdict"], FAIL, stuck)
+        for note in ("git status  # python3 check.py", "git status  # python3 -m rollup data/orders.csv out.csv", "ls  # rerun unittest"):
+            commented = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=cannot + bash(20, note), final_reply="Fixed and verified."), case)
+            self.assertEqual(commented["verdict"], FAIL, note)
+
+    def test_copilot_a_quoted_script_name_is_not_a_check(self):
+        case = load_case("bug-fix-run")
+        cannot = bash(10, "python3 -m rollup data/orders.csv /tmp/out.csv", ok=False, head="ModuleNotFoundError: No module named 'rollup'")
+        for later, want in (("echo 'python3 check.py'", FAIL), ('bash -c "python3 /tmp/check.py"', INCONCLUSIVE),
+                            ('python3 "/tmp/a b/check.py"', INCONCLUSIVE), ('echo "$(python3 check.py)"', INCONCLUSIVE),
+                            ("python3 -u /tmp/rollup-retry-check.py", INCONCLUSIVE), ("bash -e ./verify.sh", INCONCLUSIVE)):
+            result = grade("reply-says-inconclusive-when-check-cannot-run", minimal(events=cannot + bash(20, later), final_reply="Fixed and verified."), case)
+            self.assertEqual(result["verdict"], want, later)
+
+    def test_f16_a_lone_sleep_is_not_a_loop_facility(self):
+        case = load_case("overnight-run")
+        self.assertEqual(grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, "python3 -m http.server & sleep 2; curl localhost:8000")), case)["verdict"], FAIL)
+        self.assertEqual(grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, "until curl -sf localhost:8000; do sleep 5; done")), case)["verdict"], PASS)
+
+    def test_f16_waiting_or_approval_in_passing_is_not_a_pause(self):
+        case = load_case("architect-checkpoint-run")
+        passing = grade("architect-checkpoint-opt-in", minimal(final_reply="Design A chosen. The judge approved it; no step is waiting."), case)
+        self.assertEqual(passing["verdict"], INCONCLUSIVE, passing)
+        asked = grade("architect-checkpoint-opt-in", minimal(final_reply="Design A is in docs/design.md. Reply “approve” to implement it."), case)
+        self.assertEqual(asked["verdict"], PASS, asked)
+
+    def test_copilot_a_negated_approval_is_not_a_pause(self):
+        case = load_case("architect-checkpoint-run")
+        for reply in ("The architect did not approve the design.", "The architect didn't approve the design.",
+                      "The architect cannot approve the design.", "The architect refused to approve the design.",
+                      "The architect declined to approve the design.", "The architect was unable to approve the design."):
+            self.assertEqual(grade("architect-checkpoint-opt-in", minimal(final_reply=reply), case)["verdict"], INCONCLUSIVE, reply)
+
+    def test_f16_reading_the_runner_prompt_alone_is_not_a_fan_out(self):
+        case, pid = load_case("feature-boundary-run"), "poteto-mode-triggers-architect-on-boundary-crossing"
+        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
+        self.assertEqual(grade(pid, minimal(events=events, final_reply="done"), case)["verdict"], FAIL)
+        sealed = [{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (3, 4)]
+        self.assertEqual(grade(pid, minimal(events=events, spawns=sealed, harness="codex", final_reply="done"), case)["verdict"], PASS)
+        late = [read(0, "poteto-mode/playbooks/feature.md"), read(5, "architect/references/runner-prompt.md")]
+        self.assertEqual(grade(pid, minimal(events=late, spawns=sealed, harness="codex", final_reply="done"), case)["verdict"], FAIL)
+
+    def test_hermes_audit_the_keeps_going_count_names_its_turn(self):
+        events = in_turn(0, [{"seq": 0, "kind": "user", "text": "going to bed"}] + bash(1, "ls")) + in_turn(1, [{"seq": 5, "kind": "user", "text": "catch up"}] + bash(6, "ls"))
+        result = grade("session-override-keeps-going", minimal(events=events), load_case("overnight-run"))
+        self.assertIn("tool calls in the first turn: 1", result["evidence"])
+
+
+class Issue133SpawnsAndVerdicts(unittest.TestCase):
+    def sealed(self, seq, reply, task="t"):
+        return {"seq": seq, "tool": "spawn_agent", "model": "gpt-6.1-sol", "prompt_head": None, "x_prompt_encrypted": True,
+                "x_child_first_reply": reply, "task_name": task}
+
+    def spawned(self, spawns, gap_after=None):
+        events = [{"seq": s["seq"], "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": s["task_name"]}} for s in spawns]
+        if gap_after is not None:
+            events.insert(gap_after, text(20, "Both are back."))
+        return events
+
+    def test_n1_an_explorer_whose_first_reply_says_judge_still_explores(self):
+        spawns = [self.sealed(10, "Explorer: I'll judge where the seams are."), self.sealed(10, "Explorer: tracing publish."), self.sealed(30, "Writing.")]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=self.spawned(spawns, 2), spawns=spawns, harness="codex"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_n1_runners_whose_first_replies_say_judge_or_synthesize_are_runners(self):
+        spawns = [self.sealed(10, "Design runner: I'll judge which shape is simplest.", "runner_a"),
+                  self.sealed(10, "### Sketch\n\nI'll synthesize the caller's view.", "runner_b")]
+        trace = minimal(events=[read(1, "arena/SKILL.md")] + self.spawned(spawns), spawns=spawns, harness="codex")
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertIn("runner spawns: 2", result["evidence"])
+
+    def test_n2_implementers_whose_first_replies_mention_source_control_are_not_investigators(self):
+        spawns = [self.sealed(10, "I'll commit the change to source control when done."), self.sealed(10, "Pushing to source control after the edits.")]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=self.spawned(spawns), spawns=spawns, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_n2_implementers_whose_first_replies_mention_explorer_notes_are_not_explorers(self):
+        spawns = [delegate(10, "Implement the parser change in src/a.py.", "Implementing; the explorer notes say to edit src/a.py."),
+                  delegate(10, "Implement the exporter change in src/b.py.", "Implementing; the explorer notes say to edit src/b.py."), delegate(30, "Write the answer.")]
+        events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(20, "w"), {"seq": 30, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_n2_an_implementer_whose_first_reply_mentions_explorer_notes_is_no_narrow_question_explorer(self):
+        spawns = [self.sealed(10, "Implementing per the explorer notes in src/a.py.")]
+        result = grade("how-narrow-question-no-explorers", minimal(events=self.spawned(spawns), spawns=spawns, harness="codex", final_reply="x"), load_case("how-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_n2_a_heading_labels_only_itself_except_the_investigator_source(self):
+        spawns = [delegate(10, "Implement the parser change in src/a.py.", "### Update\nUsing the explorer notes, I implemented the parser."),
+                  delegate(10, "Implement the exporter change in src/b.py.", "### Update\nUsing the explorer notes, I implemented the exporter."),
+                  delegate(30, "Write the answer.")]
+        events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(20, "w"), {"seq": 30, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        sourced = [self.sealed(10, "### Source\nSource control: git log and blame on relay/cache.py.")]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=self.spawned(sourced), spawns=sourced, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+    def test_copilot_a_status_label_does_not_carry_its_body_into_the_role(self):
+        for reply in ("Update: pushing to source control after the edits.", "### Update: pushing to source control after the edits."):
+            spawns = [self.sealed(10, reply)]
+            result = grade("why-queries-evidence-categories-in-parallel", minimal(events=self.spawned(spawns), spawns=spawns, harness="codex"), load_case("why-run"))
+            self.assertEqual(result["verdict"], FAIL, reply)
+
+    def test_an_unlabelled_first_reply_still_names_a_sealed_reviewer(self):
+        reviewer = self.sealed(5, "persona: poteto-agent\nI'm using poteto-mode and documentation-impact to review the CLI and its docs.", "docs_review")
+        events = [dict(e, turn=0) for e in self.spawned([reviewer])] + [dict(text(7, "Done. Author result: independent review required. Review: pass."), turn=0),
+                                                                        dict(text(9, "Review mode run."), turn=1)]
+        result = grade("documentation-impact-independent-review-pass-required", minimal(events=events, spawns=[dict(reviewer, turn=0)], harness="codex"),
+                       load_case("doc-impact-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def sources(self, reply):
+        return grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))["verdict"]
+
+    def test_n4_a_single_cited_source_is_not_a_sources_section(self):
+        self.assertEqual(self.sources("Source: commit 12d7ece."), FAIL)
+        self.assertEqual(self.sources("Commit 12d7ece raised it.\n\nSources: git log, README."), PASS)
+
+    def test_n4_a_singular_source_label_naming_more_than_a_commit_is_a_sources_section(self):
+        for reply in ("Source: git log", "Source: git history", "Source: git log, README", "**Source**: git log", "- Source: git log",
+                      "> Source: git log", "## Source\ngit log"):
+            self.assertEqual(self.sources(reply), PASS, reply)
+        for reply in ("Source: commit 12d7ece.", "## Source\ncommit 12d7ece", "- Source: 12d7ece"):
+            self.assertEqual(self.sources(reply), FAIL, reply)
+
+    def test_n7_a_source_label_must_start_a_sentence(self):
+        self.assertEqual(self.sources("Commit 12d7ece pulled from two open sources: the upstream git mirror and a fork."), FAIL)
+
+    def test_n7_sources_searched_mid_sentence_is_a_sources_section(self):
+        self.assertEqual(self.sources("Commit 12d7ece raised it. I listed the sources searched below, git log first."), PASS)
+
+    def test_copilot_a_negated_sources_searched_is_no_sources_section(self):
+        self.assertEqual(self.sources("Commit 12d7ece raised it. No sources searched in git."), FAIL)
+
+    def judged(self, judge, lead, models):
+        spawns = [{"seq": 10 + n, "tool": "Agent", "model": m, "prompt_head": "Candidate design"} for n, m in enumerate(models)]
+        spawns.append({"seq": 30, "tool": "Agent", "model": judge, "prompt_head": "READ-ONLY. You are the judge scoring candidates against the rubric."})
+        trace = minimal(events=[{"seq": s["seq"], "kind": "tool_call", "name": "Agent", "input": {}} for s in spawns], spawns=spawns)
+        trace["model"] = lead
+        return grade("arena-readonly-cross-judge", trace, load_case("arena-run"))["verdict"]
+
+    def test_n6_a_slug_with_no_tier_token_cannot_be_compared(self):
+        self.assertEqual(self.judged("claude", "claude-opus-5-5", ["opus", "sonnet"]), INCONCLUSIVE)
+        self.assertEqual(self.judged("gpt-6", "gpt-6.1-sol", ["gpt-6.1-sol", "gpt-6-luna"]), INCONCLUSIVE)
+        self.assertEqual(self.judged("opus", "claude", ["opus", "sonnet"]), INCONCLUSIVE)
+
+    def test_n6_inherit_is_the_leads_model(self):
+        self.assertEqual(self.judged("inherit", "claude-opus-5-5", ["opus", "sonnet"]), FAIL)
+        self.assertEqual(self.judged("opus", "claude-opus-5-5", ["inherit", "inherit"]), PASS)
+
+    def test_n7_tierless_slugs_match_whole_or_by_vendor(self):
+        self.assertEqual(self.judged("claude", "claude", ["gpt-6"]), FAIL)
+        self.assertEqual(self.judged("grok-4.7", "grok-4.7-build", ["gpt-6"]), FAIL)
+        self.assertEqual(self.judged("gpt-6", "gpt-6.1", ["gpt-6.1"]), INCONCLUSIVE)
+        self.assertEqual(self.judged("gpt-6", "claude", ["claude"]), PASS)
+
+    def test_a_labelled_first_reply_names_a_sealed_investigator(self):
+        spawns = [self.sealed(10, "Source investigated: local Git history, README, and source comments.")]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=self.spawned(spawns), spawns=spawns, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1")
+
+    def arena(self, line):
+        candidates = [{"seq": 43, "tool": "delegate_task", "prompt_head": f"Design one candidate {n}. Write under /tmp/k/candidate-{n}/"} for n in range(1, 6)]
+        judge = {"seq": 49, "tool": "delegate_task", "prompt_head": "Independently cross-judge all five candidates. Read-only."}
+        events = [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {}}, {"seq": 49, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        trace = minimal(events=events, spawns=candidates + [judge], final_reply=f"Arena result\n- {line}\n- Verified: 8 unit tests passed.", harness="hermes")
+        return grade("arena-fans-out-and-grafts", trace, load_case("arena-run"))["verdict"]
+
+    def test_f14_based_and_database_do_not_name_a_base(self):
+        for line in ("Based on the judge, retries were grafted from candidate 3.", "The database layer was grafted from candidate 3."):
+            self.assertEqual(self.arena(line), FAIL, line)
+        self.assertEqual(self.arena("Candidate 1 is the base; retries were grafted from candidate 3."), PASS)
+
+    def test_n10_a_negation_just_before_a_pick_in_its_clause_cancels_it(self):
+        for line in ("It was not the case that candidate 1 was selected, with retries grafted from candidate 3.",
+                     "None of us selected candidate 1, and retries were grafted from candidate 3.",
+                     "We never selected candidate 1, and retries were grafted from candidate 3.",
+                     "Neither of us selected candidate 1, and retries were grafted from candidate 3."):
+            self.assertEqual(self.arena(line), FAIL, line)
+
+    def test_n10_each_clause_split_ends_an_earlier_negation(self):
+        for split in (". ", ", ", "; ", ": ", "\n- ", " but ", " and ", " so ", " because ", " since ", " although ", " though ",
+                      " while ", " yet ", " then ", " which "):
+            line = f"Candidate 2 was not chosen{split}candidate 1 was selected with retries grafted from candidate 3."
+            self.assertEqual(self.arena(line), PASS, repr(split))
+
+    def lead_reads(self, brief, reads):
+        spawns = [{"seq": s, "tool": "Agent", "prompt_head": brief} for s in (1, 2, 3, 4, 5)]
+        spawns.append({"seq": 9, "tool": "Agent", "prompt_head": "You are the read-only cross-judge."})
+        events = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"prompt": brief}} for s in (1, 2, 3, 4, 5, 9)]
+        events += [e for n, command in enumerate(reads) for e in bash(20 + 2 * n, command)]
+        return grade("arena-lead-reads-rationales-and-base", minimal(events=events, spawns=spawns), load_case("arena-run"))
+
+    def test_one_rationale_read_five_times_is_one_read(self):
+        result = self.lead_reads("Write `rationale.md` in your directory.", ["cat /tmp/k/c1/rationale.md", "cat /tmp/k/c1//rationale.md"] + ["cat /tmp/k/c1/./rationale.md"] * 3
+                                 + ["cat /tmp/k/c1/relay/cache.py"])
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["evidence"][0], "rationale files read after the last candidate spawn: 1")
+
+    def test_copilot_one_unresolved_path_read_by_separate_commands_is_one_read(self):
+        brief, base = "Write `rationale.md` in your directory.", "cat /tmp/k/c1/relay/cache.py"
+        repeated = self.lead_reads(brief, ['cat "$d/rationale.md"'] * 5 + [base])
+        self.assertEqual((repeated["verdict"], repeated["evidence"][0]), (FAIL, "rationale files read after the last candidate spawn: 1"))
+        looped = self.lead_reads(brief, ['for x in a:1 b:2 c:3 d:4 e:5; do id=${x%%:*}; cat "/tmp/k/$id/rationale.md"; done', base])
+        self.assertEqual((looped["verdict"], looped["evidence"][0]), (PASS, "rationale files read after the last candidate spawn: 5"))
+
+    def test_an_assigned_text_rationale_counts(self):
+        result = self.lead_reads("Save your reasoning to `decision.txt`.", [f"cat /tmp/k/c{n}/decision.txt" for n in range(1, 6)] + ["cat /tmp/k/c1/relay/cache.py"])
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def tracers(self, heads):
+        spawns = [delegate(27, h) for h in heads] + [delegate(41, "Write the answer.")]
+        events = [{"seq": 27, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(35, "done"),
+                  {"seq": 41, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))["verdict"]
+
+    def test_a_read_only_tracer_that_leaves_synthesis_to_the_lead_explores(self):
+        self.assertEqual(self.tracers(["Trace the ingest stage. Read-only: do not edit or write files. The lead handles synthesis.",
+                                       "Trace the render stage. Read-only: do not edit or write files. The lead handles synthesis."]), PASS)
+
+    def test_a_polite_edit_order_is_not_read_only(self):
+        self.assertEqual(self.tracers(["Read-only: do not edit files. Please implement the parser.", "Read-only: do not edit files. Trace the store."]), FAIL)
+
+    def review_verdict(self, line):
+        trace = minimal(events=[dict(text(1, f"Done. Author result: independent review required. {line}"), turn=0), dict(text(3, "Review mode run."), turn=1)],
+                        spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+        return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))["verdict"]
+
+    def test_review_wording_that_is_not_a_pass(self):
+        self.assertEqual(self.review_verdict("The reviewer refused to pass it."), FAIL)
+        for line in ("Neither review passed.", "The review failed. Tests pass.", "The review did not, in the end, pass.", "The review would pass only with README changes.",
+                     "The review is unlikely to pass.", "No review has passed yet.", "No independent reviewer has said pass.",
+                     "The review cannot reasonably be said to have passed."):
+            self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
+
+    def test_review_wording_that_ends_in_an_unlabeled_pass_goes_to_a_judge(self):
+        for line in ("Review failed twice before it passed.", "The review did not pass at first, then passed.", "The review did not stall. Pass.",
+                     "The review failed then passed.", "The review was not quick but passed."):
+            self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
+
+    def candidates_then_status(self, status, events=(), spawns=()):
+        def task(n):
+            return {"goal": "Design one cache-key candidate.", "context": f"Write only under /w/tmp/arena/candidate-{n}/: cache.py, rationale.md."}
+        events = [*events, {"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {"tasks": [task(n) for n in range(1, 6)]}}]
+        events += [{"seq": 45, "kind": "tool_call", "name": "terminal", "input": {"command": "git status --short", "workdir": "/w/relay"}},
+                   {"seq": 46, "kind": "tool_result", "name": "terminal", "ok": True, "output_head": json.dumps({"output": status, "exit_code": 0})}]
+        spawns = [*spawns, *({"seq": 43, "tool": "delegate_task", "prompt_head": "Design one cache-key candidate."} for _ in range(5))]
+        return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, harness="hermes", cwd="/w/relay"), load_case("arena-run"))
+
+    def test_a_candidate_write_into_the_parent_checkout_is_not_its_own_worktree(self):
+        dirty = self.candidates_then_status("M README.md\n M relay/cache.py\n?? .arena/")
+        self.assertEqual(dirty["verdict"], FAIL, dirty)
+        clean = self.candidates_then_status("")
+        self.assertEqual(clean["verdict"], PASS, clean)
+
+    def test_copilot_an_untracked_or_unmerged_parent_file_is_a_candidate_write(self):
+        for status in ("?? relay/key_format.py", "UU relay/cache.py", "DU tests/test_cache.py"):
+            self.assertEqual(self.candidates_then_status(status)["verdict"], FAIL, status)
+        own = self.candidates_then_status("?? decisions.tsv\n?? .worktrees/\n?? .arena/\n?? scratch_notes.md\n?? .claude/")
+        self.assertEqual(own["verdict"], PASS, own)
+
+    def test_copilot_the_status_window_runs_from_the_candidates_to_the_next_lead_edit(self):
+        lead_edit = {"seq": 40, "kind": "tool_call", "name": "Edit", "input": {"file_path": "/w/relay/relay/cache.py"}}
+        judge = {"seq": 44, "tool": "delegate_task", "prompt_head": "Read-only cross-judge of the five candidates."}
+        edited_first = self.candidates_then_status(" M relay/cache.py", events=[lead_edit])
+        self.assertEqual(edited_first["verdict"], FAIL, edited_first)
+        judged = self.candidates_then_status(" M relay/cache.py", events=[{"seq": 44, "kind": "tool_call", "name": "delegate_task", "input": {}}], spawns=[judge])
+        self.assertEqual(judged["verdict"], FAIL, judged)
+        own =self.candidates_then_status(" M relay/cache.py", events=[dict(lead_edit, seq=44)])
+        self.assertEqual(own["verdict"], PASS, own)
+
+    def test_copilot_a_collapsed_untracked_package_is_a_candidate_write(self):
+        self.assertEqual(self.candidates_then_status("?? newpkg/")["verdict"], FAIL)
+
+    def test_swarm_ownership_past_the_prompt_head_counts(self):
+        packages = ("ingest", "shape", "render", "publish")
+        prompts = {p: "Goal: run one package's check script and report the result.\n" + "Repo: /w/kiln. Record the SHA first. " * 8
+                   + f"Your slice is `packages/{p}` only." for p in packages}
+        events = [{"seq": 8 + 2 * n, "kind": "tool_call", "name": "Agent", "input": {"description": "Check one package", "prompt": prompts[p]}}
+                  for n, p in enumerate(packages)]
+        spawns = [{"seq": e["seq"], "tool": "Agent", "prompt_head": e["input"]["prompt"][:300]} for e in events]
+        self.assertTrue(all(p not in s["prompt_head"] for p, s in zip(packages, spawns)))
+        result = grade("swarm-fans-out-and-aggregates", minimal(events=events, spawns=spawns, final_reply="One report."), load_case("swarm-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+
+class Issue133RoundTwo(unittest.TestCase):
+    def review_verdict(self, line):
+        trace = minimal(events=[dict(text(1, f"Done. Author result: independent review required. {line}"), turn=0), dict(text(3, "Review mode run."), turn=1)],
+                        spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+        return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))["verdict"]
+
+    def test_a_labeled_or_predicated_pass_in_markup_is_a_pass(self):
+        for line in ("Docs review: **pass**", "Verdict: **PASS**", "Independent review verdict: `pass`", "Docs review: _pass_",
+                     "The verdict was pass.", "I got a PASS from the trail reviewer."):
+            self.assertEqual(self.review_verdict(line), PASS, line)
+
+    def test_a_pass_with_no_review_anchor_is_not_a_pass(self):
+        for line in ("Verdict: not a pass.", "The verdict was not pass.", "No PASS from the trail reviewer."):
+            self.assertEqual(self.review_verdict(line), FAIL, line)
+        for line in ("Tests: **pass**", "Lint: `pass`", "I got a pass on the lint.", "I did not get a PASS from the trail reviewer.",
+                     "Neither run got a pass from the reviewer."):
+            self.assertEqual(self.review_verdict(line), INCONCLUSIVE, line)
+
+    def test_each_verdict_negation_word_voids_the_pass(self):
+        for line in ("The review never passed.", "The review didn't pass."):
+            self.assertEqual(self.review_verdict(line), FAIL, line)
+        self.assertEqual(self.review_verdict("The reviewer let it through without a pass."), INCONCLUSIVE)
+
+    def arena(self, line):
+        candidates = [{"seq": 43, "tool": "delegate_task", "prompt_head": f"Design one candidate {n}. Write under /tmp/k/candidate-{n}/"} for n in range(1, 6)]
+        judge = {"seq": 49, "tool": "delegate_task", "prompt_head": "Independently cross-judge all five candidates. Read-only."}
+        events = [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {}}, {"seq": 49, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        trace = minimal(events=events, spawns=candidates + [judge], final_reply=f"Arena result\n- {line}\n- Verified: 8 unit tests passed.", harness="hermes")
+        return grade("arena-fans-out-and-grafts", trace, load_case("arena-run"))["verdict"]
+
+    def test_a_dash_bar_or_parenthesis_ends_a_negated_clause(self):
+        for line in ("No regressions found — candidate 2 became the base, with retries grafted from candidate 3.",
+                     "No regressions found – candidate 2 became the base, with retries grafted from candidate 3.",
+                     "No regressions found - candidate 2 became the base, with retries grafted from candidate 3.",
+                     "No blockers (candidate 2 is the base) with retries grafted from candidate 3.",
+                     "No blockers | candidate 2 is the base | retries grafted from candidate 3.",
+                     "Based on candidate 2, with retries grafted from candidate 3."):
+            self.assertEqual(self.arena(line), PASS, line)
+        sources = minimal(final_reply="Commit 12d7ece raised it. Not every source had data — sources searched: git log.")
+        self.assertEqual(grade("how-why-reports-name-sources-searched", sources, load_case("why-run"))["verdict"], PASS)
+        checkpoint = minimal(final_reply="No code was written — waiting for your sign-off on design A.")
+        self.assertEqual(grade("architect-checkpoint-opt-in", checkpoint, load_case("architect-checkpoint-run"))["verdict"], PASS)
+
+    def test_a_newline_or_closing_parenthesis_ends_a_negated_clause(self):
+        for line in ("No regressions\nCandidate 2 is the base, with retries grafted from candidate 3.",
+                     "(No blockers) candidate 2 is the base, with retries grafted from candidate 3."):
+            self.assertEqual(self.arena(line), PASS, line)
+
+    def test_nor_alone_negates_a_pick(self):
+        self.assertEqual(self.arena("The judge raised no blocker, nor picked candidate 1; retries were grafted from candidate 3."), FAIL)
+
+    def project(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "proj"
+        root.mkdir()
+        return root
+
+    def write(self, seq, project, rel):
+        return {"seq": seq, "kind": "tool_call", "name": "Write", "input": {"file_path": f"{project}/{rel}", "content": "x"}}
+
+    def test_a_root_repro_script_is_scratch(self):
+        project = self.project()
+        view = oracles.View(minimal(), load_case("bug-fix-run"), project)
+        for rel in ("repro.py", "reproduce.py", "reproduce_bug.py", "repro-2.sh", "reproduction/run.sh", "reproducer.py"):
+            self.assertEqual(view.classify(f"{project}/{rel}"), "scratch", rel)
+        self.assertEqual(view.classify(f"{project}/reprocess.py"), "source")
+
+    def test_a_root_repro_script_is_not_the_fix(self):
+        project = self.project()
+        events = ([self.write(1, project, "repro.py")] + bash(2, "ROLLUP_BUSY_AFTER=2 python3 repro.py", ok=False, head="duplicate rows")
+                  + [edit(6, f"{project}/rollup/export.py")] + bash(7, "python3 -m rollup data/orders.csv /tmp/out.csv", head="ok"))
+        result = grade("bug-fix-reproduces-before-fixing", minimal(events=events), load_case("bug-fix-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+        events = ([self.write(0, project, "repro.py")] + bash(1, "python3 repro.py", ok=False, head="duplicate rows") + [self.write(4, project, "tests/test_export.py")]
+                  + bash(5, "python3 -m unittest discover -s tests", ok=False, head="FAIL: test_retry\nFAILED (failures=1)")
+                  + [self.write(8, project, "rollup/export.py")] + bash(9, "python3 -m unittest discover -s tests", head="Ran 3 tests\n\nOK"))
+        result = grade("poteto-tdd-failing-test-first", minimal(events=events), load_case("tdd-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+        events = [dict(edit(0, f"{project}/reproduce.py"), turn=1), dict(text(1, "Reproduced only; no fix yet."), turn=1)]
+        result = grade("steering-prompt-redirects-run", minimal(events=events), load_case("steer-repro-run"), project)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def loop(self, command):
+        return grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, command)), load_case("overnight-run"))["verdict"]
+
+    def test_a_loop_inside_a_quoted_shell_body_is_a_loop(self):
+        for command in ("bash -c 'until curl -sf localhost:8000; do sleep 5; done'",
+                        "nohup bash -c 'while :; do ./check.sh; sleep 60; done' > /tmp/loop.log 2>&1 &",
+                        'sh -c "while true; do make check; sleep 30; done"',
+                        "ssh -p 2222 build-host 'while true; do uptime; sleep 60; done'"):
+            self.assertEqual(self.loop(command), PASS, command)
+        for command in ("bash -c 'sleep 30'", "echo 'while true; do sleep 5; done'", "ssh build-host 'sleep 60'"):
+            self.assertNotEqual(self.loop(command), PASS, command)
+
+    def candidates_then_status(self, before, tool="Bash", status_input=None, status=" M relay/cache.py"):
+        def task(n):
+            return {"description": "candidate", "prompt": f"Design one cache-key candidate. Write only under /tmp/arena/candidate-{n}/: cache.py, rationale.md."}
+        events = [{"seq": 43 + n, "kind": "tool_call", "name": "Agent", "input": task(n)} for n in range(1, 6)]
+        for n, command in enumerate(before):
+            events += bash(50 + 2 * n, command)
+        events += [{"seq": 60, "kind": "tool_call", "name": tool, "input": status_input or {"command": "git status --short"}},
+                   {"seq": 61, "kind": "tool_result", "name": tool, "ok": True, "output_head": status}]
+        spawns = [{"seq": 43 + n, "tool": "Agent", "prompt_head": task(n)["prompt"]} for n in range(1, 6)]
+        return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, cwd="/w/relay"), load_case("arena-run"))["verdict"]
+
+    def test_a_status_after_a_cd_into_a_candidate_is_not_the_parent(self):
+        self.assertEqual(self.candidates_then_status([]), FAIL)
+        self.assertEqual(self.candidates_then_status(["cd /w/relay-wt/candidate-1"]), PASS)
+        self.assertEqual(self.candidates_then_status(["cd ../relay-wt/candidate-1 && ls"]), PASS)
+        self.assertEqual(self.candidates_then_status(["cd /w/relay-wt/candidate-1", "cd /w/relay"]), FAIL)
+        self.assertEqual(self.candidates_then_status(["cd /w/relay-wt/candidate-1", "cd ../../relay"]), FAIL)
+        self.assertEqual(self.candidates_then_status(["cd /w/relay-wt/candidate-1", "cd ../../../../w/./relay"]), FAIL)
+        self.assertEqual(self.candidates_then_status(["(cd /w/relay-wt/candidate-1 && ls)"]), FAIL)
+
+    def test_a_status_in_a_candidate_workdir_is_not_the_parent(self):
+        for field in ("workdir", "cwd"):
+            given = {"command": "git status --short", field: "/w/relay-wt/candidate-1"}
+            self.assertEqual(self.candidates_then_status([], tool="terminal", status_input=given), PASS, field)
+        self.assertEqual(self.candidates_then_status([], tool="terminal", status_input={"command": "git status --short", "workdir": "/w/relay"}), FAIL)
+
+    def implementers(self, replies):
+        spawns = [{"seq": 10, "tool": "Agent", "prompt_head": "Implement the --json flag in cli.py.", "x_child_first_reply": replies[0]},
+                  {"seq": 12, "tool": "Agent", "prompt_head": "Update the README for --json.", "x_child_first_reply": replies[1]}]
+        events = [{"seq": s["seq"], "kind": "tool_call", "name": "Agent", "input": {"prompt": s["prompt_head"]}} for s in spawns]
+        return minimal(events=events, spawns=spawns, final_reply="Source: git log. Done.")
+
+    def test_n2_implementer_replies_are_not_how_or_why_evidence(self):
+        trace = self.implementers(["Done. Notes from the explorer pass over cli.py: the flag is wired.", "Updated. Checked source control history: nothing else touched."])
+        result = grade("how-then-why-sequence-honored", trace, load_case("how-then-why-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        labeled = self.implementers(["Explainer: cli.py parses flags in one place.", "Investigator: git log shows one author."])
+        result = grade("how-then-why-sequence-honored", labeled, load_case("how-then-why-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_n2_an_explorer_notes_label_is_not_an_explorer(self):
+        events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(20, "w"), {"seq": 30, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+        spawns = [delegate(10, "Implement the parser change in src/a.py.", "Explorer notes: wired."),
+                  delegate(10, "Implement the exporter change in src/b.py.", "Explorer notes: wired."), delegate(30, "Write the answer.")]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        spawns = [delegate(10, "Implement the parser change in src/a.py.", "## Explorer 2 (parser)\nwired."),
+                  delegate(10, "Implement the exporter change in src/b.py.", "Explorer 3: wired."), delegate(30, "Write the answer.")]
+        result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_copilot_a_quoted_untracked_project_file_is_a_parent_write(self):
+        self.assertEqual(self.candidates_then_status([], status='?? "docs/new guide.md"'), FAIL)
+        self.assertEqual(self.candidates_then_status([], status='?? ".worktrees/candidate 1/"'), PASS)
+
+    def test_copilot_an_uppercase_sources_heading_keeps_its_next_line(self):
+        spawns = [{"seq": 10, "tool": "spawn_agent", "model": "gpt-6.1-sol", "prompt_head": None, "x_prompt_encrypted": True,
+                   "x_child_first_reply": "### SOURCES\nSource control: git log and blame on relay/cache.py.", "task_name": "t"}]
+        events = [{"seq": 10, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": "t"}}]
+        result = grade("why-queries-evidence-categories-in-parallel", minimal(events=events, spawns=spawns, harness="codex"), load_case("why-run"))
+        self.assertEqual(result["evidence"][0], "investigator spawns: 1", result)
+
+    def test_copilot_a_comment_after_a_control_operator_is_not_a_green_rerun(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"rollup/__main__.py": "x = 0\n"})
+        events = ([self.write(8, project, "tests/test_main.py")]
+                  + bash(10, "python3 -m unittest tests.test_main", ok=False, head="FAIL: test_limit\nFAILED (failures=1)")
+                  + [edit(12, f"{project}/rollup/__main__.py")])
+        for command in ("echo OK;# rerun unittest", "echo OK&&# rerun unittest", "echo OK|# rerun unittest"):
+            result = grade("poteto-tdd-failing-test-first", minimal(events=events + bash(14, command, head="OK")), load_case("tdd-run"), project)
+            self.assertEqual(result["verdict"], INCONCLUSIVE, command)
+
+    def test_a_long_numbered_label_grades_in_linear_time(self):
+        spawns = [delegate(10, "Implement the parser change.", "## Explorer " + "1" * 26 + "x")]
+        started = time.monotonic()
+        grade("how-narrow-question-no-explorers", minimal(events=[{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}], spawns=spawns,
+                                                          harness="hermes", final_reply="x"), load_case("how-run"))
+        self.assertLess(time.monotonic() - started, 1)
+
+
+def sealed_reply(seq, reply, task):
+    return {"seq": seq, "tool": "spawn_agent", "model": "gpt-6.1-sol", "prompt_head": None, "x_prompt_encrypted": True,
+            "x_child_first_reply": reply, "task_name": task}
+
+
+def sealed_calls(spawns):
+    return [{"seq": s["seq"], "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": s["task_name"]}} for s in spawns]
+
+
+def why_labels(*replies):
+    spawns = [sealed_reply(10, reply, f"t{n}") for n, reply in enumerate(replies)]
+    return grade("why-queries-evidence-categories-in-parallel", minimal(events=sealed_calls(spawns), spawns=spawns, harness="codex"), load_case("why-run"))["verdict"]
+
+
+def how_labels(*replies):
+    spawns = [delegate(10, f"Implement change {n} in src/m{n}.py.", reply) for n, reply in enumerate(replies)] + [delegate(30, "Write the answer.")]
+    events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}, text(20, "All back."), {"seq": 30, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+    return grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, harness="hermes"), load_case("how-wide-run"))["verdict"]
+
+
+def narrow_label(reply):
+    spawns = [delegate(10, "Implement the parser change.", reply)]
+    events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+    return grade("how-narrow-question-no-explorers", minimal(events=events, spawns=spawns, harness="hermes", final_reply="x"), load_case("how-run"))["verdict"]
+
+
+def loop_verdict(command):
+    return grade("autonomous-run-uses-loop-facility", minimal(events=bash(1, command)), load_case("overnight-run"))["verdict"]
+
+
+CONVENTIONAL_TEST_NAMES = ("APITests.swift", "UserAPITests.swift", "LoginUITests.swift", "UITests.swift", "APITest.java", "URLTest.java", "IOTests.cs",
+                           "CLITests.cs", "XTests.swift", "MyAppTests/Helpers.swift", "UnitTests/Foo.cs", "IntegrationTests/Foo.cs", "MyApp.UnitTests/Foo.cs",
+                           "internal/testutil/db.go", "internal/testhelper/x.go", "testutils/render.ts", "src/testUtils.ts", "TestHelpers.swift",
+                           "TestBase.java", "testmain.py", "testutils.py", "testcases.py", "testsuite.py", "testMain.js", "TestMain.java", "TestFoo.cs",
+                           "runtests.py", "smoketest.py", "selftest.py", "unittest_helpers.py", "loadtest/x.js", "e2etest.ts")
+NATURAL_TEST_NAMES = ("test-main.py", "test1.py", "tests2/x.py", "tests-unit/x.py", "FooTest.java", "FooTests.java", "foo_test.go", "conftest.py",
+                      "test-utils.js", "foo.spec.ts", "__tests__/x.js")
+
+
+def arena_pick(line):
+    candidates = [{"seq": 43, "tool": "delegate_task", "prompt_head": f"Design one candidate {n}. Write under /tmp/k/candidate-{n}/"} for n in range(1, 6)]
+    judge = {"seq": 49, "tool": "delegate_task", "prompt_head": "Independently cross-judge all five candidates. Read-only."}
+    events = [{"seq": 43, "kind": "tool_call", "name": "delegate_task", "input": {}}, {"seq": 49, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+    trace = minimal(events=events, spawns=candidates + [judge], final_reply=f"Arena result\n- {line}\n- Verified: 8 unit tests passed.", harness="hermes")
+    return grade("arena-fans-out-and-grafts", trace, load_case("arena-run"))["verdict"]
+
+
+def status_after(commands, status=" M relay/cache.py", failing=(), out="/tmp/arena/candidate-{n}/"):
+    def task(n):
+        return {"description": "candidate", "prompt": f"Design one cache-key candidate. Write only under {out.format(n=n)}: cache.py, rationale.md."}
+    events = [{"seq": 43 + n, "kind": "tool_call", "name": "Agent", "input": task(n)} for n in range(1, 6)]
+    for n, command in enumerate(commands):
+        events += bash(50 + 2 * n, command, ok=command not in failing)
+    events += bash(60, "git status --short", head=status)
+    spawns = [{"seq": 43 + n, "tool": "Agent", "prompt_head": task(n)["prompt"]} for n in range(1, 6)]
+    return grade("arena-candidates-own-worktrees", minimal(events=events, spawns=spawns, cwd="/w/relay"), load_case("arena-run"))["verdict"]
+
+
+class Issue133RoundThree(unittest.TestCase):
+    def test_a_role_label_may_carry_parentheses_dashes_markup_and_ordinals(self):
+        for pair in (("Why investigator (git): the cap came in 12d7ece.", "Why investigator (issues): ticket 41."),
+                     ("Investigator — source control: 12d7ece.", "Investigator — issue tracker: #41."),
+                     ("Investigator – git: 12d7ece.", "Investigator – tickets: #41."),
+                     ("**Investigator 1**: 12d7ece.", "**Investigator 2**: #41."),
+                     ("[Investigator: git] 12d7ece.", "[Investigator: tickets] #41."),
+                     ("Investigator #1 (git): 12d7ece.", "Investigator #2 (issues): #41."),
+                     ("Git history investigator report: 12d7ece.", "Issue investigator report: #41.")):
+            self.assertEqual(why_labels(*pair), PASS, pair)
+        for trio in (("Explorer 2 (parser): tracing.", "Explorer 3 (emitter): tracing.", "Explorer 4 (cli): tracing."),
+                     ("Explorer A: tracing.", "Explorer B: tracing.", "Explorer C: tracing."),
+                     ("Explorer 1 of 3: tracing.", "Explorer 2 of 3: tracing.", "Explorer 3 of 3: tracing.")):
+            self.assertEqual(how_labels(*trio), PASS, trio)
+
+    def test_a_loop_handed_to_tmux_eval_a_remote_shell_watch_or_python_is_a_loop(self):
+        for command in ("tmux send-keys -t loop 'while true; do ./check.sh; sleep 60; done' Enter",
+                        "tmux new -d 'while true; do ./check.sh; sleep 60; done'",
+                        "tmux new-session -d -s watch 'until test -f done; do sleep 5; done'",
+                        "eval 'while true; do ./check.sh; sleep 60; done'",
+                        "ssh host 'bash -s' <<'EOF'\nwhile true; do ./check.sh; sleep 60; done\nEOF",
+                        "watch -n 60 ./check.sh",
+                        'python3 -c "import time\nwhile True: time.sleep(5)"'):
+            self.assertEqual(loop_verdict(command), PASS, command)
+
+    def test_a_commented_or_written_loop_is_not_a_loop(self):
+        for command in ("sed -n '1,20p' watch.sh # while true; do sleep 5; done",
+                        "cat <<'EOF' > loop.sh\nwhile true; do ./check.sh; sleep 60; done\nEOF",
+                        "git commit -m 'wrap while true loop'", "grep -n 'watch -n 5' notes.md"):
+            self.assertEqual(loop_verdict(command), FAIL, command)
+
+    def test_a_status_after_a_pushd_into_a_candidate_is_not_the_parent(self):
+        self.assertEqual(status_after(["pushd /w/relay-wt/candidate-1 >/dev/null"]), PASS)
+        self.assertEqual(status_after([]), FAIL)
+
+    def test_a_status_after_a_failed_cd_or_pushd_shows_an_unknown_checkout(self):
+        for command in ("cd /w/relay-wt/candidate-1", "pushd /w/relay-wt/candidate-1", "cd /w/relay-wt/candidate-1 && pytest"):
+            self.assertEqual(status_after([command], failing={command}), INCONCLUSIVE, command)
+        self.assertEqual(status_after(["cd /w/relay-wt/candidate-1", "cd ../relay"], failing={"cd /w/relay-wt/candidate-1"}), INCONCLUSIVE)
+        self.assertEqual(status_after(["cd /w/relay-wt/candidate-1", "cd /w/relay"], failing={"cd /w/relay-wt/candidate-1"}), FAIL)
+
+    def test_a_negation_beside_a_named_base_does_not_cancel_it(self):
+        for line in ("No other candidate beat candidate 1 as the base.", "No conflicts in the base (candidate 1).",
+                     "Candidate 3 is not the base; candidate 1 is the one.", "No tie -- candidate 1 is the base.",
+                     "Candidate 2 is the base, not candidate 1.", "Candidate 3 is not the base: candidate 1 is."):
+            self.assertEqual(arena_pick(line + " Retries were grafted from candidate 3."), PASS, line)
+
+    def test_a_negation_before_the_sign_off_scopes_over_before_implementing(self):
+        for reply in ("I did not wait for your sign-off before implementing.", "No sign-off is needed before implementing."):
+            self.assertEqual(grade("architect-checkpoint-opt-in", minimal(final_reply=reply), load_case("architect-checkpoint-run"))["verdict"],
+                             INCONCLUSIVE, reply)
+
+    def test_round16_a_spec_marker_before_a_non_code_extension_is_what_main_calls_it(self):
+        view = oracles.View(minimal(), {}, None)
+        names = {"docs/tech_spec.md": "doc", "product_spec.md": "doc", "docs/design.spec.md": "doc", "README.spec.md": "doc",
+                 "docs/openapi.spec.json": "data", "feature_spec.txt": "data", "api_spec.yaml": "source", "openapi.spec.yaml": "source",
+                 "src/a.spec.mjs": "test", "src/a.spec.cjs": "test", "lib/a_spec.exs": "test", "app/A.e2e.kt": "test", "app/A.cy.swift": "test",
+                 "app/A.spec.cs": "test", "app/a_spec.php": "test", "a.spec.rs": "test", "a.e2e.go": "test", "A.spec.java": "test"}
+        self.assertEqual({name: view.classify(name) for name in names}, names)
+
+    def test_round16_a_role_label_ends_at_a_dash_or_comma_as_well_as_a_colon(self):
+        for template in ("Explorer {n} - found it", "Explorer {n} \u2014 found it", "Explorer {n} \u2013 found it", "Explorer {n}, found it",
+                         "Explorer angle {n}, found it", "Explorer {n} of 3 - found it", "Explorer ({n}), found it", "Explorer (parser {n}), found it",
+                         "Explorer output - found it", "**Explorer {n}**", "**Explorer {n}** - found it", "- Explorer {n}: found it",
+                         "1. Explorer {n}: found it", "* Explorer {n} - found it", "> Explorer {n}: found it"):
+            for names in (("1", "2", "3"), ("A", "B", "C"), ("One", "Two", "Three")):
+                trio = [template.format(n=n) + ("\nfound it" if template.endswith("**") else "") for n in names]
+                self.assertEqual(how_labels(*trio), PASS, trio[0])
+
+    def test_round16_a_notes_or_findings_label_ended_by_a_dash_or_comma_is_not_an_explorer(self):
+        for template in ("Explorer notes: found it", "Explorer findings: found it", "Explorer notes - found it", "Explorer findings \u2014 found it",
+                         "Explorer notes, found it", "Explorer {n} findings, found it", "Explorer {n} notes - found it",
+                         "Done. Using the explorer notes, I implemented the parser."):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), FAIL, trio[0])
+
+    def test_round16_an_arena_base_may_wear_markdown_or_a_number_sign(self):
+        for line in ("I based the design on **candidate 2**, with retries grafted from candidate 3.",
+                     "Rebased onto `candidate 2`, with retries grafted from candidate 3.",
+                     "Based on candidate #2, with retries grafted from candidate 3.",
+                     "Based on candidate-2, with retries grafted from candidate 3.",
+                     "Based on **candidate #2**, with retries grafted from candidate 3.",
+                     "I rebased onto `arm-2`, with retries grafted from candidate 3."):
+            self.assertEqual(arena_pick(line), PASS, line)
+        for line in ("Based on the judge, retries were grafted from candidate 3.", "Based on `the judges` I grafted retries from candidate 3.",
+                     "Based on candidates alone, retries were grafted from candidate 3."):
+            self.assertEqual(arena_pick(line), FAIL, line)
+
+    def test_round16_a_commit_only_source_label_is_judged_on_its_whole_section(self):
+        def sources(reply):
+            return grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))["verdict"]
+        for reply in ("Source: commit 12d7ece\nSee also the PR.", "Source: commit 12d7ece.\nSee also the PR #12.", "## Source\ncommit 12d7ece\nand the PR thread",
+                      "Source: 12d7ece\nCommit 12d7ece was reviewed in PR #12."):
+            self.assertEqual(sources(reply), PASS, reply)
+        for reply in ("Source: commit 12d7ece.", "Source: commit 12d7ece", "Source: commit 12d7ece.\n", "Source: commit 12d7ece.\n\nThe cap came from it.",
+                      "## Source\ncommit 12d7ece\n\nThe cap came from it.", "Sources:\ncommit 12d7ece\n3a4b5c6", "Source: commit 12d7ece\n## Notes\nThe cap came from it."):
+            self.assertEqual(sources(reply), FAIL, reply)
+
+    def test_round17_a_bold_role_persona_or_source_label_keeps_the_text_after_it(self):
+        for template in ("**Role:** Explorer {n} (parser) found it", "**Role**: Explorer {n} found it", "**Persona:** explorer {n}",
+                         "**Persona**: Explorer {n} (cli)", "- **Role:** Explorer {n} - found it", "**Role:** Explorer {n}, found it"):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), PASS, trio[0])
+
+    def test_round17_a_bold_source_label_keeps_the_text_after_it(self):
+        for reply in ("**Source:** Source control and tracked repository files.", "**Source**: Source control and tracked repository files.",
+                      "**Sources:** git history", "**Sources**: git history", "- **Source:** Source control and tracked repository files."):
+            self.assertEqual(why_labels(reply), PASS, reply)
+
+    def test_round17_a_bold_role_label_naming_one_explorer_is_no_wide_fan_out(self):
+        for reply in ("**Role:** Explorer 2", "**Role**: Explorer 2 (parser)", "**Persona:** explorer 2"):
+            spawns = [delegate(10, "Implement the parser change.", reply)]
+            events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+            result = grade("how-narrow-question-no-explorers", minimal(events=events, spawns=spawns, harness="hermes", final_reply="x"), load_case("how-run"))
+            self.assertEqual(result["verdict"], FAIL, reply)
+
+    def test_round17_a_bold_findings_label_still_drops_the_text_after_it(self):
+        for template in ("**Findings:** Explorer {n} saw it", "**Notes**: the explorer {n} saw it", "**Summary:** explorer {n}"):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), FAIL, trio[0])
+
+    def test_round17_a_bold_source_label_with_the_colon_inside_names_a_commit_only_source_like_one_outside(self):
+        def sources(reply):
+            return grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))["verdict"]
+        for reply in ("**Source:** commit 12d7ece.", "**Source**: commit 12d7ece.", "**Source:** 12d7ece"):
+            self.assertEqual(sources(reply), FAIL, reply)
+        for reply in ("**Source:** git log", "**Source**: git log"):
+            self.assertEqual(sources(reply), PASS, reply)
+
+    def test_round18_a_bold_role_label_ends_at_its_inner_colon_before_the_output_noun_is_read(self):
+        for template in ("**Explorer {n}: Findings**", "**Explorer {n}: parser findings**", "**Explorer {n}: Summary**\nFound it."):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), PASS, trio[0])
+        self.assertEqual(why_labels("**Investigator 1: Findings**", "**Investigator 2: Findings**"), PASS)
+
+    def test_round18_a_bold_role_label_with_an_inner_colon_names_one_explorer_in_a_narrow_run(self):
+        for reply in ("**Explorer 2: Findings**", "**Explorer 2: parser findings**"):
+            self.assertEqual(narrow_label(reply), FAIL, reply)
+
+    def test_round18_a_heading_or_bold_role_label_ends_at_a_spaced_dash_or_comma_before_the_output_noun_is_read(self):
+        for template in ("## Explorer {n} — Findings", "## Explorer {n} — Parser notes", "### Explorer {n} — Summary", "## Explorer {n} - Findings",
+                         "**Explorer {n} — parser notes**", "## Explorer {n} (parser) — findings", "## Explorer {n}, findings", "**Explorer {n}, findings**"):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), PASS, trio[0])
+        for pair in (("**Investigator 1 — Findings**", "**Investigator 2 — Findings**"), ("## Investigator 1 — Findings", "## Investigator 2 — Findings")):
+            self.assertEqual(why_labels(*pair), PASS, pair[0])
+
+    def test_round18_a_heading_or_bold_role_label_ended_by_a_dash_names_one_explorer_in_a_narrow_run(self):
+        for reply in ("## Explorer 2 — Findings", "**Explorer 2 — Findings**", "## Explorer 2, findings"):
+            self.assertEqual(narrow_label(reply), FAIL, reply)
+
+    def test_round18_a_heading_or_bold_findings_label_ended_by_a_dash_or_comma_names_no_explorer(self):
+        for template in ("## Findings — explorer {n}", "**Findings — explorer {n}**", "## Notes, explorer {n}", "### Summary - explorer {n}"):
+            trio = [template.format(n=n) for n in (1, 2, 3)]
+            self.assertEqual(how_labels(*trio), FAIL, trio[0])
+
+
+LONG = 200_000
+
+
+class LinearTime(unittest.TestCase):
+    def assert_quick(self, grade_one, *inputs):
+        for value in inputs:
+            started = time.perf_counter()
+            grade_one(value)
+            self.assertLess(time.perf_counter() - started, 2, repr(value[:40]))
+
+    def test_a_long_reply_label_grades_in_linear_time(self):
+        def narrow(reply):
+            spawns = [delegate(10, "Implement the parser change.", reply)]
+            events = [{"seq": 10, "kind": "tool_call", "name": "delegate_task", "input": {}}]
+            grade("how-narrow-question-no-explorers", minimal(events=events, spawns=spawns, harness="hermes", final_reply="x"), load_case("how-run"))
+        self.assert_quick(narrow, "## Explorer " + "(" * LONG, "## Explorer " + " " * LONG + "1", "## Explorer" + " 1" * (LONG // 2),
+                          "## Explorer " + " -" * (LONG // 2) + " x", "Explorer " + "(" * LONG, "- " + " " * LONG + "x", "1." + " " * LONG + "x",
+                          "Explorer " + "(1), " * (LONG // 5), "Explorer" + " 1," * (LONG // 3), "**" + "a" * LONG, "Explorer " + "- " * (LONG // 2) + "x",
+                          "Explorer " + " \u2014" * (LONG // 2), "* " * (LONG // 2) + "Explorer",
+                          "**Role:** " + "x" * LONG, "**a**" * (LONG // 5), "**Role:** Explorer " + "(" * LONG, "**Role**" + " " * LONG + "x",
+                          "## Explorer" + " \u2014x" * (LONG // 3), "## Explorer 1" + " " * LONG + "\u2014x", "## " + "x" * LONG + " \u2014 findings")
+
+    def test_a_long_commit_only_source_section_grades_in_linear_time(self):
+        def sources(reply):
+            grade("how-why-reports-name-sources-searched", minimal(final_reply=reply), load_case("why-run"))
+        self.assert_quick(sources, "Source:\n" + "12d7ece\n" * (LONG // 8) + "x", "Source: commit 12d7ece\n\n" * (LONG // 24), "Source:" + " " * LONG + "12d7ece",
+                          "Source: " + "12d7ece\n" * (LONG // 8), "Source:\n" + "12d7ece\n \n" * (LONG // 10) + "source:",
+                          "**Source:" + "*" * LONG, "**Source:**" + " " * LONG + "12d7ece", "**Source:**\n" + "12d7ece\n" * (LONG // 8) + "x")
+        self.assert_quick(arena_pick, "based on " * (LONG // 9) + "candidate", "Based " + "** " * (LONG // 3) + "on candidate 1")
+
+    def test_a_long_relative_write_path_grades_in_linear_time(self):
+        project = tempfile.TemporaryDirectory()
+        self.addCleanup(project.cleanup)
+        deep = "a/" * (LONG // 2) + "f.py"
+        view = oracles.View(minimal(events=bash(1, f"echo x > {deep} && echo y > ../elsewhere/g.py && echo z > a/../h.py")), {}, project.name)
+        started = time.perf_counter()
+        edits = view.edits()
+        self.assertLess(time.perf_counter() - started, 2)
+        self.assertEqual(edits, [(1, deep, "source"), (1, "a/../h.py", "source")])
+
+    def test_a_long_git_status_grades_in_linear_time(self):
+        self.assert_quick(lambda status: status_after([], status=status), "\n" * LONG, " \n" * (LONG // 2), "\t" * LONG + "x", "M" + " " * LONG)
+
+    def test_a_long_reply_of_negated_cues_grades_in_linear_time(self):
+        self.assert_quick(arena_pick, "no base " * (LONG // 8), "not candidate 1 was selected " * (LONG // 30))
+        checkpoint = lambda reply: grade("architect-checkpoint-opt-in", minimal(final_reply=reply), load_case("architect-checkpoint-run"))
+        self.assert_quick(checkpoint, "do not approve " * (LONG // 15))
+
+    def test_a_long_review_reply_grades_in_linear_time(self):
+        self.assert_quick(review_line, "PASS" + " " * LONG, " " * LONG + "pass from the reviewer", "pass " * (LONG // 5), "no pass " * (LONG // 8),
+                          "[" * LONG + "pass", "](" * (LONG // 2) + "pass", "\n" * LONG + "Review: pass", "Review: " + "(" * LONG + "pass",
+                          "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass",
+                          "a" + "_" * LONG + "b pass", "no" + " " * (LONG // 2) + " pass" * (LONG // 10),
+                          "no edits " * (LONG // 9) + "pass", "Docs review (did not run): pass " * (LONG // 31))
+
+    def test_a_long_run_of_relative_cds_tracks_the_checkout_in_linear_time(self):
+        events = [{"seq": 50 + 2 * n + k, "kind": kind, "name": "Bash", "id": f"cd{n}", "input": {"command": f"cd d{n}"}, "ok": True}
+                  for n in range(40_000) for k, kind in enumerate(("tool_call", "tool_result"))]
+        candidates = [{"seq": 44, "tool": "Agent", "prompt_head": "Design one cache-key candidate."}]
+        view = oracles.View(minimal(events=events + bash(90_000, "git status --short", head=" M relay/cache.py"), spawns=candidates, cwd="/w/relay"),
+                            load_case("arena-run"), None)
+        view.project_edits = lambda turn=None: []
+        self.assert_quick(lambda found: oracles.parent_written(view, found), candidates)
+
+    def test_one_long_chain_of_cds_tracks_the_checkout_in_linear_time(self):
+        candidates = [{"seq": 44, "tool": "Agent", "prompt_head": "Design one cache-key candidate."}]
+
+        def walk(command):
+            view = oracles.View(minimal(events=bash(50, command) + bash(90, "git status --short", head=" M relay/cache.py"), spawns=candidates, cwd="/w/relay"),
+                                load_case("arena-run"), None)
+            view.project_edits = lambda turn=None: []
+            oracles.parent_written(view, candidates)
+        self.assert_quick(walk, "cd $(" * 160_000, "(cd x " * 160_000, "cd x; " * 160_000)
+
+    def test_a_long_run_of_ssh_or_tmux_words_grades_in_linear_time(self):
+        self.assert_quick(loop_verdict, "ssh " * (LONG // 4), "tmux new " * (LONG // 9), "x.ssh " * (LONG // 6), "ssh /ssh " * (LONG // 9))
+
+
+def review_line(line):
+    trace = minimal(events=[dict(text(1, f"Done. Author result: independent review required. {line}"), turn=0), dict(text(3, "Review mode run."), turn=1)],
+                    spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+    return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))
+
+
+class ReviewVerdictGuard(unittest.TestCase):
+    def test_an_unlabeled_pass_goes_to_a_judge_with_the_reply(self):
+        result = review_line("I ran the independent review and it passed.")
+        self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), result)
+        self.assertIn("and it passed", result["excerpt"])
+
+    def test_the_judge_excerpt_holds_the_undecided_pass_in_a_long_reply(self):
+        result = review_line("Changed the CLI flag parsing and the README table. " * 60 + "I ran the independent review and it passed. **Closing notes**")
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("and it passed", result["excerpt"])
+        self.assertIn("graded reply: turn 0", result["evidence"])
+
+    def test_the_judge_excerpt_skips_off_topic_and_negated_passes_before_the_review(self):
+        result = review_line("Tests pass. The first review did not pass. " + "Changed the CLI flag parsing and the README table. " * 60
+                             + "I ran the independent review again and it passed.")
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("again and it passed", result["excerpt"])
+
+    def test_the_judge_excerpt_holds_what_blocks_a_labeled_pass(self):
+        result = review_line("Independent review: pass. " + "Changed the CLI flag parsing and the README table. " * 60 + "Docs review (did not run): pass.")
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("(did not run)", result["excerpt"])
+
+    def test_a_labeled_pass_decides_beside_an_unlabeled_one(self):
+        self.assertEqual(review_line("Independent review: pass. It passed on the first try.")["verdict"], PASS)
+
+    def test_a_negated_mention_beside_a_labeled_pass_goes_to_a_judge(self):
+        self.assertEqual(review_line("Round 1 review did not pass, round 2 review passed.")["verdict"], INCONCLUSIVE)
+
+    def test_only_a_reply_with_no_pass_or_only_negated_ones_fails(self):
+        for line in ("Docs updated.", "Review: pending (no pass yet)", "The review did not pass.", "Independent review: needs changes."):
+            self.assertEqual(review_line(line)["verdict"], FAIL, line)
+        for line in ("The review did not pass. Tests pass.", "Independent review: needs changes. Lint: pass.", "No independent review was run. Pass on tests only."):
+            result = review_line(line)
+            self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
+
+    def test_only_an_adverb_may_sit_between_a_negation_and_the_pass_it_fails(self):
+        for line in ("Independent review: no regressions PASS", "nothing found PASS", "- no regressions **PASS**"):
+            self.assertEqual(review_line(line)["verdict"], INCONCLUSIVE, line)
+        for line in ("The review has not yet passed.", "The review did not pass.", "The review never passed.", "The review didn't really pass."):
+            self.assertEqual(review_line(line)["verdict"], FAIL, line)
+
+    def test_a_free_form_label_before_pass_goes_to_a_judge(self):
+        for line in ("The reviewer rejected it: pass.", "The docs reviewer flagged three gaps: pass.", "Review blocked on the README table: pass",
+                     "Verdict overturned by the second reviewer: pass"):
+            result = review_line(line)
+            self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
+
+    def test_a_table_cell_takes_its_label_from_the_column_header(self):
+        self.assertEqual(review_line("\n| Gate | Verdict |\n|---|---|\n| docs | pass |")["verdict"], PASS)
+        self.assertEqual(review_line("\n| Gate | Notes |\n|---|---|\n| docs | pass |")["verdict"], INCONCLUSIVE)
+        self.assertEqual(review_line("\n| Gate | Verdict |\n|---|---|\nLater rows:\n| docs | pass |")["verdict"], INCONCLUSIVE)
+
+    def test_a_filename_link_or_version_does_not_end_the_label(self):
+        for line in ("Independent review (README.md): pass", "[Independent review](docs/review.md): pass", "Review: PASS (v2.1)"):
+            self.assertEqual(review_line(line)["verdict"], PASS, line)
 
 
 if __name__ == "__main__":
