@@ -10,7 +10,7 @@ From your project root, run:
 npx skills add mdsmithaustin/pstack
 ```
 
-Choose the targets you use, including `hermes-agent` for Hermes. The installer delivers the skills and bundled personas. Hermes requires trust for project skills, and its project link can be skipped when `.hermes` does not exist. For global Hermes use, install into its native skills directory or configure `skills.external_dirs` for the shared `~/.agents/skills` directory. Confirm discovery in your installed version.
+Choose the targets you use, including `hermes-agent` for Hermes. The installer delivers the skills and bundled personas. Hermes requires trust for project skills, and its project link can be skipped when `.hermes` does not exist. For global Hermes use, install into its native skills directory or configure `skills.external_dirs` for the shared `~/.agents/skills` directory. Some skills are set to load only when you type their name. Claude Code and Codex honor that setting. In the 2026-10-03 run of the guide-promise evals, Hermes and Grok Build loaded such a skill without being asked. Confirm discovery in your installed version.
 
 ## Pick your models
 
@@ -61,6 +61,6 @@ Pick something real but small, and describe it the way you'd describe it to a co
 
 Watch the todo list, or the numbered list in chat when the task tools are off. Its first items are the matched playbook's opening prose and steps copied in, the Feature playbook for this prompt. If `/poteto-mode` skips a step, the step stays in the list with `skipped: <reason>`, so you can see what it chose not to do.
 
-From here you can type normal follow-ups. `/poteto-mode` is sticky. It stays on for the conversation until you opt out by saying so.
+From here you can type normal follow-ups. `/poteto-mode` is sticky. It stays on for the conversation until you opt out by saying so. In a very long chat, the CLI may compress older messages and drop the mode. Type `/poteto-mode` again if it stops applying.
 
 Next: [Route work through `/poteto-mode`](./02-poteto-mode.md).

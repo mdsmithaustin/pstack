@@ -150,6 +150,8 @@ Upstream removes instructions it judges a single lead model no longer needs. The
 
 Upstream #496 evaluated its performance-mantra rewrite on Opus only. The port takes the seven ordered mantras and their stop rule, but retains trace-signal admission, deletion proof through `how`, cache invalidation, redundancy headroom, interactive-path measurement, and the critical-path net-benefit guard for added indirection in `skills/poteto-mode/playbooks/perf-issue.md`. Keep these safeguards on sync until GPT-lead behavioral evidence supports their removal. Hillclimb still borrows only the mantra order.
 
+Upstream #511 (df58112) dropped `gpt-5.6-sol-max` from every panel and from `reflect tooling`, cut the panels to two entries, and lowered the judgment effort from `max` to `xhigh`, with no reason or measurement in the commit. The port holds all of it until a check covers the `fable` panel seat and a GPT lead. The substitution map row records the shipped values.
+
 Upstream #414 (70b2dc8, 15 cuts) and #419 (b0b9c7a) justified their lead-side cuts with Opus 5.5 runs only. The port checked them on 2026-09-27 and took all of them:
 
 - 14 of #414's cuts, plus #419's poteto-tdd, never-block, and outcome-oriented cuts, keep their rule in the same file or in poteto-mode, so the text settles them.

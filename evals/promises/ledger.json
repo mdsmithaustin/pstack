@@ -1279,7 +1279,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Pick the wake mechanism using your CLI's loop facility (per the **pstack-harness** skill \u2014 a built-in or wrapper, not a pstack skill). An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
+     "quote": "Pick the wake mechanism using your CLI's loop facility (per the **pstack-harness** skill — a built-in or wrapper, not a pstack skill). An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
      "file": "skills/pstack-harness/SKILL.md",
@@ -1326,7 +1326,7 @@
     },
     {
      "file": "skills/maintain-verification-skill/SKILL.md",
-     "quote": "**changed** \u2014 one PR ships proven doc, harness, or map corrections."
+     "quote": "**changed** — one PR ships proven doc, harness, or map corrections."
     },
     {
      "file": "skills/maintain-verification-skill/SKILL.md",
@@ -1739,7 +1739,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Code crossing a function boundary \u2192 the **architect** skill, parallel design exploration before implementing."
+     "quote": "Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
@@ -8826,7 +8826,7 @@
    "class": "substituted",
    "file": "README.md",
    "ported_as": [
-    "c096c9f14d15"
+    "4e630f5db969"
    ],
    "promise": "poteto-help-typed-only",
    "sources": [
@@ -9980,22 +9980,13 @@
    "class": "substituted",
    "file": "05-build-and-clean.md",
    "ported_as": [
-    "1cbce876149e"
+    "c1f305f4e11e"
    ],
    "promise": "typescript-rules-load-by-name",
    "sources": [
     "upstream"
    ],
    "text": "It doesn't load on its own, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
-  },
-  "1cbce876149e": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "typescript-rules-load-by-name",
-   "sources": [
-    "port"
-   ],
-   "text": "It's gated against loading on its own, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
   },
   "30aa844403bd": {
    "class": "context",
@@ -11420,15 +11411,6 @@
    ],
    "text": "**Parallel agents in one worktree.** They overwrite each other and the diff becomes archaeology. Run them as cloud agents, or say \"own worktree per attempt\"."
   },
-  "c096c9f14d15": {
-   "class": "promise",
-   "file": "README.md",
-   "promise": "poteto-help-typed-only",
-   "sources": [
-    "port"
-   ],
-   "text": "It's gated against loading on its own, so it runs when you type it."
-  },
   "06188b938938": {
    "class": "context",
    "file": "README.md",
@@ -11472,6 +11454,64 @@
     "port"
    ],
    "text": "Grok Build's spawn tool takes no effort, so there every role runs at your session effort, whatever the file writes."
+  },
+  "c1f305f4e11e": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "typescript-rules-load-by-name",
+   "sources": [
+    "port"
+   ],
+   "text": "It's set to load only when you type it, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
+  },
+  "4e630f5db969": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-typed-only",
+   "sources": [
+    "port"
+   ],
+   "text": "It's set to load only when you type it, so type `/poteto-help`."
+  },
+  "250f0b8a5b98": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Some skills are set to load only when you type their name."
+  },
+  "ba7e8624cfe7": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Claude Code and Codex honor that setting."
+  },
+  "4c5cb33af9ed": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "In the 2026-10-03 run of the guide-promise evals, Hermes and Grok Build loaded such a skill without being asked."
+  },
+  "c3d6057b5fdb": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "In a very long chat, the CLI may compress older messages and drop the mode."
+  },
+  "7060f8af3657": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Type `/poteto-mode` again if it stops applying."
   }
  }
 }
