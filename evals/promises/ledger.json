@@ -2875,7 +2875,7 @@
   },
   "budget-labels-set-effort": {
    "check": "static",
-   "claim": "The shipped flat lines write no effort, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every role, which overrides the session effort in either direction. A harness that cannot run a written effort drops it, so on Grok Build a written max runs at the session effort.",
+   "claim": "The shipped flat lines write no effort, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
    "evidence": [
     {
      "file": "skills/setup-pstack/examples/pstack-models.md",
@@ -2884,10 +2884,6 @@
     {
      "file": "skills/setup-pstack/references/models-config.md",
      "quote": "A line without a usable effort runs at the session effort on Claude Code and Grok Build."
-    },
-    {
-     "file": "skills/setup-pstack/references/models-config.md",
-     "quote": "Grok Build takes `low` through `xhigh`."
     },
     {
      "file": "skills/setup-pstack/SKILL.md",
@@ -2902,15 +2898,16 @@
      "quote": "say at the ask that a budget's suffix overrides the session effort in both directions once the effort agents are loaded."
     },
     {
-     "file": "skills/setup-pstack/references/models-config.md",
-     "quote": "An effort the CLI or the model cannot use is dropped, and the effort policy fills it as if the line wrote none."
+     "file": "skills/pstack-harness/SKILL.md",
+     "quote": "The spawn takes no effort, so a resolved level runs at the session effort and step 5 reports it."
     }
    ],
    "harness_sensitive": false,
    "owners": [
     "skills/setup-pstack/SKILL.md",
     "skills/setup-pstack/references/models-config.md",
-    "skills/setup-pstack/examples/pstack-models.md"
+    "skills/setup-pstack/examples/pstack-models.md",
+    "skills/pstack-harness/SKILL.md"
    ]
   },
   "investigation-returns-cited-explanation-or-tradeoffs": {
@@ -8854,7 +8851,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "b5731271de06"
+    "a83ccde08cc1"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -8866,7 +8863,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "0767aa518b7f"
+    "f87f981bda52"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -8878,8 +8875,8 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "b5731271de06",
-    "3e502e9fa9bb"
+    "a83ccde08cc1",
+    "b7618cfbba23"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -8909,7 +8906,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "b5731271de06"
+    "a83ccde08cc1"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -11433,48 +11430,54 @@
    "text": "It's gated against loading on its own, so it runs when you type it."
   },
   "06188b938938": {
-   "class": "context",
+   "class": "substituted",
    "file": "README.md",
+   "ported_as": [
+    "06188b938938"
+   ],
    "sources": [
     "port"
    ],
    "text": "[Set up pstack](./01-setup.md). Install the skills and pick your models."
   },
-  "b5731271de06": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "The other budgets write one effort on every role: `unlimited` writes `max`, `large` writes `xhigh`, `medium` writes `high`, and `small` writes `medium`."
-  },
-  "3e502e9fa9bb": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "A written effort replaces your session effort, whether it is higher or lower."
-  },
-  "0767aa518b7f": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "A CLI drops an effort it can't run, so on Grok Build, which stops at `xhigh`, a role written at `max` runs at your session effort."
-  },
   "4cc94348b2c5": {
-   "class": "promise",
+   "class": "substituted",
    "file": "04-design.md",
+   "ported_as": [
+    "4cc94348b2c5"
+   ],
    "promise": "interrogate-reviewers-on-different-models",
    "sources": [
     "port"
    ],
    "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to reviewers on different models."
+  },
+  "a83ccde08cc1": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "The other budgets write one effort on every role that names a model: `unlimited` writes `max`, `large` writes `xhigh`, `medium` writes `high`, and `small` writes `medium`."
+  },
+  "b7618cfbba23": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code and Codex a written effort replaces your session effort, whether it is higher or lower."
+  },
+  "f87f981bda52": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "Grok Build's spawn tool takes no effort, so there every role runs at your session effort, whatever the file writes."
   }
  }
 }
