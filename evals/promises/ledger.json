@@ -2875,7 +2875,7 @@
   },
   "budget-labels-set-effort": {
    "check": "static",
-   "claim": "The shipped flat lines write no effort, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own; `default` keeps them, `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium, and a model that cannot take the target falls to its highest supported effort at or below it.",
+   "claim": "The shipped flat lines write no effort, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every role, which overrides the session effort in either direction. A harness that cannot run a written effort drops it, so on Grok Build a written max runs at the session effort.",
    "evidence": [
     {
      "file": "skills/setup-pstack/examples/pstack-models.md",
@@ -2899,7 +2899,11 @@
     },
     {
      "file": "skills/setup-pstack/SKILL.md",
-     "quote": "If the lint in step 4 rejects that effort for the model, use the model's highest supported effort at or below the target."
+     "quote": "say at the ask that a budget's suffix overrides the session effort in both directions once the effort agents are loaded."
+    },
+    {
+     "file": "skills/setup-pstack/references/models-config.md",
+     "quote": "An effort the CLI or the model cannot use is dropped, and the effort policy fills it as if the line wrote none."
     }
    ],
    "harness_sensitive": false,
@@ -4978,11 +4982,13 @@
    "text": "Say the agent is about to bolt a new adapter onto three existing ones:"
   },
   "5712e3224d70": {
-   "class": "context",
+   "class": "substituted",
    "file": "README.md",
+   "ported_as": [
+    "06188b938938"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "[Set up pstack](./01-setup.md). Install the plugin and pick your models."
   },
@@ -8820,12 +8826,14 @@
    "text": "It doesn't start the work, because a pstack run spends real tokens, so you send the prompt when you're ready."
   },
   "c6f75c4a665a": {
-   "class": "promise",
+   "class": "substituted",
    "file": "README.md",
+   "ported_as": [
+    "c096c9f14d15"
+   ],
    "promise": "poteto-help-typed-only",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "It runs only when you type it."
   },
@@ -8846,7 +8854,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "2c7eb061fed3"
+    "b5731271de06"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -8858,7 +8866,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "871f2ac74e57"
+    "0767aa518b7f"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -8870,7 +8878,8 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "fa9fd32557e7"
+    "b5731271de06",
+    "3e502e9fa9bb"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -8897,23 +8906,16 @@
    "text": "On Claude Code and Grok Build those roles run at your session effort, and on Codex the `## codex` section pins its own."
   },
   "2c7eb061fed3": {
-   "class": "promise",
+   "class": "substituted",
    "file": "01-setup.md",
+   "ported_as": [
+    "b5731271de06"
+   ],
    "promise": "budget-labels-set-effort",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "`unlimited` lifts each model to its highest tier, up to `max`."
-  },
-  "fa9fd32557e7": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "`large` pins `xhigh`, and `medium` and `small` lower the reasoning and spend fewer tokens."
   },
   "b61923c61339": {
    "class": "substituted",
@@ -9799,12 +9801,14 @@
    "text": "It scraps the sketch and starts over instead of patching around it."
   },
   "7285a3d9185e": {
-   "class": "promise",
+   "class": "substituted",
    "file": "04-design.md",
+   "ported_as": [
+    "4cc94348b2c5"
+   ],
    "promise": "interrogate-reviewers-on-different-models",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to reviewers on different model families."
   },
@@ -11419,14 +11423,58 @@
    ],
    "text": "**Parallel agents in one worktree.** They overwrite each other and the diff becomes archaeology. Run them as cloud agents, or say \"own worktree per attempt\"."
   },
-  "871f2ac74e57": {
+  "c096c9f14d15": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-typed-only",
+   "sources": [
+    "port"
+   ],
+   "text": "It's gated against loading on its own, so it runs when you type it."
+  },
+  "06188b938938": {
+   "class": "context",
+   "file": "README.md",
+   "sources": [
+    "port"
+   ],
+   "text": "[Set up pstack](./01-setup.md). Install the skills and pick your models."
+  },
+  "b5731271de06": {
    "class": "promise",
    "file": "01-setup.md",
    "promise": "budget-labels-set-effort",
    "sources": [
     "port"
    ],
-   "text": "A model whose highest tier is lower, such as Grok at `xhigh`, runs at that tier."
+   "text": "The other budgets write one effort on every role: `unlimited` writes `max`, `large` writes `xhigh`, `medium` writes `high`, and `small` writes `medium`."
+  },
+  "3e502e9fa9bb": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "A written effort replaces your session effort, whether it is higher or lower."
+  },
+  "0767aa518b7f": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "A CLI drops an effort it can't run, so on Grok Build, which stops at `xhigh`, a role written at `max` runs at your session effort."
+  },
+  "4cc94348b2c5": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-reviewers-on-different-models",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to reviewers on different models."
   }
  }
 }

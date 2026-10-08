@@ -133,7 +133,7 @@ Principles are one-rule skills that `/poteto-mode` reads and cites in its replie
 | A question got treated as the next step of the last task | Say "new task", or say the turn doesn't need the mode. |
 | A new model choice had no effect | A workspace `.agents/pstack-models.md` overrides the home file, and a harness section such as `## codex` beats a flat line. On Claude Code, a written effort applies only once `/setup-pstack` has registered pstack's effort agents. |
 | Runs cost more than expected | See the cost paragraph under Get set up. |
-| A skill didn't load on its own | Of the skills a user types, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when `/poteto-mode` runs them, and it doesn't run every skill. |
+| A skill didn't load on its own | On Claude Code and Codex, which honor the gating, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when `/poteto-mode` runs them, and it doesn't run every skill. |
 | Parallel agents overwrote each other | Give each agent its own worktree. |
 | An overnight run moved but finished nothing | `/loop` needs a check that can pass or fail, not a duration. See [guide page 7](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/07-overnight.md). |
 | The reply claims success from a green build | Ask for the real command, flow, stored value, or profile. That's the prove-it-works principle. |

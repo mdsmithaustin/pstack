@@ -4,7 +4,7 @@ pstack works best when you stop micromanaging the agent. You describe what you w
 
 Here's what you'll learn:
 
-1. [Set up pstack](./01-setup.md). Install the plugin and pick your models.
+1. [Set up pstack](./01-setup.md). Install the skills and pick your models.
 2. [Route work through `/poteto-mode`](./02-poteto-mode.md). Give it a goal and watch it pick a playbook.
 3. [Understand the code](./03-understand.md). A read-only investigation, then `/how`, `/why`, `/poteto-teach`, and `/recall` before you edit anything.
 4. [Design the change](./04-design.md). `/architect`, `/arena`, `/swarm`, `/interrogate`, prototypes, and plans before code locks in a shape.
@@ -23,7 +23,7 @@ When you're stuck, or can't tell which skill fits, type [`/poteto-help`](../../s
 /poteto-help which skill should i use to review this branch?
 ```
 
-It answers, hands you a prompt to send, and links the skill or guide page the answer came from. It doesn't start the work, because a pstack run spends real tokens, so you send the prompt when you're ready. It runs only when you type it.
+It answers, hands you a prompt to send, and links the skill or guide page the answer came from. It doesn't start the work, because a pstack run spends real tokens, so you send the prompt when you're ready. It's gated against loading on its own, so it runs when you type it.
 
 ## If you only remember one thing
 
