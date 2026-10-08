@@ -329,7 +329,7 @@ Behavioral eval manifests and their oracles live at the repository root under `e
 
 `.skill-ci.toml` pins the skill-ci release that every skill check runs, here and in CI. The `skill-ci` command reads that pin and runs that version from any checkout or worktree, and it needs `uv` on your PATH. `skill-ci check` runs the frontmatter and trigger declaration coverage check, the content check with `tools/skill-content-conventions.json`, and the whole-tree PII scan. `evals_dir` points it at the manifests, so for every `evals/**/shared-benchmark.json` it also runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. It runs the harness that the pinned skill-ci release installs, never whatever `skill-benchmark` is on your PATH.
 
-`mise.toml` adds a one-line task for each skill-ci command. mise asks you to run `mise trust` once.
+`mise.toml` adds a one-line task for each check and run command, such as `skill-check` for `skill-ci check`. A mise older than 2026.8.9 asks you to run `mise trust` once.
 
 ```sh
 mise run skill-lint
@@ -349,7 +349,7 @@ Pinning the runner does not make those two commands complete. Neither resolves `
 skill-ci run skills/unslop --out evals/unslop/runs/$(date +%Y%m%d-%H%M%S)
 ```
 
-`evals_dir` in `.skill-ci.toml` points every command at `evals/`. Delete it and the commands search `skills/`, find no manifest, and still exit 0, so `tools/test_eval_artifacts.py` pins its value.
+`evals_dir` in `.skill-ci.toml` points every command at `evals/`. Delete it and `check`, `validate`, and `audit` search `skills/`, find no manifest, and still exit 0, so `tools/test_eval_artifacts.py` pins its value.
 
 `tools/skill-trigger-cases.json` checks deterministic trigger declaration coverage. It confirms that every shipped skill has a realistic request, literal description anchors, and the expected invocation policy. It does not measure model-routing accuracy.
 

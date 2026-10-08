@@ -125,7 +125,7 @@ runner skill-benchmark benchmark "$manifest" --runs "$run_root/claude" --split t
 ## Trigger run
 
 Run trigger cases separately for each answer model. `skill-ci trigger` passes
-one `--model` value to every selected adapter, so use the pinned harness directly:
+one `--model` value to both agents, so use the pinned harness directly:
 
 ```sh
 skill=runtime-probes

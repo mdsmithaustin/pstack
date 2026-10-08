@@ -1050,7 +1050,7 @@ def sandbox_wrapper(agent, out, entry):
 
 def refuse_effort(agent, effort):
     if effort and agent != "codex":
-        raise ScreenError("--effort applies to --agent codex only; the pinned harness has no Claude effort flag")
+        raise ScreenError("--effort applies to --agent codex only; the screen passes Claude no effort setting")
 
 
 def backend_args(agent, out, entry, in_workspace=False, runner="host", effort=None):

@@ -888,7 +888,7 @@ Drop `--entry poteto-mode` for the single-skill screen. `--effort E` pins a
 Codex lead's reasoning effort on either runner with `-c
 model_reasoning_effort=E` in the `--codex-cmd` string, which survives the
 harness's `--ignore-user-config` and `sandbox.py`'s argv rewrite. It is refused
-for `--agent claude`, since the pinned harness has no Claude effort flag.
+for `--agent claude`, because the screen passes Claude no effort setting.
 `CODEX_BIN` puts that
 binary first on `PATH`, so the `exec codex` in `codex-project-only` finds it.
 The shim also links every executable `codex-*` file beside the binary, because
