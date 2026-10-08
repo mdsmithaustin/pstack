@@ -826,9 +826,8 @@ delegate brief.
 ## Model-free checks
 
 These need Docker and `uv`. `audit` and `run` reach the pinned harness through
-`skill-ci harness`, which needs the `skill-ci` command on `PATH`
-(`uv tool install git+https://github.com/mdsmithaustin/skill-ci.git`) and reads
-the version from `.skill-ci.toml`. Without a running Docker daemon, the
+`skill-ci harness`. Follow [README contributor checks](../../README.md#contributor-checks)
+for installation and version pinning. Without a running Docker daemon, the
 oracle tests that run answer code skip. The `project_test_results` tests
 skip unless this machine has built the `omnigent-336207801509` image, which the
 `lint` workflow does not build. `audit` and `run` need the `skill-ci` command,
