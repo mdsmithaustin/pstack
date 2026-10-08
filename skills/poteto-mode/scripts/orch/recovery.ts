@@ -106,23 +106,6 @@ export interface Attempt extends BeginAttempt {
   readonly observation: Observation;
   readonly settled: Settlement | null;
 }
-export interface Requirement {
-  readonly id: string;
-  readonly unit: string;
-  readonly states?: readonly string[];
-  readonly ledger?: {
-    readonly pr: number;
-    readonly sha: string;
-    readonly verdicts: readonly Verdict[];
-  };
-}
-export interface Closeout {
-  readonly ok: boolean;
-  readonly failures: readonly string[];
-  readonly pendingEvents: number;
-  readonly pendingAttempts: readonly string[];
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -390,48 +373,6 @@ export function parseSavedDecision(value: unknown): SavedDecision {
   const decision = parseAckDecisions([value])[0];
   if (decision === undefined) throw new UserError("invalid saved decision");
   return { ...decision, ...parseWriteIntent(value) };
-}
-export function parseRequirements(value: unknown): readonly Requirement[] {
-  const rows = array(value).map((value) => {
-    const row = record(value);
-    const states =
-      row.states === undefined ? undefined : array(row.states).map(text);
-    const l = row.ledger === undefined ? undefined : record(row.ledger);
-    const ledger =
-      l === undefined
-        ? undefined
-        : {
-            pr: integer(l.pr),
-            sha: text(l.sha),
-            verdicts: array(l.verdicts).map((value) =>
-              parseVerdict(text(value)),
-            ),
-          };
-    if (ledger?.verdicts.some(
-      (verdict) => verdict === "verifier-blocked" || verdict === "verifier-failed",
-    ))
-      throw new UserError("blocked or failed verifier verdicts cannot satisfy closeout");
-    if (
-      states?.length === 0 ||
-      ledger?.verdicts.length === 0 ||
-      (states === undefined && ledger === undefined)
-    )
-      throw new UserError(
-        "requirement needs explicit states or ledger verdicts",
-      );
-    return {
-      id: text(row.id),
-      unit: text(row.unit),
-      ...(states === undefined ? {} : { states }),
-      ...(ledger === undefined ? {} : { ledger }),
-    };
-  });
-  if (
-    rows.length === 0 ||
-    new Set(rows.map((row) => row.id)).size !== rows.length
-  )
-    throw new UserError("requirements must be nonempty with unique ids");
-  return rows;
 }
 export function sameSlot(left: AttemptSlot, right: AttemptSlot): boolean {
   return (

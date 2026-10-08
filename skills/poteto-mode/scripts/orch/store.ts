@@ -20,7 +20,6 @@ import {
   parseBeginAttempt,
   parseCompletionBinding,
   parseObservation,
-  parseRequirements,
   parseSavedDecision,
   parseWriteIntent,
   safeId,
@@ -29,12 +28,10 @@ import {
   type Attempt,
   type Batch,
   type BeginAttempt,
-  type Closeout,
   type CompletionBinding,
   type Event,
   type Observation,
   type Receipt,
-  type Requirement,
   type SavedDecision,
   type WriteIntent,
 } from "./recovery.ts";
@@ -246,9 +243,6 @@ export interface Store {
     ) => Promise<Attempt>;
     readonly list: () => Promise<readonly Attempt[]>;
     readonly finish: (id: string, reason: string) => Promise<Attempt>;
-  };
-  readonly requirements: {
-    readonly check: (criteria: readonly Requirement[]) => Promise<Closeout>;
   };
   readonly gates: {
     readonly park: (params: ParkGateParams) => Promise<OpenGate>;
@@ -847,7 +841,7 @@ async function mutationAuthority(
 ): Promise<Attempt | undefined> {
   const rows = await readAttempts(store);
   if (attemptId === undefined) {
-    if (unit !== undefined && rows.some((row) => row.unit === unit.id))
+    if (unit !== undefined && rows.some((row) => row.unit === unit.id && row.settled?.kind !== "finished"))
       throw new UserError(`tracked unit ${unit.id} requires an attempt`);
     return undefined;
   }
@@ -916,7 +910,7 @@ async function ledgerEffect(
   const boundUnits = (await readUnits(store)).filter((row) => row.pr === pr);
   if (attempt === undefined) {
     const tracked = await readAttempts(store);
-    if (boundUnits.some((row) => tracked.some((a) => a.unit === row.id)))
+    if (boundUnits.some((row) => tracked.some((a) => a.unit === row.id && a.settled?.kind !== "finished")))
       throw new UserError("tracked ledger mutation requires an attempt");
   } else if (unit?.pr !== pr || unit.sha !== sha)
     throw new UserError("verdict does not match the current unit PR/head");
@@ -2269,58 +2263,6 @@ export function openStore(
         };
         await saveAttempt(store, row);
         return row;
-      },
-    },
-    requirements: {
-      check: async (input) => {
-        await beginWrite();
-        const criteria = parseRequirements(input);
-        const units = await readUnits(store);
-        const ledger = await readLedger(store);
-        const failures: string[] = [];
-        for (const criterion of criteria) {
-          const unit = units.find((row) => row.id === criterion.unit);
-          if (unit === undefined) {
-            failures.push(`${criterion.id}: unit ${criterion.unit} not found`);
-            continue;
-          }
-          if (
-            criterion.states !== undefined &&
-            !criterion.states.includes(unit.state)
-          )
-            failures.push(
-              `${criterion.id}: state ${unit.state} does not satisfy requirement`,
-            );
-          if (criterion.ledger !== undefined) {
-            const expected = criterion.ledger;
-            const row = ledger.find(
-              (row) =>
-                row.pr === String(expected.pr) && row.sha === expected.sha,
-            );
-            if (
-              unit.pr !== String(expected.pr) ||
-              unit.sha !== expected.sha ||
-              row === undefined ||
-              !expected.verdicts.includes(row.verdict)
-            )
-              failures.push(
-                `${criterion.id}: current PR/head verdict does not satisfy requirement`,
-              );
-          }
-        }
-        const pendingCount = (await pending.events()).length;
-        const attempts = (await readAttempts(store))
-          .filter((row) => row.settled === null)
-          .map((row) => row.id);
-        if (pendingCount > 0) failures.push(`${pendingCount} pending inbox events`);
-        if (attempts.length > 0)
-          failures.push(`${attempts.length} pending attempts`);
-        return {
-          ok: failures.length === 0,
-          failures,
-          pendingEvents: pendingCount,
-          pendingAttempts: attempts,
-        };
       },
     },
     gates: {

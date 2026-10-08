@@ -901,109 +901,6 @@ describe("CLI attempt authority", () => {
   });
 });
 
-describe("CLI explicit requirements", () => {
-  it("checks state-only units without invented PRs and fails pending work or wrong criteria", async () => {
-    const { dir, run } = await fixture();
-    const criteria = await input(dir, "requirements.json", [
-      { id: "core", unit: "u", states: ["published"] },
-    ]);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(2);
-    expect(run("unit", "set", "u", "--state", "published").code).toBe(0);
-    expect(
-      JSON.parse(run("requirements", "check", "--file", criteria).out),
-    ).toEqual({
-      ok: true,
-      failures: [],
-      pendingEvents: 0,
-      pendingAttempts: [],
-    });
-    const attempt = (await begin(dir, run, "worker")).attempt;
-    expect(run("requirements", "check", "--file", criteria).code).toBe(2);
-    expect(
-      run(
-        "attempt",
-        "finish",
-        attempt.id,
-        "--reason",
-        "abandoned after inspection",
-      ).code,
-    ).toBe(0);
-    expect(run("inbox", "push", "worker", "u", "done").code).toBe(0);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(2);
-    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
-    const ack = await input(dir, "ack.json", [
-      {
-        event: batch.events[0].id,
-        outcome: { kind: "discard", reason: "duplicate" },
-      },
-    ]);
-    expect(run("inbox", "ack", batch.id, "--file", ack).code).toBe(0);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
-    await input(dir, "requirements.json", [
-      { id: "missing", unit: "missing", states: ["published"] },
-    ]);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(2);
-    await input(dir, "requirements.json", [{ id: "empty", unit: "u" }]);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(1);
-  });
-  it("requires the declared exact current PR/head and allowed verdict", async () => {
-    const { dir, run } = await fixture();
-    expect(
-      run(
-        "unit",
-        "set",
-        "u",
-        "--state",
-        "merged",
-        "--pr",
-        "12",
-        "--sha",
-        "head",
-      ).code,
-    ).toBe(0);
-    const criteria = await input(dir, "requirements.json", [
-      {
-        id: "pr",
-        unit: "u",
-        ledger: { pr: 12, sha: "head", verdicts: ["unit-test-verified"] },
-      },
-    ]);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(2);
-    expect(
-      run(
-        "ledger",
-        "record",
-        "12",
-        "head",
-        "unit-test-verified",
-        "--evidence",
-        "proof",
-        "--verifier",
-        "reviewer",
-      ).code,
-    ).toBe(0);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
-    expect(
-      run(
-        "ledger",
-        "record",
-        "12",
-        "head",
-        "verifier-failed",
-        "--evidence",
-        "failure",
-        "--verifier",
-        "reviewer",
-      ).code,
-    ).toBe(0);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(2);
-    expect(
-      run("unit", "set", "u", "--state", "restacked", "--sha", "new-head").code,
-    ).toBe(0);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(2);
-  });
-});
-
 describe("CLI acknowledgment authority", () => {
   it("uses verifier precedence for acknowledgments and preserves rejected events", async () => {
     const { dir, run } = await fixture();
@@ -1153,10 +1050,72 @@ describe("CLI acknowledgment authority", () => {
       "unit-test-verified",
     );
     expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
-    const criteria = await input(dir, "requirements.json", [
-      { id: "published", unit: "u", states: ["published"] },
-    ]);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
+  });
+});
+
+describe("CLI coordinator updates after finished attempts", () => {
+  for (const operation of ["unit", "ledger", "ack-unit", "ack-verdict", "ack-combined"] as const) {
+    it(`allows untracked ${operation} only after every attempt is finished`, async () => {
+      const { dir, run } = await fixture();
+      expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+      const worker = (await begin(dir, run, "worker")).attempt;
+      const verifier = (await begin(dir, run, "verifier", "verifier")).attempt;
+      const verdict = { kind: "verdict", pr: 12, sha: "head", verdict: "unit-test-verified", evidence: "coordinator inspection", verifier: "coordinator" };
+      let batch: { id: string; events: { id: string }[] } | undefined;
+      let ack: string | undefined;
+      if (operation.startsWith("ack-")) {
+        expect(run("inbox", "push", "coordinator", "u", "done").code).toBe(0);
+        batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+        const outcome = operation === "ack-verdict" ? verdict : {
+          kind: "unit", state: "merged",
+          ...(operation === "ack-combined" ? { ledger: verdict } : {}),
+        };
+        ack = await input(dir, "ack.json", [{ event: batch!.events[0]!.id, outcome }]);
+      }
+      const update = () => {
+        if (operation === "unit") return run("unit", "set", "u", "--state", "merged", "--sha", "landed");
+        if (operation === "ledger") return run("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "coordinator inspection", "--verifier", "coordinator");
+        return run("inbox", "ack", batch!.id, "--file", ack!);
+      };
+      expect(update().code).toBe(1);
+      expect(run("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "worker report", "--attempt", worker.id).code).toBe(0);
+      expect(JSON.parse(run("attempt", "list").out)[0].settled.kind).toBe("accepted");
+      expect(update().code).toBe(1);
+      expect(run("attempt", "finish", verifier.id, "--reason", "abandoned").code).toBe(0);
+      expect(update().code).toBe(1);
+      expect(run("attempt", "finish", worker.id, "--reason", "abandoned after inspection").code).toBe(0);
+      expect(run("unit", "set", "u", "--state", "abandoned").code).toBe(0);
+      expect(update().code).toBe(0);
+      if (operation !== "ledger" && operation !== "ack-verdict") expect(JSON.parse(run("unit", "get", "u").out).state).toBe("merged");
+      if (operation === "unit") expect(JSON.parse(run("unit", "get", "u").out).sha).toBe("landed");
+      if (operation === "ledger" || operation === "ack-verdict" || operation === "ack-combined")
+        expect(JSON.parse(run("ledger", "check", "12", "head").out)).toMatchObject({ verdict: "unit-test-verified", verifier: "coordinator", evidence: "coordinator inspection" });
+      expect(JSON.parse(run("attempt", "list").out).map((row: { settled: { kind: string } }) => row.settled.kind)).toEqual(["finished", "finished"]);
+      if (batch !== undefined) expect(JSON.parse(run("inbox", "count").out)).toEqual({ count: 0 });
+    });
+  }
+  it("keeps ledger authority bound to every unit sharing a PR", async () => {
+    const { dir, run } = await fixture();
+    expect(run("unit", "set", "u", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+    expect(run("unit", "add", "sibling", "--track", "core").code).toBe(0);
+    expect(run("unit", "set", "sibling", "--state", "ready", "--pr", "12", "--sha", "head").code).toBe(0);
+    const first = await begin(dir, run, "first");
+    expect(run("attempt", "finish", first.attempt.id, "--reason", "abandoned").code).toBe(0);
+    const request = JSON.parse(await readFile(first.path, "utf8"));
+    const path = await input(dir, "sibling.json", { ...request, unit: "sibling", requestId: "sibling" });
+    const started = run("attempt", "begin", "--file", path);
+    expect(started.code).toBe(0);
+    const sibling = JSON.parse(started.out);
+    const update = () => run("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "inspection", "--verifier", "coordinator");
+    expect(update().code).toBe(1);
+    expect(run("inbox", "push", "coordinator", "u", "done").code).toBe(0);
+    const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
+    const ack = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "verdict", pr: 12, sha: "head", verdict: "unit-test-verified", evidence: "inspection", verifier: "coordinator" } }]);
+    expect(run("inbox", "ack", batch.id, "--file", ack).code).toBe(1);
+    expect(run("attempt", "finish", sibling.id, "--reason", "abandoned").code).toBe(0);
+    expect(update().code).toBe(0);
+    expect(run("inbox", "ack", batch.id, "--file", ack).code).toBe(0);
+    expect(JSON.parse(run("ledger", "check", "12", "head").out).verifier).toBe("coordinator");
   });
 });
 
@@ -1176,14 +1135,9 @@ describe("CLI slot and pending invariants", () => {
       ).code,
     ).toBe(0);
     expect(JSON.parse(run("attempt", "list").out)[0].settled).toBeNull();
-    const path = await input(dir, "requirements.json", [
-      { id: "state", unit: "u", states: ["custom running state"] },
-    ]);
-    expect(run("requirements", "check", "--file", path).code).toBe(2);
     expect(
       run("attempt", "finish", worker.id, "--reason", "output inspected").code,
     ).toBe(0);
-    expect(run("requirements", "check", "--file", path).code).toBe(0);
   });
   it("keeps exact resolution and independent panel arms and rejects a foreign unit", async () => {
     const { dir, run } = await fixture();
@@ -1257,9 +1211,7 @@ describe("CLI core review regressions", () => {
     const verifier = (await begin(dir, run, "verifier", "verifier")).attempt;
     await killAt(dir, "ledger", ["ledger", "record", "12", "head", "unit-test-verified", "--evidence", "proof", "--attempt", verifier.id]);
     expect(JSON.parse(run("ledger", "check", "12", "head").out).verdict).toBe("unit-test-verified");
-    expect(JSON.parse(run("attempt", "list").out)[0].settled).not.toBeNull();
-    const criteria = await input(dir, "requirements.json", [{ id: "verified", unit: "u", ledger: { pr: 12, sha: "head", verdicts: ["unit-test-verified"] } }]);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
+    expect(JSON.parse(run("attempt", "list").out)[0].settled.kind).toBe("accepted");
   });
   for (const kind of ["unit", "verdict"] as const) {
     it(`quarantines a legacy queued ${kind} result after rebinding its attempt`, async () => {
@@ -1298,17 +1250,6 @@ describe("CLI core review regressions", () => {
       expect(run("ledger", "check", "12", "head").code).toBe(2);
     });
   }
-  for (const verdict of ["verifier-blocked", "verifier-failed"]) {
-    for (const mixed of [false, true]) {
-      it(`rejects ${verdict} ${mixed ? "mixed" : "single"} closeout criteria`, async () => {
-        const { dir, run } = await fixture();
-        expect(run("unit", "set", "u", "--state", "custom done", "--pr", "12", "--sha", "head").code).toBe(0);
-        expect(run("ledger", "record", "12", "head", verdict, "--evidence", "failure", "--verifier", "reviewer").code).toBe(0);
-        const criteria = await input(dir, "requirements.json", [{ id: "verified", unit: "u", ledger: { pr: 12, sha: "head", verdicts: mixed ? ["unit-test-verified", verdict] : [verdict] } }]);
-        expect(run("requirements", "check", "--file", criteria).code).toBe(1);
-      });
-    }
-  }
   for (const mode of ["legacy", "receipt", "compact"] as const) {
     it(`keeps repeated empty ${mode} drains bounded`, async () => {
       const { dir, run } = await fixture();
@@ -1327,10 +1268,14 @@ describe("CLI core review regressions", () => {
     const first = (await begin(dir, run, "first")).attempt;
     const second = (await begin(dir, run, "second", "worker", first.id)).attempt;
     expect(run("attempt", "finish", second.id, "--reason", "inspected").code).toBe(0);
-    const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["pending"] }]);
-    const check = run("requirements", "check", "--file", criteria);
-    expect(check.code).toBe(2);
-    expect(JSON.parse(check.out).pendingAttempts).toEqual([first.id]);
+    expect(JSON.parse(run("attempt", "list").out)).toMatchObject([
+      { id: first.id, settled: null },
+      { id: second.id, settled: { kind: "finished", reason: "inspected" } },
+    ]);
+    expect(run("unit", "set", "u", "--state", "merged").code).toBe(1);
+    expect(run("attempt", "finish", first.id, "--reason", "confirmed abandoned").code).toBe(0);
+    expect(run("unit", "set", "u", "--state", "merged").code).toBe(0);
+    expect(JSON.parse(run("unit", "get", "u").out).state).toBe("merged");
   });
   it("allows a known terminal disposition for a superseded attempt", async () => {
     const { dir, run } = await fixture();
@@ -1341,8 +1286,6 @@ describe("CLI core review regressions", () => {
     expect(run("unit", "set", "u", "--state", "old", "--attempt", first.id).code).toBe(1);
     expect(run("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "old", "--attempt", first.id).code).toBe(1);
     expect(run("attempt", "finish", second.id, "--reason", "inspected").code).toBe(0);
-    const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["pending"] }]);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
   });
 });
 
@@ -1417,8 +1360,6 @@ describe("CLI immutable completion bindings", () => {
     const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
     const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "arbitrary published state" } }]);
     expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
-    const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["arbitrary published state"] }]);
-    expect(run("requirements", "check", "--file", criteria).code).toBe(0);
     expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject({ pr: "", sha: "" });
   });
   it("rejects an initial outcome for a different report head", async () => {
@@ -1522,8 +1463,6 @@ describe("CLI partial non-PR metadata", () => {
       const batch = JSON.parse(run("inbox", "drain", "--receipt").out);
       const path = await input(dir, "ack.json", [{ event: batch.events[0].id, outcome: { kind: "unit", state: "published", [field]: field === "pr" ? 12 : value } }]);
       expect(run("inbox", "ack", batch.id, "--file", path).code).toBe(0);
-      const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["published"] }]);
-      expect(run("requirements", "check", "--file", criteria).code).toBe(0);
       expect(JSON.parse(run("unit", "get", "u").out)).toMatchObject(field === "sha" ? { pr: "", sha: "source" } : { pr: "12", sha: "" });
     });
   }
@@ -1709,8 +1648,6 @@ mock.module("node:fs/promises", () => ({ ...fs,
     expect(guarded("ledger", "record", "12", "head", "unit-test-verified", "--evidence", "proof", "--attempt", worker.id).verdict).toBe("unit-test-verified");
     expect(guarded("attempt", "finish", worker.id, "--reason", "confirmed complete").settled).toEqual({ kind: "finished", reason: "confirmed complete" });
     expect(guarded("attempt", "list")[0].id).toBe(worker.id);
-    const criteria = await input(dir, "requirements.json", [{ id: "state", unit: "u", states: ["ready"], ledger: { pr: 12, sha: "head", verdicts: ["unit-test-verified"] } }]);
-    expect(guarded("requirements", "check", "--file", criteria)).toEqual({ ok: true, failures: [], pendingEvents: 0, pendingAttempts: [] });
     expect(run("inbox", "push", "new", "u", "waiting").code).toBe(0);
     expect(run("inbox", "push", "later", "u", "waiting").code).toBe(0);
     expect(guarded("inbox", "count")).toEqual({ count: 2 });

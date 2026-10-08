@@ -104,7 +104,7 @@ The context is immutable request content. Changing raw input, source, notes, ste
 
 A CLI observation is `{"kind":"cli","receipt":"logs/agent-1.jsonl"}`. Missing runtime evidence is `{"kind":"unknown"}`. Unknown leaves an unsettled attempt pending and establishes neither death nor liveness. Replacing it does not settle it. Observing an attempt does not dispatch or settle it. `attempt finish <id> --reason <disposition>` records `settled: {"kind":"finished","reason":"<disposition>"}` for any known attempt. This revokes further unit and ledger effects, including new acknowledgments. An accepted unit or verdict acknowledgment records `settled: {"kind":"accepted","at":"<timestamp>"}`. A direct ledger record does the same. Accepted results remain usable for current verifier revisions and coordinator metadata updates after landing. Direct unit updates preserve settlement because unit states are caller-defined. Legacy settlement strings cannot distinguish accepted results from explicit finish and conservatively revoke effects. Replay does not consume retry allowance.
 
-Tracked unit and ledger mutations require the current bound `--attempt`. The attempt must match the unit and stored PR/head. Direct coordinator metadata updates use that attempt, including after an accepted result, without another worker launch. Changing its PR or SHA also rotates its `binding` token in the same replayable write. A state or branch update keeps the token. Other attempts bound to the old head cannot advance the new head.
+Unit and ledger mutations require the current bound `--attempt` while any attempt for the affected unit is unsettled or accepted, including superseded attempts. When every attempt for the unit is explicitly finished, untracked coordinator unit updates, ledger records, and acknowledgments are allowed. Explicitly finished attempts still cannot authorize new effects. The attempt must match the unit and stored PR/head. Direct coordinator metadata updates use that attempt, including after an accepted result, without another worker launch. Changing its PR or SHA also rotates its `binding` token in the same replayable write. A state or branch update keeps the token. Other attempts bound to the old head cannot advance the new head.
 
 Save the attempt's `binding` with its brief and report. Publish tracked reports with `--attempt`, that saved `--binding`, and the report's actual `--pr` and `--sha` when present. Omitted head fields mean absent metadata. Do not obtain an old report's head or token from the attempt's mutable state. A worker may introduce its reported head through a matching unit acknowledgment only when both captured target fields, PR and SHA, are empty. If either target field is populated, the report and unit outcome must match both captured fields exactly, including an empty field. A worker acknowledgment cannot fill or change either field of a partial target. Use the direct coordinator metadata update described above to change that target. Verifiers require the existing target head.
 
@@ -112,21 +112,3 @@ Inbox publication accepts late and unbound events for inspection. Acknowledgment
 
 Direct ledger writes and acknowledgment share verifier precedence. Tracked authority comes from the attempt, regardless of a supplied `verifier` field. Untracked callers retain the existing trusted `--verifier <name>` attribution. A worker cannot replace a verifier on the same PR/head. A current verifier may revise either direction. Verdict labels have no strength ranking. Untracked legacy unit and ledger usage remains available.
 
-## Explicit closeout
-
-`requirements check --file requirements.json` checks only declared criteria over existing units, then requires no pending inbox events or unsettled attempts, including superseded history. Requirements must be nonempty and have unique ids. Each entry requires at least one explicit state list or exact PR/head verdict list:
-
-```json
-[
-	{"id":"core","unit":"u1","states":["published"]},
-	{
-		"id":"review",
-		"unit":"u2",
-		"ledger":{"pr":12,"sha":"head","verdicts":["unit-test-verified"]}
-	}
-]
-```
-
-State-only units need no PR verdict. A ledger criterion requires both the unit's current PR/head and the exact ledger row to match. Changed heads and disallowed verdicts fail. `verifier-blocked` and `verifier-failed` are invalid successful closeout criteria, even in a mixed allowlist. Passing labels have no strength ranking. Unknown unsettled attempts remain pending after replacement until the coordinator records a known terminal disposition. Superseded ids may be finished for reconciliation, but cannot authorize unit or ledger effects.
-
-The result contains `ok`, `failures`, `pendingEvents`, and `pendingAttempts`. Exit 0 means the explicit criteria pass. Exit 2 means requirements or pending work remain. Exit 1 means invalid input or a store error. These checks do not authorize landing or replace verification against the actual artifact.

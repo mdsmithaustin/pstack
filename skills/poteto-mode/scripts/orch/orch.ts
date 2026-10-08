@@ -5,7 +5,6 @@ import {
   parseAckDecisions,
   parseBeginAttempt,
   parseObservation,
-  parseRequirements,
 } from "./recovery.ts";
 import { ensureDependenciesInstalled } from "../bootstrap.ts";
 import {
@@ -532,35 +531,6 @@ function createProgram(io: Io): Command {
         JSON.stringify,
       ),
     );
-  const requirements = program
-    .command("requirements")
-    .description("check explicit closeout criteria")
-    .action(() => requireSubcommand(program));
-  leaf(
-    requirements,
-    "check",
-    "check declared units, exact heads and pending work",
-  )
-    .requiredOption("--file <path>", "JSON array of requirements")
-    .action((options: { file: string }) =>
-      runStore(
-        program,
-        io,
-        async (store) => {
-          const result = await store.requirements.check(
-            parseRequirements(JSON.parse(await readFile(options.file, "utf8"))),
-          );
-          if (!result.ok)
-            throw new NotFoundError("requirements not satisfied", {
-              compact: JSON.stringify(result),
-              json: result,
-            });
-          return result;
-        },
-        JSON.stringify,
-      ),
-    );
-
   const gate = program
     .command("gate")
     .description("manage decision gates")
