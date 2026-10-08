@@ -1,6 +1,5 @@
-# cross-suite-references is this repository's own check, which skill-ci does
-# not run. A linked worktree has no .venv of its own, so it uses the one in the
-# main checkout, found through the shared git directory.
+# A linked worktree has no .venv of its own, so the local check uses the one in
+# the main checkout, found through the shared git directory.
 templates:
   python: '"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"'
 
