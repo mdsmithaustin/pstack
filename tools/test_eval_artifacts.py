@@ -36,7 +36,7 @@ WHY_EVALS_LIVE_OUTSIDE_SKILLS = (
     "A skill installer copies a skill directory verbatim and offers no exclude "
     "mechanism. Eval material placed there reaches everyone who installs the skill. "
     "Manifests, oracles, and runs belong under the repository-root evals/ tree, which "
-    "skill-checks reads through its evals-dir input."
+    "skill-ci reads through the evals_dir key in .skill-ci.toml."
 )
 
 TEST_FILE_PATTERNS = (
