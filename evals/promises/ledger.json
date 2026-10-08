@@ -6853,13 +6853,13 @@
    ],
    "text": "Before dispatch, the coordinator records its predecessor and the harness, model, and effort that will run it."
   },
-  "9c15dc16e75c": {
+  "a1917b64aaa1": {
    "class": "context",
    "file": "07-overnight.md",
    "sources": [
     "port"
    ],
-   "text": "The [orch reference](../../skills/poteto-mode/scripts/orch/README.md) describes acknowledgment and explicit closeout criteria."
+   "text": "The [orch reference](../../skills/poteto-mode/scripts/orch/README.md) describes acknowledgment."
   },
   "ac185061330d": {
    "class": "promise",
