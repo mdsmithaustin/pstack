@@ -1572,7 +1572,7 @@ describe("CLI terminal disposition text", () => {
 
 
 describe("CLI bot core regressions", () => {
-  it("retains successful reviewer context from normal CLI through cold store to recovery CLI", async () => {
+  it("retains successful reviewer context through a cold store into the normal resolver", async () => {
     const { dir, run } = await fixture();
     await mkdir(join(dir, ".agents"));
     await writeFile(join(dir, ".agents", "pstack-models.md"),
@@ -1581,13 +1581,13 @@ describe("CLI bot core regressions", () => {
     const python = process.env.PSTACK_TEST_PYTHON ?? "python3";
     const environment = { ...process.env, CODEX_HOME: join(dir, "absent-catalog"), PYTHONDONTWRITEBYTECODE: "1" };
     const workModel = "claude-opus-5-5[1m]@xhigh";
-    const normal = (harness: string) => {
+    const normal = (harness: string, work: string) => {
       const result = Bun.spawnSync([python, join(setup, "check-models-config.py"), "--resolve", "--harness", harness,
-        "--project", dir, "--user-file", join(dir, "absent-user"), "--work-model", workModel, "trail reviewer"], { env: environment });
+        "--project", dir, "--user-file", join(dir, "absent-user"), "--work-model", work, "trail reviewer"], { env: environment });
       expect(result.exitCode).toBe(0);
       return JSON.parse(result.stdout.toString());
     };
-    const sourceArm = normal("claude-code");
+    const sourceArm = normal("claude-code", workModel);
     expect(sourceArm).toEqual({ role: "trail reviewer", arm: 1, model: "fable", effort: "high", source: "workspace ## claude-code",
       notes: ["trail reviewer matched work model opus; stepped up to fable"], step: "up" });
     const resolutionContext = { workModel, resolvedArm: sourceArm };
@@ -1604,28 +1604,15 @@ describe("CLI bot core regressions", () => {
     expect(saved.resolutionContext).toEqual(resolutionContext);
     expect(JSON.parse(await readFile(join(dir, "attempts.json"), "utf8"))[0].resolutionContext).toEqual(resolutionContext);
     expect(run("attempt", "begin", "--file", path).out).toBe(created.out);
-    const projection = await input(dir, "resolution-input.json", { workModel: saved.resolutionContext.workModel });
-    const contexts = await input(dir, "contexts.json", {});
-    const destination = { role: "trail reviewer", arm: 1, model: "gpt-6-astra", effort: "high", source: "workspace ## codex",
-      notes: ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], step: "up" };
-    expect(normal("codex")).toEqual(destination);
-    const recovery = Bun.spawnSync([python, join(setup, "resolve-resume.py"), "--source", saved.resolution.harness,
-      "--role", saved.role, "--arm", String(saved.arm), "--project", dir, "--user-file", join(dir, "absent-user"),
-      "--contexts", contexts, "--resolution-input", projection], { env: environment });
-    expect(recovery.exitCode).toBe(1);
-    expect(JSON.parse(recovery.stdout.toString())).toEqual({
-      priority: { source: "claude-code", destinations: ["codex"], configured_source: "default" },
-      candidates: [{ harness: "codex", resolution: destination, route: null, version: null, eval_receipt: null,
-        eligible: false, reason: "destination availability, route or version is unobserved" }],
-    });
+    expect(normal("codex", saved.resolutionContext.workModel)).toEqual({ role: "trail reviewer", arm: 1, model: "gpt-6-astra",
+      effort: "high", source: "workspace ## codex", notes: ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], step: "up" });
     expect(JSON.parse(run("attempt", "list").out)[0]).toEqual(saved);
   });
-  it("round trips numeric saved role arms through the existing destination resolver", async () => {
+  it("round trips numeric saved role arms through the normal resolver", async () => {
     const { dir, run } = await fixture();
     const config = join(dir, ".agents");
     await mkdir(config);
     await writeFile(join(config, "pstack-models.md"), "## codex\nfeature: gpt-6.1-sol@xhigh\narena runners: gpt-6.1-sol@xhigh,gpt-6-astra@high\n");
-    const contexts = await input(dir, "contexts.json", {});
     for (const [role, arm, authority, model, effort] of [
       ["feature", 1, "worker", "gpt-6.1-sol", "xhigh"],
       ["arena runners", 1, "worker", "gpt-6.1-sol", "xhigh"],
@@ -1641,15 +1628,12 @@ describe("CLI bot core regressions", () => {
       expect(run("attempt", "begin", "--file", path).out).toBe(result.out);
       const saved = JSON.parse(await readFile(join(dir, "attempts.json"), "utf8")).find((row: { requestId: string }) => row.requestId === `${role}-${arm}-${authority}`);
       expect(saved).toMatchObject({ role, arm, authority });
-      const resolver = Bun.spawnSync(["python3", join(import.meta.dir, "../../../../../skills/setup-pstack/scripts/resolve-resume.py"),
-        "--source", "claude-code", "--role", saved.role, "--arm", String(saved.arm),
-        "--project", dir, "--user-file", join(dir, "absent-user"), "--contexts", contexts],
+      const resolver = Bun.spawnSync(["python3", join(import.meta.dir, "../../../../../skills/setup-pstack/scripts/check-models-config.py"),
+        "--resolve", "--harness", "codex", "--project", dir, "--user-file", join(dir, "absent-user"), saved.role],
         { env: { ...process.env, CODEX_HOME: join(dir, "absent-catalog"), PYTHONDONTWRITEBYTECODE: "1" } });
-      expect(resolver.exitCode).toBe(1);
-      const candidate = JSON.parse(resolver.stdout.toString()).candidates[0];
-      expect(candidate.resolution).toEqual({ role, arm, model, effort, source: "workspace ## codex" });
-      expect(candidate.eligible).toBe(false);
-      expect(candidate.reason).toBe("destination availability, route or version is unobserved");
+      expect(resolver.exitCode).toBe(0);
+      const arms = resolver.stdout.toString().trim().split("\n").map((line) => JSON.parse(line));
+      expect(arms.find((printed: { arm: number }) => printed.arm === saved.arm)).toEqual({ role, arm, model, effort, source: "workspace ## codex" });
     }
     expect(JSON.parse(run("attempt", "list").out)).toHaveLength(4);
   });

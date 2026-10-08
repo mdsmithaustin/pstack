@@ -827,16 +827,6 @@ STEP_CATALOG = catalog_json("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-lu
 
 
 class TrailReviewerStep(ResolveRunner, unittest.TestCase):
-    def test_public_role_resolution_owns_raw_input_and_complete_stepping(self):
-        user, findings = cmc.parse('## codex\ntrail reviewer: gpt-6-sol@high\nfeature: gpt-6-astra@high\n')
-        self.assertEqual(findings, [])
-        defaults, _ = cmc.parse(cmc.SKILL_DEFAULT_FILE.read_text())
-        layers = cmc.build_layers('codex', {}, user, defaults)
-        [resolved] = cmc.resolve_role('trail reviewer', 'codex', layers, work_model='claude-opus-5-5[1m]@xhigh')
-        self.assertEqual(resolved.to_json(), '{"role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex", "notes": ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], "step": "up"}')
-        [omitted] = cmc.resolve_role('trail reviewer', 'codex', layers)
-        self.assertEqual(omitted.to_json(), '{"role": "trail reviewer", "arm": 1, "model": "gpt-6-sol", "effort": "high", "source": "user ## codex"}')
-
     def reviewer(self, harness, work_model, user=OPERATOR_FILE, codex_catalog=None):
         [arm] = self.resolve(harness, "trail reviewer", user=user, codex_catalog=codex_catalog, work_model=work_model)
         return arm
@@ -1325,19 +1315,6 @@ class ResolveExitCodes(unittest.TestCase):
             result.stderr,
             f"{user_file}:1: error: unknown effort 'turbo' for model 'sonnet'\n",
         )
-
-    def test_work_input_errors_precede_unknown_role_and_config_errors(self):
-        for work, message in [('', "argument --work-model: invalid model name ''"),
-                              ('opus@turbo', "argument --work-model: unknown effort 'turbo'"),
-                              ('gpt-6.1-sol@high', "argument --work-model: 'gpt-6.1-sol' is not a Claude Code model; use an alias (fable, opus, sonnet, haiku) or a claude-<alias>-... ID")]:
-            with self.subTest(work=work):
-                result, _ = self.run_resolve('--harness', 'claude-code', '--work-model', work, 'frobnicate', user='feature: sonnet@turbo\n')
-                self.assertEqual(result.returncode, 2)
-                self.assertEqual(result.stdout, '')
-                self.assertEqual(result.stderr.splitlines()[-1], f'check-models-config.py: error: {message}')
-        result, _ = self.run_resolve('--harness', 'claude-code', '--work-model', 'opus@high', 'frobnicate', user='feature: sonnet@turbo\n')
-        self.assertEqual(result.returncode, 2)
-        self.assertEqual(result.stderr, "unknown role 'frobnicate'\n")
 
 
 if __name__ == "__main__":

@@ -1576,7 +1576,7 @@
   },
   "orchestrate-rebuilds-from-store-after-restart": {
    "check": "static",
-   "claim": "Orchestrate keeps its store at .orchestrate/<project-slug>/ in the main checkout. After a restart it reconciles retained completions and attempt identities with runtime evidence, pushed branches, open PRs, and checkouts before refill. Missing runtime evidence leaves an attempt uncertain. Replacements preserve the saved role, exact panel arm, resolved destination, and predecessor before dispatch.",
+   "claim": "Orchestrate keeps its store at .orchestrate/<project-slug>/ in the main checkout. After a restart it reconciles retained completions and attempt identities with runtime evidence, pushed branches, open PRs, and checkouts before refill. Missing runtime evidence leaves an attempt uncertain. Replacements resolve the saved role and exact panel arm like any other spawn and record the predecessor and the harness, model, and effort before dispatch.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
@@ -1596,7 +1596,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
-     "quote": "For an actual replacement dispatch, begin an attempt in the saved slot with its exact predecessor and current resolved destination."
+     "quote": "Begin an attempt in the saved slot with its exact predecessor, the original raw work input, the newly printed arm, and the harness, model, and effort that will run it."
     },
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
@@ -6835,14 +6835,23 @@
    ],
    "text": "Missing runtime evidence leaves an attempt uncertain."
   },
-  "5ec4a3b76e9e": {
+  "3feaeb9a6d54": {
    "class": "promise",
    "file": "07-overnight.md",
    "promise": "orchestrate-rebuilds-from-store-after-restart",
    "sources": [
     "port"
    ],
-   "text": "A replacement records the saved role, exact panel arm, resolved destination, and predecessor before dispatch."
+   "text": "A replacement resolves the saved role and exact panel arm like any other spawn."
+  },
+  "3e5142f6b269": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "orchestrate-rebuilds-from-store-after-restart",
+   "sources": [
+    "port"
+   ],
+   "text": "Before dispatch, the coordinator records its predecessor and the harness, model, and effort that will run it."
   },
   "9c15dc16e75c": {
    "class": "context",

@@ -38,7 +38,6 @@ CLAUDE_CODE_SECTION = "claude-code"
 INHERIT = "inherit-parent"
 CONFIG_NAME = "pstack-models.md"
 SKILL_DEFAULT_FILE = Path(__file__).resolve().parent.parent / "examples" / CONFIG_NAME
-RESUME_DEFAULTS = {"codex": ("claude-code",), "claude-code": ("codex",)}
 
 
 class Cli(NamedTuple):
@@ -198,21 +197,19 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
     return entries, deferred_flat_notices
 
 
-def _frontmatter_body_start(lines: list[str]) -> int | None:
-    if not lines or lines[0].strip() != "---":
-        return 0
-    return next((i + 1 for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
-
-
 def parse(text: str) -> tuple[dict, list]:
-    _, findings = parse_resume_priority(text)
+    findings: list[tuple[int, str, str]] = []
     sections: dict[str, dict[str, list[tuple[str, str | None]]]] = {"": {}}
     lines = text.splitlines()
 
-    body_start = _frontmatter_body_start(lines)
-    if body_start is None:
-        findings.append((1, "error", "unclosed frontmatter fence"))
-        body_start = len(lines)
+    body_start = 0
+    if lines and lines[0].strip() == "---":
+        close_idx = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+        if close_idx is None:
+            findings.append((1, "error", "unclosed frontmatter fence"))
+            body_start = len(lines)
+        else:
+            body_start = close_idx + 1
 
     current_section = ""
     headers_seen: set[str] = set()
@@ -277,51 +274,6 @@ def parse(text: str) -> tuple[dict, list]:
             findings.append((line_no, "notice", f"Claude Code cannot use none or ultra, so it runs `{name}` at the session effort"))
 
     return sections, findings
-
-
-class Priority(NamedTuple):
-    source: str
-    destinations: tuple[str, ...]
-    configured_source: str
-
-
-def parse_resume_priority(text: str) -> tuple[dict[str, tuple[str, ...]], list[tuple[int, str, str]]]:
-    priorities = {}
-    findings = []
-    lines = text.splitlines()
-    body_start = _frontmatter_body_start(lines)
-    if body_start is None:
-        body_start = len(lines)
-    seen = set()
-    for i in range(body_start, len(lines)):
-        line = lines[i].strip()
-        if not re.match(r"#\s*resume-priority\b", line):
-            continue
-        match = re.fullmatch(r"# resume-priority: ([a-z-]+)=([a-z,-]+)", line)
-        if not match:
-            findings.append((i + 1, "error", "malformed resume-priority directive"))
-            continue
-        source, values = match.groups()
-        destinations = tuple(values.split(","))
-        if source not in CLIS or any(value not in CLIS for value in destinations):
-            findings.append((i + 1, "error", "unknown resume-priority harness"))
-        elif source in seen:
-            findings.append((i + 1, "error", f"duplicate resume-priority source {source!r}"))
-        elif source in destinations:
-            findings.append((i + 1, "error", "resume-priority cannot include its source"))
-        elif len(set(destinations)) != len(destinations):
-            findings.append((i + 1, "error", "duplicate resume-priority destination"))
-        else:
-            priorities[source] = destinations
-        seen.add(source)
-    return priorities, findings
-
-
-def resolve_priority(source: str, workspace: dict, user: dict) -> Priority:
-    for configured_source, priorities in (("workspace", workspace), ("user", user)):
-        if source in priorities:
-            return Priority(source, priorities[source], configured_source)
-    return Priority(source, RESUME_DEFAULTS.get(source, ()), "default")
 
 
 class Layer(NamedTuple):
@@ -407,7 +359,7 @@ def _resolve_arm(
     return ResolvedArm(role, arm, model, effort, source, tuple(notes))
 
 
-def _resolve_role_unstepped(
+def resolve_role(
     role: str, harness: str, layers: list[Layer], listed: Mapping[str, frozenset[str]] = NO_CATALOG,
 ) -> list[ResolvedArm]:
     for source, roles in layers:
@@ -428,7 +380,7 @@ def _shift_effort(base: str, delta: int, floor: str) -> str:
     return EFFORT_ORDER[min(max(EFFORT_ORDER.index(base) + delta, low), high)]
 
 
-def _step_reviewer(
+def step_reviewer(
     reviewer: ResolvedArm, work_model: str, work_effort: str | None,
     harness: str, allowed: frozenset[str], listed: Mapping[str, frozenset[str]],
 ) -> ResolvedArm:
@@ -479,33 +431,11 @@ def _load_layer_file(path: Path) -> tuple[dict, list[tuple[int, str, str]]]:
     return parse(path.read_text(encoding="utf-8"))
 
 
-class WorkModelError(ValueError):
-    pass
-
-
-class WorkModelSyntaxError(WorkModelError):
-    pass
-
-
-class _WorkModel(NamedTuple):
-    model: str
-    effort: str | None
-    unusable_notes: tuple[str, ...]
-
-
 def _work_model(value: str) -> tuple[str, str | None]:
     model, at, effort = value.partition("@")
     if at and effort not in (*EFFORT_ORDER, INHERIT):
-        raise WorkModelSyntaxError(f"unknown effort {effort!r}")
+        raise argparse.ArgumentTypeError(f"unknown effort {effort!r}")
     return model, effort if at else None
-
-
-def work_model_argument(value: str) -> str:
-    try:
-        _work_model(value)
-    except WorkModelSyntaxError as error:
-        raise argparse.ArgumentTypeError(str(error)) from error
-    return value
 
 
 def _claude_alias_of(model: str, harness: str) -> str:
@@ -517,57 +447,25 @@ def _claude_alias_of(model: str, harness: str) -> str:
     return model
 
 
-def _parse_work_model(value: str, harness: str) -> _WorkModel:
-    try:
-        name, written_effort = _work_model(value)
-    except WorkModelSyntaxError as error:
-        raise WorkModelSyntaxError(f"argument --work-model: {error}") from error
-    name = _claude_alias_of(name, harness)
-    if not _is_valid_model_name(name):
-        raise WorkModelError(f"argument --work-model: invalid model name {name!r}")
-    if CLIS[harness].native_aliases and name not in CLAUDE_ALIASES | OTHER_ALIASES:
-        raise WorkModelError(
-            f"argument --work-model: {name!r} is not a Claude Code model; "
-            "use an alias (fable, opus, sonnet, haiku) or a claude-<alias>-... ID"
-        )
-    model, effort, notes = _resolve_model(name, written_effort, harness)
-    unusable = tuple(f"work model {note}; no step applied" for note in notes if model == INHERIT)
-    return _WorkModel(model, effort, unusable)
-
-
-def resolve_role(
-    role: str, harness: str, layers: list[Layer], listed: Mapping[str, frozenset[str]] = NO_CATALOG,
-    *, work_model: str | None = None,
-) -> list[ResolvedArm]:
-    work = _parse_work_model(work_model, harness) if work_model is not None else None
-    arms = _resolve_role_unstepped(role, harness, layers, listed)
-    if work is None or role != "trail reviewer":
-        return arms
-    allowed = frozenset(
-        arm.model for configured_role in ROLES
-        for arm in _resolve_role_unstepped(configured_role, harness, layers, listed)
-    ) - {INHERIT}
-    results = []
-    for arm in arms:
-        resolved = _step_reviewer(arm, work.model, work.effort, harness, allowed, listed)
-        results.append(resolved._replace(notes=(*resolved.notes, *work.unusable_notes)))
-    return results
-
-
 def _resolve_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="check-models-config.py", allow_abbrev=False)
     parser.add_argument("--resolve", action="store_true", required=True)
     parser.add_argument("--harness", required=True, choices=sorted(CLIS))
     parser.add_argument("--project", type=Path, default=Path.cwd())
     parser.add_argument("--user-file", type=Path, default=Path.home() / ".agents" / CONFIG_NAME)
-    parser.add_argument("--work-model", type=work_model_argument, metavar="MODEL[@EFFORT]")
+    parser.add_argument("--work-model", type=_work_model, metavar="MODEL[@EFFORT]")
     parser.add_argument("roles", nargs="*", metavar="ROLE")
     args = parser.parse_args(argv)
-    if args.work_model is not None:
-        try:
-            _parse_work_model(args.work_model, args.harness)
-        except WorkModelError as error:
-            parser.error(str(error))
+    if args.work_model:
+        work_name, work_written_effort = args.work_model
+        work_name = _claude_alias_of(work_name, args.harness)
+        if not _is_valid_model_name(work_name):
+            parser.error(f"argument --work-model: invalid model name {work_name!r}")
+        if CLIS[args.harness].native_aliases and work_name not in CLAUDE_ALIASES | OTHER_ALIASES:
+            parser.error(
+                f"argument --work-model: {work_name!r} is not a Claude Code model; "
+                "use an alias (fable, opus, sonnet, haiku) or a claude-<alias>-... ID"
+            )
 
     unknown = [r for r in args.roles if r not in ROLES]
     if unknown:
@@ -591,8 +489,17 @@ def _resolve_main(argv: list[str]) -> int:
     layers = build_layers(args.harness, parsed[workspace_file], parsed[args.user_file], skill_default)
     catalog = CLIS[args.harness].catalog
     listed = listed_models(catalog) if catalog else NO_CATALOG
+    if args.work_model:
+        work_model, work_effort, work_notes = _resolve_model(work_name, work_written_effort, args.harness)
+        unusable = [f"work model {note}; no step applied" for note in work_notes if work_model == INHERIT]
+        allowed = frozenset(
+            arm.model for role in ROLES for arm in resolve_role(role, args.harness, layers, listed)
+        ) - {INHERIT}
     for role in args.roles or sorted(ROLES):
-        for arm in resolve_role(role, args.harness, layers, listed, work_model=args.work_model):
+        for arm in resolve_role(role, args.harness, layers, listed):
+            if args.work_model and role == "trail reviewer":
+                arm = step_reviewer(arm, work_model, work_effort, args.harness, allowed, listed)
+                arm = arm._replace(notes=(*arm.notes, *unusable))
             print(arm.to_json())
     return 0
 
