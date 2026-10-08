@@ -117,10 +117,6 @@ class DocumentRule(unittest.TestCase):
             (root / "samples" / "labels.json").write_text(json.dumps({name: label for name, (label, _) in case["samples"].items()}))
         environment = {"CANON_RULES": str(rules), "CANON_CACHE": str(self.base / "cache"),
                        "CODEX_BIN": str(ROOT / "offline" / "codex"), "CANON_JUDGE_STANDIN": str(ROOT / "offline" / "judge")}
-        if not (screen.skill_ci() / "runner.lock").is_file():
-            (self.base / "skill-ci").mkdir()
-            (self.base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
-            environment["SKILL_CI"] = str(self.base / "skill-ci")
         for patch in (mock.patch.object(screen, "RULES", rules), mock.patch.object(review_cases.screen, "RULES", rules), mock.patch.dict(os.environ, environment)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -270,7 +266,7 @@ class DocumentJudgeTests(DocumentRule):
         self.assertIn("    skill: review UNJUDGED (judge None, precheck FAIL, uncalibrated: no calibration record)", printed.getvalue().splitlines())
 
 
-@unittest.skipUnless(harness_available(), "needs a skill-ci checkout at $SKILL_CI and uv")
+@unittest.skipUnless(harness_available(), "needs the skill-ci command on PATH")
 class OfflineDocumentRunTests(DocumentRule):
     def test_the_skill_arm_separates_the_positive_case_and_tie_passes_the_near_miss(self):
         prompts = []

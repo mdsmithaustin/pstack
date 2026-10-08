@@ -825,16 +825,16 @@ delegate brief.
 
 ## Model-free checks
 
-These need Docker, `uv`, and a skill-ci checkout at `../skill-ci` or
-`$SKILL_CI` with its `runner.lock`. `audit` and `run` call the harness through
-`uv run <skill-ci>/tools/run_runner.py`. Without a running Docker daemon, the
+These need Docker and `uv`. `audit` and `run` reach the pinned harness through
+`skill-ci harness`, which needs the `skill-ci` command on `PATH`
+(`uv tool install git+https://github.com/mdsmithaustin/skill-ci.git`) and reads
+the version from `.skill-ci.toml`. Without a running Docker daemon, the
 oracle tests that run answer code skip. The `project_test_results` tests
 skip unless this machine has built the `omnigent-336207801509` image, which the
-`lint` workflow does not build. `audit` and `run` need skill-ci and
-`uv`, and so do the offline workspace runs in `test_workspace.py`, which skip
-without them. On every pull request the `lint` workflow pulls the image,
-checks out skill-ci at the commit `skill-checks.yml` pins, installs uv, and
-runs the unit tests.
+`lint` workflow does not build. `audit` and `run` need the `skill-ci` command,
+and so do the offline workspace runs in `test_workspace.py`, which skip
+without it. On every pull request the `lint` workflow pulls the image,
+installs uv and the `skill-ci` command, and runs the unit tests.
 
 ```sh
 docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
@@ -848,13 +848,13 @@ CODEX_BIN=evals/canon/offline/codex python3 evals/canon/screen.py run --agent co
 `python3 -m unittest` runs `test_screen.py`, `test_arms.py`, `test_host.py`
 (the host wrapper keeping each run's session), `test_workspace.py`,
 `test_review.py` (review checkouts, the judge, calibration, scores, and stopped
-runs, with an offline review run when skill-ci is present, and its
+runs, with an offline review run when the `skill-ci` command is on `PATH`, and its
 `SandboxedReviewRunTests` gated on `CANON_SBX_E2E=1`), `test_review_cases.py`
 (the seeded review cases), `test_document.py` (judged document cases, with an
-offline document run when skill-ci is present), `test_chain.py`, `test_sandbox.py` (its sandbox runs need
+offline document run when the `skill-ci` command is on `PATH`), `test_chain.py`, `test_sandbox.py` (its sandbox runs need
 `CANON_SBX_E2E=1`, see Sandboxed runs), and `test_oracles.py`, which loads `oracles/test_shared.py` and every
 `rules/*/test_oracle.py`. `test_workspace.py` builds a small repo and its
-mirror in a temporary directory. With skill-ci and `uv` present, it also runs a
+mirror in a temporary directory. With the `skill-ci` command on `PATH`, it also runs a
 workspace rule through the offline pipeline and checks both harvested diffs. It
 points `$CANON_RULES` and `$CANON_CACHE` at that directory, so the rule never
 joins `rules/`. `audit` validates, audits, and prepares both arms of every
@@ -1120,7 +1120,7 @@ no network.
 repack, and `sbx_inside.py` setup and harvest on a plain clone. With a fake
 `sbx`, it checks the exact `sbx create` argv and that an allowed probe host
 refuses the run before the agent starts. With `CANON_SBX_E2E=1`, `sbx` on
-`PATH`, and a skill-ci checkout at `$SKILL_CI` with `uv`, it also runs both arms of a workspace rule for each agent
+`PATH`, and `skill-ci` on `PATH`, it also runs both arms of a workspace rule for each agent
 in real sandboxes with `offline/sbx-agent` as the agent. That stand-in exits
 nonzero unless the prompt carries the invocation, the skills are linked, the
 persona is registered, the flags give it full tools, and its cwd is the

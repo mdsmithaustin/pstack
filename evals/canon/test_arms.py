@@ -80,11 +80,9 @@ class ArmsRuleLoadTests(unittest.TestCase):
     def test_build_records_the_skills_each_arm_lists_by_description(self):
         added = "--- /dev/null\n+++ b/premortem/SKILL.md\n@@ -0,0 +1,4 @@\n+---\n+name: premortem\n+description: Use before a rollout.\n+---\n"
         self.write("scratch-place", {"rule.json": json.dumps({"cases_from": "scratch-base", "arms": ["current", "skill"]}), "arms/skill.patch": added})
-        (self.rules / "skill-ci").mkdir()
-        (self.rules / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
         out = self.rules / "out"
 
-        with mock.patch.dict("os.environ", {"SKILL_CI": str(self.rules / "skill-ci")}), contextlib.redirect_stdout(io.StringIO()) as printed:
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
             built = screen.build(out, [screen.load_rule("scratch-place")], "poteto-mode")["scratch-place"]
 
         self.assertEqual(built["arm_listed"], {"current": [], "skill": ["premortem/SKILL.md"]})
