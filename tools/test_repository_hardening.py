@@ -49,7 +49,12 @@ class RepositoryHardening(unittest.TestCase):
     def test_only_lint_reports_the_required_skills_context(self) -> None:
         reporting = []
         for path in sorted((ROOT / ".github" / "workflows").glob("*.y*ml")):
-            jobs = re.search(r"(?ms)^jobs:\n(.*?)(?=^\S|\Z)", path.read_text(encoding="utf-8")).group(1)
+            workflow = re.sub(
+                r'''("(?:\\.|[^"\\])*"|'(?:''|[^'])*')| #[^\n]*''',
+                lambda match: match.group(1) or "",
+                path.read_text(encoding="utf-8"),
+            )
+            jobs = re.search(r"(?ms)^jobs:\n(.*?)(?=^\S|\Z)", workflow).group(1)
             for job_id, body in re.findall(r"(?ms)^  ([\w-]+):\s*\n(.*?)(?=^  \S|\Z)", jobs):
                 name = re.search(r"(?m)^    name:\s*['\"]?(.*?)['\"]?\s*$", body)
                 job_name = name.group(1) if name else None
