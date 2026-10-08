@@ -13,3 +13,27 @@ run = "tools/gate-check.sh lint"
 [tasks.gate-test]
 description = "Run the manual test-tier checks"
 run = "tools/gate-check.sh test"
+
+[tasks.skill-check]
+run = "skill-ci check"
+
+[tasks.skill-lint]
+run = "skill-ci lint"
+
+[tasks.skill-package]
+run = "skill-ci package"
+
+[tasks.skill-coverage]
+run = "skill-ci coverage"
+
+[tasks.skill-validate]
+run = "skill-ci validate"
+
+[tasks.skill-audit]
+run = "skill-ci audit"
+
+[tasks.skill-trigger]
+run = "skill-ci trigger"
+
+[tasks.skill-run]
+run = "skill-ci run"

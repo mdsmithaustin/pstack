@@ -18,3 +18,10 @@ pre-commit:
       run: '{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'
     pii:
       run: '{python} tools/check-pii.py --staged'
+    skill-ci-check-fast:
+      run: skill-ci check --fast
+
+pre-push:
+  commands:
+    skill-ci-check:
+      run: skill-ci check

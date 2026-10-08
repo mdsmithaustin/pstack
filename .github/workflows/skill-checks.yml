@@ -1,19 +1,18 @@
+# Written by skill-ci init. The version this runs is the one in .skill-ci.toml. The job installs whatever skill-ci the
+# source serves, and that skill-ci runs the pinned version.
 name: skill-checks
+on: [push, pull_request]
 permissions:
   contents: read
-on:
-  push:
-    branches: [main]
-  pull_request:
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   skills:
-    uses: mdsmithaustin/skill-ci/.github/workflows/skill-checks.yml@193db3b208a89420feb12d16d12a04cebb46c4df
-    with:
-      skills-dir: skills
-      evals-dir: evals
-      trigger-cases: tools/skill-trigger-cases.json
-      pii-scope: repository
-      content-conventions-file: tools/skill-content-conventions.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SKILL_CI_SOURCE: "https://github.com/mdsmithaustin/skill-ci.git"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: pip install uv==0.12.7
+      - run: uv tool run --from "git+$SKILL_CI_SOURCE" skill-ci check

@@ -1,5 +1,5 @@
 commands:
-  lint: tools/gate-check.sh lint
+  lint: tools/gate-check.sh lint && skill-ci check
 pr:
   publish_intent: false
   appendix: collapsed

@@ -1,0 +1,7 @@
+# The skill-ci release this repository runs, here and in CI. skill-ci update moves it to the newest tag.
+version = "v1.0.0"
+skills_dir = "skills"
+evals_dir = "evals"
+trigger_cases = "tools/skill-trigger-cases.json"
+pii_scope = "repository"
+content_conventions_file = "tools/skill-content-conventions.json"
