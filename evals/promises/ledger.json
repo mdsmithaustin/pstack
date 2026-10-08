@@ -1279,7 +1279,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Pick the wake mechanism using your CLI's loop facility (per the **pstack-harness** skill \u2014 a built-in or wrapper, not a pstack skill). An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
+     "quote": "Pick the wake mechanism using your CLI's loop facility (per the **pstack-harness** skill — a built-in or wrapper, not a pstack skill). An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
      "file": "skills/pstack-harness/SKILL.md",
@@ -1326,7 +1326,7 @@
     },
     {
      "file": "skills/maintain-verification-skill/SKILL.md",
-     "quote": "**changed** \u2014 one PR ships proven doc, harness, or map corrections."
+     "quote": "**changed** — one PR ships proven doc, harness, or map corrections."
     },
     {
      "file": "skills/maintain-verification-skill/SKILL.md",
@@ -1739,7 +1739,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Code crossing a function boundary \u2192 the **architect** skill, parallel design exploration before implementing."
+     "quote": "Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
@@ -2552,17 +2552,6 @@
     "skills/poteto-mode/SKILL.md"
    ]
   },
-  "typescript-rules-auto-load-on-ts-files": {
-   "check": "live",
-   "claim": "typescript-best-practices loads whenever the agent touches a .ts or .tsx file without the user invoking it.",
-   "harness_sensitive": true,
-   "live_case": "TypeScript fixture; prompt `/poteto-mode add a flag to src/cli.ts`; pass when the transcript shows typescript-best-practices read without the user naming it.",
-   "owners": [
-    "skills/typescript-best-practices/SKILL.md",
-    "skills/typescript-best-practices/agents/openai.yaml"
-   ],
-   "scenario": "ts-autoload"
-  },
   "unslop-takes-target-and-rules": {
    "check": "live",
    "claim": "/unslop with a target and extra rules edits that target by those rules and reads terse prompts.",
@@ -2835,6 +2824,408 @@
    "owners": [
     "skills/poteto-mode/playbooks/opening-a-pr.md"
    ]
+  },
+  "poteto-help-finds-need-and-routes": {
+   "check": "live",
+   "claim": "/poteto-help infers what the user needs, asks one multiple-choice question when that stays unclear, and answers with an example prompt and a link to the public copy of the file the answer came from, without starting the work.",
+   "harness_sensitive": true,
+   "live_case": "tally fixture; prompts `/poteto-help which skill should i use to review this branch?` (case poteto-help-run) and `/poteto-help i just installed this and i'm not sure where to start` (case poteto-help-unclear-run); pass when no project file changes and no subagent spawns, the first reply names `/interrogate` or Code review with a code-block prompt and a github.com/mdsmithaustin/pstack/blob/main/ link, and the second asks over at least three of the five help sections.",
+   "owners": [
+    "skills/poteto-help/SKILL.md"
+   ],
+   "scenario": "poteto-help-run"
+  },
+  "poteto-help-typed-only": {
+   "check": "static",
+   "claim": "/poteto-help is gated against model invocation (disable-model-invocation in SKILL.md, allow_implicit_invocation: false for Codex), so it runs when the user types it.",
+   "evidence": [
+    {
+     "file": "skills/poteto-help/SKILL.md",
+     "quote": "disable-model-invocation: true"
+    },
+    {
+     "file": "skills/poteto-help/agents/openai.yaml",
+     "quote": "allow_implicit_invocation: false"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-help/SKILL.md",
+    "skills/poteto-help/agents/openai.yaml"
+   ]
+  },
+  "typescript-rules-load-by-name": {
+   "check": "static",
+   "claim": "typescript-best-practices is gated against model invocation on every harness that honors the gate (disable-model-invocation in SKILL.md, allow_implicit_invocation: false for Codex), so the user loads it by typing /typescript-best-practices.",
+   "evidence": [
+    {
+     "file": "skills/typescript-best-practices/SKILL.md",
+     "quote": "disable-model-invocation: true"
+    },
+    {
+     "file": "skills/typescript-best-practices/agents/openai.yaml",
+     "quote": "allow_implicit_invocation: false"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/typescript-best-practices/SKILL.md",
+    "skills/typescript-best-practices/agents/openai.yaml"
+   ]
+  },
+  "budget-labels-set-effort": {
+   "check": "static",
+   "claim": "The shipped flat lines write no effort, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
+   "evidence": [
+    {
+     "file": "skills/setup-pstack/examples/pstack-models.md",
+     "quote": "# budget: default (keep as written)"
+    },
+    {
+     "file": "skills/setup-pstack/references/models-config.md",
+     "quote": "A line without a usable effort runs at the session effort on Claude Code and Grok Build."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "`default` applies no budget: every written `@effort` suffix stands"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "`unlimited`, `large`, `medium`, and `small` set the `@effort` of every real entry, panel entries and harness sections included, to `max`, `xhigh`, `high`, or `medium`, adding the suffix where none was written."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "say at the ask that a budget's suffix overrides the session effort in both directions once the effort agents are loaded."
+    },
+    {
+     "file": "skills/pstack-harness/SKILL.md",
+     "quote": "The spawn takes no effort, so a resolved level runs at the session effort and step 5 reports it."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/SKILL.md",
+    "skills/setup-pstack/references/models-config.md",
+    "skills/setup-pstack/examples/pstack-models.md",
+    "skills/pstack-harness/SKILL.md"
+   ]
+  },
+  "investigation-returns-cited-explanation-or-tradeoffs": {
+   "check": "static",
+   "claim": "Investigation returns a cited explanation, or a recommendation with a tradeoffs table when the request is a choice between alternatives, and changes no code.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/investigation.md",
+     "quote": "They produce a cited explanation or a recommendation, not a code change."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/investigation.md",
+     "quote": "or a recommendation with a tradeoffs table if the request is a decision between alternatives."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/investigation.md"
+   ]
+  },
+  "architect-scraps-sketch-on-friction-pattern": {
+   "check": "static",
+   "claim": "When implementation shows a repeated workaround or types that compile only with escape hatches, architect throws the sketch out instead of patching around it.",
+   "evidence": [
+    {
+     "file": "skills/architect/SKILL.md",
+     "quote": "If implementation keeps producing friction the sketch can't absorb, throw the sketch out."
+    },
+    {
+     "file": "skills/architect/SKILL.md",
+     "quote": "The same shape of workaround appearing repeatedly across unrelated code."
+    },
+    {
+     "file": "skills/architect/SKILL.md",
+     "quote": "Types that need escape hatches (`any`, casts, optional fields always set in practice) to compile."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/architect/SKILL.md"
+   ]
+  },
+  "prototype-builds-variants-behind-switcher": {
+   "check": "static",
+   "claim": "The Prototype playbook builds throwaway variants in a scratch directory behind one switcher, drives each, and captures screenshots for a visual decision or the observed output or timing for a behavioral one.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/prototype.md",
+     "quote": "Build throwaway in an isolated scratch dir, separate from production source."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/prototype.md",
+     "quote": "When comparing alternatives, build them behind one switcher (buttons or a keypress), each variant labeled."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/prototype.md",
+     "quote": "For a visual decision, screenshot each variant via the control skill and drive the interaction. For a behavioral or timing decision, observe the thing you are deciding by logging the timing, printing the output, or watching the render."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/prototype.md"
+   ]
+  },
+  "multi-phase-plan-prototypes-then-plans-per-pr": {
+   "check": "static",
+   "claim": "The Multi-phase plan playbook settles open questions by prototype, writes one section per PR whose verification needs more than tests, does not implement, and names the execution playbook that runs the plan.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/multi-phase-plan.md",
+     "quote": "Settle open questions by prototype before you write."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/multi-phase-plan.md",
+     "quote": "One section per PR."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/multi-phase-plan.md",
+     "quote": "Tests alone are not sufficient verification."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/multi-phase-plan.md",
+     "quote": "The plan is the deliverable. Do not implement."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/multi-phase-plan.md",
+     "quote": "Execution starts on the operator's explicit go, under the execution playbook the plan names."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/multi-phase-plan.md"
+   ]
+  },
+  "perf-playbooks-run-benchmark-checklist": {
+   "check": "static",
+   "claim": "Perf issue vets its baseline and every later number with benchmark-checklist, and Hillclimb vets its harness with it before freezing the harness.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/perf-issue.md",
+     "quote": "Vet the baseline, and each later number, with the **benchmark-checklist** skill."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/hillclimb.md",
+     "quote": "Vet the harness with the **benchmark-checklist** skill before you freeze it"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/perf-issue.md",
+    "skills/poteto-mode/playbooks/hillclimb.md"
+   ]
+  },
+  "forensics-playbooks-return-diagnosis": {
+   "check": "static",
+   "claim": "Runtime forensics instruments the live process, Trace forensics maps the hot frame of a captured artifact to source, and both return a cited diagnosis with no fix unless asked.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/runtime-forensics.md",
+     "quote": "Instrument the live process, don't theorize from source."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/runtime-forensics.md",
+     "quote": "The deliverable is a cited diagnosis, not a fix."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/trace-forensics.md",
+     "quote": "Map the hot frame to file, symbol, and line via the artifact's own symbols."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/trace-forensics.md",
+     "quote": "Hand back a cited diagnosis, no fix unless asked."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/runtime-forensics.md",
+    "skills/poteto-mode/playbooks/trace-forensics.md"
+   ]
+  },
+  "visual-parity-diffs-against-baseline": {
+   "check": "static",
+   "claim": "The Visual parity playbook verifies pixel-exact equivalence by image diff against a baseline it never edits.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/visual-parity.md",
+     "quote": "The baseline is the spec. You do not touch it."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/visual-parity.md",
+     "quote": "Equivalence is verified by image diff, not by eye."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/visual-parity.md"
+   ]
+  },
+  "benchmark-checklist-seven-questions-verdict": {
+   "check": "static",
+   "claim": "/benchmark-checklist asks seven questions answered from real runs and reports faster, slower, no measurable difference, or inconclusive with the run count, range, and limiter, calling it inconclusive when the limiter is unnamed or a side ran untuned.",
+   "evidence": [
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "1. **Why not double?** Name the limiter."
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "2. **Was it tuned?** Run every side the way production runs it"
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "3. **Did it break limits?**"
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "4. **Did it error?**"
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "5. **Does it reproduce?** Run each side at least 5 times, and alternate the sides"
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "6. **Does it matter?** Next to any micro result, measure the end-to-end path a user waits on"
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "7. **Did it even happen?** Confirm the work ran inside the timed region."
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "Lead with the verdict: faster, slower, no measurable difference, or inconclusive."
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "Give the number with its unit, the run count, the range, and the limiter."
+    },
+    {
+     "file": "skills/benchmark-checklist/SKILL.md",
+     "quote": "Call the verdict inconclusive when you claim a difference but cannot name the limiter, when a side ran untuned"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/benchmark-checklist/SKILL.md"
+   ]
+  },
+  "pause-safely-checkpoints-and-resume-note": {
+   "check": "static",
+   "claim": "Pause safely runs only on an explicit pause, stops at a safe boundary, commits a wip checkpoint, and writes a resume note that Session pickup resumes from; keep going never pauses.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/pause-safely.md",
+     "quote": "This is explicit only. On \"keep going\", \"going to bed, keep going\", or \"don't stop\", do not pause."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/pause-safely.md",
+     "quote": "Stop at a safe boundary. Finish the current atomic step or back out of it."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/pause-safely.md",
+     "quote": "Commit uncommitted edits as one clear `wip:` commit on the current branch so nothing is lost."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/pause-safely.md",
+     "quote": "Write the resume note off-context."
+    },
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "on an explicit pause, going offline, a CLI restart, or imminent context compaction. The complement to Session pickup."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/pause-safely.md",
+    "skills/poteto-mode/SKILL.md"
+   ]
+  },
+  "correct-fixes-mistake-classes-at-highest-level": {
+   "check": "static",
+   "claim": "/correct mines recent commits, reverts, review comments, and workaround comments for mistake classes seen twice, fixes the most frequent at the highest level that works one commit each with a check proven on a past mistake, keeps a rule-to-enforcement table, and replies per class.",
+   "evidence": [
+    {
+     "file": "skills/correct/SKILL.md",
+     "quote": "First, read recent commits, reverts, review comments, agent instruction files, and comments that explain workarounds. Group the mistakes into classes. A class counts once it has happened twice."
+    },
+    {
+     "file": "skills/correct/SKILL.md",
+     "quote": "Then fix the most frequent classes now, one commit each. Prove each new check fails on a real past mistake."
+    },
+    {
+     "file": "skills/correct/SKILL.md",
+     "quote": "Last, keep a table in the agent instruction file that pairs each rule with what enforces it."
+    },
+    {
+     "file": "skills/correct/SKILL.md",
+     "quote": "**Reply:** each class with its evidence, the level you picked, and why a higher level didn't work."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/correct/SKILL.md"
+   ]
+  },
+  "make-bot-ui-keeps-sender-key-on-server": {
+   "check": "static",
+   "claim": "/make-bot-ui builds a page whose server POSTs to a webhook routine, keeps the sender key on that server and out of the browser, and covers exposing the page on Tailscale.",
+   "evidence": [
+    {
+     "file": "skills/make-bot-ui/SKILL.md",
+     "quote": "A server on this computer POSTs JSON to a webhook routine."
+    },
+    {
+     "file": "skills/make-bot-ui/SKILL.md",
+     "quote": "Keep the sender key on the server."
+    },
+    {
+     "file": "skills/make-bot-ui/SKILL.md",
+     "quote": "when exposing that UI on Tailscale."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/make-bot-ui/SKILL.md"
+   ]
+  },
+  "benny-pack-triages-and-reproduces": {
+   "check": "static",
+   "claim": "The dormant benny automation pack triages Slack issue reports and reproduces confirmed bugs, may prepare a small draft fix, runs on a scheduled agent runner, and is set up from FOR_AGENTS.md.",
+   "evidence": [
+    {
+     "file": "automations/benny/README.md",
+     "quote": "benny gives you two automations for slack issue reports, built to run on a scheduled cloud agent runner (e.g. claude code scheduled agents, or any cron-driven ci job that invokes your cli). one triages each report. the other reproduces confirmed bugs and may prepare a small draft fix."
+    },
+    {
+     "file": "automations/benny/README.md",
+     "quote": "point your cli at [`FOR_AGENTS.md`](./FOR_AGENTS.md) and name the target repository."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "automations/benny/README.md"
+   ]
+  },
+  "poteto-mode-subagents-carry-poteto-agent": {
+   "check": "static",
+   "claim": "Subagents that /poteto-mode spawns inside a playbook step carry the poteto-agent persona, which reads poteto-mode before any work.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "**Use the `poteto-agent` persona for any subagent you spawn inside a playbook step**"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/SKILL.md"
+   ]
   }
  },
  "units": {
@@ -2856,15 +3247,6 @@
     "port"
    ],
    "text": "Don't memorize the list."
-  },
-  "004e5ec3d471": {
-   "class": "context",
-   "file": "03-understand.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Use it when you're returning to a topic cold."
   },
   "00b0aedd9675": {
    "class": "context",
@@ -3242,18 +3624,6 @@
    ],
    "text": "Right after a task that taught you something, run:"
   },
-  "12955b5a2a92": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "45f5cc237f9a"
-   ],
-   "promise": "setup-rerun-keeps-changed-roles",
-   "sources": [
-    "upstream"
-   ],
-   "text": "A rule written before 0.15.3 pins the old default models, so delete those role lines, or delete the file, then run `/setup-pstack` again."
-  },
   "1299e60a2a40": {
    "class": "promise",
    "file": "04-design.md",
@@ -3422,7 +3792,6 @@
    "file": "01-setup.md",
    "promise": "poteto-mode-sticky",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "`/poteto-mode` is sticky."
@@ -3541,15 +3910,6 @@
    ],
    "text": "Each skill's report tells you which sources it searched, so you know what the answer is grounded in."
   },
-  "1c901afcc81a": {
-   "class": "context",
-   "file": "06-verify-and-ship.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "This page covers stating a finish condition, generating a verification skill for your app, opening the PR, and driving it to merged."
-  },
   "1c944add4a9f": {
    "also": [
     "slash-skills-invocable"
@@ -3589,16 +3949,6 @@
     "port"
    ],
    "text": "A swarm worker that reads and judges a diff runs on `trail reviewer` instead."
-  },
-  "1f2ec01fa8da": {
-   "class": "promise",
-   "file": "08-principles.md",
-   "promise": "principle-leaf-summaries-match",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Build the Lever](../../skills/principle-build-the-lever/SKILL.md) builds the script that does or proves the work, so a reviewer can rerun it."
   },
   "1f7211d1d1b4": {
    "class": "promise",
@@ -3682,15 +4032,6 @@
    ],
    "text": "Give `/loop` a predicate that can pass or fail."
   },
-  "230c448595a1": {
-   "class": "context",
-   "file": "README.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Run work while you sleep](./07-overnight.md). An overnight contract, a decision log you can audit, and the playbooks that scale past one agent."
-  },
   "231c19c90890": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -3738,20 +4079,10 @@
    ],
    "text": "[Type System Discipline](../../skills/principle-type-system-discipline/SKILL.md) makes illegal states unrepresentable."
   },
-  "2606b5627588": {
-   "class": "context",
-   "file": "06-verify-and-ship.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "A UI change walks the changed flow in the running app."
-  },
   "26331839fa40": {
    "class": "context",
    "file": "07-overnight.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "It's a checkable finish condition, an isolated worktree, and a decision log you audit in the morning."
@@ -3876,15 +4207,6 @@
     "port"
    ],
    "text": "Confirm discovery in your installed version."
-  },
-  "2d8ff5667118": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Verify and ship](./06-verify-and-ship.md#create-a-project-verification-skill) covers when it earns its place."
   },
   "2dee704a0086": {
    "class": "promise",
@@ -4160,15 +4482,6 @@
     "port"
    ],
    "text": "You're auditing decisions, not re-reading the whole night."
-  },
-  "3a417258f191": {
-   "class": "context",
-   "file": "09-make-it-yours.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "This page covers generating a personal mode, capturing lessons from a session, authoring a focused skill, and testing a skill change before you trust it."
   },
   "3b46a2cd3a8d": {
    "also": [
@@ -4502,18 +4815,6 @@
    ],
    "text": "```text\ni said the goal is to repro. i did not ask for a fix yet.\n```"
   },
-  "49c6b06199b0": {
-   "class": "substituted",
-   "file": "README.md",
-   "ported_as": [
-    "7b1f6ab1ca2c"
-   ],
-   "promise": "guide-named-skills-exist",
-   "sources": [
-    "upstream"
-   ],
-   "text": "[Understand the code](./03-understand.md). `/how`, `/why`, `/teach`, and `/recall` before you edit anything."
-  },
   "49d8c3846ebb": {
    "class": "promise",
    "file": "03-understand.md",
@@ -4678,11 +4979,13 @@
    "text": "Say the agent is about to bolt a new adapter onto three existing ones:"
   },
   "5712e3224d70": {
-   "class": "context",
+   "class": "substituted",
    "file": "README.md",
+   "ported_as": [
+    "06188b938938"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "[Set up pstack](./01-setup.md). Install the plugin and pick your models."
   },
@@ -4952,7 +5255,6 @@
    "class": "context",
    "file": "02-poteto-mode.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "Ask for isolation up front:"
@@ -5461,15 +5763,6 @@
    ],
    "text": "That's how the vocabulary sticks."
   },
-  "7b1f6ab1ca2c": {
-   "class": "promise",
-   "file": "README.md",
-   "promise": "guide-named-skills-exist",
-   "sources": [
-    "port"
-   ],
-   "text": "[Understand the code](./03-understand.md). `/how`, `/why`, `/poteto-teach`, and `/recall` before you edit anything."
-  },
   "7ba062eeee90": {
    "class": "promise",
    "file": "04-design.md",
@@ -5489,16 +5782,6 @@
     "port"
    ],
    "text": "```text\nuse /how first to understand how this initialization works. then use /why to figure out why it broke recently.\n```"
-  },
-  "7bafe69c404c": {
-   "class": "promise",
-   "file": "08-principles.md",
-   "promise": "principle-leaf-summaries-match",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Encode Lessons in Structure](../../skills/principle-encode-lessons-in-structure/SKILL.md) turns advice you've repeated twice into a lint, check, or script."
   },
   "7bb0c8bde632": {
    "class": "context",
@@ -5523,7 +5806,6 @@
    "file": "01-setup.md",
    "promise": "poteto-mode-sticky",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "It stays on for the conversation until you opt out by saying so."
@@ -5545,15 +5827,6 @@
     "port"
    ],
    "text": "Say no and setup moves on."
-  },
-  "7d8ac6870e43": {
-   "class": "context",
-   "file": "06-verify-and-ship.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "When yours drifts, run:"
   },
   "7d9c71e0c978": {
    "class": "context",
@@ -5837,15 +6110,6 @@
    ],
    "text": "Comments need their own pass, and not from the agent that wrote them."
   },
-  "8bc18f33ef04": {
-   "class": "context",
-   "file": "README.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Make it yours](./09-make-it-yours.md). Your own mode, plus how to test a skill change."
-  },
   "8bc42ed490d2": {
    "class": "promise",
    "file": "08-principles.md",
@@ -5925,16 +6189,6 @@
     "port"
    ],
    "text": "Prompts worth copying, then the mistakes everyone makes once."
-  },
-  "8fa5eb3c4e65": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "typescript-rules-auto-load-on-ts-files",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[`typescript-best-practices`](../../skills/typescript-best-practices/SKILL.md) has no slash command in your workflow."
   },
   "8fb4bee99a14": {
    "class": "promise",
@@ -6080,16 +6334,6 @@
    ],
    "text": "The agent needs a scripted way to drive your app."
   },
-  "95bbcfc5518b": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "interrogate-reviewers-on-different-models",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to several reviewers on different model families."
-  },
   "9645bb3267a8": {
    "class": "promise",
    "file": "07-overnight.md",
@@ -6161,15 +6405,6 @@
     "port"
    ],
    "text": "Skim it now, then come back when you catch the agent doing something a name here would have prevented."
-  },
-  "9b260c1ba3eb": {
-   "class": "context",
-   "file": "README.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Verify and ship](./06-verify-and-ship.md). Prove behavior on the real app, then open a focused PR and drive it to merged."
   },
   "9bd9a9e66390": {
    "also": [
@@ -6311,15 +6546,6 @@
     "port"
    ],
    "text": "On GitHub each merge goes through `merge-gate`."
-  },
-  "a2edee4a99f4": {
-   "class": "context",
-   "file": "09-make-it-yours.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "A skill edit affects every future session, so test it like the experiment it is:"
   },
   "a3132d1f816a": {
    "class": "promise",
@@ -6624,16 +6850,6 @@
     "port"
    ],
    "text": "A status-only request reports a missing or stale author result or a missing or stale required independent review verdict as pending."
-  },
-  "acdf85cfcb57": {
-   "class": "promise",
-   "file": "README.md",
-   "promise": "guide-named-skills-exist",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Design the change](./04-design.md). `/architect`, `/arena`, `/swarm`, and `/interrogate` before code locks in a shape."
   },
   "aced83efe229": {
    "also": [
@@ -7047,7 +7263,6 @@
    "file": "02-poteto-mode.md",
    "promise": "poteto-mode-sticky",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "Short works because the mode is sticky and the playbook holds the structure."
@@ -7243,7 +7458,6 @@
    "file": "10-recipes-and-pitfalls.md",
    "promise": "worktree-request-honored",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "**Parallel agents in one worktree.** They overwrite each other and the diff becomes archaeology. Say \"own worktree per attempt\" and the isolation is free."
@@ -7461,16 +7675,6 @@
    ],
    "text": "You rarely need more words."
   },
-  "d0d8649226ba": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "typescript-rules-auto-load-on-ts-files",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It loads whenever the agent touches a `.ts` or `.tsx` file and turns the type-system principles into concrete rules: discriminated unions, `unknown` at boundaries, exhaustive variants, schema-derived types."
-  },
   "d12943b3cae9": {
    "class": "promise",
    "file": "README.md",
@@ -7607,7 +7811,6 @@
    "class": "context",
    "file": "02-poteto-mode.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "If you run several agents against one repository, they will fight over the working tree."
@@ -7722,16 +7925,6 @@
     "port"
    ],
    "text": "One weird session is an anecdote, not a rule."
-  },
-  "dedbba8f2090": {
-   "class": "promise",
-   "file": "03-understand.md",
-   "promise": "guide-named-skills-exist",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Editing code you don't understand is how subtle regressions ship. pstack gives you four ways in."
   },
   "dee8960c60b1": {
    "class": "promise",
@@ -8145,16 +8338,6 @@
    ],
    "text": "Say two parallel attempts are about to write to the same branch:"
   },
-  "f00689b111ed": {
-   "class": "promise",
-   "file": "08-principles.md",
-   "promise": "principle-leaf-summaries-match",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Explain the Number](../../skills/principle-explain-the-number/SKILL.md) names what limits a measured number and rules out that it measured something else, before anyone trusts or reports it."
-  },
   "f024eea80460": {
    "class": "substituted",
    "file": "05-build-and-clean.md",
@@ -8528,6 +8711,2807 @@
     "port"
    ],
    "text": "Run `no-mistakes init` in your main checkout, from the exact path spelling that git reports, because on a case-insensitive disk no-mistakes matches the spelling `init` used."
+  },
+  "6b1fbea19d37": {
+   "class": "substituted",
+   "file": "README.md",
+   "ported_as": [
+    "6e777cf3d97d"
+   ],
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[Understand the code](./03-understand.md). A read-only investigation, then `/how`, `/why`, `/teach`, and `/recall` before you edit anything."
+  },
+  "6e777cf3d97d": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "port"
+   ],
+   "text": "[Understand the code](./03-understand.md). A read-only investigation, then `/how`, `/why`, `/poteto-teach`, and `/recall` before you edit anything."
+  },
+  "33b855caed40": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Design the change](./04-design.md). `/architect`, `/arena`, `/swarm`, `/interrogate`, prototypes, and plans before code locks in a shape."
+  },
+  "6a065cfac703": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Verify and ship](./06-verify-and-ship.md). Prove behavior on the real app, vet numbers with `/benchmark-checklist`, then open a focused PR and drive it to merged."
+  },
+  "5fec60521f6d": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Make it yours](./09-make-it-yours.md). Your own mode, `/correct` for repeated mistakes, and how to test a skill change."
+  },
+  "83352d24bd1c": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When you're stuck, or can't tell which skill fits, type [`/poteto-help`](../../skills/poteto-help/SKILL.md) with your question:"
+  },
+  "806993409f48": {
+   "class": "substituted",
+   "file": "README.md",
+   "ported_as": [
+    "cb4518252d93"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "[Run work while you sleep](./07-overnight.md). Trust before loops, an overnight contract, a decision log you can audit, and Projects and automations that scale past one agent."
+  },
+  "cb4518252d93": {
+   "class": "context",
+   "file": "README.md",
+   "sources": [
+    "port"
+   ],
+   "text": "[Run work while you sleep](./07-overnight.md). Trust before loops, an overnight contract, a decision log you can audit, and the coordinator chats and automations that scale past one agent."
+  },
+  "831b2f4f4b2b": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-finds-need-and-routes",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-help which skill should i use to review this branch?\n```"
+  },
+  "8e536d95e0c8": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-finds-need-and-routes",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It answers, hands you a prompt to send, and links the skill or guide page the answer came from."
+  },
+  "a710322dd179": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-finds-need-and-routes",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It doesn't start the work, because a pstack run spends real tokens, so you send the prompt when you're ready."
+  },
+  "c6f75c4a665a": {
+   "class": "substituted",
+   "file": "README.md",
+   "ported_as": [
+    "4e630f5db969"
+   ],
+   "promise": "poteto-help-typed-only",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It runs only when you type it."
+  },
+  "68d84dbb65ba": {
+   "class": "substituted",
+   "file": "01-setup.md",
+   "ported_as": [
+    "737222ee00d4",
+    "c8fbb13927bb"
+   ],
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The defaults run at `xhigh` reasoning, the same as the `large` budget."
+  },
+  "f9b43d345e9f": {
+   "class": "substituted",
+   "file": "01-setup.md",
+   "ported_as": [
+    "a83ccde08cc1"
+   ],
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Opus goes to `max`."
+  },
+  "532d47076a7c": {
+   "class": "substituted",
+   "file": "01-setup.md",
+   "ported_as": [
+    "f87f981bda52"
+   ],
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Grok tops out at `xhigh`, so it stays there."
+  },
+  "d1920996f970": {
+   "class": "substituted",
+   "file": "01-setup.md",
+   "ported_as": [
+    "a83ccde08cc1",
+    "b7618cfbba23"
+   ],
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "upstream"
+   ],
+   "text": "`medium` and `small` lower the reasoning and spend fewer tokens."
+  },
+  "737222ee00d4": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "The shipped defaults write no effort on their flat lines, which is what the `default` budget keeps."
+  },
+  "c8fbb13927bb": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code and Grok Build those roles run at your session effort, and on Codex the `## codex` section pins its own."
+  },
+  "2c7eb061fed3": {
+   "class": "substituted",
+   "file": "01-setup.md",
+   "ported_as": [
+    "a83ccde08cc1"
+   ],
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "upstream"
+   ],
+   "text": "`unlimited` lifts each model to its highest tier, up to `max`."
+  },
+  "b61923c61339": {
+   "class": "substituted",
+   "file": "01-setup.md",
+   "ported_as": [
+    "45f5cc237f9a"
+   ],
+   "promise": "setup-rerun-keeps-changed-roles",
+   "sources": [
+    "upstream"
+   ],
+   "text": "When a default changes, a rule written before the change still pins the old default, so delete those role lines, or delete the file, then run `/setup-pstack` again."
+  },
+  "b8135d3e2e47": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Verify and ship](./06-verify-and-ship.md#create-a-project-verification-skill) covers it in depth."
+  },
+  "5536f368417b": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "If you're new to pstack, say yes."
+  },
+  "ea3ce31eb77b": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "An agent that can check its own work keeps going until the check passes."
+  },
+  "faf1781751e4": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "An agent that can't hands every result back to you to check by hand."
+  },
+  "ec95fa153bb0": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Of everything in this guide, the verification skill pays off the most."
+  },
+  "af4a00b96986": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "pstack spends extra tokens on subagents and review panels."
+  },
+  "7e39dea0e0a3": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "That's the price of the rigor."
+  },
+  "303d95552759": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "To spend fewer:"
+  },
+  "2ec1f4de7e47": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Rerun `/setup-pstack` and pick a smaller reasoning budget or cheaper models. A strong model in the main chat with cheaper, faster models in the code roles is a good split."
+  },
+  "38630e6e62e2": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Save `/poteto-mode` for work that needs rigor. A small, obvious edit doesn't."
+  },
+  "b9b5f702ea91": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "inherit-parent-omits-model-field",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Set a role to `auto` or `inherit-parent` so it runs on the chat's own model."
+  },
+  "5f75f2aa6f29": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "panel-list-sets-arm-count",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Shorten a panel list. Each entry runs one subagent."
+  },
+  "dd8e15e16e6c": {
+   "class": "substituted",
+   "file": "01-setup.md",
+   "ported_as": [
+    "1841b9684cfc",
+    "7ca833ffe63f"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "To keep `/poteto-mode` on for the whole chat, pick it from the `/` menu with Option+Enter (Mac) or Alt+Enter (Windows) instead of Enter."
+  },
+  "77a3cc02293e": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "That makes it a [Custom Mode](https://cursor.com/docs/skills), which stays in context on every turn until you exit it."
+  },
+  "dab649d29033": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Custom Modes are available in the Agents Window and the CLI."
+  },
+  "06d87253a45e": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Plain Enter attaches the skill to one message, and it fades as the chat moves on."
+  },
+  "8a52a937d01b": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A useful prompt carries up to five things, and each one fits in a sentence:"
+  },
+  "d962394350f7": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**The goal.** Say what's wrong, or what you want."
+  },
+  "6018210912a1": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**The done check.** It must be able to pass or fail. \"Make it better\" and \"work on it for an hour\" aren't checks."
+  },
+  "b2201a854c56": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**The proof you want to see.** Ask for the real command output, a video of the flow, the stored value, or a before-and-after number."
+  },
+  "768813397fb2": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**What you already know.** A symptom, a repro step, a log line, or a link saves the agent a search."
+  },
+  "c0288e8d1b96": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**The real constraints.** \"repro first\", \"don't change any code yet\", \"zero behavior change\", and \"let me review before proceeding\" each change what the agent does."
+  },
+  "3696424e4b04": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Here's one prompt with all five:"
+  },
+  "b65ab2ff9ff8": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Two things are worth leaving out:"
+  },
+  "a1ac9928a707": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**The how.** Say what to achieve, and leave the agent room to find a better path than the one you'd pick. The same goes for a list of skills, covered in the pitfall below."
+  },
+  "685bf207edb7": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**Your theory of the cause, at first.** A stated guess narrows the search to wherever you pointed. Let the agent restate the problem before you share your hunch."
+  },
+  "92f59e865bbb": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For a noisy report, such as a long thread or a vague bug, make the restatement the first step:"
+  },
+  "5176e90c94c3": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A misreading shows up in the restatement, before any code exists."
+  },
+  "970e0503270e": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Correct it there, and it costs you one message instead of one wrong fix."
+  },
+  "413c27bde05b": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Worktrees cost disk and machine resources, so a laptop runs only a handful at once."
+  },
+  "115f332de49b": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "bug-prompt-routes-to-bug-fix",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode the csv export drops its last row since yesterday's deploy. failing job id is 4812. repro first, then fix. done means the 60k-row fixture exports every row. show me the row counts before and after.\n```"
+  },
+  "2e5703ef2f80": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "read-only-phrase-pins-investigation",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode read this thread. restate the underlying issue in your own words, in plain english. don't change any code yet.\n```"
+  },
+  "5453f5abe591": {
+   "class": "substituted",
+   "file": "02-poteto-mode.md",
+   "ported_as": [
+    "bedaf31dca04"
+   ],
+   "promise": "poteto-mode-sticky",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Short works because the playbook holds the structure, and a Custom Mode keeps `/poteto-mode` in context on every turn."
+  },
+  "f4c94ee7fe28": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[Set up pstack](./01-setup.md#run-your-first-task) shows how to start one."
+  },
+  "55129016dbc8": {
+   "class": "substituted",
+   "file": "02-poteto-mode.md",
+   "ported_as": [
+    "d72e6863abdf"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "If you run several agents against one repository on one computer, they will fight over the working tree, the ports, and the build output."
+  },
+  "7f5cef2d7c27": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The cleanest isolation is a [cloud subagent](https://cursor.com/docs/subagents#cloud-subagents)."
+  },
+  "d80ea230d09f": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Each one gets its own VM and branch, so it can install dependencies, run your app, and record video of the result without touching your machine."
+  },
+  "c4a4184079de": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Type `/in-cloud` before the task, or ask the parent chat to hand work to cloud subagents."
+  },
+  "62315a381101": {
+   "class": "substituted",
+   "file": "02-poteto-mode.md",
+   "ported_as": [
+    "63a874252a50"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "When the work has to stay local, ask for a worktree up front:"
+  },
+  "7205ac93dd56": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Editing code you don't understand is how subtle regressions ship, and that's as true for the agent as for you."
+  },
+  "0f9cc893bd89": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Agents usually fail in one of two ways."
+  },
+  "a1c8d6289f99": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "They misread what you want, or they don't have the context to do the work right."
+  },
+  "8a9905b36c83": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[What goes in a prompt](./02-poteto-mode.md#what-goes-in-a-prompt) handles the first."
+  },
+  "5d23421b119e": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "This page handles the second."
+  },
+  "7fed3c844747": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "pstack gives you four ways in."
+  },
+  "fd1bd7db7e0f": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Each one also makes the agent explain itself in words you can check."
+  },
+  "5074c54cc5a0": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "That's how you supervise an agent that may know the code better than you do."
+  },
+  "f2dd2d9ffd32": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When the cause is unclear, ask for findings, not a fix:"
+  },
+  "e4d00d7fc158": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Asking \"what data you used\" makes the agent separate its evidence from its guesses."
+  },
+  "f45aa18c7033": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When the findings point at a fix, start the fix as a new task."
+  },
+  "57b99aecd4cc": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It works on the agent's own choices too:"
+  },
+  "e932dae5763e": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Teaching helps the agent as much as you."
+  },
+  "dd8dea4de1ef": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "An agent that has to explain its work must read the code and back each claim with evidence, instead of stating it confidently and moving on."
+  },
+  "91bc0bd17b6c": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Your old chats hold context that a fresh agent lacks, so start new work on an old topic by loading it first, then hand over the new input:"
+  },
+  "30294967676a": {
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "read-only-phrase-pins-investigation",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode investigate why background jobs time out every few hours. give me what we know, what data you used, and your best hypotheses. don't change any code yet.\n```"
+  },
+  "213edf44b9a8": {
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "read-only-phrase-pins-investigation",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "\"don't change any code yet\" routes this to the [Investigation playbook](../../skills/poteto-mode/playbooks/investigation.md)."
+  },
+  "12c7370c9c1c": {
+   "also": [
+    "investigation-returns-cited-explanation-or-tradeoffs"
+   ],
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "investigation-routes-code-to-how-and-external-to-research",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It runs `/how`, adds `/why` for questions about motivation, and returns a cited explanation."
+  },
+  "a8b6ef1aca13": {
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "investigation-returns-cited-explanation-or-tradeoffs",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For a choice between options, it returns a recommendation with a trade-offs table."
+  },
+  "f12e676f533a": {
+   "class": "substituted",
+   "file": "03-understand.md",
+   "ported_as": [
+    "38a51749f1cb"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "```text\n/teach me why you implemented it this way and not with a queue. what did you trade off, and why?\n```"
+  },
+  "38a51749f1cb": {
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "poteto-teach-runs-how-and-why",
+   "sources": [
+    "port"
+   ],
+   "text": "```text\n/poteto-teach me why you implemented it this way and not with a queue. what did you trade off, and why?\n```"
+  },
+  "407bad5d424f": {
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "recall-rebuilds-context-brief",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/recall my work on the virtualized list from yesterday, then read this bug report.\n```"
+  },
+  "715f2c984854": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The two most common design mistakes are taking the agent's first design and polishing a plan that no code has tested."
+  },
+  "32321e17e0b2": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "This page fixes both."
+  },
+  "c88df1cdc0bf": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You plan through code: prototypes answer the open questions, a README or tutorial sets the target, and the written plan comes last."
+  },
+  "42a2bed9292c": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The design isn't sacred once code starts."
+  },
+  "45ce0c8844d3": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Never take the first design."
+  },
+  "d182e5e83786": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Ask for a few, and pick from evidence you can see:"
+  },
+  "0c5063de44c1": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode prototype a few options for the new dropdown menu. take screenshots or videos for me to compare.\n```"
+  },
+  "8cb3787c59f6": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Prototypes are planning with code."
+  },
+  "a2ddd6980419": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "They let the agent answer its own open questions by running something instead of asking you, and they leave room for an option you wouldn't have thought of."
+  },
+  "1e1d1ccadb61": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The same idea scales up to a real design."
+  },
+  "7cd447fffd04": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Pair `/architect` with prototypes and keep a review gate:"
+  },
+  "dc65eb3d9938": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode we need rate limiting for external webhooks. /architect it first, and answer open questions with prototypes. let me review before proceeding.\n```"
+  },
+  "e4f2a183b2d5": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Don't spend reviewers on an abstract plan."
+  },
+  "4c192f6b0c89": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "`/interrogate` belongs on a diff."
+  },
+  "ae65b145c0ba": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Point adversarial review at a plan with no code behind it and the reviewers invent theoretical risks and edge cases that will never happen."
+  },
+  "ec7e3a134a35": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Let prototypes settle the questions, then review what got built."
+  },
+  "8041ff5e31b1": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For a package or API that other code will use, start with the doc a user would read:"
+  },
+  "a6d54e6be8ad": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Writing the tutorial first forces the caller's view."
+  },
+  "660e25570396": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You describe the API to a hypothetical user and work back to the implementation."
+  },
+  "3b38274c1157": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The doc also becomes a concrete target the agent checks its own work against."
+  },
+  "fae73ab94746": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "pstack has no planning skill, on purpose."
+  },
+  "f96e822dbdcd": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When you do want a written plan, ask for it once the design is settled:"
+  },
+  "f988f8b43273": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode turn this design into a plan. small verifiable PRs, each with its own verification steps.\n```"
+  },
+  "2bfd37e5c3be": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For a migration, state the bar in the prompt:"
+  },
+  "250faf3809dc": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode plan the migration of our ui library to the new styling system. small verifiable PRs, each with visual regression checks. the result must match the original exactly, bugs included.\n```"
+  },
+  "9e52d3d47e93": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "\"bugs included\" keeps the migration from quietly fixing things on the way, which would make the old and new output impossible to compare."
+  },
+  "2dac5d5b6b16": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For a project that spans many days, you can commit the plan to the repo for a while so other agents see the work in progress."
+  },
+  "fe99bd246dda": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Delete it when the work lands."
+  },
+  "7fec3c772765": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "An open question you could answer by running something, like a layout, a timing, or an approach, gets a prototype, not a debate."
+  },
+  "45e3bec32e00": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Work that spans several PRs gets a plan, written after the design settles."
+  },
+  "573d5509fa16": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "port"
+   ],
+   "text": "```text\n/poteto-mode write a tutorial for how i would use the new config package first. then /poteto-teach me why it beats the current one.\n```"
+  },
+  "06f0cd7bc63b": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "architect-scraps-sketch-on-friction-pattern",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "If implementation shows the same workaround in unrelated places, or types that only compile with `any` or forced casts, `/architect` treats that as proof the design is wrong."
+  },
+  "05c11c0e3512": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "architect-scraps-sketch-on-friction-pattern",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It scraps the sketch and starts over instead of patching around it."
+  },
+  "7285a3d9185e": {
+   "class": "substituted",
+   "file": "04-design.md",
+   "ported_as": [
+    "4cc94348b2c5"
+   ],
+   "promise": "interrogate-reviewers-on-different-models",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to reviewers on different model families."
+  },
+  "8a8b5f7a268a": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "prototype-builds-variants-behind-switcher",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The [Prototype playbook](../../skills/poteto-mode/playbooks/prototype.md) builds throwaway sketches in a scratch directory, puts the variants behind one switcher, drives each one, and captures screenshots or timings."
+  },
+  "582a088c3724": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "prototype-builds-variants-behind-switcher",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It also works for behavior and algorithms, not just UI."
+  },
+  "eafda0a661d8": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "technical-writing-picks-mode-then-sentences",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Name [`/technical-writing`](../../skills/technical-writing/SKILL.md) when the doc itself matters, so a tutorial stays a tutorial instead of drifting into reference and explanation at once."
+  },
+  "75bc08340d22": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "multi-phase-plan-prototypes-then-plans-per-pr",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The [Multi-phase plan playbook](../../skills/poteto-mode/playbooks/multi-phase-plan.md) settles any remaining open questions by prototype, then writes one section per PR, each ending in proof that the change works."
+  },
+  "631ec55dfea6": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "multi-phase-plan-prototypes-then-plans-per-pr",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A passing test suite alone doesn't count as that proof."
+  },
+  "d3d387b0e057": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "multi-phase-plan-prototypes-then-plans-per-pr",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The plan is the deliverable."
+  },
+  "1bd7e7c6fc3f": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "multi-phase-plan-prototypes-then-plans-per-pr",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The playbook doesn't implement it, and it names which execution playbook should run it next."
+  },
+  "2d2bb3ca9e0d": {
+   "class": "substituted",
+   "file": "04-design.md",
+   "ported_as": [
+    "573d5509fa16"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "```text\n/poteto-mode write a tutorial for how i would use the new config package first. then /teach me why it beats the current one.\n```"
+  },
+  "cb2022959f29": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "perf-playbooks-run-benchmark-checklist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Both perf playbooks run [`/benchmark-checklist`](../../skills/benchmark-checklist/SKILL.md) on their numbers."
+  },
+  "d070e112f089": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "perf-playbooks-run-benchmark-checklist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Perf issue vets its baseline and every number after it, and Hillclimb vets its harness before freezing it."
+  },
+  "3b0e5227593a": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Verify and ship](./06-verify-and-ship.md#vet-a-measured-number-with-benchmark-checklist) shows when to type it yourself."
+  },
+  "5db91ebe99e8": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Sometimes you want the cause before any fix."
+  },
+  "c80955563d03": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode here's a cpuprofile from the slow startup. tell me where the time goes and which source lines own it. no fix yet.\n```"
+  },
+  "bc04aa842f29": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`typescript-best-practices`](../../skills/typescript-best-practices/SKILL.md) turns the type-system principles into concrete rules: discriminated unions, `unknown` at boundaries, exhaustive variants, schema-derived types."
+  },
+  "0b485a6fb145": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "forensics-playbooks-return-diagnosis",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For a live symptom, such as a leak, an idle CPU spin, or a visual glitch, the [Runtime forensics playbook](../../skills/poteto-mode/playbooks/runtime-forensics.md) instruments the running process."
+  },
+  "135849ff3db8": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "forensics-playbooks-return-diagnosis",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For a profile you already captured, the [Trace forensics playbook](../../skills/poteto-mode/playbooks/trace-forensics.md) reads the artifact and maps the hot frame to source."
+  },
+  "61fe3496e966": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "forensics-playbooks-return-diagnosis",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Both return a diagnosis, not a fix:"
+  },
+  "13c0ad2855ea": {
+   "class": "substituted",
+   "file": "05-build-and-clean.md",
+   "ported_as": [
+    "c1f305f4e11e"
+   ],
+   "promise": "typescript-rules-load-by-name",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It doesn't load on its own, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
+  },
+  "30aa844403bd": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "This page covers stating a finish condition, vetting a measured number, generating a verification skill for your app, opening the PR, and driving it to merged."
+  },
+  "174032b3695a": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Verification is the slowest step in most agent work, because it's the step that usually waits on a human."
+  },
+  "240af020a213": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Make the agent able to do it, and you stop being the bottleneck."
+  },
+  "f0ff35a8de8b": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Skip it, and running more agents only gets you more unchecked work to review."
+  },
+  "21492427fda7": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Ask for the proof as an artifact you can inspect yourself: the failing test and then the passing one, a before-and-after video, the trace, the screenshot."
+  },
+  "eddf561abca9": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "If the fix already merged, ask for the same check again on main."
+  },
+  "6446cad12faf": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "An artifact beats a plausible explanation, because you can challenge it without replaying the whole run."
+  },
+  "88c989b519f3": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A before-and-after number is the easiest evidence to get wrong by accident."
+  },
+  "c6b78b524590": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A warm cache, a debug build on one side, or work that never ran inside the timed region can each produce a convincing speedup."
+  },
+  "6a76a533a79f": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Before you report or act on a number, type:"
+  },
+  "1881247b1e31": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/benchmark-checklist vet the export speedup before it goes in the pr\n```"
+  },
+  "d901fbd6df61": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It's the working form of the [Explain the Number principle](../../skills/principle-explain-the-number/SKILL.md)."
+  },
+  "081cba013487": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Name it in the prompt when you want the proof in a specific form:"
+  },
+  "3b4aee2593cf": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode build the bulk-archive action. use /verify-<app> to verify your changes and show me a video and screenshots as proof.\n```"
+  },
+  "4df436366520": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A swarm of verifiers also confirms a perf win over a big enough sample, or fuzzes the app for regressions before a PR ships."
+  },
+  "50e5eaf55cc2": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Treat the verification skill as infrastructure, not a one-off."
+  },
+  "6a187e8ca8e4": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Commit it, so every person and every agent on the team drives the app the same way."
+  },
+  "3b8612702f62": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Then [build the lever](../../skills/principle-build-the-lever/SKILL.md)."
+  },
+  "272739ec2e86": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When agents keep writing throwaway scripts to click through the app, ask for a small control CLI that the skill calls instead."
+  },
+  "c1fc7a94023a": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Agents spend fewer tokens, and every run becomes repeatable."
+  },
+  "6489725575f9": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A CLI that agents use well has these traits:"
+  },
+  "2d39b86e10b6": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A few composable commands, each doing real work, rather than many thin ones."
+  },
+  "5d67c7b584a2": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A `--dry-run` option on anything destructive."
+  },
+  "991be44a8207": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Subcommands that reveal features gradually instead of all at once."
+  },
+  "923ba7bda583": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Error messages that say what to do instead."
+  },
+  "56018e8d1fa1": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Rich `--help` text."
+  },
+  "962664149230": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Machine-readable output, such as JSON."
+  },
+  "07fbec0983ed": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "While you're there, make the dev setup repeatable too: seeded data, test users, and one command that brings the environment up the same way every time."
+  },
+  "0301b1bd4442": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Run this at least once a day, ideally from a scheduled automation so nobody has to remember:"
+  },
+  "3d55fda3312e": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "visual-parity-diffs-against-baseline",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A UI change walks the changed flow in the running app. When it must match a reference pixel for pixel, the [Visual parity playbook](../../skills/poteto-mode/playbooks/visual-parity.md) diffs screenshots against a frozen baseline instead of judging by eye."
+  },
+  "19df43cd9318": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`/benchmark-checklist`](../../skills/benchmark-checklist/SKILL.md) asks seven questions and wants evidence from a run for each:"
+  },
+  "72ddd3680be1": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "What limits the number, and why isn't it double?"
+  },
+  "1e1df05812a8": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Did every side run tuned the way production runs?"
+  },
+  "60541f4cc941": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Does the result break a physical limit, like disk bandwidth or core count?"
+  },
+  "b389ccb388de": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Did anything error or return wrong output?"
+  },
+  "e0acb193f9ba": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Does it reproduce over alternating runs, with a median and a range?"
+  },
+  "71a2c0a2ee5b": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Does it matter end to end, on the path a user waits on?"
+  },
+  "6334293ccfc1": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Did the work actually happen inside the timed region?"
+  },
+  "cda575a11923": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The verdict comes back as faster, slower, no measurable difference, or inconclusive, with the run count, range, and limiter."
+  },
+  "1c0d11e8061b": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It says inconclusive when it can't name the limiter or a side ran untuned."
+  },
+  "f0281cb592b5": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "perf-playbooks-run-benchmark-checklist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "`/poteto-mode` already runs the checklist inside the Perf issue and Hillclimb playbooks, so you type it yourself when you measured something outside them, or when someone else's number looks too good."
+  },
+  "fc3983632e6c": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "bug-prompt-routes-to-bug-fix",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode repro this with /verify-<app>. if it repros on main, fix it and show me a video as proof.\n```"
+  },
+  "35cd3d035c39": {
+   "class": "substituted",
+   "file": "07-overnight.md",
+   "ported_as": [
+    "26331839fa40"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "It's a checkable finish condition, an isolated worktree or cloud agent, and a decision log you audit in the morning."
+  },
+  "50f14f23e8ef": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A loop you don't trust just produces unchecked work faster, and the mess compounds with every iteration."
+  },
+  "be7acdabe05d": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Before you leave one running, check that it has earned it:"
+  },
+  "7464a664deff": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You've done the task once by hand, or watched an agent do it, so you know what good looks like."
+  },
+  "9768756dc5e0": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The agent has the tools and signals you'd use yourself: the verification skill, the profiler, the logs."
+  },
+  "23b4ef38716e": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Every stage proves its work and can stop the line when the work misses the bar."
+  },
+  "71b04d934321": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You've read a few transcripts and turned the repeated failures into tools, skills, or checks."
+  },
+  "33fa2580afef": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Make the loop autonomous only after all four hold."
+  },
+  "e22c26127c60": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Until then, run it while you watch."
+  },
+  "c1fab5803dd8": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "That's the shape the Orchestrate playbook expects."
+  },
+  "ef13c835b6c5": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A few habits help:"
+  },
+  "231fcdf4a903": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Give each PR a verification swarm before it merges, and let Autopilot-stack or Autopilot-full carry the queue."
+  },
+  "71a1fb2d8473": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Ask the coordinator for a plan backed by data, and have it answer open questions with prototypes before it asks you."
+  },
+  "aa98b92d5270": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup."
+  },
+  "025080dabc58": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "One prompt can carry a whole program, from research through execution:"
+  },
+  "7c0009c0112d": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode refactor this repo so its architecture is more agent friendly. use /correct and /architect on past commits and review comments to find the mistakes agents make most here. use /recall for context from past chats. answer open questions with prototypes instead of asking me. come back with a plan backed by real data. once i approve it, run it with autopilot-stack or autopilot-full, and ask me which.\n```"
+  },
+  "51bca557b2fd": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Every loop above still waits for you to start it."
+  },
+  "d8ea4a22c708": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A scheduled or event-driven automation removes that step."
+  },
+  "682d834d3328": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Software maintenance splits into stages that suit this well: triage a report, reproduce it, fix it, verify the fix."
+  },
+  "b7de69594a25": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Two rules keep such a line trustworthy:"
+  },
+  "f8a8dadca760": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Every stage can stop the line. Triage can decide the report is expected behavior, repro can fail to reproduce it, and the fixer can judge the change too risky. Each of those outcomes is useful, because it keeps bad work from reaching the next stage, where it costs more to undo."
+  },
+  "c8066657f094": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Every stage hands over evidence. Repro attaches screenshots and video of the broken state, and the fix attaches before-and-after proof. A human can then check that the agent fixed the right thing before reading a line of code."
+  },
+  "d553f21839b2": {
+   "class": "substituted",
+   "file": "07-overnight.md",
+   "ported_as": [
+    "fd1240f7af47"
+   ],
+   "promise": "pause-safely-checkpoints-and-resume-note",
+   "sources": [
+    "upstream"
+   ],
+   "text": "To stop a run on purpose, tell the agent to pause, or that you're about to go offline or restart Cursor."
+  },
+  "fd1240f7af47": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "pause-safely-checkpoints-and-resume-note",
+   "sources": [
+    "port"
+   ],
+   "text": "To stop a run on purpose, tell the agent to pause, or that you're about to go offline or restart your CLI."
+  },
+  "ad16723b4f8d": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "pause-safely-checkpoints-and-resume-note",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The [Pause safely playbook](../../skills/poteto-mode/playbooks/pause-safely.md) finishes or backs out of the current step, commits a work-in-progress checkpoint, and writes a resume note."
+  },
+  "8dad624d8813": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "pause-safely-checkpoints-and-resume-note",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A fresh chat picks the work up from that note through the Session pickup playbook."
+  },
+  "22f096ae8979": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "pause-safely-checkpoints-and-resume-note",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Saying \"keep going\" never triggers a pause."
+  },
+  "90e223fc0825": {
+   "class": "substituted",
+   "file": "07-overnight.md",
+   "ported_as": [
+    "aa98b92d5270"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "A [Cursor Project](https://cursor.com/blog/projects) gives one coordinator agent a persistent thread."
+  },
+  "e198875f06b6": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "orchestrate-coordinator-never-writes-code",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The coordinator doesn't write code."
+  },
+  "ba17e8851fb3": {
+   "class": "substituted",
+   "file": "07-overnight.md",
+   "ported_as": [
+    "0bfa70f161e4"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "It directs subagents, which run in the cloud by default, so the work continues when your laptop is closed."
+  },
+  "0bfa70f161e4": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "orchestrate-rebuilds-from-store-after-restart",
+   "sources": [
+    "port"
+   ],
+   "text": "It directs subagents, which run on your machine and end with the session."
+  },
+  "c3360623184e": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "poteto-mode-subagents-carry-poteto-agent",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks."
+  },
+  "7232da26dc19": {
+   "class": "cursor-only",
+   "file": "07-overnight.md",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Give each body of work its own Project, such as a feature, a migration, a perf push, or a tech-debt cleanup. Several can run side by side."
+  },
+  "d036426d131b": {
+   "class": "cursor-only",
+   "file": "07-overnight.md",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Drag related chats into the Project, finished ones included. They become context for every agent in it."
+  },
+  "16efbef9dc59": {
+   "class": "substituted",
+   "file": "07-overnight.md",
+   "ported_as": [
+    "025080dabc58"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "One prompt can carry a whole Project, from research through execution:"
+  },
+  "343a75ffbf0f": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "benny-pack-triages-and-reproduces",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "pstack ships this as a dormant [automation pack](../../automations/benny/README.md) for Slack issue reports."
+  },
+  "afac786755ba": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "benny-pack-triages-and-reproduces",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "One automation triages each report."
+  },
+  "aeb429799838": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "benny-pack-triages-and-reproduces",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The other reproduces confirmed bugs and may prepare a small draft fix."
+  },
+  "c39d1d8d9ee7": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "benny-pack-triages-and-reproduces",
+   "sources": [
+    "port"
+   ],
+   "text": "It runs on a scheduled agent runner, such as Claude Code scheduled agents or a cron job that invokes your CLI."
+  },
+  "f3d51efbdbe0": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "benny-pack-triages-and-reproduces",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Point an agent at its [`FOR_AGENTS.md`](../../automations/benny/FOR_AGENTS.md) and name the target repository to set it up."
+  },
+  "32a18330aff9": {
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-leaf-summaries-match",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Build the Lever](../../skills/principle-build-the-lever/SKILL.md) builds the script that does or proves the work, so a reviewer can rerun it. When an agent keeps doing the same thing by hand, have it write the tool or skill it wishes it had. If a script can do a step the same way every time, use the script, and save agents for the judgment calls."
+  },
+  "dd2ad473b5ec": {
+   "also": [
+    "benchmark-checklist-seven-questions-verdict"
+   ],
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-leaf-summaries-match",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Explain the Number](../../skills/principle-explain-the-number/SKILL.md) names what limits a measured number and rules out that it measured something else, before anyone trusts or reports it. [`/benchmark-checklist`](../../skills/benchmark-checklist/SKILL.md) turns it into seven questions you answer from real runs."
+  },
+  "dd474c0b54e1": {
+   "also": [
+    "correct-fixes-mistake-classes-at-highest-level"
+   ],
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-leaf-summaries-match",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Encode Lessons in Structure](../../skills/principle-encode-lessons-in-structure/SKILL.md) turns advice you've repeated twice into a lint, check, or script. [`/correct`](../../skills/correct/SKILL.md) applies it to a whole repo, as shown in [Make it yours](./09-make-it-yours.md#fix-the-environment-with-correct)."
+  },
+  "7d4c28ff8434": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "This page covers generating a personal mode, capturing lessons from a session, fixing the repo so agents stop repeating mistakes, authoring a focused skill, and testing a skill change before you trust it."
+  },
+  "6267b9c3cbea": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Start smaller than you think."
+  },
+  "4a37fcc07999": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "port"
+   ],
+   "text": "You don't need many skills on day one, or even this whole skill set."
+  },
+  "a9d051c70718": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Prompt plainly, watch where agents fail, and add a skill or a check when the same failure shows up twice."
+  },
+  "851b106c1447": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When you correct agents for the same mistake again and again, the fix belongs in the repo, not in your next prompt."
+  },
+  "2948163728a4": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Rank the options by how well they hold:"
+  },
+  "71416e6d5725": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Make the mistake impossible with architecture or a better data structure."
+  },
+  "cdc5c8dbefe5": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Block it with types, or with a lint or CI check whose error names the fix."
+  },
+  "11c815c8e6fc": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Catch it with a test."
+  },
+  "6fd59d1053d1": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Write it down as a doc or agent rule. Nothing fails when an agent skips a rule, so this comes last."
+  },
+  "fb9e9dee86ed": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Human review isn't on the list."
+  },
+  "09cf932cf4ee": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A reviewer who must catch the same mistake on every PR is the problem this fixes."
+  },
+  "bbbd433854aa": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/correct agents keep calling the database client directly instead of going through the repository layer\n```"
+  },
+  "4b12c1ca4e3c": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "`/reflect` and `/correct` split the work."
+  },
+  "9b941ae22a44": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "`/reflect` improves skills from one session."
+  },
+  "143a0d70ed63": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Pair it with `/architect` when the fix is a new boundary."
+  },
+  "aee91387e5dc": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "port"
+   ],
+   "text": "[Run a program from one coordinator chat](./07-overnight.md#run-a-program-from-one-coordinator-chat) has a prompt that does both across a whole repo."
+  },
+  "dc1ae2001c3b": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A skill edit affects every future session, so test it like the experiment it is."
+  },
+  "9b1e42d78780": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The same goes for adopting someone else's skill."
+  },
+  "908e3fe3345b": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Check that it makes the agent better on your work before you keep it."
+  },
+  "9bf656ea5891": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When a skill keeps missing and you know what it should do, change and test it in one task:"
+  },
+  "fed084c38ce7": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode update the review skill so it flags missing migrations, and eval the change.\n```"
+  },
+  "61d0d2b3795f": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Asking for the eval up front keeps the edit honest."
+  },
+  "44819d121894": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A fix written from one bad session tends to overfit that session, and over many edits the skill drifts."
+  },
+  "9751be6e67d5": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The eval catches the drift before it ships."
+  },
+  "186d964fdc44": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "One situational skill is for Grok Bot users."
+  },
+  "670984349ecf": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For example, you could swipe through a review queue and have each swipe ask the bot to act on that item."
+  },
+  "e01e6ffc40e1": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`/correct`](../../skills/correct/SKILL.md) does the work:"
+  },
+  "326352b65fa3": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "correct-fixes-mistake-classes-at-highest-level",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It reads recent commits, reverts, review comments, and comments that explain workarounds, then groups the mistakes into classes."
+  },
+  "9fb670f54622": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "correct-fixes-mistake-classes-at-highest-level",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A class counts once it has happened twice."
+  },
+  "62fd1a91b06d": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "correct-fixes-mistake-classes-at-highest-level",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It fixes the most frequent classes one commit each, at the highest level that works, and proves each new check fails on a real past mistake."
+  },
+  "d50ad4f3b01f": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "correct-fixes-mistake-classes-at-highest-level",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It also keeps a table in the agent instruction file that pairs each rule with what enforces it, so a rule that nothing enforces shows up as a repeat."
+  },
+  "62c3660eafa2": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "correct-fixes-mistake-classes-at-highest-level",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The reply lists each class with its evidence, the level chosen, and why a higher level didn't work."
+  },
+  "39c8cdad686e": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "correct-fixes-mistake-classes-at-highest-level",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Run it with no argument and it finds the classes from history on its own."
+  },
+  "f15e296b50d6": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "correct-fixes-mistake-classes-at-highest-level",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "`/correct` changes the repo so a mistake class can't come back."
+  },
+  "67ad3ff1c094": {
+   "class": "substituted",
+   "file": "09-make-it-yours.md",
+   "ported_as": [
+    "4a37fcc07999"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "You don't need many skills on day one, or even this whole plugin."
+  },
+  "a9744f54a77d": {
+   "class": "substituted",
+   "file": "09-make-it-yours.md",
+   "ported_as": [
+    "aee91387e5dc"
+   ],
+   "sources": [
+    "upstream"
+   ],
+   "text": "[Run many projects in parallel](./07-overnight.md#run-many-projects-in-parallel) has a prompt that does both across a whole repo."
+  },
+  "a0d423d76423": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "make-bot-ui-keeps-sender-key-on-server",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`/make-bot-ui`](../../skills/make-bot-ui/SKILL.md) builds a small page whose buttons wake a bot over a webhook routine."
+  },
+  "252545d9278d": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "make-bot-ui-keeps-sender-key-on-server",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A server on your machine holds the webhook's sender key, so the key never reaches the browser or the chat."
+  },
+  "b886ea55b0e1": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "make-bot-ui-keeps-sender-key-on-server",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The skill also covers exposing the page on Tailscale."
+  },
+  "8261582447ac": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "read-only-phrase-pins-investigation",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode read this thread. restate the underlying issue in your own words, in plain english. don't change any code yet.\n```"
+  },
+  "fc5e03a7e132": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A misreading shows up in the restatement, where it costs one message to correct."
+  },
+  "5660b76238e6": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Keep your own theory to yourself until the agent has stated its own."
+  },
+  "1ff9b95f0f33": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode prototype a few options for the settings layout. put them behind a switcher and send me screenshots of each.\n```"
+  },
+  "de5491303e22": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You pick from things that run, not from descriptions."
+  },
+  "e5ad0c2986b5": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The agent answers its own layout and timing questions along the way."
+  },
+  "8fc7c30f0935": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode turn this design into a plan. small verifiable PRs, each with its own proof.\n```"
+  },
+  "cc484a91b469": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Ask only after the design settles."
+  },
+  "9dfa2e4dc86e": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "\"if it repros on main\" lets the run stop early when the bug is already gone."
+  },
+  "de55137d405f": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The video lets you check the fix before you read the diff."
+  },
+  "2aa878590359": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/benchmark-checklist vet this 40% speedup before it goes in the pr description\n```"
+  },
+  "65dbc8899604": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/correct agents keep adding new config flags without registering them in the schema\n```"
+  },
+  "360bce6ebc52": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**Leading with your theory of the cause.** The agent searches wherever you pointed. Ask it to restate the problem first, then share your hunch."
+  },
+  "2772e3c7e6e1": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**Taking the first design.** One attempt locks in the first shape the model thought of. Ask for prototypes or `/architect` and pick from evidence."
+  },
+  "e9b9a90fb70c": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**Polishing an abstract plan.** Adversarial review of a plan with no code behind it invents risks that will never happen. Settle the open questions with prototypes, then review what got built."
+  },
+  "c740294c50c4": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**Looping before you trust the loop.** A loop that can't verify its own work only makes unchecked work faster. Get the verification skill working first."
+  },
+  "6d7fdb4a0edf": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**Trusting an unvetted number.** A warm cache or a skipped code path can fake a speedup. Run `/benchmark-checklist` before the number goes anywhere."
+  },
+  "1a6bb0c03e0e": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "**Correcting the same mistake by hand.** A correction in chat helps one run. `/correct` fixes the repo so no later run repeats it."
+  },
+  "f044581ea34e": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "multi-phase-plan-prototypes-then-plans-per-pr",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The plan is the deliverable, and it names the playbook that will execute it."
+  },
+  "62fb460ef013": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "bug-prompt-routes-to-bug-fix",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-mode repro this with /verify-<app>. if it repros on main, fix it and show me a video as proof.\n```"
+  },
+  "c374ce62b8ae": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "benchmark-checklist-seven-questions-verdict",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You get faster, slower, no measurable difference, or inconclusive, with the run count, the range, and what limits the number."
+  },
+  "2a00894e16cd": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "correct-fixes-mistake-classes-at-highest-level",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The fix lands in the repo as architecture, a type, a lint, or a test, so the next agent can't make the mistake."
+  },
+  "1545f64209bd": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "poteto-help-finds-need-and-routes",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/poteto-help how do i get poteto-mode to stay on every turn?\n```"
+  },
+  "00d89161a77b": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "poteto-help-finds-need-and-routes",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You get an answer, a prompt to send, and a link to the source."
+  },
+  "bc73600a7cf3": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "poteto-help-finds-need-and-routes",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Nothing runs until you send that prompt."
+  },
+  "5c7416e2a55b": {
+   "class": "substituted",
+   "file": "10-recipes-and-pitfalls.md",
+   "ported_as": [
+    "c7ffc28fd05e"
+   ],
+   "promise": "worktree-request-honored",
+   "sources": [
+    "upstream"
+   ],
+   "text": "**Parallel agents in one worktree.** They overwrite each other and the diff becomes archaeology. Run them as cloud agents, or say \"own worktree per attempt\"."
+  },
+  "06188b938938": {
+   "class": "context",
+   "file": "README.md",
+   "sources": [
+    "port"
+   ],
+   "text": "[Set up pstack](./01-setup.md). Install the skills and pick your models."
+  },
+  "4cc94348b2c5": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-reviewers-on-different-models",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to reviewers on different models."
+  },
+  "a83ccde08cc1": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "The other budgets write one effort on every role that names a model: `unlimited` writes `max`, `large` writes `xhigh`, `medium` writes `high`, and `small` writes `medium`."
+  },
+  "b7618cfbba23": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code and Codex a written effort replaces your session effort, whether it is higher or lower."
+  },
+  "f87f981bda52": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "Grok Build's spawn tool takes no effort, so there every role runs at your session effort, whatever the file writes."
+  },
+  "c1f305f4e11e": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "typescript-rules-load-by-name",
+   "sources": [
+    "port"
+   ],
+   "text": "It's set to load only when you type it, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
+  },
+  "4e630f5db969": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-typed-only",
+   "sources": [
+    "port"
+   ],
+   "text": "It's set to load only when you type it, so type `/poteto-help`."
+  },
+  "250f0b8a5b98": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Some skills are set to load only when you type their name."
+  },
+  "ba7e8624cfe7": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Claude Code and Codex honor that setting."
+  },
+  "4c5cb33af9ed": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "In the 2026-10-03 run of the guide-promise evals, Hermes and Grok Build loaded such a skill without being asked."
+  },
+  "c3d6057b5fdb": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "In a very long chat, the CLI may compress older messages and drop the mode."
+  },
+  "7060f8af3657": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Type `/poteto-mode` again if it stops applying."
   }
  }
 }

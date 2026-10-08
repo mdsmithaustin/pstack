@@ -726,12 +726,30 @@ class SmallSkills(unittest.TestCase):
                         spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
         self.assertNotEqual(grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"], PASS)
 
-    def test_ts_autoload(self):
-        case = load_case("ts-autoload")
-        loaded = minimal(events=[edit(0, "/w/src/cli.ts"), read(1, "typescript-best-practices/SKILL.md")])
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", loaded, case)["verdict"], PASS)
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", minimal(events=[edit(0, "/w/src/cli.ts")]), case)["verdict"], FAIL)
-        self.assertEqual(grade("typescript-rules-auto-load-on-ts-files", minimal(exit_code=-9), case)["verdict"], INCONCLUSIVE)
+    def test_poteto_help_routes_a_named_need(self):
+        case = load_case("poteto-help-run")
+        answer = ("Use `/interrogate`. It has different models try to break the diff.\n\n"
+                  "```text\n/interrogate the whole branch, but skeptically.\n```\n\n"
+                  "Source: https://github.com/mdsmithaustin/pstack/blob/main/skills/interrogate/SKILL.md")
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", minimal(final_reply=answer), case)["verdict"], PASS)
+        started = minimal(events=[edit(0, "/w/tally.py")], final_reply=answer)
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", started, case)["verdict"], FAIL)
+        spawned = minimal(spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Review the branch."}], final_reply=answer)
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", spawned, case)["verdict"], FAIL)
+        no_prompt = minimal(final_reply="Use /interrogate. See https://github.com/mdsmithaustin/pstack/blob/main/skills/interrogate/SKILL.md")
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", no_prompt, case)["verdict"], FAIL)
+
+    def test_poteto_help_asks_when_the_need_is_unclear(self):
+        case = load_case("poteto-help-unclear-run")
+        menu = ("What do you want help with?\n\n1. Get set up\n2. Start a task with `/poteto-mode`\n"
+                "3. Pick a skill for a situation\n4. Fix a run that went wrong\n5. Make pstack my own")
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", minimal(final_reply=menu), case)["verdict"], PASS)
+        ask = {"seq": 0, "kind": "tool_call", "name": "AskUserQuestion",
+               "input": {"questions": [{"question": "What do you need?", "options": [
+                   {"label": "Get set up"}, {"label": "Pick a skill for a situation"}, {"label": "Fix a run that went wrong"}]}]}}
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", minimal(events=[ask]), case)["verdict"], PASS)
+        guessed = minimal(final_reply="Run `/setup-pstack`, then start a task with `/poteto-mode`.")
+        self.assertEqual(grade("poteto-help-finds-need-and-routes", guessed, case)["verdict"], FAIL)
 
     def test_technical_writing_mode_first(self):
         case = load_case("technical-writing-run")

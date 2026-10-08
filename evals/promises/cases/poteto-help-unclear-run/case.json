@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "poteto-help-finds-need-and-routes"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-help",
+ "turns": [
+  "i just installed this and i'm not sure where to start"
+ ],
+ "timeout_s": {
+  "default": 600,
+  "codex": 900
+ },
+ "expect": {
+  "asks": true
+ },
+ "tmp_lock": false
+}

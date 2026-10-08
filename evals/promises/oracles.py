@@ -2462,20 +2462,39 @@ def bro(view):
     return inconclusive("shorter, but still carries code spans; plainness needs a judge", *evidence, needs_judge=True, excerpt=after[:1500])
 
 
-@oracle("typescript-rules-auto-load-on-ts-files")
-def ts_autoload(view):
-    prompt = " ".join(str(t) for t in view.case.get("turns", []))
-    if "typescript-best-practices" in prompt:
-        return inconclusive("prompt names the skill; auto-load not exercised")
-    touched = [e for e in view.edits() if e[1].endswith((".ts", ".tsx"))] + \
-        [(seq, rel) for seq, rel in view.event_reads() if rel.endswith((".ts", ".tsx"))]
-    loaded = view.skill_read("typescript-best-practices")
-    evidence = [f".ts files touched by the lead: {len(touched)}", f"skill loaded (lead or delegate): {loaded}"]
-    if loaded:
-        return passed(*evidence)
-    if not touched and not view.spawns:
-        return inconclusive("no .ts file touched" + (" (run killed)" if view.killed else ""), *evidence)
-    return failed("a .ts file was touched without loading typescript-best-practices", *evidence)
+HELP_SECTIONS = ("get set up", "start a task", "pick a skill", "fix a run", "make pstack my own")
+PUBLIC_COPY = "github.com/mdsmithaustin/pstack/blob/main/"
+
+
+@oracle("poteto-help-finds-need-and-routes")
+def poteto_help(view):
+    expect = view.case.get("expect") or {}
+    reply = view.final_reply
+    failures, evidence = no_edits_verdict(view)
+    evidence.append(f"subagents spawned: {len(view.spawns)}")
+    if view.spawns:
+        failures.append(f"spawned {len(view.spawns)} subagent(s) for a help question")
+    if expect.get("asks"):
+        asked = view.asked_user()
+        question = (json.dumps(asked.get("input") or {}) if asked else reply).lower()
+        offered = [s for s in HELP_SECTIONS if s in question]
+        evidence.append(f"help sections offered: {offered}")
+        if len(offered) < 3:
+            failures.append("the unclear need got no multiple-choice question over the help sections")
+    else:
+        named = [n for n in expect.get("names_any", []) if n.lower() in reply.lower()]
+        evidence += [f"expected names in the reply: {named}", f"code block: {'```' in reply}", f"public link: {PUBLIC_COPY in reply}"]
+        if not named:
+            failures.append(f"the reply names none of {expect.get('names_any')}")
+        if "```" not in reply:
+            failures.append("no example prompt in a code block")
+        if PUBLIC_COPY not in reply:
+            failures.append("no link to the public copy of the file the answer came from")
+    if failures:
+        if not reply and view.killed:
+            return inconclusive("run killed before a reply", *evidence)
+        return failed(failures, *evidence)
+    return passed(*evidence)
 
 
 @oracle("blast-radius-finds-breakage")
