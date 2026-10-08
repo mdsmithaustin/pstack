@@ -11430,22 +11430,16 @@
    "text": "It's gated against loading on its own, so it runs when you type it."
   },
   "06188b938938": {
-   "class": "substituted",
+   "class": "context",
    "file": "README.md",
-   "ported_as": [
-    "06188b938938"
-   ],
    "sources": [
     "port"
    ],
    "text": "[Set up pstack](./01-setup.md). Install the skills and pick your models."
   },
   "4cc94348b2c5": {
-   "class": "substituted",
+   "class": "promise",
    "file": "04-design.md",
-   "ported_as": [
-    "4cc94348b2c5"
-   ],
    "promise": "interrogate-reviewers-on-different-models",
    "sources": [
     "port"
