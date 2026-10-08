@@ -93,7 +93,7 @@ On a base branch with a merge queue, owners stop at merge-ready, and the final r
 
 ## Run a program from one coordinator chat
 
-One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup. The coordinator doesn't write code. It directs subagents, which run on your machine and end with the session. That's the shape the Orchestrate playbook expects. Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks.
+One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup. The coordinator doesn't write code. It directs subagents, which run on your machine. That's the shape the Orchestrate playbook expects. Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks.
 
 A few habits help:
 

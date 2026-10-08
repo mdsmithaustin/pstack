@@ -9303,7 +9303,7 @@
   "7f5cef2d7c27": {
    "class": "cursor-only",
    "file": "02-poteto-mode.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
@@ -9312,7 +9312,7 @@
   "d80ea230d09f": {
    "class": "cursor-only",
    "file": "02-poteto-mode.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
@@ -9321,7 +9321,7 @@
   "c4a4184079de": {
    "class": "cursor-only",
    "file": "02-poteto-mode.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
@@ -10700,21 +10700,21 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "0bfa70f161e4"
+    "c697a4838e32"
    ],
    "sources": [
     "upstream"
    ],
    "text": "It directs subagents, which run in the cloud by default, so the work continues when your laptop is closed."
   },
-  "0bfa70f161e4": {
+  "c697a4838e32": {
    "class": "promise",
    "file": "07-overnight.md",
    "promise": "orchestrate-rebuilds-from-store-after-restart",
    "sources": [
     "port"
    ],
-   "text": "It directs subagents, which run on your machine and end with the session."
+   "text": "It directs subagents, which run on your machine."
   },
   "c3360623184e": {
    "class": "promise",
@@ -10729,7 +10729,7 @@
   "7232da26dc19": {
    "class": "cursor-only",
    "file": "07-overnight.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
@@ -10738,7 +10738,7 @@
   "d036426d131b": {
    "class": "cursor-only",
    "file": "07-overnight.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
