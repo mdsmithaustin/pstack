@@ -70,8 +70,9 @@ GUIDE_SLASH_SKILLS = {
     "poteto-tdd", "deslop", "unslop", "no-comments", "blast-radius", "create-verification-skill",
     "maintain-verification-skill", "documentation-impact", "show-me-your-work", "figure-it-out",
     "automate-me", "reflect", "technical-writing", "bro", "setup-pstack", "poteto-mode",
+    "poteto-help", "typescript-best-practices", "benchmark-checklist", "correct", "make-bot-ui",
 }
-GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | {"typescript-best-practices"} | set(PRINCIPLE_RULES)
+GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | set(PRINCIPLE_RULES)
 GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack"}
 
 ROUTER_ROUTES = {
@@ -135,6 +136,14 @@ class TestStaticPromises(unittest.TestCase):
         listed = sorted(set(re.findall(r"\(\*\*(principle-[a-z-]+)\*\*\)", index)))
         self.assertEqual(listed, on_disk)
 
+    def test_poteto_help_lists_every_ungated_skill(self):
+        row = next(line for line in read(SKILLS / "poteto-help" / "SKILL.md").splitlines()
+                   if line.startswith("| A skill didn't load on its own |"))
+        listed = set(re.findall(r"`/([a-z0-9-]+)`", row.split(" load from the user's words")[0]))
+        ungated = {p.parent.name for p in SKILLS.glob("*/SKILL.md")
+                   if "disable-model-invocation: true" not in read(p).split("---")[1]}
+        self.assertEqual(listed, ungated - {"pstack-harness"})
+
     def test_principle_leaf_summaries_match(self):
         page = read(GUIDE / "08-principles.md")
         links = re.findall(r"\[[^\]]+\]\(\.\./\.\./skills/(principle-[a-z-]+)/SKILL\.md\)", page)
@@ -153,8 +162,9 @@ class TestStaticPromises(unittest.TestCase):
             linked,
             [
                 "authoring-a-skill", "autonomous-run", "autopilot-full", "autopilot-stack", "babysit",
-                "bug-fix", "code-review", "eval", "feature", "hillclimb", "opening-a-pr", "orchestrate",
-                "perf-issue", "refactoring", "research", "session-pickup", "shipping", "worktree-cleanup",
+                "bug-fix", "code-review", "eval", "feature", "hillclimb", "investigation", "multi-phase-plan",
+                "opening-a-pr", "orchestrate", "pause-safely", "perf-issue", "prototype", "refactoring", "research",
+                "runtime-forensics", "session-pickup", "shipping", "trace-forensics", "visual-parity", "worktree-cleanup",
             ],
         )
         for name in linked:

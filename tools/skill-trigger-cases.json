@@ -17,6 +17,7 @@
     {"skill":"maintain-verification-skill","example_request":"Audit the verification skill.","description_contains":["verification skill"],"implicit_allowed":false},
     {"skill":"make-bot-ui","example_request":"Build a custom bot UI.","description_contains":["building a custom UI"],"implicit_allowed":false},
     {"skill":"no-comments","example_request":"Review these comments.","description_contains":["Spawn Comment"],"implicit_allowed":false},
+    {"skill":"poteto-help","example_request":"Which pstack skill should I use to review this branch?","description_contains":["Type /poteto-help"],"implicit_allowed":false},
     {"skill":"poteto-mode","example_request":"Work in poteto mode.","description_contains":["poteto's agent"],"implicit_allowed":false},
     {"skill":"poteto-tdd","example_request":"Implement test first.","description_contains":["asks for TDD"],"implicit_allowed":false},
     {"skill":"poteto-teach","example_request":"Teach me this system.","description_contains":["Explain a body"],"implicit_allowed":false},
