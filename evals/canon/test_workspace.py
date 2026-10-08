@@ -121,12 +121,6 @@ class ShopRepo(unittest.TestCase):
         git(upstream, "commit", "-q", "-m", "Shop")
         self.commit = git(upstream, "rev-parse", "HEAD").strip()
         environment = {"CANON_CACHE": str(self.base / "cache")}
-        if not (screen.skill_ci() / "runner.lock").is_file():
-            # A build stamps each manifest with the harness that skill-ci's
-            # runner.lock pins, and CI has no skill-ci checkout.
-            (self.base / "skill-ci").mkdir()
-            (self.base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
-            environment["SKILL_CI"] = str(self.base / "skill-ci")
         patch = mock.patch.dict(os.environ, environment)
         patch.start()
         self.addCleanup(patch.stop)
@@ -708,7 +702,7 @@ class AgentFlagTests(ShopRepo):
         agent_path = self.base / "argv-agent"
         agent_path.write_text(ARGV_AGENT)
         agent_path.chmod(0o755)
-        with mock.patch.object(screen, "skill_ci", return_value=self.base):
+        with mock.patch.object(screen, "LAUNCHERS", self.base / "tools"):
             (self.base / "tools").mkdir(exist_ok=True)
             for name in ("claude-project-only", "codex-project-only"):
                 target = self.base / "tools" / name
@@ -920,10 +914,10 @@ class RegradeTests(ShopRule):
 
 
 def harness_available():
-    return (screen.skill_ci() / "runner.lock").is_file() and shutil.which("uv") is not None
+    return shutil.which("skill-ci") is not None
 
 
-@unittest.skipUnless(harness_available(), "needs a skill-ci checkout at $SKILL_CI and uv")
+@unittest.skipUnless(harness_available(), "needs the skill-ci command on PATH")
 class OfflineWorkspaceRunTests(ShopRule):
     def test_stand_in_edits_the_checkout_and_the_rule_separates_on_the_harvested_diff(self):
         with mock.patch.dict(os.environ, {"CODEX_BIN": str(ROOT / "offline" / "codex")}), contextlib.redirect_stdout(io.StringIO()) as printed:
@@ -999,7 +993,7 @@ class StubBuildTests(ShopStubRule):
         self.assertEqual(screen.read_tree(arms / "current" / "workspace"), screen.read_tree(arms / "stub" / "workspace"))
 
 
-@unittest.skipUnless(harness_available(), "needs a skill-ci checkout at $SKILL_CI and uv")
+@unittest.skipUnless(harness_available(), "needs the skill-ci command on PATH")
 class OfflineArmsRunTests(ShopArmsRule):
     def test_each_treatment_arm_separates_from_current_and_the_two_tie(self):
         with mock.patch.dict(os.environ, {"CODEX_BIN": str(ROOT / "offline" / "codex")}), contextlib.redirect_stdout(io.StringIO()) as printed:
@@ -1027,7 +1021,7 @@ class OfflineArmsRunTests(ShopArmsRule):
 
 
 
-@unittest.skipUnless(harness_available(), "needs a skill-ci checkout at $SKILL_CI and uv")
+@unittest.skipUnless(harness_available(), "needs the skill-ci command on PATH")
 class OfflineStubRunTests(ShopStubRule):
     def test_current_separates_from_the_stub_on_the_harvested_diffs(self):
         with mock.patch.dict(os.environ, {"CODEX_BIN": str(ROOT / "offline" / "codex")}), contextlib.redirect_stdout(io.StringIO()) as printed:

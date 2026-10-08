@@ -36,7 +36,7 @@ WHY_EVALS_LIVE_OUTSIDE_SKILLS = (
     "A skill installer copies a skill directory verbatim and offers no exclude "
     "mechanism. Eval material placed there reaches everyone who installs the skill. "
     "Manifests, oracles, and runs belong under the repository-root evals/ tree, which "
-    "skill-checks reads through its evals-dir input."
+    "skill-ci reads through the evals_dir key in .skill-ci.toml."
 )
 
 TEST_FILE_PATTERNS = (
@@ -102,16 +102,31 @@ class MiseTasksReadTheEvalsTree(unittest.TestCase):
     """A task that searches the wrong tree finds no manifest and still exits 0."""
 
     def setUp(self) -> None:
+        self.pin = tomllib.loads((ROOT / ".skill-ci.toml").read_text(encoding="utf-8"))
         self.config = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))
 
     def test_evals_dir_names_the_tree_that_holds_the_manifests(self) -> None:
-        self.assertEqual(self.config["env"]["EVALS_DIR"], "evals")
+        self.assertEqual(self.pin["evals_dir"], "evals")
         manifests = sorted(p.relative_to(ROOT).as_posix() for p in EVALS.rglob("shared-benchmark.json"))
         self.assertIn("evals/unslop/shared-benchmark.json", manifests)
 
-    def test_tasks_come_from_the_skill_ci_checkout(self) -> None:
-        self.assertEqual(self.config["env"]["SKILL_CI"], "{{ env.SKILL_CI | default(value=config_root ~ '/../skill-ci') }}")
-        self.assertEqual(self.config["task_config"]["includes"], ["../skill-ci/skill-tasks.toml"])
+    def test_tasks_run_the_pinned_skill_ci_command(self) -> None:
+        self.assertNotIn("env", self.config)
+        self.assertNotIn("task_config", self.config)
+        skill_tasks = {name: task["run"] for name, task in self.config["tasks"].items() if name.startswith("skill-")}
+        self.assertEqual(
+            skill_tasks,
+            {
+                "skill-check": "skill-ci check",
+                "skill-lint": "skill-ci lint",
+                "skill-package": "skill-ci package",
+                "skill-coverage": "skill-ci coverage",
+                "skill-validate": "skill-ci validate",
+                "skill-audit": "skill-ci audit",
+                "skill-trigger": "skill-ci trigger",
+                "skill-run": "skill-ci run",
+            },
+        )
 
 
 class ManifestsNameRealSkillFiles(unittest.TestCase):

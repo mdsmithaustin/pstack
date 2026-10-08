@@ -281,11 +281,11 @@ to set it up, point your agent at [`FOR_AGENTS.md`](./automations/benny/FOR_AGEN
 
 ## contributor checks
 
-CI uses Python 3.12 and Bun 1.4.0. For the pre-commit hook, create the local virtual environment in the main checkout, install the hook, and let its fast checks run before each commit. The gate selects its interpreter separately, as described below.
+CI uses Python 3.12 and Bun 1.4.0. For the git hooks, create the local virtual environment in the main checkout, install the `skill-ci` command, and install the hooks. The gate selects its interpreter separately, as described below.
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install --require-hashes -r tools/requirements.txt
+uv tool install git+https://github.com/mdsmithaustin/skill-ci.git
 lefthook install
 ```
 
@@ -296,11 +296,11 @@ tools/gate-check.sh lint
 tools/gate-check.sh test
 ```
 
-The `lint` tier checks cross-suite references, skill frontmatter and trigger declaration coverage, skill content, the generated subagent bundle, the promise ledger, the shipped models config, and the whole tree for PII. The `test` tier runs the tools, promise, and setup-pstack unit suites, then installs the poteto-mode dependencies with the frozen lockfile and runs its Bun tests and typecheck. Each check belongs to one tier. The script runs every check in the selected tier, prints a PASS or FAIL line for each, and exits nonzero if any check fails. Unit suites and Bun tests must report tests, not a zero-test success.
+The `lint` tier checks cross-suite references, the generated subagent bundle, the promise ledger, and the shipped models config. `skill-ci check` runs the shared skill checks, as described below. The `test` tier runs the tools, promise, and setup-pstack unit suites, then installs the poteto-mode dependencies with the frozen lockfile and runs its Bun tests and typecheck. Each check belongs to one tier. The script runs every check in the selected tier, prints a PASS or FAIL line for each, and exits nonzero if any check fails. Unit suites and Bun tests must report tests, not a zero-test success.
 
-The script needs neither mise nor the main checkout's `.venv`. It selects `PSTACK_GATE_PYTHON` when set to a Python executable, then the pinned native interpreter documented in [the promise suite README](./evals/promises/README.md#run-the-model-free-checks), then `uv` on PATH with Python 3.12 and `tools/requirements.txt`. The native pin is deliberate because Python 3.12 fails the native fsmonitor control on the reviewed host. The test tier also needs Bun. When the adjacent skill-ci checkout described below is available, `mise run gate-lint` and `mise run gate-test` wrap the same script.
+The script needs neither mise nor the main checkout's `.venv`. It selects `PSTACK_GATE_PYTHON` when set to a Python executable, then the pinned native interpreter documented in [the promise suite README](./evals/promises/README.md#run-the-model-free-checks), then `uv` on PATH with Python 3.12. The native pin is deliberate because Python 3.12 fails the native fsmonitor control on the reviewed host. The test tier also needs Bun. `mise run gate-lint` and `mise run gate-test` wrap the same script.
 
-`.no-mistakes.yaml` runs the `lint` tier as the gate's Lint step. It leaves the Test step to the pipeline's targeted checks, because no-mistakes reserves `commands.test` for targeted validation of the change, not a full suite that mirrors CI. Run the `test` tier yourself before a large change. GitHub CI remains authoritative and additionally runs the Docker oracle and canon suites, the npx installation probe, the reusable skill-ci workflow, and the Linux worktree-audit job. Those checks stay outside the local gate tiers. CI cancels superseded pull-request runs of `lint.yml` and `skill-checks.yml`; pushes to main never cancel. The gate omits intent from PR bodies, collapses its appendix, and protects `.github/workflows/**` and `.github/rulesets/**` from automatic repairs.
+`.no-mistakes.yaml` runs the `lint` tier and then `skill-ci check` as the gate's Lint step. It leaves the Test step to the pipeline's targeted checks, because no-mistakes reserves `commands.test` for targeted validation of the change, not a full suite that mirrors CI. Run the `test` tier yourself before a large change. GitHub CI remains authoritative and additionally runs the Docker oracle and canon suites, the npx installation probe, and the Linux worktree-audit job. Those checks stay outside the local gate tiers. CI cancels superseded pull-request runs of `lint.yml` and `skill-checks.yml`; pushes to main never cancel. The gate omits intent from PR bodies, collapses its appendix, and protects `.github/workflows/**` and `.github/rulesets/**` from automatic repairs.
 
 To reproduce the Docker suites and installation probe manually, use the commands below. Follow the [canon setup instructions](./evals/canon/README.md) for its skill-ci dependency.
 
@@ -313,10 +313,10 @@ docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9f
 
 Each command exits nonzero on failure. Each unittest command must report tests, not a zero-test success.
 
-The pre-commit hook uses the main checkout's `.venv/bin/python`, from any worktree, and runs the fast whole-tree metadata, trigger declaration coverage, content, cross-suite-reference, and staged PII checks. For a manual whole-tree PII scan, hook configuration check, and whitespace check:
+The pre-commit hook runs the cross-suite-reference check with the main checkout's `.venv/bin/python`, from any worktree, and `skill-ci check --fast`, which runs the frontmatter, trigger declaration coverage, content, and staged PII checks. The pre-push hook runs the full `skill-ci check`. For the full skill checks, hook configuration check, and whitespace check:
 
 ```sh
-.venv/bin/python tools/check-pii.py
+skill-ci check
 lefthook validate
 git diff --check
 ```
@@ -327,9 +327,9 @@ Each command exits nonzero when its check fails.
 
 Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The same reasoning keeps tests out: they live under `tests/`, mirroring their path under `skills/` (`tests/skills/poteto-mode/scripts/` and `tests/skills/setup-pstack/scripts/`), and the same test fails if a tracked file under `skills/` matches a test-file pattern. The Bun and typecheck scripts in `skills/poteto-mode/scripts/package.json` reach into `tests/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 
-The local gate tiers do not cover the manifests. CI runs that gate separately, through the `evals-dir` input to `skill-checks`. For every `evals/**/shared-benchmark.json` it runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. The runner is pinned in `runner.lock` in `mdsmithaustin/skill-ci`, so reproduce that gate locally with the build that file names rather than whatever `skill-benchmark` is on your PATH.
+`.skill-ci.toml` pins the skill-ci release used by GitHub Actions, the git hooks, the no-mistakes Lint step, the mise tasks, and the canon screen. The `skill-ci` command reads that pin and runs that version from any checkout or worktree, and it needs `uv` on your PATH. `skill-ci check` runs the frontmatter and trigger declaration coverage check, the content check with `tools/skill-content-conventions.json`, and the whole-tree PII scan. `evals_dir` points it at the manifests, so for every `evals/**/shared-benchmark.json` it also runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. It runs the harness that the pinned skill-ci release installs, never whatever `skill-benchmark` is on your PATH.
 
-`mise.toml` adds local tasks for those runner commands. It expects a checkout of `mdsmithaustin/skill-ci` beside this one and `uv` on your PATH. A worktree under `.worktrees/` inherits that path from the main checkout. A checkout anywhere else, such as under `$TMPDIR`, cannot load these tasks, so run them from the main checkout or a `.worktrees/` worktree. mise asks you to run `mise trust` once. Each runner task reads that checkout's `runner.lock` and invokes the pinned runner in an isolated uv environment. A globally installed runner cannot override the lock.
+`mise.toml` adds a one-line task for each check and run command, such as `skill-check` for `skill-ci check`. A mise older than 2026.8.9 asks you to run `mise trust` once.
 
 ```sh
 mise run skill-lint
@@ -337,21 +337,19 @@ mise run skill-validate
 mise run skill-audit
 ```
 
-Local tasks follow the adjacent skill-ci checkout. CI follows the skill-ci SHA in `.github/workflows/skill-checks.yml`. Update the adjacent checkout to that revision when reproducing CI. The existing GitHub Actions Dependabot entry opens PRs for the workflow pin. Merging one also adopts that revision's runner lock.
+Local runs and CI read the same pin, and each run prints `skill-ci <version> (<commit>)` first, so the two logs show the commit they ran. `skill-ci update` moves the pin to the newest release tag.
 
 Pinning the runner does not make those two commands complete. Neither resolves `skill_paths` in any build, so both exit 0 on a manifest that names a skill file which does not exist, and `validate` reports `OK`. `skill-benchmark profile-skill <manifest>` is the command that reports that, as `skill_files: 0` with a `missing-skill-file` finding, and `tools/test_eval_artifacts.py` fails when any manifest under `evals/` names a path that is not a file.
 
 `skill-audit` is stricter than CI on one point. CI skips `audit-manifest` for a manifest with no cases, and the task audits every manifest it finds, so an empty manifest fails locally and passes in CI. Nothing in this repository has one today.
 
-`skill-lint` is not a superset of the gate lint tier. It runs the frontmatter and content checkers without the trigger declaration corpus. The gate frontmatter check also verifies trigger declaration coverage.
-
-`skill-trigger <skill>` and `skill-run <skill>` spend model budget on your own logins and never run in CI. Both default their output to `<skill>/eval-runs/`, inside the skills tree. A git install never sees it, because `.gitignore` covers it, but an install from a local working tree copies that directory like any other, which is what the repository-root `evals/` tree prevents. Pass `OUT` to write under `evals/` instead.
+`skill-ci trigger <skill>` and `skill-ci run <skill>` spend model budget on your own logins and never run in CI. Both write to a new directory under `<checkout>.eval-runs/<skill>/`, beside the checkout. Pass `--out` to write under `evals/` instead. skill-ci refuses an output directory inside the skill package.
 
 ```sh
-OUT=evals/unslop/runs/$(date +%Y%m%d-%H%M%S) mise run skill-run skills/unslop
+skill-ci run skills/unslop --out evals/unslop/runs/$(date +%Y%m%d-%H%M%S)
 ```
 
-`EVALS_DIR` in `mise.toml` points every task at `evals/`. Delete it and the tasks search `skills/`, find no manifest, and still exit 0, so `tools/test_eval_artifacts.py` pins its value.
+`evals_dir` in `.skill-ci.toml` points every command at `evals/`. Delete it and `check`, `validate`, and `audit` search `skills/`, find no manifest, and still exit 0, so `tools/test_eval_artifacts.py` pins its value.
 
 `tools/skill-trigger-cases.json` checks deterministic trigger declaration coverage. It confirms that every shipped skill has a realistic request, literal description anchors, and the expected invocation policy. It does not measure model-routing accuracy.
 

@@ -57,13 +57,11 @@ without blockers. These checks validate the instrument, not skill quality.
 Start with one paired repetition. Replace the skill name for each corpus.
 
 ```sh
-AGENTS=codex RUNS=1 CODEX_MODEL=gpt-6.1-sol \
-  OUT=/private/tmp/verify-commands-sol-screen \
-  mise run skill-run skills/verify-commands
+skill-ci run skills/verify-commands --agent codex --runs 1 \
+  --codex-model gpt-6.1-sol --out /private/tmp/verify-commands-sol-screen
 
-AGENTS=claude RUNS=1 MODEL=opus JUDGE_MODEL=sonnet \
-  OUT=/private/tmp/verify-commands-opus-screen \
-  mise run skill-run skills/verify-commands
+skill-ci run skills/verify-commands --agent claude --runs 1 \
+  --model opus --judge-model sonnet --out /private/tmp/verify-commands-opus-screen
 ```
 
 The screen checks that fixture execution, exposure events, judge inputs, and
@@ -76,7 +74,7 @@ exposure assertions.
 Use three paired answer repetitions only after the screen works. One grounded
 judge verdict per answer is the default confirmation budget. Repeat judging
 only for threshold-close or disputed answers after inspecting the first
-verdict's prompt and rationale. The convenience task always uses a Claude
+verdict's prompt and rationale. `skill-ci run` always uses a Claude
 judge, so invoke the pinned harness directly for a cross-family comparison.
 
 Resolve adapter paths before starting. Answer runs execute in isolated
@@ -85,21 +83,21 @@ workspaces, where a repository-relative adapter path does not exist.
 ```sh
 skill=runtime-probes
 run_root=/private/tmp/runtime-probes-confirmation
-skill_ci="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/../../skill-ci" && pwd -P)"
+tools="$(git rev-parse --show-toplevel)/tools"
 manifest="evals/$skill/shared-benchmark.json"
-runner() { uv run --no-project python "$skill_ci/tools/run_runner.py" "$@"; }
+runner() { skill-ci harness "$@"; }
 mkdir -p "$run_root"
 
 runner skill-benchmark audit-manifest "$manifest" --fail-on-blockers --strict-judge
 runner skill-benchmark prepare "$manifest" --split tune --runs-per-variant 3 --out "$run_root/tasks.jsonl"
 
 runner skill-benchmark run-agent --agent codex --model gpt-6.1-sol \
-  --codex-cmd "$skill_ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
+  --codex-cmd "$tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
   --tasks "$run_root/tasks.jsonl" --runs "$run_root/codex" --timeout 240
 runner skill-benchmark grade "$manifest" --runs "$run_root/codex" --allow-scripts
 runner skill-benchmark judge "$manifest" --runs "$run_root/codex" \
   --judge-backend claude --judge-model opus \
-  --claude-bin "$skill_ci/tools/claude-project-only" --judge-runs 1 \
+  --claude-bin "$tools/claude-project-only" --judge-runs 1 \
   --transcripts "$run_root/codex-judge-transcripts" \
   --out "$run_root/codex-judge.jsonl"
 runner skill-benchmark benchmark "$manifest" --runs "$run_root/codex" --split tune \
@@ -111,12 +109,12 @@ Run Claude answers separately and use Codex as their judge:
 
 ```sh
 runner skill-benchmark run-agent --agent claude --model opus \
-  --claude-bin "$skill_ci/tools/claude-project-only" \
+  --claude-bin "$tools/claude-project-only" \
   --tasks "$run_root/tasks.jsonl" --runs "$run_root/claude" --timeout 240
 runner skill-benchmark grade "$manifest" --runs "$run_root/claude" --allow-scripts
 runner skill-benchmark judge "$manifest" --runs "$run_root/claude" \
   --judge-backend codex --judge-model gpt-6.1-sol \
-  --codex-cmd "$skill_ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
+  --codex-cmd "$tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
   --judge-runs 1 --transcripts "$run_root/claude-judge-transcripts" \
   --out "$run_root/claude-judge.jsonl"
 runner skill-benchmark benchmark "$manifest" --runs "$run_root/claude" --split tune \
@@ -126,24 +124,24 @@ runner skill-benchmark benchmark "$manifest" --runs "$run_root/claude" --split t
 
 ## Trigger run
 
-Run trigger cases separately for each answer model. The convenience task passes
-one `MODEL` value to every selected adapter, so use the pinned harness directly:
+Run trigger cases separately for each answer model. `skill-ci trigger` passes
+one `--model` value to both agents, so use the pinned harness directly:
 
 ```sh
 skill=runtime-probes
 trigger_root=/private/tmp/runtime-probes-triggers
-skill_ci="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/../../skill-ci" && pwd -P)"
+tools="$(git rev-parse --show-toplevel)/tools"
 manifest="evals/$skill/shared-benchmark.json"
-runner() { uv run --no-project python "$skill_ci/tools/run_runner.py" "$@"; }
+runner() { skill-ci harness "$@"; }
 mkdir -p "$trigger_root/codex-traces" "$trigger_root/claude-traces"
 
 runner skill-trigger-matrix "$manifest" --agent codex --model gpt-6.1-sol \
-  --codex-cmd "$skill_ci/tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
+  --codex-cmd "$tools/codex-project-only exec --json --skip-git-repo-check --sandbox read-only" \
   --runs-per-query 3 --trace-runs "$trigger_root/codex-traces" \
   --out "$trigger_root/codex.json"
 
 runner skill-trigger-matrix "$manifest" --agent claude --model opus \
-  --claude-bin "$skill_ci/tools/claude-project-only" \
+  --claude-bin "$tools/claude-project-only" \
   --runs-per-query 3 --trace-runs "$trigger_root/claude-traces" \
   --out "$trigger_root/claude.json"
 ```

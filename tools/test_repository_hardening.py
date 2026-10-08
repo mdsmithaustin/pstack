@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = (ROOT / ".github" / "workflows" / "lint.yml").read_text(encoding="utf-8")
 SHARED_WORKFLOW = (ROOT / ".github" / "workflows" / "skill-checks.yml").read_text(encoding="utf-8")
+PIN = tomllib.loads((ROOT / ".skill-ci.toml").read_text(encoding="utf-8"))
 RULESET = json.loads((ROOT / ".github" / "rulesets" / "copilot-code-review.json").read_text(encoding="utf-8"))
 
 
@@ -23,22 +25,42 @@ class RepositoryHardening(unittest.TestCase):
         for action_reference in action_references:
             self.assertRegex(action_reference, r"^[^@\s]+@[0-9a-f]{40}$")
         self.assertIn('python-version: "3.12"', WORKFLOW)
-        self.assertIn("pip install --require-hashes -r tools/requirements.txt", WORKFLOW)
         self.assertIn('bun-version: "1.4.0"', WORKFLOW)
         self.assertIn("bun install --frozen-lockfile", WORKFLOW)
         self.assertIn("bun run test", WORKFLOW)
         self.assertIn("bun run typecheck", WORKFLOW)
 
-    def test_shared_skill_checks_pin_one_reviewed_skill_ci_commit(self) -> None:
+    def test_skill_checks_run_the_version_the_pin_names(self) -> None:
         self.assertIn("permissions:\n  contents: read", SHARED_WORKFLOW)
-        workflow_references = re.findall(r"^\s+uses: mdsmithaustin/skill-ci/\S+@(\S+)", SHARED_WORKFLOW, re.MULTILINE)
-        self.assertEqual(len(workflow_references), 1)
-        self.assertRegex(workflow_references[0], r"^[0-9a-f]{40}$")
-        self.assertNotRegex(SHARED_WORKFLOW, r"(?m)^\s+skill-ci-ref:")
-        self.assertIn("pii-scope: repository", SHARED_WORKFLOW)
-        self.assertIn("evals-dir: evals", SHARED_WORKFLOW)
-        self.assertIn("trigger-cases: tools/skill-trigger-cases.json", SHARED_WORKFLOW)
-        self.assertIn("content-conventions-file: tools/skill-content-conventions.json", SHARED_WORKFLOW)
+        self.assertNotRegex(SHARED_WORKFLOW, r"(?m)^\s+uses: mdsmithaustin/skill-ci/")
+        self.assertIn('uv tool run --from "git+$SKILL_CI_SOURCE" skill-ci check', SHARED_WORKFLOW)
+        self.assertEqual(
+            PIN,
+            {
+                "version": "v1.0.0",
+                "skills_dir": "skills",
+                "evals_dir": "evals",
+                "trigger_cases": "tools/skill-trigger-cases.json",
+                "pii_scope": "repository",
+                "content_conventions_file": "tools/skill-content-conventions.json",
+            },
+        )
+
+    def test_only_lint_reports_the_required_skills_context(self) -> None:
+        reporting = []
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.y*ml")):
+            workflow = re.sub(
+                r'''("(?:\\.|[^"\\])*"|'(?:''|[^'])*')| #[^\n]*''',
+                lambda match: match.group(1) or "",
+                path.read_text(encoding="utf-8"),
+            )
+            jobs = re.search(r"(?ms)^jobs:\n(.*?)(?=^\S|\Z)", workflow).group(1)
+            for job_id, body in re.findall(r"(?ms)^  ([\w-]+):\s*\n(.*?)(?=^  \S|\Z)", jobs):
+                name = re.search(r"(?m)^    name:\s*['\"]?(.*?)['\"]?\s*$", body)
+                job_name = name.group(1) if name else None
+                if "skills" in (job_id, job_name):
+                    reporting.append((path.name, job_id, job_name))
+        self.assertEqual(reporting, [("lint.yml", "skills", None)])
 
     def test_ruleset_has_required_branch_protections(self) -> None:
         self.assertEqual(RULESET["enforcement"], "active")
@@ -61,15 +83,10 @@ class RepositoryHardening(unittest.TestCase):
     def test_hook_keeps_the_fast_contract(self) -> None:
         hook = (ROOT / "lefthook.yml").read_text(encoding="utf-8")
         python_runs = re.findall(r"^\s+run: (.*python.*)$", hook, re.MULTILINE)
-        self.assertEqual(len(python_runs), 4)
+        self.assertEqual(python_runs, ["'{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'"])
         self.assertIn("""python: '"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"'""", hook)
-        self.assertTrue(all(command.startswith("'{python} ") for command in python_runs))
-        self.assertIn("{python} tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json", hook)
-        self.assertIn(
-            "{python} tools/check-skill-content.py skills --conventions-file tools/skill-content-conventions.json", hook
-        )
-        self.assertIn("{python} tools/check-cross-suite-references.py", hook)
-        self.assertIn("{python} tools/check-pii.py --staged", hook)
+        self.assertIn("    skill-ci-check-fast:\n      run: skill-ci check --fast\n", hook)
+        self.assertIn("pre-push:\n  commands:\n    skill-ci-check:\n      run: skill-ci check\n", hook)
 
 
 if __name__ == "__main__":
