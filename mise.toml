@@ -1,5 +1,5 @@
 [tasks.gate-lint]
-description = "Run the lint-tier checks the no-mistakes gate runs"
+description = "Run the gate-check lint tier, without the skill-ci check the gate adds"
 run = "tools/gate-check.sh lint"
 
 [tasks.gate-test]

@@ -46,6 +46,17 @@ class RepositoryHardening(unittest.TestCase):
             },
         )
 
+    def test_only_lint_reports_the_required_skills_context(self) -> None:
+        reporting = []
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.y*ml")):
+            jobs = re.search(r"(?ms)^jobs:\n(.*?)(?=^\S|\Z)", path.read_text(encoding="utf-8")).group(1)
+            for job_id, body in re.findall(r"(?ms)^  ([\w-]+):\s*\n(.*?)(?=^  \S|\Z)", jobs):
+                name = re.search(r"(?m)^    name:\s*['\"]?(.*?)['\"]?\s*$", body)
+                job_name = name.group(1) if name else None
+                if "skills" in (job_id, job_name):
+                    reporting.append((path.name, job_id, job_name))
+        self.assertEqual(reporting, [("lint.yml", "skills", None)])
+
     def test_ruleset_has_required_branch_protections(self) -> None:
         self.assertEqual(RULESET["enforcement"], "active")
         self.assertEqual(RULESET["conditions"]["ref_name"]["include"], ["~DEFAULT_BRANCH"])
