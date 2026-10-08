@@ -1,23 +1,13 @@
-# These four run locally because a pre-commit gate needs a local script and a
-# shared CI workflow cannot provide one. Three of them (skill-metadata,
-# skill-content, pii) are also run in CI from mdsmithaustin/skill-ci, which
-# fails if the copies here have drifted from the shared ones.
-#
-# A linked worktree has no .venv of its own, so every command uses the one in
-# the main checkout, found through the shared git directory.
+# cross-suite-references is this repository's own check, which skill-ci does
+# not run. A linked worktree has no .venv of its own, so it uses the one in the
+# main checkout, found through the shared git directory.
 templates:
   python: '"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"'
 
 pre-commit:
   commands:
-    skill-metadata:
-      run: '{python} tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json'
-    skill-content:
-      run: '{python} tools/check-skill-content.py skills --conventions-file tools/skill-content-conventions.json'
     cross-suite-references:
       run: '{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'
-    pii:
-      run: '{python} tools/check-pii.py --staged'
     skill-ci-check-fast:
       run: skill-ci check --fast
 

@@ -18,7 +18,7 @@ if [[ -n ${PSTACK_GATE_PYTHON:-} ]]; then
 elif [[ -x $pinned ]]; then
   py=("$pinned")
 else
-  py=(uv run -q --no-project --python 3.12 --with-requirements tools/requirements.txt python)
+  py=(uv run -q --no-project --python 3.12 python)
 fi
 
 failed=0
@@ -35,11 +35,8 @@ run() {
 }
 
 run lint "cross-suite references" . "${py[@]}" tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
-run lint "skill frontmatter" . "${py[@]}" tools/check-skill-frontmatter.py skills --triggers tools/skill-trigger-cases.json
-run lint "skill content" . "${py[@]}" tools/check-skill-content.py skills --conventions-file tools/skill-content-conventions.json
 run lint "subagent bundle" . "${py[@]}" tools/generate-subagents.py --check
 run lint "promise ledger" . "${py[@]}" evals/promises/ledger.py audit
-run lint "whole-tree pii" . "${py[@]}" tools/check-pii.py
 run lint "pstack-models default" . "${py[@]}" skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
 
 run test "tools unit tests" . "${py[@]}" -m unittest discover -s tools -p 'test_*.py'
