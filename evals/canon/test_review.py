@@ -448,7 +448,7 @@ def judge_env():
     return mock.patch.dict(os.environ, {"CODEX_BIN": str(ROOT / "offline" / "codex"), "CANON_JUDGE_STANDIN": str(ROOT / "offline" / "judge")})
 
 
-@unittest.skipUnless(harness_available(), "needs a skill-ci checkout at $SKILL_CI and uv")
+@unittest.skipUnless(harness_available(), "needs the skill-ci command on PATH")
 class OfflineReviewRunTests(ReviewCase):
     def test_stand_in_reviews_are_judged_blind_scored_and_calibrated(self):
         prompts = []

@@ -92,6 +92,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import tomllib
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -105,6 +106,7 @@ import shared  # noqa: E402
 import workspace  # noqa: E402
 
 REPO = CANON.parents[1]
+LAUNCHERS = REPO / "tools"
 RULES = Path(os.environ.get("CANON_RULES", CANON / "rules")).resolve()
 ARMS = ("current", "amended")
 ARM_NAME = re.compile(r"^[a-z0-9][a-z0-9+._-]*$")
@@ -304,14 +306,10 @@ class Change:
         return "replace" if self.removed else "insert"
 
 
-def skill_ci():
-    return Path(os.environ.get("SKILL_CI", REPO.parent / "skill-ci")).resolve()
-
-
 def harness(*arguments, env=None):
-    command = ["uv", "run", "--no-project", "python", str(skill_ci() / "tools" / "run_runner.py"), "skill-benchmark", *map(str, arguments)]
-    print("+", " ".join(command[4:]), flush=True)
-    subprocess.run(command, check=True, env=env)
+    command = ["skill-ci", "harness", "skill-benchmark", *map(str, arguments)]
+    print("+", " ".join(command[2:]), flush=True)
+    subprocess.run(command, check=True, env=env, cwd=REPO)
 
 
 def load_check(rules=None):
@@ -683,8 +681,8 @@ def frontmatter_description(skill_md):
 
 
 def harness_version():
-    lock = (skill_ci() / "runner.lock").read_text().strip().splitlines()[-1]
-    return "git+" + lock.rsplit("@", 1)[1]
+    pinned = tomllib.loads((REPO / ".skill-ci.toml").read_text())["version"]
+    return f"skill-ci {pinned}"
 
 
 def render_prompt(case):
@@ -1052,7 +1050,7 @@ def sandbox_wrapper(agent, out, entry):
 
 def refuse_effort(agent, effort):
     if effort and agent != "codex":
-        raise ScreenError("--effort applies to --agent codex only; the pinned harness has no Claude effort flag")
+        raise ScreenError("--effort applies to --agent codex only; the screen passes Claude no effort setting")
 
 
 def backend_args(agent, out, entry, in_workspace=False, runner="host", effort=None):
@@ -1061,8 +1059,7 @@ def backend_args(agent, out, entry, in_workspace=False, runner="host", effort=No
     Codex with --ignore-user-config, which skips config files but keeps -c, and
     sandbox.py's argv rewrite passes it through, so both runners get it."""
     refuse_effort(agent, effort)
-    tools = skill_ci() / "tools"
-    target = tools / ("claude-project-only" if agent == "claude" else "codex-project-only")
+    target = LAUNCHERS / ("claude-project-only" if agent == "claude" else "codex-project-only")
     if runner == "sbx":
         if not in_workspace:
             raise ScreenError("--runner sbx runs workspace cases only; a pasted-project case has no checkout to clone")

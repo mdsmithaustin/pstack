@@ -403,9 +403,7 @@ class CompanionMountTests(unittest.TestCase):
         for path, data in COMPANION.items():
             (base / "companions" / "domain-modeling" / path).parent.mkdir(parents=True, exist_ok=True)
             (base / "companions" / "domain-modeling" / path).write_bytes(data)
-        (base / "skill-ci").mkdir()
-        (base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
-        environment = mock.patch.dict(os.environ, {"CANON_COMPANIONS_ROOT": str(base / "companions"), "SKILL_CI": str(base / "skill-ci")})
+        environment = mock.patch.dict(os.environ, {"CANON_COMPANIONS_ROOT": str(base / "companions")})
         environment.start()
         self.addCleanup(environment.stop)
         quiet = contextlib.redirect_stdout(io.StringIO())
@@ -636,15 +634,36 @@ class SkillsAtRulesTests(ScratchRules):
             screen.rule_tree(screen.load_rule("scratch-base"))
 
 
+class HarnessCommandTests(unittest.TestCase):
+    def test_harness_runs_the_pinned_skill_ci_from_the_repository_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            seen = base / "seen.json"
+            command = base / "bin" / "skill-ci"
+            command.parent.mkdir()
+            command.write_text(f"#!{sys.executable}\nimport json, os, sys\nopen({str(seen)!r}, 'w').write(json.dumps([sys.argv[1:], os.getcwd()]))\n")
+            command.chmod(0o755)
+            environment = {"PATH": f"{command.parent}{os.pathsep}{os.environ['PATH']}"}
+
+            with mock.patch.dict(os.environ, environment), contextlib.redirect_stdout(io.StringIO()) as printed:
+                screen.harness("validate", "--strict-leakage", base / "manifest.json")
+
+            argv, cwd = json.loads(seen.read_text())
+            self.assertEqual(argv, ["harness", "skill-benchmark", "validate", "--strict-leakage", str(base / "manifest.json")])
+            self.assertEqual(Path(cwd).resolve(), screen.REPO.resolve())
+            self.assertEqual(printed.getvalue(), f"+ skill-benchmark validate --strict-leakage {base / 'manifest.json'}\n")
+
+    def test_harness_version_is_the_release_pinned_in_skill_ci_toml(self):
+        self.assertEqual(screen.harness_version(), "skill-ci v1.0.0")
+
+
 class VariantArmTests(unittest.TestCase):
     def test_variant_arm_grades_with_the_source_oracle_under_its_own_id(self):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
-            (base / "skill-ci").mkdir()
-            (base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
             rule = screen.load_rule("domain-words-index")
             rule = dataclasses.replace(rule, cases=tuple(case for case in rule.cases if case.id == "shipment-tracking"))
-            with mock.patch.dict(os.environ, {"SKILL_CI": str(base / "skill-ci")}), contextlib.redirect_stdout(io.StringIO()):
+            with contextlib.redirect_stdout(io.StringIO()):
                 screen.build(base / "out", [rule], "poteto-mode")
             arm = base / "out" / "arms" / "domain-words-index" / "shipment-tracking" / "amended"
             samples = ROOT / "rules" / "domain-words" / "cases" / "shipment-tracking" / "samples"
@@ -708,11 +727,8 @@ class ArmSelectionTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         base = Path(directory.name).resolve()
-        (base / "skill-ci").mkdir()
-        (base / "skill-ci" / "runner.lock").write_text("git+https://example.invalid/harness.git@abc123\n")
         self.out = base / "out"
         for patch in (
-            mock.patch.dict(os.environ, {"SKILL_CI": str(base / "skill-ci")}),
             mock.patch.object(screen, "agent_env", return_value={}),
             mock.patch.object(screen, "check_manifest"),
             mock.patch.object(screen, "run_arm"),

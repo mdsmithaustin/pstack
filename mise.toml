@@ -1,15 +1,31 @@
-[env]
-SKILL_CI = "{{ env.SKILL_CI | default(value=config_root ~ '/../skill-ci') }}"
-EVALS_DIR = "evals"
-CONTENT_CONVENTIONS_FILE = "tools/skill-content-conventions.json"
-
-[task_config]
-includes = ["../skill-ci/skill-tasks.toml"]
-
 [tasks.gate-lint]
-description = "Run the lint-tier checks the no-mistakes gate runs"
+description = "Run the gate-check lint tier, without the skill-ci check the gate adds"
 run = "tools/gate-check.sh lint"
 
 [tasks.gate-test]
 description = "Run the manual test-tier checks"
 run = "tools/gate-check.sh test"
+
+[tasks.skill-check]
+run = "skill-ci check"
+
+[tasks.skill-lint]
+run = "skill-ci lint"
+
+[tasks.skill-package]
+run = "skill-ci package"
+
+[tasks.skill-coverage]
+run = "skill-ci coverage"
+
+[tasks.skill-validate]
+run = "skill-ci validate"
+
+[tasks.skill-audit]
+run = "skill-ci audit"
+
+[tasks.skill-trigger]
+run = "skill-ci trigger"
+
+[tasks.skill-run]
+run = "skill-ci run"
