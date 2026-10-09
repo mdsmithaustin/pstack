@@ -1,5 +1,11 @@
 #!/usr/bin/env bun
 
+import { readFile } from "node:fs/promises";
+import {
+  parseAckDecisions,
+  parseBeginAttempt,
+  parseObservation,
+} from "./recovery.ts";
 import { ensureDependenciesInstalled } from "../bootstrap.ts";
 import {
   NotFoundError,
@@ -45,6 +51,7 @@ interface UnitAddOptions {
 }
 
 interface UnitSetOptions {
+  readonly attempt?: string;
   readonly state: string;
   readonly branch?: string;
   readonly pr?: number;
@@ -57,16 +64,22 @@ interface UnitListOptions {
 }
 
 interface LedgerRecordOptions {
+  readonly attempt?: string;
   readonly evidence: string;
   readonly verifier?: string;
 }
 
 interface InboxPushOptions {
+  readonly attempt?: string;
+  readonly binding?: string;
+  readonly pr?: number;
+  readonly sha?: string;
   readonly report?: string;
 }
 
 interface InboxDrainOptions {
   readonly peek: boolean;
+  readonly receipt: boolean;
 }
 
 interface GateParkOptions {
@@ -302,6 +315,7 @@ function createProgram(io: Io): Command {
     .option("--branch <branch>", "branch name")
     .option("--pr <number>", "pull request number", positiveInteger)
     .option("--sha <sha>", "commit SHA")
+    .option("--attempt <id>", "bound current attempt")
     .action((id: string, options: UnitSetOptions) =>
       runStore(
         program,
@@ -310,6 +324,7 @@ function createProgram(io: Io): Command {
           store.units.set({
             id,
             state: options.state,
+            attempt: options.attempt,
             branch: options.branch,
             pr: options.pr,
             sha: options.sha,
@@ -345,6 +360,7 @@ function createProgram(io: Io): Command {
     .argument("<verdict>", "verification verdict", parseVerdict)
     .requiredOption("--evidence <path>", "evidence path")
     .option("--verifier <name>", "verifier name")
+    .option("--attempt <id>", "bound current attempt")
     .action(
       (
         pr: number,
@@ -362,6 +378,7 @@ function createProgram(io: Io): Command {
               verdict,
               evidence: options.evidence,
               verifier: options.verifier,
+              attempt: options.attempt,
             }),
           (row) => `${row.pr}\t${row.sha}\t${row.verdict}`
         )
@@ -387,6 +404,10 @@ function createProgram(io: Io): Command {
     .action(() => requireSubcommand(program));
   leaf(inbox, "push <agent> <unit> <status>", "push an inbox pointer")
     .option("--report <path>", "report path")
+    .option("--attempt <id>", "completion attempt")
+    .option("--binding <id>", "binding saved for this report")
+    .option("--pr <number>", "actual report PR", positiveInteger)
+    .option("--sha <sha>", "actual report head")
     .action(
       (
         agent: string,
@@ -403,22 +424,54 @@ function createProgram(io: Io): Command {
               unit: unitId,
               status,
               report: options.report,
+              attempt: options.attempt,
+              binding: options.binding,
+              pr: options.pr,
+              sha: options.sha,
             }),
           (result) =>
             `${result.pointer.unit}\t${result.pointer.status}\t${result.filename}`,
           (result) => result.pointer
         )
     );
-  leaf(inbox, "drain", "drain inbox pointers")
-    .option("--peek", "read without draining", false)
-    .action((options: InboxDrainOptions) =>
+  leaf(inbox, "drain", "claim pending inbox pointers")
+    .option("--peek", "read without claiming", false)
+    .option("--receipt", "print batch and stable event ids as JSON", false)
+    .action(async (options: InboxDrainOptions) => {
+      if (options.receipt && options.peek)
+        throw new UsageError("--receipt and --peek cannot be combined");
+      if (options.receipt) {
+        await runStore(
+          program,
+          io,
+          (store) => store.inbox.claim(),
+          JSON.stringify,
+        );
+      } else {
+        await runStore(
+          program,
+          io,
+          (store) => (options.peek ? store.inbox.peek() : store.inbox.drain()),
+          (rows) => compactRows(rows, pointerLine, "(empty)", null),
+        );
+      }
+    });
+  leaf(inbox, "receipts", "inspect pending and completed deliveries").action(() =>
+    runStore(program, io, (store) => store.inbox.receipts(), JSON.stringify),
+  );
+  leaf(inbox, "ack <batch>", "apply per-event decisions")
+    .requiredOption("--file <path>", "JSON array of event outcomes")
+    .action((batch: string, options: { file: string }) =>
       runStore(
         program,
         io,
-        (store) =>
-          options.peek ? store.inbox.peek() : store.inbox.drain(),
-        (rows) => compactRows(rows, pointerLine, "(empty)", null)
-      )
+        async (store) =>
+          store.inbox.ack(
+            batch,
+            parseAckDecisions(JSON.parse(await readFile(options.file, "utf8"))),
+          ),
+        JSON.stringify,
+      ),
     );
   leaf(inbox, "count", "count inbox pointers").action(() =>
     runStore(
@@ -430,6 +483,54 @@ function createProgram(io: Io): Command {
     )
   );
 
+  const attempt = program
+    .command("attempt")
+    .description("record durable delegation attempts")
+    .action(() => requireSubcommand(program));
+  leaf(attempt, "begin", "persist a request before dispatch")
+    .requiredOption("--file <path>", "JSON attempt request")
+    .action((options: { file: string }) =>
+      runStore(
+        program,
+        io,
+        async (store) =>
+          store.attempts.begin(
+            parseBeginAttempt(JSON.parse(await readFile(options.file, "utf8"))),
+          ),
+        JSON.stringify,
+      ),
+    );
+  leaf(
+    attempt,
+    "observe <id>",
+    "record available runtime identity or uncertainty",
+  )
+    .requiredOption("--file <path>", "JSON observation")
+    .action((id: string, options: { file: string }) =>
+      runStore(
+        program,
+        io,
+        async (store) =>
+          store.attempts.observe(
+            id,
+            parseObservation(JSON.parse(await readFile(options.file, "utf8"))),
+          ),
+        JSON.stringify,
+      ),
+    );
+  leaf(attempt, "list", "inspect current and prior attempts").action(() =>
+    runStore(program, io, (store) => store.attempts.list(), JSON.stringify),
+  );
+  leaf(attempt, "finish <id>", "record a terminal disposition for any known attempt")
+    .requiredOption("--reason <text>", "terminal disposition")
+    .action((id: string, options: { reason: string }) =>
+      runStore(
+        program,
+        io,
+        (store) => store.attempts.finish(id, options.reason),
+        JSON.stringify,
+      ),
+    );
   const gate = program
     .command("gate")
     .description("manage decision gates")

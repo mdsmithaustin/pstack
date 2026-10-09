@@ -1,0 +1,38 @@
+{
+  "harnesses": [
+    "claude-code",
+    "codex",
+    "grok",
+    "hermes"
+  ],
+  "singleRoles": [
+    "bug-fix",
+    "default",
+    "feature",
+    "hardest tasks",
+    "hillclimb",
+    "how explainer",
+    "how explorer",
+    "judgment and prose",
+    "perf-issue",
+    "refactoring",
+    "reflect divergent",
+    "reflect judgment",
+    "reflect synthesizer",
+    "reflect tooling",
+    "swarm workers",
+    "trail reviewer",
+    "why investigators",
+    "why synthesizer"
+  ],
+  "panelRoles": [
+    "architect runners",
+    "arena cross-judge pool",
+    "arena runners",
+    "interrogate reviewers"
+  ],
+  "unresolvedAliases": [
+    "auto",
+    "inherit-parent"
+  ]
+}

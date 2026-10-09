@@ -1576,7 +1576,7 @@
   },
   "orchestrate-rebuilds-from-store-after-restart": {
    "check": "static",
-   "claim": "Orchestrate keeps its store at .orchestrate/<project-slug>/ in the main checkout and after a restart reconciles every unit from the store, pushed branches, and open PRs before respawning workers.",
+   "claim": "Orchestrate keeps its store at .orchestrate/<project-slug>/ in the main checkout. After a restart it reconciles retained completions and attempt identities with runtime evidence, pushed branches, open PRs, and checkouts before refill. Missing runtime evidence leaves an attempt uncertain. Replacements resolve the saved role and exact panel arm like any other spawn and record the predecessor and the harness, model, and effort before dispatch.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
@@ -1584,11 +1584,23 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
-     "quote": "After a CLI restart, every worker, verifier, and sub-coordinator is dead, because each ran inside the session. The store, pushed branches, open PRs, and checkouts on disk survive. Re-read the standing orders and `units.tsv`, then recompute the frontier. Reconcile each unit that had a worker in flight against the forge and its checkout."
+     "quote": "After a CLI restart, read the standing orders, `units.tsv`, `orch attempt list`, and `orch inbox receipts`, then run `orch inbox drain --receipt` and reconcile pending events before refill."
     },
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
-     "quote": "Drain, restore each track's owner, then refill the rolling window of step 4 within the in-flight cap."
+     "quote": "Inspect the existing runtime identity, forge, pushed branch, and checkout to assess runtime state. Missing runtime evidence stays uncertain."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/orchestrate.md",
+     "quote": "Record the request id, unit, saved role and exact panel arm, worker or verifier authority, brief, checkout, and observed execution harness, model, and effort."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/orchestrate.md",
+     "quote": "Begin an attempt in the saved slot with its exact predecessor, the original raw work input, the newly printed arm, and the harness, model, and effort that will run it."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/orchestrate.md",
+     "quote": "Restore each track's owner and refill step 4 within the in-flight cap only after reconciliation."
     }
    ],
    "harness_sensitive": false,
@@ -6805,14 +6817,49 @@
    ],
    "text": "When you're back, ask for the run in review form:"
   },
-  "abbfdd91cf23": {
+  "22e61eb012d5": {
    "class": "promise",
    "file": "07-overnight.md",
    "promise": "orchestrate-rebuilds-from-store-after-restart",
    "sources": [
     "port"
    ],
-   "text": "Its subagents run on your machine and end with the session, so after a restart the coordinator rebuilds its state from the store under `.orchestrate/`, your pushed branches, and open PRs, then respawns its workers."
+   "text": "After a restart, the coordinator reads retained completions and attempt identities from `.orchestrate/`, then reconciles them with runtime evidence, pushed branches, and open PRs."
+  },
+  "c6c4bf25b3e0": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "orchestrate-rebuilds-from-store-after-restart",
+   "sources": [
+    "port"
+   ],
+   "text": "Missing runtime evidence leaves an attempt uncertain."
+  },
+  "3feaeb9a6d54": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "orchestrate-rebuilds-from-store-after-restart",
+   "sources": [
+    "port"
+   ],
+   "text": "A replacement resolves the saved role and exact panel arm like any other spawn."
+  },
+  "3e5142f6b269": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "orchestrate-rebuilds-from-store-after-restart",
+   "sources": [
+    "port"
+   ],
+   "text": "Before dispatch, the coordinator records its predecessor and the harness, model, and effort that will run it."
+  },
+  "a1917b64aaa1": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "The [orch reference](../../skills/poteto-mode/scripts/orch/README.md) describes acknowledgment."
   },
   "ac185061330d": {
    "class": "promise",
@@ -9256,7 +9303,7 @@
   "7f5cef2d7c27": {
    "class": "cursor-only",
    "file": "02-poteto-mode.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
@@ -9265,7 +9312,7 @@
   "d80ea230d09f": {
    "class": "cursor-only",
    "file": "02-poteto-mode.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
@@ -9274,7 +9321,7 @@
   "c4a4184079de": {
    "class": "cursor-only",
    "file": "02-poteto-mode.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
@@ -10653,21 +10700,21 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "0bfa70f161e4"
+    "c697a4838e32"
    ],
    "sources": [
     "upstream"
    ],
    "text": "It directs subagents, which run in the cloud by default, so the work continues when your laptop is closed."
   },
-  "0bfa70f161e4": {
+  "c697a4838e32": {
    "class": "promise",
    "file": "07-overnight.md",
    "promise": "orchestrate-rebuilds-from-store-after-restart",
    "sources": [
     "port"
    ],
-   "text": "It directs subagents, which run on your machine and end with the session."
+   "text": "It directs subagents, which run on your machine."
   },
   "c3360623184e": {
    "class": "promise",
@@ -10682,7 +10729,7 @@
   "7232da26dc19": {
    "class": "cursor-only",
    "file": "07-overnight.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],
@@ -10691,7 +10738,7 @@
   "d036426d131b": {
    "class": "cursor-only",
    "file": "07-overnight.md",
-   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine and ends with the session (PORTING.md, Workers are local), so the port keeps worktree isolation",
+   "reason": "Cursor cloud subagents and Projects; every subagent in the port's harnesses runs on this machine (PORTING.md, Workers are local), so the port keeps worktree isolation",
    "sources": [
     "upstream"
    ],

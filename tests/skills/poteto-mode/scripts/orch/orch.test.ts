@@ -397,6 +397,7 @@ describe("Store", () => {
       sha: "abc123",
       verdict: "live-ui-verified",
       evidence: "reports/live.md",
+      verifier: "sol",
     });
     expect(await store.ledger.summary()).toEqual({
       "live-ui-verified": 1,
@@ -424,6 +425,16 @@ describe("Store", () => {
     expect(await store.inbox.peek()).toHaveLength(2);
     expect(await store.inbox.count()).toBe(2);
     expect(await store.inbox.drain()).toHaveLength(2);
+    expect(await store.inbox.count()).toBe(2);
+    const batch = await store.inbox.claim();
+    if (batch === null) throw new Error("expected the retained batch");
+    await store.inbox.ack(
+      batch.id,
+      batch.events.map((event) => ({
+        event: event.id,
+        outcome: { kind: "discard", reason: "reviewed" },
+      })),
+    );
     expect(await store.inbox.count()).toBe(0);
     expect(await readdir(join(directory, "inbox"))).toEqual([]);
     expect(

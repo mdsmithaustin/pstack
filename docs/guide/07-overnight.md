@@ -85,7 +85,7 @@ On a base branch with a merge queue, owners stop at merge-ready, and the final r
 /poteto-mode autopilot these five changes but stack them, don't ship. i'll land the stack in the morning.
 ```
 
-[Orchestrate](../../skills/poteto-mode/playbooks/orchestrate.md) is for a program that outlives any single agent: multi-day, many stacked PRs, fleets of subagents under one standing coordinator chat. The coordinator authors briefs, collects what its subagents finish, keeps the lowest unmerged PR green, and never writes code itself. Its subagents run on your machine and end with the session, so after a restart the coordinator rebuilds its state from the store under `.orchestrate/`, your pushed branches, and open PRs, then respawns its workers. It's deliberately heavy machinery. If one agent could finish the work in a session, the playbook itself routes you back to the overnight contract above:
+[Orchestrate](../../skills/poteto-mode/playbooks/orchestrate.md) is for a program that outlives any single agent: multi-day, many stacked PRs, fleets of subagents under one standing coordinator chat. The coordinator authors briefs, collects what its subagents finish, keeps the lowest unmerged PR green, and never writes code itself. After a restart, the coordinator reads retained completions and attempt identities from `.orchestrate/`, then reconciles them with runtime evidence, pushed branches, and open PRs. Missing runtime evidence leaves an attempt uncertain. A replacement resolves the saved role and exact panel arm like any other spawn. Before dispatch, the coordinator records its predecessor and the harness, model, and effort that will run it. The [orch reference](../../skills/poteto-mode/scripts/orch/README.md) describes acknowledgment. It's deliberately heavy machinery. If one agent could finish the work in a session, the playbook itself routes you back to the overnight contract above:
 
 ```text
 /poteto-mode orchestrate the store migration. own it until every package is converted and merged. i'll check in twice a day.
@@ -93,7 +93,7 @@ On a base branch with a merge queue, owners stop at merge-ready, and the final r
 
 ## Run a program from one coordinator chat
 
-One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup. The coordinator doesn't write code. It directs subagents, which run on your machine and end with the session. That's the shape the Orchestrate playbook expects. Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks.
+One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup. The coordinator doesn't write code. It directs subagents, which run on your machine. That's the shape the Orchestrate playbook expects. Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks.
 
 A few habits help:
 

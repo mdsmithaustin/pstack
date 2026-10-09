@@ -15,6 +15,10 @@ When a pstack workflow uses a `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, or `PR
 
 Carry delegation roles into plans, checkpoints, and handoffs. Record the resolved harness, model, and effort as execution observations. Preserve a specific-model override with its original explicit human request. Model names in defaults, examples, past runs, or agent-written summaries do not establish such a request. If the source is unavailable, report the uncertainty instead of attributing the model choice to the human. A direct human model request still takes precedence.
 
+For durable recovery, preserve the exact role and one-based panel arm, brief, standing orders, checkout, resolved identity, and any observed native task id or CLI receipt. A missing observation leaves the child's liveness unknown. It does not prove that the child stopped. To recover, spawn the saved role per **Spawn a role** like any other spawn, and use the printed arm whose `arm` matches the saved arm. Do not choose `default`, another panel arm, or a guessed model. Record the harness, model, and effort that the replacement runs on. Recovery keeps the workflow's existing retry allowance.
+
+Retain the exact raw `--work-model` argument from the final successful resolver invocation and its complete printed arm. Keep this pair separate from observed execution identity. In an orch attempt, save it as `resolutionContext: {workModel, resolvedArm}` per the [orch reference](../poteto-mode/scripts/orch/README.md#optional-durable-attempts). A successful invocation without the flag records `workModel: null`. An unsuccessful resolver invocation supplies no successful context. Keep legacy absence unknown. Later model substitution or effort inheritance does not rewrite the saved arm. To recover a `trail reviewer`, pass a saved string `workModel` as `--work-model`. For a saved null, omit the flag. Without saved context, pass the model the work ran on, as for a new review.
+
 ## Spawn a role
 
 Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona. Build each spawn in this order.
