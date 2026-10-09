@@ -17,6 +17,8 @@ SHARES_HOST_TMP = True
 APP_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
 MODEL = "gpt-6.1-sol"
 EFFORT = "high"
+COMPACT = "/compact"
+COMPACT_TOKEN_LIMIT = 2000
 ENV_KEPT = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES", "TERM", "USER", "LOGNAME", "SHELL", "TZ",
             "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
             "http_proxy", "https_proxy", "no_proxy")
@@ -77,7 +79,7 @@ def prepare(run):
 def config_flags(run):
     project = run.project
     plan = str(run.case.get("env", {}).get("todo_tools") is not False).lower()
-    return ["--disable", "apps", "-c", f'model="{MODEL}"', "-c", f'model_reasoning_effort="{EFFORT}"',
+    return ["--disable", "apps", "-c", f'model="{run.model or MODEL}"', "-c", f'model_reasoning_effort="{run.effort or EFFORT}"',
             "-c", 'approval_policy="never"', "-c", 'sandbox_mode="workspace-write"',
             "-c", f"tools.update_plan.enabled={plan}",
             "-c", f'projects={{"{project}"={{trust_level="trusted"}}}}',
@@ -103,8 +105,11 @@ def turn(run, text, index):
         if not previous:
             raise RuntimeError("no session id from an earlier turn to resume")
         resume = ["resume"]
+    if text.strip() == COMPACT and not index:
+        raise ValueError("a /compact turn needs an earlier turn to compact")
+    compact = ["-c", f"model_auto_compact_token_limit={COMPACT_TOKEN_LIMIT}"] if text.strip() == COMPACT else []
     tail = ["--json", "-o", str(last), "--", *([previous] if index else []), prompt]
-    argv = [launch["path"], "exec", *resume, *config_flags(run), *tail]
+    argv = [launch["path"], "exec", *resume, *config_flags(run), *compact, *tail]
     record = live.execute(argv, run.project, child_env(run.root), run.timeout_s, stream, errors)
     record.update(index=index, session_id=thread_id(stream) or (previous if index else None), stream=str(stream),
                   stderr=str(errors), last_message=str(last), codex_bin=launch["path"], codex_bin_source=launch["source"])
@@ -216,11 +221,11 @@ def js_update_plan_calls(code):
 
 def harvest_rollout(data, prompts=None):
     events, files, worklist, spawns = [], [], [], []
-    final, injected, context, usage = "", [], {}, None
+    final, injected, context, usage, compacted = "", [], {}, None, []
     meta = session_meta(data)
     cwd = Path(meta.get("cwd") or ".")
     names, plan_calls, spawn_by_call = {}, [], {}
-    turn, upcoming = 0, list(enumerate(prompts or []))
+    turn, upcoming, started = 0, list(enumerate(prompts or [])), -1
 
     def add(event):
         event["seq"] = len(events)
@@ -233,6 +238,11 @@ def harvest_rollout(data, prompts=None):
         kind, payload = record.get("type"), record.get("payload") or {}
         if kind == "turn_context" and not context:
             context = payload
+        if kind == "event_msg" and payload.get("type") == "task_started":
+            started += 1
+        if kind == "compacted":
+            compacted.append({"turn": max(started, turn) if prompts is not None else None, "ordinal": record.get("ordinal"),
+                              "source": "rollout"})
         if kind == "event_msg" and payload.get("type") == "token_count":
             usage = (payload.get("info") or {}).get("total_token_usage") or usage
         if kind == "response_item":
@@ -299,7 +309,7 @@ def harvest_rollout(data, prompts=None):
               if e["kind"] == "tool_call" and e["name"] in ("view_image", "read_file") and e["input"].get("path")]
     return {"meta": meta, "context": context, "events": events, "files_read": list(dict.fromkeys(files)),
             "worklist": stamp_turns(worklist, events), "plan_calls": plan_calls, "spawns": spawns, "final_reply": final,
-            "injected": injected, "usage": usage}
+            "injected": injected, "usage": usage, "compactions": compacted}
 
 
 def stamp_turns(snapshots, events):
@@ -376,7 +386,7 @@ def harvest(run):
     prompts = [t["argv"][-1] for t in run.turns if t.get("argv")]
     lead = harvest_rollout(next(iter(leads.values())), prompts) if leads else {
         "meta": {}, "context": {}, "events": [], "files_read": [], "worklist": [], "plan_calls": [], "spawns": [],
-        "final_reply": "", "injected": [], "usage": None}
+        "final_reply": "", "injected": [], "usage": None, "compactions": []}
     merge_stream_plans(lead, streams.values())
     launch = json.loads((run.root / "launch.json").read_text())
     context = lead["context"]
@@ -404,6 +414,7 @@ def harvest(run):
         "x_turn_entries": turn_entries(run, lead),
         "x_todo_tools": "off" if run.case.get("env", {}).get("todo_tools") is False else "on",
         "x_token_usage": lead["usage"],
+        "x_compactions": lead["compactions"],
         "x_subagents": [],
     }
     for path, data in children.items():

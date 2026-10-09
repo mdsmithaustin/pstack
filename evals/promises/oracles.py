@@ -3424,3 +3424,375 @@ def gated_publish(view):
         return passed(*evidence)
     return inconclusive("no `no-mistakes axi run` that supplies intent, no forge PR command, and no `git push` in the trace"
                         + (" (run killed)" if view.killed else ""), *evidence)
+
+
+SKILL_REFUSAL = re.compile(r"cannot be used with Skill tool|disable-model-invocation|Unknown skill", re.I)
+WHOLE_READERS = {"cat", "nl", "bat", "less", "more"}
+PASS_THROUGH = {"cat", "nl", "bat", "less", "more", "tee"}
+SEARCHES = {"grep", "egrep", "fgrep", "rg", "ag", "wc", "ls", "stat", "file", "test", "[", "diff", "cmp", "shasum",
+            "sha256sum", "md5", "md5sum", "cksum", "du", "find"}
+SCRIPTED_READERS = {"python", "python3", "node", "perl", "ruby", "awk", "gawk", "jq", "bash", "sh", "zsh"}
+SED_PRINT = re.compile(r"^\s*(\d+)\s*(?:,\s*(\d+|\$)\s*)?p\s*$")
+HAND_BACK_VERB = r"(?:run|type|typing|invoke|enter|send|start)"
+FIRST_PERSON = re.compile(r"\b(?:I|I'll|I'm|I've|I'd|we|we'll|let me|let's)\b")
+SKILL_LOAD = {"claude-code": ("skill-tool",), "codex": ("injection", "read-whole")}
+LOAD_RULE = {"claude-code": "a Skill tool call whose result succeeded", "codex": "a skill injection or a read that covers the whole file"}
+READ_KINDS = ("read", "read-whole", "read-part", "read-unknown")
+
+
+def pipelines(command):
+    """Each pipeline in a shell command as (stages, base): argv lists in pipe order and the directory a cd left it in."""
+    outer, inner = split_substitutions(strip_heredocs(command))
+    for text in inner:
+        yield from pipelines(text)
+    for segment, masked, base in walk_segments(outer):
+        stages, start = [], 0
+        for cut in [*PIPE_OR_BACKGROUND.finditer(masked), None]:
+            end = cut.start() if cut else len(segment)
+            argv = bare_command(argv_of(command_position(segment[start:end], masked[start:end])))
+            if argv:
+                stages.append(argv)
+            start = cut.end() if cut else end
+        if stages:
+            yield stages, base
+
+
+def head_count(args):
+    for i, arg in enumerate(args):
+        if arg in ("-n", "--lines") and i + 1 < len(args):
+            return int(args[i + 1]) if args[i + 1].isdigit() else None
+        match = re.fullmatch(r"-n?(\d+)|--lines=(\d+)", arg)
+        if match:
+            return int(match.group(1) or match.group(2))
+        if arg.startswith(("-c", "--bytes")):
+            return None
+    return 10
+
+
+def tail_span(args):
+    for i, arg in enumerate(args):
+        match = re.fullmatch(r"-n(\+?\d+)|--lines=(\+?\d+)|-(\d+)|(\+\d+)", arg)
+        value = args[i + 1] if arg in ("-n", "--lines") and i + 1 < len(args) else next((g for g in match.groups() if g), None) if match else None
+        if value is not None:
+            if not re.fullmatch(r"\+?\d+", value):
+                return None
+            return (int(value[1:]), None) if value.startswith("+") else ("last", int(value))
+        if arg.startswith(("-c", "--bytes")):
+            return None
+    return ("last", 10)
+
+
+def sed_spans(args, files):
+    quiet = any(arg in ("--quiet", "--silent") or re.fullmatch(r"-[A-Za-z]*n[A-Za-z]*", arg) for arg in args)
+    scripts = [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in ("-e", "--expression")]
+    if not scripts:
+        scripts = [next((arg for arg in args if not arg.startswith("-") and arg not in files), "")]
+    if not quiet:
+        return [(1, None)]
+    spans = []
+    for command in (part for script in scripts for part in re.split(r"[;\n]", script) if part.strip()):
+        match = SED_PRINT.match(command)
+        if not match:
+            return None
+        spans.append((int(match.group(1)), None if match.group(2) == "$" else int(match.group(2) or match.group(1))))
+    return spans or None
+
+
+def pipeline_read(stages, base, rel):
+    """What a pipeline shows of the skills-relative file rel: ("span", spans), ("search", []), ("unknown", []), or None."""
+    for index, argv in enumerate(stages):
+        files = [word for word in argv[1:] if skill_rel(under(base, word)) == rel]
+        if not files:
+            continue
+        verb, args = os.path.basename(argv[0]), argv[1:]
+        if verb in SEARCHES:
+            return "search", []
+        if verb in SCRIPTED_READERS:
+            return "unknown", []
+        if verb in WHOLE_READERS:
+            spans = [(1, None)]
+        elif verb == "head":
+            count = head_count(args)
+            spans = [(1, count)] if count else None
+        elif verb == "tail":
+            span = tail_span(args)
+            spans = [span] if span else None
+        elif verb == "sed":
+            spans = sed_spans(args, files)
+        else:
+            return None
+        for later in stages[index + 1:]:
+            name = os.path.basename(later[0])
+            if name in PASS_THROUGH:
+                continue
+            if name in SEARCHES:
+                return "search", []
+            count = head_count(later[1:]) if name == "head" else None
+            if not (count and spans and len(spans) == 1 and spans[0][0] != "last"):
+                return "unknown", []
+            low, high = spans[0]
+            spans = [(low, low + count - 1 if high is None else min(high, low + count - 1))]
+        return ("span", spans) if spans else ("unknown", [])
+    return None
+
+
+def covers(spans, total):
+    fixed = sorted((total - span[1] + 1 if span[0] == "last" else span[0], total if span[0] == "last" or span[1] is None else span[1])
+                   for span in spans)
+    reached = 0
+    for low, high in fixed:
+        if low > reached + 1:
+            return False
+        reached = max(reached, high)
+    return reached >= total
+
+
+def skill_lines(view, skill):
+    roots = [view.project / sub for sub in (".agents/skills", ".claude/skills", ".hermes/skills", ".grok/skills")] if view.project else []
+    for root in [*roots, Path(view.skills_root), ROOT / "skills"]:
+        path = root / skill / "SKILL.md"
+        try:
+            if _is_file(path):
+                text = _read_text(path, errors="replace")
+                return text.count("\n") + (0 if text.endswith("\n") else 1)
+        except Exception:
+            continue
+    return None
+
+
+def load_attempts(view, skill, turn=None):
+    """Every attempt by the lead to load skill, in trace order, as (seq, how, ok, detail). how is skill-tool, injection,
+    read (a file-read tool), read-whole, read-part, read-unknown, or search; ok is None when the call never returned."""
+    rel, total, covered, out = f"{skill}/SKILL.md", skill_lines(view, skill), [], []
+    for call in view.tool_calls:
+        seq = call.get("seq")
+        if turn is not None and view.turn_of(seq) != turn:
+            continue
+        name, given = call.get("name"), call.get("input") or {}
+        result = view.results_for(call)
+        ok = (True if view.read_returned(call) else None) if result is None else result.get("ok") is not False
+        head = (result or {}).get("output_head") or ""
+        if name in SKILL_LOAD_TOOLS:
+            if skill_load(str(given.get("skill") or given.get("name") or "")) == rel:
+                out.append((seq, "skill-tool", False if SKILL_REFUSAL.search(head) else ok, head[:300]))
+        elif name in READ_TOOLS:
+            path = next((given[f] for f in READ_TOOLS[name] if isinstance(given.get(f), str)), "")
+            if skill_rel(path) == rel:
+                out.append((seq, "read", ok, path))
+        elif name in SHELL_TOOLS:
+            command = str(given.get(SHELL_TOOLS[name]) or "")
+            for stages, base in pipelines(command):
+                found = pipeline_read(stages, base, rel)
+                if found is None:
+                    continue
+                kind, spans = found
+                if kind != "span" or not ok:
+                    out.append((seq, "search" if kind == "search" else "read-unknown", ok, command[:200]))
+                    continue
+                covered += spans
+                whole = total is not None and covers(covered, total)
+                out.append((seq, "read-whole" if whole else "read-part", ok, f"lines {spans} of {total}"))
+    for hit in view.trace.get("x_entry_injections") or []:
+        if hit.get("name") == skill and (turn is None or hit.get("turn") == turn):
+            seq = next((e.get("seq") for e in view.events if e.get("kind") == "user"
+                        and (hit.get("turn") is None or view.turn_of(e.get("seq")) == hit.get("turn"))), -1)
+            out.append((seq, "injection", True, hit.get("path") or ""))
+    return sorted(out, key=lambda a: a[0] if a[0] is not None else -1)
+
+
+def allowed_load(view, attempt):
+    _, how, ok, _ = attempt
+    if view.harness == "claude-code":
+        return how == "skill-tool" and ok is True
+    return ok is not False and how in SKILL_LOAD.get(view.harness, ("skill-tool", "injection", "read-whole", "read"))
+
+
+def hands_back(text, skill):
+    """The sentence that asks the user to run or type /skill, or None. A first-person plan ("I'll run /skill") is not one."""
+    command = rf"`?/{re.escape(skill)}(?![\w-])`?"
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", text or ""):
+        for match in re.finditer(rf"\b(?:you|yourself)\b(?P<gap>[^.!?\n]{{0,60}}?)\b{HAND_BACK_VERB}\b[^.!?\n]{{0,30}}?{command}", sentence, re.I):
+            if not FIRST_PERSON.search(match.group("gap")):
+                return sentence.strip()
+        if re.search(rf"\b{HAND_BACK_VERB}\s+{command}\s+yourself\b", sentence, re.I) or \
+                re.match(rf"\s*(?:[-*>]\s*|\d+[.)]\s*)?(?:please\s+|just\s+)?{HAND_BACK_VERB}\s+{command}", sentence, re.I):
+            return sentence.strip()
+    return None
+
+
+def turn_finished(view):
+    return not view.killed and bool(view.final_reply)
+
+
+def routing_decided(view, skill, turn=None, after=None):
+    """The first lead event, after seq `after`, that shows a route was chosen: a playbook or another routed skill loaded,
+    a worklist, a project edit, or a question to the user."""
+    routed = set(view.trace.get("x_implicit_off") or ()) - {"poteto-mode", skill}
+
+    def later(seq):
+        return (after is None or (seq or 0) > after) and (turn is None or view.turn_of(seq) == turn)
+    for seq, rel in view.event_reads():
+        if later(seq) and (PLAYBOOK.match(rel) or (SKILL_FILE.match(rel) and rel.split("/", 1)[0] in routed)):
+            return f"read {rel} at seq {seq}"
+    for snapshot in view.worklist:
+        if later(snapshot.get("seq")):
+            return f"worklist at seq {snapshot.get('seq')}"
+    for seq, path, _ in view.project_edits():
+        if later(seq):
+            return f"edited {path} at seq {seq}"
+    for call in view.tool_calls:
+        if call.get("name") in ASK_TOOLS and later(call.get("seq")):
+            return f"asked the user at seq {call.get('seq')}"
+    return None
+
+
+def file_load_failures(view, skill, reads):
+    if view.harness == "claude-code" and reads:
+        return ["loaded by file read, not the Skill tool"]
+    if view.harness == "codex" and reads and all(a[1] == "read-part" for a in reads):
+        return [f"read only part of {skill}/SKILL.md: {[a[3] for a in reads]}"]
+    return []
+
+
+def routed_load_verdict(view, skill, turn=None):
+    attempts = load_attempts(view, skill, turn)
+    evidence = [f"{skill} load attempts by the lead: {[(seq, how, ok) for seq, how, ok, _ in attempts]}",
+                f"load rule on {view.harness}: {LOAD_RULE.get(view.harness, 'a skill load or a whole-file read')}"]
+    loaded = next((a for a in attempts if allowed_load(view, a)), None)
+    if loaded:
+        return passed(f"{skill} loaded by {loaded[1]} at seq {loaded[0]}", *evidence)
+    failures = []
+    back = next((h for t in view.texts(turn) if (h := hands_back(t, skill))), None)
+    if back:
+        failures.append(f"handed the run back to the user: {back[:200]!r}")
+    refused = next((a for a in attempts if a[1] == "skill-tool" and a[2] is False), None)
+    if refused and (turn_finished(view) or routing_decided(view, skill, turn, refused[0])):
+        failures.append(f"Skill({skill}) was refused and no later load succeeded: {refused[3][:200]!r}")
+    reads = [a for a in attempts if a[1] in READ_KINDS and a[2] is not False]
+    failures += file_load_failures(view, skill, reads)
+    if failures:
+        return failed(failures, *evidence)
+    if reads:
+        return inconclusive(f"read {skill}/SKILL.md in a way the trace cannot size: {[a[3][:80] for a in reads]}", *evidence)
+    decided = routing_decided(view, skill, turn)
+    if turn_finished(view) or decided:
+        return failed(f"routing finished without loading {skill}", *evidence, f"routing decision: {decided or 'the turn finished'}")
+    return inconclusive("run killed before a routing decision", *evidence)
+
+
+@oracle("routed-skill-loads-when-named")
+def routed_skill_loads(view):
+    return routed_load_verdict(view, (view.case.get("expect") or {}).get("skill", "figure-it-out"))
+
+
+@oracle("routed-skill-loads-after-compaction")
+def routed_skill_loads_after_compaction(view):
+    gate = need_turns(view)
+    if gate:
+        return gate
+    last = len(view.case.get("turns", [])) - 1
+    compacted = [c for c in view.trace.get("x_compactions") or [] if isinstance(c.get("turn"), int) and c["turn"] < last]
+    evidence = f"compactions before turn {last}: {[(c['turn'], c.get('source')) for c in compacted]}"
+    if not compacted:
+        return inconclusive(f"the trace shows no compaction before turn {last}", evidence)
+    result = routed_load_verdict(view, (view.case.get("expect") or {}).get("skill", "figure-it-out"), turn=last)
+    result["evidence"].insert(0, evidence)
+    return result
+
+
+def prompt_named(texts, names):
+    words = set(re.findall(r"[a-z0-9][a-z0-9-]*", " ".join(t for t in texts if t).lower()))
+    return {name for name in names if name in words}
+
+
+def child_loads(view, hidden):
+    """(agent, skill, how) for each name-only skill a delegate loaded that its own brief or persona did not name."""
+    named_by = {}
+    for spawn in view.spawns:
+        call = next((c for c in view.tool_calls if c.get("seq") == spawn.get("seq")), None)
+        given = (call or {}).get("input") or {}
+        persona = spawn.get("persona") or spawn.get("subagent_type") or ""
+        brief = [str(given.get(k) or "") for k in ("prompt", "message", "description")] + [str(spawn.get("prompt_head") or "")]
+        named = prompt_named(brief, hidden) | ({"poteto-mode"} if persona == "poteto-agent" else set())
+        for key in (Path(spawn["transcript"]).stem if spawn.get("transcript") else None, spawn.get("x_thread_id")):
+            if key:
+                named_by[key] = named
+    found = []
+    for agent, calls in (view.trace.get("x_child_skill_calls") or {}).items():
+        for call in calls:
+            name = (skill_load(str(call.get("skill") or "")) or "").removesuffix("/SKILL.md")
+            if name in hidden and call.get("ok") and name not in named_by.get(agent, set()):
+                found.append((agent, name, "skill-tool"))
+    pools = [(k, v) for k, v in (view.trace.get("x_files_read_by") or {}).items() if k != "lead"]
+    pools += [(c.get("thread_id"), c.get("files_read") or []) for c in view.trace.get("x_subagents") or []]
+    for agent, paths in pools:
+        for path in paths:
+            name = (skill_rel(path) or "").removesuffix("/SKILL.md")
+            if name in hidden and skill_rel(path) == f"{name}/SKILL.md" and name not in named_by.get(agent, set()):
+                found.append((agent, name, "read"))
+    return list(dict.fromkeys(found))
+
+
+@oracle("name-only-skills-stay-unloaded-unnamed")
+def name_only_stay_unloaded(view):
+    hidden = set(view.trace.get("x_implicit_off") or ())
+    if not hidden:
+        return inconclusive("the trace records no name-only skill set (x_implicit_off)")
+    named = prompt_named([view.case.get("entry") or "", *view.case.get("turns", [])], hidden)
+    hidden -= named
+    attempts = {skill: load_attempts(view, skill) for skill in sorted(hidden)}
+    lead = [("lead", skill, how, seq) for skill, rows in attempts.items() for seq, how, ok, _ in rows if ok and how != "search"]
+    unsettled = [(skill, how, seq) for skill, rows in attempts.items() for seq, how, ok, _ in rows if ok is not True and how != "search"]
+    children = child_loads(view, hidden)
+    evidence = [f"name-only skills: {len(hidden)} (named by the prompts: {sorted(named)})", f"lead loads: {lead}",
+                f"delegate loads: {children}", f"refused or unreturned load calls: {unsettled}"]
+    if lead or children:
+        return failed(f"loaded name-only skills nobody named: {sorted({row[1] for row in lead + children})}", *evidence)
+    if not (view.tool_calls or view.texts() or view.final_reply):
+        return inconclusive("empty trace: no tool call and no reply", *evidence)
+    return passed(*evidence)
+
+
+def unsettled_survived(view):
+    spec = (view.case.get("expect") or {}).get("unsettled") or {}
+    if not spec or not (view.project and _is_dir(view.project)):
+        return None
+    path = view.project / spec["file"]
+    return _is_file(path) and spec["text"] in _read_text(path, errors="replace")
+
+
+def child_skill_loaded(view, skill, after):
+    stems = {Path(s["transcript"]).stem: s.get("seq") for s in view.spawns if s.get("transcript") and (s.get("seq") or 0) > after}
+    return next((agent for agent, calls in (view.trace.get("x_child_skill_calls") or {}).items() if agent in stems
+                 and any(c.get("ok") and skill_load(str(c.get("skill") or "")) == f"{skill}/SKILL.md" for c in calls)), None)
+
+
+@oracle("deslop-hands-unsettled-comments-to-no-comments")
+def deslop_hands_to_no_comments(view):
+    deslop, handoff = load_attempts(view, "deslop"), load_attempts(view, "no-comments")
+    survived = unsettled_survived(view)
+    evidence = [f"deslop load attempts: {[(seq, how, ok) for seq, how, ok, _ in deslop]}",
+                f"no-comments load attempts: {[(seq, how, ok) for seq, how, ok, _ in handoff]}",
+                f"load rule on {view.harness}: {LOAD_RULE.get(view.harness, 'a skill load or a whole-file read')}",
+                f"unsettled comment survived: {'unknown, no project' if survived is None else survived}"]
+    first = next((a for a in deslop if allowed_load(view, a)), None)
+    if not first:
+        return inconclusive("deslop never loaded", *evidence)
+    after = [a for a in handoff if (a[0] or 0) > (first[0] or 0)]
+    loaded = next((a for a in after if allowed_load(view, a)), None)
+    delegate = child_skill_loaded(view, "no-comments", first[0] or 0) if view.harness == "claude-code" else None
+    if loaded or delegate:
+        return passed(f"no-comments loaded after deslop: {f'{loaded[1]} at seq {loaded[0]}' if loaded else f'by delegate {delegate}'}", *evidence)
+    failures = []
+    refused = next((a for a in after if a[1] == "skill-tool" and a[2] is False), None)
+    if refused and turn_finished(view):
+        failures.append(f"Skill(no-comments) was refused and no later load succeeded: {refused[3][:200]!r}")
+    reads = [a for a in after if a[1] in READ_KINDS and a[2] is not False]
+    failures += file_load_failures(view, "no-comments", reads)
+    if failures:
+        return failed(failures, *evidence)
+    if reads:
+        return inconclusive(f"read no-comments/SKILL.md in a way the trace cannot size: {[a[3][:80] for a in reads]}", *evidence)
+    if turn_finished(view):
+        return failed("deslop finished without loading no-comments", *evidence)
+    return inconclusive("run killed after deslop loaded and before it finished", *evidence)

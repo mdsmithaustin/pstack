@@ -1,4 +1,5 @@
 import fcntl
+import hashlib
 import json
 import io
 import os
@@ -219,6 +220,38 @@ class GradeRun(unittest.TestCase):
                     verdict = json.loads((root / "verdict.json").read_text())
                     self.assertEqual({p["verdict"] for p in verdict["promises"].values()}, {"INCONCLUSIVE"})
 
+    def test_an_overlaid_arm_with_run_overrides_passes_parent_grading_admission(self):
+        from harnesses import codex
+        case = live.load_case("deslop-handoff-use")
+        with tempfile.TemporaryDirectory(prefix="pstack-live-arm-") as tmp:
+            out = Path(tmp).resolve()
+
+            def prepare(run):
+                (run.root / "launch.json").write_text(json.dumps({"path": "synthetic-no-model", "source": "test", "version": "test", "rejected": []}))
+
+            def turn(run, text, index):
+                (run.root / "turn-0.jsonl").write_bytes(b"")
+                return {"index": index, "session_id": "owned-session", "argv": ["codex", "exec", *codex.config_flags(run), text],
+                        "exit_code": 0, "timed_out": False, "duration_s": 0.25, "stream": str(run.root / "turn-0.jsonl"),
+                        "stderr": str(run.root / "turn-0.err"), "last_message": str(run.root / "last.txt"),
+                        "codex_bin": "synthetic-no-model", "codex_bin_source": "test"}
+
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(codex, "prepare", side_effect=prepare), \
+                    mock.patch.object(codex, "turn", side_effect=turn), redirect_stdout(io.StringIO()):
+                root = live.run_case("codex", case["id"], "HEAD", out, 0, model="gpt-6-luna", effort="xhigh")
+            installed = (root / "w" / "rollup" / ".agents/skills/deslop/SKILL.md").read_text()
+            trace = json.loads((root / "trace.json").read_text())
+            record = json.loads((root / "run.json").read_text())
+            verdict = json.loads((root / "verdict.json").read_text())
+        self.assertEqual(installed.count("A comment the rules below do not settle needs a second review. Use the **no-comments** skill."), 1)
+        self.assertNotIn("go to `/no-comments`.", installed)
+        self.assertIn("no-comments", trace["x_implicit_off"])
+        self.assertNotIn("deslop", trace["x_implicit_off"])
+        self.assertIn('model="gpt-6-luna"', trace["x_turns"][0]["argv"])
+        self.assertIn('model_reasoning_effort="xhigh"', trace["x_turns"][0]["argv"])
+        self.assertEqual(sorted(record), ["baseline", "case", "harness", "project", "skills_at", "timeout_s", "turns"])
+        self.assertEqual(verdict["promises"]["deslop-hands-unsettled-comments-to-no-comments"]["failures"], ["deslop never loaded"])
+
     def test_a_run_with_host_skill_hits_writes_inconclusive_for_every_promise(self):
         with tempfile.TemporaryDirectory(prefix="pstack-live-test-") as tmp:
             root = Path(tmp).resolve()
@@ -247,6 +280,98 @@ class GradeRun(unittest.TestCase):
             graded = live.grade(authority)
             self.assertNotIn("never started", json.dumps(graded))
 
+
+
+DESLOP_STEP_5 = "Comments the rules below do not settle go to `/no-comments`."
+
+
+class SkillOverlays(unittest.TestCase):
+    def tree(self, text):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-overlay-")
+        self.addCleanup(tmp.cleanup)
+        skills = Path(tmp.name)
+        (skills / "deslop").mkdir()
+        (skills / "deslop" / "SKILL.md").write_text(text)
+        return skills
+
+    def test_an_overlay_replaces_its_sentence_once(self):
+        skills = self.tree(f"5. Hand off. {DESLOP_STEP_5} Names go on.\n")
+        case = {"id": "arm", "skill_overlays": [{"file": "deslop/SKILL.md", "old": DESLOP_STEP_5, "new": "Use the **no-comments** skill."}]}
+        live.apply_overlays(case, skills)
+        self.assertEqual((skills / "deslop" / "SKILL.md").read_text(), "5. Hand off. Use the **no-comments** skill. Names go on.\n")
+
+    def test_an_overlay_whose_text_is_missing_or_repeated_refuses_the_run(self):
+        for text, found in (("5. Hand off.\n", 0), (f"{DESLOP_STEP_5}\n{DESLOP_STEP_5}\n", 2)):
+            with self.subTest(found=found):
+                skills = self.tree(text)
+                case = {"id": "arm", "skill_overlays": [{"file": "deslop/SKILL.md", "old": DESLOP_STEP_5, "new": "x"}]}
+                with self.assertRaisesRegex(ValueError, f"occurs {found} times in deslop/SKILL.md, expected exactly once"):
+                    live.apply_overlays(case, skills)
+                self.assertEqual((skills / "deslop" / "SKILL.md").read_text(), text)
+
+    def test_an_overlay_path_outside_the_skill_tree_refuses(self):
+        skills = self.tree(DESLOP_STEP_5)
+        for rel in ("../deslop/SKILL.md", "/etc/hosts"):
+            with self.subTest(rel=rel), self.assertRaisesRegex(ValueError, "leaves the skill tree"):
+                live.apply_overlays({"id": "arm", "skill_overlays": [{"file": rel, "old": "a", "new": "b"}]}, skills)
+
+    def test_every_handoff_arm_rewrites_the_current_step_5_sentence(self):
+        expected = {"deslop-handoff-slash": DESLOP_STEP_5,
+                    "deslop-handoff-bold": "Comments the rules below do not settle go to the **no-comments** skill.",
+                    "deslop-handoff-use": "A comment the rules below do not settle needs a second review. Use the **no-comments** skill."}
+        for case_id, sentence in expected.items():
+            with self.subTest(case=case_id):
+                skills = self.tree((live.ROOT / "skills" / "deslop" / "SKILL.md").read_text())
+                live.apply_overlays(live.load_case(case_id), skills)
+                text = (skills / "deslop" / "SKILL.md").read_text()
+                self.assertEqual(text.count(sentence), 1)
+                self.assertEqual(text.count(DESLOP_STEP_5), int(case_id == "deslop-handoff-slash"))
+
+
+class NameOnlySet(unittest.TestCase):
+    def test_the_set_holds_skills_whose_policy_turns_implicit_invocation_off(self):
+        with tempfile.TemporaryDirectory(prefix="pstack-implicit-") as tmp:
+            skills = Path(tmp)
+            for name, yaml in (("gated", "policy:\n  allow_implicit_invocation: false\n"), ("open", "policy:\n  allow_implicit_invocation: true\n"),
+                               ("other", "interface:\n  allow_implicit_invocation: false\n"), ("bare", None)):
+                (skills / name / "agents").mkdir(parents=True)
+                (skills / name / "SKILL.md").write_text(f"# {name}\n")
+                if yaml is not None:
+                    (skills / name / "agents" / "openai.yaml").write_text(yaml)
+            (skills / "stray" / "agents").mkdir(parents=True)
+            (skills / "stray" / "agents" / "openai.yaml").write_text("policy:\n  allow_implicit_invocation: false\n")
+            self.assertEqual(live.implicit_off(skills), ["gated"])
+
+
+class RunOverrides(unittest.TestCase):
+    def test_model_and_effort_refuse_harnesses_without_an_override(self):
+        for harness in ("hermes", "grok"):
+            with self.subTest(harness=harness), self.assertRaisesRegex(ValueError, "--model and --effort support claude-code, codex, not " + harness):
+                live.run_case(harness, "principle-steer-run", "HEAD", Path("/unused"), 0, model="m")
+
+    def test_the_cli_passes_model_and_effort_to_every_case(self):
+        with tempfile.TemporaryDirectory(prefix="pstack-overrides-") as tmp, mock.patch.object(live, "run_case") as run_case:
+            live.main(["run", "--harness", "codex", "--case", "a", "--case", "b", "--model", "gpt-6-luna", "--effort", "xhigh", "--out", tmp])
+        self.assertEqual([c.args[1] for c in run_case.call_args_list], ["a", "b"])
+        self.assertEqual({c.args[-2:] for c in run_case.call_args_list}, {("gpt-6-luna", "xhigh")})
+
+    def test_codex_and_claude_turns_carry_the_override_in_argv(self):
+        from harnesses import claude_code, codex
+        run = live.Run(Path("/r"), "codex", {"id": "x", "fixture": "relay", "turns": ["go"]}, "0" * 40, 60, model="gpt-6-luna", effort="xhigh")
+        flags = codex.config_flags(run)
+        self.assertEqual(flags[flags.index('model="gpt-6-luna"') - 1:flags.index('model="gpt-6-luna"') + 3],
+                         ["-c", 'model="gpt-6-luna"', "-c", 'model_reasoning_effort="xhigh"'])
+        with tempfile.TemporaryDirectory(prefix="pstack-overrides-") as tmp:
+            root = Path(tmp).resolve()
+            case = {"id": "x", "fixture": "relay", "turns": ["go"], "model": "case-model", "effort": "low"}
+            run = live.Run(root, "claude-code", case, "0" * 40, 60, model="claude-sonnet-5-5", effort="high")
+            run.project.mkdir(parents=True)
+            binary = root / "native.bin"
+            binary.write_bytes(b"identity")
+            claude_code._bind_paths(run, claude_code.HostRuntime(binary, "test", root / "home", "u", (), (),
+                                                                 ((binary, hashlib.sha256(b"identity").hexdigest()),), "/usr/bin:/bin", "/bin/sh"))
+            argv = claude_code._command(run, "go", 0).argv
+        self.assertEqual(argv[-5:], ("--effort", "high", "--model", "claude-sonnet-5-5", "go"))
 
 
 class MakeProject(unittest.TestCase):
