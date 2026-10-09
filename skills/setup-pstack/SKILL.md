@@ -38,7 +38,21 @@ poteto-mode keeps its worklist in the harness's structured task tool when that t
 - **Hermes** has no known switch. Report nothing to change.
 - **Grok Build** ships its `todo_write` tool with no known switch. Report nothing to change.
 
-### 0c. Check Codex subagents
+### 0c. Check the Claude Code skill listing
+
+Run this check whenever the user runs pstack on Claude Code. Codex keeps some pstack skills from implicit invocation through `agents/openai.yaml`, and Claude Code ignores that file. Without an override those skills list with their full descriptions and load from them. With `"skillOverrides": {"<skill>": "name-only"}` in `~/.claude/settings.json`, Claude Code lists each by bare name. The skill then loads when the user types `/name` or a pstack skill names it, and never from its description.
+
+Resolve the installed skills root as step 0a does, then run:
+
+```sh
+python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/skill-listing.py" check
+```
+
+Failure signal: exit 2. The settings file is unreadable or malformed, or the skills root is wrong. Report the stderr line and leave the file alone. Exit 1 means the listing is stale, and the JSON on stdout names the skills in `missing` and `extra`. Exit 0 means it is current. Report any `kept_off` skills as the user's own `off` choice.
+
+When the listing is stale, offer `install` and say what it changes. Run the same command with `install` in place of `check` only after the user says yes. It adds `name-only` for each missing skill and removes `name-only` entries for skills that no longer need them. It keeps every other key and the user's `off` entries. Report `added`, `removed`, and the final `state`, and say the change applies from the next session.
+
+### 0d. Check Codex subagents
 
 On Codex, pstack spawns roles natively through `spawn_agent`. When the tool is unavailable, the **pstack-harness** skill falls back to `codex exec` subprocesses, or to arms run one at a time inline, and an inline review is not independent. Run this check when this skill runs on Codex or the user also runs pstack there.
 
