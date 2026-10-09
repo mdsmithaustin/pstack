@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -654,7 +655,8 @@ class HarnessCommandTests(unittest.TestCase):
             self.assertEqual(printed.getvalue(), f"+ skill-benchmark validate --strict-leakage {base / 'manifest.json'}\n")
 
     def test_harness_version_is_the_release_pinned_in_skill_ci_toml(self):
-        self.assertEqual(screen.harness_version(), "skill-ci v1.0.0")
+        pinned = tomllib.loads((ROOT.parents[1] / ".skill-ci.toml").read_text())["version"]
+        self.assertEqual(screen.harness_version(), f"skill-ci {pinned}")
 
 
 class VariantArmTests(unittest.TestCase):
