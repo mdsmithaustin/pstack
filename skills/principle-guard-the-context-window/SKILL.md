@@ -1,7 +1,6 @@
 ---
 name: principle-guard-the-context-window
 description: "Apply before a large read, a long command output, or a subagent brief, not only when context is filling up. Route bulk to subagents, take thin reports back, and keep summaries in the main thread, not raw payloads."
-disable-model-invocation: true
 ---
 
 # Guard the Context Window
