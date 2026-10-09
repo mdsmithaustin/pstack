@@ -48,9 +48,9 @@ Resolve the installed skills root as step 0a does, then run:
 python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/skill-listing.py" check
 ```
 
-Failure signal: exit 2. The settings file is unreadable or malformed, or the skills root is wrong. Report the stderr line and leave the file alone. Exit 1 means the listing is stale, and the JSON on stdout names the skills in `missing` and `extra`. Exit 0 means it is current. Report any `kept_off` skills as the user's own `off` choice.
+Failure signal: exit 2. The settings file is unreadable or malformed, or the skills root is wrong. Report the stderr line and leave the file alone. Exit 1 means the listing is stale, and the JSON on stdout names the skills in `missing` and `extra`. Exit 0 means it is current. Report any `kept_off` skills as the user's own `off` choice, and say that a pstack skill that names one cannot load it. The check reads only the user file. When the project's `.claude/settings.json` or `.claude/settings.local.json` holds a `skillOverrides` entry for a pstack skill, report that entry too, because a project entry can override the user file.
 
-When the listing is stale, offer `install` and say what it changes. Run the same command with `install` in place of `check` only after the user says yes. It adds `name-only` for each missing skill and removes `name-only` entries for skills that no longer need them. It keeps every other key and the user's `off` entries. Report `added`, `removed`, and the final `state`, and say the change applies from the next session.
+When the listing is stale, offer `install` and say what it changes. Run the same command with `install` in place of `check` only after the user says yes. It sets `name-only` for each missing skill, replacing an `on` or `user-invocable-only` value. It deletes a `name-only` entry for any pstack skill outside the set, even one the user wrote. It keeps every other key and the user's `off` entries. Report `added`, `removed`, and the final `state`, and say the change applies from the next session.
 
 ### 0d. Check Codex subagents
 

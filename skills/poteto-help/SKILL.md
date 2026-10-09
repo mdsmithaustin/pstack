@@ -34,10 +34,10 @@ When the models config is missing and it matters, ask whether the user wants to 
 ## Get set up
 
 1. Install from the project root with `npx skills add mdsmithaustin/pstack`, and pick the targets the user runs. `-g` installs user-level instead of per-project.
-2. Run [`/setup-pstack`](../setup-pstack/SKILL.md). It checks the bundled personas, asks for a reasoning budget, maps a model to each role, and writes `~/.agents/pstack-models.md`. Skills read that file the next time they run.
+2. Run [`/setup-pstack`](../setup-pstack/SKILL.md). It checks the bundled personas, asks for a reasoning budget, maps a model to each role, and writes `~/.agents/pstack-models.md`. Skills read that file the next time they run. On Claude Code it also sets the skill listing, so the skills that load only by name stop showing their descriptions.
 3. Start a real task with `/poteto-mode`, a goal, and a check that can pass or fail.
 
-Installing changes nothing until the user invokes a skill. The skills that load from the user's words are listed under Fix a run that went wrong. The [README](https://github.com/mdsmithaustin/pstack/blob/main/README.md) and [guide page 1](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/01-setup.md) have the details. Offer to word their first prompt with them, per [`references/prompting.md`](references/prompting.md).
+On Codex, installing changes nothing until the user invokes a skill. On Claude Code that holds once `/setup-pstack` sets the skill listing. Before then, and after an update from a version that gated skills in their frontmatter, Claude Code can load a pstack skill from its description. The skills that load from the user's words are listed under Fix a run that went wrong. The [README](https://github.com/mdsmithaustin/pstack/blob/main/README.md) and [guide page 1](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/01-setup.md) have the details. Offer to word their first prompt with them, per [`references/prompting.md`](references/prompting.md).
 
 If cost is the worry, say where the tokens go and how to spend fewer. pstack spends extra tokens on subagents and review panels. Rerun `/setup-pstack` and pick a smaller budget or cheaper models. A role set to `auto` or `inherit-parent` runs on the session's model, which saves tokens when the session runs on a cheaper model. A shorter panel list runs fewer subagents, one for each entry. Save `/poteto-mode` for work that needs rigor.
 

@@ -26,7 +26,7 @@ pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g
 
 two steps:
 
-1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md) to check the bundled personas, optionally register native agents, set claude code's skill listing, pick a reasoning budget, and choose which models you want.
+1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md) to check the bundled personas, optionally register native agents, set claude code's skill listing, pick a reasoning budget, and choose which models you want. until the listing step runs, claude code shows every pstack skill's description and can load one on its own, so rerun it after `npx skills update`.
 2. use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) whenever you're doing anything that requires rigor.
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs. stuck, or unsure which skill fits? ask [`/poteto-help`](./skills/poteto-help/SKILL.md).
@@ -209,7 +209,7 @@ pstack ships both complete personas inside the installed `pstack-harness` skill.
 
 The [persona contract](./skills/pstack-harness/references/named-roles.md) uses the native persona when the live agent catalog lists it, or supplies the complete persona to a generic delegate. Claude uses Markdown registrations, and Codex uses TOML. Hermes receives the full persona through delegation context. The normalized native names are `poteto-agent` and `comment-sicko`; `Comment Sicko` remains a supported logical alias. Model and effort choices still come from pstack's existing model policy.
 
-A ready payload, an installed native file, and an agent loaded in the current session are separate states. Setup reports each separately. The skill's `agents/openai.yaml` controls Codex skill invocation policy; it does not register a subagent.
+A ready payload, an installed native file, and an agent loaded in the current session are separate states. Setup reports each separately. The skill's `agents/openai.yaml` controls Codex skill invocation policy and names the skills setup-pstack lists by name only on claude code; it does not register a subagent.
 
 ## principles
 
@@ -351,7 +351,7 @@ skill-ci run skills/unslop --out evals/unslop/runs/$(date +%Y%m%d-%H%M%S)
 
 `evals_dir` in `.skill-ci.toml` points every command at `evals/`. Delete it and `check`, `validate`, and `audit` search `skills/`, find no manifest, and still exit 0, so `tools/test_eval_artifacts.py` pins its value.
 
-`tools/skill-trigger-cases.json` checks deterministic trigger declaration coverage. It confirms that every shipped skill has a realistic request, literal description anchors, and the expected invocation policy. It does not measure model-routing accuracy.
+`tools/skill-trigger-cases.json` checks deterministic trigger declaration coverage. It confirms that every shipped skill has a realistic request, literal description anchors, and the expected invocation policy. `implicit_allowed` is false exactly for the skills whose `agents/openai.yaml` sets `allow_implicit_invocation: false`. It does not measure model-routing accuracy.
 
 ## license
 
