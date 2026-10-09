@@ -14,6 +14,26 @@ NAME_ONLY = "name-only"
 OFF = "off"
 OVERRIDES_KEY = "skillOverrides"
 
+# Other suites install into the same skills root, so only pstack's own skills are managed.
+# tools/test_skill_invocation_policy.py keeps this equal to the repository's skills/.
+PSTACK_SKILLS = frozenset({
+    "architect", "arena", "automate-me", "benchmark-checklist", "blast-radius", "bro", "correct",
+    "create-verification-skill", "deslop", "documentation-impact", "figure-it-out", "how", "interrogate",
+    "maintain-verification-skill", "make-bot-ui", "no-comments", "poteto-help", "poteto-mode", "poteto-tdd",
+    "poteto-teach", "principle-attack-the-premise", "principle-boundary-discipline", "principle-build-the-lever",
+    "principle-encode-lessons-in-structure", "principle-exhaust-the-design-space", "principle-experience-first",
+    "principle-explain-the-number", "principle-fix-root-causes", "principle-foundational-thinking",
+    "principle-guard-the-context-window", "principle-laziness-protocol", "principle-make-operations-idempotent",
+    "principle-migrate-callers-then-delete-legacy-apis", "principle-minimize-reader-load",
+    "principle-model-the-domain", "principle-never-block-on-the-human", "principle-outcome-oriented-execution",
+    "principle-prove-it-works", "principle-redesign-from-first-principles",
+    "principle-separate-before-serializing-shared-state", "principle-sequence-verifiable-units",
+    "principle-subtract-before-you-add", "principle-test-behavior-not-implementation",
+    "principle-type-system-discipline", "pstack-harness", "recall", "reflect", "runtime-probes", "setup-pstack",
+    "show-me-your-work", "spec-probes", "swarm", "technical-writing", "typescript-best-practices", "unslop",
+    "verify-commands", "why",
+})
+
 POLICY_HEADER = re.compile(r"^policy\s*:\s*(?P<inline>.*?)\s*(?:#.*)?$")
 IMPLICIT_FALSE = re.compile(r"""\ballow_implicit_invocation\s*:\s*["']?false["']?\s*(?:[,}#]|$)""", re.IGNORECASE)
 
@@ -48,7 +68,7 @@ def disables_implicit_invocation(yaml_text: str) -> bool:
 
 
 def skill_dirs(root: Path) -> list[str]:
-    return sorted(entry.name for entry in root.iterdir() if (entry / "SKILL.md").is_file())
+    return sorted(entry.name for entry in root.iterdir() if entry.name in PSTACK_SKILLS and (entry / "SKILL.md").is_file())
 
 
 def managed_skills(root: Path) -> list[str]:

@@ -79,7 +79,7 @@ jobs:
                nudges, pstack-harness pointers,
                agents/openai.yaml files, renamed skill references) must
                survive. Drop every `disable-model-invocation` line from incoming
-               frontmatter. When upstream adds it to a skill, add or keep that
+               pstack/skills/ frontmatter. When upstream adds it to a skill, add or keep that
                skill's `agents/openai.yaml` (policy: allow_implicit_invocation:
                false) and keep its implicit_allowed false in
                tools/skill-trigger-cases.json. When upstream removes it, delete

@@ -52,11 +52,11 @@ class Base(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name)
         self.root = self.tmp / "skills"
-        make_skill(self.root, "alpha", FALSE_YAML)
-        make_skill(self.root, "beta", FALSE_YAML)
-        make_skill(self.root, "gamma", TRUE_YAML)
-        make_skill(self.root, "delta", None)
-        make_skill(self.root, "epsilon", "interface:\n  display_name: E\n")
+        make_skill(self.root, "arena", FALSE_YAML)
+        make_skill(self.root, "bro", FALSE_YAML)
+        make_skill(self.root, "how", TRUE_YAML)
+        make_skill(self.root, "why", None)
+        make_skill(self.root, "unslop", "interface:\n  display_name: E\n")
         (self.root / "not-a-skill").mkdir()
         (self.root / "not-a-skill" / "agents").mkdir()
         (self.root / "not-a-skill" / "agents" / "openai.yaml").write_text(FALSE_YAML, encoding="utf-8")
@@ -81,7 +81,7 @@ class Base(unittest.TestCase):
 
 class ManagedSet(Base):
     def test_only_false_flag_under_policy_with_a_skill_md_is_managed(self):
-        self.assertEqual(sl.managed_skills(self.root), ["alpha", "beta"])
+        self.assertEqual(sl.managed_skills(self.root), ["arena", "bro"])
 
     def test_yaml_forms(self):
         cases = {
@@ -100,18 +100,34 @@ class ManagedSet(Base):
                 self.assertIs(sl.disables_implicit_invocation(text), expected)
 
 
+class OtherSuites(Base):
+    def setUp(self):
+        super().setUp()
+        make_skill(self.root, "grill-me", FALSE_YAML)
+        make_skill(self.root, "handoff", None)
+
+    def test_skills_from_other_suites_are_left_alone(self):
+        self.write_settings({"skillOverrides": {"handoff": "name-only", "grill-me": "on"}})
+        done = self.run_cli("install")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        out = json.loads(done.stdout)
+        self.assertEqual((out["added"], out["removed"], out["state"]), (["arena", "bro"], [], "current"))
+        self.assertEqual(self.read_settings()["skillOverrides"],
+                         {"handoff": "name-only", "grill-me": "on", "arena": "name-only", "bro": "name-only"})
+
+
 class FreshInstall(Base):
     def test_creates_missing_file_and_parent(self):
         proc = self.run_cli("install")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(self.read_settings(), {"skillOverrides": {"alpha": "name-only", "beta": "name-only"}})
+        self.assertEqual(self.read_settings(), {"skillOverrides": {"arena": "name-only", "bro": "name-only"}})
         self.assertTrue(self.settings.read_text(encoding="utf-8").endswith("}\n"))
-        self.assertIn('\n  "skillOverrides": {\n    "alpha": "name-only"', self.settings.read_text(encoding="utf-8"))
+        self.assertIn('\n  "skillOverrides": {\n    "arena": "name-only"', self.settings.read_text(encoding="utf-8"))
         out = json.loads(proc.stdout)
         self.assertEqual(out["settings"], str(self.settings))
         self.assertEqual(out["skills_root"], str(self.root))
         self.assertEqual(out["name_only"], 2)
-        self.assertEqual(out["added"], ["alpha", "beta"])
+        self.assertEqual(out["added"], ["arena", "bro"])
         self.assertEqual(out["removed"], [])
         self.assertEqual(out["missing"], [])
         self.assertEqual(out["extra"], [])
@@ -123,7 +139,7 @@ class FreshInstall(Base):
         proc = self.run_cli("check")
         self.assertEqual(proc.returncode, 1)
         out = json.loads(proc.stdout)
-        self.assertEqual(out["missing"], ["alpha", "beta"])
+        self.assertEqual(out["missing"], ["arena", "bro"])
         self.assertEqual(out["state"], "stale")
         self.assertFalse(self.settings.exists())
 
@@ -147,8 +163,8 @@ class Merge(Base):
                 "skillOverrides": {
                     "my-own-skill": "off",
                     "other-name-only": "name-only",
-                    "alpha": "name-only",
-                    "beta": "name-only",
+                    "arena": "name-only",
+                    "bro": "name-only",
                 },
                 "hooks": {},
             },
@@ -156,48 +172,48 @@ class Merge(Base):
         self.assertEqual(list(self.read_settings()), ["model", "env", "skillOverrides", "hooks"])
 
     def test_off_is_kept_and_reported_not_failed(self):
-        self.write_settings({"skillOverrides": {"alpha": "off", "beta": "name-only"}})
+        self.write_settings({"skillOverrides": {"arena": "off", "bro": "name-only"}})
         check = self.run_cli("check")
         self.assertEqual(check.returncode, 0)
         out = json.loads(check.stdout)
-        self.assertEqual(out["kept_off"], ["alpha"])
+        self.assertEqual(out["kept_off"], ["arena"])
         self.assertEqual(out["missing"], [])
         self.assertEqual(out["state"], "current")
         install = self.run_cli("install")
         self.assertEqual(json.loads(install.stdout)["written"], False)
-        self.assertEqual(self.read_settings()["skillOverrides"]["alpha"], "off")
+        self.assertEqual(self.read_settings()["skillOverrides"]["arena"], "off")
 
     def test_other_values_are_replaced(self):
         for value in ("user-invocable-only", "on", "bogus", None, 3):
             with self.subTest(value=value):
-                self.write_settings({"skillOverrides": {"alpha": value, "beta": "name-only"}})
+                self.write_settings({"skillOverrides": {"arena": value, "bro": "name-only"}})
                 check = self.run_cli("check")
                 self.assertEqual(check.returncode, 1)
-                self.assertEqual(json.loads(check.stdout)["missing"], ["alpha"])
+                self.assertEqual(json.loads(check.stdout)["missing"], ["arena"])
                 install = self.run_cli("install")
                 out = json.loads(install.stdout)
-                self.assertEqual(out["added"], ["alpha"])
-                self.assertEqual(self.read_settings()["skillOverrides"], {"alpha": "name-only", "beta": "name-only"})
+                self.assertEqual(out["added"], ["arena"])
+                self.assertEqual(self.read_settings()["skillOverrides"], {"arena": "name-only", "bro": "name-only"})
 
     def test_extra_name_only_for_unmanaged_skill_is_removed(self):
         self.write_settings(
-            {"skillOverrides": {"alpha": "name-only", "beta": "name-only", "gamma": "name-only", "delta": "off", "outside": "name-only"}}
+            {"skillOverrides": {"arena": "name-only", "bro": "name-only", "how": "name-only", "why": "off", "outside": "name-only"}}
         )
         check = self.run_cli("check")
         self.assertEqual(check.returncode, 1)
-        self.assertEqual(json.loads(check.stdout)["extra"], ["gamma"])
+        self.assertEqual(json.loads(check.stdout)["extra"], ["how"])
         install = self.run_cli("install")
         out = json.loads(install.stdout)
-        self.assertEqual(out["removed"], ["gamma"])
+        self.assertEqual(out["removed"], ["how"])
         self.assertEqual(out["added"], [])
         self.assertEqual(out["state"], "current")
         self.assertEqual(
             self.read_settings()["skillOverrides"],
-            {"alpha": "name-only", "beta": "name-only", "delta": "off", "outside": "name-only"},
+            {"arena": "name-only", "bro": "name-only", "why": "off", "outside": "name-only"},
         )
 
     def test_names_outside_the_root_are_never_reported(self):
-        self.write_settings({"skillOverrides": {"alpha": "name-only", "beta": "name-only", "outside": "name-only"}})
+        self.write_settings({"skillOverrides": {"arena": "name-only", "bro": "name-only", "outside": "name-only"}})
         out = json.loads(self.run_cli("check").stdout)
         self.assertEqual(out["extra"], [])
         self.assertEqual(out["state"], "current")
@@ -205,7 +221,7 @@ class Merge(Base):
 
 class Idempotence(Base):
     def test_second_install_changes_nothing(self):
-        self.write_settings({"model": "opus", "skillOverrides": {"gamma": "name-only", "alpha": "user-invocable-only"}})
+        self.write_settings({"model": "opus", "skillOverrides": {"how": "name-only", "arena": "user-invocable-only"}})
         first = json.loads(self.run_cli("install").stdout)
         self.assertIs(first["written"], True)
         after_first = self.settings.read_bytes()
@@ -219,7 +235,7 @@ class Idempotence(Base):
         self.assertEqual(self.settings.stat().st_mtime_ns, mtime)
 
     def test_current_file_with_other_formatting_is_not_rewritten(self):
-        compact = '{"skillOverrides":{"alpha":"name-only","beta":"name-only"}}'
+        compact = '{"skillOverrides":{"arena":"name-only","bro":"name-only"}}'
         self.settings.parent.mkdir(parents=True)
         self.settings.write_text(compact, encoding="utf-8")
         out = json.loads(self.run_cli("install").stdout)
@@ -239,7 +255,7 @@ class Idempotence(Base):
         self.assertEqual(self.run_cli("install").returncode, 0)
         self.assertTrue(self.settings.is_symlink())
         self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["model"], "opus")
-        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["skillOverrides"]["alpha"], "name-only")
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["skillOverrides"]["arena"], "name-only")
 
 
 class ErrorExits(Base):
@@ -267,7 +283,7 @@ class ErrorExits(Base):
         self.assert_refused(b'["skillOverrides"]\n')
 
     def test_skill_overrides_not_an_object(self):
-        self.assert_refused(b'{"skillOverrides": ["alpha"]}\n')
+        self.assert_refused(b'{"skillOverrides": ["arena"]}\n')
 
     def test_settings_path_is_a_directory(self):
         self.settings.mkdir(parents=True)
@@ -289,7 +305,7 @@ class ErrorExits(Base):
                 self.assertFalse(self.settings.exists())
 
     def test_current_check_exits_zero(self):
-        self.write_settings({"skillOverrides": {"alpha": "name-only", "beta": "name-only"}})
+        self.write_settings({"skillOverrides": {"arena": "name-only", "bro": "name-only"}})
         self.assertEqual(self.run_cli("check").returncode, 0)
 
 
@@ -301,7 +317,7 @@ class DefaultSettingsPath(Base):
         self.assertEqual(json.loads(proc.stdout)["settings"], str(config / "settings.json"))
         self.assertEqual(
             json.loads((config / "settings.json").read_text(encoding="utf-8")),
-            {"skillOverrides": {"alpha": "name-only", "beta": "name-only"}},
+            {"skillOverrides": {"arena": "name-only", "bro": "name-only"}},
         )
 
     def test_empty_claude_config_dir_falls_back_to_home(self):
@@ -315,7 +331,7 @@ class DefaultSettingsPath(Base):
         scripts = installed / "setup-pstack" / "scripts"
         scripts.mkdir(parents=True)
         (scripts / "skill-listing.py").write_text(SCRIPT.read_text(encoding="utf-8"), encoding="utf-8")
-        make_skill(installed, "alpha", FALSE_YAML)
+        make_skill(installed, "arena", FALSE_YAML)
         (installed / "setup-pstack" / "SKILL.md").write_text("---\nname: setup-pstack\n---\n", encoding="utf-8")
         proc = subprocess.run(
             [sys.executable, str(scripts / "skill-listing.py"), "check", "--settings", str(self.settings)],
@@ -323,7 +339,7 @@ class DefaultSettingsPath(Base):
         )
         out = json.loads(proc.stdout)
         self.assertEqual(out["skills_root"], str(installed))
-        self.assertEqual(out["missing"], ["alpha"])
+        self.assertEqual(out["missing"], ["arena"])
 
 
 class RealSkillsRoot(unittest.TestCase):

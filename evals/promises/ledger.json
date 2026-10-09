@@ -3290,7 +3290,7 @@
   },
   "claude-listing-follows-codex-policy": {
    "check": "static",
-   "claim": "setup-pstack's listing step gives Claude Code exactly the skills whose agents/openai.yaml sets allow_implicit_invocation: false, the gate Codex honors as installed, and no skill sets disable-model-invocation.",
+   "claim": "setup-pstack's listing step gives Claude Code exactly the skills whose agents/openai.yaml sets allow_implicit_invocation: false, the gate Codex honors as installed, and no skill under skills/ sets disable-model-invocation.",
    "harness_sensitive": false,
    "owners": [
     "skills/setup-pstack/scripts/skill-listing.py",

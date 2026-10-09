@@ -26,6 +26,11 @@ class SkillInvocationPolicy(unittest.TestCase):
                    if FLAG.search(FRONTMATTER.match(p.read_text(encoding="utf-8")).group(1))]
         self.assertEqual(flagged, [], "the Skill tool refuses these skills by name; gate them with agents/openai.yaml")
 
+    def test_listing_inventory_names_every_skill(self):
+        shipped = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md"))
+        self.assertEqual(sorted(skill_listing.PSTACK_SKILLS), shipped,
+                         "PSTACK_SKILLS in skills/setup-pstack/scripts/skill-listing.py must name exactly the skills/ directories")
+
     def test_every_skill_is_gated_or_listed_as_auto_invocable(self):
         open_skills = set(skill_listing.skill_dirs(SKILLS)) - set(skill_listing.managed_skills(SKILLS))
         self.assertEqual(sorted(open_skills - AUTO_INVOCABLE), [],
