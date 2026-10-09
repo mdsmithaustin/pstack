@@ -34,10 +34,11 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn("permissions:\n  contents: read", SHARED_WORKFLOW)
         self.assertNotRegex(SHARED_WORKFLOW, r"(?m)^\s+uses: mdsmithaustin/skill-ci/")
         self.assertIn('uv tool run --from "git+$SKILL_CI_SOURCE" skill-ci check', SHARED_WORKFLOW)
+        self.assertRegex(PIN["version"], r"^v\d+\.\d+\.\d+$")
         self.assertEqual(
             PIN,
             {
-                "version": "v1.0.0",
+                "version": PIN["version"],
                 "skills_dir": "skills",
                 "evals_dir": "evals",
                 "trigger_cases": "tools/skill-trigger-cases.json",
