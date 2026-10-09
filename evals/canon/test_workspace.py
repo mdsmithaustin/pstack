@@ -970,7 +970,7 @@ class ShopStubRule(ShopRule):
 
 
 class StubBuildTests(ShopStubRule):
-    def test_stub_arm_keeps_every_skill_name_and_frontmatter_and_nothing_else(self):
+    def test_stub_arm_keeps_every_skill_name_frontmatter_and_openai_yaml_and_nothing_else(self):
         with contextlib.redirect_stdout(io.StringIO()):
             built = screen.build(self.out, [self.rule], "poteto-mode")["orders-stub"]
 
@@ -978,8 +978,13 @@ class StubBuildTests(ShopStubRule):
         current, stub = (screen.read_tree(arms / arm / "pstack") for arm in ("current", "stub"))
         self.assertEqual(current, screen.tracked("skills"))
         skills = sorted({path.split("/", 1)[0] for path in current})
-        self.assertEqual(sorted(stub), [f"{skill}/SKILL.md" for skill in skills])
+        policies = sorted(path for path in current if path.partition("/")[2] == "agents/openai.yaml")
+        self.assertNotEqual(policies, [])
+        self.assertEqual(sorted(stub), sorted([f"{skill}/SKILL.md" for skill in skills] + policies))
+        self.assertEqual({path: stub[path] for path in policies}, {path: current[path] for path in policies})
         for path, data in stub.items():
+            if path in policies:
+                continue
             with self.subTest(path=path):
                 self.assertTrue(data.startswith(b"---\n") and data.endswith(b"\n---\n"), data[-40:])
                 self.assertEqual(data.count(b"\n---\n"), 1)

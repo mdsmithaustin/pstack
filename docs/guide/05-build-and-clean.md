@@ -52,7 +52,7 @@ In context, that's enough. [`/poteto-tdd`](../../skills/poteto-tdd/SKILL.md) wri
 
 ## Load the TypeScript rules by name
 
-[`typescript-best-practices`](../../skills/typescript-best-practices/SKILL.md) turns the type-system principles into concrete rules: discriminated unions, `unknown` at boundaries, exhaustive variants, schema-derived types. It's set to load only when you type it, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files.
+[`typescript-best-practices`](../../skills/typescript-best-practices/SKILL.md) turns the type-system principles into concrete rules: discriminated unions, `unknown` at boundaries, exhaustive variants, schema-derived types. It doesn't load from its description (on Claude Code, once `/setup-pstack` sets the skill listing), so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files.
 
 ## Clean before you commit
 

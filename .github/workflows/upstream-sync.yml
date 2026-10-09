@@ -78,9 +78,11 @@ jobs:
                — never wholesale-overwrite: this fork's additions (GitNexus
                nudges, pstack-harness pointers,
                agents/openai.yaml files, renamed skill references) must
-               survive. If upstream adds or removes `disable-model-invocation`
-               on a skill, add or remove that skill's `agents/openai.yaml`
-               (policy: allow_implicit_invocation: false) to match.
+               survive. Drop every `disable-model-invocation` line from incoming
+               frontmatter. When upstream adds it to a skill, add or keep that
+               skill's `agents/openai.yaml` (policy: allow_implicit_invocation:
+               false). When upstream removes it, delete that file and add the
+               skill to AUTO_INVOCABLE in tools/test_skill_invocation_policy.py.
             4. Every SKILL.md frontmatter `name:` must equal its directory
                name. Verify after editing.
             5. Preserve root agents/*.md as upstream source. After any agent

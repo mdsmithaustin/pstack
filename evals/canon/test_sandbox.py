@@ -39,6 +39,43 @@ class AgentCommandTests(unittest.TestCase):
         ])
         self.assertIsNone(last_message)
 
+    def mounted_tree(self):
+        """A mounted tree: two skills whose openai.yaml turns off implicit
+        invocation, one with none, one that leaves it on, and a policy with no
+        SKILL.md beside it."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        tree = Path(directory.name)
+        for name, policy in {"how": None, "loud": "true", "notes": "false", "poteto-mode": "false", "premortem": "false"}.items():
+            (tree / name / "agents").mkdir(parents=True)
+            if name != "notes":
+                (tree / name / "SKILL.md").write_text(f"---\nname: {name}\n---\n")
+            if policy:
+                (tree / name / "agents" / "openai.yaml").write_text(f"policy:\n  allow_implicit_invocation: {policy}\n")
+        return tree
+
+    def test_claude_adds_the_name_only_listing_to_the_harness_settings(self):
+        argv = ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--setting-sources", "project",
+                "--strict-mcp-config", "--settings", '{"disableBundledSkills":true,"autoMemoryEnabled":false}', "--model", "sonnet"]
+
+        command, _ = sandbox.agent_command("claude", argv, self.mounted_tree())
+
+        self.assertEqual(command, [
+            "claude", "-p", "--output-format", "stream-json", "--verbose", "--setting-sources", "project", "--strict-mcp-config",
+            "--settings", '{"disableBundledSkills":true,"autoMemoryEnabled":false,"skillOverrides":{"poteto-mode":"name-only","premortem":"name-only"}}',
+            "--model", "sonnet", "--setting-sources", "project", "--permission-mode", "bypassPermissions",
+            "--strict-mcp-config", "--allowedTools", "TodoWrite",
+        ])
+
+    def test_claude_gets_its_own_settings_when_the_harness_passes_none(self):
+        command, _ = sandbox.agent_command("claude", CLAUDE_HARNESS_ARGV, self.mounted_tree())
+
+        self.assertEqual(command, [
+            "claude", "-p", "--output-format", "stream-json", "--verbose", "--model", "sonnet",
+            "--setting-sources", "project", "--permission-mode", "bypassPermissions", "--strict-mcp-config", "--allowedTools", "TodoWrite",
+            "--settings", '{"skillOverrides":{"poteto-mode":"name-only","premortem":"name-only"}}',
+        ])
+
     def test_codex_keeps_its_rollouts_and_sandbox_config_and_writes_its_last_message_inside(self):
         command, last_message = sandbox.agent_command("codex", CODEX_HARNESS_ARGV)
 

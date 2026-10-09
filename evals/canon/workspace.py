@@ -56,6 +56,8 @@ GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TER
 # workspace cannot be built or does not match the recorded tree.
 REFUSED = 97
 TREE = "skills/pstack"
+INVOCATION_POLICY = "agents/openai.yaml"
+IMPLICIT_OFF = re.compile(rb"^\s*allow_implicit_invocation:\s*false\s*$", re.MULTILINE)
 CREDENTIAL_FILES = {".credentials.json", "auth.json"}
 CREDENTIAL_TOKENS = {
     "API key": re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}"),
@@ -397,6 +399,30 @@ def expose(root, discovery, tree=None):
         shutil.copytree(skill, target / skill.name, symlinks=True)
         added.append(f"{discovery}/{skill.name}")
     exclude(root, added)
+
+
+def implicit_invocation_off(policy):
+    """Whether a skill's agents/openai.yaml bytes turn off implicit invocation.
+    Codex then never offers the skill by its description, and setup-pstack's
+    skill-listing.py lists it to Claude Code by name only."""
+    return IMPLICIT_OFF.search(policy) is not None
+
+
+def name_only_settings(argv, tree):
+    """Claude's argv with skillOverrides set to name-only for each skill in
+    the mounted tree whose agents/openai.yaml turns off implicit invocation,
+    as skill-listing.py install sets them for a user. They join the harness's
+    own --settings object, or a new --settings when it passes none."""
+    policies = {skill.name: skill / INVOCATION_POLICY for skill in sorted(Path(tree).iterdir()) if (skill / "SKILL.md").is_file()}
+    overrides = {name: "name-only" for name, policy in policies.items() if policy.is_file() and implicit_invocation_off(policy.read_bytes())}
+    if not overrides:
+        return argv
+    if "--settings" not in argv:
+        return [*argv, "--settings", json.dumps({"skillOverrides": overrides}, separators=(",", ":"))]
+    at = argv.index("--settings") + 1
+    settings = json.loads(argv[at])
+    settings["skillOverrides"] = {**settings.get("skillOverrides", {}), **overrides}
+    return [*argv[:at], json.dumps(settings, separators=(",", ":")), *argv[at + 1:]]
 
 
 def next_slot(root):

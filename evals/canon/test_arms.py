@@ -214,13 +214,15 @@ class ArmPatchTests(unittest.TestCase):
         open_skill = adds("premortem/SKILL.md", "---\nname: premortem\ndescription: Use before a rollout.\n---\n# Premortem\n")
         gated = adds("gated/SKILL.md", "---\nname: gated\ndescription: Style.\ndisable-model-invocation: true\n---\n# Gated\n")
         implicit_off = adds("quiet/SKILL.md", "---\nname: quiet\n---\n# Quiet\n") + adds("quiet/agents/openai.yaml", "policy:\n  allow_implicit_invocation: false\n")
+        implicit_on = (adds("loud/SKILL.md", "---\nname: loud\ndisable-model-invocation: false\n---\n# Loud\n")
+                       + adds("loud/agents/openai.yaml", "policy:\n  allow_implicit_invocation: true\n"))
         fronted = {"poteto-mode/SKILL.md": b"---\nname: poteto-mode\n---\n# P\n", "principle-laziness-protocol/SKILL.md": b"---\nname: lazy\n---\n# L\n"}
         trees = [("current", TREE), ("skill", screen.apply_arm_patch(TREE, open_skill)), ("gated", screen.apply_arm_patch(TREE, gated)),
-                 ("quiet", screen.apply_arm_patch(TREE, implicit_off)), ("leaf", screen.apply_arm_patch(TREE, LEAF)),
-                 ("both", screen.apply_arm_patch(TREE, open_skill + LEAF)), ("stub", screen.stub_tree(fronted))]
+                 ("quiet", screen.apply_arm_patch(TREE, implicit_off)), ("loud", screen.apply_arm_patch(TREE, implicit_on)),
+                 ("leaf", screen.apply_arm_patch(TREE, LEAF)), ("both", screen.apply_arm_patch(TREE, open_skill + LEAF)), ("stub", screen.stub_tree(fronted))]
 
-        self.assertEqual(screen.arm_listed(TREE, trees), {"current": [], "skill": ["premortem/SKILL.md"], "gated": [], "quiet": [], "leaf": [],
-                                                          "both": ["premortem/SKILL.md"], "stub": []})
+        self.assertEqual(screen.arm_listed(TREE, trees), {"current": [], "skill": ["premortem/SKILL.md"], "gated": [], "quiet": [], "loud": ["loud/SKILL.md"],
+                                                          "leaf": [], "both": ["premortem/SKILL.md"], "stub": []})
 
     def test_patch_that_changes_nothing_is_refused(self):
         patch = "--- a/poteto-mode/SKILL.md\n+++ b/poteto-mode/SKILL.md\n@@ -2 +2 @@\n-Read the leaf.\n+Read the leaf.\n"
@@ -228,15 +230,18 @@ class ArmPatchTests(unittest.TestCase):
         with self.assertRaisesRegex(screen.ScreenError, "arm patch changes nothing"):
             screen.apply_arm_patch(TREE, patch)
 
-    def test_stub_keeps_each_skill_md_frontmatter_and_drops_everything_else(self):
+    def test_stub_keeps_each_skill_md_frontmatter_and_openai_yaml_and_drops_everything_else(self):
         tree = {
             "poteto-mode/SKILL.md": b"---\nname: poteto-mode\ndescription: Style.\n---\n\n# Poteto mode\nRead the leaf.\n",
+            "poteto-mode/agents/openai.yaml": b"policy:\n  allow_implicit_invocation: false\n",
             "poteto-mode/playbooks/feature.md": b"1. Plan.\n",
+            "poteto-mode/references/agents/openai.yaml": b"policy:\n  allow_implicit_invocation: false\n",
             "why/SKILL.md": b"---\nname: why\ndescription: \"Rationale: ---\"\n---",
         }
 
         self.assertEqual(screen.stub_tree(tree), {
             "poteto-mode/SKILL.md": b"---\nname: poteto-mode\ndescription: Style.\n---\n",
+            "poteto-mode/agents/openai.yaml": b"policy:\n  allow_implicit_invocation: false\n",
             "why/SKILL.md": b"---\nname: why\ndescription: \"Rationale: ---\"\n---",
         })
 

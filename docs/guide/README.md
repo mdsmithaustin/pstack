@@ -23,7 +23,7 @@ When you're stuck, or can't tell which skill fits, type [`/poteto-help`](../../s
 /poteto-help which skill should i use to review this branch?
 ```
 
-It answers, hands you a prompt to send, and links the skill or guide page the answer came from. It doesn't start the work, because a pstack run spends real tokens, so you send the prompt when you're ready. It's set to load only when you type it, so type `/poteto-help`.
+It answers, hands you a prompt to send, and links the skill or guide page the answer came from. It doesn't start the work, because a pstack run spends real tokens, so you send the prompt when you're ready. It doesn't load from its description (on Claude Code, once `/setup-pstack` sets the skill listing), so type `/poteto-help`.
 
 ## If you only remember one thing
 

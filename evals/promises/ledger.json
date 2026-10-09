@@ -2393,7 +2393,7 @@
   },
   "slash-skills-invocable": {
    "check": "install",
-   "claim": "Each harness lists every guide-named pstack skill as a user-invocable entry (slash command, $skill, or equivalent) after install, including skills gated with disable-model-invocation.",
+   "claim": "Each harness lists every guide-named pstack skill as a user-invocable entry (slash command, $skill, or equivalent) after install, including the skills Claude Code lists by name only.",
    "harness_sensitive": true,
    "owners": [
     "skills/poteto-mode/SKILL.md",
@@ -2849,40 +2849,42 @@
   },
   "poteto-help-typed-only": {
    "check": "static",
-   "claim": "/poteto-help is gated against model invocation (disable-model-invocation in SKILL.md, allow_implicit_invocation: false for Codex), so it runs when the user types it.",
+   "claim": "/poteto-help does not load from its description: its agents/openai.yaml sets allow_implicit_invocation: false, which Codex honors and which puts it in setup-pstack's Claude Code name-only listing, so it runs when the user types it.",
    "evidence": [
-    {
-     "file": "skills/poteto-help/SKILL.md",
-     "quote": "disable-model-invocation: true"
-    },
     {
      "file": "skills/poteto-help/agents/openai.yaml",
      "quote": "allow_implicit_invocation: false"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Claude Code lists each by bare name."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-help/SKILL.md",
-    "skills/poteto-help/agents/openai.yaml"
+    "skills/poteto-help/agents/openai.yaml",
+    "skills/setup-pstack/SKILL.md",
+    "skills/setup-pstack/scripts/skill-listing.py"
    ]
   },
   "typescript-rules-load-by-name": {
    "check": "static",
-   "claim": "typescript-best-practices is gated against model invocation on every harness that honors the gate (disable-model-invocation in SKILL.md, allow_implicit_invocation: false for Codex), so the user loads it by typing /typescript-best-practices.",
+   "claim": "typescript-best-practices does not load from its description: its agents/openai.yaml sets allow_implicit_invocation: false, which Codex honors and which puts it in setup-pstack's Claude Code name-only listing, so the user loads it by typing /typescript-best-practices.",
    "evidence": [
-    {
-     "file": "skills/typescript-best-practices/SKILL.md",
-     "quote": "disable-model-invocation: true"
-    },
     {
      "file": "skills/typescript-best-practices/agents/openai.yaml",
      "quote": "allow_implicit_invocation: false"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Claude Code lists each by bare name."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/typescript-best-practices/SKILL.md",
-    "skills/typescript-best-practices/agents/openai.yaml"
+    "skills/typescript-best-practices/agents/openai.yaml",
+    "skills/setup-pstack/SKILL.md",
+    "skills/setup-pstack/scripts/skill-listing.py"
    ]
   },
   "budget-labels-set-effort": {
@@ -3237,6 +3239,41 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/SKILL.md"
+   ]
+  },
+  "claude-listing-follows-codex-policy": {
+   "check": "static",
+   "claim": "setup-pstack's listing step gives Claude Code exactly the skills whose agents/openai.yaml sets allow_implicit_invocation: false, the gate Codex honors as installed, and no skill sets disable-model-invocation.",
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/scripts/skill-listing.py",
+    "skills/setup-pstack/SKILL.md"
+   ]
+  },
+  "setup-checks-claude-skill-listing": {
+   "check": "static",
+   "claim": "On Claude Code, setup checks the skill listing, writes the name-only overrides only after the user's yes, and says the change applies from the next session; until then the gated skills list with their descriptions.",
+   "evidence": [
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Run this check whenever the user runs pstack on Claude Code."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Run the same command with `install` in place of `check` only after the user says yes."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "say the change applies from the next session."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Without an override those skills list with their full descriptions and load from them."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/SKILL.md"
    ]
   }
  },
@@ -8873,7 +8910,7 @@
    "class": "substituted",
    "file": "README.md",
    "ported_as": [
-    "4e630f5db969"
+    "0fb2f22fffd9"
    ],
    "promise": "poteto-help-typed-only",
    "sources": [
@@ -10027,7 +10064,7 @@
    "class": "substituted",
    "file": "05-build-and-clean.md",
    "ported_as": [
-    "c1f305f4e11e"
+    "ce48bab5e706"
    ],
    "promise": "typescript-rules-load-by-name",
    "sources": [
@@ -11502,40 +11539,6 @@
    ],
    "text": "Grok Build's spawn tool takes no effort, so there every role runs at your session effort, whatever the file writes."
   },
-  "c1f305f4e11e": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "typescript-rules-load-by-name",
-   "sources": [
-    "port"
-   ],
-   "text": "It's set to load only when you type it, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
-  },
-  "4e630f5db969": {
-   "class": "promise",
-   "file": "README.md",
-   "promise": "poteto-help-typed-only",
-   "sources": [
-    "port"
-   ],
-   "text": "It's set to load only when you type it, so type `/poteto-help`."
-  },
-  "250f0b8a5b98": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "Some skills are set to load only when you type their name."
-  },
-  "ba7e8624cfe7": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "Claude Code and Codex honor that setting."
-  },
   "4c5cb33af9ed": {
    "class": "context",
    "file": "01-setup.md",
@@ -11559,6 +11562,69 @@
     "port"
    ],
    "text": "Type `/poteto-mode` again if it stops applying."
+  },
+  "0fb2f22fffd9": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-typed-only",
+   "sources": [
+    "port"
+   ],
+   "text": "It doesn't load from its description (on Claude Code, once `/setup-pstack` sets the skill listing), so type `/poteto-help`."
+  },
+  "ce48bab5e706": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "typescript-rules-load-by-name",
+   "sources": [
+    "port"
+   ],
+   "text": "It doesn't load from its description (on Claude Code, once `/setup-pstack` sets the skill listing), so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
+  },
+  "6e05925cddd8": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-listing-follows-codex-policy",
+   "sources": [
+    "port"
+   ],
+   "text": "Some skills don't load from their description."
+  },
+  "06a14c57d8c1": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "slash-skills-invocable",
+   "sources": [
+    "port"
+   ],
+   "text": "They load when you type their name or when another pstack skill names them."
+  },
+  "1d21f306c413": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-listing-follows-codex-policy",
+   "sources": [
+    "port"
+   ],
+   "text": "Codex honors this as installed, and Claude Code does once `/setup-pstack` sets its skill listing."
+  },
+  "49ff3b443342": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-claude-skill-listing",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code it also checks the skill listing, and with your yes it lists the skills that don't load from their description by name only, from your next session."
+  },
+  "7936ca81b241": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-claude-skill-listing",
+   "sources": [
+    "port"
+   ],
+   "text": "Until then, including after an update from a version that gated those skills in their frontmatter, Claude Code shows their descriptions and can load them on its own."
   }
  }
 }

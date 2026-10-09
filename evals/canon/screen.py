@@ -624,14 +624,19 @@ def apply_arm_patch(tree, patch):
 
 
 def stub_tree(tree):
-    """Each skill's SKILL.md cut to its frontmatter, and no other file."""
+    """Each skill's SKILL.md cut to its frontmatter and its agents/openai.yaml
+    as it is, so both arms list the same skills by description and the same
+    by name only. No other file."""
     stubs = {}
     for path, data in tree.items():
-        if path.partition("/")[2] == "SKILL.md":
+        inner = path.partition("/")[2]
+        if inner == "SKILL.md":
             match = FRONTMATTER.match(data)
             if not match:
                 raise ScreenError(f"skills/{path} has no frontmatter to keep in the stub arm")
             stubs[path] = match.group(0)
+        elif inner == workspace.INVOCATION_POLICY:
+            stubs[path] = data
     return stubs
 
 
@@ -1259,14 +1264,16 @@ def skill_files_read(events, tree_files):
 
 
 def auto_invocable(tree, path):
-    """Whether the SKILL.md at path is offered to the agent by its description:
-    its frontmatter does not set disable-model-invocation, and its skill has no
-    agents/openai.yaml that sets allow_implicit_invocation to false."""
-    frontmatter = FRONTMATTER.match(tree[path])
-    if frontmatter and re.search(rb"^disable-model-invocation:\s*true\s*$", frontmatter.group(0), re.MULTILINE):
+    """Whether every run offers the agent the SKILL.md at path by its
+    description. Its skill's agents/openai.yaml must not turn off implicit
+    invocation, which Codex reads and which puts the skill in the name-only
+    listing each Claude run gets (workspace.name_only_settings). Its
+    frontmatter must not set disable-model-invocation, which Claude Code still
+    honors in a tree that carries it, as every pinned skills_at tree does."""
+    if workspace.implicit_invocation_off(tree.get(f"{path.rsplit('/', 1)[0]}/{workspace.INVOCATION_POLICY}", b"")):
         return False
-    manifest_path = f"{path.rsplit('/', 1)[0]}/agents/openai.yaml"
-    return not re.search(rb"^\s*allow_implicit_invocation:\s*false\s*$", tree.get(manifest_path, b""), re.MULTILINE)
+    frontmatter = FRONTMATTER.match(tree[path])
+    return not (frontmatter and re.search(rb"^disable-model-invocation:\s*true\s*$", frontmatter.group(0), re.MULTILINE))
 
 
 def arm_listed(current, trees):

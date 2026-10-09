@@ -370,11 +370,14 @@ def self_contained(root):
         alternates.unlink()
 
 
-def agent_command(agent, argv):
+def agent_command(agent, argv, tree=None):
     """The harness's argv, rewritten for inside the sandbox. Returns (argv, the
-    host path the harness reads Codex's last message from, or None)."""
+    host path the harness reads Codex's last message from, or None). tree is
+    the host copy of the skill tree setup links where Claude finds project
+    skills, and Claude lists its implicit-off skills by name only."""
     if agent == "claude":
-        return ["claude", *[arg for arg in argv if arg != "--no-session-persistence"], *CLAUDE_FLAGS], None
+        command = ["claude", *[arg for arg in argv if arg != "--no-session-persistence"], *CLAUDE_FLAGS]
+        return (workspace.name_only_settings(command, tree) if tree else command), None
     rewritten, last_message, skip = ["codex"], None, False
     for index, arg in enumerate(argv):
         if skip:
@@ -550,7 +553,7 @@ def wrap(argv, stdin=sys.stdin.buffer):
                 record["tree"] = record["setup"]["tree"]
                 record["versions"] = box.exec("sh", "-c", "claude --version 2>/dev/null; codex --version 2>/dev/null; uv --version").stdout.decode().split("\n")[:3]
             save()
-            command, last_message = agent_command(agent, harness_argv)
+            command, last_message = agent_command(agent, harness_argv, root / inside["tree"] if discovery else None)
             if os.environ.get("CANON_SBX_STANDIN"):
                 host, plan, command = standin(command, root)
                 box.unpack(pack(directory, {"agent": host, "plan.json": plan}), STANDIN)
@@ -751,7 +754,7 @@ def probe(agent, repo=None, commit=None):
                 report["deps_check"] = (check.stdout + check.stderr).decode(errors="replace").strip().splitlines()[-3:]
             if agent == "claude":
                 command, _ = agent_command("claude", ["-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence",
-                                                      "--model", "canon-no-such-model"])
+                                                      "--model", "canon-no-such-model"], root / inside["tree"])
                 out = box.exec(*command, workdir=str(root), env=env, input=b"/poteto-mode reply ok", check=False).stdout.decode()
                 init = next(json.loads(line) for line in out.splitlines() if '"subtype":"init"' in line.replace(" ", ""))
                 report.update({key: init.get(key) for key in ("claude_code_version", "permissionMode", "tools", "agents")})

@@ -29,7 +29,7 @@
       "file": "principle-model-the-domain/SKILL.md",
       "line": 3,
       "tier": 2,
-      "why": "Mirror of the index when-clause in the leaf description. Not a loader, since the leaf is gated against model invocation."
+      "why": "Mirror of the index when-clause in the leaf description. Not a loader, since no agent is offered the leaf by its description: its agents/openai.yaml turns off implicit invocation."
     },
     {
       "arm": "trigger",
