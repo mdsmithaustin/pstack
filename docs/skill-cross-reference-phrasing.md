@@ -80,7 +80,7 @@ This census describes the tree at f8eb694f, before PR 185 (e4968e32) dropped `di
 
 ## Unknowns
 
-1. Precedence. Settled by PR 185, which removed the frontmatter flag, and by the 2026-10-10 runs, where Claude Code loaded figure-it-out through the Skill tool on a name-only listing. The docs do not say whether a `skillOverrides` value of `"name-only"` overrides frontmatter `disable-model-invocation: true`. If frontmatter wins, the Skill tool keeps refusing gated siblings (#43809), and Claude Code needs the path route too. One `/skills` check or one `Skill` call settles it.
+1. Precedence. Moot for pstack, because PR 185 removed the frontmatter flag and the 2026-10-10 runs loaded figure-it-out through the Skill tool on a name-only listing. The docs question stays open. The docs do not say whether a `skillOverrides` value of `"name-only"` overrides frontmatter `disable-model-invocation: true`. If frontmatter wins, the Skill tool keeps refusing gated siblings (#43809), and Claude Code needs the path route too. One `/skills` check or one `Skill` call settles it.
 2. Hit rate. No public eval compares "Use the X skill", "Call the Skill tool with X", `/X`, and a path. A small trigger eval in `evals/` (does a Skill call or a read of X/SKILL.md follow the step) would answer it per host.
 3. Grok Build and Hermes. Their docs and source were not inspected for how they handle sibling skills.
 4. Cursor. Its skills docs URL returned 404, and nothing else was inspected.

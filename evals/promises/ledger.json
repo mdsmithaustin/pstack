@@ -6619,23 +6619,23 @@
    ],
    "text": "You don't describe your style, because [`/automate-me`](../../skills/automate-me/SKILL.md) reads it out of your history."
   },
-  "4d02a25d7ebb": {
+  "c23b9d40c6a7": {
    "class": "promise",
    "file": "09-make-it-yours.md",
    "promise": "automate-me-gates-generated-mode",
    "sources": [
     "port"
    ],
-   "text": "The skill it drafts loads only when you type it or a skill tells the agent to use it."
+   "text": "The PR adds `agents/openai.yaml`, so on Codex the skill it drafts loads only when you type it or a skill tells the agent to use it."
   },
-  "42b1c8292c67": {
+  "ee377c3a6df0": {
    "class": "promise",
    "file": "09-make-it-yours.md",
    "promise": "automate-me-gates-generated-mode",
    "sources": [
     "port"
    ],
-   "text": "The PR adds `agents/openai.yaml` for Codex, and on Claude Code `/automate-me` asks before it adds a name-only entry to your `~/.claude/settings.json`."
+   "text": "On Claude Code that holds once you let `/automate-me` add a name-only entry to your `~/.claude/settings.json`, which it asks about first."
   },
   "a0dc9570c89b": {
    "class": "substituted",
