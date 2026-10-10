@@ -14,23 +14,11 @@ _spec = importlib.util.spec_from_file_location("skill_listing", SCRIPT)
 sl = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sl)
 
-REAL_MANAGED = """
-architect arena automate-me benchmark-checklist blast-radius bro correct
-create-verification-skill figure-it-out interrogate maintain-verification-skill
-make-bot-ui no-comments poteto-help poteto-mode poteto-tdd poteto-teach
-principle-attack-the-premise principle-boundary-discipline principle-build-the-lever
-principle-encode-lessons-in-structure principle-exhaust-the-design-space
-principle-experience-first principle-explain-the-number principle-fix-root-causes
-principle-foundational-thinking principle-guard-the-context-window
-principle-laziness-protocol principle-make-operations-idempotent
-principle-migrate-callers-then-delete-legacy-apis principle-minimize-reader-load
-principle-model-the-domain principle-never-block-on-the-human
-principle-outcome-oriented-execution principle-prove-it-works
-principle-redesign-from-first-principles principle-separate-before-serializing-shared-state
-principle-sequence-verifiable-units principle-subtract-before-you-add
-principle-test-behavior-not-implementation principle-type-system-discipline
-recall reflect show-me-your-work swarm technical-writing typescript-best-practices
-""".split()
+# The source of truth is each skill's agents/openai.yaml. A plain text match keeps this independent of the script's parser.
+REAL_MANAGED = sorted(
+    path.parents[1].name for path in (REPO / "skills").glob("*/agents/openai.yaml")
+    if "allow_implicit_invocation: false" in path.read_text(encoding="utf-8")
+)
 
 
 def make_skill(root: Path, name: str, openai_yaml: str | None) -> None:
@@ -343,7 +331,7 @@ class DefaultSettingsPath(Base):
 
 
 class RealSkillsRoot(unittest.TestCase):
-    def test_managed_set_is_the_47_openai_yaml_skills(self):
+    def test_managed_set_is_every_openai_yaml_gated_skill(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings = Path(tmp) / "settings.json"
             proc = subprocess.run(
@@ -352,9 +340,9 @@ class RealSkillsRoot(unittest.TestCase):
             )
         self.assertEqual(proc.returncode, 1, proc.stderr)
         out = json.loads(proc.stdout)
-        self.assertEqual(len(REAL_MANAGED), 47)
-        self.assertEqual(out["name_only"], 47)
-        self.assertEqual(out["missing"], sorted(REAL_MANAGED))
+        self.assertGreater(len(REAL_MANAGED), 0)
+        self.assertEqual(out["name_only"], len(REAL_MANAGED))
+        self.assertEqual(out["missing"], REAL_MANAGED)
         self.assertEqual(out["extra"], [])
         self.assertEqual(out["kept_off"], [])
 
