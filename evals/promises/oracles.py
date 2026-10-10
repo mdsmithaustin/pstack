@@ -3627,7 +3627,8 @@ def turn_finished(view):
 def routing_decided(view, skill, turn=None, after=None):
     """The first lead event, after seq `after`, that shows a route was chosen: a playbook or another routed skill loaded,
     a worklist, a project edit, or a question to the user."""
-    routed = set(view.trace.get("x_implicit_off") or ()) - {"poteto-mode", skill}
+    routed = {name for name in view.trace.get("x_implicit_off") or ()
+              if name not in {"poteto-mode", "pstack-harness", skill} and not name.startswith("principle-")}
 
     def later(seq):
         return (after is None or (seq or 0) > after) and (turn is None or view.turn_of(seq) == turn)

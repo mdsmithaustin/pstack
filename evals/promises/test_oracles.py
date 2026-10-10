@@ -1515,6 +1515,43 @@ class RoutedSkillLoads(unittest.TestCase):
                 result = self.grade(minimal(events=events, exit_code=-9))
                 self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before a routing decision"]))
 
+    def test_preparation_loads_do_not_decide_a_route_in_a_killed_run(self):
+        """The routing contract excludes principle and harness preparation.
+        A preparation-only timeout must be inconclusive rather than a missing-load failure.
+        """
+        for name in ("principle-never-block-on-the-human", "principle-foundational-thinking", "pstack-harness"):
+            carriers = [
+                ("claude-code", skill_call(8, name)),
+                ("claude-code", [read(8, f"{name}/SKILL.md"),
+                                 {"seq": 9, "kind": "tool_result", "name": "Read", "ok": True}]),
+                ("codex", shell(8, f"cat .agents/skills/{name}/SKILL.md")),
+            ]
+            for harness, events in carriers:
+                with self.subTest(name=name, harness=harness, tool=events[0]["name"]):
+                    result = self.grade(minimal(events=events, harness=harness, exit_code=-9,
+                                                x_implicit_off=["figure-it-out", name]))
+                    self.assertEqual((result["verdict"], result["failures"]),
+                                     (INCONCLUSIVE, ["run killed before a routing decision"]))
+
+    def test_preparation_after_a_refused_load_does_not_decide_a_route(self):
+        for name in ("principle-never-block-on-the-human", "pstack-harness"):
+            with self.subTest(name=name):
+                events = skill_call(0, "figure-it-out", ok=False) + skill_call(8, name)
+                result = self.grade(minimal(events=events, exit_code=-9, x_implicit_off=["figure-it-out", name]))
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (INCONCLUSIVE, ["run killed before a routing decision"]))
+
+    def test_another_routed_skill_still_decides_a_route_after_preparation(self):
+        for harness, routed in (("claude-code", skill_call(10, "arena")),
+                                ("codex", shell(10, "cat .agents/skills/arena/SKILL.md"))):
+            with self.subTest(harness=harness):
+                events = skill_call(0, "pstack-harness") + routed
+                result = self.grade(minimal(events=events, harness=harness, exit_code=-9,
+                                            x_implicit_off=["figure-it-out", "pstack-harness", "arena"]))
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (FAIL, ["routing finished without loading figure-it-out"]))
+                self.assertEqual(result["evidence"][-1], "routing decision: read arena/SKILL.md at seq 10")
+
 
 class RoutedSkillLoadsAfterCompaction(unittest.TestCase):
     case = load_case("name-only-route-after-compact")
@@ -1546,6 +1583,21 @@ class RoutedSkillLoadsAfterCompaction(unittest.TestCase):
         events = in_turn(2, [{"seq": 0, "kind": "user", "text": "/poteto-mode go"}, text(1, reply)])
         result = self.grade(minimal(events=events, final_reply=reply, x_compactions=[{"turn": 1, "source": "rollout"}]))
         self.assertEqual((result["verdict"], result["failures"]), (FAIL, [f"handed the run back to the user: {reply!r}"]))
+
+    def test_preparation_after_compaction_is_inconclusive_with_or_without_a_refusal(self):
+        for name in ("principle-never-block-on-the-human", "pstack-harness"):
+            for harness, preparation in (("claude-code", skill_call(8, name)),
+                                         ("codex", shell(8, f"cat .agents/skills/{name}/SKILL.md"))):
+                for refused in (False, True):
+                    with self.subTest(name=name, harness=harness, refused=refused):
+                        attempts = skill_call(2, "figure-it-out", ok=False) if refused else []
+                        events = in_turn(0, skill_call(0, "arena")) + in_turn(2, attempts + preparation)
+                        trace = minimal(events=events, harness=harness, exit_code=-9,
+                                        x_implicit_off=["figure-it-out", name, "arena"],
+                                        x_compactions=[{"turn": 1, "source": "stream"}])
+                        result = self.grade(trace)
+                        self.assertEqual((result["verdict"], result["failures"]),
+                                         (INCONCLUSIVE, ["run killed before a routing decision"]))
 
 
 class NameOnlyStaysUnloaded(unittest.TestCase):
