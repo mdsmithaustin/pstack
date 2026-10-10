@@ -40,7 +40,7 @@ Remaining triggers:
 
 ## Principles
 
-Use the leaf skill for any principle you apply. Each entry names when it applies. Use every leaf and sibling skill this suite names yourself. The **pstack-harness** skill says how to use a skill on this CLI.
+Use the leaf skill for any principle you apply. Each entry names when it applies. Use every leaf and sibling skill this suite names yourself. On Claude Code, that is a Skill tool call with the bare name, even when the listing shows only the name. The **pstack-harness** skill defines using a skill on every CLI.
 
 **Core**
 

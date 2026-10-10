@@ -9,7 +9,7 @@ When the task matches no playbook, design one. The deliverable before any code i
 
 ## Start
 
-Use the **poteto-mode** skill. Open a worklist whose first item is to read its Principles section. Then add the phases below as items.
+Open a worklist whose first item is to read the Principles section of the **poteto-mode** skill. Then add the phases below as items.
 
 ## Phase A: Frame
 

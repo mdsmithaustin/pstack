@@ -40,7 +40,7 @@ poteto-mode keeps its worklist in the harness's structured task tool when that t
 
 ### 0c. Check the Claude Code skill listing
 
-Run this check whenever the user runs pstack on Claude Code. Codex keeps some pstack skills from implicit invocation through `agents/openai.yaml`, and Claude Code ignores that file. Without an override those skills list with their full descriptions and load from them. With `"skillOverrides": {"<skill>": "name-only"}` in `~/.claude/settings.json`, Claude Code lists each by bare name. The skill then loads when the user types `/name` or a pstack skill names it, and never from its description.
+Run this check whenever the user runs pstack on Claude Code. Codex keeps some pstack skills from implicit invocation through `agents/openai.yaml`, and Claude Code ignores that file. Without an override those skills list with their full descriptions and load from them. With `"skillOverrides": {"<skill>": "name-only"}` in `~/.claude/settings.json`, Claude Code lists each by bare name. The skill then loads when the user types `/name` or a pstack skill tells the agent to use it, and never from its description.
 
 Resolve the installed skills root as step 0a does, then run:
 
