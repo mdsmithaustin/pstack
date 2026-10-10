@@ -1504,10 +1504,35 @@ class RoutedSkillLoads(unittest.TestCase):
         self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["routing finished without loading figure-it-out"]))
 
     def test_a_route_that_skips_figure_it_out_fails_once_it_is_chosen(self):
-        trace = minimal(events=[read(0, "poteto-mode/playbooks/feature.md")] + bash(1, "ls"), exit_code=-9, x_implicit_off=["figure-it-out"])
+        trace = minimal(events=[read(0, "poteto-mode/playbooks/feature.md")] + bash(1, "ls"), final_reply="Done.", x_implicit_off=["figure-it-out"])
         result = self.grade(trace)
         self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["routing finished without loading figure-it-out"]))
         self.assertEqual(result["evidence"][-1], "routing decision: read poteto-mode/playbooks/feature.md at seq 0")
+
+    def test_a_worklist_or_playbook_read_does_not_decide_a_killed_run(self):
+        for label, events, worklist in (("worklist", bash(0, "ls"), [{"seq": 2, "carrier": "TodoWrite", "items": [{"text": "plan", "state": "pending"}]}]),
+                                        ("playbook", [read(0, "poteto-mode/playbooks/autonomous-run.md")] + bash(1, "ls"), [])):
+            with self.subTest(label=label):
+                result = self.grade(minimal(events=events, worklist=worklist, exit_code=-9, x_implicit_off=["figure-it-out"]))
+                self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before a routing decision"]))
+
+    def test_a_worklist_decides_a_finished_turn(self):
+        worklist = [{"seq": 2, "carrier": "TodoWrite", "items": [{"text": "plan", "state": "pending"}]}]
+        result = self.grade(minimal(events=bash(0, "ls"), worklist=worklist, final_reply="Done.", x_implicit_off=["figure-it-out"]))
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["routing finished without loading figure-it-out"]))
+        self.assertEqual(result["evidence"][-1], "routing decision: worklist at seq 2")
+
+    def test_a_project_edit_decides_a_killed_run_with_or_without_a_worklist(self):
+        for worklist in ([], [{"seq": 0, "carrier": "TodoWrite", "items": [{"text": "plan", "state": "pending"}]}]):
+            with self.subTest(worklist=bool(worklist)):
+                result = self.grade(minimal(events=[edit(3, "/w/relay/cache.py")], worklist=worklist, exit_code=-9, x_implicit_off=["figure-it-out"]))
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["routing finished without loading figure-it-out"]))
+                self.assertEqual(result["evidence"][-1], "routing decision: edited /w/relay/cache.py at seq 3")
+
+    def test_a_refused_load_followed_only_by_a_worklist_is_inconclusive_in_a_killed_run(self):
+        worklist = [{"seq": 3, "carrier": "TodoWrite", "items": [{"text": "plan", "state": "pending"}]}]
+        result = self.grade(minimal(events=skill_call(0, "figure-it-out", ok=False), worklist=worklist, exit_code=-9, x_implicit_off=["figure-it-out"]))
+        self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before a routing decision"]))
 
     def test_a_run_killed_before_any_route_is_inconclusive(self):
         for events in (bash(0, "ls"), skill_call(0, "figure-it-out", ok=False)):
