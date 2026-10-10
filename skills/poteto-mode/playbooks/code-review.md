@@ -2,7 +2,7 @@
 
 **You own the verdict. Read the change, judge the design, report findings.** This playbook reviews someone else's pull request, branch, or diff. The deliverable is findings, not edits. Do not push to the author's branch. Your own PR goes through **Opening a PR** and **Babysit** instead.
 
-Steps 3 to 6 are design checks. Each names the principle skill that governs it. Read that leaf before the step, and open [`references/review-lens.md`](../references/review-lens.md) for the questions, the evidence each one needs, and when to leave it.
+Steps 3 to 6 are design checks. Each names the principle skill that governs it. Read that leaf before the step, and open [`../references/review-lens.md`](../references/review-lens.md) for the questions, the evidence each one needs, and when to leave it.
 
 1. **Establish the change and its intent.** Diff the head against its merge base with `git diff <base>...<head>` or `gh pr diff <number>`. Read the PR description, the linked issue, and the commit messages. State the intent in one sentence. Judge the execution against that intent. An unclear intent is itself a finding.
 2. **Understand the affected subsystem.** Read the whole changed files, not only the hunks, and the callers of what changed. For a change across modules, run the **how** skill over the touched code before you judge it.

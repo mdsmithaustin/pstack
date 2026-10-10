@@ -33,6 +33,53 @@ class CallIds(unittest.TestCase):
                          [("tool_call", "x1", None), ("tool_call", "x2", None), ("tool_result", "x2", False), ("tool_result", "x1", True)])
 
 
+class Compaction(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-codex-compact-")
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve()
+        (root / "transcripts").mkdir()
+        (root / "launch.json").write_text(json.dumps({"path": "codex", "source": "test", "version": "test", "rejected": []}))
+        self.run_ = SimpleNamespace(root=root, project=root / "w" / "relay", model=None, effort=None, timeout_s=60,
+                                    case={"id": "c", "turns": ["what does relay do?", "/compact"]},
+                                    turns=[{"index": 0, "session_id": "thread-1", "argv": ["codex", "what does relay do?"]}])
+
+    def test_a_compact_turn_resumes_with_a_small_auto_compact_limit(self):
+        def execute(argv, cwd, env, timeout_s, stdout, stderr):
+            stdout.write_text("")
+            return {"argv": [str(a) for a in argv], "exit_code": 0, "timed_out": False, "duration_s": 1.0}
+        with mock.patch.object(codex.live, "execute", side_effect=execute):
+            record = codex.turn(self.run_, "/compact", 1)
+        argv = record["argv"]
+        self.assertEqual(argv[1:3], ["exec", "resume"])
+        self.assertEqual(argv[argv.index("model_auto_compact_token_limit=2000") - 1], "-c")
+        self.assertEqual(argv[-3:], ["--", "thread-1", "/compact"])
+        self.assertEqual(record["session_id"], "thread-1")
+        with mock.patch.object(codex.live, "execute", side_effect=execute):
+            later = codex.turn(self.run_, "what does relay do?", 1)["argv"]
+        self.assertNotIn("model_auto_compact_token_limit=2000", later)
+
+    def test_a_first_turn_cannot_compact(self):
+        with self.assertRaisesRegex(ValueError, "a /compact turn needs an earlier turn to compact"):
+            codex.turn(self.run_, "/compact", 0)
+
+    def test_the_rollout_compaction_record_is_stamped_with_the_turn_it_opened(self):
+        def message(role, text):
+            return {"type": "response_item", "payload": {"type": "message", "role": role, "content": [{"type": "input_text", "text": text}]}}
+        rows = [{"type": "session_meta", "payload": {"cwd": "/w", "id": "thread-1"}},
+                {"type": "event_msg", "payload": {"type": "task_started"}}, message("user", "what does relay do?"),
+                message("assistant", "It imports feeds."), {"type": "event_msg", "payload": {"type": "task_started"}},
+                {"type": "compacted", "ordinal": 33, "payload": {"message": "", "replacement_history": []}},
+                {"type": "event_msg", "payload": {"type": "item_completed", "item": {"type": "ContextCompaction", "id": "k"}}},
+                message("user", "/compact"), message("assistant", "Compacted.")]
+        data = "".join(json.dumps(r) + "\n" for r in rows).encode()
+        lead = codex.harvest_rollout(data, ["what does relay do?", "/compact"])
+        self.assertEqual(lead["compactions"], [{"turn": 1, "ordinal": 33, "source": "rollout"}])
+        self.assertEqual([(e["turn"], e["kind"]) for e in lead["events"] if e["kind"] in ("user", "text")],
+                         [(0, "user"), (0, "text"), (1, "user"), (1, "text")])
+        self.assertEqual(codex.harvest_rollout(data)["compactions"], [{"turn": None, "ordinal": 33, "source": "rollout"}])
+
+
 class CopyInto(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="pstack-copy-test-")

@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -293,7 +294,7 @@ class PreparedHarvest(unittest.TestCase):
             self.assertEqual(env["CLAUDE_CONFIG_DIR"], str(self.state.paths.config))
             self.assertEqual(argv[:2], ("/usr/bin/sandbox-exec", "-p"))
             self.assertEqual(argv[3:11], (str(self.state.runtime.binary), "-p", "--output-format", "stream-json",
-                                        "--verbose", "--setting-sources", "project", "--strict-mcp-config"))
+                                        "--verbose", "--setting-sources", "user,project", "--strict-mcp-config"))
             self.assertEqual(argv[11:15], ("--mcp-config", '{"mcpServers":{}}', "--permission-mode", "bypassPermissions"))
             self.assertEqual(argv[15:17], ("--session-id" if index == 0 else "--resume", self.state.session))
             with self.lead.open("a") as lead:
@@ -392,6 +393,101 @@ class PreparedHarvest(unittest.TestCase):
         with self.assertRaisesRegex(claude_code.IsolationUnavailable, "unsafe directory"):
             claude_code.harvest(self.run)
         self.assertEqual(list(self.state.paths.transcripts.iterdir()), [])
+
+    def test_a_compact_turn_records_its_boundary_and_keeps_later_turns_in_order(self):
+        self.prepare_run()
+        self.run.case["turns"] = ["what does relay do?", "/compact", "/poteto-mode im stepping away."]
+        user = lambda content, **flags: {"type": "user", "message": {"role": "user", "content": content}, **flags}
+        rows = [user("what does relay do?"),
+                {"type": "assistant", "message": {"content": [{"type": "text", "text": "It imports feeds."}]}},
+                {"type": "system", "subtype": "compact_boundary", "compactMetadata": {"trigger": "manual"}},
+                user("This session is being continued from a previous conversation.", isCompactSummary=True, isVisibleInTranscriptOnly=True),
+                user("<local-command-caveat>The command below was run directly.</local-command-caveat>", isMeta=True),
+                user("<command-name>/compact</command-name>\n<command-message>compact</command-message>\n<command-args></command-args>"),
+                user("<local-command-stdout>Compacted </local-command-stdout>"),
+                user("<command-name>/poteto-mode</command-name>\n<command-args>im stepping away.</command-args>"),
+                {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "s1", "name": "Skill", "input": {"skill": "figure-it-out"}}]}},
+                user([{"type": "tool_result", "tool_use_id": "s1", "content": "Launching skill: figure-it-out"}])]
+        self.lead.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        streams = [[{"type": "result", "subtype": "success", "result": "It imports feeds."}],
+                   [{"type": "system", "subtype": "compact_boundary", "compact_metadata": {"trigger": "manual", "pre_tokens": 25309, "post_tokens": 2308}},
+                    {"type": "result", "subtype": "success", "result": "", "local_command": "compact"}],
+                   [{"type": "result", "subtype": "success", "result": "Loaded."}]]
+        records = []
+        for index, stream in enumerate(streams):
+            path = self.root / f"stream-{index}.jsonl"
+            path.write_text("".join(json.dumps(r) + "\n" for r in stream))
+            records.append({"argv": ["claude"], "exit_code": 0, "timed_out": False, "duration_s": 1.0, "session_id": self.state.session,
+                            "index": index, "stream": str(path)})
+        self.run._claude_state = replace(self.state, records=tuple(records))
+        trace = claude_code.harvest(self.run)
+        self.assertEqual([(e["turn"], e["kind"], e.get("text") or e.get("name")) for e in trace["events"]], [
+            (0, "user", "what does relay do?"), (0, "text", "It imports feeds."), (1, "user", "/compact"),
+            (2, "user", "/poteto-mode im stepping away."), (2, "tool_call", "Skill"), (2, "tool_result", "Skill")])
+        self.assertEqual(trace["x_compactions"], [{"turn": 1, "trigger": "manual", "pre_tokens": 25309, "post_tokens": 2308, "source": "stream"}])
+        self.assertEqual(trace["x_turn_entries"], [{"turn": 2, "skill": "poteto-mode", "entry": "injected"}])
+
+    def test_delegate_skill_calls_and_the_listing_record_reach_the_trace(self):
+        self.prepare_run()
+        children = self.native / self.state.session / "subagents"
+        children.mkdir(parents=True)
+        (children / "agent-c1.jsonl").write_text("".join(json.dumps(r) + "\n" for r in [
+            {"type": "assistant", "isSidechain": True, "message": {"content": [{"type": "tool_use", "id": "k1", "name": "Skill", "input": {"skill": "no-comments"}}]}},
+            {"type": "user", "isSidechain": True, "message": {"content": [{"type": "tool_result", "tool_use_id": "k1", "is_error": True,
+                                                                          "content": "Unknown skill: no-comments"}]}}]))
+        (self.root / "skill-listing.json").write_text(json.dumps({"step": "absent", "name_only": [], "setting_sources": "user,project"}))
+        self.launch([{"type": "text", "text": "done"}], {"type": "result", "subtype": "success", "result": "done"})
+        trace = claude_code.harvest(self.run)
+        self.assertEqual(trace["x_child_skill_calls"], {"agent-c1": [{"skill": "no-comments", "ok": False, "output_head": "Unknown skill: no-comments"}]})
+        self.assertEqual(trace["x_skill_listing"], {"step": "absent", "name_only": [], "setting_sources": "user,project"})
+
+
+class ListingProvision(unittest.TestCase):
+    def state(self, gated):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve()
+        run = live.Run(root, "claude-code", {"id": "x", "fixture": "relay", "turns": ["go"]}, "0" * 40, 60)
+        skills = run.project / claude_code.SKILLS_DIR
+        for name, policy in gated.items():
+            (skills / name / "agents").mkdir(parents=True)
+            (skills / name / "SKILL.md").write_text(f"---\nname: {name}\n---\n")
+            (skills / name / "agents" / "openai.yaml").write_text(f"policy:\n  allow_implicit_invocation: {policy}\n")
+        binary = root / "native.bin"
+        binary.write_bytes(b"identity")
+        return claude_code._bind_paths(run, claude_code.HostRuntime(binary, "test", root / "home", "u", (), (),
+                                                                    ((binary, hashlib.sha256(b"identity").hexdigest()),), "/usr/bin:/bin", "/bin/sh"))
+
+    def install_script(self, state):
+        target = state.paths.project / claude_code.SKILLS_DIR / claude_code.LISTING_SCRIPT
+        target.parent.mkdir(parents=True)
+        target.write_bytes((live.ROOT / "skills" / claude_code.LISTING_SCRIPT).read_bytes())
+
+    def test_setup_listing_lands_in_the_private_user_settings(self):
+        state = self.state({"figure-it-out": "false", "deslop": "true"})
+        self.install_script(state)
+        record = claude_code.provision_listing(state)
+        settings = json.loads((state.paths.config / "settings.json").read_text())
+        self.assertEqual(settings, {"syncClaudeAiSkills": False, "syncClaudeAiPlugins": False, "skillOverrides": {"figure-it-out": "name-only"}})
+        self.assertEqual(record, {"step": "installed", "script": "setup-pstack/scripts/skill-listing.py", "name_only": ["figure-it-out"],
+                                  "setting_sources": "user,project"})
+        self.assertEqual(json.loads((state.paths.root / "skill-listing.json").read_text()), record)
+        self.assertEqual(json.loads((state.paths.root / "skill-listing-install.json").read_text())["state"], "current")
+
+    def test_a_tree_without_the_script_installs_nothing_and_says_so(self):
+        state = self.state({"figure-it-out": "false"})
+        record = claude_code.provision_listing(state)
+        self.assertEqual(record, {"step": "absent", "script": "setup-pstack/scripts/skill-listing.py", "name_only": [],
+                                  "setting_sources": "user,project"})
+        self.assertEqual(json.loads((state.paths.config / "settings.json").read_text()), {"syncClaudeAiSkills": False, "syncClaudeAiPlugins": False})
+        self.assertFalse((state.paths.root / "skill-listing-install.json").exists())
+
+    def test_a_failing_install_stops_preparation(self):
+        state = self.state({"deslop": "true"})
+        self.install_script(state)
+        with self.assertRaisesRegex(RuntimeError, "skill listing install failed with exit 2"):
+            claude_code.provision_listing(state)
+        self.assertFalse((state.paths.root / "skill-listing.json").exists())
 
 
 @unittest.skipUnless(platform.system() == "Darwin" and os.access("/usr/bin/sandbox-exec", os.X_OK),
@@ -569,6 +665,22 @@ class NativeGit(unittest.TestCase):
                 self.assertEqual(done.returncode, 0, done.stderr)
                 self.assertEqual(done.stdout, expected)
             self.assertTrue((run.project / ".git" / "HEAD").is_file())
+
+    def test_the_confined_user_scope_cannot_read_the_host_claude_directory(self):
+        host = Path.home() / ".claude"
+        if not host.is_dir():
+            self.skipTest("the host has no ~/.claude to protect")
+        with tempfile.TemporaryDirectory() as tmp:
+            run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": "tally"}, "0" * 40, 60)
+            run.project.mkdir(parents=True)
+            state = claude_code._bind_paths(run, claude_code._host_runtime())
+            for argv in (["/bin/ls", str(host)], ["/bin/cat", str(host / "settings.json")], ["/bin/ls", str(host / "skills")]):
+                with self.subTest(argv=argv[0]):
+                    done = subprocess.run(["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0), *argv], cwd=run.project,
+                                          env=claude_code.child_env(run), capture_output=True, text=True, timeout=10)
+                    self.assertNotEqual(done.returncode, 0)
+                    self.assertEqual(done.stdout, "")
+                    self.assertIn("Operation not permitted", done.stderr)
 
     def test_prepared_runtime_rejects_a_different_supported_git_digest(self):
         with tempfile.TemporaryDirectory() as tmp:

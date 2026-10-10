@@ -1,0 +1,35 @@
+{
+ "promises": [
+  "deslop-hands-unsettled-comments-to-no-comments"
+ ],
+ "fixture": "rollup",
+ "entry": null,
+ "turns": [
+  "deslop it before i commit"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "history": "rollup-csv-header",
+ "skill_overlays": [
+  {
+   "file": "deslop/SKILL.md",
+   "old": "Comments the rules below do not settle go to `/no-comments`.",
+   "new": "Comments the rules below do not settle go to `/no-comments`."
+  }
+ ],
+ "expect": {
+  "unsettled": {
+   "file": "rollup/export.py",
+   "text": "# the header rides in the first batch, so a retry after a busy sink sends it again with the rows"
+  },
+  "narrating": [
+   "# check whether a header was asked for",
+   "# put the header in front of the rows",
+   "# report how many rows went out",
+   "# pull --header out of the arguments",
+   "# hand the flag to export"
+  ]
+ }
+}

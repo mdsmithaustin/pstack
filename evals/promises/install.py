@@ -2,6 +2,7 @@
 
 import argparse
 import fcntl
+import importlib.util
 import json
 import os
 import re
@@ -98,9 +99,12 @@ def frontmatter_name(skill_md):
     return match.group(1).strip("\"'") if match else skill_md.parent.name
 
 
-def frontmatter_flag(skill_md, key):
-    head = skill_md.read_text(encoding="utf-8").split("\n---", 2)[0]
-    return re.search(rf"^{key}:\s*true\s*$", head, re.M) is not None
+def name_only_skills(skills_root):
+    """The skills setup-pstack lists by name only on Claude Code, from the snapshot's own script."""
+    spec = importlib.util.spec_from_file_location("skill_listing", skills_root / "setup-pstack/scripts/skill-listing.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.managed_skills(skills_root)
 
 
 class Box:
@@ -144,8 +148,7 @@ class Context:
         self.snapshot_source()
         self.skills_version = self.skills_cli_version()
         self.skill_names = sorted(frontmatter_name(p) for p in (self.snapshot / "skills").glob("*/SKILL.md"))
-        self.hidden = sorted(frontmatter_name(p) for p in (self.snapshot / "skills").glob("*/SKILL.md")
-                             if frontmatter_flag(p, "disable-model-invocation"))
+        self.name_only = name_only_skills(self.snapshot / "skills")
         self.path_scoped = sorted(frontmatter_name(p) for p in (self.snapshot / "skills").glob("*/SKILL.md")
                                   if re.search(r"^paths:", p.read_text(encoding="utf-8").split("\n---", 2)[0], re.M))
         self.guide_names = self.read_guide_names()
@@ -386,7 +389,7 @@ def check_slash_skills_invocable(ctx, harness):
     named = sorted(n for n in ctx.guide_names if n in ctx.skill_names)
     missing = sorted(n for n in named if n not in listing.invocable)
     outcome = Outcome({"entry_syntax": ENTRY_SYNTAX[harness], "guide_named_pstack_skills": len(named), "invocable": len(named) - len(missing),
-                       "gated_with_disable_model_invocation": len(ctx.hidden), "via": listing.via,
+                       "listed_by_name_only": len(ctx.name_only), "via": listing.via,
                        "not_pstack_skills_named_in_guide": sorted(n for n in ctx.guide_names if n not in ctx.skill_names)})
     outcome.expect(not missing, f"{harness} offers no user-invocable entry for: {', '.join(missing)}")
     return outcome

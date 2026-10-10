@@ -20,6 +20,17 @@ def collect(out):
     return cells
 
 
+def listing_states(out):
+    states = collections.defaultdict(collections.Counter)
+    for path in sorted(Path(out).rglob("verdict.json")):
+        trace = path.parent / "trace.json"
+        listing = json.loads(trace.read_text()).get("x_skill_listing") if trace.is_file() else None
+        if listing:
+            states[json.loads(path.read_text())["harness"]][listing.get("step")] += 1
+    return [f"{harness} skill listing: " + ", ".join(f"{step} {n}" for step, n in sorted(counts.items()))
+            for harness, counts in sorted(states.items())]
+
+
 def cell(results):
     if not results:
         return ""
@@ -49,4 +60,5 @@ def render(out, upstream=None):
     lines.append("")
     lines.append(f"{len(pids)} promises, {sum(totals.values())} verdicts: " +
                  ", ".join(f"{v} {n}" for v, n in sorted(totals.items())))
+    lines += listing_states(out)
     return "\n".join(lines)

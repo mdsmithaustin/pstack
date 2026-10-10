@@ -1,0 +1,20 @@
+{
+ "promises": [
+  "routed-skill-loads-after-compaction"
+ ],
+ "fixture": "relay",
+ "entry": null,
+ "turns": [
+  "what does relay do? two sentences is plenty.",
+  "/compact",
+  "/poteto-mode im stepping away. keep going until the migration check reports zero old callers. log your decisions."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "skill": "figure-it-out"
+ },
+ "tmp_lock": false
+}

@@ -1,6 +1,10 @@
 import hashlib
+import importlib.util
 import json
 import re
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,6 +13,10 @@ GUIDE = ROOT / "docs" / "guide"
 SKILLS = ROOT / "skills"
 POTETO = SKILLS / "poteto-mode" / "SKILL.md"
 PLAYBOOKS = SKILLS / "poteto-mode" / "playbooks"
+
+_spec = importlib.util.spec_from_file_location("skill_listing", SKILLS / "setup-pstack" / "scripts" / "skill-listing.py")
+skill_listing = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(skill_listing)
 
 PLAYBOOK_FILES = [
     "authoring-a-skill",
@@ -136,12 +144,26 @@ class TestStaticPromises(unittest.TestCase):
         listed = sorted(set(re.findall(r"\(\*\*(principle-[a-z-]+)\*\*\)", index)))
         self.assertEqual(listed, on_disk)
 
+    def test_claude_listing_follows_codex_policy(self):
+        policy_off = {p.parents[1].name for p in SKILLS.glob("*/agents/openai.yaml")
+                      if re.search(r"^\s+allow_implicit_invocation:\s*false\s*$", read(p), re.M)}
+        flagged = {p.parent.name for p in SKILLS.glob("*/SKILL.md")
+                   if re.search(r"^disable-model-invocation:", read(p).split("\n---", 1)[0], re.M)}
+        with tempfile.TemporaryDirectory() as home:
+            settings = Path(home) / "settings.json"
+            done = subprocess.run([sys.executable, str(SKILLS / "setup-pstack/scripts/skill-listing.py"), "install",
+                                   "--settings", str(settings), "--skills-root", str(SKILLS)], capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            overrides = json.loads(settings.read_text())["skillOverrides"]
+        self.assertEqual({name for name, value in overrides.items() if value == "name-only"}, policy_off)
+        self.assertGreater(len(policy_off), 0)
+        self.assertEqual(flagged, set())
+
     def test_poteto_help_lists_every_ungated_skill(self):
         row = next(line for line in read(SKILLS / "poteto-help" / "SKILL.md").splitlines()
                    if line.startswith("| A skill didn't load on its own |"))
         listed = set(re.findall(r"`/([a-z0-9-]+)`", row.split(" load from the user's words")[0]))
-        ungated = {p.parent.name for p in SKILLS.glob("*/SKILL.md")
-                   if "disable-model-invocation: true" not in read(p).split("---")[1]}
+        ungated = set(skill_listing.skill_dirs(SKILLS)) - set(skill_listing.managed_skills(SKILLS))
         self.assertEqual(listed, ungated - {"pstack-harness"})
 
     def test_principle_leaf_summaries_match(self):

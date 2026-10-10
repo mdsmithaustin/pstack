@@ -159,6 +159,17 @@ class HostWrapTests(unittest.TestCase):
         self.assertEqual(json.loads((harvested / f"{session}.jsonl").read_text().splitlines()[0]), EXPANSION)
         self.assertTrue((harvested / session / "subagents" / "agent-a1.jsonl").is_file())
 
+    def test_claude_run_lists_each_linked_skill_whose_openai_yaml_turns_off_implicit_invocation_by_name_only(self):
+        (self.ws / "skills" / "pstack" / "poteto-mode" / "agents").mkdir()
+        (self.ws / "skills" / "pstack" / "poteto-mode" / "agents" / "openai.yaml").write_text("policy:\n  allow_implicit_invocation: false\n")
+
+        code, stream = self.wrap("claude", FAKE_CLAUDE, "-p", "--settings", '{"autoMemoryEnabled":false}', "--model", "sonnet")
+
+        session = json.loads((self.work / "harvest" / "0001" / "session.json").read_text())["session"]
+        self.assertEqual((code, json.loads(stream.splitlines()[-1])["argv"]), (0, [
+            "-p", "--settings", '{"autoMemoryEnabled":false,"skillOverrides":{"poteto-mode":"name-only"}}', "--model", "sonnet",
+            "--session-id", session]))
+
     def test_claude_run_leaves_no_project_dir_that_held_only_its_session(self):
         code, stream = self.wrap("claude", FAKE_CLAUDE, "-p", FAKE_PROJECT="-only-this-run")
 

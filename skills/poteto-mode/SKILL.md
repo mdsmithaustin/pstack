@@ -1,7 +1,6 @@
 ---
 name: poteto-mode
 description: poteto's agent style for concise, detailed responses, deliberate subagents, unslopped prose, simple code, and verified work. Use for poteto, /poteto-mode, or requests to work in this style.
-disable-model-invocation: true
 mode: true
 icon: crown
 color: yellow
@@ -41,7 +40,7 @@ Remaining triggers:
 
 ## Principles
 
-Read the leaf skill in full for any principle you apply. Each entry names when it applies. Leaf and sibling skills named in this suite are mostly gated against model invocation, so they are absent from your tool inventory: that never means missing — read the named skill's directory under the installed skills root directly (the **pstack-harness** skill maps this).
+Read the leaf skill in full for any principle you apply. Each entry names when it applies. Load every leaf and sibling skill this suite names yourself. On Claude Code, invoke it with the Skill tool, even when the listing shows its name with no description. Elsewhere, read its SKILL.md under the installed skills root (the **pstack-harness** skill maps this).
 
 **Core**
 
@@ -124,7 +123,7 @@ Comments follow the same rule as the reply. Write them clean as you go. Keep a c
 
 Open a worklist whose first items are the matched playbook's opening prose and then its steps, copied verbatim, before any task-specific items. The **pstack-harness** skill selects the best native carrier from live capability descriptions, without depending on a product-specific tool name. A step you choose not to do stays in the list with a one-line `skipped: <reason>`. Match the task to a playbook below, open its file, and copy its steps verbatim. Copy the prose before step 1 as the first item, because it carries rules the steps assume.
 
-A large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, routes to the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
+For a large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, load the **figure-it-out** skill even when a narrower playbook like Feature fits. Use **figure-it-out** whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
 
 - **Investigation.** Read-only question about current code or its history: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. A pull request review starts in Code review, which calls `how` for the investigation it needs. `playbooks/investigation.md`.
 - **Code review.** Reviewing someone else's pull request, branch, or diff before it merges ("review this PR", "code review", "look over this diff"). `playbooks/code-review.md`.
@@ -142,7 +141,7 @@ A large or cross-cutting effort (a migration across many call sites, an ambitiou
 - **Eval.** Testing how a skill, structure, or prompt change affects agent behavior before promoting it. `playbooks/eval.md`.
 - **Babysit.** Driving a PR or a stack to merge-ready: conflicts, review threads, CI. `playbooks/babysit.md`.
 - **Shipping.** The half after Babysit. Independently verifying a green stack, then landing the contiguous verified run bottom-up through `gh` by default or Origin when its CLI is available. `playbooks/shipping.md`.
-- **Autonomous run.** A long task to drive to completion without stopping ("run until done", "/loop until X") while the user stays in the conversation. When the user steps away ("im stepping away", "going to bed"), route to **figure-it-out** instead, which designs the run's phases. `playbooks/autonomous-run.md`.
+- **Autonomous run.** A long task to drive to completion without stopping ("run until done", "/loop until X") while the user stays in the conversation. When the user steps away ("im stepping away", "going to bed"), load the **figure-it-out** skill instead, which designs the run's phases. `playbooks/autonomous-run.md`.
 - **Orchestrate.** A standing project handed to one coordinator chat: multi-day, many stacked PRs, dozens to hundreds of subagents, minimal human turns ("run this whole project", "own this migration until it lands"). Distinct from Autonomous run, which drives one task to a predicate. Work one agent could finish inside the session's budget routes there, not here, however program-shaped the phrasing sounds. `playbooks/orchestrate.md`.
 - **Autopilot-full.** A queue of independent PRs run to merged with full autonomy. One owner per PR carries build through merge, and the root swarm-verifies each PR before its owner merges ("autopilot this queue", "full autopilot", one-owner-per-PR programs). `playbooks/autopilot-full.md`.
 - **Autopilot-stack.** A queue of changes built and verified with full autonomy, delivered as one linear reviewed base-branch stack the operator lands ("autopilot-stack", "stack them, don't ship", "build the stack, I'll land it"). `playbooks/autopilot-stack.md`.

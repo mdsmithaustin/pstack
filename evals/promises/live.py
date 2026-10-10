@@ -3,6 +3,7 @@
 import argparse
 import fcntl
 import importlib
+import importlib.util
 import json
 import os
 import re
@@ -20,6 +21,9 @@ from grade_boundary import create_file, grade, GradeRefused, read_file, _before_
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+_listing_spec = importlib.util.spec_from_file_location("skill_listing", ROOT / "skills/setup-pstack/scripts/skill-listing.py")
+skill_listing = importlib.util.module_from_spec(_listing_spec)
+_listing_spec.loader.exec_module(skill_listing)
 CASES = HERE / "cases"
 FIXTURES = HERE / "fixtures"
 HISTORIES = HERE / "histories"
@@ -31,6 +35,7 @@ HARNESSES = {
     "hermes": "harnesses.hermes",
     "grok": "harnesses.grok",
 }
+RUN_OVERRIDES = ("claude-code", "codex")
 MEANINGS = ("eval", "evals", "evaluation", "judge", "experiment", "rubric", "score", "compare",
             "benchmark", "candidate", "arena", "promise", "promises", "oracle", "verdict")
 
@@ -45,6 +50,9 @@ class Run:
     turns: list = field(default_factory=list)
     baseline: list = field(default_factory=list)
     hermes_retain_out: Path | None = None
+    model: str | None = None
+    effort: str | None = None
+    implicit_off: list = field(default_factory=list)
 
     @property
     def project(self):
@@ -153,6 +161,21 @@ GIT_ISOLATION = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 GIT_IDENTITY = ["-c", "user.name=dev", "-c", "user.email=dev@example.com", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"]
 
 
+def apply_overlays(case, skills):
+    """Rewrite installed skill text for an arm case. Each `old` must occur exactly once, so an arm never runs on text
+    that moved under it."""
+    for overlay in case.get("skill_overlays", []):
+        rel = Path(overlay["file"])
+        if rel.is_absolute() or ".." in rel.parts:
+            raise ValueError(f"{case['id']}: overlay path leaves the skill tree: {rel}")
+        path = skills / rel
+        text = path.read_text(encoding="utf-8")
+        found = text.count(overlay["old"])
+        if found != 1:
+            raise ValueError(f"{case['id']}: overlay text occurs {found} times in {rel}, expected exactly once")
+        path.write_text(text.replace(overlay["old"], overlay["new"]), encoding="utf-8")
+
+
 def git_run(dest, *args, **kwargs):
     return subprocess.run(["git", "-C", str(dest), *GIT_IDENTITY, *args], check=True,
                           env={**os.environ, **GIT_ISOLATION}, **kwargs)
@@ -210,9 +233,11 @@ def fixture_lock(fixture):
     return handle
 
 
-def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None):
+def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, model=None, effort=None):
     if hermes_retain_out is not None and harness != "hermes":
         raise ValueError("--hermes-retain-out requires --harness hermes")
+    if (model or effort) and harness not in RUN_OVERRIDES:
+        raise ValueError(f"--model and --effort support {', '.join(RUN_OVERRIDES)}, not {harness}")
     case = load_case(case_id)
     if case.get("deferred") or case.get("kind", "live") != "live":
         raise SystemExit(f"{case_id} does not run live: kind {case.get('kind', 'live')}, deferred {case.get('deferred')}")
@@ -223,11 +248,13 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None):
     retention = Path(hermes_retain_out).absolute() if hermes_retain_out is not None else None
     if retention is not None:
         retention.mkdir(parents=True, exist_ok=True)
-    run = Run(root, harness, case, commit, timeout_for(case, harness), hermes_retain_out=retention)
+    run = Run(root, harness, case, commit, timeout_for(case, harness), hermes_retain_out=retention, model=model, effort=effort)
     run.project.parent.mkdir(parents=True)
     make_project(case, run.project)
     run.baseline = baseline(run.project)
     install_tree(run.skills_at, run.project / module.SKILLS_DIR)
+    apply_overlays(case, run.project / module.SKILLS_DIR)
+    run.implicit_off = skill_listing.managed_skills(run.project / module.SKILLS_DIR)
     exclude = run.project / ".git" / "info" / "exclude"
     exclude.write_text(exclude.read_text() + "".join(f"{d}\n" for d in module.PRIVATE_DIRS))
     authorization = _before_turns(run)
@@ -243,7 +270,7 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None):
         finally:
             if lock:
                 lock.close()
-        trace = module.harvest(run)
+        trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
         _seal(authorization, meta(run), trace)
         verdict = grade(authorization)
     except BaseException as original:
@@ -288,6 +315,8 @@ def main(argv=None):
     r.add_argument("--skills-at", default="HEAD")
     r.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "pstack-live"))
     r.add_argument("--hermes-retain-out", help="durable parent for private Hermes evidence and paired exports")
+    r.add_argument("--model", help="model for every turn of every case in this invocation (claude-code, codex)")
+    r.add_argument("--effort", help="reasoning effort for every turn of every case in this invocation (claude-code, codex)")
     g = sub.add_parser("grade")
     g.add_argument("run_ids", nargs="+", help="controller-issued run IDs")
     g.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "pstack-live"))
@@ -301,7 +330,7 @@ def main(argv=None):
         out.mkdir(parents=True, exist_ok=True)
         for case_id in args.case:
             for n in range(args.runs):
-                run_case(args.harness, case_id, args.skills_at, out, n, args.hermes_retain_out)
+                run_case(args.harness, case_id, args.skills_at, out, n, args.hermes_retain_out, args.model, args.effort)
         return 0
     if args.cmd == "grade":
         for run_id in args.run_ids:

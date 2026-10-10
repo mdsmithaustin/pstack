@@ -1,0 +1,11 @@
+{
+  "fixture": "rollup",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "export: add --header\n\nThe partner import reads columns by name, so it wants them on the first line. With --header, the export writes id,customer,total before the rows.",
+      "delete": [],
+      "branch": "csv-header"
+    }
+  ]
+}

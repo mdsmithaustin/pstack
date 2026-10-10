@@ -1,0 +1,15 @@
+{
+ "promises": [
+  "name-only-skills-stay-unloaded-unnamed"
+ ],
+ "fixture": "relay",
+ "entry": null,
+ "turns": [
+  "im stepping away. keep going until the migration check reports zero old callers. log your decisions."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "tmp_lock": false
+}

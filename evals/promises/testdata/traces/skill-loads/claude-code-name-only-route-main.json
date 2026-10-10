@@ -1,0 +1,19 @@
+{
+ "harness": "claude-code",
+ "events": [
+  {
+   "seq": 6,
+   "kind": "tool_call",
+   "name": "Read",
+   "input": {
+    "file_path": "/tmp/pstack-live/claude-a-main/relay-z86ntfr_/w/relay/.claude/skills/figure-it-out/SKILL.md"
+   },
+   "id": "toolu_01GsBuBiwq9ZQFbzgX8EMGM7"
+  },
+  {
+   "seq": 7,
+   "kind": "tool_result",
+   "id": "toolu_01GsBuBiwq9ZQFbzgX8EMGM7"
+  }
+ ]
+}

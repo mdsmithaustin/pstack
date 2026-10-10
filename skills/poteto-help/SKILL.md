@@ -1,7 +1,6 @@
 ---
 name: poteto-help
 description: Guides users through pstack setup, /poteto-mode, and picking the skill, playbook, or principle for a task. Type /poteto-help with a question.
-disable-model-invocation: true
 ---
 
 # Poteto help
@@ -35,10 +34,10 @@ When the models config is missing and it matters, ask whether the user wants to 
 ## Get set up
 
 1. Install from the project root with `npx skills add mdsmithaustin/pstack`, and pick the targets the user runs. `-g` installs user-level instead of per-project.
-2. Run [`/setup-pstack`](../setup-pstack/SKILL.md). It checks the bundled personas, asks for a reasoning budget, maps a model to each role, and writes `~/.agents/pstack-models.md`. Skills read that file the next time they run.
+2. Run [`/setup-pstack`](../setup-pstack/SKILL.md). It checks the bundled personas, asks for a reasoning budget, maps a model to each role, and writes `~/.agents/pstack-models.md`. Skills read that file the next time they run. On Claude Code it also sets the skill listing, so the skills that load only by name stop showing their descriptions.
 3. Start a real task with `/poteto-mode`, a goal, and a check that can pass or fail.
 
-Installing changes nothing until the user invokes a skill. The skills that load from the user's words are listed under Fix a run that went wrong. The [README](https://github.com/mdsmithaustin/pstack/blob/main/README.md) and [guide page 1](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/01-setup.md) have the details. Offer to word their first prompt with them, per [`references/prompting.md`](references/prompting.md).
+The skills that load from the user's words are listed under Fix a run that went wrong. For invocation behavior and the Claude Code setup requirement, see the [README](https://github.com/mdsmithaustin/pstack/blob/main/README.md#get-started). [Guide page 1](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/01-setup.md) covers setup in detail. Offer to word their first prompt with them, per [`references/prompting.md`](references/prompting.md).
 
 If cost is the worry, say where the tokens go and how to spend fewer. pstack spends extra tokens on subagents and review panels. Rerun `/setup-pstack` and pick a smaller budget or cheaper models. A role set to `auto` or `inherit-parent` runs on the session's model, which saves tokens when the session runs on a cheaper model. A shorter panel list runs fewer subagents, one for each entry. Save `/poteto-mode` for work that needs rigor.
 
@@ -133,7 +132,7 @@ Principles are one-rule skills that `/poteto-mode` reads and cites in its replie
 | A question got treated as the next step of the last task | Say "new task", or say the turn doesn't need the mode. |
 | A new model choice had no effect | A workspace `.agents/pstack-models.md` overrides the home file, and a harness section such as `## codex` beats a flat line. On Claude Code, a written effort applies only once `/setup-pstack` has registered pstack's effort agents. |
 | Runs cost more than expected | See the cost paragraph under Get set up. |
-| A skill didn't load on its own | On Claude Code and Codex, which honor the gating, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when `/poteto-mode` runs them, and it doesn't run every skill. |
+| A skill didn't load on its own | On Codex, and on Claude Code once `/setup-pstack` sets the skill listing, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when `/poteto-mode` runs them, and it doesn't run every skill. |
 | Parallel agents overwrote each other | Give each agent its own worktree. |
 | An overnight run moved but finished nothing | `/loop` needs a check that can pass or fail, not a duration. See [guide page 7](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/07-overnight.md). |
 | The reply claims success from a green build | Ask for the real command, flow, stored value, or profile. That's the prove-it-works principle. |
