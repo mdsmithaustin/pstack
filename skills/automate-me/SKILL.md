@@ -85,7 +85,7 @@ Work in a worktree off main. Commit and open a PR. Don't push to main directly.
 
 - **Don't overfit to one conversation.** A preference stated once and contradicted another time is noise. Require multiple instances before codifying it.
 - **Don't be clever.** Restating other skills' contents, inventing metaphors, or writing "poetic" prose for an agent reader is cost without benefit. Keep it operational.
-- **Reference, don't inline.** Other skills the user relies on should appear as path references, not pasted excerpts. Same for any principle docs they maintain elsewhere.
+- **Reference, don't inline.** Name another skill the user relies on with "Use the **unslop** skill." and that skill's bare name, per the authoring playbook, never as a pasted excerpt. Point at principle docs they maintain elsewhere by path.
 - **Keep sections minimal.** Only add a section if the user has a specific, non-default rule there. "Communicate clearly" is not a section. "Short paragraphs. Tables when comparing options. Bullets only when items are genuinely parallel." is.
 - **Name conventions generic.** Use "the user" or "the human" in imperatives, not the author's first name.
 - **Don't force symmetry.** If a user has no process rules worth writing down, skip the Process section entirely.
