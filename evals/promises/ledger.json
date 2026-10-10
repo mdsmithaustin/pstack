@@ -781,7 +781,7 @@
   },
   "deslop-hands-unsettled-comments-to-no-comments": {
    "check": "live",
-   "claim": "deslop hands the comments its own rules do not settle to the no-comments skill, so after deslop loads, the lead loads no-comments.",
+   "claim": "deslop hands the comments its own rules do not settle to the no-comments skill, so after deslop loads, the lead loads no-comments, or on Claude Code a delegate it spawns does.",
    "harness_sensitive": true,
    "live_case": "rollup fixture with the rollup-csv-header history, which adds --header on a csv-header branch with narrating comments and one design-rationale comment that deslop rules 1-3 do not settle; prompt `deslop it before i commit` with no entry; arms deslop-handoff-slash, deslop-handoff-bold, and deslop-handoff-use spell the step 5 handoff sentence three ways through `skill_overlays`; pass when no-comments loads after deslop (through a Skill tool call whose result succeeded on Claude Code, by a skill injection or a read that covers the whole file on Codex); fail when deslop finishes without that load or a refused Skill(no-comments) has no later load; evidence records whether the unsettled comment survived.",
    "owners": [

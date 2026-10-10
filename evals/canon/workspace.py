@@ -411,7 +411,8 @@ def implicit_invocation_off(policy):
 def name_only_settings(argv, tree):
     """Claude's argv with skillOverrides set to name-only for each skill in
     the mounted tree whose agents/openai.yaml turns off implicit invocation,
-    as skill-listing.py install sets them for a user. They join the harness's
+    companions included, where skill-listing.py install sets only pstack's own
+    skills. They join the harness's
     own --settings object, or a new --settings when it passes none."""
     policies = {skill.name: skill / INVOCATION_POLICY for skill in sorted(Path(tree).iterdir()) if (skill / "SKILL.md").is_file()}
     overrides = {name: "name-only" for name, policy in policies.items() if policy.is_file() and implicit_invocation_off(policy.read_bytes())}

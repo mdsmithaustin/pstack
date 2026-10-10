@@ -17,7 +17,8 @@ effort agents on Claude Code) as sbx_inside.py setup does, for a workspace run
 keeps their files out of the harvest, and for Codex trusts the project with a
 -c override, since the harness's --ignore-user-config skips the config file's
 trust. For Claude it lists each linked skill whose agents/openai.yaml turns
-off implicit invocation by name only, as setup-pstack does for a user.
+off implicit invocation by name only, as setup-pstack does for a user's
+pstack skills.
 
 The harness turns persistence off, with --no-session-persistence for Claude
 and --ephemeral for Codex, and removes its isolated CODEX_HOME when the run

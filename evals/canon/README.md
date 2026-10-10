@@ -280,7 +280,10 @@ A user who ran setup-pstack's `skill-listing.py install` sees each skill whose
 `agents/openai.yaml` sets `allow_implicit_invocation: false` listed by name
 only, with no description. Under this entry both wrappers, `host.py wrap` and
 `sandbox.py wrap`, give each Claude run that listing, taken from the tree the
-run mounts, so a skill an arm adds is covered. They set `skillOverrides` to
+run mounts, so a skill an arm adds is covered. The wrappers also list a
+companion skill by name only when its `openai.yaml` turns implicit invocation
+off, which `skill-listing.py` does not do for another suite's skill. No current
+companion sets it. They set `skillOverrides` to
 `name-only` for each such skill inside the one `--settings` object the
 harness passes, which skill-ci v1.1.0 sets to
 `{"disableBundledSkills":true,"autoMemoryEnabled":false}`. When the harness
