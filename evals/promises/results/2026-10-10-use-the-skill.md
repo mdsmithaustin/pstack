@@ -1,6 +1,6 @@
 # "Use the skill" live runs, 2026-10-10
 
-**Status: ISSUES.** deslop now hands unsettled comments to no-comments on both harnesses. On the final skills tree the hand-off ran 3 of 3 times on Claude Code and 3 of 3 on Codex, against 0 of 9 on Claude Code and 3 of 9 on Codex on 2026-10-09. A control that keeps the new fixture and restores the old deslop wording ran it 0 of 6 times on Claude Code and 1 of 3 on Codex. The wording change is what moved Claude Code. The routed figure-it-out load holds at 3 of 3 on each harness. The first round of runs, at an earlier commit, found two regressions this branch caused. The branch fixed both before the final round. The request that names no skill did not improve: 1 of 3 per harness in each round. The new pstack-harness rule against loading skills found by listing never reached a lead before a load, because no lead had read pstack-harness by then.
+**Status: ISSUES.** deslop now hands unsettled comments to no-comments on both harnesses. On the final skills tree the hand-off ran 3 of 3 times on Claude Code and 3 of 3 on Codex, and 9 of 9 and 8 of 8 graded across all three rounds, against 0 of 9 on Claude Code and 3 of 9 on Codex on 2026-10-09. A control that keeps the new fixture and restores the old deslop wording ran it 0 of 6 times on Claude Code and 1 of 3 on Codex. The wording change is what moved Claude Code. The routed figure-it-out load holds at 3 of 3 on each harness. The first round of runs, at an earlier commit, found two regressions this branch caused. The branch fixed both before the final round. The request that names no skill did not improve: 1 of 3 per harness in each round. The new pstack-harness rule against loading skills found by listing never reached a lead before a load, because no lead had read pstack-harness by then.
 
 ## What ran
 
@@ -20,8 +20,9 @@ Two arms ran from case files added to the evaluator worktree only. They are not 
 ## Pins and runs
 
 - Round 1. The evaluator ran from a worktree detached at `034ef58791b1886c74e577fb6d72187e7c6931d5`, and the skills pin is the same commit.
-- Round 2. The evaluator ran from a worktree detached at `881dcdd9cee24cf6769fdf8664be955ee4dc6315`, and the skills pin is the same commit. No later commit changes a file under `skills/`.
-- Between the rounds, 26443774 renames `routing_decided` to `routing_events` and drops docstrings in `evals/promises/oracles.py`, with no change in behavior. 7e284616 restores the opening sentence of seven playbook steps. 881dcdd9 restores figure-it-out's Start sentence, adds the Claude Code sentence to poteto-mode, and narrows setup-pstack step 0c.
+- Round 2. The evaluator ran from a worktree detached at `881dcdd9cee24cf6769fdf8664be955ee4dc6315`, and the skills pin is the same commit.
+- Round 3, (d) only. The evaluator and the skills pin are `3f2bf97b29171c80436271bad2c198d3e1adb4f3`, the final skills tree. That commit adds "If its review changes code, run step 4 again." to deslop step 5, rewords one poteto-help table cell, and adds one automate-me update-mode sentence. No (a) or (b) run read poteto-help or automate-me. The one round 2 (a) run that loaded deslop did so at seq 75, after its graded figure-it-out load at seq 2. No commit after 3f2bf97b changes a file under `skills/`.
+- Between the rounds, 26443774 renames `routing_decided` to `routing_events` and drops docstrings in `evals/promises/oracles.py`, with no change in behavior. 7e284616 restores the opening sentence of eight playbook steps. Its commit message miscounts them as seven. 881dcdd9 restores figure-it-out's Start sentence, adds the Claude Code sentence to poteto-mode, and narrows setup-pstack step 0c.
 - Command per group: `python3.14 evals/promises/live.py run --harness <h> --model <m> --effort <e> --skills-at <pin> --runs 3 --case <c> --out <dir>`. Groups ran in parallel, and runs inside a group ran in sequence. No retries.
 - Lead models: `claude-sonnet-5-5` at effort high on the adapter's pinned Claude Code 2.1.295, and `gpt-6-luna` at effort xhigh on Codex 0.162.0.
 - Every Claude Code run recorded `x_skill_listing` step `installed`.
@@ -39,12 +40,13 @@ Counts are PASS of graded runs, three runs per cell.
 | (b) unnamed request | 1/3 | 1/3 | 1/3 | 1/3 |
 | (d) deslop hand-off | 3/3 | 3/3 | 3/3 | 2/2, 1 INCONCLUSIVE |
 | (d) old-text control | 0/3 | 1/3 | 0/3 | not run |
+| (d) deslop hand-off, round 3 (3f2bf97b) | 3/3 | 3/3 | not run | not run |
 
 ## Classification
 
-- **(d), Claude Code, 6 of 6.** Every run called Skill(deslop) at seq 1, read the diff, then called Skill(no-comments) between seq 7 and 9 and spawned comment-sicko. The dana note was gone after the review in every run, and two round 1 reports say Comment Sicko ruled it a note about our own code. Two runs passed only that comment in the Skill args.
-- **(d) control, Claude Code, 0 of 6.** No run loaded no-comments, and the dana note survived every time. Each report named the comment for no-comments in prose, for example "Handed to `/no-comments`" and "Flagged for `/no-comments`". That is the 2026-10-09 failure, on a comment that every lead judged unsettled. The fixture change made the comment unsettled, and the step 5 action wording made the lead load the skill.
-- **(d), Codex, 5 of 5 graded.** Each lead read deslop and then no-comments whole and spawned comment-sicko. Every edit to the dana note came after that review, and the note was gone at the end.
+- **(d), Claude Code, 9 of 9.** Every run called Skill(deslop) at seq 1, read the diff, then called Skill(no-comments) between seq 7 and 9 and spawned comment-sicko. The dana note was gone after the review in every run, and two round 1 reports say Comment Sicko ruled it a note about our own code. Three runs passed only that comment in the Skill args.
+- **(d) control, Claude Code, 0 of 6.** No run loaded no-comments, and the dana note survived every time. Each report named the comment for no-comments in prose, for example "Handed to `/no-comments`" and "Flagged for `/no-comments`". That is the 2026-10-09 failure, on a comment that every lead judged unsettled. The fixture change made the comment unsettled, and the new step 5 and Report wording made the lead load the skill. The control restores both together, so it cannot tell which of the two did it.
+- **(d), Codex, 8 of 8 graded.** Each lead read deslop and then no-comments whole and spawned comment-sicko. Every edit to the dana note came after that review, and the note was gone at the end.
   - The round 1 INCONCLUSIVE run `rollup-tl62ryyy` did the same. Its first command chained `cat` of unslop and deslop with an `rg` that found no AGENTS.md and exited 1. The chain failed, so the oracle could not credit the deslop read, even though the output shows the file.
 - **(d) control, Codex, 1 of 3.** One run read no-comments. Two cut the dana note directly as narration under rule 1 and reported no no-comments flags. Under the old wording the fixture is still settled by rule 1 on Codex 2 times in 3.
 - **(a), final tree.** Claude Code called Skill(figure-it-out) at seq 2 or 3. Codex read figure-it-out whole at seq 7, and each worklist opens with figure-it-out's own items.
