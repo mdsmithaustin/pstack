@@ -1,6 +1,8 @@
 # The skill-ci release this repository runs, here and in CI. skill-ci update moves it to the newest tag.
-version = "v1.1.0"
+version = "v1.2.0"
 skills_dir = "skills"
+# agents/openai.yaml alone gates a skill; setup-pstack hides gated skills on Claude Code by name-only listing.
+invocation_policy = "openai-yaml"
 evals_dir = "evals"
 trigger_cases = "tools/skill-trigger-cases.json"
 pii_scope = "repository"
