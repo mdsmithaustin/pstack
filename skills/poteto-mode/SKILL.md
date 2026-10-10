@@ -40,7 +40,7 @@ Remaining triggers:
 
 ## Principles
 
-Read the leaf skill in full for any principle you apply. Each entry names when it applies. Load every leaf and sibling skill this suite names yourself. On Claude Code, invoke it with the Skill tool, even when the listing shows its name with no description. Elsewhere, read its SKILL.md under the installed skills root (the **pstack-harness** skill maps this).
+Use the leaf skill for any principle you apply. Each entry names when it applies. Use every leaf and sibling skill this suite names yourself. The **pstack-harness** skill says how to use a skill on this CLI.
 
 **Core**
 
