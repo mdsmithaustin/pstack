@@ -69,7 +69,7 @@ Author the skill per `../poteto-mode/playbooks/authoring-a-skill.md`. Placement:
 - Handle: the user's first name or chosen identifier.
 - Frontmatter `description`: trigger on their name + `/<handle>-mode` + "work in their style", not on generic keywords like "write code" or "review PR".
 - Frontmatter formatting: Keep frontmatter valid YAML. Keep `description` as one YAML scalar. Quote it or use `description: >-` with indented continuation lines when punctuation or wrapping requires it.
-- Frontmatter `disable-model-invocation: true` by default. Opt out only if the user explicitly wants their mode to apply on every turn.
+- Gate the skill by default, so it loads only when the user types it or a skill names it. Write `agents/openai.yaml` beside its `SKILL.md`, with `allow_implicit_invocation: false` under `policy:`, which gates it on Codex. On Claude Code, offer to add `"<handle>-mode": "name-only"` under `skillOverrides` in the user's `~/.claude/settings.json`, as setup-pstack step 0c does for pstack's own skills. Write the entry only after the user says yes, and keep every other key. Never write `disable-model-invocation`, because Claude Code's Skill tool then refuses the skill when another skill names it. Opt out of the gate only if the user explicitly wants their mode to apply on every turn.
 
 ### 5. Iterate on prose
 
