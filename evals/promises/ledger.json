@@ -11642,10 +11642,11 @@
    ],
    "text": "Some skills don't load from their description."
   },
-  "06a14c57d8c1": {
+  "45109a48e3a8": {
    "also": [
     "routed-skill-loads-after-compaction",
-    "slash-skills-invocable"
+    "slash-skills-invocable",
+    "deslop-hands-unsettled-comments-to-no-comments"
    ],
    "class": "promise",
    "file": "01-setup.md",
@@ -11653,7 +11654,23 @@
    "sources": [
     "port"
    ],
-   "text": "They load when you type their name or when another pstack skill names them."
+   "text": "They load when you type their name or when another pstack skill tells the agent to use them."
+  },
+  "2a201edf4e1b": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "An agent that lists the skills folder can still open one of these skills by its folder name."
+  },
+  "0ef8fb5607d8": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "On 2026-10-10 that happened in 7 of 12 runs of a request that named no skill, on both Claude Code and Codex."
   },
   "1d21f306c413": {
    "class": "promise",
