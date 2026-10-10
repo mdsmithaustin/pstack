@@ -1,0 +1,26 @@
+{
+ "harness": "claude-code",
+ "events": [
+  {
+   "seq": 9,
+   "turn": 2,
+   "kind": "tool_call",
+   "name": "Skill",
+   "input": {
+    "skill": "figure-it-out"
+   },
+   "id": "toolu_01WrTT8ht1fai34vEhTna1Rr"
+  },
+  {
+   "seq": 10,
+   "kind": "tool_result",
+   "id": "toolu_01WrTT8ht1fai34vEhTna1Rr"
+  }
+ ],
+ "x_compactions": [
+  {
+   "turn": 1,
+   "source": "stream"
+  }
+ ]
+}

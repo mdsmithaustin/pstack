@@ -16,7 +16,8 @@ Under --discovery it also registers the named agents (the personas, plus the
 effort agents on Claude Code) as sbx_inside.py setup does, for a workspace run
 keeps their files out of the harvest, and for Codex trusts the project with a
 -c override, since the harness's --ignore-user-config skips the config file's
-trust.
+trust. For Claude it lists the linked managed pstack skills by name only,
+as setup-pstack does for a user's pstack skills.
 
 The harness turns persistence off, with --no-session-persistence for Claude
 and --ephemeral for Codex, and removes its isolated CODEX_HOME when the run
@@ -231,6 +232,8 @@ def wrap(argv, stdin=sys.stdin.buffer, stdout=None):
     command, session = keep_session(agent, command)
     if agent == "codex":
         command = codex_config(command, root, bool(checkout), bool(personas))
+    elif discovery:
+        command = workspace.name_only_settings(command, root / workspace.TREE)
     before = session_dirs(agent, session_store(agent))
     record_session(slot, agent, session)
     code, thread = run_agent(command, prompt, stdout)

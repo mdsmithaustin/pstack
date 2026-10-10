@@ -21,6 +21,11 @@ PRIVATE_DIRS = (".claude/",)
 SHARES_HOST_TMP = False
 
 DEFAULT_EFFORT = "high"
+SETTING_SOURCES = "user,project"
+LISTING_SCRIPT = Path("setup-pstack/scripts/skill-listing.py")
+LISTING_RECORD = "skill-listing.json"
+ACCOUNT_SYNC_OFF = {"syncClaudeAiSkills": False, "syncClaudeAiPlugins": False}
+LOCAL_COMMAND_OUTPUT = ("<local-command-stdout>", "<local-command-stderr>")
 SPAWN_TOOLS = ("Task", "Agent")
 READ_COMMANDS = {"cat", "head", "tail", "sed", "awk", "less", "more", "nl", "bat", "wc", "grep", "rg",
                  "diff", "cmp", "jq", "python3", "python"}
@@ -77,8 +82,9 @@ class ConfinedCommand:
     session: str
 
 
-CLAUDE_BINARY = Path("/Users/msmith1/.local/share/claude/versions/2.1.289")
-CLAUDE_SHA256 = "03d66745e3bb69ec727d66023696f3820bc0a00a8a5ba725eb6706d0c67cbe69"
+CLAUDE_VERSION = "2.1.295"
+CLAUDE_BINARY = Path(f"/Users/msmith1/.local/share/claude/versions/{CLAUDE_VERSION}")
+CLAUDE_SHA256 = "0116ee2e0a513900b633d9951367f18747686478e2b462805b8c31609f047f70"
 PYTHON_ROOT = Path("/Users/msmith1/.local/share/mise/installs/python/3.14.7")
 NODE_ROOT = Path("/Users/msmith1/.local/share/mise/installs/node/24.20.0")
 GIT_ROOT = Path("/Library/Developer/CommandLineTools")
@@ -86,7 +92,7 @@ RG_BINARY = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-p
 PINNED_TOOLS = (
     (PYTHON_ROOT / "bin/python3.14", ("1bfa9a829d950ecd4870a3d7a6826eb57edb4aa93f69d07cd3bb21e9fcc6d439",)),
     (NODE_ROOT / "bin/node", ("9d050fd455b56426e25d4d603c7c501cbb2630348e836cf221dcce748e90588a",)),
-    (RG_BINARY, ("ee0025a8dcfb3bef627328c5fb57b56967dcdfc3ed713e3825dfaba1da2e579a",)),
+    (RG_BINARY, ("268128f0b67b319ce00e659bc9130b28aff1edd7a184660a9930f797b135576c",)),
     (GIT_ROOT / "usr/bin/git", ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
                               "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae")),
 )
@@ -136,7 +142,7 @@ def _host_runtime():
         pins.append((path, digest))
     if not Path("/usr/bin/sandbox-exec").is_file() or any(not path.exists() for path in (*files, *trees)):
         raise IsolationUnavailable("measured Seatbelt runtime dependencies are missing")
-    return HostRuntime(CLAUDE_BINARY, "2.1.289", home, account.pw_name, files, trees, tuple(pins),
+    return HostRuntime(CLAUDE_BINARY, CLAUDE_VERSION, home, account.pw_name, files, trees, tuple(pins),
                        f"{PYTHON_ROOT}/bin:{NODE_ROOT}/bin:{RG_BINARY.parent}:{GIT_ROOT}/usr/bin:/usr/bin:/bin", "/bin/bash")
 
 
@@ -201,12 +207,47 @@ def prepare(run):
     if done.returncode or report.get("payload") != "ready" or not rows or any(r["native_file"] != "current" for r in rows):
         raise RuntimeError(f"persona registration failed: {done.stdout}{done.stderr}")
     (state.paths.project / ".claude/settings.json").write_text(json.dumps({"attribution": {"commit": "", "pr": ""}}) + "\n")
+    provision_listing(state)
     _validate(state)
     profile = _policy(state, 0)
     done = subprocess.run(["/usr/bin/sandbox-exec", "-p", profile, "/usr/bin/true"], cwd=state.paths.project,
                           env=child_env(run), capture_output=True, timeout=10)
     if done.returncode:
         raise IsolationUnavailable(f"Seatbelt policy preflight failed: {done.stderr.decode(errors='replace')}")
+
+
+def provision_listing(state):
+    """Give the private user scope the name-only skill listing a user who ran setup-pstack has. A tree without the
+    script (an older pin) installs nothing, and the record says so."""
+    skills = state.paths.project / SKILLS_DIR
+    settings = state.paths.config / "settings.json"
+    settings.write_text(json.dumps(ACCOUNT_SYNC_OFF) + "\n")
+    script = skills / LISTING_SCRIPT
+    if not script.is_file():
+        record = {"step": "absent", "script": str(LISTING_SCRIPT), "name_only": []}
+    else:
+        done = subprocess.run([sys.executable, str(script), "install", "--settings", str(settings), "--skills-root", str(skills)],
+                              capture_output=True, text=True)
+        (state.paths.root / "skill-listing-install.json").write_text(done.stdout)
+        report = json.loads(done.stdout or "{}") if not done.returncode else {}
+        if done.returncode or report.get("state") != "current":
+            raise RuntimeError(f"skill listing install failed with exit {done.returncode}: {done.stdout}{done.stderr}")
+        overrides = json.loads(settings.read_text(encoding="utf-8")).get("skillOverrides", {})
+        record = {"step": "installed", "script": str(LISTING_SCRIPT),
+                  "name_only": sorted(name for name, value in overrides.items() if value == "name-only")}
+    record["setting_sources"] = SETTING_SOURCES
+    (state.paths.root / LISTING_RECORD).write_text(json.dumps(record) + "\n")
+    return record
+
+
+def listing_record(root):
+    fd = _open_dir(Path(os.path.abspath(root)))
+    try:
+        return json.loads(_read_file(fd, LISTING_RECORD))
+    except FileNotFoundError:
+        return None
+    finally:
+        os.close(fd)
 
 
 def child_env(run):
@@ -250,13 +291,14 @@ def _command(run, text, index):
     prompt = f"/{skill} {rest}".rstrip() if skill else text
     pin = ["--session-id" if index == 0 else "--resume", state.session]
     argv = ["/usr/bin/sandbox-exec", "-p", _policy(state, index), str(state.runtime.binary),
-            "-p", "--output-format", "stream-json", "--verbose", "--setting-sources", "project",
+            "-p", "--output-format", "stream-json", "--verbose", "--setting-sources", SETTING_SOURCES,
             "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--permission-mode", "bypassPermissions", *pin]
-    effort = run.case.get("effort", DEFAULT_EFFORT)
+    effort = run.effort or run.case.get("effort", DEFAULT_EFFORT)
     if effort:
         argv += ["--effort", effort]
-    if run.case.get("model"):
-        argv += ["--model", run.case["model"]]
+    model = run.model or run.case.get("model")
+    if model:
+        argv += ["--model", model]
     argv.append(prompt)
     return ConfinedCommand(tuple(argv), child_env(run), state.session)
 
@@ -541,13 +583,13 @@ def prompt_text(entry):
 
 
 def is_prompt(entry):
-    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isSidechain"):
+    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isSidechain") or entry.get("isCompactSummary"):
         return False
     parts = blocks(entry)
     if not parts or any(p.get("type") == "tool_result" for p in parts):
         return False
     text = prompt_text(entry).strip()
-    return bool(text) and not text.startswith(("<task-notification", "<system-reminder", "[Request interrupted"))
+    return bool(text) and not text.startswith(("<task-notification", "<system-reminder", "[Request interrupted", *LOCAL_COMMAND_OUTPUT))
 
 
 def tag_turns(rows):
@@ -704,6 +746,21 @@ def injected_base(rows):
     return None
 
 
+def compactions(streams):
+    return [{"turn": index, "trigger": (row.get("compact_metadata") or {}).get("trigger"),
+             "pre_tokens": (row.get("compact_metadata") or {}).get("pre_tokens"),
+             "post_tokens": (row.get("compact_metadata") or {}).get("post_tokens"), "source": "stream"}
+            for index, rows in enumerate(streams) for row in rows
+            if row.get("type") == "system" and row.get("subtype") == "compact_boundary"]
+
+
+def skill_calls(events):
+    results = {e["id"]: e for e in events if e["kind"] == "tool_result"}
+    return [{"skill": e["input"].get("skill"), "ok": results[e["id"]]["ok"] if e["id"] in results else None,
+             "output_head": results[e["id"]]["output_head"][:200] if e["id"] in results else None}
+            for e in events if e["kind"] == "tool_call" and e["name"] == "Skill"]
+
+
 def host_skill_hits(contents):
     roots = [str(Path.home() / ".claude/skills"), str(Path.home() / ".agents/skills")]
     return sorted({root for data in contents for root in roots if root in data.decode(errors="replace")})
@@ -729,8 +786,12 @@ def harvest(run):
     results = [next((e for e in reversed(s) if e.get("type") == "result"), {}) for s in streams]
     events = lead_events(rows)
     reads_by = {"lead": files_read(rows, cwd)}
+    child_skills = {}
     for path in delegates:
-        reads_by[path.stem] = files_read(_jsonl(evidence[path]), cwd)
+        child = _jsonl(evidence[path])
+        reads_by[path.stem] = files_read(child, cwd)
+        if calls := skill_calls(lead_events(child)):
+            child_skills[path.stem] = calls
     state = entry_state(run.case.get("entry"), init, rows)
     if state == "not-observed" and any(p.endswith(f"/{run.case.get('entry')}/SKILL.md") for p in reads_by["lead"]):
         state = "read"
@@ -772,6 +833,9 @@ def harvest(run):
         "x_turn_entries": turn_entries,
         "x_entry_base_dir": injected_base(rows),
         "x_files_read_by": reads_by,
+        "x_child_skill_calls": child_skills,
+        "x_compactions": compactions(streams),
+        "x_skill_listing": listing_record(prepared.paths.root if prepared else run.root),
         "x_cost_usd": round(sum(r.get("total_cost_usd") or 0 for r in results), 4),
         "x_deferred_tools": next((e["attachment"].get("addedNames") for e in rows if e.get("type") == "attachment"
                                   and e["attachment"].get("type") == "deferred_tools_delta"), None),

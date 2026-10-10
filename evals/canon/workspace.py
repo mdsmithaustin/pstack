@@ -24,6 +24,7 @@ date, so every arm gets the same commit ids. The PR branch is checked out and
 the PR body sits in the workspace root, untracked, under its own file name.
 """
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -56,6 +57,7 @@ GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TER
 # workspace cannot be built or does not match the recorded tree.
 REFUSED = 97
 TREE = "skills/pstack"
+INVOCATION_POLICY = "agents/openai.yaml"
 CREDENTIAL_FILES = {".credentials.json", "auth.json"}
 CREDENTIAL_TOKENS = {
     "API key": re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}"),
@@ -397,6 +399,24 @@ def expose(root, discovery, tree=None):
         shutil.copytree(skill, target / skill.name, symlinks=True)
         added.append(f"{discovery}/{skill.name}")
     exclude(root, added)
+
+
+def name_only_settings(argv, tree):
+    """Claude's argv with setup-pstack's name-only overrides for the mounted
+    tree. They join the harness's own --settings object, or a new --settings
+    when it passes none."""
+    _listing_spec = importlib.util.spec_from_file_location("skill_listing", Path(__file__).resolve().parents[2] / "skills/setup-pstack/scripts/skill-listing.py")
+    skill_listing = importlib.util.module_from_spec(_listing_spec)
+    _listing_spec.loader.exec_module(skill_listing)
+    overrides = {name: "name-only" for name in skill_listing.managed_skills(Path(tree))}
+    if not overrides:
+        return argv
+    if "--settings" not in argv:
+        return [*argv, "--settings", json.dumps({"skillOverrides": overrides}, separators=(",", ":"))]
+    at = argv.index("--settings") + 1
+    settings = json.loads(argv[at])
+    settings["skillOverrides"] = {**settings.get("skillOverrides", {}), **overrides}
+    return [*argv[:at], json.dumps(settings, separators=(",", ":")), *argv[at + 1:]]
 
 
 def next_slot(root):

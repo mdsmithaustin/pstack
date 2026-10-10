@@ -78,9 +78,18 @@ jobs:
                — never wholesale-overwrite: this fork's additions (GitNexus
                nudges, pstack-harness pointers,
                agents/openai.yaml files, renamed skill references) must
-               survive. If upstream adds or removes `disable-model-invocation`
-               on a skill, add or remove that skill's `agents/openai.yaml`
-               (policy: allow_implicit_invocation: false) to match.
+               survive. Drop every `disable-model-invocation` line from incoming
+               pstack/skills/ frontmatter. When upstream adds it to a skill, add or keep that
+               skill's `agents/openai.yaml` (policy: allow_implicit_invocation:
+               false) and keep its implicit_allowed false in
+               tools/skill-trigger-cases.json. When upstream removes it, delete
+               that file, add the skill to AUTO_INVOCABLE in
+               tools/test_skill_invocation_policy.py, and set its
+               implicit_allowed to true. When a skill directory is added,
+               renamed, or removed, update PSTACK_SKILLS in
+               skills/setup-pstack/scripts/skill-listing.py, then run
+               python3 -m unittest discover -s tools -p 'test_*.py', which
+               must exit zero.
             4. Every SKILL.md frontmatter `name:` must equal its directory
                name. Verify after editing.
             5. Preserve root agents/*.md as upstream source. After any agent

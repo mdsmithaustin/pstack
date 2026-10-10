@@ -779,6 +779,18 @@
    ],
    "scenario": "deslop-run"
   },
+  "deslop-hands-unsettled-comments-to-no-comments": {
+   "check": "live",
+   "claim": "deslop hands the comments its own rules do not settle to the no-comments skill, so after deslop loads, the lead loads no-comments, or on Claude Code a delegate it spawns does.",
+   "harness_sensitive": true,
+   "live_case": "rollup fixture with the rollup-csv-header history, which adds --header on a csv-header branch with narrating comments and one design-rationale comment that deslop rules 1-3 do not settle; prompt `deslop it before i commit` with no entry; arms deslop-handoff-slash, deslop-handoff-bold, and deslop-handoff-use spell the step 5 handoff sentence three ways through `skill_overlays`; pass when no-comments loads after deslop (through a Skill tool call whose result succeeded on Claude Code, by a skill injection or a read that covers the whole file on Codex); fail when deslop finishes without that load or a refused Skill(no-comments) has no later load; evidence records whether the unsettled comment survived.",
+   "owners": [
+    "skills/deslop/SKILL.md",
+    "skills/no-comments/SKILL.md",
+    "skills/setup-pstack/scripts/skill-listing.py"
+   ],
+   "scenario": "deslop-handoff-slash"
+  },
   "disk-prompt-routes-to-worktree-cleanup": {
    "check": "live",
    "claim": "A disk-space or prune-worktrees prompt opens the Worktree cleanup playbook.",
@@ -1395,6 +1407,17 @@
     "skills/setup-pstack/scripts/check-models-config.py",
     "skills/setup-pstack/references/models-config.md"
    ]
+  },
+  "name-only-skills-stay-unloaded-unnamed": {
+   "check": "live",
+   "claim": "A skill set to load only when named never loads from its description: with no entry and no skill named, no agent in the run loads a skill whose agents/openai.yaml sets allow_implicit_invocation: false.",
+   "harness_sensitive": true,
+   "live_case": "relay fixture; prompt `im stepping away. keep going until the migration check reports zero old callers. log your decisions.` with no entry; fail when any agent loads a skill from that set that the prompts and its own brief do not name; pass when the run acted with no such load.",
+   "owners": [
+    "skills/setup-pstack/scripts/skill-listing.py",
+    "skills/setup-pstack/SKILL.md"
+   ],
+   "scenario": "name-only-unnamed-request"
   },
   "native-agents-appear-in-catalog-after-restart": {
    "check": "install",
@@ -2061,6 +2084,30 @@
    ],
    "scenario": "code-review-run"
   },
+  "routed-skill-loads-after-compaction": {
+   "check": "live",
+   "claim": "After `/compact`, a `/poteto-mode` step-away request still loads figure-it-out by name.",
+   "harness_sensitive": true,
+   "live_case": "relay fixture; turns `what does relay do? two sentences is plenty.`, `/compact`, then `/poteto-mode` with `im stepping away. keep going until the migration check reports zero old callers. log your decisions.`; grade the routed-skill-loads-when-named rule on the last turn; inconclusive when the trace shows no compaction before it. Codex runs `/compact` as a resumed turn with model_auto_compact_token_limit, which leaves a compacted record in the rollout.",
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/figure-it-out/SKILL.md",
+    "skills/setup-pstack/scripts/skill-listing.py"
+   ],
+   "scenario": "name-only-route-after-compact"
+  },
+  "routed-skill-loads-when-named": {
+   "check": "live",
+   "claim": "When `/poteto-mode` routes a step-away request to figure-it-out, the lead loads figure-it-out itself and never hands the run back by asking the user to type `/figure-it-out`.",
+   "harness_sensitive": true,
+   "live_case": "relay fixture; prompt `/poteto-mode` with `im stepping away. keep going until the migration check reports zero old callers. log your decisions.`; pass when the lead loads figure-it-out through a Skill tool call whose result succeeded on Claude Code, by a skill injection or a read that covers the whole file on Codex; fail on a refused Skill(figure-it-out) with no later load, a reply that asks the user to run or type `/figure-it-out`, a Claude Code load by file read, or a finished routing step with no load; inconclusive when the run was killed before a routing decision.",
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/figure-it-out/SKILL.md",
+    "skills/setup-pstack/scripts/skill-listing.py"
+   ],
+   "scenario": "name-only-route-figure-it-out"
+  },
   "router-diagram-routes-match-selector": {
    "check": "static",
    "claim": "Every route label in the guide's routing diagram (code or history question, external evidence, defect, new behavior, structure only, someone else's PR, measured slowness, large work or no match) matches a selector entry in poteto-mode's Playbooks section, and the diagram's first step (read the Principles section) is a poteto-mode non-negotiable.",
@@ -2393,7 +2440,7 @@
   },
   "slash-skills-invocable": {
    "check": "install",
-   "claim": "Each harness lists every guide-named pstack skill as a user-invocable entry (slash command, $skill, or equivalent) after install, including skills gated with disable-model-invocation.",
+   "claim": "Each harness lists every guide-named pstack skill as a user-invocable entry (slash command, $skill, or equivalent) after install, including the skills Claude Code lists by name only.",
    "harness_sensitive": true,
    "owners": [
     "skills/poteto-mode/SKILL.md",
@@ -2849,40 +2896,42 @@
   },
   "poteto-help-typed-only": {
    "check": "static",
-   "claim": "/poteto-help is gated against model invocation (disable-model-invocation in SKILL.md, allow_implicit_invocation: false for Codex), so it runs when the user types it.",
+   "claim": "/poteto-help does not load from its description: its agents/openai.yaml sets allow_implicit_invocation: false, which Codex honors and which puts it in setup-pstack's Claude Code name-only listing, so it runs when the user types it.",
    "evidence": [
-    {
-     "file": "skills/poteto-help/SKILL.md",
-     "quote": "disable-model-invocation: true"
-    },
     {
      "file": "skills/poteto-help/agents/openai.yaml",
      "quote": "allow_implicit_invocation: false"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Claude Code lists each by bare name."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-help/SKILL.md",
-    "skills/poteto-help/agents/openai.yaml"
+    "skills/poteto-help/agents/openai.yaml",
+    "skills/setup-pstack/SKILL.md",
+    "skills/setup-pstack/scripts/skill-listing.py"
    ]
   },
   "typescript-rules-load-by-name": {
    "check": "static",
-   "claim": "typescript-best-practices is gated against model invocation on every harness that honors the gate (disable-model-invocation in SKILL.md, allow_implicit_invocation: false for Codex), so the user loads it by typing /typescript-best-practices.",
+   "claim": "typescript-best-practices does not load from its description: its agents/openai.yaml sets allow_implicit_invocation: false, which Codex honors and which puts it in setup-pstack's Claude Code name-only listing, so the user loads it by typing /typescript-best-practices.",
    "evidence": [
-    {
-     "file": "skills/typescript-best-practices/SKILL.md",
-     "quote": "disable-model-invocation: true"
-    },
     {
      "file": "skills/typescript-best-practices/agents/openai.yaml",
      "quote": "allow_implicit_invocation: false"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Claude Code lists each by bare name."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/typescript-best-practices/SKILL.md",
-    "skills/typescript-best-practices/agents/openai.yaml"
+    "skills/typescript-best-practices/agents/openai.yaml",
+    "skills/setup-pstack/SKILL.md",
+    "skills/setup-pstack/scripts/skill-listing.py"
    ]
   },
   "budget-labels-set-effort": {
@@ -3237,6 +3286,41 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/SKILL.md"
+   ]
+  },
+  "claude-listing-follows-codex-policy": {
+   "check": "static",
+   "claim": "setup-pstack's listing step gives Claude Code exactly the skills whose agents/openai.yaml sets allow_implicit_invocation: false, the gate Codex honors as installed, and no skill under skills/ sets disable-model-invocation.",
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/scripts/skill-listing.py",
+    "skills/setup-pstack/SKILL.md"
+   ]
+  },
+  "setup-checks-claude-skill-listing": {
+   "check": "static",
+   "claim": "On Claude Code, setup checks the skill listing, writes the name-only overrides only after the user's yes, and says the change applies from the next session; until then the gated skills list with their descriptions.",
+   "evidence": [
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Run this check whenever the user runs pstack on Claude Code."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Run the same command with `install` in place of `check` only after the user says yes."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "say the change applies from the next session."
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Without an override those skills list with their full descriptions and load from them."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/SKILL.md"
    ]
   }
  },
@@ -5663,7 +5747,8 @@
    "also": [
     "unslop-takes-target-and-rules",
     "no-comments-spawns-comment-sicko",
-    "deslop-cleans-code-slop"
+    "deslop-cleans-code-slop",
+    "deslop-hands-unsettled-comments-to-no-comments"
    ],
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -6684,7 +6769,11 @@
     "upstream",
     "port"
    ],
-   "text": "```text\n/poteto-mode im stepping away. keep going until the migration check reports zero old callers. log your decisions.\n```"
+   "text": "```text\n/poteto-mode im stepping away. keep going until the migration check reports zero old callers. log your decisions.\n```",
+   "also": [
+    "routed-skill-loads-when-named",
+    "routed-skill-loads-after-compaction"
+   ]
   },
   "a87b5c4ec948": {
    "class": "substituted",
@@ -8873,7 +8962,7 @@
    "class": "substituted",
    "file": "README.md",
    "ported_as": [
-    "4e630f5db969"
+    "0fb2f22fffd9"
    ],
    "promise": "poteto-help-typed-only",
    "sources": [
@@ -10027,7 +10116,7 @@
    "class": "substituted",
    "file": "05-build-and-clean.md",
    "ported_as": [
-    "c1f305f4e11e"
+    "ce48bab5e706"
    ],
    "promise": "typescript-rules-load-by-name",
    "sources": [
@@ -11502,40 +11591,6 @@
    ],
    "text": "Grok Build's spawn tool takes no effort, so there every role runs at your session effort, whatever the file writes."
   },
-  "c1f305f4e11e": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "typescript-rules-load-by-name",
-   "sources": [
-    "port"
-   ],
-   "text": "It's set to load only when you type it, so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
-  },
-  "4e630f5db969": {
-   "class": "promise",
-   "file": "README.md",
-   "promise": "poteto-help-typed-only",
-   "sources": [
-    "port"
-   ],
-   "text": "It's set to load only when you type it, so type `/poteto-help`."
-  },
-  "250f0b8a5b98": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "Some skills are set to load only when you type their name."
-  },
-  "ba7e8624cfe7": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "Claude Code and Codex honor that setting."
-  },
   "4c5cb33af9ed": {
    "class": "context",
    "file": "01-setup.md",
@@ -11559,6 +11614,73 @@
     "port"
    ],
    "text": "Type `/poteto-mode` again if it stops applying."
+  },
+  "0fb2f22fffd9": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "poteto-help-typed-only",
+   "sources": [
+    "port"
+   ],
+   "text": "It doesn't load from its description (on Claude Code, once `/setup-pstack` sets the skill listing), so type `/poteto-help`."
+  },
+  "ce48bab5e706": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "typescript-rules-load-by-name",
+   "sources": [
+    "port"
+   ],
+   "text": "It doesn't load from its description (on Claude Code, once `/setup-pstack` sets the skill listing), so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
+  },
+  "6e05925cddd8": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "name-only-skills-stay-unloaded-unnamed",
+   "sources": [
+    "port"
+   ],
+   "text": "Some skills don't load from their description."
+  },
+  "06a14c57d8c1": {
+   "also": [
+    "routed-skill-loads-after-compaction",
+    "slash-skills-invocable"
+   ],
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "routed-skill-loads-when-named",
+   "sources": [
+    "port"
+   ],
+   "text": "They load when you type their name or when another pstack skill names them."
+  },
+  "1d21f306c413": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-listing-follows-codex-policy",
+   "sources": [
+    "port"
+   ],
+   "text": "Codex honors this as installed, and Claude Code does once `/setup-pstack` sets its skill listing."
+  },
+  "49ff3b443342": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-claude-skill-listing",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code it also checks the skill listing, and with your yes it lists the skills that don't load from their description by name only, from your next session."
+  },
+  "7936ca81b241": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-claude-skill-listing",
+   "sources": [
+    "port"
+   ],
+   "text": "Until then, including after an update from a version that gated those skills in their frontmatter, Claude Code shows their descriptions and can load them on its own."
   }
  }
 }

@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "routed-skill-loads-when-named"
+ ],
+ "fixture": "relay",
+ "entry": "poteto-mode",
+ "turns": [
+  "im stepping away. keep going until the migration check reports zero old callers. log your decisions."
+ ],
+ "timeout_s": {
+  "default": 300,
+  "codex": 420
+ },
+ "expect": {
+  "skill": "figure-it-out"
+ },
+ "tmp_lock": false
+}

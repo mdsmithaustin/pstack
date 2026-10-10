@@ -1427,6 +1427,357 @@ class SkillToolLoads(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+SKILL_TRACES = TRACES / "skill-loads"
+REFUSAL = ("<tool_use_error>Skill figure-it-out cannot be used with Skill tool due to disable-model-invocation. Ask the user to run "
+           "/figure-it-out themselves — it cannot be invoked via the Skill tool. Do not repl")
+
+
+def shell(seq, cmd, ok=True, turn=None):
+    events = [{"seq": seq, "kind": "tool_call", "name": "exec_command", "input": {"cmd": cmd}, "id": f"c{seq}"},
+              {"seq": seq + 1, "kind": "tool_result", "name": "exec_command", "ok": ok, "output_head": "", "id": f"c{seq}"}]
+    return in_turn(turn, events) if turn is not None else events
+
+
+def installed_skill(test, skill, lines, sub=".agents/skills"):
+    tmp = tempfile.TemporaryDirectory()
+    test.addCleanup(tmp.cleanup)
+    project = Path(tmp.name)
+    (project / sub / skill).mkdir(parents=True)
+    (project / sub / skill / "SKILL.md").write_text("".join(f"line {n}\n" for n in range(1, lines + 1)))
+    return project
+
+
+class RoutedSkillLoads(unittest.TestCase):
+    case = load_case("name-only-route-figure-it-out")
+
+    def grade(self, trace, project=None):
+        return grade("routed-skill-loads-when-named", trace, self.case, project)
+
+    def test_claude_loads_figure_it_out_through_the_skill_tool(self):
+        result = self.grade(json.loads((SKILL_TRACES / "claude-code-name-only-route.json").read_text()))
+        self.assertEqual((result["verdict"], result["failures"], result["evidence"][0]), (PASS, [], "figure-it-out loaded by skill-tool at seq 2"))
+
+    def test_claude_reading_the_skill_file_instead_fails(self):
+        result = self.grade(json.loads((SKILL_TRACES / "claude-code-name-only-route-main.json").read_text()))
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["loaded by file read, not the Skill tool"]))
+
+    def test_a_refused_skill_call_that_hands_the_run_back_fails(self):
+        result = self.grade(json.loads((SKILL_TRACES / "claude-code-skill-refusal.json").read_text()))
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["failures"], [
+            "handed the run back to the user: 'Only you can start this skill, by typing `/figure-it-out` yourself.'",
+            f"Skill(figure-it-out) was refused and no later load succeeded: {REFUSAL!r}"])
+
+    def test_codex_loads_figure_it_out_by_reading_the_whole_file(self):
+        result = self.grade(json.loads((SKILL_TRACES / "codex-name-only-route.json").read_text()))
+        self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, "figure-it-out loaded by read-whole at seq 13"))
+
+    def test_codex_partial_reads_fail_until_they_cover_the_file(self):
+        project = installed_skill(self, "figure-it-out", 30)
+        path = ".agents/skills/figure-it-out/SKILL.md"
+        partial = minimal(events=shell(0, f"sed -n '1,20p' {path}") + [text(2, "Plan set.")], harness="codex", final_reply="Plan set.")
+        result = self.grade(partial, project)
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["read only part of figure-it-out/SKILL.md: ['lines [(1, 20)] of 30']"]))
+        for command, verdict in ((f"sed -n '21,$p' {path}", PASS), (f"tail -n 10 {path}", PASS), (f"tail -n 5 {path}", FAIL),
+                                 (f"cat {path} | head -n 25", FAIL), (f"cat {path} | head -n 40", PASS), (f"grep -n line {path}", FAIL),
+                                 (f"cd .agents/skills/figure-it-out && head -n 40 SKILL.md", PASS)):
+            with self.subTest(command=command):
+                trace = minimal(events=shell(0, f"sed -n '1,20p' {path}") + shell(2, command) + [text(4, "Plan set.")],
+                                harness="codex", final_reply="Plan set.")
+                self.assertEqual(self.grade(trace, project)["verdict"], verdict)
+
+    def test_codex_skill_injection_is_a_load(self):
+        trace = minimal(events=[{"seq": 0, "kind": "user", "text": "go"}], harness="codex", final_reply="ok",
+                        x_entry_injections=[{"name": "figure-it-out", "path": "/w/.agents/skills/figure-it-out/SKILL.md", "turn": None}])
+        result = self.grade(trace)
+        self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, "figure-it-out loaded by injection at seq 0"))
+
+    def test_a_reply_that_asks_the_user_to_type_the_command_fails(self):
+        for reply in ("Run `/figure-it-out` when you're back and I'll pick it up.", "You can start it by typing /figure-it-out."):
+            with self.subTest(reply=reply):
+                result = self.grade(minimal(events=bash(0, "ls") + [text(2, reply)], final_reply=reply))
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, [f"handed the run back to the user: {reply!r}"]))
+
+    def test_a_first_person_plan_is_not_a_hand_back(self):
+        reply = "You asked for a migration, so I'll run /figure-it-out first."
+        result = self.grade(minimal(events=bash(0, "ls") + [text(2, reply)], final_reply=reply))
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["routing finished without loading figure-it-out"]))
+
+    def test_a_route_that_skips_figure_it_out_fails_once_it_is_chosen(self):
+        trace = minimal(events=[read(0, "poteto-mode/playbooks/feature.md")] + bash(1, "ls"), exit_code=-9, x_implicit_off=["figure-it-out"])
+        result = self.grade(trace)
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["routing finished without loading figure-it-out"]))
+        self.assertEqual(result["evidence"][-1], "routing decision: read poteto-mode/playbooks/feature.md at seq 0")
+
+    def test_a_run_killed_before_any_route_is_inconclusive(self):
+        for events in (bash(0, "ls"), skill_call(0, "figure-it-out", ok=False)):
+            with self.subTest(events=events[0]["name"]):
+                result = self.grade(minimal(events=events, exit_code=-9))
+                self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before a routing decision"]))
+
+    def test_preparation_loads_do_not_decide_a_route_in_a_killed_run(self):
+        """The routing contract excludes principle and harness preparation.
+        A preparation-only timeout must be inconclusive rather than a missing-load failure.
+        """
+        for name in ("principle-never-block-on-the-human", "principle-foundational-thinking", "pstack-harness"):
+            carriers = [
+                ("claude-code", skill_call(8, name)),
+                ("claude-code", [read(8, f"{name}/SKILL.md"),
+                                 {"seq": 9, "kind": "tool_result", "name": "Read", "ok": True}]),
+                ("codex", shell(8, f"cat .agents/skills/{name}/SKILL.md")),
+            ]
+            for harness, events in carriers:
+                with self.subTest(name=name, harness=harness, tool=events[0]["name"]):
+                    result = self.grade(minimal(events=events, harness=harness, exit_code=-9,
+                                                x_implicit_off=["figure-it-out", name]))
+                    self.assertEqual((result["verdict"], result["failures"]),
+                                     (INCONCLUSIVE, ["run killed before a routing decision"]))
+
+    def test_preparation_after_a_refused_load_does_not_decide_a_route(self):
+        for name in ("principle-never-block-on-the-human", "pstack-harness"):
+            with self.subTest(name=name):
+                events = skill_call(0, "figure-it-out", ok=False) + skill_call(8, name)
+                result = self.grade(minimal(events=events, exit_code=-9, x_implicit_off=["figure-it-out", name]))
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (INCONCLUSIVE, ["run killed before a routing decision"]))
+
+    def test_another_routed_skill_still_decides_a_route_after_preparation(self):
+        for harness, routed in (("claude-code", skill_call(10, "arena")),
+                                ("codex", shell(10, "cat .agents/skills/arena/SKILL.md"))):
+            with self.subTest(harness=harness):
+                events = skill_call(0, "pstack-harness") + routed
+                result = self.grade(minimal(events=events, harness=harness, exit_code=-9,
+                                            x_implicit_off=["figure-it-out", "pstack-harness", "arena"]))
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (FAIL, ["routing finished without loading figure-it-out"]))
+                self.assertEqual(result["evidence"][-1], "routing decision: read arena/SKILL.md at seq 10")
+
+
+class RoutedSkillLoadsAfterCompaction(unittest.TestCase):
+    case = load_case("name-only-route-after-compact")
+
+    def grade(self, trace):
+        return grade("routed-skill-loads-after-compaction", trace, self.case)
+
+    def test_claude_and_codex_load_figure_it_out_after_a_compaction(self):
+        for name, first in (("claude-code-compact-route.json", "compactions before turn 2: [(1, 'stream')]"),
+                            ("codex-compact-route.json", "compactions before turn 2: [(1, 'rollout')]")):
+            with self.subTest(trace=name):
+                result = self.grade(json.loads((SKILL_TRACES / name).read_text()))
+                self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, first))
+
+    def test_no_compaction_before_the_last_turn_is_inconclusive(self):
+        trace = json.loads((SKILL_TRACES / "claude-code-compact-route.json").read_text())
+        for compactions in ([], [{"turn": 2, "source": "stream"}]):
+            with self.subTest(compactions=compactions):
+                result = self.grade({**trace, "x_compactions": compactions})
+                self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["the trace shows no compaction before turn 2"]))
+
+    def test_a_load_before_the_compaction_does_not_count(self):
+        events = in_turn(0, skill_call(0, "figure-it-out")) + in_turn(2, [{"seq": 2, "kind": "user", "text": "/poteto-mode go"}] + bash(3, "ls"))
+        result = self.grade(minimal(events=events, exit_code=-9, x_compactions=[{"turn": 1, "source": "stream"}]))
+        self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before a routing decision"]))
+
+    def test_a_hand_back_after_the_compaction_fails(self):
+        reply = "Run `/figure-it-out` yourself when you're back."
+        events = in_turn(2, [{"seq": 0, "kind": "user", "text": "/poteto-mode go"}, text(1, reply)])
+        result = self.grade(minimal(events=events, final_reply=reply, x_compactions=[{"turn": 1, "source": "rollout"}]))
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, [f"handed the run back to the user: {reply!r}"]))
+
+    def test_preparation_after_compaction_is_inconclusive_with_or_without_a_refusal(self):
+        for name in ("principle-never-block-on-the-human", "pstack-harness"):
+            for harness, preparation in (("claude-code", skill_call(8, name)),
+                                         ("codex", shell(8, f"cat .agents/skills/{name}/SKILL.md"))):
+                for refused in (False, True):
+                    with self.subTest(name=name, harness=harness, refused=refused):
+                        attempts = skill_call(2, "figure-it-out", ok=False) if refused else []
+                        events = in_turn(0, skill_call(0, "arena")) + in_turn(2, attempts + preparation)
+                        trace = minimal(events=events, harness=harness, exit_code=-9,
+                                        x_implicit_off=["figure-it-out", name, "arena"],
+                                        x_compactions=[{"turn": 1, "source": "stream"}])
+                        result = self.grade(trace)
+                        self.assertEqual((result["verdict"], result["failures"]),
+                                         (INCONCLUSIVE, ["run killed before a routing decision"]))
+
+
+class NameOnlyStaysUnloaded(unittest.TestCase):
+    case = load_case("name-only-unnamed-request")
+    hidden = ["figure-it-out", "poteto-mode", "show-me-your-work", "swarm"]
+
+    def grade(self, events, case=None, **extra):
+        trace = minimal(events=events, final_reply="Working on it.", **{"x_implicit_off": self.hidden, **extra})
+        return grade("name-only-skills-stay-unloaded-unnamed", trace, case or self.case)
+
+    def test_a_run_that_acts_without_loading_a_name_only_skill_passes(self):
+        events = bash(0, "sh tools/old_callers.sh") + skill_call(2, "unslop") + skill_call(4, "figure-it-out", ok=False) \
+            + bash(6, "grep -n phase .claude/skills/figure-it-out/SKILL.md")
+        result = self.grade(events)
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        self.assertEqual(result["evidence"][3], "refused or unreturned load calls: [('figure-it-out', 'skill-tool', 4)]")
+
+    def test_a_lead_load_of_an_unnamed_name_only_skill_fails(self):
+        for events, how in ((skill_call(0, "figure-it-out"), "skill-tool"), (bash(0, "cat .claude/skills/figure-it-out/SKILL.md"), "read-whole"),
+                            ([read(0, "figure-it-out/SKILL.md")], "read")):
+            with self.subTest(how=how):
+                result = self.grade(events)
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["loaded name-only skills nobody named: ['figure-it-out']"]))
+                self.assertEqual(result["evidence"][1], f"lead loads: [('lead', 'figure-it-out', '{how}', 0)]")
+
+    def test_a_skill_the_prompt_names_is_not_bait(self):
+        case = dict(self.case, turns=["/swarm check every caller"])
+        self.assertEqual(self.grade(skill_call(0, "swarm"), case)["verdict"], PASS)
+
+    def test_a_delegate_load_fails_unless_its_brief_or_persona_names_the_skill(self):
+        path = "/w/.claude/skills/show-me-your-work/SKILL.md"
+        spawn = {"seq": 0, "kind": "tool_call", "name": "Agent", "input": {"prompt": "migrate the callers", "subagent_type": "general-purpose"}}
+        spawns = [{"seq": 0, "subagent_type": "general-purpose", "transcript": "/t/agent-a1.jsonl"}]
+        result = self.grade([spawn], spawns=spawns, x_files_read_by={"lead": [], "agent-a1": [path]})
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["loaded name-only skills nobody named: ['show-me-your-work']"]))
+        result = self.grade([spawn], spawns=spawns, x_child_skill_calls={"agent-a1": [{"skill": "swarm", "ok": True}]})
+        self.assertEqual(result["evidence"][2], "delegate loads: [('agent-a1', 'swarm', 'skill-tool')]")
+        named = dict(spawn, input={"prompt": "Use the **show-me-your-work** skill to log each decision"})
+        self.assertEqual(self.grade([named], spawns=spawns, x_files_read_by={"agent-a1": [path]})["verdict"], PASS)
+        persona = [dict(spawns[0], subagent_type="poteto-agent")]
+        self.assertEqual(self.grade([spawn], spawns=persona, x_files_read_by={"agent-a1": ["/w/.claude/skills/poteto-mode/SKILL.md"]})["verdict"], PASS)
+
+    def test_case_prompts_only_exempt_explicit_skill_naming_forms(self):
+        """The operator's naming contract excludes bare words and longer names.
+        Grade output must reject an unrequested correct load in a free-form turn.
+        """
+        examples = [
+            ("every migrated caller is correct", FAIL),
+            ("Use the **correct** skill", PASS),
+            ("/correct", PASS),
+            ("$correct", PASS),
+            ("`correct`", PASS),
+            ("**correct**", PASS),
+            ("Use THE CORRECT SKILL", PASS),
+            ("Use `correct` skill", PASS),
+            ("/correctness", FAIL),
+            ("$correct-extra", FAIL),
+            ("`correct-extra`", FAIL),
+            ("**correct-extra**", FAIL),
+            ("the correct skillset", FAIL),
+        ]
+        for prompt, verdict in examples:
+            with self.subTest(prompt=prompt):
+                case = dict(self.case, turns=[prompt])
+                result = self.grade(skill_call(0, "correct"), case, x_implicit_off=["correct"])
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (verdict, [] if verdict == PASS else ["loaded name-only skills nobody named: ['correct']"]))
+
+    def test_entry_names_only_the_explicitly_invoked_skill(self):
+        for entry, loaded, verdict in (("correct", "correct", PASS), ("poteto-mode", "poteto-mode", PASS),
+                                       ("swarm", "correct", FAIL), (None, "correct", FAIL),
+                                       ("correct", "poteto-mode", FAIL)):
+            with self.subTest(entry=entry, loaded=loaded):
+                case = dict(self.case, entry=entry, turns=["Check the callers."])
+                result = self.grade(skill_call(0, loaded), case, x_implicit_off=["correct", "poteto-mode"])
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (verdict, [] if verdict == PASS else [f"loaded name-only skills nobody named: ['{loaded}']"]))
+
+    def test_entry_exempts_a_delegate_load_of_the_invoked_skill(self):
+        case = dict(self.case, entry="correct", turns=["Check the callers."])
+        spawn = {"seq": 0, "kind": "tool_call", "name": "Agent", "input": {"prompt": "Check the callers."}}
+        result = self.grade([spawn], case, x_implicit_off=["correct"],
+                            x_child_skill_calls={"agent-a1": [{"skill": "correct", "ok": True}]})
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
+    def test_delegate_briefs_only_exempt_explicit_skill_naming_forms(self):
+        examples = [("check that every migrated caller is correct", FAIL),
+                    ("Use the **correct** skill", PASS), ("/correct", PASS), ("$correct", PASS),
+                    ("`correct`", PASS), ("the correct skill", PASS), ("Use **CORRECT** skill", PASS)]
+        for field in ("prompt", "message", "description", "prompt_head"):
+            for brief, verdict in examples:
+                for carrier in ("skill-tool", "read", "subagent-read"):
+                    with self.subTest(field=field, brief=brief, carrier=carrier):
+                        spawn = {"seq": 0, "kind": "tool_call", "name": "Agent", "input": {}}
+                        spawns = [{"seq": 0, "transcript": "/t/agent-a1.jsonl", "x_thread_id": "agent-a1"}]
+                        if field == "prompt_head":
+                            spawns[0][field] = brief
+                        else:
+                            spawn["input"][field] = brief
+                        path = "/w/.claude/skills/correct/SKILL.md"
+                        extra = {"x_child_skill_calls": {"agent-a1": [{"skill": "correct", "ok": True}]}} if carrier == "skill-tool" else \
+                                {"x_files_read_by": {"agent-a1": [path]}} if carrier == "read" else \
+                                {"x_subagents": [{"thread_id": "agent-a1", "files_read": [path]}]}
+                        result = self.grade([spawn], spawns=spawns, x_implicit_off=["correct"], **extra)
+                        self.assertEqual((result["verdict"], result["failures"]),
+                                         (verdict, [] if verdict == PASS else ["loaded name-only skills nobody named: ['correct']"]))
+
+    def test_an_empty_trace_or_a_missing_name_only_set_is_inconclusive(self):
+        result = grade("name-only-skills-stay-unloaded-unnamed", minimal(x_implicit_off=self.hidden), self.case)
+        self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["empty trace: no tool call and no reply"]))
+        result = grade("name-only-skills-stay-unloaded-unnamed", minimal(events=skill_call(0, "figure-it-out")), self.case)
+        self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["the trace records no name-only skill set (x_implicit_off)"]))
+
+
+class DeslopHandsOff(unittest.TestCase):
+    case = load_case("deslop-handoff-use")
+
+    def grade(self, events, exit_code=0, harness="claude-code", project=None, **extra):
+        trace = minimal(events=events, final_reply="Cleaned the diff.", exit_code=exit_code, harness=harness, **extra)
+        return grade("deslop-hands-unsettled-comments-to-no-comments", trace, self.case, project)
+
+    def test_a_real_pass_that_named_no_comments_in_prose_without_loading_it_fails(self):
+        trace = json.loads((SKILL_TRACES / "claude-code-deslop-handoff-use.json").read_text())
+        result = grade("deslop-hands-unsettled-comments-to-no-comments", trace, self.case)
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["deslop finished without loading no-comments"]))
+        self.assertEqual(result["evidence"][:2], ["deslop load attempts: [(1, 'skill-tool', True)]", "no-comments load attempts: []"])
+
+    def test_claude_loads_no_comments_after_deslop(self):
+        result = self.grade(skill_call(0, "deslop") + bash(2, "git diff main...HEAD") + skill_call(4, "no-comments"))
+        self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, "no-comments loaded after deslop: skill-tool at seq 4"))
+
+    def test_a_delegate_that_loads_no_comments_counts_on_claude(self):
+        spawn = {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {"prompt": "review the comments"}}
+        result = self.grade(skill_call(0, "deslop") + [spawn], spawns=[{"seq": 2, "transcript": "/t/agent-b2.jsonl"}],
+                            x_child_skill_calls={"agent-b2": [{"skill": "no-comments", "ok": True}]})
+        self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, "no-comments loaded after deslop: by delegate agent-b2"))
+
+    def test_codex_reads_both_skills_whole(self):
+        project = installed_skill(self, "deslop", 12)
+        (project / ".agents/skills/no-comments").mkdir()
+        (project / ".agents/skills/no-comments/SKILL.md").write_text("one\ntwo\n")
+        events = shell(0, "sed -n '1,200p' .agents/skills/deslop/SKILL.md") + shell(2, "cat .agents/skills/no-comments/SKILL.md")
+        result = self.grade(events, harness="codex", project=project)
+        self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, "no-comments loaded after deslop: read-whole at seq 2"))
+
+    def test_a_finished_pass_without_no_comments_fails(self):
+        for events in (skill_call(0, "deslop") + bash(2, "git diff"), skill_call(0, "no-comments") + skill_call(2, "deslop")):
+            with self.subTest(first=events[0]["input"]["skill"]):
+                result = self.grade(events)
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["deslop finished without loading no-comments"]))
+
+    def test_a_refused_or_file_read_handoff_fails_on_claude(self):
+        refused = self.grade(skill_call(0, "deslop") + skill_call(2, "no-comments", ok=False))
+        self.assertEqual((refused["verdict"], refused["failures"]),
+                         (FAIL, ["Skill(no-comments) was refused and no later load succeeded: 'Launching skill: no-comments'"]))
+        read_only = self.grade(skill_call(0, "deslop") + [read(2, "no-comments/SKILL.md")])
+        self.assertEqual((read_only["verdict"], read_only["failures"]), (FAIL, ["loaded by file read, not the Skill tool"]))
+
+    def test_no_deslop_load_or_a_killed_pass_is_inconclusive(self):
+        for events, exit_code, reason in ((bash(0, "git diff"), 0, "deslop never loaded"),
+                                          ([read(0, "deslop/SKILL.md")], 0, "deslop never loaded"),
+                                          (skill_call(0, "deslop") + bash(2, "git diff"), -9, "run killed after deslop loaded and before it finished")):
+            with self.subTest(reason=reason, exit_code=exit_code):
+                result = self.grade(events, exit_code=exit_code)
+                self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, [reason]))
+
+    def test_the_evidence_says_whether_the_unsettled_comment_survived(self):
+        spec = self.case["expect"]["unsettled"]
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = Path(tmp.name)
+        (project / "rollup").mkdir()
+        events = skill_call(0, "deslop") + skill_call(2, "no-comments")
+        for body, said in ((f"x = 1\n    {spec['text']}\n", "True"), ("x = 1\n", "False")):
+            with self.subTest(said=said):
+                (project / spec["file"]).write_text(body)
+                self.assertEqual(self.grade(events, project=project)["evidence"][-1], f"unsettled comment survived: {said}")
+        self.assertEqual(self.grade(events)["evidence"][-1], "unsettled comment survived: unknown, no project")
+
+
 def codex_spawn(seq, task, reply, model="gpt-6.1-sol"):
     events = [{"seq": seq, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": task, "model": model, "message": "gAAAAABqwbhN"}},
               {"seq": seq + 1, "kind": "tool_call", "name": "SubAgentActivity", "input": {"kind": "started", "agent_path": f"/root/{task}"}},

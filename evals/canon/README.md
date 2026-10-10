@@ -184,10 +184,14 @@ current, `rule leaf vs current run-1 SEPARATES`. In `compare.json` these pair
 entries add `baseline` and `treatment`, and these rule entries add `arm`.
 
 `build.json` also records `arm_listed`, the `SKILL.md` files each arm adds
-beside current whose frontmatter does not set `disable-model-invocation` and
-whose skill has no `agents/openai.yaml` with `allow_implicit_invocation:
-false`. The agent is offered such a skill by its description in every run of
-that arm. A pair whose differing files include a listed skill is exposed only
+beside current that every run of that arm offers by description. Such a
+skill has no `agents/openai.yaml` with `allow_implicit_invocation: false`,
+which Codex reads. Claude's name-only listing covers managed pstack skills
+only (see Entry modes). Its frontmatter also does not set
+`disable-model-invocation`, which Claude Code still honors in a tree that
+carries it, as every pinned `skills_at` tree does. A skill that sets only the
+frontmatter flag is not listed either, since Claude Code never offers it by
+description. A pair whose differing files include a listed skill is exposed only
 when the listing arm is the treatment, whether or not the run loaded the skill.
 Such a pair is scored on its verdicts instead of reading `unexposed`, which is
 the outcome a placement screen measures. After the rule lines `compare` prints
@@ -212,13 +216,16 @@ rules/<id>/
 ```
 
 The build makes it from the current tree. Every skill directory keeps its
-name and its `SKILL.md`, cut to the frontmatter bytes that current holds
-through the closing `---` line. Every body and every other file is dropped.
-Both arms are `with_skill` rows with the same manifest, prompt, entry prefix,
-workspace input, grader, and companions, so the only difference is the
-guidance text. The whole frontmatter stays, including fields such as
-`reminder` and `disable-model-invocation`, so that both arms discover and
-trigger the same skills. A stub arm needs no `arms/` directory, and
+name, its `SKILL.md` cut to the frontmatter bytes that current holds through
+the closing `---` line, and its `agents/openai.yaml` as it is. Every body and
+every other file is dropped. Both arms are `with_skill` rows with the same
+manifest, prompt, entry prefix, workspace input, grader, and companions, so
+the only difference is the guidance text. The whole frontmatter stays,
+including fields such as `reminder` and, in a pinned tree,
+`disable-model-invocation`. The `openai.yaml` stays because Codex reads its
+`allow_implicit_invocation: false` and each Claude run takes its name-only
+listing from it (see Entry modes), so both arms discover and trigger the same
+skills. A stub arm needs no `arms/` directory, and
 `arms/stub.patch` is refused. It may also sit beside patched arms. A rule with
 only current and stub targets `poteto-mode/SKILL.md`, and under `--entry
 skill` mounts poteto-mode alone. `plan` and `build` print the stub arm as a
@@ -268,6 +275,25 @@ Both agents need the link. `codex debug prompt-input` in a harness-shaped
 workspace listed only the system skill root until `.agents/skills` existed. A
 Claude run with an unknown model, which costs nothing, listed `poteto-mode`
 among its slash commands only with `.claude/skills` present.
+
+A user who ran setup-pstack's `skill-listing.py install` sees each pstack skill whose
+`agents/openai.yaml` sets `allow_implicit_invocation: false` listed by name
+only, with no description. Under this entry both wrappers, `host.py wrap` and
+`sandbox.py wrap`, give each Claude run that listing, taken from the tree the
+run mounts. Both wrappers import `managed_skills` from the evaluator's own
+listing script, including for pinned trees without that script. An arm's
+added skill is covered when its name belongs to pstack's managed scope.
+They set `skillOverrides` to
+`name-only` for each such skill inside the one `--settings` object the
+harness passes. The repository's skill-ci pin lives in
+[`.skill-ci.toml`](../../.skill-ci.toml). When the harness
+passes no `--settings`, they pass a new one. A project `.claude/settings.json`
+is not used, because the harness refuses a workspace that holds one. Under
+`--entry skill` nothing is linked where Claude finds project skills, so no
+listing applies. Codex needs none, since it reads `openai.yaml` itself. Every
+pinned `skills_at` tree also sets `disable-model-invocation: true` on the same
+43 skills. How Claude Code combines that flag with a name-only override on one
+skill was not observed.
 
 `compare` reports which tracked skill files each run read, taken from completed
 read, command, and tool events whose input names the file. It also reports how
@@ -973,7 +999,9 @@ Each run goes through `sandbox.py wrap`, which does this:
    case budget minus 120 seconds. The harness's flags are rewritten for the
    sandbox. Claude drops `--no-session-persistence`, so its transcripts are
    written, and gets `--setting-sources project --permission-mode
-   bypassPermissions --strict-mcp-config --allowedTools TodoWrite`. Codex
+   bypassPermissions --strict-mcp-config --allowedTools TodoWrite`, and under
+   `--entry poteto-mode` the name-only listing in its `--settings` (see Entry
+   modes). Codex
    drops `--ephemeral` and `--ignore-user-config`, because the sandbox's own
    config holds its proxy provider. It runs `--sandbox danger-full-access`
    with the sandbox's MCP gateway disabled. `bypassPermissions` and
@@ -1071,9 +1099,9 @@ sits under `$CANON_CACHE/sbx/`.
 
 **Tools observed.** `sandbox.py probe` builds a run-shaped sandbox and lists
 what the agent is offered without a paid model call. Claude gets a model name
-that does not exist, and its init event lists tools, agents, and slash commands
-before it fails. The report marks each persona setup registered as offered or
-not, and the probe exits 1 when the agent does not offer one. A probe whose sandbox setup fails stops there with setup's
+that does not exist and the name-only listing a run gets, and its init event
+lists tools, agents, and slash commands before it fails. The report marks each
+persona setup registered as offered or not, and the probe exits 1 when the agent does not offer one. A probe whose sandbox setup fails stops there with setup's
 stderr, before any check or agent runs. Codex is pointed at a local server inside the sandbox that
 records the request and answers 400. Observed on 2026-09-25, with and without
 a dependency template:
