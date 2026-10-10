@@ -374,7 +374,7 @@ def agent_command(agent, argv, tree=None):
     """The harness's argv, rewritten for inside the sandbox. Returns (argv, the
     host path the harness reads Codex's last message from, or None). tree is
     the host copy of the skill tree setup links where Claude finds project
-    skills, and Claude lists its implicit-off skills by name only."""
+    skills, and Claude lists its managed pstack skills by name only."""
     if agent == "claude":
         command = ["claude", *[arg for arg in argv if arg != "--no-session-persistence"], *CLAUDE_FLAGS]
         return (workspace.name_only_settings(command, tree) if tree else command), None
