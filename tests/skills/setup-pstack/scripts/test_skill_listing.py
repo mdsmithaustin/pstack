@@ -339,7 +339,12 @@ class RealSkillsRoot(unittest.TestCase):
             )
         self.assertEqual(proc.returncode, 1, proc.stderr)
         out = json.loads(proc.stdout)
-        self.assertGreater(len(REAL_MANAGED), 0)
+        for name in ("figure-it-out", "no-comments", "poteto-mode"):
+            self.assertIn(name, REAL_MANAGED)
+            self.assertIn(name, out["missing"])
+        for name in ("pstack-harness", "deslop"):
+            self.assertNotIn(name, REAL_MANAGED)
+            self.assertNotIn(name, out["missing"])
         self.assertEqual(out["name_only"], len(REAL_MANAGED))
         self.assertEqual(out["missing"], REAL_MANAGED)
         self.assertEqual(out["extra"], [])

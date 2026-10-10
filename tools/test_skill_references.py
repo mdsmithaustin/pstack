@@ -50,7 +50,7 @@ class SkillReferenceSpelling(unittest.TestCase):
 
     def test_the_scan_finds_a_slash_and_a_dollar_spelling(self):
         names = skill_references.skill_names(ROOT)
-        sigil = skill_references.patterns("deslop")["sigil"]
+        sigil = skill_references.sigil_pattern("deslop")
         self.assertIn("deslop", names)
         self.assertEqual([m.group(0) for m in sigil.finditer("Run `/deslop`, then $deslop, not skills/deslop/x.")],
                          ["/deslop", "$deslop"])
