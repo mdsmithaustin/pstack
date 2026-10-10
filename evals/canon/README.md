@@ -186,8 +186,8 @@ entries add `baseline` and `treatment`, and these rule entries add `arm`.
 `build.json` also records `arm_listed`, the `SKILL.md` files each arm adds
 beside current that every run of that arm offers by description. Such a
 skill has no `agents/openai.yaml` with `allow_implicit_invocation: false`,
-which Codex reads and which puts the skill in the name-only listing each
-Claude run gets (see Entry modes). Its frontmatter also does not set
+which Codex reads. Claude's name-only listing covers managed pstack skills
+only (see Entry modes). Its frontmatter also does not set
 `disable-model-invocation`, which Claude Code still honors in a tree that
 carries it, as every pinned `skills_at` tree does. A skill that sets only the
 frontmatter flag is not listed either, since Claude Code never offers it by
@@ -285,8 +285,8 @@ listing script, including for pinned trees without that script. An arm's
 added skill is covered when its name belongs to pstack's managed scope.
 They set `skillOverrides` to
 `name-only` for each such skill inside the one `--settings` object the
-harness passes, which skill-ci v1.1.0 sets to
-`{"disableBundledSkills":true,"autoMemoryEnabled":false}`. When the harness
+harness passes. The repository's skill-ci pin lives in
+[`.skill-ci.toml`](../../.skill-ci.toml). When the harness
 passes no `--settings`, they pass a new one. A project `.claude/settings.json`
 is not used, because the harness refuses a workspace that holds one. Under
 `--entry skill` nothing is linked where Claude finds project skills, so no
