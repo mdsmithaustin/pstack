@@ -223,6 +223,14 @@ class GradeRun(unittest.TestCase):
     def test_an_overlaid_arm_with_run_overrides_passes_parent_grading_admission(self):
         from harnesses import codex
         case = live.load_case("deslop-handoff-use")
+        case["skill_overlays"].extend([
+            {"file": "no-comments/agents/openai.yaml", "old": "policy:\n  allow_implicit_invocation: false\n",
+             "new": 'policy: {allow_implicit_invocation: "false"}\n'},
+            {"file": "arena/agents/openai.yaml", "old": "policy:\n  allow_implicit_invocation: false\n",
+             "new": "policy:\n  allow_implicit_invocation: 'false'\n"},
+            {"file": "bro/agents/openai.yaml", "old": "policy:\n  allow_implicit_invocation: false\n",
+             "new": "interface:\n  allow_implicit_invocation: false\n"},
+        ])
         with tempfile.TemporaryDirectory(prefix="pstack-live-arm-") as tmp:
             out = Path(tmp).resolve()
 
@@ -246,6 +254,8 @@ class GradeRun(unittest.TestCase):
         self.assertEqual(installed.count("A comment the rules below do not settle needs a second review. Use the **no-comments** skill."), 1)
         self.assertNotIn("go to `/no-comments`.", installed)
         self.assertIn("no-comments", trace["x_implicit_off"])
+        self.assertIn("arena", trace["x_implicit_off"])
+        self.assertNotIn("bro", trace["x_implicit_off"])
         self.assertNotIn("deslop", trace["x_implicit_off"])
         self.assertIn('model="gpt-6-luna"', trace["x_turns"][0]["argv"])
         self.assertIn('model_reasoning_effort="xhigh"', trace["x_turns"][0]["argv"])
@@ -326,21 +336,6 @@ class SkillOverlays(unittest.TestCase):
                 text = (skills / "deslop" / "SKILL.md").read_text()
                 self.assertEqual(text.count(sentence), 1)
                 self.assertEqual(text.count(DESLOP_STEP_5), int(case_id == "deslop-handoff-slash"))
-
-
-class NameOnlySet(unittest.TestCase):
-    def test_the_set_holds_skills_whose_policy_turns_implicit_invocation_off(self):
-        with tempfile.TemporaryDirectory(prefix="pstack-implicit-") as tmp:
-            skills = Path(tmp)
-            for name, yaml in (("gated", "policy:\n  allow_implicit_invocation: false\n"), ("open", "policy:\n  allow_implicit_invocation: true\n"),
-                               ("other", "interface:\n  allow_implicit_invocation: false\n"), ("bare", None)):
-                (skills / name / "agents").mkdir(parents=True)
-                (skills / name / "SKILL.md").write_text(f"# {name}\n")
-                if yaml is not None:
-                    (skills / name / "agents" / "openai.yaml").write_text(yaml)
-            (skills / "stray" / "agents").mkdir(parents=True)
-            (skills / "stray" / "agents" / "openai.yaml").write_text("policy:\n  allow_implicit_invocation: false\n")
-            self.assertEqual(live.implicit_off(skills), ["gated"])
 
 
 class RunOverrides(unittest.TestCase):

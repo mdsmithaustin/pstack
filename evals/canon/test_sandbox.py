@@ -62,7 +62,7 @@ class AgentCommandTests(unittest.TestCase):
 
         self.assertEqual(command, [
             "claude", "-p", "--output-format", "stream-json", "--verbose", "--setting-sources", "project", "--strict-mcp-config",
-            "--settings", '{"disableBundledSkills":true,"autoMemoryEnabled":false,"skillOverrides":{"poteto-mode":"name-only","premortem":"name-only"}}',
+            "--settings", '{"disableBundledSkills":true,"autoMemoryEnabled":false,"skillOverrides":{"poteto-mode":"name-only"}}',
             "--model", "sonnet", "--setting-sources", "project", "--permission-mode", "bypassPermissions",
             "--strict-mcp-config", "--allowedTools", "TodoWrite",
         ])
@@ -73,7 +73,7 @@ class AgentCommandTests(unittest.TestCase):
         self.assertEqual(command, [
             "claude", "-p", "--output-format", "stream-json", "--verbose", "--model", "sonnet",
             "--setting-sources", "project", "--permission-mode", "bypassPermissions", "--strict-mcp-config", "--allowedTools", "TodoWrite",
-            "--settings", '{"skillOverrides":{"poteto-mode":"name-only","premortem":"name-only"}}',
+            "--settings", '{"skillOverrides":{"poteto-mode":"name-only"}}',
         ])
 
     def test_codex_keeps_its_rollouts_and_sandbox_config_and_writes_its_last_message_inside(self):

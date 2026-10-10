@@ -103,6 +103,75 @@ def live_feature_patch():
     return f"--- a/{name}\n+++ b/{name}\n{head}{''.join(body)}"
 
 
+class NameOnlySettingsTests(unittest.TestCase):
+    """Setup-pstack's contract gates only installed pstack skills under policy.
+    The assertions reject omitted inline policies and overrides from unrelated keys.
+    """
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.tree = Path(directory.name)
+        policies = {
+            "arena": "policy:\n  allow_implicit_invocation: false\n",
+            "bro": 'policy: {allow_implicit_invocation: "false"}\n',
+            "no-comments": "policy:\n  allow_implicit_invocation: 'false'\n",
+            "how": "policy:\n  allow_implicit_invocation: true\n",
+            "why": "interface:\n  allow_implicit_invocation: false\n",
+            "premortem": "policy:\n  allow_implicit_invocation: false\n",
+            "poteto-mode": None,
+            "reflect": "policy:\n  allow_implicit_invocation: false\n",
+        }
+        for name, policy in policies.items():
+            skill = self.tree / name
+            (skill / "agents").mkdir(parents=True)
+            if name != "reflect":
+                (skill / "SKILL.md").write_text(f"# {name}\n")
+            if policy is not None:
+                (skill / "agents/openai.yaml").write_text(policy)
+        self.overrides = {"arena": "name-only", "bro": "name-only", "no-comments": "name-only"}
+
+    def test_pinned_tree_without_listing_script_gets_the_managed_overrides(self):
+        argv = ["claude", "-p", "--model", "sonnet"]
+
+        result = workspace.name_only_settings(argv, self.tree)
+
+        self.assertEqual(result[:-2], argv)
+        self.assertEqual(result[-2], "--settings")
+        self.assertEqual(json.loads(result[-1]), {"skillOverrides": self.overrides})
+        self.assertEqual(argv, ["claude", "-p", "--model", "sonnet"])
+
+    def test_overrides_merge_with_existing_harness_settings(self):
+        settings = {"autoMemoryEnabled": False, "skillOverrides": {"arena": "on", "companion": "off"}}
+        argv = ["claude", "--settings", json.dumps(settings), "-p"]
+        original = argv.copy()
+
+        result = workspace.name_only_settings(argv, self.tree)
+
+        self.assertEqual(result[:2], argv[:2])
+        self.assertEqual(result[3:], argv[3:])
+        self.assertEqual(json.loads(result[2]), {"autoMemoryEnabled": False,
+                                              "skillOverrides": {**self.overrides, "companion": "off"}})
+        self.assertEqual(argv, original)
+
+    def test_workspace_cli_remains_usable_when_copied_without_evaluator_skills(self):
+        script = self.tree / "workspace.py"
+        shutil.copyfile(ROOT / "workspace.py", script)
+
+        result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+        self.assertTrue(result.stderr)
+
+    def test_no_managed_policy_leaves_the_command_unchanged(self):
+        for name in self.overrides:
+            (self.tree / name / "agents/openai.yaml").unlink()
+        argv = ["claude", "-p"]
+
+        self.assertEqual(workspace.name_only_settings(argv, self.tree), argv)
+
+
 class ShopRepo(unittest.TestCase):
     """A tiny upstream repo with a pinned commit in a mirror under a private cache."""
 

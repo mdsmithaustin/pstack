@@ -224,6 +224,25 @@ class ArmPatchTests(unittest.TestCase):
         self.assertEqual(screen.arm_listed(TREE, trees), {"current": [], "skill": ["premortem/SKILL.md"], "gated": [], "quiet": [], "loud": ["loud/SKILL.md"],
                                                           "leaf": [], "both": ["premortem/SKILL.md"], "stub": []})
 
+    def test_auto_invocable_uses_the_setup_policy_contract_for_each_skill(self):
+        """Codex policy gating excludes a skill from every-run description exposure.
+        These policy examples reject false positives outside policy and omitted inline gating.
+        """
+        policies = [
+            (b"policy:\n  allow_implicit_invocation: false\n", False),
+            (b'policy: {allow_implicit_invocation: "false"}\n', False),
+            (b"policy:\n  allow_implicit_invocation: 'false'\n", False),
+            (b"interface:\n  allow_implicit_invocation: false\n", True),
+            (b"policy:\n  allow_implicit_invocation: true\n", True),
+            (b"", True),
+        ]
+        for name in ("arena", "companion"):
+            for policy, expected in policies:
+                with self.subTest(name=name, policy=policy):
+                    path = f"{name}/SKILL.md"
+                    tree = {path: b"---\nname: skill\n---\n", f"{name}/agents/openai.yaml": policy}
+                    self.assertEqual(screen.auto_invocable(tree, path), expected)
+
     def test_patch_that_changes_nothing_is_refused(self):
         patch = "--- a/poteto-mode/SKILL.md\n+++ b/poteto-mode/SKILL.md\n@@ -2 +2 @@\n-Read the leaf.\n+Read the leaf.\n"
 

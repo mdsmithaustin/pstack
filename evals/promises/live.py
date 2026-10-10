@@ -3,6 +3,7 @@
 import argparse
 import fcntl
 import importlib
+import importlib.util
 import json
 import os
 import re
@@ -20,6 +21,9 @@ from grade_boundary import create_file, grade, GradeRefused, read_file, _before_
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+_listing_spec = importlib.util.spec_from_file_location("skill_listing", ROOT / "skills/setup-pstack/scripts/skill-listing.py")
+skill_listing = importlib.util.module_from_spec(_listing_spec)
+_listing_spec.loader.exec_module(skill_listing)
 CASES = HERE / "cases"
 FIXTURES = HERE / "fixtures"
 HISTORIES = HERE / "histories"
@@ -32,7 +36,6 @@ HARNESSES = {
     "grok": "harnesses.grok",
 }
 RUN_OVERRIDES = ("claude-code", "codex")
-IMPLICIT_OFF = re.compile(r"^policy\s*:[ \t]*\n(?:[ \t]+.*\n)*?[ \t]+allow_implicit_invocation\s*:\s*false\b", re.M)
 MEANINGS = ("eval", "evals", "evaluation", "judge", "experiment", "rubric", "score", "compare",
             "benchmark", "candidate", "arena", "promise", "promises", "oracle", "verdict")
 
@@ -173,12 +176,6 @@ def apply_overlays(case, skills):
         path.write_text(text.replace(overlay["old"], overlay["new"]), encoding="utf-8")
 
 
-def implicit_off(skills):
-    """Skills whose agents/openai.yaml sets policy.allow_implicit_invocation false: the name-only set."""
-    return sorted(path.parent.parent.name for path in skills.glob("*/agents/openai.yaml")
-                  if (path.parent.parent / "SKILL.md").is_file() and IMPLICIT_OFF.search(path.read_text(encoding="utf-8") + "\n"))
-
-
 def git_run(dest, *args, **kwargs):
     return subprocess.run(["git", "-C", str(dest), *GIT_IDENTITY, *args], check=True,
                           env={**os.environ, **GIT_ISOLATION}, **kwargs)
@@ -257,7 +254,7 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     run.baseline = baseline(run.project)
     install_tree(run.skills_at, run.project / module.SKILLS_DIR)
     apply_overlays(case, run.project / module.SKILLS_DIR)
-    run.implicit_off = implicit_off(run.project / module.SKILLS_DIR)
+    run.implicit_off = skill_listing.managed_skills(run.project / module.SKILLS_DIR)
     exclude = run.project / ".git" / "info" / "exclude"
     exclude.write_text(exclude.read_text() + "".join(f"{d}\n" for d in module.PRIVATE_DIRS))
     authorization = _before_turns(run)

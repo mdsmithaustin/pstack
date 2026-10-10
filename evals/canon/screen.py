@@ -106,6 +106,9 @@ import shared  # noqa: E402
 import workspace  # noqa: E402
 
 REPO = CANON.parents[1]
+_listing_spec = importlib.util.spec_from_file_location("skill_listing", REPO / "skills/setup-pstack/scripts/skill-listing.py")
+skill_listing = importlib.util.module_from_spec(_listing_spec)
+_listing_spec.loader.exec_module(skill_listing)
 LAUNCHERS = REPO / "tools"
 RULES = Path(os.environ.get("CANON_RULES", CANON / "rules")).resolve()
 ARMS = ("current", "amended")
@@ -1266,11 +1269,11 @@ def skill_files_read(events, tree_files):
 def auto_invocable(tree, path):
     """Whether every run offers the agent the SKILL.md at path by its
     description. Its skill's agents/openai.yaml must not turn off implicit
-    invocation, which Codex reads and which puts the skill in the name-only
-    listing each Claude run gets (workspace.name_only_settings). Its
+    invocation, which Codex reads. Claude lists managed pstack skills with
+    that policy by name only (workspace.name_only_settings). Its
     frontmatter must not set disable-model-invocation, which Claude Code still
     honors in a tree that carries it, as every pinned skills_at tree does."""
-    if workspace.implicit_invocation_off(tree.get(f"{path.rsplit('/', 1)[0]}/{workspace.INVOCATION_POLICY}", b"")):
+    if skill_listing.disables_implicit_invocation(tree.get(f"{path.rsplit('/', 1)[0]}/{workspace.INVOCATION_POLICY}", b"").decode("utf-8")):
         return False
     frontmatter = FRONTMATTER.match(tree[path])
     return not (frontmatter and re.search(rb"^disable-model-invocation:\s*true\s*$", frontmatter.group(0), re.MULTILINE))
