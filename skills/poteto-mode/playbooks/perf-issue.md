@@ -5,7 +5,7 @@
 For sustained improvement against a metric rather than a one-off fix, use the Hillclimb playbook (`playbooks/hillclimb.md`).
 
 1. Capture a baseline trace via the matching control skill. Use the **benchmark-checklist** skill to vet the baseline and each later number.
-2. Use the **how** skill to ground hypotheses. Don't claim a perf ceiling without running it first.
+2. `how` to ground hypotheses. Use the **how** skill. Don't claim a perf ceiling without running it first.
    Treat the mantras as hypothesis generators. Admit an attempt only when the trace shows its supporting signal.
    Try the performance mantras in order, cheapest first:
    1. Don't do it. Stop work whose result nothing uses rather than cheapening it. Use the **how** skill to prove the work is deletable. A trace shows cost, not whether the work is needed.

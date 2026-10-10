@@ -195,7 +195,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Use the **show-me-your-work** skill to checkpoint every iteration, with a row for what changed and whether the predicate moved."
+     "quote": "Checkpoint every iteration with a row for what changed and whether the predicate moved. Use the **show-me-your-work** skill."
     },
     {
      "file": "skills/figure-it-out/SKILL.md",
@@ -1291,7 +1291,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Pick the wake mechanism from your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's **Loops and wake-ups** section to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
+     "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's **Loops and wake-ups** section to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
      "file": "skills/pstack-harness/SKILL.md",
@@ -1782,7 +1782,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "2. Use the **architect** skill for parallel design exploration when the change crosses a function boundary or admits several valid shapes."
+     "quote": "2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes."
     }
    ],
    "harness_sensitive": false,

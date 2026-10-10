@@ -2,8 +2,8 @@
 
 **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
 
-1. Use the **how** skill on the affected subsystem.
-2. Use the **architect** skill for parallel design exploration when the change crosses a function boundary or admits several valid shapes. A small, self-contained change keeps this step with `skipped: <reason>`.
+1. `how` over the affected subsystem. Use the **how** skill.
+2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes. Use the **architect** skill for it. A small, self-contained change keeps this step with `skipped: <reason>`.
 3. Write the throughput checkpoint as four items in the same worklist. A dimension that genuinely does not apply (single file, no fan-out) keeps its item with `skipped: <reason>` rather than being dropped:
    - **Blocking first steps.** Gates run before fan-out.
    - **Independent workstreams.** Disjoint files, services, or layers parallelize. Shared writes serialize.
@@ -13,7 +13,7 @@
    Parent-level fan-out also covers slices that produce independent artifacts (audits, cross-subsystem investigations, competing experiments). Rewrite the checkpoint at phase boundaries. A phase boundary gets a fresh delegate with consolidated scope, never a resume of the last one.
 5. Verify on the matching surface against the accepted scope and integrated result, per [Prove It Works](../../principle-prove-it-works/SKILL.md). "Inconclusive" or wrong-surface is not a pass. Flag it.
 6. Rebase into small, ordered commits. Stack follow-ups.
-   Use the **principle-sequence-verifiable-units** skill. Build, verify, and commit each small unit before the next.
+   Use the **sequence-verifiable-units** principle skill, building, verifying, and committing each small unit before the next.
 7. If the design is contested, use the **interrogate** skill before shipping.
 8. Run **Opening a PR**.
 
