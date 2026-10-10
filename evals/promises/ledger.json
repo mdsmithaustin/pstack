@@ -165,6 +165,24 @@
    ],
    "scenario": "automate-me-run"
   },
+  "automate-me-gates-generated-mode": {
+   "check": "static",
+   "claim": "A -mode skill that /automate-me drafts loads only when typed or named: it ships agents/openai.yaml with allow_implicit_invocation: false, and on Claude Code /automate-me adds a name-only skillOverrides entry only after the user says yes.",
+   "evidence": [
+    {
+     "file": "skills/automate-me/SKILL.md",
+     "quote": "Write `agents/openai.yaml` beside its `SKILL.md`, with `allow_implicit_invocation: false` under `policy:`, which gates it on Codex."
+    },
+    {
+     "file": "skills/automate-me/SKILL.md",
+     "quote": "Write the entry only after the user says yes, and keep every other key."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/automate-me/SKILL.md"
+   ]
+  },
   "automate-me-mines-transcripts": {
    "check": "live",
    "claim": "/automate-me mines this workspace's recent transcripts for repeated preferences and asks which patterns are really the user's.",
@@ -5759,6 +5777,15 @@
    ],
    "text": "`/deslop` cleans slop out of the code, `/unslop` cleans it out of prose, and `/no-comments` hands the comments to a reviewer who didn't write them."
   },
+  "c41d18f82f9c": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "deslop-hands-unsettled-comments-to-no-comments",
+   "sources": [
+    "port"
+   ],
+   "text": "When `/deslop` meets a comment its rules don't settle, it runs `/no-comments` on that comment in the same pass, and its report says what the review did."
+  },
   "77b5baffabb8": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -6591,6 +6618,24 @@
     "port"
    ],
    "text": "You don't describe your style, because [`/automate-me`](../../skills/automate-me/SKILL.md) reads it out of your history."
+  },
+  "4d02a25d7ebb": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "automate-me-gates-generated-mode",
+   "sources": [
+    "port"
+   ],
+   "text": "The skill it drafts loads only when you type it or a skill tells the agent to use it."
+  },
+  "42b1c8292c67": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "automate-me-gates-generated-mode",
+   "sources": [
+    "port"
+   ],
+   "text": "The PR adds `agents/openai.yaml` for Codex, and on Claude Code `/automate-me` asks before it adds a name-only entry to your `~/.claude/settings.json`."
   },
   "a0dc9570c89b": {
    "class": "substituted",

@@ -62,7 +62,7 @@ Independent origins that state a rule: Pocock, superpowers, larch, and upstream 
 ## Evidence on reliability
 
 - mattpocock/skills [PR #878](https://github.com/mattpocock/skills/pull/878), merged 2026-08-15. "Naming the tool directly gets a higher hit rate than dropping a bare `/name` into prose and hoping the model reads it as a command." No eval is cited.
-- mattpocock/skills commit [1dab982](https://github.com/mattpocock/skills/commit/1dab98299c3b81f560026c01b7ebf55ed5d91373), fixing [#453](https://github.com/mattpocock/skills/issues/453). The explicit phrasing "made this fire more reliably in the wrong direction" against a `disable-model-invocation` target. This is the same hazard pstack's gated siblings face.
+- mattpocock/skills commit [1dab982](https://github.com/mattpocock/skills/commit/1dab98299c3b81f560026c01b7ebf55ed5d91373), fixing [#453](https://github.com/mattpocock/skills/issues/453). The explicit phrasing "made this fire more reliably in the wrong direction" against a `disable-model-invocation` target. This is the same hazard pstack's gated siblings faced before PR 185 removed the flag.
 - zhupanov/larch [#168](https://github.com/zhupanov/larch/issues/168), a research report from 2026-04-19 with three agents. "Phrasing matters, but phrasing alone cannot guarantee the caller will call the sub-skill." It recommends "an explicit numbered step with an imperative verb, the tool name, and literal args", ranked below structural checks (narrow `allowed-tools`, verify the child's side effect). It reports no measured rates.
 - anthropics/claude-code [#43809](https://github.com/anthropics/claude-code/issues/43809), closed. "Error: Skill cc-use-subagents cannot be used with Skill tool due to disable-model-invocation" when a subagent tries to load a gated skill.
 - anthropics/claude-code [#73774](https://github.com/anthropics/claude-code/issues/73774), closed. Claude Code's system prompt tells the model to invoke the Skill tool for any `/<name>` reference, and that duplicate call errors on a gated skill.
@@ -74,13 +74,13 @@ Independent origins that state a rule: Pocock, superpowers, larch, and upstream 
 - Pocock calls "Call the Skill tool" "more harness-neutral". That holds for the sigil only. Codex has no `Skill` tool for host skills, and a hidden Codex skill cannot be reached by name at all.
 - superpowers and Pocock both name the target bare, with no sigil. superpowers uses the `superpowers:` namespace that Claude Code gives plugin skills. pstack installs skills flat, so it has no namespace to use.
 
-## Current pstack state (measured)
+## Pstack state before PR 185 (measured)
 
-`skills/` holds 57 skills. 47 have `disable-model-invocation: true` and 47 have `allow_implicit_invocation: false`. `skills/**/*.md` contains the phrase "the **x** skill" 127 times. Where a preposition comes first, it is mostly "in" (31) or "per" (22). Imperative "Run" or "Use" comes first only 5 times. Slash forms appear in SKILL.md a handful of times (for example `/poteto-mode` 3 times).
+This census describes the tree at f8eb694f, before PR 185 (e4968e32) dropped `disable-model-invocation` from all 47 skills. `skills/` holds 57 skills. 47 have `disable-model-invocation: true` and 47 have `allow_implicit_invocation: false`. `skills/**/*.md` contains the phrase "the **x** skill" 127 times. Where a preposition comes first, it is mostly "in" (31) or "per" (22). Imperative "Run" or "Use" comes first only 5 times. Slash forms appear in SKILL.md a handful of times (for example `/poteto-mode` 3 times).
 
 ## Unknowns
 
-1. Precedence. The docs do not say whether a `skillOverrides` value of `"name-only"` overrides frontmatter `disable-model-invocation: true`. If frontmatter wins, the Skill tool keeps refusing gated siblings (#43809), and Claude Code needs the path route too. One `/skills` check or one `Skill` call settles it.
+1. Precedence. Settled by PR 185, which removed the frontmatter flag, and by the 2026-10-10 runs, where Claude Code loaded figure-it-out through the Skill tool on a name-only listing. The docs do not say whether a `skillOverrides` value of `"name-only"` overrides frontmatter `disable-model-invocation: true`. If frontmatter wins, the Skill tool keeps refusing gated siblings (#43809), and Claude Code needs the path route too. One `/skills` check or one `Skill` call settles it.
 2. Hit rate. No public eval compares "Use the X skill", "Call the Skill tool with X", `/X`, and a path. A small trigger eval in `evals/` (does a Skill call or a read of X/SKILL.md follow the step) would answer it per host.
 3. Grok Build and Hermes. Their docs and source were not inspected for how they handle sibling skills.
 4. Cursor. Its skills docs URL returned 404, and nothing else was inspected.
