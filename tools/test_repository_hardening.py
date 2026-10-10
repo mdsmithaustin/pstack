@@ -40,6 +40,7 @@ class RepositoryHardening(unittest.TestCase):
             {
                 "version": PIN["version"],
                 "skills_dir": "skills",
+                "invocation_policy": "openai-yaml",
                 "evals_dir": "evals",
                 "trigger_cases": "tools/skill-trigger-cases.json",
                 "pii_scope": "repository",
