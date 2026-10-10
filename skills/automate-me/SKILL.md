@@ -21,7 +21,7 @@ Look recursively for `.agents/skills/**/*-mode/SKILL.md` and `~/.agents/skills/*
 Update mode changes the rest of the flow:
 - Step 1 mines only history since the skill was last edited (`git log -1 --format=%cI <path>`).
 - Step 2 asks what's changed or missing, not what to capture from zero.
-- Step 4 edits the existing file in place. Preserve sections the user hasn't contradicted. Revise ones with new evidence. Add new sections only for genuinely new rules.
+- Step 4 edits the existing file in place. Preserve sections the user hasn't contradicted. Revise ones with new evidence. Add new sections only for genuinely new rules. Replace a `disable-model-invocation` line in its frontmatter with the gate that step 4 describes.
 
 ### 1. Mine their history
 
