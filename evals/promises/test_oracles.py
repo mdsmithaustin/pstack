@@ -1635,10 +1635,59 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
         self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["loaded name-only skills nobody named: ['show-me-your-work']"]))
         result = self.grade([spawn], spawns=spawns, x_child_skill_calls={"agent-a1": [{"skill": "swarm", "ok": True}]})
         self.assertEqual(result["evidence"][2], "delegate loads: [('agent-a1', 'swarm', 'skill-tool')]")
-        named = dict(spawn, input={"prompt": "use show-me-your-work to log each decision"})
+        named = dict(spawn, input={"prompt": "Use the **show-me-your-work** skill to log each decision"})
         self.assertEqual(self.grade([named], spawns=spawns, x_files_read_by={"agent-a1": [path]})["verdict"], PASS)
         persona = [dict(spawns[0], subagent_type="poteto-agent")]
         self.assertEqual(self.grade([spawn], spawns=persona, x_files_read_by={"agent-a1": ["/w/.claude/skills/poteto-mode/SKILL.md"]})["verdict"], PASS)
+
+    def test_case_prompts_only_exempt_explicit_skill_naming_forms(self):
+        """The operator's naming contract excludes bare words and longer names.
+        Grade output must reject an unrequested correct load in either prompt field.
+        """
+        examples = [
+            ("every migrated caller is correct", FAIL),
+            ("Use the **correct** skill", PASS),
+            ("/correct", PASS),
+            ("$correct", PASS),
+            ("`correct`", PASS),
+            ("**correct**", PASS),
+            ("Use THE CORRECT SKILL", PASS),
+            ("Use `correct` skill", PASS),
+            ("/correctness", FAIL),
+            ("$correct-extra", FAIL),
+            ("`correct-extra`", FAIL),
+            ("**correct-extra**", FAIL),
+            ("the correct skillset", FAIL),
+        ]
+        for field in ("entry", "turns"):
+            for prompt, verdict in examples:
+                with self.subTest(field=field, prompt=prompt):
+                    case = dict(self.case, **{field: [prompt] if field == "turns" else prompt})
+                    result = self.grade(skill_call(0, "correct"), case, x_implicit_off=["correct"])
+                    self.assertEqual((result["verdict"], result["failures"]),
+                                     (verdict, [] if verdict == PASS else ["loaded name-only skills nobody named: ['correct']"]))
+
+    def test_delegate_briefs_only_exempt_explicit_skill_naming_forms(self):
+        examples = [("check that every migrated caller is correct", FAIL),
+                    ("Use the **correct** skill", PASS), ("/correct", PASS), ("$correct", PASS),
+                    ("`correct`", PASS), ("the correct skill", PASS), ("Use **CORRECT** skill", PASS)]
+        for field in ("prompt", "message", "description", "prompt_head"):
+            for brief, verdict in examples:
+                for carrier in ("skill-tool", "read", "subagent-read"):
+                    with self.subTest(field=field, brief=brief, carrier=carrier):
+                        spawn = {"seq": 0, "kind": "tool_call", "name": "Agent", "input": {}}
+                        spawns = [{"seq": 0, "transcript": "/t/agent-a1.jsonl", "x_thread_id": "agent-a1"}]
+                        if field == "prompt_head":
+                            spawns[0][field] = brief
+                        else:
+                            spawn["input"][field] = brief
+                        path = "/w/.claude/skills/correct/SKILL.md"
+                        extra = {"x_child_skill_calls": {"agent-a1": [{"skill": "correct", "ok": True}]}} if carrier == "skill-tool" else \
+                                {"x_files_read_by": {"agent-a1": [path]}} if carrier == "read" else \
+                                {"x_subagents": [{"thread_id": "agent-a1", "files_read": [path]}]}
+                        result = self.grade([spawn], spawns=spawns, x_implicit_off=["correct"], **extra)
+                        self.assertEqual((result["verdict"], result["failures"]),
+                                         (verdict, [] if verdict == PASS else ["loaded name-only skills nobody named: ['correct']"]))
 
     def test_an_empty_trace_or_a_missing_name_only_set_is_inconclusive(self):
         result = grade("name-only-skills-stay-unloaded-unnamed", minimal(x_implicit_off=self.hidden), self.case)

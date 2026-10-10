@@ -3702,8 +3702,14 @@ def routed_skill_loads_after_compaction(view):
 
 
 def prompt_named(texts, names):
-    words = set(re.findall(r"[a-z0-9][a-z0-9-]*", " ".join(t for t in texts if t).lower()))
-    return {name for name in names if name in words}
+    named = set()
+    for name in names:
+        escaped = re.escape(name)
+        pattern = rf"(?<![\w/])[/\$]{escaped}(?![\w/-])|(?<!`)`{escaped}`(?!`)" \
+                  rf"|(?<!\*)\*\*{escaped}\*\*(?!\*)|\bthe\s+{escaped}\s+skill\b"
+        if any(re.search(pattern, text, re.I) for text in texts if text):
+            named.add(name)
+    return named
 
 
 def child_loads(view, hidden):
