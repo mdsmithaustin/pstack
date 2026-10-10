@@ -3624,9 +3624,7 @@ def turn_finished(view):
     return not view.killed and bool(view.final_reply)
 
 
-def routing_decided(view, skill, turn=None, after=None):
-    """Every lead event, after seq `after`, that shows a route was chosen, as (kind, text) pairs. kind is playbook, skill (another
-    routed skill loaded), worklist, edit, or question."""
+def routing_events(view, skill, turn=None, after=None):
     routed = {name for name in view.trace.get("x_implicit_off") or ()
               if name not in {"poteto-mode", "pstack-harness", skill} and not name.startswith("principle-")}
     found = []
@@ -3650,12 +3648,13 @@ def routing_decided(view, skill, turn=None, after=None):
     return found
 
 
+KILLED_RUN_DECISIONS = ("skill", "edit", "question")
+
+
 def firm_decision(view, skill, turn=None, after=None):
-    """The first routing decision that settles a verdict. A turn that finished counts any of them. A killed run counts only an
-    edit, a question, or another routed skill, because a lead can open a worklist or read a playbook and still load the skill."""
     finished = turn_finished(view)
-    return next((text for kind, text in routing_decided(view, skill, turn, after)
-                 if finished or kind in ("skill", "edit", "question")), None)
+    return next((text for kind, text in routing_events(view, skill, turn, after)
+                 if finished or kind in KILLED_RUN_DECISIONS), None)
 
 
 def file_load_failures(view, skill, reads):

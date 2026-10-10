@@ -7,9 +7,6 @@ _spec = importlib.util.spec_from_file_location("skill_references", ROOT / "tools
 skill_references = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(skill_references)
 
-# /name and $name are what a user types, and the harness intercepts them. A model reads them as labels, so
-# model-facing skill text says "Use the **name** skill". These passages quote what the user types or the text
-# the agent shows the user, and keep the user's spelling.
 USER_FACING_SKILLS = frozenset({"poteto-help"})
 USER_FACING = {
     "skills/architect/SKILL.md": ["Use for /architect,", '"/architect with checkpoint,"'],

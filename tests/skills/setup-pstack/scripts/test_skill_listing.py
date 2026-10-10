@@ -14,7 +14,6 @@ _spec = importlib.util.spec_from_file_location("skill_listing", SCRIPT)
 sl = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sl)
 
-# The source of truth is each skill's agents/openai.yaml. A plain text match keeps this independent of the script's parser.
 REAL_MANAGED = sorted(
     path.parents[1].name for path in (REPO / "skills").glob("*/agents/openai.yaml")
     if "allow_implicit_invocation: false" in path.read_text(encoding="utf-8")

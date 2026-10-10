@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""List every sibling-skill reference in model-facing skill text, one TSV row per reference.
-
-Columns: file, line, skill, form, shape, sentence. `form` is how the text spells the name (sigil, bold, code,
-link, plain). `shape` is `use` when the sentence is the load form "Use the **x** skill", else `other`.
-"""
+"""List every sibling-skill reference in model-facing skill text, one TSV row per reference."""
 from __future__ import annotations
 
 import argparse
@@ -15,6 +11,13 @@ from typing import NamedTuple
 ROOT = Path(__file__).resolve().parents[1]
 SENTENCE = re.compile(r"(?<=[.!?])\s+(?=[A-Z`*\[(\"'])")
 LIST_MARK = r"(?:\s*(?:[-*]|\d+[.)])\s+)?(?:\*\*[^*]+\*\*\s+)?"
+
+
+class Sigil(NamedTuple):
+    file: str
+    line: int
+    spelling: str
+    text: str
 
 
 class Ref(NamedTuple):
@@ -51,7 +54,6 @@ def use_shape(name: str) -> re.Pattern[str]:
 
 
 def body_lines(text: str) -> list[tuple[int, str]]:
-    """(line number, text) for each line outside the frontmatter and fenced blocks."""
     lines, out, fenced, start = text.splitlines(), [], False, 0
     if lines and lines[0] == "---":
         start = next((i for i in range(1, len(lines)) if lines[i] == "---"), 0) + 1
@@ -83,15 +85,14 @@ def scan(root: Path = ROOT) -> list[Ref]:
     return refs
 
 
-def sigils(root: Path = ROOT) -> list[tuple[str, int, str, str]]:
-    """(file, line, spelling, line text) for every /name or $name of a pstack skill, frontmatter and fences included."""
+def sigils(root: Path = ROOT) -> list[Sigil]:
     compiled = {name: patterns(name)["sigil"] for name in skill_names(root)}
     hits = []
     for path in model_facing_files(root):
         rel = path.relative_to(root).as_posix()
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for pattern in compiled.values():
-                hits += [(rel, number, match.group(0), line) for match in pattern.finditer(line)]
+                hits += [Sigil(rel, number, match.group(0), line) for match in pattern.finditer(line)]
     return hits
 
 
