@@ -195,7 +195,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Checkpoint every iteration via the **show-me-your-work** skill, a row for what changed and whether the predicate moved."
+     "quote": "Use the **show-me-your-work** skill to checkpoint every iteration, with a row for what changed and whether the predicate moved."
     },
     {
      "file": "skills/figure-it-out/SKILL.md",
@@ -625,11 +625,11 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/code-review.md",
-     "quote": "**Check shared code against its other callers.** Apply **principle-model-the-domain**."
+     "quote": "**Check shared code against its other callers.** Use the **principle-model-the-domain** skill."
     },
     {
      "file": "skills/poteto-mode/playbooks/code-review.md",
-     "quote": "For a large or contested change, also run the **interrogate** skill for a multi-model pass."
+     "quote": "For a large or contested change, also use the **interrogate** skill for a multi-model pass."
     }
    ],
    "harness_sensitive": false,
@@ -1022,7 +1022,7 @@
     },
     {
      "file": "skills/figure-it-out/SKILL.md",
-     "quote": "Log the run via the **show-me-your-work** skill."
+     "quote": "Use the **show-me-your-work** skill to log the run."
     }
    ],
    "harness_sensitive": false,
@@ -1266,7 +1266,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/investigation.md",
-     "quote": "For external, domain, or dependency research, continue in the [Research playbook](research.md). For current code behavior, route through the **how** skill. For motivation questions, also route through the **why** skill."
+     "quote": "For external, domain, or dependency research, continue in the [Research playbook](research.md). For current code behavior, use the **how** skill. For motivation questions, also use the **why** skill."
     }
    ],
    "harness_sensitive": false,
@@ -1291,7 +1291,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Pick the wake mechanism using your CLI's loop facility (per the **pstack-harness** skill — a built-in or wrapper, not a pstack skill). An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
+     "quote": "Pick the wake mechanism from your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's **Loops and wake-ups** section to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
      "file": "skills/pstack-harness/SKILL.md",
@@ -1516,7 +1516,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Run `/deslop` over the diff before commit."
+     "quote": "Use the **deslop** skill over the diff before commit."
     }
    ],
    "harness_sensitive": false,
@@ -1531,7 +1531,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Write every PR title, PR description, and commit body with `/technical-writing`, then apply `/unslop`."
+     "quote": "Use the **technical-writing** skill for every PR title, PR description, and commit body. Then use the **unslop** skill."
     }
    ],
    "harness_sensitive": false,
@@ -1774,15 +1774,15 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing."
+     "quote": "Code crossing a function boundary → use the **architect** skill for parallel design exploration before implementing."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "Plan the fix. If it crosses a function boundary, `architect` first."
+     "quote": "Plan the fix. If it crosses a function boundary, use the **architect** skill first."
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes."
+     "quote": "2. Use the **architect** skill for parallel design exploration when the change crosses a function boundary or admits several valid shapes."
     }
    ],
    "harness_sensitive": false,
@@ -3069,11 +3069,11 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/perf-issue.md",
-     "quote": "Vet the baseline, and each later number, with the **benchmark-checklist** skill."
+     "quote": "Use the **benchmark-checklist** skill to vet the baseline and each later number."
     },
     {
      "file": "skills/poteto-mode/playbooks/hillclimb.md",
-     "quote": "Vet the harness with the **benchmark-checklist** skill before you freeze it"
+     "quote": "Use the **benchmark-checklist** skill to vet the harness before you freeze it"
     }
    ],
    "harness_sensitive": false,

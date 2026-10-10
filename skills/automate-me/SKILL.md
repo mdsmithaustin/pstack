@@ -25,7 +25,7 @@ Update mode changes the rest of the flow:
 
 ### 1. Mine their history
 
-Locate the active workspace's transcripts before fanning out (per the **pstack-harness** skill). Use only this workspace's store. Don't read other workspaces' sessions. That crosses workspace boundaries and reads private chats from unrelated projects.
+Use the **pstack-harness** skill to locate the active workspace's transcripts before fanning out. Use only this workspace's store. Don't read other workspaces' sessions. That crosses workspace boundaries and reads private chats from unrelated projects.
 
 Survey recent agent conversations within that scope for recurring patterns. Run multiple parallel subagents across slices of history (e.g. last 2-4 weeks, split into 3 slices so each has enough material). Each slice mining subagent reads transcripts from the workspace-scoped path the parent provides, looks for the signals below, and returns a short structured list of patterns it saw with evidence pointers. Default signals worth hunting:
 
@@ -73,7 +73,7 @@ Author the skill per `../poteto-mode/playbooks/authoring-a-skill.md`. Placement:
 
 ### 5. Iterate on prose
 
-Apply the **unslop** skill and the authoring-a-skill playbook's writing guidelines to every line.
+Use the **unslop** skill on every line, with the authoring-a-skill playbook's writing guidelines.
 
 Show the draft to the user and take feedback. Expect multiple iterations. Cut ruthlessly. A mode skill is not a manual.
 

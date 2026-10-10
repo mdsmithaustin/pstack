@@ -32,7 +32,7 @@ Write one clear paragraph. If you're unsure about the intent, ask the user befor
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` role, one reviewer per entry, extending or shrinking the Reviewer A/B/C labels below to the configured entry count. Its default is the table below. Spawn per **Spawn a role** in the **pstack-harness** skill, which resolves the role and builds this CLI's spawn call.
+Launch all reviewers in a single message using the Task tool. Use the `interrogate reviewers` role, one reviewer per entry, extending or shrinking the Reviewer A/B/C labels below to the configured entry count. Its default is the table below. Use the **pstack-harness** skill for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
 
 | Subagent | Default model |
 |----------|---------------|
@@ -45,7 +45,7 @@ For each reviewer:
 - `model` and effort: that reviewer's resolved arm, per **Spawn a role**.
 - `readonly`: `true`
 
-If the Task tool rejects a configured entry or a table default, handle it per the **pstack-harness** skill. When it rejects a table default, also open a separate PR to update the default table. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.
+If the Task tool rejects a configured entry or a table default, use the **pstack-harness** skill to handle it. When it rejects a table default, also open a separate PR to update the default table. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.
 
 Read `references/reviewer-prompt.md` and fill in the template with:
 1. The stated intent
