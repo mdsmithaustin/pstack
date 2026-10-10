@@ -1738,7 +1738,7 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
 
 
 class DeslopHandsOff(unittest.TestCase):
-    case = load_case("deslop-handoff-use")
+    case = load_case("deslop-handoff")
 
     def grade(self, events, exit_code=0, harness="claude-code", project=None, **extra):
         trace = minimal(events=events, final_reply="Cleaned the diff.", exit_code=exit_code, harness=harness, **extra)

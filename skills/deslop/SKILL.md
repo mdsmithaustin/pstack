@@ -17,7 +17,7 @@ Use the caller's files or diff. Otherwise diff against the branch this one build
 2. Apply the rules below in order. Make the smallest edit. Delete before you rewrite.
 3. Stop at a cut that needs a new shape, such as a type, a helper, or a state model. Flag it for the [Refactoring playbook](../poteto-mode/playbooks/refactoring.md). Deslop never adds abstraction to remove slop.
 4. Prove behavior unchanged on the real artifact. Run the tests the diff touches and the type check. A test that must change to pass means behavior changed. Revert that cut.
-5. Hand what remains to the neighbors. Comments the rules below do not settle go to `/no-comments`. Names, messages, and kept comments go to `/unslop`.
+5. Hand what remains to the neighbors. A comment that rules 1 to 3 do not settle needs the comment review before you report. Use the **no-comments** skill on those comments. Then use the **unslop** skill on names, messages, and kept comments.
 6. Report in the format below.
 
 ## Rules
@@ -28,7 +28,7 @@ Rule numbers are stable ids that other skills cite. A removed rule leaves a gap.
 
 1. **Narrating comments.** The comment restates the line below it or names a phase (`// increment count`, `// Phase 1: add cards`). Delete it.
 2. **Commented-out code and removal markers.** Code behind comment markers, or a `// removed` note. Delete it.
-3. **Keep list.** License headers. Non-obvious behavior forced by an external dependency, platform, vendor, or protocol you cannot reshape. `prettier-ignore`. Doc comments that define a public API contract. Issue or RFC links that explain a constraint code cannot express. A kept comment is still prose, so `/unslop` reads it.
+3. **Keep list.** License headers. Non-obvious behavior forced by an external dependency, platform, vendor, or protocol you cannot reshape. `prettier-ignore`. Doc comments that define a public API contract. Issue or RFC links that explain a constraint code cannot express. A kept comment is still prose, so step 5 sends it to the **unslop** skill.
 
 ### Guards
 
@@ -71,7 +71,8 @@ One to three sentences, then:
 
 - Counts by rule id, and the files touched.
 - Hunks reverted under rule 17, and the uncommitted unrelated hunks left in place.
-- Flags handed to the Refactoring playbook (step 3, rule 16) and to `/no-comments`.
+- Flags handed to the Refactoring playbook (step 3, rule 16).
+- The comments step 5 gave the **no-comments** skill, and what it did with each.
 - A "Did not touch" list of slop outside the scope.
 - The test and type-check commands with their results.
 
