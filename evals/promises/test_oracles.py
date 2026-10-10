@@ -1642,7 +1642,7 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
 
     def test_case_prompts_only_exempt_explicit_skill_naming_forms(self):
         """The operator's naming contract excludes bare words and longer names.
-        Grade output must reject an unrequested correct load in either prompt field.
+        Grade output must reject an unrequested correct load in a free-form turn.
         """
         examples = [
             ("every migrated caller is correct", FAIL),
@@ -1659,13 +1659,29 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
             ("**correct-extra**", FAIL),
             ("the correct skillset", FAIL),
         ]
-        for field in ("entry", "turns"):
-            for prompt, verdict in examples:
-                with self.subTest(field=field, prompt=prompt):
-                    case = dict(self.case, **{field: [prompt] if field == "turns" else prompt})
-                    result = self.grade(skill_call(0, "correct"), case, x_implicit_off=["correct"])
-                    self.assertEqual((result["verdict"], result["failures"]),
-                                     (verdict, [] if verdict == PASS else ["loaded name-only skills nobody named: ['correct']"]))
+        for prompt, verdict in examples:
+            with self.subTest(prompt=prompt):
+                case = dict(self.case, turns=[prompt])
+                result = self.grade(skill_call(0, "correct"), case, x_implicit_off=["correct"])
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (verdict, [] if verdict == PASS else ["loaded name-only skills nobody named: ['correct']"]))
+
+    def test_entry_names_only_the_explicitly_invoked_skill(self):
+        for entry, loaded, verdict in (("correct", "correct", PASS), ("poteto-mode", "poteto-mode", PASS),
+                                       ("swarm", "correct", FAIL), (None, "correct", FAIL),
+                                       ("correct", "poteto-mode", FAIL)):
+            with self.subTest(entry=entry, loaded=loaded):
+                case = dict(self.case, entry=entry, turns=["Check the callers."])
+                result = self.grade(skill_call(0, loaded), case, x_implicit_off=["correct", "poteto-mode"])
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (verdict, [] if verdict == PASS else [f"loaded name-only skills nobody named: ['{loaded}']"]))
+
+    def test_entry_exempts_a_delegate_load_of_the_invoked_skill(self):
+        case = dict(self.case, entry="correct", turns=["Check the callers."])
+        spawn = {"seq": 0, "kind": "tool_call", "name": "Agent", "input": {"prompt": "Check the callers."}}
+        result = self.grade([spawn], case, x_implicit_off=["correct"],
+                            x_child_skill_calls={"agent-a1": [{"skill": "correct", "ok": True}]})
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
 
     def test_delegate_briefs_only_exempt_explicit_skill_naming_forms(self):
         examples = [("check that every migrated caller is correct", FAIL),

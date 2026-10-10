@@ -3745,7 +3745,7 @@ def name_only_stay_unloaded(view):
     hidden = set(view.trace.get("x_implicit_off") or ())
     if not hidden:
         return inconclusive("the trace records no name-only skill set (x_implicit_off)")
-    named = prompt_named([view.case.get("entry") or "", *view.case.get("turns", [])], hidden)
+    named = prompt_named(view.case.get("turns", []), hidden) | ({view.case.get("entry")} & hidden)
     hidden -= named
     attempts = {skill: load_attempts(view, skill) for skill in sorted(hidden)}
     lead = [("lead", skill, how, seq) for skill, rows in attempts.items() for seq, how, ok, _ in rows if ok and how != "search"]
