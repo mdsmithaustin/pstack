@@ -46,6 +46,18 @@ jobs:
           echo "open=$open" >> "$GITHUB_OUTPUT"
           [ "$open" = "0" ] || echo "A sync PR is already open; skipping until it lands."
 
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: steps.gate.outputs.changed == 'true' && steps.dup.outputs.open == '0'
+        with:
+          python-version: "3.12"
+
+      - name: Install the skill-ci command, which runs the version .skill-ci.toml pins
+        if: steps.gate.outputs.changed == 'true' && steps.dup.outputs.open == '0'
+        run: |
+          python3 -m pip install --require-hashes -r tools/uv-requirements.txt
+          uv tool install "git+https://github.com/mdsmithaustin/skill-ci.git"
+          uv tool dir --bin >> "$GITHUB_PATH"
+
       - name: Port upstream changes
         if: steps.gate.outputs.changed == 'true' && steps.dup.outputs.open == '0'
         uses: anthropics/claude-code-action@v1
@@ -85,11 +97,21 @@ jobs:
                tools/skill-trigger-cases.json. When upstream removes it, delete
                that file, add the skill to AUTO_INVOCABLE in
                tools/test_skill_invocation_policy.py, and set its
-               implicit_allowed to true. When a skill directory is added,
-               renamed, or removed, update PSTACK_SKILLS in
-               skills/setup-pstack/scripts/skill-listing.py, then run
-               python3 -m unittest discover -s tools -p 'test_*.py', which
-               must exit zero.
+               implicit_allowed to true. Write every incoming load of another
+               skill as "Use the **x** skill" with the bare name, per the
+               PORTING.md row for sibling-skill loads, never as `/x` or `$x`.
+               A passage that quotes what the user types goes in USER_FACING in
+               tools/test_skill_references.py. When a skill directory is added,
+               renamed, or removed, update each list that names skills:
+               - PSTACK_SKILLS in skills/setup-pstack/scripts/skill-listing.py.
+               - The skill's row in tools/skill-trigger-cases.json.
+               - In evals/promises/test_static.py, PLAYBOOK_FILES for a
+                 poteto-mode playbook, PRINCIPLE_RULES for a principle-*
+                 skill, and GUIDE_SLASH_SKILLS when docs/guide names the
+                 skill as /x.
+               - For a skill with no agents/openai.yaml gate, AUTO_INVOCABLE
+                 in tools/test_skill_invocation_policy.py and the "A skill
+                 didn't load on its own" row in skills/poteto-help/SKILL.md.
             4. Every SKILL.md frontmatter `name:` must equal its directory
                name. Verify after editing.
             5. Preserve root agents/*.md as upstream source. After any agent
@@ -109,8 +131,20 @@ jobs:
                text behind a static guide promise: keep the promise true or
                record the change for human judgment in the PR body. List every
                ledger change in the PR body under "Guide promises".
-            7. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
-            8. If there are portable changes: create branch
+            7. Run each of these, even when no skill directory changed. Each
+               must exit zero before you continue. Fix the port, not the
+               check, and say in the PR body what each failure was. Run
+               `git add -A` first, because skill-ci reads tracked files.
+               - python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
+               - python3 -m unittest discover -s tools -p 'test_*.py'
+               - python3 -m unittest discover -s evals/promises -p 'test_*.py'
+               - python3 -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
+               - skill-ci check
+               The canon and poteto-mode script suites need Docker and Bun,
+               and CI does not start on a PR this workflow opens. Say in the
+               PR body that they have not run, so a maintainer runs them.
+            8. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
+            9. If there are portable changes: create branch
                `sync/upstream-<YYYYMMDD>`, commit with a message summarizing
                the upstream commits ported, push it, and open a DRAFT PR to
                main with `gh pr create --draft --repo mdsmithaustin/pstack`
