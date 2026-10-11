@@ -1684,6 +1684,21 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
                 self.assertEqual(result["evidence"][4], "lead load routes: {'show-me-your-work': 'a skills folder listing at seq 0'}")
 
     def test_a_search_tool_over_the_skills_folder_counts_as_a_listing(self):
+        for name, given, verdict in (("Grep", {"pattern": "phase"}, PASS),
+                                     ("Grep", {"pattern": "phase", "path": "."}, PASS),
+                                     ("Glob", {"pattern": "**/SKILL.md"}, PASS),
+                                     ("Glob", {"pattern": "**/SKILL.md", "path": "."}, PASS),
+                                     ("Glob", {"pattern": "relay/**/*.py"}, FAIL),
+                                     ("Glob", {"pattern": "*/SKILL.md", "path": ".claude/skills"}, PASS),
+                                     ("Glob", {"pattern": "**/SKILL.md", "path": "relay"}, FAIL),
+                                     ("Glob", {"pattern": "*.py", "path": ".claude/skills"}, FAIL),
+                                     ("Grep", {"pattern": "phase", "glob": "**/SKILL.md"}, PASS),
+                                     ("Grep", {"pattern": "phase", "glob": "relay/**/*.py"}, FAIL)):
+            with self.subTest(name=name, given=given):
+                call = {"seq": 0, "kind": "tool_call", "name": name, "input": given}
+                result = self.grade([call] + bash(2, self.load))
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (verdict, [] if verdict == PASS else [self.unrouted + "['show-me-your-work']"]))
         for name, field in (("Glob", "pattern"), ("Glob", "path"), ("Glob", "glob"),
                             ("Grep", "path"), ("Grep", "glob"), ("LS", "path"), ("list_dir", "directory"),
                             ("list_directory", "directory"), ("search_files", "glob"), ("find_files", "glob")):
@@ -1707,6 +1722,12 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
 
     def test_search_tool_listing_paths_use_the_run_directory(self):
         cwd = "/home/u/.claude/worktrees/run/w"
+        for name in ("Grep", "Glob", "LS", "list_dir", "list_directory", "search_files", "find_files"):
+            for given in ({}, {"path": "."}, {"directory": "."}):
+                with self.subTest(name=name, given=given):
+                    call = {"seq": 0, "kind": "tool_call", "name": name, "input": given}
+                    result = self.grade([call] + bash(2, self.load), cwd=cwd)
+                    self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
         for path, verdict in ((".", PASS), (cwd, PASS), (f"{cwd}/.agents/skills/*/SKILL.md", PASS),
                               (f"{cwd}/.agents/skills/show-me-your-work/SKILL.md", FAIL),
                               (f"{cwd}/relay", FAIL), ("/etc", FAIL)):

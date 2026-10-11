@@ -3868,9 +3868,13 @@ def skill_listings(view):
                 found.append(call.get("seq"))
         elif name in SEARCH_TOOLS:
             roots = [Path(root) for root in (view.trace.get("cwd"), view.project) if root]
-            fields = ("path", "glob", "directory", "pattern") if name == "Glob" else ("path", "glob", "directory")
-            paths = [str(given[field]) for field in fields if given.get(field)]
-            if any(reaches_skills(path, roots) or is_ancestor(path, roots) for path in paths):
+            paths = [str(given[field]) for field in ("path", "directory") if given.get(field)] or ["."]
+            fields = ("glob", "pattern") if name == "Glob" else ("glob",)
+            filters = [str(given[field]) for field in fields if given.get(field)]
+            if any((reaches_skills(path, roots) or is_ancestor(path, roots)) and
+                   (not filters or any(fnmatch.fnmatchcase(os.path.normpath(under(path, sample)).lower(),
+                                                          os.path.normpath(under(path, pattern)).lower())
+                                       for pattern in filters for sample in SKILL_FILE_PATHS)) for path in paths):
                 found.append(call.get("seq"))
     return sorted(seq for seq in found if seq is not None)
 
