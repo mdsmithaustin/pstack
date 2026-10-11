@@ -154,19 +154,17 @@ jobs:
                maintainer must push a commit or close and reopen the PR to
                start it.
             8. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
-            9. If there are portable changes: create branch
-               `sync/upstream-<YYYYMMDD>`, commit with a message summarizing
-               the upstream commits ported, push it, and open a DRAFT PR to
-               main with `gh pr create --draft --repo mdsmithaustin/pstack`
+            9. Create branch `sync/upstream-<YYYYMMDD>`, commit everything
+               staged with a message summarizing the upstream commits
+               ported, push it, and open a DRAFT PR to main with
+               `gh pr create --draft --repo mdsmithaustin/pstack`
                (required: the upstream remote otherwise hijacks base-repo
                resolution). The PR body lists each
                upstream commit, what transformation was applied, and anything
-               that needs human judgment. If nothing is portable (upstream
-               churn with no effect on this port), open the same draft PR
-               with only the .github/upstream-sha bump, committed with
-               `git commit --only .github/upstream-sha` so nothing step 7
-               staged goes with it, and say in the body that nothing was
-               portable.
+               that needs human judgment. A ledger classification from step 6
+               is a port change and goes in the same commit. When the only
+               change is the .github/upstream-sha bump, say in the body that
+               nothing else was portable.
 
             Never force-push. Never push to main, because its ruleset requires a
             pull request and grants no bypass.
