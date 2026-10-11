@@ -3867,8 +3867,10 @@ def skill_listings(view):
             if any(lists_skills(view, argv, base) for stages, base in pipelines(command) for argv in stages):
                 found.append(call.get("seq"))
         elif name in SEARCH_TOOLS:
-            fields = [str(given.get(field) or "") for field in ("path", "pattern", "glob", "directory")]
-            if any(SKILL_DIR_NAMES & set(re.split(r"/+", value)) or "SKILL.md" in value for value in fields):
+            roots = [Path(root) for root in (view.trace.get("cwd"), view.project) if root]
+            fields = ("path", "glob", "directory", "pattern") if name == "Glob" else ("path", "glob", "directory")
+            paths = [str(given[field]) for field in fields if given.get(field)]
+            if any(reaches_skills(path, roots) or is_ancestor(path, roots) for path in paths):
                 found.append(call.get("seq"))
     return sorted(seq for seq in found if seq is not None)
 

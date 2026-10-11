@@ -1684,10 +1684,37 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
                 self.assertEqual(result["evidence"][4], "lead load routes: {'show-me-your-work': 'a skills folder listing at seq 0'}")
 
     def test_a_search_tool_over_the_skills_folder_counts_as_a_listing(self):
-        glob = [{"seq": 0, "kind": "tool_call", "name": "Glob", "input": {"pattern": ".claude/skills/*/SKILL.md"}}]
-        self.assertEqual(self.grade(glob + bash(2, self.load))["verdict"], PASS)
-        glob = [{"seq": 0, "kind": "tool_call", "name": "Glob", "input": {"pattern": "relay/**/*.py"}}]
-        self.assertEqual(self.grade(glob + bash(2, self.load))["verdict"], FAIL)
+        for name, field in (("Glob", "pattern"), ("Glob", "path"), ("Glob", "glob"),
+                            ("Grep", "path"), ("Grep", "glob"), ("LS", "path"), ("list_dir", "directory"),
+                            ("list_directory", "directory"), ("search_files", "glob"), ("find_files", "glob")):
+            for path, verdict in ((".claude/skills/*/SKILL.md", PASS), (".claude/skills", PASS),
+                                  (".claude/skills/show-me-your-work/SKILL.md", FAIL),
+                                  (".claude/skills/show-me-your-work", FAIL), ("relay/**/*.py", FAIL)):
+                with self.subTest(name=name, field=field, path=path):
+                    call = {"seq": 0, "kind": "tool_call", "name": name, "input": {field: path}}
+                    result = self.grade([call] + bash(2, self.load))
+                    self.assertEqual((result["verdict"], result["failures"]),
+                                     (verdict, [] if verdict == PASS else [self.unrouted + "['show-me-your-work']"]))
+
+    def test_a_grep_content_pattern_does_not_count_as_a_listing(self):
+        for given in ({"pattern": "phase", "path": ".claude/skills/show-me-your-work/SKILL.md"},
+                      {"pattern": "skills", "path": "relay"}, {"pattern": ".claude/skills/*/SKILL.md", "path": "relay"}):
+            with self.subTest(given=given):
+                call = {"seq": 0, "kind": "tool_call", "name": "Grep", "input": given}
+                result = self.grade([call] + bash(2, self.load))
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, [self.unrouted + "['show-me-your-work']"]))
+                self.assertEqual(result["evidence"][4], "lead load routes: {}")
+
+    def test_search_tool_listing_paths_use_the_run_directory(self):
+        cwd = "/home/u/.claude/worktrees/run/w"
+        for path, verdict in ((".", PASS), (cwd, PASS), (f"{cwd}/.agents/skills/*/SKILL.md", PASS),
+                              (f"{cwd}/.agents/skills/show-me-your-work/SKILL.md", FAIL),
+                              (f"{cwd}/relay", FAIL), ("/etc", FAIL)):
+            with self.subTest(path=path):
+                call = {"seq": 0, "kind": "tool_call", "name": "Grep", "input": {"pattern": "phase", "path": path}}
+                result = self.grade([call] + bash(2, self.load), cwd=cwd)
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (verdict, [] if verdict == PASS else [self.unrouted + "['show-me-your-work']"]))
 
     def test_a_listing_must_come_before_the_load_and_in_an_earlier_call(self):
         for events in (bash(0, self.load) + bash(2, "ls -R .claude"), bash(0, f"ls -R .claude; {self.load}")):
