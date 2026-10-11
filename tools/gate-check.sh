@@ -38,6 +38,7 @@ run lint "cross-suite references" . "${py[@]}" tools/check-cross-suite-reference
 run lint "subagent bundle" . "${py[@]}" tools/generate-subagents.py --check
 run lint "promise ledger" . "${py[@]}" evals/promises/ledger.py audit
 run lint "pstack-models default" . "${py[@]}" skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
+run lint "skill reference spelling" . "${py[@]}" -m unittest discover -s tools -p test_skill_references.py
 
 run test "tools unit tests" . "${py[@]}" -m unittest discover -s tools -p 'test_*.py'
 run test "promise unit tests" . "${py[@]}" -m unittest discover -s evals/promises -p 'test_*.py'

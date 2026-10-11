@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""List slash and dollar skill spellings in model-facing text, one TSV row per spelling."""
+"""List slash and dollar skill spellings in model-facing text, one TSV row per spelling.
+
+The scan covers the markdown under skills/ that git tracks, so an installed node_modules
+or another untracked file never fails it. Root agents/*.md is out of scope because PORTING.md
+keeps it as upstream text, including Comment Sicko's /how and /why and poteto-agent's /poteto-mode.
+"""
 from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import NamedTuple
@@ -23,7 +29,9 @@ def skill_names(root: Path) -> list[str]:
 
 
 def model_facing_files(root: Path) -> list[Path]:
-    return sorted(p for p in (root / "skills").rglob("*.md") if p.is_file())
+    tracked = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--", "skills/*.md"],
+                             check=True, capture_output=True, text=True).stdout
+    return sorted(root / rel for rel in tracked.split("\0") if rel)
 
 
 def sigil_pattern(name: str) -> re.Pattern[str]:
