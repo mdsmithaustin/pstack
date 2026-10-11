@@ -112,6 +112,14 @@ def chat_worklist(text):
     return [{**i, "state": i["state"] or "pending"} for i in items]
 
 
+LISTED_SKILL = re.compile(r"^- ([A-Za-z0-9_.:-]+)(?:: (.*?))?(?: \(file: [^)]*\))?$")
+
+
+def listed_skills(text):
+    """{name: description shown, or "" for a bare name} for each `- name` line of the skill listing a harness gives an agent."""
+    return {m.group(1): m.group(2) or "" for m in map(LISTED_SKILL.match, text.splitlines()) if m}
+
+
 def timeout_for(case, harness):
     limits = case.get("timeout_s", 1800)
     if isinstance(limits, int):

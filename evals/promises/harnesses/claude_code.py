@@ -761,6 +761,13 @@ def skill_calls(events):
             for e in events if e["kind"] == "tool_call" and e["name"] == "Skill"]
 
 
+def listed_skills(rows):
+    """The skill listing Claude Code attached to the lead's context, or None when the transcript holds none."""
+    listings = [e["attachment"].get("content") or "" for e in rows if e.get("type") == "attachment"
+                and (e.get("attachment") or {}).get("type") == "skill_listing"]
+    return live.listed_skills("\n".join(listings)) if listings else None
+
+
 def host_skill_hits(contents):
     roots = [str(Path.home() / ".claude/skills"), str(Path.home() / ".agents/skills")]
     return sorted({root for data in contents for root in roots if root in data.decode(errors="replace")})
@@ -839,6 +846,7 @@ def harvest(run):
         "x_cost_usd": round(sum(r.get("total_cost_usd") or 0 for r in results), 4),
         "x_deferred_tools": next((e["attachment"].get("addedNames") for e in rows if e.get("type") == "attachment"
                                   and e["attachment"].get("type") == "deferred_tools_delta"), None),
+        "x_listed_skills": listed_skills(rows),
         "x_init_tools": init.get("tools"),
         "x_host_skill_hits": host_skill_hits(evidence.values()),
         "x_evidence_snapshot": str(transcripts),
