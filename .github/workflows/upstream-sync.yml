@@ -109,9 +109,9 @@ jobs:
                  poteto-mode playbook, PRINCIPLE_RULES for a principle-*
                  skill, and GUIDE_SLASH_SKILLS when docs/guide names the
                  skill as /x.
-               - The "A skill didn't load on its own" row in
-                 skills/poteto-help/SKILL.md, when the skill has no
-                 agents/openai.yaml gate.
+               - For a skill with no agents/openai.yaml gate, AUTO_INVOCABLE
+                 in tools/test_skill_invocation_policy.py and the "A skill
+                 didn't load on its own" row in skills/poteto-help/SKILL.md.
             4. Every SKILL.md frontmatter `name:` must equal its directory
                name. Verify after editing.
             5. Preserve root agents/*.md as upstream source. After any agent
@@ -133,13 +133,16 @@ jobs:
                ledger change in the PR body under "Guide promises".
             7. Run each of these, even when no skill directory changed. Each
                must exit zero before you continue. Fix the port, not the
-               check, and say in the PR body what each failure was.
+               check, and say in the PR body what each failure was. Run
+               `git add -A` first, because skill-ci reads tracked files.
+               - python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
                - python3 -m unittest discover -s tools -p 'test_*.py'
                - python3 -m unittest discover -s evals/promises -p 'test_*.py'
                - python3 -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
                - skill-ci check
                The canon and poteto-mode script suites need Docker and Bun,
-               so the PR's CI runs them.
+               and CI does not start on a PR this workflow opens. Say in the
+               PR body that they have not run, so a maintainer runs them.
             8. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
             9. If there are portable changes: create branch
                `sync/upstream-<YYYYMMDD>`, commit with a message summarizing
