@@ -3624,27 +3624,37 @@ def turn_finished(view):
     return not view.killed and bool(view.final_reply)
 
 
-def routing_decided(view, skill, turn=None, after=None):
-    """The first lead event, after seq `after`, that shows a route was chosen: a playbook or another routed skill loaded,
-    a worklist, a project edit, or a question to the user."""
+def routing_events(view, skill, turn=None, after=None):
     routed = {name for name in view.trace.get("x_implicit_off") or ()
               if name not in {"poteto-mode", "pstack-harness", skill} and not name.startswith("principle-")}
+    found = []
 
     def later(seq):
         return (after is None or (seq or 0) > after) and (turn is None or view.turn_of(seq) == turn)
     for seq, rel in view.event_reads():
-        if later(seq) and (PLAYBOOK.match(rel) or (SKILL_FILE.match(rel) and rel.split("/", 1)[0] in routed)):
-            return f"read {rel} at seq {seq}"
+        if later(seq) and PLAYBOOK.match(rel):
+            found.append(("playbook", f"read {rel} at seq {seq}"))
+        elif later(seq) and SKILL_FILE.match(rel) and rel.split("/", 1)[0] in routed:
+            found.append(("skill", f"read {rel} at seq {seq}"))
     for snapshot in view.worklist:
         if later(snapshot.get("seq")):
-            return f"worklist at seq {snapshot.get('seq')}"
+            found.append(("worklist", f"worklist at seq {snapshot.get('seq')}"))
     for seq, path, _ in view.project_edits():
         if later(seq):
-            return f"edited {path} at seq {seq}"
+            found.append(("edit", f"edited {path} at seq {seq}"))
     for call in view.tool_calls:
         if call.get("name") in ASK_TOOLS and later(call.get("seq")):
-            return f"asked the user at seq {call.get('seq')}"
-    return None
+            found.append(("question", f"asked the user at seq {call.get('seq')}"))
+    return found
+
+
+KILLED_RUN_DECISIONS = ("skill", "edit", "question")
+
+
+def firm_decision(view, skill, turn=None, after=None):
+    finished = turn_finished(view)
+    return next((text for kind, text in routing_events(view, skill, turn, after)
+                 if finished or kind in KILLED_RUN_DECISIONS), None)
 
 
 def file_load_failures(view, skill, reads):
@@ -3667,7 +3677,7 @@ def routed_load_verdict(view, skill, turn=None):
     if back:
         failures.append(f"handed the run back to the user: {back[:200]!r}")
     refused = next((a for a in attempts if a[1] == "skill-tool" and a[2] is False), None)
-    if refused and (turn_finished(view) or routing_decided(view, skill, turn, refused[0])):
+    if refused and (turn_finished(view) or firm_decision(view, skill, turn, refused[0])):
         failures.append(f"Skill({skill}) was refused and no later load succeeded: {refused[3][:200]!r}")
     reads = [a for a in attempts if a[1] in READ_KINDS and a[2] is not False]
     failures += file_load_failures(view, skill, reads)
@@ -3675,7 +3685,7 @@ def routed_load_verdict(view, skill, turn=None):
         return failed(failures, *evidence)
     if reads:
         return inconclusive(f"read {skill}/SKILL.md in a way the trace cannot size: {[a[3][:80] for a in reads]}", *evidence)
-    decided = routing_decided(view, skill, turn)
+    decided = firm_decision(view, skill, turn)
     if turn_finished(view) or decided:
         return failed(f"routing finished without loading {skill}", *evidence, f"routing decision: {decided or 'the turn finished'}")
     return inconclusive("run killed before a routing decision", *evidence)

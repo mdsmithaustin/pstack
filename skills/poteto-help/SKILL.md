@@ -7,7 +7,7 @@ description: Guides users through pstack setup, /poteto-mode, and picking the sk
 
 Answer the user's question about pstack, hand them a prompt they can send, and link the file the answer came from. For a help question, don't start the work. The user asked how, and a pstack run spends real tokens, so let them send the prompt.
 
-A message that asks for work, such as "use pstack to fix this bug", is not a help question. Read [`poteto-mode`](../poteto-mode/SKILL.md) and do the work under it.
+A message that asks for work, such as "use pstack to fix this bug", is not a help question. Use the **poteto-mode** skill and do the work under it.
 
 This file maps questions to the skills and guide pages that hold the answers. Those files own the details. Read the file you route to before you quote it, and trust it when it disagrees with this map. Read a sibling skill from the installed skills root. The README and guide pages don't ship with an installed skill, so read them from a pstack checkout when the session runs in one, and otherwise from their public copy. Give the user the file's public copy: `https://github.com/mdsmithaustin/pstack/blob/main/` followed by its path.
 
@@ -132,7 +132,7 @@ Principles are one-rule skills that `/poteto-mode` reads and cites in its replie
 | A question got treated as the next step of the last task | Say "new task", or say the turn doesn't need the mode. |
 | A new model choice had no effect | A workspace `.agents/pstack-models.md` overrides the home file, and a harness section such as `## codex` beats a flat line. On Claude Code, a written effort applies only once `/setup-pstack` has registered pstack's effort agents. |
 | Runs cost more than expected | See the cost paragraph under Get set up. |
-| A skill didn't load on its own | On Codex, and on Claude Code once `/setup-pstack` sets the skill listing, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when `/poteto-mode` runs them, and it doesn't run every skill. |
+| A skill didn't load on its own | On Codex, and on Claude Code once `/setup-pstack` sets the skill listing, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when another pstack skill, such as `/poteto-mode`, tells the agent to use them. `/poteto-mode` doesn't run every skill. |
 | Parallel agents overwrote each other | Give each agent its own worktree. |
 | An overnight run moved but finished nothing | `/loop` needs a check that can pass or fail, not a duration. See [guide page 7](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/07-overnight.md). |
 | The reply claims success from a green build | Ask for the real command, flow, stored value, or profile. That's the prove-it-works principle. |

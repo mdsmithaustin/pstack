@@ -24,7 +24,7 @@ The N candidates will receive the same prompt, so the prompt is the contract.
 
 1. State the artifact each candidate is producing.
 2. Derive the rubric. State what success looks like for *this* task, then turn it into 3-6 concrete gradeable criteria. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). The rubric is the picker's tool in Phase D. Candidates only see the task.
-3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, `sonnet`. A rejected entry also follows the required-arm rule below. Spawn more when the arena covers multiple design directions. Same model N times when the work is generation-bound rather than judgment-sensitive. Spawn per **Spawn a role** in the **pstack-harness** skill, which resolves the role and builds this CLI's spawn call.
+3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, `sonnet`. A rejected entry also follows the required-arm rule below. Spawn more when the arena covers multiple design directions. Same model N times when the work is generation-bound rather than judgment-sensitive. Use the **pstack-harness** skill for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
 4. Assign output paths. Each candidate writes to its own location (a git worktree where possible, otherwise `/tmp/arena-<slug>/candidate-<n>/`), per the **separate-before-serializing-shared-state** principle skill.
 
 ## Phase B: Fan out
@@ -39,7 +39,7 @@ An arm or exact model requested for this task remains an obligation. If it canno
 
 ## Phase C: Cross-judge
 
-After all Phase B candidates complete, choose one arm of the `arena cross-judge pool` role, resolved per **Spawn a role** in the **pstack-harness** skill. Its default pool is `fable`, `opus`, `sonnet`. Prefer a different model family or capability tier from the parent's. Spawn one readonly judge subagent on that model. It sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with the parent's reading in Phase D, not with the candidates themselves. Don't spawn the judge while candidates are still writing.
+After all Phase B candidates complete, choose one arm of the `arena cross-judge pool` role. Use the **pstack-harness** skill's **Spawn a role** section to resolve it. Its default pool is `fable`, `opus`, `sonnet`. Prefer a different model family or capability tier from the parent's. Spawn one readonly judge subagent on that model. It sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with the parent's reading in Phase D, not with the candidates themselves. Don't spawn the judge while candidates are still writing.
 
 ## Phase D: Pick a base
 

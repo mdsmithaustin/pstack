@@ -14,7 +14,7 @@ def export(rows, sink, retries=3, header=False):
     # check whether a header was asked for
     if header:
         # put the header in front of the rows
-        # the header rides in the first batch, so a retry after a busy sink sends it again with the rows
+        # ask dana before changing this, we may want a header on every batch later
         lines.insert(0, HEADER)
     for attempt in range(retries + 1):
         try:

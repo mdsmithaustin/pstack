@@ -165,6 +165,24 @@
    ],
    "scenario": "automate-me-run"
   },
+  "automate-me-gates-generated-mode": {
+   "check": "static",
+   "claim": "A -mode skill that /automate-me drafts loads only when typed or named: it ships agents/openai.yaml with allow_implicit_invocation: false, and on Claude Code /automate-me adds a name-only skillOverrides entry only after the user says yes.",
+   "evidence": [
+    {
+     "file": "skills/automate-me/SKILL.md",
+     "quote": "Write `agents/openai.yaml` beside its `SKILL.md`, with `allow_implicit_invocation: false` under `policy:`, which gates it on Codex."
+    },
+    {
+     "file": "skills/automate-me/SKILL.md",
+     "quote": "Write the entry only after the user says yes, and keep every other key."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/automate-me/SKILL.md"
+   ]
+  },
   "automate-me-mines-transcripts": {
    "check": "live",
    "claim": "/automate-me mines this workspace's recent transcripts for repeated preferences and asks which patterns are really the user's.",
@@ -195,7 +213,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Checkpoint every iteration via the **show-me-your-work** skill, a row for what changed and whether the predicate moved."
+     "quote": "Checkpoint every iteration with a row for what changed and whether the predicate moved. Use the **show-me-your-work** skill."
     },
     {
      "file": "skills/figure-it-out/SKILL.md",
@@ -625,11 +643,11 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/code-review.md",
-     "quote": "**Check shared code against its other callers.** Apply **principle-model-the-domain**."
+     "quote": "**Check shared code against its other callers.** Use the **principle-model-the-domain** skill."
     },
     {
      "file": "skills/poteto-mode/playbooks/code-review.md",
-     "quote": "For a large or contested change, also run the **interrogate** skill for a multi-model pass."
+     "quote": "For a large or contested change, also use the **interrogate** skill for a multi-model pass."
     }
    ],
    "harness_sensitive": false,
@@ -783,13 +801,13 @@
    "check": "live",
    "claim": "deslop hands the comments its own rules do not settle to the no-comments skill, so after deslop loads, the lead loads no-comments, or on Claude Code a delegate it spawns does.",
    "harness_sensitive": true,
-   "live_case": "rollup fixture with the rollup-csv-header history, which adds --header on a csv-header branch with narrating comments and one design-rationale comment that deslop rules 1-3 do not settle; prompt `deslop it before i commit` with no entry; arms deslop-handoff-slash, deslop-handoff-bold, and deslop-handoff-use spell the step 5 handoff sentence three ways through `skill_overlays`; pass when no-comments loads after deslop (through a Skill tool call whose result succeeded on Claude Code, by a skill injection or a read that covers the whole file on Codex); fail when deslop finishes without that load or a refused Skill(no-comments) has no later load; evidence records whether the unsettled comment survived.",
+   "live_case": "rollup fixture with the rollup-csv-header history, which adds --header on a csv-header branch with narrating comments and one talk-to-the-owner comment about our own code that deslop rules 1-3 do not settle; prompt `deslop it before i commit` with no entry; case deslop-handoff runs the shipped step 5; pass when no-comments loads after deslop (through a Skill tool call whose result succeeded on Claude Code, by a skill injection or a read that covers the whole file on Codex); fail when deslop finishes without that load or a refused Skill(no-comments) has no later load; evidence records whether the unsettled comment survived.",
    "owners": [
     "skills/deslop/SKILL.md",
     "skills/no-comments/SKILL.md",
     "skills/setup-pstack/scripts/skill-listing.py"
    ],
-   "scenario": "deslop-handoff-slash"
+   "scenario": "deslop-handoff"
   },
   "disk-prompt-routes-to-worktree-cleanup": {
    "check": "live",
@@ -1022,7 +1040,7 @@
     },
     {
      "file": "skills/figure-it-out/SKILL.md",
-     "quote": "Log the run via the **show-me-your-work** skill."
+     "quote": "Use the **show-me-your-work** skill to log the run."
     }
    ],
    "harness_sensitive": false,
@@ -1266,7 +1284,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/investigation.md",
-     "quote": "For external, domain, or dependency research, continue in the [Research playbook](research.md). For current code behavior, route through the **how** skill. For motivation questions, also route through the **why** skill."
+     "quote": "For external, domain, or dependency research, continue in the [Research playbook](research.md). For current code behavior, use the **how** skill. For motivation questions, also use the **why** skill."
     }
    ],
    "harness_sensitive": false,
@@ -1291,7 +1309,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Pick the wake mechanism using your CLI's loop facility (per the **pstack-harness** skill — a built-in or wrapper, not a pstack skill). An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
+     "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's **Loops and wake-ups** section to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
      "file": "skills/pstack-harness/SKILL.md",
@@ -1516,7 +1534,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Run `/deslop` over the diff before commit."
+     "quote": "Use the **deslop** skill over the diff before commit."
     }
    ],
    "harness_sensitive": false,
@@ -1531,7 +1549,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Write every PR title, PR description, and commit body with `/technical-writing`, then apply `/unslop`."
+     "quote": "Use the **technical-writing** skill for every PR title, PR description, and commit body. Then use the **unslop** skill."
     }
    ],
    "harness_sensitive": false,
@@ -1774,11 +1792,11 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Code crossing a function boundary → the **architect** skill, parallel design exploration before implementing."
+     "quote": "Code crossing a function boundary → use the **architect** skill for parallel design exploration before implementing."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "Plan the fix. If it crosses a function boundary, `architect` first."
+     "quote": "Plan the fix. If it crosses a function boundary, use the **architect** skill first."
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
@@ -3069,11 +3087,11 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/perf-issue.md",
-     "quote": "Vet the baseline, and each later number, with the **benchmark-checklist** skill."
+     "quote": "Use the **benchmark-checklist** skill to vet the baseline and each later number."
     },
     {
      "file": "skills/poteto-mode/playbooks/hillclimb.md",
-     "quote": "Vet the harness with the **benchmark-checklist** skill before you freeze it"
+     "quote": "Use the **benchmark-checklist** skill to vet the harness before you freeze it"
     }
    ],
    "harness_sensitive": false,
@@ -5759,6 +5777,15 @@
    ],
    "text": "`/deslop` cleans slop out of the code, `/unslop` cleans it out of prose, and `/no-comments` hands the comments to a reviewer who didn't write them."
   },
+  "c41d18f82f9c": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "deslop-hands-unsettled-comments-to-no-comments",
+   "sources": [
+    "port"
+   ],
+   "text": "When `/deslop` meets a comment its rules don't settle, it runs `/no-comments` on that comment in the same pass, and its report says what the review did."
+  },
   "77b5baffabb8": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -6591,6 +6618,24 @@
     "port"
    ],
    "text": "You don't describe your style, because [`/automate-me`](../../skills/automate-me/SKILL.md) reads it out of your history."
+  },
+  "c23b9d40c6a7": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "automate-me-gates-generated-mode",
+   "sources": [
+    "port"
+   ],
+   "text": "The PR adds `agents/openai.yaml`, so on Codex the skill it drafts loads only when you type it or a skill tells the agent to use it."
+  },
+  "ee377c3a6df0": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "automate-me-gates-generated-mode",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code that holds once you let `/automate-me` add a name-only entry to your `~/.claude/settings.json`, which it asks about first."
   },
   "a0dc9570c89b": {
    "class": "substituted",
@@ -11642,10 +11687,11 @@
    ],
    "text": "Some skills don't load from their description."
   },
-  "06a14c57d8c1": {
+  "45109a48e3a8": {
    "also": [
     "routed-skill-loads-after-compaction",
-    "slash-skills-invocable"
+    "slash-skills-invocable",
+    "deslop-hands-unsettled-comments-to-no-comments"
    ],
    "class": "promise",
    "file": "01-setup.md",
@@ -11653,7 +11699,23 @@
    "sources": [
     "port"
    ],
-   "text": "They load when you type their name or when another pstack skill names them."
+   "text": "They load when you type their name or when another pstack skill tells the agent to use them."
+  },
+  "2a201edf4e1b": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "An agent that lists the skills folder can still open one of these skills by its folder name."
+  },
+  "0ef8fb5607d8": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "On 2026-10-10 that happened in 7 of 12 runs of a request that named no skill, on both Claude Code and Codex."
   },
   "1d21f306c413": {
    "class": "promise",

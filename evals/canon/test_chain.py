@@ -923,7 +923,7 @@ class StepSpecTests(unittest.TestCase):
             ("move in small behavior-preserving steps", ("principle-migrate-callers-then-delete-legacy-apis", "pstack-harness")),
             ("prove behavior is unchanged on", ("principle-prove-it-works",)),
             ("confirm the change is worth", ("principle-minimize-reader-load",)),
-            ("rebase into small ordered commits", ("sequence-verifiable-units",)),
+            ("rebase into small ordered commits", ("principle-sequence-verifiable-units",)),
         ])
 
     def test_a_pointer_on_an_indented_line_belongs_to_its_step_and_a_non_skill_is_no_pointer(self):

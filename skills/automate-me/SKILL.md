@@ -21,11 +21,11 @@ Look recursively for `.agents/skills/**/*-mode/SKILL.md` and `~/.agents/skills/*
 Update mode changes the rest of the flow:
 - Step 1 mines only history since the skill was last edited (`git log -1 --format=%cI <path>`).
 - Step 2 asks what's changed or missing, not what to capture from zero.
-- Step 4 edits the existing file in place. Preserve sections the user hasn't contradicted. Revise ones with new evidence. Add new sections only for genuinely new rules.
+- Step 4 edits the existing file in place. Preserve sections the user hasn't contradicted. Revise ones with new evidence. Add new sections only for genuinely new rules. Replace a `disable-model-invocation` line in its frontmatter with the gate that step 4 describes.
 
 ### 1. Mine their history
 
-Locate the active workspace's transcripts before fanning out (per the **pstack-harness** skill). Use only this workspace's store. Don't read other workspaces' sessions. That crosses workspace boundaries and reads private chats from unrelated projects.
+Use the **pstack-harness** skill to locate the active workspace's transcripts before fanning out. Use only this workspace's store. Don't read other workspaces' sessions. That crosses workspace boundaries and reads private chats from unrelated projects.
 
 Survey recent agent conversations within that scope for recurring patterns. Run multiple parallel subagents across slices of history (e.g. last 2-4 weeks, split into 3 slices so each has enough material). Each slice mining subagent reads transcripts from the workspace-scoped path the parent provides, looks for the signals below, and returns a short structured list of patterns it saw with evidence pointers. Default signals worth hunting:
 
@@ -69,11 +69,11 @@ Author the skill per `../poteto-mode/playbooks/authoring-a-skill.md`. Placement:
 - Handle: the user's first name or chosen identifier.
 - Frontmatter `description`: trigger on their name + `/<handle>-mode` + "work in their style", not on generic keywords like "write code" or "review PR".
 - Frontmatter formatting: Keep frontmatter valid YAML. Keep `description` as one YAML scalar. Quote it or use `description: >-` with indented continuation lines when punctuation or wrapping requires it.
-- Frontmatter `disable-model-invocation: true` by default. Opt out only if the user explicitly wants their mode to apply on every turn.
+- Gate the skill by default, so it loads only when the user types it or a skill names it. Write `agents/openai.yaml` beside its `SKILL.md`, with `allow_implicit_invocation: false` under `policy:`, which gates it on Codex. On Claude Code, offer to add `"<handle>-mode": "name-only"` under `skillOverrides` in the user's `~/.claude/settings.json`, as setup-pstack step 0c does for pstack's own skills. Write the entry only after the user says yes, and keep every other key. Never write `disable-model-invocation`, because Claude Code's Skill tool then refuses the skill when another skill names it. Opt out of the gate only if the user explicitly wants their mode to apply on every turn.
 
 ### 5. Iterate on prose
 
-Apply the **unslop** skill and the authoring-a-skill playbook's writing guidelines to every line.
+Use the **unslop** skill on every line, with the authoring-a-skill playbook's writing guidelines.
 
 Show the draft to the user and take feedback. Expect multiple iterations. Cut ruthlessly. A mode skill is not a manual.
 
@@ -85,7 +85,7 @@ Work in a worktree off main. Commit and open a PR. Don't push to main directly.
 
 - **Don't overfit to one conversation.** A preference stated once and contradicted another time is noise. Require multiple instances before codifying it.
 - **Don't be clever.** Restating other skills' contents, inventing metaphors, or writing "poetic" prose for an agent reader is cost without benefit. Keep it operational.
-- **Reference, don't inline.** Other skills the user relies on should appear as path references, not pasted excerpts. Same for any principle docs they maintain elsewhere.
+- **Reference, don't inline.** Name another skill the user relies on with "Use the **<name>** skill.", for example "Use the **unslop** skill.", using that skill's bare name, per the authoring playbook, never as a pasted excerpt. Point at principle docs they maintain elsewhere by path.
 - **Keep sections minimal.** Only add a section if the user has a specific, non-default rule there. "Communicate clearly" is not a section. "Short paragraphs. Tables when comparing options. Bullets only when items are genuinely parallel." is.
 - **Name conventions generic.** Use "the user" or "the human" in imperatives, not the author's first name.
 - **Don't force symmetry.** If a user has no process rules worth writing down, skip the Process section entirely.
