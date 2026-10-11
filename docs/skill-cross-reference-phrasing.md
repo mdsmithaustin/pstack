@@ -10,7 +10,7 @@ pstack needs one phrasing that a skill's body uses to make the agent load a sibl
 
 Use an imperative verb, then the bare skill name, then the word "skill": **"Use the `no-comments` skill"** (the house bold form, "Use the **no-comments** skill", is equivalent). Put it in a numbered step or a direct sentence, never in a "per" or "in" clause, at every site where the sibling must load. Leave plain mentions (routers, "see also") as they are. The **pstack-harness** skill defines what "use the X skill" means on each CLI. On Claude Code it means a Skill tool call with the bare name. On Codex, Grok, and Hermes it means reading `<installed skills root>/X/SKILL.md`.
 
-Confidence is medium on the shape and low on any hit-rate gain. No source publishes measured trigger rates for one phrasing against another. pstack's eval suite can measure this.
+The [2026-10-10 results record](../evals/promises/results/2026-10-10-use-the-skill.md) measures the shipped wording against an old-text control on Claude Code and Codex. It owns the hit rates, trace classifications, and remaining failures. Those runs support the deslop hand-off change, but do not establish a gain for every sibling-skill load point or harness.
 
 Reasons, each with its evidence label.
 
@@ -81,6 +81,6 @@ This census describes the tree at f8eb694f, before PR 185 (e4968e32) dropped `di
 ## Unknowns
 
 1. Precedence. Moot for pstack, because PR 185 removed the frontmatter flag and the 2026-10-10 runs loaded figure-it-out through the Skill tool on a name-only listing. The docs question stays open. The docs do not say whether a `skillOverrides` value of `"name-only"` overrides frontmatter `disable-model-invocation: true`. If frontmatter wins, the Skill tool keeps refusing gated siblings (#43809), and Claude Code needs the path route too. One `/skills` check or one `Skill` call settles it.
-2. Hit rate. No public eval compares "Use the X skill", "Call the Skill tool with X", `/X`, and a path. A small trigger eval in `evals/` (does a Skill call or a read of X/SKILL.md follow the step) would answer it per host.
+2. Hit rate. The [2026-10-10 results record](../evals/promises/results/2026-10-10-use-the-skill.md) compares the shipped deslop wording with its old-text control. It does not isolate the step 5 wording from the Report wording or compare "Use the X skill", "Call the Skill tool with X", `/X`, and a path as separate arms.
 3. Grok Build and Hermes. Their docs and source were not inspected for how they handle sibling skills.
 4. Cursor. Its skills docs URL returned 404, and nothing else was inspected.
