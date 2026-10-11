@@ -37,7 +37,7 @@ class SkillListing(unittest.TestCase):
     def test_the_lead_rollout_listing_reaches_the_harvest_without_its_file_paths(self):
         listing = ("## Skills\n### Skill roots\n- `r1` = `/w/.agents/skills`\n### Available skills\n"
                    "- deslop: Remove AI slop. (file: r1/deslop/SKILL.md)\n- how: Use for how X works. (file: r1/how/SKILL.md)\n"
-                   "### How to use skills\n- Discovery: the list above is the skills available.")
+                   "### How to use skills\n- Discovery: the list above is the skills available.\n</skills_instructions>")
         rows = [{"type": "session_meta", "payload": {"cwd": "/w", "id": "s"}},
                 {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": listing}]}}]
         data = "".join(json.dumps(r) + "\n" for r in rows).encode()

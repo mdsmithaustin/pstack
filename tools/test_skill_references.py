@@ -69,6 +69,18 @@ class SkillReferenceSpelling(unittest.TestCase):
             self.assertEqual(skill_references.sigils(root),
                              [("skills/demo/SKILL.md", 1, "/demo", "Then run /demo.")])
 
+    def test_the_scan_skips_a_tracked_file_deleted_from_disk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "skills/demo").mkdir(parents=True)
+            (root / "skills/demo/SKILL.md").write_text("Then run /demo.\n")
+            (root / "skills/demo/notes.md").write_text("Run /demo here too.\n")
+            subprocess.run(["git", "init", "-q", tmp], check=True)
+            subprocess.run(["git", "-C", tmp, "add", "skills"], check=True)
+            (root / "skills/demo/notes.md").unlink()
+            self.assertEqual(skill_references.sigils(root),
+                             [("skills/demo/SKILL.md", 1, "/demo", "Then run /demo.")])
+
     def test_the_scan_finds_a_slash_and_a_dollar_spelling(self):
         names = skill_references.skill_names(ROOT)
         sigil = skill_references.sigil_pattern("deslop")

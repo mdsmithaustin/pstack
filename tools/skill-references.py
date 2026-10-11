@@ -31,7 +31,7 @@ def skill_names(root: Path) -> list[str]:
 def model_facing_files(root: Path) -> list[Path]:
     tracked = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--", "skills/*.md"],
                              check=True, capture_output=True, text=True).stdout
-    return sorted(root / rel for rel in tracked.split("\0") if rel)
+    return sorted(root / rel for rel in tracked.split("\0") if rel and (root / rel).is_file())
 
 
 def sigil_pattern(name: str) -> re.Pattern[str]:
