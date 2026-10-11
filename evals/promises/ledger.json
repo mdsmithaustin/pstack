@@ -1428,9 +1428,9 @@
   },
   "name-only-skills-stay-unloaded-unnamed": {
    "check": "live",
-   "claim": "A skill set to load only when named never loads from its description: with no entry and no skill named, no agent in the run loads a skill whose agents/openai.yaml sets allow_implicit_invocation: false.",
+   "claim": "A skill set to load only when named never loads from its description: with no entry and no skill named, no agent in the run loads a skill whose agents/openai.yaml sets allow_implicit_invocation: false while the harness's skill listing shows that skill's description.",
    "harness_sensitive": true,
-   "live_case": "relay fixture; prompt `im stepping away. keep going until the migration check reports zero old callers. log your decisions.` with no entry; fail when any agent loads a skill from that set that the prompts and its own brief do not name; pass when the run acted with no such load.",
+   "live_case": "relay fixture; prompt `im stepping away. keep going until the migration check reports zero old callers. log your decisions.` with no entry; fail when the lead loads a skill from that set whose description the harness's skill listing showed it, and neither the prompts nor a skill the lead loaded earlier name it; inconclusive when the trace holds no harness listing, or when a delegate loads such a skill whose description the lead's listing showed; pass otherwise. Loads reached by listing a skills folder are a known gap, see README.md.",
    "owners": [
     "skills/setup-pstack/scripts/skill-listing.py",
     "skills/setup-pstack/SKILL.md"
@@ -11709,13 +11709,13 @@
    ],
    "text": "An agent that lists the skills folder can still open one of these skills by its folder name."
   },
-  "0ef8fb5607d8": {
+  "ef406aaaa3fc": {
    "class": "context",
    "file": "01-setup.md",
    "sources": [
     "port"
    ],
-   "text": "On 2026-10-10 that happened in 7 of 12 runs of a request that named no skill, on both Claude Code and Codex."
+   "text": "The [promise suite's known gap](../../evals/promises/README.md#run-live-cases) explains this limitation and links the observed results."
   },
   "1d21f306c413": {
    "class": "promise",

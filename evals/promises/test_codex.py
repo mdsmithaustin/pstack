@@ -33,6 +33,18 @@ class CallIds(unittest.TestCase):
                          [("tool_call", "x1", None), ("tool_call", "x2", None), ("tool_result", "x2", False), ("tool_result", "x1", True)])
 
 
+class SkillListing(unittest.TestCase):
+    def test_the_lead_rollout_listing_reaches_the_harvest_without_its_file_paths(self):
+        listing = ("## Skills\n### Skill roots\n- `r1` = `/w/.agents/skills`\n### Available skills\n"
+                   "- deslop: Remove AI slop. (file: r1/deslop/SKILL.md)\n- how: Use for how X works. (file: r1/how/SKILL.md)\n"
+                   "### How to use skills\n- Discovery: the list above is the skills available.")
+        rows = [{"type": "session_meta", "payload": {"cwd": "/w", "id": "s"}},
+                {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": listing}]}}]
+        data = "".join(json.dumps(r) + "\n" for r in rows).encode()
+        self.assertEqual(codex.harvest_rollout(data)["listed"], {"deslop": "Remove AI slop.", "how": "Use for how X works."})
+        self.assertEqual(codex.harvest_rollout(data[:data.index(b"\n") + 1])["listed"], None)
+
+
 class Compaction(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="pstack-codex-compact-")

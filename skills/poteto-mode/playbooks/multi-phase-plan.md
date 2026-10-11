@@ -34,14 +34,14 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 ### Arm the program
 
 - [ ] State the protocol and this plan to the operator, then stop. Start execution only on the operator's explicit go.
-- [ ] In private, untracked run state, record the absolute `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, and `PROJECT_ROOT` bindings from the **pstack-harness** skill. Record whether this program owns `PSTACK_TEMP_ROOT`. Keep concrete host paths out of this plan and other shared files.
+- [ ] In private, untracked run state, record the absolute `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, and `PROJECT_ROOT` bindings. Use the **pstack-harness** skill, which defines them. Record whether this program owns `PSTACK_TEMP_ROOT`. Keep concrete host paths out of this plan and other shared files.
 - [ ] Read these from trunk at program start. Re-read them at every tick. If a fetch fails at a tick, skip that tick's drift fix, run the rest of the tick, and record the failed fetch in the trail.
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/poteto-mode/playbooks/<execution playbook>.md'`
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/swarm/SKILL.md'`
   - [ ] `git -C "${PROJECT_ROOT:?}" show "origin/main:$CONTROL_SKILL_PATH"`
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/poteto-mode/playbooks/opening-a-pr.md'`
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/<each other leaf skill the program uses>'`
-- [ ] On the operator's go, arm the audit tick through the harness's loop facility, per **Loops and wake-ups** in the **pstack-harness** skill, as `/loop 1h` in Claude Code, with the tick prompt below. Never leave the cadence to memory.
+- [ ] On the operator's go, arm the audit tick through the harness's loop facility, as `/loop 1h` in Claude Code, with the tick prompt below. Use the **pstack-harness** skill's **Loops and wake-ups** section. Never leave the cadence to memory.
 - [ ] Use this tick prompt, verbatim. "Re-read the execution playbook from trunk. Audit the operation against it and fix drift in this tick. If the trunk fetch fails, skip the drift fix, run the rest of this tick, and log the failed fetch in your decision trail. Probe every active lane and judge progress by side effects only. Stand down a stuck lane and dispatch its replacement now. Then post a short status message to the operator in chat only when the audit found a tracked change that no earlier status message reported, such as a PR opened, a code-ready head, a round launched or closed, a verdict, a merge, a stuck agent and the action taken, a blocker added or cleared, or a decision only the operator can make. Name every such change and nothing else. Do not repeat a table, the merged list, or an unchanged blocker. If the audit found none, end the turn with no reply text. Either way, log this tick's row in your decision trail. The row names the items reported, or none."
 - [ ] On the operator's hold or stand-down, send every owner a zero-writes order at once.
 
@@ -138,7 +138,7 @@ Each live lane runs in its own isolated worktree at the PR head. Drive through t
 ## Close the program
 
 - [ ] Every box above is checked with its evidence.
-- [ ] If the program owns `PSTACK_TEMP_ROOT`, remove it with the cleanup block in the **pstack-harness** skill. Never remove an installed root or an explicit checkout.
+- [ ] If the program owns `PSTACK_TEMP_ROOT`, remove it with the harness cleanup block. Use the **pstack-harness** skill for that block. Never remove an installed root or an explicit checkout.
 - [ ] Reply to the operator with the report the execution playbook names.
 
 ## Appendix A. Prototype evidence

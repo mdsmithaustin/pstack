@@ -3547,17 +3547,25 @@ def covers(spans, total):
     return reached >= total
 
 
-def skill_lines(view, skill):
+def skill_roots(view):
     roots = [view.project / sub for sub in (".agents/skills", ".claude/skills", ".hermes/skills", ".grok/skills")] if view.project else []
-    for root in [*roots, Path(view.skills_root), ROOT / "skills"]:
+    return [*roots, Path(view.skills_root), ROOT / "skills"]
+
+
+def skill_text(view, skill):
+    for root in skill_roots(view):
         path = root / skill / "SKILL.md"
         try:
             if _is_file(path):
-                text = _read_text(path, errors="replace")
-                return text.count("\n") + (0 if text.endswith("\n") else 1)
+                return _read_text(path, errors="replace")
         except Exception:
             continue
     return None
+
+
+def skill_lines(view, skill):
+    text = skill_text(view, skill)
+    return None if text is None else text.count("\n") + (0 if text.endswith("\n") else 1)
 
 
 def load_attempts(view, skill, turn=None):
@@ -3750,6 +3758,40 @@ def child_loads(view, hidden):
     return list(dict.fromkeys(found))
 
 
+def installed_skills(view):
+    names = set()
+    for root in skill_roots(view):
+        try:
+            names |= {Path(p).name for p in _files(root, "*")}
+        except Exception:
+            continue
+    return names
+
+
+def first_loads(view, names):
+    first = {}
+    for skill in sorted(names):
+        rows = [(seq, how) for seq, how, ok, _ in load_attempts(view, skill) if ok and how != "search"]
+        if rows:
+            first[skill] = rows[0]
+    return first
+
+
+def named_by_loaded(view, skill, loaded):
+    """The skill the lead loaded before its first load of skill whose text names skill, or None."""
+    at = loaded[skill][0]
+    return next((other for other, (seq, _) in sorted(loaded.items())
+                 if other != skill and seq < at and prompt_named([skill_text(view, other) or ""], {skill})), None)
+
+
+def description_shown(view, skill):
+    """Whether the skill listing the harness gave the lead showed skill's description: None when the trace cannot tell."""
+    listed = view.trace.get("x_listed_skills")
+    if listed:
+        return bool(listed.get(skill))
+    return None
+
+
 @oracle("name-only-skills-stay-unloaded-unnamed")
 def name_only_stay_unloaded(view):
     hidden = set(view.trace.get("x_implicit_off") or ())
@@ -3761,10 +3803,22 @@ def name_only_stay_unloaded(view):
     lead = [("lead", skill, how, seq) for skill, rows in attempts.items() for seq, how, ok, _ in rows if ok and how != "search"]
     unsettled = [(skill, how, seq) for skill, rows in attempts.items() for seq, how, ok, _ in rows if ok is not True and how != "search"]
     children = child_loads(view, hidden)
+    shown = {skill: description_shown(view, skill) for skill in sorted({row[1] for row in lead + children})}
+    lead_shown = sorted({row[1] for row in lead if shown[row[1]]})
+    loaded = first_loads(view, installed_skills(view) | set(view.trace.get("x_implicit_off") or ())) if lead_shown else {}
+    named_by = {skill: named_by_loaded(view, skill, loaded) for skill in lead_shown}
     evidence = [f"name-only skills: {len(hidden)} (named by the prompts: {sorted(named)})", f"lead loads: {lead}",
-                f"delegate loads: {children}", f"refused or unreturned load calls: {unsettled}"]
-    if lead or children:
-        return failed(f"loaded name-only skills nobody named: {sorted({row[1] for row in lead + children})}", *evidence)
+                f"delegate loads: {children}", f"refused or unreturned load calls: {unsettled}",
+                f"description in the harness listing: {shown}", f"named by an earlier loaded skill: {named_by}"]
+    from_description = [skill for skill in lead_shown if not named_by[skill]]
+    if from_description:
+        return failed(f"loaded name-only skills whose description the harness listing showed the lead, with no name for them: {from_description}", *evidence)
+    unknown = sorted(skill for skill, seen in shown.items() if seen is None)
+    if unknown:
+        return inconclusive(f"the trace holds no harness skill listing for {unknown}, so whether their descriptions were in context is unknown", *evidence)
+    strays = sorted({row[1] for row in children if shown[row[1]]})
+    if strays:
+        return inconclusive(f"delegates loaded name-only skills {strays} whose description the lead's listing showed, and the trace holds no delegate listing", *evidence)
     if not (view.tool_calls or view.texts() or view.final_reply):
         return inconclusive("empty trace: no tool call and no reply", *evidence)
     return passed(*evidence)

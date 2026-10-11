@@ -27,6 +27,7 @@ READ_COMMANDS = {"cat", "head", "tail", "sed", "nl", "less", "more", "bat", "awk
 SHELL_WRAPPERS = {"bash", "sh", "zsh", "/bin/bash", "/bin/sh", "/bin/zsh"}
 PERSONA_LINE = re.compile(r"persona: ([\w-]+)")
 REPLY_PERSONA_LINE = re.compile(r"^persona: ([\w-]+)[ \t]*$", re.M)
+AVAILABLE_SKILLS = "### Available skills"
 SKILL_INJECTION = re.compile(r"^<skill>\n<name>([^<]+)</name>\n<path>([^<]+)</path>")
 
 
@@ -221,7 +222,7 @@ def js_update_plan_calls(code):
 
 def harvest_rollout(data, prompts=None):
     events, files, worklist, spawns = [], [], [], []
-    final, injected, context, usage, compacted = "", [], {}, None, []
+    final, injected, context, usage, compacted, listed = "", [], {}, None, [], None
     meta = session_meta(data)
     cwd = Path(meta.get("cwd") or ".")
     names, plan_calls, spawn_by_call = {}, [], {}
@@ -250,6 +251,8 @@ def harvest_rollout(data, prompts=None):
             if ptype == "message":
                 text = text_of(payload.get("content"))
                 hit = SKILL_INJECTION.match(text)
+                if payload.get("role") == "developer" and listed is None and AVAILABLE_SKILLS in text:
+                    listed = live.listed_skills(text.split(AVAILABLE_SKILLS, 1)[1].split("\n#", 1)[0])
                 if payload.get("role") == "user" and hit:
                     injected.append({"name": hit.group(1), "path": hit.group(2), "turn": turn if prompts is not None else None})
                 if payload.get("role") == "user" and upcoming and text.strip() == upcoming[0][1].strip():
@@ -309,7 +312,7 @@ def harvest_rollout(data, prompts=None):
               if e["kind"] == "tool_call" and e["name"] in ("view_image", "read_file") and e["input"].get("path")]
     return {"meta": meta, "context": context, "events": events, "files_read": list(dict.fromkeys(files)),
             "worklist": stamp_turns(worklist, events), "plan_calls": plan_calls, "spawns": spawns, "final_reply": final,
-            "injected": injected, "usage": usage, "compactions": compacted}
+            "injected": injected, "usage": usage, "compactions": compacted, "listed": listed}
 
 
 def stamp_turns(snapshots, events):
@@ -386,7 +389,7 @@ def harvest(run):
     prompts = [t["argv"][-1] for t in run.turns if t.get("argv")]
     lead = harvest_rollout(next(iter(leads.values())), prompts) if leads else {
         "meta": {}, "context": {}, "events": [], "files_read": [], "worklist": [], "plan_calls": [], "spawns": [],
-        "final_reply": "", "injected": [], "usage": None, "compactions": []}
+        "final_reply": "", "injected": [], "usage": None, "compactions": [], "listed": None}
     merge_stream_plans(lead, streams.values())
     launch = json.loads((run.root / "launch.json").read_text())
     context = lead["context"]
@@ -415,6 +418,7 @@ def harvest(run):
         "x_todo_tools": "off" if run.case.get("env", {}).get("todo_tools") is False else "on",
         "x_token_usage": lead["usage"],
         "x_compactions": lead["compactions"],
+        "x_listed_skills": lead["listed"],
         "x_subagents": [],
     }
     for path, data in children.items():

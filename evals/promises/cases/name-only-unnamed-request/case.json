@@ -11,5 +11,6 @@
   "default": 300,
   "codex": 420
  },
+ "note": "See the dated known gap for this promise in evals/promises/README.md, which links the observed counts and regrades.",
  "tmp_lock": false
 }

@@ -436,8 +436,12 @@ class PreparedHarvest(unittest.TestCase):
             {"type": "user", "isSidechain": True, "message": {"content": [{"type": "tool_result", "tool_use_id": "k1", "is_error": True,
                                                                           "content": "Unknown skill: no-comments"}]}}]))
         (self.root / "skill-listing.json").write_text(json.dumps({"step": "absent", "name_only": [], "setting_sources": "user,project"}))
+        listing = "- no-comments\n- deslop: Remove AI slop from the code a branch changed.\n  Use for /deslop.\n- anthropic-skills:docx: Word files"
+        self.lead.write_text(json.dumps({"type": "attachment", "attachment": {"type": "skill_listing", "content": listing}}) + "\n")
         self.launch([{"type": "text", "text": "done"}], {"type": "result", "subtype": "success", "result": "done"})
         trace = claude_code.harvest(self.run)
+        self.assertEqual(trace["x_listed_skills"], {"no-comments": "", "deslop": "Remove AI slop from the code a branch changed.",
+                                                    "anthropic-skills:docx": "Word files"})
         self.assertEqual(trace["x_child_skill_calls"], {"agent-c1": [{"skill": "no-comments", "ok": False, "output_head": "Unknown skill: no-comments"}]})
         self.assertEqual(trace["x_skill_listing"], {"step": "absent", "name_only": [], "setting_sources": "user,project"})
 
