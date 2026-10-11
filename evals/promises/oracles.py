@@ -1,4 +1,5 @@
 import bisect
+import fnmatch
 import json
 import os
 import re
@@ -3547,17 +3548,25 @@ def covers(spans, total):
     return reached >= total
 
 
-def skill_lines(view, skill):
+def skill_roots(view):
     roots = [view.project / sub for sub in (".agents/skills", ".claude/skills", ".hermes/skills", ".grok/skills")] if view.project else []
-    for root in [*roots, Path(view.skills_root), ROOT / "skills"]:
+    return [*roots, Path(view.skills_root), ROOT / "skills"]
+
+
+def skill_text(view, skill):
+    for root in skill_roots(view):
         path = root / skill / "SKILL.md"
         try:
             if _is_file(path):
-                text = _read_text(path, errors="replace")
-                return text.count("\n") + (0 if text.endswith("\n") else 1)
+                return _read_text(path, errors="replace")
         except Exception:
             continue
     return None
+
+
+def skill_lines(view, skill):
+    text = skill_text(view, skill)
+    return None if text is None else text.count("\n") + (0 if text.endswith("\n") else 1)
 
 
 def load_attempts(view, skill, turn=None):
@@ -3716,7 +3725,7 @@ def prompt_named(texts, names):
     for name in names:
         escaped = re.escape(name)
         pattern = rf"(?<![\w/])[/\$]{escaped}(?![\w/-])|(?<!`)`{escaped}`(?!`)" \
-                  rf"|(?<!\*)\*\*{escaped}\*\*(?!\*)|\bthe\s+{escaped}\s+skill\b"
+                  rf"|(?<!\*)\*\*{escaped}\*\*(?!\*)|\bthe\s+{escaped}\s+skill\b|(?<![\w-]){escaped}/SKILL\.md\b"
         if any(re.search(pattern, text, re.I) for text in texts if text):
             named.add(name)
     return named
@@ -3750,6 +3759,150 @@ def child_loads(view, hidden):
     return list(dict.fromkeys(found))
 
 
+SKILL_DIR_NAMES = {".claude", ".agents", ".codex", ".hermes", ".grok", "skills"}
+LISTERS = {"ls", "eza", "exa", "tree", "find", "fd", "fdfind", "rg", "ag", "grep", "egrep", "fgrep"}
+SEARCHERS = {"rg", "ag", "grep", "egrep", "fgrep", "fd", "fdfind"}
+LISTER_VALUE_FLAGS = {"-e", "--regexp", "-f", "--file", "-g", "--glob", "-t", "-T", "--type", "-m", "--max-count", "-A", "-B", "-C",
+                      "--max-depth", "--exclude", "--include", "--exclude-dir"}
+PATTERN_FLAGS = {"-e", "--regexp", "-f", "--file"}
+LISTING_CODE = re.compile(r"listdir|scandir|iterdir|\bglob|\bwalk|readdir|\bls\b")
+SKILL_FILE_PATHS = ("SKILL.md", ".claude/skills/x/SKILL.md", ".claude/skills/x", ".claude/skills")
+SEARCH_TOOLS = {"Glob", "Grep", "LS", "list_dir", "list_directory", "search_files", "find_files"}
+
+
+def lister_scope(verb, args):
+    """(recursive, sees dot-directories) for a listing or search command."""
+    letters = "".join(arg[1:] for arg in args if arg.startswith("-") and not arg.startswith("--"))
+    if verb in ("ls", "eza", "exa"):
+        return "R" in letters or "T" in letters or "--recursive" in args, bool({"a", "A"} & set(letters)) or "--all" in args or "--almost-all" in args
+    if verb == "tree":
+        return True, "a" in letters or "--all" in args
+    if verb in ("rg", "ag"):
+        return True, "--hidden" in args or "." in letters or letters.count("u") >= (2 if verb == "rg" else 1) or args.count("--unrestricted") >= 2
+    if verb in ("fd", "fdfind"):
+        return True, bool({"H", "u"} & set(letters)) or "--hidden" in args or "--unrestricted" in args
+    if verb == "find":
+        return True, True
+    return bool({"r", "R"} & set(letters)) or any(arg.startswith(("--recursive", "--dereference-recursive")) for arg in args), True
+
+
+def lister_targets(verb, args):
+    if verb == "find":
+        targets = []
+        for arg in args:
+            if arg.startswith(("-", "(", "!")):
+                break
+            targets.append(arg)
+        return targets or ["."]
+    positional, skip, patternless = [], False, "--files" in args
+    for arg in args:
+        if skip:
+            skip = False
+        elif arg in LISTER_VALUE_FLAGS:
+            skip, patternless = True, patternless or arg in PATTERN_FLAGS
+        elif not arg.startswith("-") or arg == "-":
+            positional.append(arg)
+    if verb in SEARCHERS and not patternless:
+        positional = positional[1:]
+    return positional or ["."]
+
+
+def is_ancestor(path, roots):
+    norm = os.path.normpath(path)
+    if not norm.startswith("/"):
+        return all(part in (".", "..") for part in norm.split("/"))
+    return any(Path(norm) == root or Path(norm) in root.parents for root in roots)
+
+
+def reaches_skills(path, roots):
+    here = Path(os.path.normpath(path))
+    parts = here.parts
+    if path.startswith("/"):
+        inside = next((root for root in roots if root in (here, *here.parents)), None)
+        if inside:
+            parts = here.relative_to(inside).parts
+        elif any(here in root.parents for root in roots):
+            return False
+    last = max((i for i, part in enumerate(parts) if part in SKILL_DIR_NAMES), default=None)
+    if last is None:
+        return False
+    rest = parts[last + 1:]
+    return not rest or any(char in rest[0] for char in "*?[")
+
+
+def filters_out_skills(verb, args):
+    """True when a name or glob filter on a file listing keeps every skill file out of its output."""
+    if verb == "find":
+        filters = [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in ("-name", "-iname", "-path", "-ipath", "-wholename", "-iwholename")]
+    elif "--files" in args:
+        filters = [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in ("-g", "--glob") and not args[i + 1].startswith("!")]
+    else:
+        return False
+    return bool(filters) and not any(fnmatch.fnmatchcase(path.lower(), pattern.lower()) for pattern in filters for path in SKILL_FILE_PATHS)
+
+
+def lists_skills(view, argv, base):
+    verb, args = os.path.basename(argv[0]), argv[1:]
+    if verb in SCRIPTED_READERS:
+        code = " ".join(args)
+        return bool(LISTING_CODE.search(code)) and any(name in code for name in SKILL_DIR_NAMES)
+    if verb not in LISTERS or filters_out_skills(verb, args):
+        return False
+    recursive, hidden = lister_scope(verb, args)
+    roots = [Path(root) for root in (view.trace.get("cwd"), view.project) if root]
+    for target in lister_targets(verb, args):
+        path = under(base, target)
+        if reaches_skills(path, roots) or (recursive and hidden and is_ancestor(path, roots)):
+            return True
+    return False
+
+
+def skill_listings(view):
+    """Seq of each lead call that lists or searches a directory holding skills, in trace order."""
+    found = []
+    for call in view.tool_calls:
+        name, given = call.get("name"), call.get("input") or {}
+        if name in SHELL_TOOLS:
+            command = str(given.get(SHELL_TOOLS[name]) or "")
+            if any(lists_skills(view, argv, base) for stages, base in pipelines(command) for argv in stages):
+                found.append(call.get("seq"))
+        elif name in SEARCH_TOOLS:
+            fields = [str(given.get(field) or "") for field in ("path", "pattern", "glob", "directory")]
+            if any(SKILL_DIR_NAMES & set(re.split(r"/+", value)) or "SKILL.md" in value for value in fields):
+                found.append(call.get("seq"))
+    return sorted(seq for seq in found if seq is not None)
+
+
+def installed_skills(view):
+    names = set()
+    for root in skill_roots(view):
+        try:
+            names |= {Path(p).name for p in _files(root, "*")}
+        except Exception:
+            continue
+    return names
+
+
+def first_loads(view, names):
+    first = {}
+    for skill in sorted(names):
+        rows = [(seq, how) for seq, how, ok, _ in load_attempts(view, skill) if ok and how != "search"]
+        if rows:
+            first[skill] = rows[0]
+    return first
+
+
+def load_route(view, skill, at, listings, loaded):
+    """Why a lead's first load of skill at seq `at` did not come from its description, or None when nothing explains it."""
+    listed = next((seq for seq in listings if seq < (at if at is not None else -1)), None)
+    if listed is not None:
+        return f"a skills folder listing at seq {listed}"
+    for other, (seq, _) in sorted(loaded.items()):
+        if other != skill and seq is not None and at is not None and seq < at and prompt_named([skill_text(view, other) or ""], {skill}):
+            return f"named by {other}, loaded at seq {seq}"
+    return None
+
+
 @oracle("name-only-skills-stay-unloaded-unnamed")
 def name_only_stay_unloaded(view):
     hidden = set(view.trace.get("x_implicit_off") or ())
@@ -3761,10 +3914,23 @@ def name_only_stay_unloaded(view):
     lead = [("lead", skill, how, seq) for skill, rows in attempts.items() for seq, how, ok, _ in rows if ok and how != "search"]
     unsettled = [(skill, how, seq) for skill, rows in attempts.items() for seq, how, ok, _ in rows if ok is not True and how != "search"]
     children = child_loads(view, hidden)
+    routes, unrouted = {}, []
+    if lead:
+        listings = skill_listings(view)
+        loaded = first_loads(view, installed_skills(view) | set(view.trace.get("x_implicit_off") or ()))
+        for skill in sorted({row[1] for row in lead}):
+            route = load_route(view, skill, loaded[skill][0], listings, loaded)
+            if route:
+                routes[skill] = route
+            else:
+                unrouted.append(skill)
+    strays = sorted({row[1] for row in children if row[1] not in routes})
     evidence = [f"name-only skills: {len(hidden)} (named by the prompts: {sorted(named)})", f"lead loads: {lead}",
-                f"delegate loads: {children}", f"refused or unreturned load calls: {unsettled}"]
-    if lead or children:
-        return failed(f"loaded name-only skills nobody named: {sorted({row[1] for row in lead + children})}", *evidence)
+                f"delegate loads: {children}", f"refused or unreturned load calls: {unsettled}", f"lead load routes: {routes}"]
+    if unrouted:
+        return failed(f"loaded name-only skills with no listing, naming, or path route: {unrouted}", *evidence)
+    if strays:
+        return inconclusive(f"delegates loaded name-only skills {strays} and the trace holds none of their commands, so a folder listing cannot be ruled out", *evidence)
     if not (view.tool_calls or view.texts() or view.final_reply):
         return inconclusive("empty trace: no tool call and no reply", *evidence)
     return passed(*evidence)

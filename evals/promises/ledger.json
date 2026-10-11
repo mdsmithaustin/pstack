@@ -1428,9 +1428,9 @@
   },
   "name-only-skills-stay-unloaded-unnamed": {
    "check": "live",
-   "claim": "A skill set to load only when named never loads from its description: with no entry and no skill named, no agent in the run loads a skill whose agents/openai.yaml sets allow_implicit_invocation: false.",
+   "claim": "A skill set to load only when named never loads from its description: with no entry and no skill named, no agent in the run loads a skill whose agents/openai.yaml sets allow_implicit_invocation: false from its description. A load that follows a listing of a skills folder, or that the prompts or an already loaded skill name, does not come from the description.",
    "harness_sensitive": true,
-   "live_case": "relay fixture; prompt `im stepping away. keep going until the migration check reports zero old callers. log your decisions.` with no entry; fail when any agent loads a skill from that set that the prompts and its own brief do not name; pass when the run acted with no such load.",
+   "live_case": "relay fixture; prompt `im stepping away. keep going until the migration check reports zero old callers. log your decisions.` with no entry; fail when the lead loads a skill from that set with no earlier listing of a skills folder and no name or SKILL.md path for it in the prompts or in a skill the lead already loaded; inconclusive when only a delegate loads such a skill and nothing explains it; pass when the run acted with no such load or every load has a listing or naming behind it. Loads reached by listing a skills folder are a known gap, see README.md.",
    "owners": [
     "skills/setup-pstack/scripts/skill-listing.py",
     "skills/setup-pstack/SKILL.md"

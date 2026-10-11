@@ -66,7 +66,7 @@ Counts are PASS of graded runs, three runs per cell.
 
 ## Follow-ups
 
-- The listing rule lives in pstack-harness, which no (b) lead had read before its first gated load. It cannot act on a request that names no skill until it sits somewhere such a lead reads first. The promise's second clause, "no agent in the run loads a skill whose agents/openai.yaml sets allow_implicit_invocation: false", failed in 8 of 12 runs.
+- The listing rule lives in pstack-harness, which no (b) lead had read before its first gated load. It cannot act on a request that names no skill until it sits somewhere such a lead reads first. The promise as these runs graded it failed in 8 of 12 runs. Under the narrowed promise, which fails only a load from the description, none of the 12 failed, because each of the 8 loads came through a folder listing or a skill that names it.
 - Count a chained read whose output shows the file, even when a later command in the chain fails. This record has three more cases of it. In `routing_events`, do not count a read from a failed chain as a routing decision while the target skill's read in the same chain goes uncredited.
-- In `name-only-skills-stay-unloaded-unnamed`, a skill that a loaded skill tells the agent to use counts as unnamed. That conflicts with the pstack-harness rule.
+- The oracle for `name-only-skills-stay-unloaded-unnamed` was narrowed after these runs. It now passes a load that follows a skills-folder listing or that a loaded skill names. Regraded on copies of the saved runs, all 8 (b) FAILs here grade PASS: 7 through a listing, and `relay-q9kyt_c6` because `documentation-impact` names `technical-writing`. Loads reached by listing a skills folder are a known gap, documented in `evals/promises/README.md`.
 - Under the old wording, Codex cut the dana note as narration 2 times in 3. Under the shipped wording no Codex lead cut it before the comment review.

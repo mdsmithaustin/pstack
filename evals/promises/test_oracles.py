@@ -1629,9 +1629,24 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
     case = load_case("name-only-unnamed-request")
     hidden = ["figure-it-out", "poteto-mode", "show-me-your-work", "swarm"]
 
-    def grade(self, events, case=None, **extra):
+    unrouted = "loaded name-only skills with no listing, naming, or path route: "
+    load = "cat .claude/skills/show-me-your-work/SKILL.md"
+
+    def grade(self, events, case=None, project=None, **extra):
         trace = minimal(events=events, final_reply="Working on it.", **{"x_implicit_off": self.hidden, **extra})
-        return grade("name-only-skills-stay-unloaded-unnamed", trace, case or self.case)
+        return grade("name-only-skills-stay-unloaded-unnamed", trace, case or self.case, project)
+
+    def unseen(self, names):
+        return f"delegates loaded name-only skills {names} and the trace holds none of their commands, so a folder listing cannot be ruled out"
+
+    def skills_project(self, **bodies):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        for name, body in bodies.items():
+            folder = Path(tmp.name) / ".claude/skills" / name
+            folder.mkdir(parents=True)
+            (folder / "SKILL.md").write_text(body)
+        return Path(tmp.name)
 
     def test_a_run_that_acts_without_loading_a_name_only_skill_passes(self):
         events = bash(0, "sh tools/old_callers.sh") + skill_call(2, "unslop") + skill_call(4, "figure-it-out", ok=False) \
@@ -1645,19 +1660,110 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
                             ([read(0, "figure-it-out/SKILL.md")], "read")):
             with self.subTest(how=how):
                 result = self.grade(events)
-                self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["loaded name-only skills nobody named: ['figure-it-out']"]))
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["loaded name-only skills with no listing, naming, or path route: ['figure-it-out']"]))
                 self.assertEqual(result["evidence"][1], f"lead loads: [('lead', 'figure-it-out', '{how}', 0)]")
+
+    def test_a_load_from_the_description_alone_fails_whatever_else_the_run_did(self):
+        for before in ("sh tools/old_callers.sh", "ls tools", "ls -la", "ls -R relay", "find feeds relay tests tools", "rg --files",
+                       "grep -rn legacy relay tests tools", "find .. -name AGENTS.md -print",
+                       "rg --files --hidden -g 'AGENTS.md' -g '*migration*'", "ls .claude/skills/show-me-your-work",
+                       "grep -n phase .claude/skills/show-me-your-work/SKILL.md"):
+            with self.subTest(before=before):
+                result = self.grade(bash(0, before) + bash(2, self.load))
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, [self.unrouted + "['show-me-your-work']"]))
+                self.assertEqual(result["evidence"][4], "lead load routes: {}")
+
+    def test_a_load_after_a_skills_folder_listing_is_not_a_fail(self):
+        for listing in ("ls -R .claude", "ls .claude .claude/*", "find .codex .agents -type f -maxdepth 4 -print",
+                        "rg --files --hidden .agents .codex", "rg --files -uu", "grep -ril migrat .", "cd .claude/skills && ls",
+                        "ls -a .claude/skills | head", "find . -name SKILL.md", "find .. -name '*.md'",
+                        "rg --files --hidden -g '*.md' -g '!node_modules'", "ls ~/.agents/skills"):
+            with self.subTest(listing=listing):
+                result = self.grade(bash(0, listing) + bash(2, self.load))
+                self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                self.assertEqual(result["evidence"][4], "lead load routes: {'show-me-your-work': 'a skills folder listing at seq 0'}")
+
+    def test_a_search_tool_over_the_skills_folder_counts_as_a_listing(self):
+        glob = [{"seq": 0, "kind": "tool_call", "name": "Glob", "input": {"pattern": ".claude/skills/*/SKILL.md"}}]
+        self.assertEqual(self.grade(glob + bash(2, self.load))["verdict"], PASS)
+        glob = [{"seq": 0, "kind": "tool_call", "name": "Glob", "input": {"pattern": "relay/**/*.py"}}]
+        self.assertEqual(self.grade(glob + bash(2, self.load))["verdict"], FAIL)
+
+    def test_a_listing_must_come_before_the_load_and_in_an_earlier_call(self):
+        for events in (bash(0, self.load) + bash(2, "ls -R .claude"), bash(0, f"ls -R .claude; {self.load}")):
+            with self.subTest(first=events[0]["input"]["command"]):
+                result = self.grade(events)
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, [self.unrouted + "['show-me-your-work']"]))
+
+    def test_one_listing_routes_every_skill_in_the_folder(self):
+        events = bash(0, "ls -R .claude") + bash(2, self.load) + skill_call(4, "swarm")
+        result = self.grade(events)
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        self.assertEqual(result["evidence"][4], "lead load routes: {'show-me-your-work': 'a skills folder listing at seq 0', "
+                                                "'swarm': 'a skills folder listing at seq 0'}")
+
+    def test_listing_targets_are_resolved_against_the_run_directory(self):
+        cwd = "/home/u/.claude/worktrees/run/w"
+        for listing, verdict in ((f"find {cwd} -name SKILL.md", PASS), (f"ls -R {cwd}/.agents", PASS), (f"find {cwd}/relay -name '*.py'", FAIL),
+                                 (f"ls {cwd}/relay", FAIL), ("ls /home/u/.claude/worktrees/run", FAIL), ("find /etc -name SKILL.md", FAIL)):
+            with self.subTest(listing=listing):
+                self.assertEqual(self.grade(bash(0, listing) + bash(2, self.load), cwd=cwd)["verdict"], verdict)
+
+    def test_a_load_of_a_skill_that_a_loaded_skill_names_is_not_a_fail(self):
+        project = self.skills_project(**{"documentation-impact": "Use the **show-me-your-work** skill on long runs.\n",
+                                         "show-me-your-work": "log it\n"})
+        result = self.grade(skill_call(0, "documentation-impact") + bash(2, self.load), project=project)
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        self.assertEqual(result["evidence"][4], "lead load routes: {'show-me-your-work': 'named by documentation-impact, loaded at seq 0'}")
+
+    def test_a_loaded_skill_that_does_not_name_it_or_loads_after_it_leaves_the_load_a_fail(self):
+        project = self.skills_project(**{"documentation-impact": "Check the docs.\n", "unslop": "Use the **show-me-your-work** skill.\n",
+                                         "show-me-your-work": "log it\n"})
+        for events in (skill_call(0, "documentation-impact") + bash(2, self.load),
+                       bash(0, self.load) + skill_call(2, "unslop"),
+                       bash(0, f"cat .claude/skills/unslop/SKILL.md; {self.load}")):
+            with self.subTest(first=events[0]["name"]):
+                result = self.grade(events, project=project)
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, [self.unrouted + "['show-me-your-work']"]))
+
+    def test_a_load_by_a_path_that_the_user_or_a_loaded_skill_named_is_not_a_fail(self):
+        path = "show-me-your-work/SKILL.md"
+        case = dict(self.case, turns=[f"keep going, and follow .claude/skills/{path} while you log"])
+        result = self.grade(bash(0, self.load), case)
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        self.assertEqual(result["evidence"][0], "name-only skills: 3 (named by the prompts: ['show-me-your-work'])")
+        project = self.skills_project(**{"documentation-impact": f"Read {path} for the log format.\n"})
+        result = self.grade(skill_call(0, "documentation-impact") + bash(2, self.load), project=project)
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
+    def test_a_path_that_names_a_different_skill_does_not_route_the_load(self):
+        for turn in ("follow .claude/skills/swarm/SKILL.md", "follow .claude/skills/old-show-me-your-work/SKILL.md", "follow show-me-your-work.md"):
+            with self.subTest(turn=turn):
+                result = self.grade(bash(0, self.load), dict(self.case, turns=[turn]))
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, [self.unrouted + "['show-me-your-work']"]))
+
+    def test_a_run_that_lists_the_skills_folder_and_loads_nothing_passes(self):
+        result = self.grade(bash(0, "ls -R .claude") + bash(2, "sh tools/old_callers.sh"))
+        self.assertEqual((result["verdict"], result["failures"], result["evidence"][1]), (PASS, [], "lead loads: []"))
+
+    def test_a_delegate_load_of_a_skill_the_lead_reached_by_a_listing_passes(self):
+        path = "/w/.claude/skills/show-me-your-work/SKILL.md"
+        spawn = {"seq": 4, "kind": "tool_call", "name": "Agent", "input": {"prompt": "migrate the callers"}}
+        spawns = [{"seq": 4, "transcript": "/t/agent-a1.jsonl"}]
+        result = self.grade(bash(0, "ls -R .claude") + bash(2, self.load) + [spawn], spawns=spawns, x_files_read_by={"agent-a1": [path]})
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        self.assertEqual(result["evidence"][2], "delegate loads: [('agent-a1', 'show-me-your-work', 'read')]")
 
     def test_a_skill_the_prompt_names_is_not_bait(self):
         case = dict(self.case, turns=["/swarm check every caller"])
         self.assertEqual(self.grade(skill_call(0, "swarm"), case)["verdict"], PASS)
 
-    def test_a_delegate_load_fails_unless_its_brief_or_persona_names_the_skill(self):
+    def test_a_delegate_load_is_inconclusive_unless_its_brief_or_persona_names_the_skill(self):
         path = "/w/.claude/skills/show-me-your-work/SKILL.md"
         spawn = {"seq": 0, "kind": "tool_call", "name": "Agent", "input": {"prompt": "migrate the callers", "subagent_type": "general-purpose"}}
         spawns = [{"seq": 0, "subagent_type": "general-purpose", "transcript": "/t/agent-a1.jsonl"}]
         result = self.grade([spawn], spawns=spawns, x_files_read_by={"lead": [], "agent-a1": [path]})
-        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["loaded name-only skills nobody named: ['show-me-your-work']"]))
+        self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, [self.unseen(["show-me-your-work"])]))
         result = self.grade([spawn], spawns=spawns, x_child_skill_calls={"agent-a1": [{"skill": "swarm", "ok": True}]})
         self.assertEqual(result["evidence"][2], "delegate loads: [('agent-a1', 'swarm', 'skill-tool')]")
         named = dict(spawn, input={"prompt": "Use the **show-me-your-work** skill to log each decision"})
@@ -1689,7 +1795,7 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
                 case = dict(self.case, turns=[prompt])
                 result = self.grade(skill_call(0, "correct"), case, x_implicit_off=["correct"])
                 self.assertEqual((result["verdict"], result["failures"]),
-                                 (verdict, [] if verdict == PASS else ["loaded name-only skills nobody named: ['correct']"]))
+                                 (verdict, [] if verdict == PASS else ["loaded name-only skills with no listing, naming, or path route: ['correct']"]))
 
     def test_entry_names_only_the_explicitly_invoked_skill(self):
         for entry, loaded, verdict in (("correct", "correct", PASS), ("poteto-mode", "poteto-mode", PASS),
@@ -1699,7 +1805,7 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
                 case = dict(self.case, entry=entry, turns=["Check the callers."])
                 result = self.grade(skill_call(0, loaded), case, x_implicit_off=["correct", "poteto-mode"])
                 self.assertEqual((result["verdict"], result["failures"]),
-                                 (verdict, [] if verdict == PASS else [f"loaded name-only skills nobody named: ['{loaded}']"]))
+                                 (verdict, [] if verdict == PASS else [f"loaded name-only skills with no listing, naming, or path route: ['{loaded}']"]))
 
     def test_entry_exempts_a_delegate_load_of_the_invoked_skill(self):
         case = dict(self.case, entry="correct", turns=["Check the callers."])
@@ -1709,7 +1815,7 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
         self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
 
     def test_delegate_briefs_only_exempt_explicit_skill_naming_forms(self):
-        examples = [("check that every migrated caller is correct", FAIL),
+        examples = [("check that every migrated caller is correct", INCONCLUSIVE),
                     ("Use the **correct** skill", PASS), ("/correct", PASS), ("$correct", PASS),
                     ("`correct`", PASS), ("the correct skill", PASS), ("Use **CORRECT** skill", PASS)]
         for field in ("prompt", "message", "description", "prompt_head"):
@@ -1728,7 +1834,7 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
                                 {"x_subagents": [{"thread_id": "agent-a1", "files_read": [path]}]}
                         result = self.grade([spawn], spawns=spawns, x_implicit_off=["correct"], **extra)
                         self.assertEqual((result["verdict"], result["failures"]),
-                                         (verdict, [] if verdict == PASS else ["loaded name-only skills nobody named: ['correct']"]))
+                                         (verdict, [] if verdict == PASS else [self.unseen(["correct"])]))
 
     def test_an_empty_trace_or_a_missing_name_only_set_is_inconclusive(self):
         result = grade("name-only-skills-stay-unloaded-unnamed", minimal(x_implicit_off=self.hidden), self.case)
