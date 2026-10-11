@@ -48,9 +48,9 @@ PLAYBOOK_FILES = [
 
 PRINCIPLE_RULES = {
     "principle-laziness-protocol": "Bias toward deletion and the smallest change that solves the problem.",
-    "principle-explain-the-number": "find what limits it and rule out that it measured something else",
+    "principle-explain-the-number": "Find what limits it, and rule out that it measured something other than the work you think.",
     "principle-foundational-thinking": "choosing core types and data structures",
-    "principle-redesign-from-first-principles": "foundational assumption from day one",
+    "principle-redesign-from-first-principles": "foundational assumption from the start",
     "principle-attack-the-premise": "question the premise",
     "principle-subtract-before-you-add": "then build on the simpler base",
     "principle-minimize-reader-load": "collapse one-caller wrappers",
@@ -58,7 +58,7 @@ PRINCIPLE_RULES = {
     "principle-experience-first": "Choose user delight over implementation convenience",
     "principle-exhaust-the-design-space": "Build 2-3 competing prototypes",
     "principle-build-the-lever": "The tool is the artifact a reviewer can rerun.",
-    "principle-model-the-domain": "Encode the domain in a structure instead of scattered conditionals.",
+    "principle-model-the-domain": "Encode the real domain in a data structure instead of scattering it across conditionals.",
     "principle-boundary-discipline": "trust internal types",
     "principle-type-system-discipline": "Make illegal states unrepresentable",
     "principle-make-operations-idempotent": "Converge to the same end state",
@@ -67,9 +67,9 @@ PRINCIPLE_RULES = {
     "principle-prove-it-works": "Verify against the real artifact",
     "principle-fix-root-causes": "reproduce first",
     "principle-sequence-verifiable-units": "check each before the next",
-    "principle-test-behavior-not-implementation": "every imported function returns undefined",
+    "principle-test-behavior-not-implementation": "would still pass if every imported function returned `undefined`",
     "principle-guard-the-context-window": "Route bulk to subagents",
-    "principle-never-block-on-the-human": "Proceed, present the result",
+    "principle-never-block-on-the-human": "Proceed, then present.",
     "principle-encode-lessons-in-structure": "Encode the rule as a lint, metadata flag, runtime check, or script",
 }
 

@@ -47,6 +47,7 @@
     {"skill":"principle-type-system-discipline","example_request":"Make bad states impossible.","description_contains":["illegal states"],"implicit_allowed":false},
     {"skill":"pstack-harness","example_request":"Map this to Codex.","description_contains":["Maps pstack's"],"implicit_allowed":true},
     {"skill":"recall","example_request":"Catch me up.","description_contains":["recent working context"],"implicit_allowed":false},
+    {"skill":"ketchup","example_request":"What happened while I was away in this chat?","description_contains":["since their last message"],"implicit_allowed":false},
     {"skill":"reflect","example_request":"Review this transcript.","description_contains":["parallel review"],"implicit_allowed":false},
     {"skill":"runtime-probes","example_request":"Probe for defects.","description_contains":["probe, stress"],"implicit_allowed":true},
     {"skill":"setup-pstack","example_request":"Configure pstack models.","description_contains":["Configure which models"],"implicit_allowed":true},

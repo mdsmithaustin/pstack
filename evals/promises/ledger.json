@@ -3167,7 +3167,7 @@
     },
     {
      "file": "skills/benchmark-checklist/SKILL.md",
-     "quote": "5. **Does it reproduce?** Run each side at least 5 times, and alternate the sides"
+     "quote": "5. **Does it reproduce?** Run each side at least 5 times, alternating"
     },
     {
      "file": "skills/benchmark-checklist/SKILL.md",
@@ -3175,7 +3175,7 @@
     },
     {
      "file": "skills/benchmark-checklist/SKILL.md",
-     "quote": "7. **Did it even happen?** Confirm the work ran inside the timed region."
+     "quote": "7. **Did it even happen?** Confirm the work ran inside the timed region:"
     },
     {
      "file": "skills/benchmark-checklist/SKILL.md",

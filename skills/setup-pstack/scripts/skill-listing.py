@@ -18,7 +18,7 @@ OVERRIDES_KEY = "skillOverrides"
 # tools/test_skill_invocation_policy.py keeps this equal to the repository's skills/.
 PSTACK_SKILLS = frozenset({
     "architect", "arena", "automate-me", "benchmark-checklist", "blast-radius", "bro", "correct",
-    "create-verification-skill", "deslop", "documentation-impact", "figure-it-out", "how", "interrogate",
+    "create-verification-skill", "deslop", "documentation-impact", "figure-it-out", "how", "interrogate", "ketchup",
     "maintain-verification-skill", "make-bot-ui", "no-comments", "poteto-help", "poteto-mode", "poteto-tdd",
     "poteto-teach", "principle-attack-the-premise", "principle-boundary-discipline", "principle-build-the-lever",
     "principle-encode-lessons-in-structure", "principle-exhaust-the-design-space", "principle-experience-first",
