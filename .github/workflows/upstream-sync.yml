@@ -65,6 +65,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
           claude_args: '--allowedTools "Bash,Read,Write,Edit,Glob,Grep"'
           prompt: |
             You are in mdsmithaustin/pstack, a CLI-agnostic port of the
@@ -108,7 +109,11 @@ jobs:
                - In evals/promises/test_static.py, PLAYBOOK_FILES for a
                  poteto-mode playbook, PRINCIPLE_RULES for a principle-*
                  skill, and GUIDE_SLASH_SKILLS when docs/guide names the
-                 skill as /x.
+                 skill as /x. A playbook added or removed also changes the
+                 two `25` counts in test_twenty_five_playbooks, the
+                 twenty-five-playbooks promise in evals/promises/ledger.json,
+                 and the "twenty-five" in README.md and
+                 docs/guide/02-poteto-mode.md.
                - For a skill with no agents/openai.yaml gate, AUTO_INVOCABLE
                  in tools/test_skill_invocation_policy.py and the "A skill
                  didn't load on its own" row in skills/poteto-help/SKILL.md.
@@ -134,15 +139,20 @@ jobs:
             7. Run each of these, even when no skill directory changed. Each
                must exit zero before you continue. Fix the port, not the
                check, and say in the PR body what each failure was. Run
-               `git add -A` first, because skill-ci reads tracked files.
+               `git add -A` before every `skill-ci check`, including each
+               rerun after a fix, because skill-ci reads tracked files and
+               exits 2 on a tracked file that no longer exists.
                - python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
                - python3 -m unittest discover -s tools -p 'test_*.py'
                - python3 -m unittest discover -s evals/promises -p 'test_*.py'
                - python3 -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
                - skill-ci check
-               The canon and poteto-mode script suites need Docker and Bun,
-               and CI does not start on a PR this workflow opens. Say in the
-               PR body that they have not run, so a maintainer runs them.
+               CI does not start on a PR this workflow opens, because it
+               pushes with the workflow token. So no required check runs,
+               and the canon and poteto-mode script suites need Docker and
+               Bun. Say in the PR body that CI has not run, and that a
+               maintainer must push a commit or close and reopen the PR to
+               start it.
             8. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
             9. If there are portable changes: create branch
                `sync/upstream-<YYYYMMDD>`, commit with a message summarizing
@@ -152,9 +162,13 @@ jobs:
                resolution). The PR body lists each
                upstream commit, what transformation was applied, and anything
                that needs human judgment. If nothing is portable (upstream
-               churn with no effect on this port), commit only the
-               .github/upstream-sha bump directly to main and push.
+               churn with no effect on this port), open the same draft PR
+               with only the .github/upstream-sha bump, committed with
+               `git commit --only .github/upstream-sha` so nothing step 7
+               staged goes with it, and say in the body that nothing was
+               portable.
 
-            Never force-push. Never push to main except the SHA-only bump.
+            Never force-push. Never push to main, because its ruleset requires a
+            pull request and grants no bypass.
             If you are unsure whether a change is portable, include it in the
             draft PR with a "needs judgment" note rather than dropping it.
