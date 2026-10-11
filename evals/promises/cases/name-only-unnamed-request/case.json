@@ -11,6 +11,6 @@
   "default": 300,
   "codex": 420
  },
- "note": "known gap: a lead that lists a skills folder and then loads a gated skill by its folder name grades PASS; the paragraph on this promise in evals/promises/README.md has the dated counts",
+ "note": "See the dated known gap for this promise in evals/promises/README.md, which links the observed counts and regrades.",
  "tmp_lock": false
 }

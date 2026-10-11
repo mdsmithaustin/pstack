@@ -61,7 +61,7 @@ Counts are PASS of graded runs, three runs per cell.
   - The oracle then took a later show-me-your-work read as the routing decision. In `relay-__ceheht` that read came from the same failed chain.
 - **(b), 4 of 12 PASS.** In 7 runs the lead listed the skills folder (`ls -R .claude`, `ls .claude .claude/*`, `rg --files --hidden .agents .codex`, `rg --files -uu`, or `find .agents .codex`), then read gated skills by folder name. The skills were show-me-your-work, the migrate-callers principle, and technical-writing, which match "log your decisions" and "migration".
   - Claude Code had 4 of those 7 runs and Codex 3. No lead had read pstack-harness before the load. Two Codex leads read it later, because show-me-your-work points at it.
-  - The eighth FAIL, Codex `relay-q9kyt_c6`, has no listing load. The lead loaded documentation-impact from its description and read pstack-harness. It then loaded technical-writing, which documentation-impact tells it to use. The new rule allows that load. The oracle counts only the prompt and delegate briefs as naming a skill, so it grades the run FAIL.
+  - The eighth FAIL, Codex `relay-q9kyt_c6`, has no listing load. The lead loaded documentation-impact from its description and read pstack-harness. It then loaded technical-writing, which documentation-impact tells it to use. The new rule allows that load. The oracle used for these runs counted only the prompt and delegate briefs as naming a skill, so it graded the run FAIL. The current grading contract is in the [promise suite README](../README.md#run-live-cases).
   - No load came from a description that the listing or the policy file hides.
 
 ## Follow-ups
