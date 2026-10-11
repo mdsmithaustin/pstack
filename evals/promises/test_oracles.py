@@ -1703,9 +1703,9 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
         for setup in (None, {"step": "absent", "name_only": []},
                       {"step": "installed", "name_only": ["swarm"]},
                       {"step": "installed", "name_only": ["show-me-your-work"]}):
-            for events, extra in loads:
-                with self.subTest(setup=setup, events=events, extra=extra):
-                    result = self.grade(events, x_listed_skills=None, x_skill_listing=setup, **extra)
+            for (events, extra), listed in ((load, listed) for load in loads for listed in (None, {})):
+                with self.subTest(setup=setup, events=events, extra=extra, listed=listed):
+                    result = self.grade(events, x_listed_skills=listed, x_skill_listing=setup, **extra)
                     self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, [no_listing]))
 
     def test_a_delegate_load_of_a_skill_whose_description_the_listing_hid_passes(self):

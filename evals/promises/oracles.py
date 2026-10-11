@@ -3787,7 +3787,7 @@ def named_by_loaded(view, skill, loaded):
 def description_shown(view, skill):
     """Whether the skill listing the harness gave the lead showed skill's description: None when the trace cannot tell."""
     listed = view.trace.get("x_listed_skills")
-    if listed is not None:
+    if listed:
         return bool(listed.get(skill))
     return None
 
