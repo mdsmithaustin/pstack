@@ -1688,15 +1688,25 @@ class NameOnlyStaysUnloaded(unittest.TestCase):
                 result = self.grade(events, project=project)
                 self.assertEqual((result["verdict"], result["failures"]), (FAIL, [self.shown + "['show-me-your-work']"]))
 
-    def test_with_no_listing_in_the_trace_only_the_setup_record_can_show_the_description_hidden(self):
+    def test_with_no_listing_in_the_trace_loads_are_inconclusive_regardless_of_setup(self):
         no_listing = "the trace holds no harness skill listing for ['show-me-your-work'], so whether their descriptions were in context is unknown"
-        for setup, verdict, failures in ((None, INCONCLUSIVE, [no_listing]),
-                                         ({"step": "absent", "name_only": []}, INCONCLUSIVE, [no_listing]),
-                                         ({"step": "installed", "name_only": ["swarm"]}, INCONCLUSIVE, [no_listing]),
-                                         ({"step": "installed", "name_only": ["show-me-your-work"]}, PASS, [])):
-            with self.subTest(setup=setup):
-                result = self.grade(bash(0, self.load), x_listed_skills=None, x_skill_listing=setup)
-                self.assertEqual((result["verdict"], result["failures"]), (verdict, failures))
+        loads = (
+            (bash(0, self.load), {}),
+            (skill_call(0, "show-me-your-work"), {}),
+            ([read(0, "show-me-your-work/SKILL.md")], {}),
+            (shell(0, "cat .agents/skills/show-me-your-work/SKILL.md"), {"harness": "codex"}),
+            ([], {"x_files_read_by": {"agent-a1": ["/w/.claude/skills/show-me-your-work/SKILL.md"]}}),
+            ([], {"x_subagents": [{"thread_id": "agent-a1", "files_read": ["/w/.agents/skills/show-me-your-work/SKILL.md"]}],
+                  "harness": "codex"}),
+            ([], {"x_child_skill_calls": {"agent-a1": [{"skill": "show-me-your-work", "ok": True}]}}),
+        )
+        for setup in (None, {"step": "absent", "name_only": []},
+                      {"step": "installed", "name_only": ["swarm"]},
+                      {"step": "installed", "name_only": ["show-me-your-work"]}):
+            for events, extra in loads:
+                with self.subTest(setup=setup, events=events, extra=extra):
+                    result = self.grade(events, x_listed_skills=None, x_skill_listing=setup, **extra)
+                    self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, [no_listing]))
 
     def test_a_delegate_load_of_a_skill_whose_description_the_listing_hid_passes(self):
         spawn = {"seq": 0, "kind": "tool_call", "name": "Agent", "input": {"prompt": "migrate the callers"}}

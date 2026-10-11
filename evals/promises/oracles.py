@@ -3789,8 +3789,7 @@ def description_shown(view, skill):
     listed = view.trace.get("x_listed_skills")
     if listed is not None:
         return bool(listed.get(skill))
-    setup = view.trace.get("x_skill_listing") or {}
-    return False if setup.get("step") == "installed" and skill in (setup.get("name_only") or ()) else None
+    return None
 
 
 @oracle("name-only-skills-stay-unloaded-unnamed")
