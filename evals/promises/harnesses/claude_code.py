@@ -201,9 +201,8 @@ def store(run):
 
 
 def preflight():
-    """Ask the CLI for its login status under the few variables a turn keeps, so an API key or config directory the host shell
-    exports cannot report a login the turns never see. The CLI refreshes an expired access token itself when it runs, so this
-    fails only when it reports no login."""
+    """Check the host login before a private turn config exists. Keep the turn's host HOME and Keychain namespace,
+    but omit exported API keys and config overrides so they cannot mask a missing login."""
     binary = CLAUDE_BINARY if CLAUDE_BINARY.is_file() else shutil.which("claude")
     if not binary:
         raise LoginRequired(LOGIN, "no claude binary to ask")
