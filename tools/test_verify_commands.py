@@ -35,9 +35,9 @@ class ProducerExitStatus(unittest.TestCase):
         self.assertIsNotNone(remedies["pipefail"])
         self.assertIsNotNone(remedies["pipestatus"])
         for shell in ("bash", "zsh"):
-            if shutil.which(shell) is None:
-                continue
             with self.subTest(remedy="pipefail", shell=shell):
+                if shutil.which(shell) is None:
+                    self.skipTest(f"{shell} is not installed")
                 script = f"{remedies['pipefail']}; false | tail -1; echo $?"
                 self.assertEqual(run(shell, script), (0, "1"))
         with self.subTest(remedy="pipestatus", shell="bash"):
