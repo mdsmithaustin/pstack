@@ -180,7 +180,7 @@ Each entry below changes upstream skill text so the port keeps a promise the gui
 
 - Skill bodies, playbooks, and principles retain upstream engineering content except for the substitutions and port additions recorded above.
 - Frontmatter extras (`mode`, `icon`, `color`, `reminder`): Cursor-flavored but harmless; CLIs that don't know a key ignore it. `disable-model-invocation` is not one of them for `skills/`, where the substitution map drops it. The benny automation skills under `automations/` still carry upstream's flag.
-- `agents/` remains unchanged upstream text. The port generates an installed bundle and native wrappers from it, as described above. `tools/test_skill_references.py` scans only the markdown that git tracks under `skills/`, so Comment Sicko's `/how` and `/why` and poteto-agent's `/poteto-mode` keep upstream's spelling.
+- `agents/` remains unchanged upstream text, except `agents/poteto-agent.md`, which keeps the port body from #38 (the scoped-delegate description and the nested-delegate line "When your brief names independent workstreams, spawn one delegate per workstream"). Upstream #575 rewrote its description and added "The chat that receives `/poteto-mode` owns the playbook, the todo list, and every Task spawn", which contradicts the nested-delegate line, so the 978ca6e to 1b6d44f sync skipped those hunks. On sync, keep the port body and port only upstream changes that leave both intact. The port generates an installed bundle and native wrappers from it, as described above. `tools/test_skill_references.py` scans only the markdown that git tracks under `skills/`, so Comment Sicko's `/how` and `/why` and poteto-agent's `/poteto-mode` keep upstream's spelling.
 
 ## Syncing from upstream
 
