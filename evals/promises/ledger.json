@@ -2327,7 +2327,7 @@
   },
   "principle-leaf-summaries-match": {
    "check": "static",
-   "claim": "Each of the 23 principle links on the principles page resolves to an existing leaf whose rule matches the one-line summary the guide gives it.",
+   "claim": "Each of the 24 principle links on the principles page resolves to an existing leaf whose rule matches the one-line summary the guide gives it.",
    "harness_sensitive": false,
    "owners": [
     "skills/principle-laziness-protocol/SKILL.md",
@@ -2350,6 +2350,7 @@
     "skills/principle-fix-root-causes/SKILL.md",
     "skills/principle-sequence-verifiable-units/SKILL.md",
     "skills/principle-test-behavior-not-implementation/SKILL.md",
+    "skills/principle-explain-the-number/SKILL.md",
     "skills/principle-guard-the-context-window/SKILL.md",
     "skills/principle-never-block-on-the-human/SKILL.md",
     "skills/principle-encode-lessons-in-structure/SKILL.md"
