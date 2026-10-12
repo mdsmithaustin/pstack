@@ -107,7 +107,7 @@ A completed run prints `authorization_id`. To regrade that registered run, use t
 python3 evals/promises/live.py grade --out <original-out> <authorization-id>
 ```
 
-The grade CLI exits 2 and writes a refusal receipt to stderr when the ID is unknown or grading refuses. A successful grade returns the existing verdict dictionary and writes `verdict.json`. It preserves the JSON indentation and final newline. The Python entry point is `live.grade(authorization)`. It raises `GradeRefused` for infrastructure and unsafe-I/O refusals. A refusal has no promise verdict. Its separate receipt and worker logs remain under the controller's run and attempt directories.
+The grade CLI exits 2 and writes a refusal receipt to stderr when the ID is unknown or grading refuses. A successful grade returns the existing verdict dictionary and writes `verdict.json`. It preserves the JSON indentation and final newline. The Python entry point is `live.grade(authorization)`. The CLI calls it through `live.grade_run(authorization)`, which also keeps a dead login's `error` record and its `ERROR` marks, as [Run live cases](#run-live-cases) describes. It raises `GradeRefused` for infrastructure and unsafe-I/O refusals. A refusal has no promise verdict. Its separate receipt and worker logs remain under the controller's run and attempt directories.
 
 Missing sealed `run.json`, `trace.json`, or retained prior `verdict.json` produces an `input_changed` refusal and an attempt receipt. The refusal leaves any existing output verdict unchanged. An intentionally absent project keeps its oracle result, and an absent output verdict still permits first publication.
 

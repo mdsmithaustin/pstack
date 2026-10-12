@@ -336,8 +336,6 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
 
 
 def grade_run(authorization):
-    """Grade a sealed run. When its verdict.json records a dead login under `error`, the new grade keeps that record and
-    every promise it leaves undecided goes back to ERROR, so a re-grade claims no skill result the run never produced."""
     _, state = authorization._controller.load(authorization._id)
     target = Path(state["output"]["path"]) / "verdict.json"
     try:

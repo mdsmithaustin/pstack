@@ -62,15 +62,10 @@ def _read(path):
 
 
 def death_record(login, detail):
-    """The `error` record a verdict.json carries for a run a dead login ended."""
     return {"cli": login.cli, "relogin": login.relogin, "detail": detail}
 
 
 def error_verdict(case, harness, skills_at, error, graded=None):
-    """The verdict for a run a dead login ended, from its `death_record`. `graded` holds the grader's promise verdicts when
-    turns ran before the death. A verdict the grader decided (PASS or FAIL) stands, as does a promise that does not apply
-    to the harness. Every other promise is ERROR, so no skill result is claimed for it and report.py leaves it out of
-    every pass rate. An ERROR keeps the judge flag and excerpt of the INCONCLUSIVE it replaces."""
     reason = f"{error['cli']} login died: {error['detail']}"
     promises = {}
     for pid in case["promises"]:
@@ -87,9 +82,5 @@ def error_verdict(case, harness, skills_at, error, graded=None):
 
 
 def applicability(pid, harness):
-    """The oracle's answer on an empty trace from this harness. A harness-gated oracle marks itself `not_applicable` before
-    it reads the trace, but oracles.check returns before any oracle runs when a run never started, its transcript could
-    not be read, or host skills touched it, and that answer carries no flag. The empty trace reaches the gate however the
-    real grade returned."""
     import oracles
     return oracles.check(pid, {"harness": harness}, None, None)
