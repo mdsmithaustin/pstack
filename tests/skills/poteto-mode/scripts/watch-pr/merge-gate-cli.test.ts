@@ -261,19 +261,20 @@ describe("merge-gate", () => {
       const json = await run([...MERGE_ARGS, "--check"], { port: { comments } });
       expect(parsed(json.stdout).report.failRounds).toEqual({
         count: 3,
+        state: "stop",
         complete: true,
       });
       const pretty = await run([...MERGE_ARGS, "--check", "--pretty"], {
         port: { comments },
       });
-      expect(pretty.stdout.join("")).toContain("fail-rounds=3");
+      expect(pretty.stdout.join("")).toContain("fail-rounds=3 fail-state=stop");
       const partial = await run([...MERGE_ARGS, "--check", "--pretty"], {
         port: {
           comments,
           truncated: [{ connection: "comments", total: 150, limit: 100 }],
         },
       });
-      expect(partial.stdout.join("")).toContain("fail-rounds=3+");
+      expect(partial.stdout.join("")).toContain("fail-rounds=3+ fail-state=stop");
     });
 
     it("needs neither a subject nor a body file", async () => {

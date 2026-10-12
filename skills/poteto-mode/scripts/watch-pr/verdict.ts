@@ -163,39 +163,55 @@ export function latestVerdict(
 }
 
 const RESET_PREFIX = "Fail-count reset:";
+const STOPPED_PREFIX = "Stopped:";
+const SECURITY_ASK_LINE = "Security ask: open";
+const FAIL_ROUND_LIMIT = 3;
 
-function isReset(comment: IssueComment): boolean {
-  const first = comment.body.split(/\r?\n/).find((line) => line.trim() !== "");
-  return (
-    first?.startsWith(RESET_PREFIX) === true &&
-    first.slice(RESET_PREFIX.length).trim() !== ""
-  );
+type RoundEvent =
+  | { readonly kind: "reset"; readonly at: number }
+  | { readonly kind: "stopped"; readonly at: number }
+  | { readonly kind: "fail"; readonly at: number; readonly head: CommitSha };
+const TIE_ORDER = { reset: 0, stopped: 1, fail: 2 } as const;
+
+type FailRoundState = "open" | "stop" | "stopped";
+export interface FailRounds {
+  readonly count: number;
+  readonly state: FailRoundState;
 }
 
-/**
- * Autopilot-full's third-FAIL stop. Counts the distinct `Head` SHAs of
- * well-formed FAIL blocks from trusted commenters, read exactly as
- * `latestVerdict` reads them. Only blocks posted after the newest trusted
- * `Fail-count reset: <reason>` comment count; a FAIL in the same second as the
- * reset stays in the count, so a tie never hides a stop.
- */
+function roundEvent(comment: IssueComment): RoundEvent | null {
+  const at = Date.parse(comment.createdAt);
+  const first = comment.body.split(/\r?\n/).find((line) => line.trim() !== "");
+  if (
+    first?.startsWith(RESET_PREFIX) === true &&
+    first.slice(RESET_PREFIX.length).trim() !== ""
+  )
+    return { kind: "reset", at };
+  if (first?.startsWith(STOPPED_PREFIX) === true) return { kind: "stopped", at };
+  const reading = readComment(comment);
+  if (reading.kind !== "recorded" || reading.record.verdict !== "FAIL") return null;
+  if (comment.body.split(/\r?\n/).some((line) => line.trim() === SECURITY_ASK_LINE))
+    return null;
+  return { kind: "fail", at, head: reading.record.head };
+}
+
 export function failRounds(
   comments: readonly IssueComment[],
   prAuthor: string | null
-): number {
-  const trusted = comments.filter((comment) =>
-    isTrustedComment(comment, prAuthor)
-  );
-  const resetAt = Math.max(
-    Number.NEGATIVE_INFINITY,
-    ...trusted.filter(isReset).map((comment) => Date.parse(comment.createdAt))
-  );
+): FailRounds {
+  const events = comments
+    .filter((comment) => isTrustedComment(comment, prAuthor))
+    .flatMap((comment) => roundEvent(comment) ?? [])
+    .sort((a, b) => a.at - b.at || TIE_ORDER[a.kind] - TIE_ORDER[b.kind]);
   const heads = new Set<CommitSha>();
-  for (const comment of trusted) {
-    if (Date.parse(comment.createdAt) < resetAt) continue;
-    const reading = readComment(comment);
-    if (reading.kind === "recorded" && reading.record.verdict === "FAIL")
-      heads.add(reading.record.head);
+  let phase: FailRoundState | "granted" = "open";
+  for (const event of events) {
+    if (event.kind === "reset") phase = "granted";
+    else if (event.kind === "stopped") phase = "stopped";
+    else {
+      heads.add(event.head);
+      if (phase !== "open" || heads.size >= FAIL_ROUND_LIMIT) phase = "stop";
+    }
   }
-  return heads.size;
+  return { count: heads.size, state: phase === "granted" ? "open" : phase };
 }

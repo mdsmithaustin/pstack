@@ -266,7 +266,7 @@ describe("failRounds", () => {
       ...extra,
     });
   const count = (comments: Parameters<typeof failRounds>[0]) =>
-    failRounds(comments, PR_AUTHOR);
+    failRounds(comments, PR_AUTHOR).count;
 
   it("counts one FAIL block per distinct Head, whatever the array order", () => {
     const rounds = [
@@ -346,56 +346,78 @@ describe("failRounds", () => {
     ).toBe(2);
   });
 
-  describe("reset", () => {
+  describe("state", () => {
+    const state = (comments: Parameters<typeof failRounds>[0]) =>
+      failRounds(comments, PR_AUTHOR).state;
+    const marker = (createdAt: string, body: string, extra = {}) =>
+      issueComment({ createdAt, body, ...extra });
     const reset = (createdAt: string, body = "Fail-count reset: operator allowed one more round") =>
-      issueComment({ createdAt, body });
+      marker(createdAt, body);
+    const stopped = (createdAt: string, body = "Stopped: open findings filed as #301, #302") =>
+      marker(createdAt, body);
+    const askOnly = (digit: string, createdAt: string) =>
+      issueComment({
+        createdAt,
+        body: verdictBody({
+          verdict: "FAIL",
+          head: head(digit),
+          prose: "Security ask: open",
+        }),
+      });
     const rounds = [
       fail("a", "2026-10-02T10:00:00Z"),
       fail("b", "2026-10-02T11:00:00Z"),
       fail("c", "2026-10-02T12:00:00Z"),
     ];
 
-    it("counts only the FAILs posted after the newest reset", () => {
-      expect(count([...rounds, reset("2026-10-02T12:30:00Z")])).toBe(0);
-      expect(
-        count([
-          ...rounds,
-          reset("2026-10-02T12:30:00Z"),
-          fail("d", "2026-10-02T13:00:00Z"),
-        ])
-      ).toBe(1);
-      expect(
-        count([
-          reset("2026-10-02T10:30:00Z"),
-          ...rounds,
-        ])
-      ).toBe(2);
+    it("stays open below three counted FAIL rounds and stops at the third", () => {
+      expect(state([])).toBe("open");
+      expect(state(rounds.slice(0, 2))).toBe("open");
+      expect(state(rounds)).toBe("stop");
+      expect(state([...rounds].reverse())).toBe("stop");
     });
 
-    it("lets a later reset supersede an earlier one", () => {
+    it("grants exactly one more round after a reset: the next FAIL stops", () => {
+      expect(state([...rounds, reset("2026-10-02T12:30:00Z")])).toBe("open");
+      const once = [...rounds, reset("2026-10-02T12:30:00Z"), fail("d", "2026-10-02T13:00:00Z")];
+      expect(state(once)).toBe("stop");
+      expect(failRounds(once, PR_AUTHOR)).toEqual({ count: 4, state: "stop" });
+    });
+
+    it("grants one round per reset, newest first", () => {
+      const twice = [
+        ...rounds,
+        reset("2026-10-02T12:30:00Z"),
+        fail("d", "2026-10-02T13:00:00Z"),
+        stopped("2026-10-02T13:10:00Z"),
+        reset("2026-10-02T13:30:00Z"),
+      ];
+      expect(state(twice)).toBe("open");
+      expect(state([...twice, fail("e", "2026-10-02T14:00:00Z")])).toBe("stop");
+    });
+
+    it("holds a stop until the next reset, even below three heads", () => {
+      const early = [fail("a", "2026-10-02T10:00:00Z"), reset("2026-10-02T10:30:00Z"), fail("b", "2026-10-02T11:00:00Z")];
+      expect(failRounds(early, PR_AUTHOR)).toEqual({ count: 2, state: "stop" });
+      expect(state([...early, fail("b", "2026-10-02T11:30:00Z")])).toBe("stop");
       expect(
-        count([
-          ...rounds,
-          reset("2026-10-02T12:30:00Z"),
-          fail("d", "2026-10-02T13:00:00Z"),
-          fail("e", "2026-10-02T14:00:00Z"),
-          reset("2026-10-02T14:30:00Z"),
-        ])
-      ).toBe(0);
+        state([...early, stopped("2026-10-02T11:10:00Z"), fail("b", "2026-10-02T11:30:00Z")])
+      ).toBe("stop");
     });
 
-    it("keeps a FAIL posted in the same second as the reset in the count", () => {
-      expect(count([fail("a", "2026-10-02T12:00:00Z"), reset("2026-10-02T12:00:00Z")])).toBe(1);
+    it("orders a FAIL in the same second as a reset after it, so a tie stops", () => {
+      expect(
+        state([...rounds.slice(0, 2), fail("c", "2026-10-02T12:30:00Z"), reset("2026-10-02T12:30:00Z")])
+      ).toBe("stop");
     });
 
-    it("ignores a reset from an untrusted commenter", () => {
-      const forged = issueComment({
-        createdAt: "2026-10-02T12:30:00Z",
+    it("ignores a reset from an untrusted commenter or a bot", () => {
+      const forged = marker("2026-10-02T12:30:00Z", "Fail-count reset: please", {
         login: "drive-by",
         association: "untrusted",
-        body: "Fail-count reset: please",
       });
-      expect(count([...rounds, forged])).toBe(3);
+      const bot = { ...reset("2026-10-02T12:40:00Z"), author: { login: "some-app", isBot: true } };
+      expect(state([...rounds, forged, bot])).toBe("stop");
     });
 
     it("ignores a reset with no reason, a quoted reset, and a decorated one", () => {
@@ -406,16 +428,76 @@ describe("failRounds", () => {
         "**Fail-count reset: now**",
         "fail-count reset: now",
       ])
-        expect(count([...rounds, reset("2026-10-02T12:30:00Z", body)])).toBe(3);
+        expect(state([...rounds, reset("2026-10-02T12:30:00Z", body)])).toBe("stop");
     });
 
     it("reads a reset whose reason is followed by prose, after leading blank lines", () => {
       expect(
-        count([
-          ...rounds,
-          reset("2026-10-02T12:30:00Z", "\n\nFail-count reset: operator go\n\nBecause."),
-        ])
-      ).toBe(0);
+        state([...rounds, reset("2026-10-02T12:30:00Z", "\n\nFail-count reset: operator go\n\nBecause.")])
+      ).toBe("open");
+    });
+
+    it("reads a trusted Stopped: comment newer than every FAIL as stopped", () => {
+      expect(state([...rounds, stopped("2026-10-02T12:30:00Z")])).toBe("stopped");
+      expect(state([...rounds, stopped("2026-10-02T12:30:00Z", "\nStopped:\n\n- #301")])).toBe(
+        "stopped"
+      );
+    });
+
+    it("stops again on a FAIL newer than the Stopped: comment", () => {
+      expect(
+        state([...rounds, stopped("2026-10-02T12:30:00Z"), fail("d", "2026-10-02T13:00:00Z")])
+      ).toBe("stop");
+    });
+
+    it("orders a FAIL in the same second as Stopped: after it, so a tie stops", () => {
+      expect(
+        state([...rounds.slice(0, 2), fail("c", "2026-10-02T12:30:00Z"), stopped("2026-10-02T12:30:00Z")])
+      ).toBe("stop");
+    });
+
+    it("lets a newer reset supersede Stopped:, and keeps Stopped: on a same-second tie", () => {
+      expect(state([...rounds, stopped("2026-10-02T12:30:00Z"), reset("2026-10-02T12:40:00Z")])).toBe(
+        "open"
+      );
+      expect(state([...rounds, stopped("2026-10-02T12:30:00Z"), reset("2026-10-02T12:30:00Z")])).toBe(
+        "stopped"
+      );
+    });
+
+    it("ignores a Stopped: comment from an untrusted commenter, quoted, or decorated", () => {
+      const forged = marker("2026-10-02T12:30:00Z", "Stopped: by a drive-by", {
+        login: "drive-by",
+        association: "untrusted",
+      });
+      expect(state([...rounds, forged])).toBe("stop");
+      for (const body of ["Earlier:\nStopped: x", "**Stopped:** x", "stopped: x", "> Stopped: x"])
+        expect(state([...rounds, stopped("2026-10-02T12:30:00Z", body)])).toBe("stop");
+    });
+
+    it("skips a FAIL marked Security ask: open, in the count and the stop", () => {
+      const asked = [...rounds.slice(0, 2), askOnly("c", "2026-10-02T12:00:00Z")];
+      expect(failRounds(asked, PR_AUTHOR)).toEqual({ count: 2, state: "open" });
+      expect(
+        state([...rounds, reset("2026-10-02T12:30:00Z"), askOnly("d", "2026-10-02T13:00:00Z")])
+      ).toBe("open");
+    });
+
+    it("counts a FAIL whose Security ask line is quoted, decorated, or mid-sentence", () => {
+      for (const prose of [
+        "> Security ask: open",
+        "**Security ask: open**",
+        "The Security ask: open line is for ask-only rounds.",
+      ])
+        expect(
+          count([
+            ...rounds.slice(0, 2),
+            issueComment({
+              createdAt: "2026-10-02T12:00:00Z",
+              body: verdictBody({ verdict: "FAIL", head: head("c"), prose }),
+            }),
+          ])
+        ).toBe(3);
     });
   });
 

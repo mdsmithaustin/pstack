@@ -58,12 +58,12 @@ describe("evaluateGates", () => {
           ],
         },
       });
-      expect(counted.failRounds).toEqual({ count: 2, complete: true });
+      expect(counted.failRounds).toEqual({ count: 2, state: "open", complete: true });
     });
 
     it("reports zero for a PR with only passing blocks", async () => {
       const { report: clean } = await report();
-      expect(clean.failRounds).toEqual({ count: 0, complete: true });
+      expect(clean.failRounds).toEqual({ count: 0, state: "open", complete: true });
     });
 
     it("marks the count incomplete when the PR has more comments than the read holds", async () => {
@@ -73,7 +73,7 @@ describe("evaluateGates", () => {
           truncated: [{ connection: "comments", total: 150, limit: 100 }],
         },
       });
-      expect(partial.failRounds).toEqual({ count: 1, complete: false });
+      expect(partial.failRounds).toEqual({ count: 1, state: "open", complete: false });
     });
 
     it("stays complete when only another connection is truncated", async () => {
