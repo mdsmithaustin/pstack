@@ -119,6 +119,21 @@ def guide_text():
     return "\n".join(read(p) for p in sorted(GUIDE.glob("*.md")))
 
 
+def spell_number(n):
+    ones = ("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen "
+            "sixteen seventeen eighteen nineteen").split()
+    tens = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
+    if n < 20:
+        return ones[n]
+    return tens[n // 10] + (f"-{ones[n % 10]}" if n % 10 else "")
+
+
+def stated_playbook_counts(text):
+    by_word = {spell_number(n): n for n in range(1, 100)}
+    counts = {by_word[word] for word in re.findall(r"\b([a-z]+(?:-[a-z]+)?) playbooks\b", text) if word in by_word}
+    return counts | {int(digits) for digits in re.findall(r"\b(\d+) playbooks\b", text)}
+
+
 def first_mermaid_block(path):
     text = read(path)
     start = text.index("```mermaid")
@@ -129,11 +144,16 @@ def first_mermaid_block(path):
 class TestStaticPromises(unittest.TestCase):
     def test_twenty_five_playbooks(self):
         bullets = poteto_playbook_bullets()
-        self.assertEqual(len(bullets), 25)
         self.assertEqual(sorted(f for _, f in bullets), PLAYBOOK_FILES)
         on_disk = sorted(p.stem for p in PLAYBOOKS.glob("*.md"))
         self.assertEqual(on_disk, PLAYBOOK_FILES)
-        self.assertEqual(len(list(PLAYBOOKS.iterdir())), 25)
+        self.assertEqual(len(list(PLAYBOOKS.iterdir())), len(on_disk))
+        for doc in (ROOT / "README.md", GUIDE / "02-poteto-mode.md"):
+            self.assertEqual(stated_playbook_counts(read(doc)), {len(on_disk)}, doc.name)
+
+    def test_a_stated_playbook_count_reads_digits_and_words(self):
+        self.assertEqual(stated_playbook_counts("it comes with twenty-five playbooks, not 24 playbooks"), {25, 24})
+        self.assertEqual(stated_playbook_counts("one playbooks, 7 playbooks"), {1, 7})
 
     def test_principle_count_matches_shipped_skills(self):
         on_disk = sorted(p.parent.name for p in SKILLS.glob("principle-*/SKILL.md"))
@@ -194,23 +214,18 @@ class TestStaticPromises(unittest.TestCase):
             f"{pid} lists owners {promise['owners']} and claims {promise['claim']!r}; {fix}",
         )
 
+    def test_readme_has_a_row_for_every_non_principle_skill(self):
+        rows = re.findall(r"^\| \[`/([a-z0-9-]+)`\]\(\./skills/\1/SKILL\.md\) \|", read(ROOT / "README.md"), flags=re.M)
+        shipped = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md") if not p.parent.name.startswith("principle-"))
+        self.assertEqual(sorted(rows), shipped, "README.md's 'all skills' table needs one row per skill directory")
+
     def test_playbook_directory_complete(self):
         text = guide_text()
         self.assertIn("(../../skills/poteto-mode/playbooks/)", text)
         self.assertTrue(PLAYBOOKS.is_dir())
         linked = sorted(set(re.findall(r"skills/poteto-mode/playbooks/([a-z-]+)\.md", text)))
-        self.assertEqual(
-            linked,
-            [
-                "authoring-a-skill", "autonomous-run", "autopilot-full", "autopilot-stack", "babysit",
-                "bug-fix", "code-review", "eval", "feature", "hillclimb", "investigation", "multi-phase-plan",
-                "opening-a-pr", "orchestrate", "pause-safely", "perf-issue", "prototype", "refactoring", "research",
-                "runtime-forensics", "session-pickup", "shipping", "trace-forensics", "visual-parity", "worktree-cleanup",
-            ],
-        )
+        self.assertEqual(linked, PLAYBOOK_FILES)
         for name in linked:
-            self.assertTrue((PLAYBOOKS / f"{name}.md").is_file(), name)
-        for name in PLAYBOOK_FILES:
             self.assertTrue((PLAYBOOKS / f"{name}.md").is_file(), name)
 
     def test_guide_named_skills_exist(self):
