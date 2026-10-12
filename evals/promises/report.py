@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 import ledger
-from harnesses.login import ERROR
+from harnesses.login import ERROR, applicability
 
 HARNESSES = ("claude-code", "codex", "hermes", "grok")
 
@@ -13,7 +13,7 @@ def collect(out):
     for path in sorted(Path(out).rglob("verdict.json")):
         record = json.loads(path.read_text())
         for pid, result in record["promises"].items():
-            if not result.get("not_applicable"):
+            if not result.get("not_applicable") and not applicability(pid, record["harness"]).get("not_applicable"):
                 cells[(pid, record["harness"])].append((result["verdict"], str(path.parent)))
     for path in sorted(Path(out).rglob("install.json")):
         for row in json.loads(path.read_text()):

@@ -299,15 +299,13 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     pair = None
     try:
         died = drive(module, run, authorization)
-        graded = None
+        if died:
+            verdict = error_verdict(case, harness, commit, death_record(*died))
+            write_file(root / "verdict.json", _json(verdict))
         if run.turns or not died:
             trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
             _seal(authorization, meta(run), trace)
-            graded = grade(authorization)
-        verdict = graded
-        if died:
-            verdict = error_verdict(case, harness, commit, death_record(*died), graded and graded["promises"])
-            write_file(root / "verdict.json", _json(verdict))
+            verdict = grade_run(authorization)
     except BaseException as original:
         owner = getattr(run, "_hermes_evidence", None)
         if owner is not None and retention is not None:
@@ -335,6 +333,22 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     if died:
         raise LoginRequired(*died)
     return root
+
+
+def grade_run(authorization):
+    """Grade a sealed run. When its verdict.json records a dead login under `error`, the new grade keeps that record and
+    every promise it leaves undecided goes back to ERROR, so a re-grade claims no skill result the run never produced."""
+    _, state = authorization._controller.load(authorization._id)
+    target = Path(state["output"]["path"]) / "verdict.json"
+    try:
+        error = json.loads(read_file(target)).get("error")
+    except FileNotFoundError:
+        error = None
+    verdict = grade(authorization)
+    if error:
+        verdict = error_verdict(state["case"], verdict["harness"], verdict["skills_at"], error, verdict["promises"])
+        write_file(target, _json(verdict))
+    return verdict
 
 
 def meta(run):
@@ -377,7 +391,7 @@ def main(argv=None):
     if args.cmd == "grade":
         for run_id in args.run_ids:
             try:
-                print(json.dumps(grade(_lookup(args.out, run_id))))
+                print(json.dumps(grade_run(_lookup(args.out, run_id))))
             except GradeRefused as refusal:
                 print(json.dumps({"refusal": refusal.receipt}), file=sys.stderr)
                 return 2

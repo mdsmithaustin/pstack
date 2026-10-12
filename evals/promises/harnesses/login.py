@@ -70,19 +70,26 @@ def error_verdict(case, harness, skills_at, error, graded=None):
     """The verdict for a run a dead login ended, from its `death_record`. `graded` holds the grader's promise verdicts when
     turns ran before the death. A verdict the grader decided (PASS or FAIL) stands, as does a promise that does not apply
     to the harness. Every other promise is ERROR, so no skill result is claimed for it and report.py leaves it out of
-    every pass rate."""
+    every pass rate. An ERROR keeps the judge flag and excerpt of the INCONCLUSIVE it replaces."""
     reason = f"{error['cli']} login died: {error['detail']}"
     promises = {}
     for pid in case["promises"]:
-        result = graded[pid] if graded else _applicability(pid, harness, case)
-        keep = result.get("not_applicable") or (graded and result["verdict"] in DECIDED)
-        promises[pid] = result if keep else {"verdict": ERROR, "failures": [reason], "evidence": []}
-    return {"case": case["id"], "harness": harness, "skills_at": skills_at,
-            "error": error, "promises": promises}
+        result = graded[pid] if graded else {}
+        gate = applicability(pid, harness)
+        if gate.get("not_applicable"):
+            promises[pid] = gate
+        elif result.get("verdict") in DECIDED:
+            promises[pid] = result
+        else:
+            judge = {k: result[k] for k in ("needs_judge", "excerpt") if k in result}
+            promises[pid] = {"verdict": ERROR, "failures": [reason], "evidence": [], **judge}
+    return {"case": case["id"], "harness": harness, "skills_at": skills_at, "error": error, "promises": promises}
 
 
-def _applicability(pid, harness, case):
-    """The oracle's own answer on a run with no trace. Only its `not_applicable` flag is read, so a promise that never
-    applies to this harness stays blank instead of turning ERROR."""
+def applicability(pid, harness):
+    """The oracle's answer on an empty trace from this harness. A harness-gated oracle marks itself `not_applicable` before
+    it reads the trace, but oracles.check returns before any oracle runs when a run never started, its transcript could
+    not be read, or host skills touched it, and that answer carries no flag. The empty trace reaches the gate however the
+    real grade returned."""
     import oracles
-    return oracles.check(pid, {"harness": harness}, case, None)
+    return oracles.check(pid, {"harness": harness}, None, None)

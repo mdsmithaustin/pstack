@@ -653,16 +653,17 @@ class ErrorRun(unittest.TestCase):
 class ErrorVerdict(unittest.TestCase):
     def test_pass_and_fail_survive_an_auth_death_and_only_the_undecided_become_error(self):
         from harnesses import codex
-        case = {"id": "x", "promises": ["a", "b", "c", "d"]}
+        gated = "persona-delivery-hermes-grok"
+        case = {"id": "x", "promises": ["a", "b", "c", gated]}
         graded = {"a": {"verdict": "PASS", "failures": [], "evidence": ["e"]},
                   "b": {"verdict": "FAIL", "failures": ["f"], "evidence": []},
                   "c": {"verdict": "INCONCLUSIVE", "failures": ["run killed"], "evidence": []},
-                  "d": {"verdict": "INCONCLUSIVE", "failures": ["applies elsewhere"], "evidence": [], "not_applicable": True}}
+                  gated: {"verdict": "INCONCLUSIVE", "failures": ["applies to hermes and grok only"], "evidence": [], "not_applicable": True}}
         verdict = error_verdict(case, "codex", "0" * 40, death_record(codex.LOGIN, "turn 0 exited 1"), graded)
         self.assertEqual({p: r["verdict"] for p, r in verdict["promises"].items()},
-                         {"a": "PASS", "b": "FAIL", "c": "ERROR", "d": "INCONCLUSIVE"})
+                         {"a": "PASS", "b": "FAIL", "c": "ERROR", gated: "INCONCLUSIVE"})
         self.assertEqual(verdict["promises"]["a"], graded["a"])
-        self.assertTrue(verdict["promises"]["d"]["not_applicable"])
+        self.assertTrue(verdict["promises"][gated]["not_applicable"])
         self.assertEqual(verdict["promises"]["c"]["failures"], ["codex login died: turn 0 exited 1"])
         self.assertEqual(verdict["error"]["relogin"], "codex login")
 
