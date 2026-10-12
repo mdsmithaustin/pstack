@@ -10,6 +10,8 @@
 # them, and `git worktree remove` deletes ignored files even without --force,
 # so a worktree with kept files is never bucketed safe. Neither is one whose
 # `git status` fails (DIRTY unreadable).
+# A populated submodule counts as one kept path, because the superproject's
+# git status never lists files a submodule ignores.
 #
 # Usage: worktree-audit.sh [-b|--base <ref>] [repo-path]
 #   repo-path defaults to the current repo.
@@ -105,6 +107,9 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 			*) wip=$((wip + 1)) ;;
 			esac
 		done < "$status_out"
+		while IFS= read -r -d '' sm; do
+			kept=$((kept + 1)); printf '# kept: %s/%s/\n' "$wt" "$sm" >> "$kept_paths"
+		done < <(git -C "$wt" submodule foreach --quiet 'printf "%s\0" "$displaypath"' 2>/dev/null)
 		[ "$wip" -gt 0 ] && dirty="wip:$wip"
 		[ "$kept" -gt 0 ] && dirty="${dirty:+$dirty,}kept:$kept"
 	else dirty=unreadable; fi

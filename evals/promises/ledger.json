@@ -7963,14 +7963,12 @@
    "text": "Findings are repaired and reviewed again."
   },
   "8d4d37d0397c": {
-   "class": "substituted",
+   "class": "promise",
    "file": "02-poteto-mode.md",
-   "ported_as": [
-    "e07ae23334d1"
-   ],
    "promise": "worktree-cleanup-pauses-on-uncommitted",
    "sources": [
-    "upstream"
+    "upstream",
+    "port"
    ],
    "text": "It deletes only what that evidence clears and pauses for your call on anything holding uncommitted work."
   },
@@ -9995,14 +9993,12 @@
    "text": "If you skipped ahead, go back to [setup](./01-setup.md) and run one real task."
   },
   "c9a74a7d503e": {
-   "class": "substituted",
+   "class": "promise",
    "file": "02-poteto-mode.md",
-   "ported_as": [
-    "e07ae23334d1"
-   ],
    "promise": "worktree-cleanup-classifies-worktrees",
    "sources": [
-    "upstream"
+    "upstream",
+    "port"
    ],
    "text": "The [Worktree cleanup playbook](../../skills/poteto-mode/playbooks/worktree-cleanup.md) classifies every worktree by merge state, uncommitted work, and which chats still touch it."
   },
@@ -10737,14 +10733,6 @@
     "port"
    ],
    "text": "A perf prompt states the measurement, not a vibe:"
-  },
-  "e07ae23334d1": {
-   "class": "context",
-   "file": "02-poteto-mode.md",
-   "sources": [
-    "port"
-   ],
-   "text": "Follow the [Worktree cleanup playbook](../../skills/poteto-mode/playbooks/worktree-cleanup.md) for the audit and deletion safeguards."
   },
   "e0acb193f9ba": {
    "class": "promise",
