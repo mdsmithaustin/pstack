@@ -326,7 +326,7 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         self.assertEqual([line for line in lines if line.startswith("# kept: ")],
                          [f"# kept: {worktree}/notes/"], result.stdout)
 
-    def test_ignored_build_cache_covers_a_nested_checkout(self):
+    def test_nested_checkout_in_an_ignored_build_cache_is_kept(self):
         worktree = self.merged_worktree("wt-venv")
         (self.repo / ".gitignore").write_text(".audit/\n.venv/\n", encoding="utf-8")
         self.git("add", ".gitignore")
@@ -335,10 +335,39 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         self.git("push", "-q", "origin", "main")
         nested = worktree / ".venv" / "src" / "pkg"
         nested.mkdir(parents=True)
-        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=nested, env=self.env, check=True,
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (nested / "package.py").write_text("pass\n", encoding="utf-8")
-        self.assertEqual(self.row(worktree), ("clean", "safe"))
+        for args in (("init", "-q", "-b", "main"), ("add", "package.py"), ("commit", "-q", "-m", "unpushed")):
+            subprocess.run(["git", *args], cwd=nested, env=self.env, check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        fields = next(line.split("\t") for line in lines if line.endswith(f"\t{worktree}"))
+        self.assertEqual((fields[3], fields[7]), ("kept:1", "hold-kept"))
+        self.assertEqual([line for line in lines if line.startswith("# kept: ")],
+                         [f"# kept: {worktree}/.venv/src/pkg/"], result.stdout)
+
+    def test_skip_worktree_edit_is_wip(self):
+        worktree = self.merged_worktree("wt-skip")
+        (worktree / "README.md").write_text("local secret\n", encoding="utf-8")
+        self.git("-C", str(worktree), "update-index", "--skip-worktree", "README.md")
+        self.assertEqual(self.row(worktree), ("wip:1", "hold-wip"))
+
+    def test_assume_unchanged_edit_is_wip(self):
+        worktree = self.merged_worktree("wt-assume")
+        (worktree / "README.md").write_text("local edit\n", encoding="utf-8")
+        self.git("-C", str(worktree), "update-index", "--assume-unchanged", "README.md")
+        self.assertEqual(self.row(worktree), ("wip:1", "hold-wip"))
+
+    def test_recent_chat_found_for_worktree_path_with_regex_characters(self):
+        self.merged_worktree("wt-plain")
+        worktree = self.tmp / "wt (a) [b]+"
+        self.git("worktree", "add", "-q", "-b", "wt-regex", str(worktree), "main")
+        slug = re.sub(r"[^a-zA-Z0-9]", "-", str(self.repo))
+        transcripts = self.tmp / "home" / ".claude" / "projects" / slug
+        transcripts.mkdir(parents=True)
+        (transcripts / "s.jsonl").write_text(json.dumps({"cwd": f"{worktree}/"}) + "\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
 
     def test_unreadable_status_is_never_safe(self):
         worktree = self.merged_worktree("wt-corrupt")
@@ -347,7 +376,7 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         git_dir = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=worktree, env=self.env,
                                  check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
         Path(git_dir, "index").write_bytes(b"not an index")
-        self.assertEqual(self.row(worktree), ("unreadable", "review"))
+        self.assertEqual(self.row(worktree), ("unreadable", "hold-kept"))
 
 
 if __name__ == "__main__":
