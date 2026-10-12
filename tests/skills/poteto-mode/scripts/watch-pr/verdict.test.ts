@@ -299,10 +299,51 @@ describe("failRounds", () => {
     ).toBe(1);
   });
 
-  it("counts nothing for malformed, quoted, or decorated blocks", () => {
+  it("counts a malformed FAIL claim, by its Head when it parses and on its own when not", () => {
     expect(
       count([
+        fail("a", "2026-10-02T10:00:00Z"),
         issueComment({ body: `Verdict: FAIL\nHead: ${head("a")}` }),
+        issueComment({
+          body: verdictBody({ verdict: "FAIL", head: head("b"), docs: "PASS" }),
+        }),
+        issueComment({
+          body: verdictBody({ verdict: "FAIL", head: head("d").toUpperCase() }),
+        }),
+        issueComment({ body: "Verdict: FAIL" }),
+      ])
+    ).toBe(4);
+  });
+
+  it("counts a claim whose word is neither PASS nor PASS+NOTES as a FAIL", () => {
+    expect(
+      count(
+        ["pass", "fail", "", "PASS (with notes)"].map((word, index) =>
+          issueComment({
+            body: verdictBody({ verdict: "PASS", head: head(String(index)) }).replace(
+              "Verdict: PASS",
+              `Verdict: ${word}`
+            ),
+          })
+        )
+      )
+    ).toBe(4);
+  });
+
+  it("counts nothing for a PASS or PASS+NOTES claim, even a malformed one", () => {
+    expect(
+      count([
+        issueComment({ body: `Verdict: PASS\nHead: ${head("a")}` }),
+        issueComment({
+          body: verdictBody({ verdict: "PASS+NOTES", head: head("b"), docs: "PASS" }),
+        }),
+      ])
+    ).toBe(0);
+  });
+
+  it("counts nothing for quoted or decorated blocks", () => {
+    expect(
+      count([
         issueComment({
           body: `Earlier round:\n\n${verdictBody({ verdict: "FAIL", head: head("b") })}`,
         }),
@@ -311,9 +352,6 @@ describe("failRounds", () => {
             "Verdict: FAIL",
             "**Verdict: FAIL**"
           ),
-        }),
-        issueComment({
-          body: verdictBody({ verdict: "FAIL", head: head("d").toUpperCase() }),
         }),
       ])
     ).toBe(0);
@@ -375,6 +413,21 @@ describe("failRounds", () => {
       expect(state(rounds.slice(0, 2))).toBe("open");
       expect(state(rounds)).toBe("stop");
       expect(state([...rounds].reverse())).toBe("stop");
+    });
+
+    it("stops at a third round whose FAIL block is malformed", () => {
+      const slipped = (digit: string, createdAt: string) =>
+        issueComment({
+          createdAt,
+          body: verdictBody({ verdict: "FAIL", head: head(digit), docs: "PASS" }),
+        });
+      expect(
+        failRounds([...rounds.slice(0, 2), slipped("c", "2026-10-02T12:00:00Z")], PR_AUTHOR)
+      ).toEqual({ count: 3, state: "stop" });
+      const everyRoundSlipped = "abcdef"
+        .split("")
+        .map((digit, index) => slipped(digit, `2026-10-02T1${index}:00:00Z`));
+      expect(failRounds(everyRoundSlipped, PR_AUTHOR)).toEqual({ count: 6, state: "stop" });
     });
 
     it("grants exactly one more round after a reset: the next FAIL stops", () => {
