@@ -5,13 +5,11 @@
 # then one "# kept: <path>" line per kept file. Never deletes anything; deletion
 # stays a human-gated step in the playbook.
 #
-# Kept files are untracked paths, and ignored paths whose name is not a known
-# build cache, such as a decision trail or saved eval runs. No commit records
-# them, and `git worktree remove` deletes ignored files even without --force,
-# so a worktree with kept files is never bucketed safe.
-# A nested git checkout, such as a populated submodule, counts as one kept
-# path, because the superproject's git status never lists files it ignores.
-# If git status or the scan for nested checkouts fails, DIRTY reads unreadable.
+# `git worktree remove` deletes ignored files even without --force, so kept
+# paths must block the safe bucket. Nested checkouts need a separate scan
+# because the outer repository never lists their ignored files.
+# See ../playbooks/worktree-cleanup.md, steps 4 and 5, for the DIRTY contract,
+# cache exclusions, nested-path coverage, and removal guard.
 #
 # Usage: worktree-audit.sh [-b|--base <ref>] [repo-path]
 #   repo-path defaults to the current repo.

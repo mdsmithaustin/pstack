@@ -7963,12 +7963,14 @@
    "text": "Findings are repaired and reviewed again."
   },
   "8d4d37d0397c": {
-   "class": "promise",
+   "class": "substituted",
    "file": "02-poteto-mode.md",
+   "ported_as": [
+    "c4a3c1750d3e"
+   ],
    "promise": "worktree-cleanup-pauses-on-uncommitted",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "It deletes only what that evidence clears and pauses for your call on anything holding uncommitted work."
   },
@@ -9775,6 +9777,14 @@
    ],
    "text": "It picks the document's mode first (tutorial, how-to, reference, or explanation), then works sentence by sentence: who does what, one thought per sentence, nothing readable two ways."
   },
+  "c4a3c1750d3e": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Follow the [Worktree cleanup playbook](../../skills/poteto-mode/playbooks/worktree-cleanup.md) for the audit output, kept-path decisions, and removal guards."
+  },
   "c4a4184079de": {
    "class": "cursor-only",
    "file": "02-poteto-mode.md",
@@ -9993,12 +10003,14 @@
    "text": "If you skipped ahead, go back to [setup](./01-setup.md) and run one real task."
   },
   "c9a74a7d503e": {
-   "class": "promise",
+   "class": "substituted",
    "file": "02-poteto-mode.md",
+   "ported_as": [
+    "c4a3c1750d3e"
+   ],
    "promise": "worktree-cleanup-classifies-worktrees",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "The [Worktree cleanup playbook](../../skills/poteto-mode/playbooks/worktree-cleanup.md) classifies every worktree by merge state, uncommitted work, and which chats still touch it."
   },
