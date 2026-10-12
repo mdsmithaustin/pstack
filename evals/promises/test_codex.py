@@ -34,15 +34,35 @@ class CallIds(unittest.TestCase):
 
 
 class SkillListing(unittest.TestCase):
-    def test_the_lead_rollout_listing_reaches_the_harvest_without_its_file_paths(self):
-        listing = ("## Skills\n### Skill roots\n- `r1` = `/w/.agents/skills`\n### Available skills\n"
-                   "- deslop: Remove AI slop. (file: r1/deslop/SKILL.md)\n- how: Use for how X works. (file: r1/how/SKILL.md)\n"
-                   "</skills_instructions>")
+    ENTRIES = ("## Skills\n### Skill roots\n- `r1` = `/w/.agents/skills`\n### Available skills\n"
+               "- deslop: Remove AI slop. (file: r1/deslop/SKILL.md)\n- how: Use for how X works. (file: r1/how/SKILL.md)\n")
+    LISTED = {"deslop": "Remove AI slop.", "how": "Use for how X works."}
+
+    def harvest(self, developer_text):
         rows = [{"type": "session_meta", "payload": {"cwd": "/w", "id": "s"}},
-                {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": listing}]}}]
-        data = "".join(json.dumps(r) + "\n" for r in rows).encode()
-        self.assertEqual(codex.harvest_rollout(data)["listed"], {"deslop": "Remove AI slop.", "how": "Use for how X works."})
+                {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": developer_text}]}}]
+        return "".join(json.dumps(r) + "\n" for r in rows).encode()
+
+    def test_the_lead_rollout_listing_reaches_the_harvest_without_its_file_paths(self):
+        data = self.harvest(self.ENTRIES + "</skills_instructions>")
+        self.assertEqual(codex.harvest_rollout(data)["listed"], self.LISTED)
         self.assertEqual(codex.harvest_rollout(data[:data.index(b"\n") + 1])["listed"], None)
+
+    def test_a_how_to_use_section_before_the_closing_tag_is_not_part_of_the_listing(self):
+        text = self.ENTRIES + "### How to use skills\n- Discovery: the list above is the skills available.\n</skills_instructions>"
+        self.assertEqual(codex.harvest_rollout(self.harvest(text))["listed"], self.LISTED)
+
+    def test_the_listing_ends_at_the_closing_tag_when_the_next_heading_is_further_on(self):
+        after = ("<permissions instructions>\nFilesystem sandboxing defines which files can be read or written. "
+                 "`sandbox_mode` is `workspace-write`: The sandbox permits reading files, and editing files in `cwd` and `writable_roots`. "
+                 "Editing files in other directories requires approval. Network access is restricted.\n"
+                 "- network: restricted\n"
+                 "Approval policy is currently never. Do not provide the `sandbox_permissions` for any reason, commands will be rejected.\n"
+                 " The writable roots are `/w/tmp`, `/w/relay`, `/w/relay/.git`, `/private/tmp`.\n</permissions instructions>"
+                 "<collaboration_mode># Collaboration Mode: Default\n\nYou are now in Default mode.\n\n"
+                 "## request_user_input availability\n\nUse the `request_user_input` tool only when it is listed.")
+        text = self.ENTRIES + "</skills_instructions>" + after
+        self.assertEqual(codex.harvest_rollout(self.harvest(text))["listed"], self.LISTED)
 
 
 class Compaction(unittest.TestCase):
