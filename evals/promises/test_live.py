@@ -10,11 +10,14 @@ import time
 import unittest
 from pathlib import Path
 from unittest import mock
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from contextlib import nullcontext
 
 import live
 from grade_boundary import GradeRefused, _authorize_fixture
+from harnesses.login import LoginRequired, auth_death, death_record, error_verdict
+
+FIXTURES = Path(__file__).resolve().parent / "testdata" / "auth_death"
 
 CODEX_CHAT = """I'm using `poteto-mode`. I'll identify the command first.
 
@@ -333,7 +336,8 @@ class RunOverrides(unittest.TestCase):
                 live.run_case(harness, "principle-steer-run", "HEAD", Path("/unused"), 0, model="m")
 
     def test_the_cli_passes_model_and_effort_to_every_case(self):
-        with tempfile.TemporaryDirectory(prefix="pstack-overrides-") as tmp, mock.patch.object(live, "run_case") as run_case:
+        with tempfile.TemporaryDirectory(prefix="pstack-overrides-") as tmp, mock.patch.object(live, "run_case") as run_case, \
+                mock.patch.object(live, "preflight"):
             live.main(["run", "--harness", "codex", "--case", "a", "--case", "b", "--model", "gpt-6-luna", "--effort", "xhigh", "--out", tmp])
         self.assertEqual([c.args[1] for c in run_case.call_args_list], ["a", "b"])
         self.assertEqual({c.args[-2:] for c in run_case.call_args_list}, {("gpt-6-luna", "xhigh")})
@@ -355,6 +359,387 @@ class RunOverrides(unittest.TestCase):
                                                                  ((binary, hashlib.sha256(b"identity").hexdigest()),), "/usr/bin:/bin", "/bin/sh"))
             argv = claude_code._command(run, "go", 0).argv
         self.assertEqual(argv[-5:], ("--effort", "high", "--model", "claude-sonnet-5-5", "go"))
+
+
+def fake_cli(directory, name, script):
+    path = Path(directory) / name
+    path.write_text("#!/bin/sh\n" + script)
+    path.chmod(0o755)
+    return path
+
+
+class LoginPreflight(unittest.TestCase):
+    """A wave stops on a login the CLI reports gone, before any case spends a token."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-preflight-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+
+    def wave(self, harness, *patches):
+        stderr = io.StringIO()
+        with mock.patch.object(live, "run_case") as run_case, redirect_stderr(stderr):
+            for patch in patches:
+                self.enterContext(patch)
+            code = live.main(["run", "--harness", harness, "--case", "a", "--case", "b", "--out", str(self.tmp / "out")])
+        return code, run_case, stderr.getvalue()
+
+    def claude(self, script):
+        from harnesses import claude_code
+        return mock.patch.object(claude_code, "CLAUDE_BINARY", fake_cli(self.tmp, "claude", script))
+
+    def codex(self, script, with_auth=True):
+        home = self.tmp / "codex-home"
+        home.mkdir(exist_ok=True)
+        if with_auth:
+            (home / "auth.json").write_text("{}")
+        binary = fake_cli(self.tmp, "codex", script)
+        return mock.patch.dict(os.environ, {"CODEX_HOME": str(home), "CODEX_BIN": str(binary)})
+
+    def grok(self, expires_at):
+        from harnesses import grok
+        home = self.tmp / "grok-home"
+        home.mkdir(exist_ok=True)
+        (home / "auth.json").write_text(json.dumps({"xai": {"key": "k", "expires_at": expires_at}}))
+        return mock.patch.object(grok, "host_grok_home", return_value=home)
+
+    def assertStopped(self, outcome, cli, command):
+        code, run_case, stderr = outcome
+        self.assertEqual(code, 3)
+        run_case.assert_not_called()
+        self.assertEqual(list((self.tmp / "out").iterdir()), [])
+        self.assertIn(f"{cli} login is not usable", stderr)
+        self.assertIn(f"Run `{command}`", stderr)
+
+    def test_claude_code_reporting_no_login_stops_the_wave(self):
+        outcome = self.wave("claude-code", self.claude('echo \'{"loggedIn": false}\'; exit 1\n'))
+        self.assertStopped(outcome, "claude", "claude auth login")
+
+    def test_claude_code_exiting_zero_with_loggedin_false_still_stops_the_wave(self):
+        outcome = self.wave("claude-code", self.claude('echo \'{"loggedIn": false}\'\n'))
+        self.assertStopped(outcome, "claude", "claude auth login")
+
+    def test_claude_code_status_does_not_see_credentials_only_the_host_shell_exports(self):
+        script = 'if [ -n "$ANTHROPIC_API_KEY" ]; then echo \'{"loggedIn": true}\'; else echo \'{"loggedIn": false}\'; exit 1; fi\n'
+        outcome = self.wave("claude-code", self.claude(script), mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "host-only"}))
+        self.assertStopped(outcome, "claude", "claude auth login")
+
+    def test_codex_login_status_failing_stops_the_wave(self):
+        script = 'case "$1" in --version) echo codex 1;; *) echo "Not logged in" >&2; exit 1;; esac\n'
+        self.assertStopped(self.wave("codex", self.codex(script)), "codex", "codex login")
+
+    def test_codex_without_an_auth_file_stops_the_wave_even_when_the_cli_says_logged_in(self):
+        script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
+        self.assertStopped(self.wave("codex", self.codex(script, with_auth=False)), "codex", "codex login")
+
+    def test_grok_with_an_expired_host_token_stops_the_wave(self):
+        self.assertStopped(self.wave("grok", self.grok("2020-01-01T00:00:00Z")), "grok", "grok login")
+
+    def test_a_valid_login_lets_every_case_run(self):
+        script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
+        code, run_case, _ = self.wave("codex", self.codex(script))
+        self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+
+    def test_a_login_that_dies_mid_wave_stops_the_wave_after_its_error_verdict(self):
+        from harnesses import codex
+        died = LoginRequired(codex.LOGIN, "turn 0 exited 1")
+        stderr = io.StringIO()
+        with mock.patch.object(live, "preflight"), mock.patch.object(live, "run_case", side_effect=[died]) as run_case, redirect_stderr(stderr):
+            code = live.main(["run", "--harness", "codex", "--case", "a", "--case", "b", "--out", str(self.tmp / "out")])
+        self.assertEqual((code, run_case.call_count), (3, 1))
+        self.assertIn("Run `codex login`", stderr.getvalue())
+
+
+class AuthDeath(unittest.TestCase):
+    """A turn that ended on an auth failure is the harness failing, not the skill under test."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-auth-death-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+
+    def record(self, stderr="", stream="", exit_code=1, timed_out=False):
+        (self.tmp / "err").write_text(stderr)
+        (self.tmp / "out").write_text(stream)
+        return {"exit_code": exit_code, "timed_out": timed_out, "stderr": str(self.tmp / "err"), "stream": str(self.tmp / "out")}
+
+    def test_each_cli_expired_login_message_is_an_auth_death(self):
+        from harnesses import claude_code, codex, grok
+        cases = [(claude_code.LOGIN, {"stream": '{"type":"result","is_error":true,"result":"Invalid API key \u00b7 Please run /login"}\n'}),
+                 (claude_code.LOGIN, {"stderr": "Login expired \u00b7 Please run /login"}),
+                 (codex.LOGIN, {"stderr": "Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again."}),
+                 (grok.LOGIN, {"stderr": "Authentication required. Run `grok login` to re-authenticate."})]
+        for login, streams in cases:
+            with self.subTest(cli=login.cli, streams=list(streams)):
+                self.assertTrue(auth_death(login, self.record(**streams)))
+
+    def test_the_grok_external_auth_failure_a_real_run_ended_on_is_an_auth_death(self):
+        from harnesses import grok
+        record = {"exit_code": 1, "timed_out": False, "stream": str(FIXTURES / "grok-external-auth.stream.json"),
+                  "stderr": str(FIXTURES / "grok-external-auth.stderr.txt")}
+        self.assertTrue(auth_death(grok.LOGIN, record))
+        self.assertTrue(auth_death(grok.LOGIN, {"exit_code": 1, "timed_out": False, "stream": record["stream"]}))
+        self.assertTrue(auth_death(grok.LOGIN, {"exit_code": 1, "timed_out": False, "stderr": record["stderr"]}))
+
+    def test_the_claude_code_401_a_real_run_ended_on_is_an_auth_death(self):
+        from harnesses import claude_code
+        record = {"exit_code": 1, "timed_out": False, "stream": str(FIXTURES / "claude-code-401-last-line.jsonl")}
+        self.assertIn("Failed to authenticate", auth_death(claude_code.LOGIN, record))
+
+    def test_a_turn_that_exited_zero_or_timed_out_or_died_for_another_reason_is_not_an_auth_death(self):
+        from harnesses import claude_code
+        login = claude_code.LOGIN
+        text = "Please run /login"
+        for name, record in (("exit zero", self.record(stderr=text, exit_code=0)),
+                             ("timed out", self.record(stderr=text, exit_code=-9, timed_out=True)),
+                             ("other failure", self.record(stderr="segmentation fault"))):
+            with self.subTest(name):
+                self.assertIsNone(auth_death(login, record))
+
+    def test_a_login_message_quoted_early_in_a_longer_stream_is_not_an_auth_death(self):
+        from harnesses import claude_code
+        stream = '{"type":"assistant","text":"the docs say Please run /login"}\n{"type":"result","is_error":true,"result":"max turns"}\n'
+        record = self.record(stream=stream)
+        self.assertIsNone(auth_death(claude_code.LOGIN, record))
+
+    def test_drive_ends_the_run_at_the_dying_turn_and_names_the_login(self):
+        from harnesses import claude_code
+        turns = []
+
+        def turn(run, text, index):
+            turns.append(index)
+            return {"index": index, **self.record(stderr="Not logged in \u00b7 Please run /login")}
+
+        module = mock.Mock(SHARES_HOST_TMP=False, LOGIN=claude_code.LOGIN, turn=turn)
+        run = live.Run(self.tmp, "claude-code", {"id": "x", "fixture": "relay", "turns": ["one", "two"]}, "0" * 40, 60)
+        with mock.patch.object(live, "_write_record"):
+            login, detail = live.drive(module, run, object())
+        self.assertEqual((login.cli, turns), ("claude", [0]))
+        self.assertIn("turn 0 exited 1", detail)
+        self.assertIn("Not logged in", detail)
+
+    def test_drive_reports_a_login_that_died_in_prepare(self):
+        from harnesses import grok
+        module = mock.Mock(SHARES_HOST_TMP=False, LOGIN=grok.LOGIN, prepare=mock.Mock(side_effect=LoginRequired(grok.LOGIN, "token expired")))
+        run = live.Run(self.tmp, "grok", {"id": "x", "fixture": "relay", "turns": ["one"]}, "0" * 40, 60)
+        self.assertEqual(live.drive(module, run, object()), (grok.LOGIN, "token expired"))
+        module.turn.assert_not_called()
+
+
+@unittest.skipUnless((platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64"),
+                     "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
+class ErrorRun(unittest.TestCase):
+    def test_a_run_that_dies_on_auth_is_graded_error_not_fail_and_stops_the_wave(self):
+        import report
+        from harnesses import codex
+        case = live.load_case("principle-steer-run")
+        case["turns"] = ["first", "second"]
+        case["tmp_lock"] = False
+        with tempfile.TemporaryDirectory(prefix="pstack-live-error-") as tmp:
+            out = Path(tmp).resolve()
+
+            def turn(run, text, index):
+                (run.root / "err").write_text("Please log out and sign in again.")
+                (run.root / "out").write_bytes(b"")
+                return {"index": index, "session_id": "s", "argv": ["codex", text], "exit_code": 1, "timed_out": False,
+                        "duration_s": 0.1, "stream": str(run.root / "out"), "stderr": str(run.root / "err")}
+
+            def prepare(run):
+                (run.root / "launch.json").write_text(json.dumps({"path": "synthetic-no-model", "source": "test", "version": "test", "rejected": []}))
+
+            output = io.StringIO()
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(codex, "prepare", side_effect=prepare), \
+                    mock.patch.object(codex, "turn", side_effect=turn) as turns, redirect_stdout(output):
+                with self.assertRaisesRegex(live.LoginRequired, "Run `codex login`"):
+                    live.run_case("codex", case["id"], "HEAD", out, 0)
+            [root] = [p.parent for p in out.rglob("verdict.json")]
+            verdict = json.loads((root / "verdict.json").read_text())
+            table = report.render(out, upstream=out)
+        self.assertEqual(turns.call_count, 1)
+        self.assertEqual({r["verdict"] for r in verdict["promises"].values()}, {"ERROR"})
+        self.assertEqual(set(verdict["promises"]), set(case["promises"]))
+        self.assertEqual(verdict["error"]["relogin"], "codex login")
+        self.assertEqual(set(json.loads(output.getvalue())["verdicts"].values()), {"ERROR"})
+        self.assertIn("codex pass rate: none graded (ERROR", table)
+
+    def test_a_login_that_dies_after_the_graded_behavior_keeps_the_graders_verdict(self):
+        import report
+        from harnesses import claude_code
+        case = live.load_case("feature-boundary-run")
+        case["tmp_lock"] = False
+        trace = json.loads((FIXTURES / "claude-code-after-ipc-trace.json").read_text())
+
+        def turn(run, text, index):
+            (run.root / "err").write_bytes(b"")
+            return {"index": index, "session_id": "s", "argv": ["claude", text], "exit_code": 1, "timed_out": False,
+                    "duration_s": 582.6, "stream": str(FIXTURES / "claude-code-401-last-line.jsonl"), "stderr": str(run.root / "err")}
+
+        with tempfile.TemporaryDirectory(prefix="pstack-live-late-death-") as tmp:
+            out = Path(tmp).resolve()
+            output = io.StringIO()
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(claude_code, "prepare"), \
+                    mock.patch.object(claude_code, "turn", side_effect=turn), \
+                    mock.patch.object(claude_code, "harvest", return_value=trace), redirect_stdout(output):
+                with self.assertRaisesRegex(live.LoginRequired, "Run `claude auth login`"):
+                    live.run_case("claude-code", case["id"], "HEAD", out, 0)
+            [root] = [p.parent for p in out.rglob("verdict.json")]
+            verdict = json.loads((root / "verdict.json").read_text())
+            sealed = json.loads((root / "trace.json").read_text())
+            table = report.render(out, upstream=out)
+        promise = "poteto-mode-triggers-architect-on-boundary-crossing"
+        self.assertEqual(verdict["promises"][promise]["verdict"], "PASS")
+        self.assertEqual(verdict["error"]["cli"], "claude")
+        self.assertEqual(sealed["harness"], "claude-code")
+        self.assertEqual(json.loads(output.getvalue())["verdicts"], {promise: "PASS"})
+        self.assertIn("claude-code pass rate: 1 of 1", table)
+
+    def claude_feature_run_that_never_started(self, out):
+        from harnesses import claude_code
+        case = live.load_case("feature-run")
+        case["tmp_lock"] = False
+        trace = json.loads((FIXTURES / "claude-code-never-started-trace.json").read_text())
+
+        def turn(run, text, index):
+            (run.root / "err").write_bytes(b"")
+            return {"index": index, "session_id": "s", "argv": ["claude", text], "exit_code": 1, "timed_out": False,
+                    "duration_s": 4.7, "stream": str(FIXTURES / "claude-code-401-last-line.jsonl"), "stderr": str(run.root / "err")}
+
+        output = io.StringIO()
+        with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(claude_code, "prepare"), \
+                mock.patch.object(claude_code, "turn", side_effect=turn), \
+                mock.patch.object(claude_code, "harvest", return_value=trace), redirect_stdout(output):
+            with self.assertRaisesRegex(live.LoginRequired, "Run `claude auth login`"):
+                live.run_case("claude-code", case["id"], "HEAD", out, 0)
+        return json.loads(output.getvalue())["authorization_id"]
+
+    def test_regrading_a_run_a_dead_login_ended_keeps_its_error_marks(self):
+        import report
+        with tempfile.TemporaryDirectory(prefix="pstack-live-regrade-") as tmp:
+            out = Path(tmp).resolve()
+            run_id = self.claude_feature_run_that_never_started(out)
+            with redirect_stdout(io.StringIO()):
+                code = live.main(["grade", run_id, "--out", str(out)])
+            [root] = [p.parent for p in out.rglob("verdict.json")]
+            verdict = json.loads((root / "verdict.json").read_text())
+            table = report.render(out, upstream=out)
+        self.assertEqual(code, 0)
+        self.assertEqual(verdict["error"]["relogin"], "claude auth login")
+        self.assertEqual({p: r["verdict"] for p, r in verdict["promises"].items() if not r.get("not_applicable")},
+                         {p: "ERROR" for p in verdict["promises"] if p != "persona-delivery-hermes-grok"})
+        self.assertIn("claude-code pass rate: none graded (ERROR 10 excluded)", table)
+
+    def test_a_harvest_refusal_after_an_auth_death_stops_the_batch_before_any_verdict(self):
+        from harnesses import claude_code
+        case = live.load_case("feature-run")
+        case["tmp_lock"] = False
+
+        def turn(run, text, index):
+            (run.root / "err").write_bytes(b"")
+            return {"index": index, "session_id": "s", "argv": ["claude", text], "exit_code": 1, "timed_out": False,
+                    "duration_s": 4.7, "stream": str(FIXTURES / "claude-code-401-last-line.jsonl"), "stderr": str(run.root / "err")}
+
+        with tempfile.TemporaryDirectory(prefix="pstack-live-harvest-refused-") as tmp:
+            out = Path(tmp).resolve()
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(claude_code, "prepare"), \
+                    mock.patch.object(claude_code, "turn", side_effect=turn), \
+                    mock.patch.object(claude_code, "harvest", side_effect=GradeRefused("input_changed", "linked transcript")):
+                with self.assertRaisesRegex(GradeRefused, "linked transcript"):
+                    live.run_case("claude-code", case["id"], "HEAD", out, 0)
+            written = sorted(p.name for p in out.rglob("*.json") if p.name in ("trace.json", "verdict.json"))
+        self.assertEqual(written, [])
+
+    def test_regrading_a_run_whose_login_died_before_any_turn_is_refused_and_keeps_its_verdict(self):
+        from harnesses import codex
+        case = live.load_case("principle-steer-run")
+        case["tmp_lock"] = False
+        with tempfile.TemporaryDirectory(prefix="pstack-live-regrade-") as tmp:
+            out = Path(tmp).resolve()
+            output = io.StringIO()
+            with mock.patch.object(live, "load_case", return_value=case), redirect_stdout(output), \
+                    mock.patch.object(codex, "prepare", side_effect=LoginRequired(codex.LOGIN, "no login at auth.json")):
+                with self.assertRaises(live.LoginRequired):
+                    live.run_case("codex", case["id"], "HEAD", out, 0)
+            [root] = [p.parent for p in out.rglob("verdict.json")]
+            before = (root / "verdict.json").read_bytes()
+            with redirect_stderr(io.StringIO()) as refusal:
+                code = live.main(["grade", json.loads(output.getvalue())["authorization_id"], "--out", str(out)])
+            after = (root / "verdict.json").read_bytes()
+        self.assertEqual(code, 2)
+        self.assertIn("not sealed", refusal.getvalue())
+        self.assertEqual(after, before)
+        self.assertEqual({r["verdict"] for r in json.loads(after)["promises"].values()}, {"ERROR"})
+
+
+class ErrorVerdict(unittest.TestCase):
+    def test_pass_and_fail_survive_an_auth_death_and_only_the_undecided_become_error(self):
+        from harnesses import codex
+        gated = "persona-delivery-hermes-grok"
+        case = {"id": "x", "promises": ["a", "b", "c", gated]}
+        graded = {"a": {"verdict": "PASS", "failures": [], "evidence": ["e"]},
+                  "b": {"verdict": "FAIL", "failures": ["f"], "evidence": []},
+                  "c": {"verdict": "INCONCLUSIVE", "failures": ["run killed"], "evidence": []},
+                  gated: {"verdict": "INCONCLUSIVE", "failures": ["applies to hermes and grok only"], "evidence": [], "not_applicable": True}}
+        verdict = error_verdict(case, "codex", "0" * 40, death_record(codex.LOGIN, "turn 0 exited 1"), graded)
+        self.assertEqual({p: r["verdict"] for p, r in verdict["promises"].items()},
+                         {"a": "PASS", "b": "FAIL", "c": "ERROR", gated: "INCONCLUSIVE"})
+        self.assertEqual(verdict["promises"]["a"], graded["a"])
+        self.assertTrue(verdict["promises"][gated]["not_applicable"])
+        self.assertEqual(verdict["promises"]["c"]["failures"], ["codex login died: turn 0 exited 1"])
+        self.assertEqual(verdict["error"]["relogin"], "codex login")
+
+    def test_a_claude_run_that_never_started_keeps_the_hermes_and_grok_promise_out(self):
+        import oracles
+        import report
+        from harnesses import claude_code
+        case = live.load_case("feature-run")
+        trace = json.loads((FIXTURES / "claude-code-never-started-trace.json").read_text())
+        graded = {pid: oracles.check(pid, trace, case, None) for pid in case["promises"]}
+        self.assertIn("run never started", graded["persona-delivery-hermes-grok"]["failures"][0])
+        verdict = error_verdict(case, "claude-code", "0" * 40, death_record(claude_code.LOGIN, "turn 0 exited 1"), graded)
+        gated = {pid for pid, r in verdict["promises"].items() if r.get("not_applicable")}
+        self.assertEqual(gated, {"persona-delivery-hermes-grok"})
+        self.assertEqual({r["verdict"] for pid, r in verdict["promises"].items() if pid not in gated}, {"ERROR"})
+        with tempfile.TemporaryDirectory(prefix="pstack-error-verdict-") as tmp:
+            (Path(tmp) / "verdict.json").write_text(json.dumps(verdict))
+            table = report.render(Path(tmp), upstream=Path(tmp))
+        self.assertIn("claude-code pass rate: none graded (ERROR 10 excluded)", table)
+        self.assertNotIn("persona-delivery-hermes-grok", table)
+
+    def test_an_undecided_promise_that_needs_a_judge_keeps_the_flag_and_excerpt_on_its_error(self):
+        import oracles
+        from harnesses import codex
+        case = {"id": "x", "promises": ["a"]}
+        graded = {"a": oracles.inconclusive("wording needs a judge", "seq 4", needs_judge=True, excerpt="the reply says pass")}
+        verdict = error_verdict(case, "codex", "0" * 40, death_record(codex.LOGIN, "turn 1 exited 1"), graded)
+        self.assertEqual(verdict["promises"]["a"], {"verdict": "ERROR", "failures": ["codex login died: turn 1 exited 1"], "evidence": [],
+                                                    "needs_judge": True, "excerpt": "the reply says pass"})
+
+    def test_a_dead_codex_run_marks_error_only_the_promises_that_apply_to_codex(self):
+        import report
+        from harnesses import codex
+        case = live.load_case("feature-run")
+        verdict = error_verdict(case, "codex", "0" * 40, death_record(codex.LOGIN, "no login at auth.json"))
+        gated = {pid for pid, r in verdict["promises"].items() if r.get("not_applicable")}
+        self.assertEqual(gated, {"claude-effort-applies-via-effort-agents", "persona-delivery-hermes-grok"})
+        self.assertEqual({r["verdict"] for pid, r in verdict["promises"].items() if pid not in gated}, {"ERROR"})
+        self.assertEqual(len(case["promises"]) - len(gated), 9)
+        with tempfile.TemporaryDirectory(prefix="pstack-error-verdict-") as tmp:
+            (Path(tmp) / "verdict.json").write_text(json.dumps(verdict))
+            table = report.render(Path(tmp), upstream=Path(tmp))
+        self.assertIn("codex pass rate: none graded (ERROR 9 excluded)", table)
+        self.assertNotIn("claude-effort-applies-via-effort-agents", table)
+
+    def test_every_promise_of_every_live_case_answers_the_applicability_probe_on_every_harness(self):
+        import report
+        from harnesses import codex
+        for case_id in sorted(p.name for p in live.CASES.iterdir() if (p / "case.json").is_file()):
+            case = live.load_case(case_id)
+            if case.get("deferred") or case.get("kind", "live") != "live":
+                continue
+            for harness in report.HARNESSES:
+                with self.subTest(case=case_id, harness=harness):
+                    verdict = error_verdict(case, harness, "0" * 40, death_record(codex.LOGIN, "probe"))
+                    self.assertEqual(set(verdict["promises"]), set(case["promises"]))
 
 
 class MakeProject(unittest.TestCase):

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import live
 from grade_boundary import GradeRefused, copy_file
+from harnesses.login import Login, LoginRequired
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/"]
@@ -132,6 +133,22 @@ def host_token_expiry(auth):
     return datetime.datetime.fromisoformat(entry["expires_at"].replace("Z", "+00:00")) if entry else None
 
 
+LOGIN = Login("grok", "grok login", re.compile(
+    r"Run `grok login`|auth token is invalid or expired|Not authenticated|Authentication required|no xAI credential|"
+    r"Invalid or expired credentials|sign-in helper could not renew", re.I))
+TOKEN_MARGIN = datetime.timedelta(minutes=5)
+
+
+def preflight():
+    """Refuse a missing or expired host token. The run's read-only provider never refreshes it, so only `grok login` on the host does."""
+    auth = host_grok_home() / "auth.json"
+    if not auth.is_file():
+        raise LoginRequired(LOGIN, f"no login at {auth}")
+    expiry = host_token_expiry(auth)
+    if expiry is not None and expiry <= datetime.datetime.now(datetime.timezone.utc) + TOKEN_MARGIN:
+        raise LoginRequired(LOGIN, f"the host token expired at {expiry:%Y-%m-%dT%H:%MZ}, and the run's read-only provider never refreshes it")
+
+
 def prepare(run):
     root = run.root
     for name in ("home", "grok-home", "tmp", "transcripts"):
@@ -139,13 +156,8 @@ def prepare(run):
     for name in HOME_DIRS:
         (home(run) / name).mkdir(exist_ok=True)
     (home(run) / ".gitconfig").write_text(GITCONFIG)
+    preflight()
     auth = host_grok_home() / "auth.json"
-    if not auth.is_file():
-        raise RuntimeError(f"no grok login at {auth}")
-    expiry = host_token_expiry(auth)
-    if expiry is not None and expiry <= datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=5):
-        raise RuntimeError(f"the host Grok token expired at {expiry:%Y-%m-%dT%H:%MZ}; run `grok login` on the host, "
-                           "since the run's read-only provider never refreshes it")
     provider = root / "auth-provider.py"
     provider.write_text(AUTH_PROVIDER.format(python=shutil.which("python3") or "/usr/bin/python3", auth=str(auth)))
     provider.chmod(0o755)
@@ -159,7 +171,7 @@ def prepare(run):
                            text=True, timeout=120)
     (root / "login.log").write_text(login.stdout + login.stderr)
     if login.returncode != 0:
-        raise RuntimeError(f"grok login failed under the run's own home: {(login.stdout + login.stderr)[-300:]}")
+        raise LoginRequired(LOGIN, f"`grok login` failed under the run's own home: {(login.stdout + login.stderr)[-300:]}")
     inspected = subprocess.run([launch["path"], "inspect", "--json"], cwd=run.project, env=env,
                                capture_output=True, text=True, timeout=120, check=True)
     (root / "inspect.json").write_text(inspected.stdout)

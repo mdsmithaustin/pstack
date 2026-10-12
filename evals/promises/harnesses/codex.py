@@ -9,6 +9,7 @@ from pathlib import Path
 
 import live
 from grade_boundary import GradeRefused, read_file, write_file
+from harnesses.login import Login, LoginRequired, check_status
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/", ".codex/"]
@@ -19,6 +20,9 @@ MODEL = "gpt-6.1-sol"
 EFFORT = "high"
 COMPACT = "/compact"
 COMPACT_TOKEN_LIMIT = 2000
+LOGIN = Login("codex", "codex login", re.compile(
+    r"access token could not be refreshed|refresh token was (?:already used|rejected)|log out and sign in again|"
+    r"authentication session could not be refreshed|Not logged in", re.I))
 ENV_KEPT = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES", "TERM", "USER", "LOGNAME", "SHELL", "TZ",
             "SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
             "http_proxy", "https_proxy", "no_proxy")
@@ -57,13 +61,26 @@ def resolve_binary(env):
     raise RuntimeError(f"no working codex binary; rejected: {json.dumps(rejected)}")
 
 
+def host_auth():
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "auth.json"
+
+
+def preflight():
+    """Ask the CLI whether it holds a login. The CLI refreshes an expired access token itself when it runs, so the token's
+    own expiry is not checked here."""
+    auth = host_auth()
+    if not auth.is_file():
+        raise LoginRequired(LOGIN, f"no login at {auth}")
+    check_status(LOGIN, [resolve_binary(dict(os.environ))["path"], "login", "status"])
+
+
 def prepare(run):
     root = run.root
     for name in ("home", "codex-home", "tmp", "transcripts"):
         (root / name).mkdir(exist_ok=True)
-    auth = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "auth.json"
+    auth = host_auth()
     if not auth.is_file():
-        raise RuntimeError(f"no codex login at {auth}")
+        raise LoginRequired(LOGIN, f"no login at {auth}")
     link = root / "codex-home" / "auth.json"
     if not link.is_symlink():
         link.symlink_to(auth)

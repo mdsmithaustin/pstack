@@ -15,11 +15,15 @@ from functools import lru_cache
 from pathlib import Path
 
 import live
+from harnesses.login import Login, LoginRequired, check_status
 
 SKILLS_DIR = ".claude/skills"
 PRIVATE_DIRS = (".claude/",)
 SHARES_HOST_TMP = False
 
+LOGIN = Login("claude", "claude auth login", re.compile(
+    r"Please run /login|Not logged in|Login expired|OAuth token (?:revoked|has expired)|Invalid API key|"
+    r"Failed to authenticate|Authentication required", re.I))
 DEFAULT_EFFORT = "high"
 SETTING_SOURCES = "user,project"
 LISTING_SCRIPT = Path("setup-pstack/scripts/skill-listing.py")
@@ -194,6 +198,23 @@ def config_dir(run):
 
 def store(run):
     return config_dir(run) / "projects"
+
+
+def preflight():
+    """Check the host login before a private turn config exists. Keep the turn's host HOME and Keychain namespace,
+    but omit exported API keys and config overrides so they cannot mask a missing login."""
+    binary = CLAUDE_BINARY if CLAUDE_BINARY.is_file() else shutil.which("claude")
+    if not binary:
+        raise LoginRequired(LOGIN, "no claude binary to ask")
+    env = {"HOME": os.environ["HOME"], "USER": os.environ.get("USER", ""), "LOGNAME": os.environ.get("LOGNAME", ""),
+           "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8", "TERM": "dumb", "CLAUDE_SECURESTORAGE_CONFIG_DIR": ""}
+    out = check_status(LOGIN, [binary, "auth", "status"], env=env)
+    try:
+        logged_in = json.loads(out).get("loggedIn")
+    except ValueError:
+        logged_in = None
+    if logged_in is not True:
+        raise LoginRequired(LOGIN, f"`claude auth status` reports loggedIn {logged_in!r}")
 
 
 def prepare(run):

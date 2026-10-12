@@ -27,6 +27,42 @@ class Render(unittest.TestCase):
             table = report.render(Path(out), upstream=Path(out))
         self.assertEqual(table.splitlines()[-1], "claude-code skill listing: absent 1, installed 2")
 
+    def run_dir(self, out, name, harness, verdicts):
+        run = Path(out) / name
+        run.mkdir()
+        (run / "verdict.json").write_text(json.dumps({"harness": harness, "promises": {
+            pid: {"verdict": v, "failures": [], "evidence": []} for pid, v in verdicts.items()}}))
+
+    def test_an_error_run_drops_out_of_the_pass_rate_and_keeps_its_cell(self):
+        with tempfile.TemporaryDirectory() as out:
+            self.run_dir(out, "a", "claude-code", {"p1": "PASS", "p2": "FAIL"})
+            self.run_dir(out, "b", "claude-code", {"p1": "ERROR", "p2": "ERROR"})
+            self.run_dir(out, "c", "claude-code", {"p3": "INCONCLUSIVE"})
+            self.run_dir(out, "d", "codex", {"p1": "ERROR"})
+            table = report.render(Path(out), upstream=Path(out))
+        self.assertIn("claude-code pass rate: 1 of 3 (ERROR 2 excluded)", table)
+        self.assertIn("codex pass rate: none graded (ERROR 1 excluded)", table)
+        self.assertIn("| `p1` | ERROR 1, PASS 1 | ERROR |", table)
+        self.assertIn("ERROR 3, FAIL 1, INCONCLUSIVE 1, PASS 1", table)
+
+    def test_a_run_whose_transcript_could_not_be_read_counts_only_the_promises_that_apply(self):
+        recorded = Path(__file__).resolve().parent / "testdata" / "harvest_refused" / "hermes-feature-run-verdict.json"
+        with tempfile.TemporaryDirectory() as out:
+            run = Path(out) / "tally"
+            run.mkdir()
+            (run / "verdict.json").write_bytes(recorded.read_bytes())
+            table = report.render(Path(out), upstream=Path(out))
+        self.assertIn("hermes pass rate: 0 of 10\n", table + "\n")
+        self.assertIn("| `persona-delivery-hermes-grok` |  |  | INCONCLUSIVE |  |  |", table)
+        self.assertNotIn("claude-effort-applies-via-effort-agents", table)
+
+    def test_a_harness_with_no_error_prints_a_plain_pass_rate(self):
+        with tempfile.TemporaryDirectory() as out:
+            self.run_dir(out, "a", "grok", {"p1": "PASS", "p2": "PASS", "p3": "FAIL"})
+            table = report.render(Path(out), upstream=Path(out))
+        self.assertIn("grok pass rate: 2 of 3\n", table + "\n")
+        self.assertNotIn("excluded", table)
+
 
 if __name__ == "__main__":
     unittest.main()

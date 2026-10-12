@@ -1,0 +1,28 @@
+Error: Internal error: {
+  "message": "Unauthorized (401) from https://cli-chat-proxy.grok.com/v1/responses: Invalid or expired credentials (auth_kind=none, x_xai_token_auth=xai-grok-cli, upstream=Unauthenticated, reason=no auth context)\n\n  Model:     grok-4.7\n  Auth:      External\n  Version:   1.0.41\n  Available: grok-4.7, grok-4.7-build-fast, grok-4.6, grok-4.5\n\nYour session expired and your sign-in helper could not renew it in the background. Run /login to sign in again.",
+  "promptUsage": {
+    "inputTokens": 1444814,
+    "outputTokens": 140967,
+    "totalTokens": 1585781,
+    "cachedReadTokens": 1104640,
+    "cacheCreationTokens": 0,
+    "reasoningTokens": 100924,
+    "modelCalls": 37,
+    "apiDurationMs": 1935728,
+    "costUsdTicks": 7066798000,
+    "modelUsage": {
+      "grok-4.7-build": {
+        "inputTokens": 1444814,
+        "outputTokens": 140967,
+        "totalTokens": 1585781,
+        "cachedReadTokens": 1104640,
+        "cacheCreationTokens": 0,
+        "reasoningTokens": 100924,
+        "modelCalls": 37,
+        "apiDurationMs": 1935728,
+        "costUsdTicks": 7066798000
+      }
+    },
+    "numTurns": 12
+  }
+}

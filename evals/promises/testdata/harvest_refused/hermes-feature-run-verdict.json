@@ -1,0 +1,84 @@
+{
+ "case": "feature-run",
+ "harness": "hermes",
+ "skills_at": "57e4409a6c4ebb7dfd27a5118caf478ef64bd769",
+ "promises": {
+  "poteto-mode-routes-to-playbook": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "worklist-opens-with-playbook-steps": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "worklist-in-native-task-tool": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "skipped-step-stays-in-worklist": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "reply-carries-commands-and-outputs": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "reply-says-inconclusive-when-check-cannot-run": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "prove-it-works-checks-real-artifact": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "claude-effort-applies-via-effort-agents": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "persona-delivery-hermes-grok": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "poteto-mode-reads-principles-and-names-applied": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  },
+  "design-ladder-spares-small-changes": {
+   "verdict": "INCONCLUSIVE",
+   "failures": [
+    "the harness transcript could not be read: path-refused: recorded read crosses an unavailable fixture prefix"
+   ],
+   "evidence": []
+  }
+ }
+}
