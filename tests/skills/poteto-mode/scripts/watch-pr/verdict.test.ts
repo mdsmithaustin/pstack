@@ -399,7 +399,7 @@ describe("failRounds", () => {
         body: verdictBody({
           verdict: "FAIL",
           head: head(digit),
-          prose: "Security ask: open",
+          prose: "Operator ask: open",
         }),
       });
     const rounds = [
@@ -528,7 +528,7 @@ describe("failRounds", () => {
         expect(state([...rounds, stopped("2026-10-02T12:30:00Z", body)])).toBe("stop");
     });
 
-    it("skips a FAIL marked Security ask: open, in the count and the stop", () => {
+    it("skips a FAIL marked Operator ask: open, in the count and the stop", () => {
       const asked = [...rounds.slice(0, 2), askOnly("c", "2026-10-02T12:00:00Z")];
       expect(failRounds(asked, PR_AUTHOR)).toEqual({ count: 2, state: "open" });
       expect(
@@ -536,11 +536,11 @@ describe("failRounds", () => {
       ).toBe("open");
     });
 
-    it("counts a FAIL whose Security ask line is quoted, decorated, or mid-sentence", () => {
+    it("counts a FAIL whose Operator ask line is quoted, decorated, or mid-sentence", () => {
       for (const prose of [
-        "> Security ask: open",
-        "**Security ask: open**",
-        "The Security ask: open line is for ask-only rounds.",
+        "> Operator ask: open",
+        "**Operator ask: open**",
+        "The Operator ask: open line is for ask-only rounds.",
       ])
         expect(
           count([

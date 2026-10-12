@@ -49,10 +49,6 @@ export interface GateReport {
   readonly headSha: CommitSha | null;
   readonly localPatchId: PatchId | null;
   readonly verdict: VerdictReading;
-  /**
-   * `complete` is false when the PR has more comments than the read holds, so
-   * `count` is a lower bound and `state` may miss newer comments.
-   */
   readonly failRounds: FailRounds & { readonly complete: boolean };
   readonly gates: readonly GateResult[];
   readonly ready: boolean;

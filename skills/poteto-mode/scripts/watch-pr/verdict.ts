@@ -165,7 +165,7 @@ export function latestVerdict(
 
 const RESET_PREFIX = "Fail-count reset:";
 const STOPPED_PREFIX = "Stopped:";
-const SECURITY_ASK_LINE = "Security ask: open";
+const OPERATOR_ASK_LINE = "Operator ask: open";
 const FAIL_ROUND_LIMIT = 3;
 
 type RoundEvent =
@@ -180,11 +180,6 @@ export interface FailRounds {
   readonly state: FailRoundState;
 }
 
-/**
- * Any trusted `Verdict:` claim whose word is not PASS or PASS+NOTES is a FAIL
- * round, malformed or not, so a slipped block cannot keep the stop open. Its
- * round is its Head when that parses, and the comment itself otherwise.
- */
 function roundEvent(comment: IssueComment): RoundEvent | null {
   const at = Date.parse(comment.createdAt);
   const lines = comment.body.split(/\r?\n/).filter((line) => line.trim() !== "");
@@ -198,7 +193,7 @@ function roundEvent(comment: IssueComment): RoundEvent | null {
   if (first?.startsWith(VERDICT_PREFIX) !== true) return null;
   const word = first.slice(VERDICT_PREFIX.length).trim();
   if (word === "PASS" || word === "PASS+NOTES") return null;
-  if (lines.some((line) => line.trim() === SECURITY_ASK_LINE)) return null;
+  if (lines.some((line) => line.trim() === OPERATOR_ASK_LINE)) return null;
   const head = field(lines, 1, parseCommitSha);
   return { kind: "fail", at, round: head.kind === "ok" ? head.value : comment.url };
 }

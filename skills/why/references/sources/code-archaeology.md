@@ -44,6 +44,7 @@ For each substantive commit, pull the PR context:
 git log -1 --format=%B <hash>
 
 # Body, review comments, linked issues. In a PR with discussion, reviews and comments hold the real signal
+# <owner>/<repo> comes from origin's fetch URL
 gh pr view <number> -R <owner>/<repo> --json title,body,author,createdAt,mergedAt,labels,closingIssuesReferences,comments,reviews,files
 ```
 
