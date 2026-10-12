@@ -32,6 +32,18 @@ class CanonicalFormTest(unittest.TestCase):
     def test_the_committed_ledger_is_canonical(self):
         self.assertEqual(ledger.main(["format", "--check"]), 0)
 
+    def test_crlf_is_rejected_and_rewritten_to_canonical_lf_bytes(self):
+        # The documented JSON serialization uses LF, regardless of input newlines.
+        before = b'{\r\n "a": 1\r\n}\r\n'
+        wanted = b'{\n "a": 1\n}\n'
+        self.path.write_bytes(before)
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = ledger.main(["format", "--check", "--ledger", str(self.path)])
+        self.assertEqual(code, 1)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(ledger.main(["format", "--ledger", str(self.path)]), 0)
+        self.assertEqual(self.path.read_bytes(), wanted)
+
     def test_a_reordered_ledger_fails_the_check_and_names_the_fix(self):
         self.shuffled()
         before = self.path.read_text(encoding="utf-8")

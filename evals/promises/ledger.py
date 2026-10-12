@@ -60,7 +60,7 @@ def write_atomically(path, data):
 
 def format_ledger(path, check=False):
     path = Path(path)
-    current = path.read_text(encoding="utf-8")
+    current = path.read_bytes().decode("utf-8")
     wanted = canonical(parse(current))
     if current == wanted:
         return 0

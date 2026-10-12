@@ -191,7 +191,7 @@ class TestStaticPromises(unittest.TestCase):
         self.assertIn(
             f"Each of the {len(PRINCIPLE_RULES)} principle links",
             promise["claim"],
-            f"{pid} claims {promise['claim']!r}; {fix}",
+            f"{pid} lists owners {promise['owners']} and claims {promise['claim']!r}; {fix}",
         )
 
     def test_playbook_directory_complete(self):
