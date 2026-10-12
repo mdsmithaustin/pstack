@@ -536,6 +536,21 @@ describe("failRounds", () => {
       ).toBe("open");
     });
 
+    it("counts the third FAIL with the retired Security ask marker", () => {
+      const third = issueComment({
+        createdAt: "2026-10-02T12:00:00Z",
+        body: verdictBody({
+          verdict: "FAIL",
+          head: head("c"),
+          prose: "Security ask: open",
+        }),
+      });
+      expect(failRounds([...rounds.slice(0, 2), third], PR_AUTHOR)).toEqual({
+        count: 3,
+        state: "stop",
+      });
+    });
+
     it("counts a FAIL whose Operator ask line is quoted, decorated, or mid-sentence", () => {
       for (const prose of [
         "> Operator ask: open",
