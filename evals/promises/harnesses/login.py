@@ -8,6 +8,7 @@ from pathlib import Path
 from grade_boundary import read_file
 
 ERROR = "ERROR"
+DECIDED = ("PASS", "FAIL")
 STATUS_TIMEOUT_S = 60
 DEATH_WINDOW = 4000
 
@@ -60,10 +61,22 @@ def _read(path):
         return ""
 
 
-def error_verdict(case, harness, skills_at, login, detail):
-    """The verdict for a run a dead login ended. Every promise of the case is ERROR, so no skill result is claimed and
-    report.py leaves the run out of every pass rate."""
+def error_verdict(case, harness, skills_at, login, detail, graded=None):
+    """The verdict for a run a dead login ended. `graded` holds the grader's promise verdicts when turns ran before the
+    death. A verdict the grader decided (PASS or FAIL) stands, as does a promise that does not apply to the harness. Every
+    other promise is ERROR, so no skill result is claimed for it and report.py leaves it out of every pass rate."""
     reason = f"{login.cli} login died: {detail}"
+    promises = {}
+    for pid in case["promises"]:
+        result = graded[pid] if graded else _applicability(pid, harness, case)
+        keep = result.get("not_applicable") or (graded and result["verdict"] in DECIDED)
+        promises[pid] = result if keep else {"verdict": ERROR, "failures": [reason], "evidence": []}
     return {"case": case["id"], "harness": harness, "skills_at": skills_at,
-            "error": {"cli": login.cli, "relogin": login.relogin, "detail": detail},
-            "promises": {pid: {"verdict": ERROR, "failures": [reason], "evidence": []} for pid in case["promises"]}}
+            "error": {"cli": login.cli, "relogin": login.relogin, "detail": detail}, "promises": promises}
+
+
+def _applicability(pid, harness, case):
+    """The oracle's own answer on a run with no trace. Only its `not_applicable` flag is read, so a promise that never
+    applies to this harness stays blank instead of turning ERROR."""
+    import oracles
+    return oracles.check(pid, {"harness": harness}, case, None)

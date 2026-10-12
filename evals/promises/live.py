@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from grade_boundary import create_file, grade, GradeRefused, read_file, _before_turns, _json, _lookup, _seal, _write_record
+from grade_boundary import create_file, grade, GradeRefused, read_file, write_file, _before_turns, _json, _lookup, _seal, _write_record
 from harnesses.login import LoginRequired, auth_death, error_verdict
 
 HERE = Path(__file__).resolve().parent
@@ -299,14 +299,15 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     pair = None
     try:
         died = drive(module, run, authorization)
-        if died:
-            verdict = error_verdict(case, harness, commit, *died)
-            with create_file(root / "verdict.json") as stream:
-                stream.write(_json(verdict))
-        else:
+        graded = None
+        if run.turns or not died:
             trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
             _seal(authorization, meta(run), trace)
-            verdict = grade(authorization)
+            graded = grade(authorization)
+        verdict = graded
+        if died:
+            verdict = error_verdict(case, harness, commit, *died, graded and graded["promises"])
+            write_file(root / "verdict.json", _json(verdict))
     except BaseException as original:
         owner = getattr(run, "_hermes_evidence", None)
         if owner is not None and retention is not None:

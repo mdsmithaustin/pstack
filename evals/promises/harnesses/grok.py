@@ -134,7 +134,8 @@ def host_token_expiry(auth):
 
 
 LOGIN = Login("grok", "grok login", re.compile(
-    r"Run `grok login`|auth token is invalid or expired|Not authenticated|Authentication required|no xAI credential", re.I))
+    r"Run `grok login`|auth token is invalid or expired|Not authenticated|Authentication required|no xAI credential|"
+    r"Invalid or expired credentials|sign-in helper could not renew", re.I))
 TOKEN_MARGIN = datetime.timedelta(minutes=5)
 
 
