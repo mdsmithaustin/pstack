@@ -10,11 +10,12 @@ import time
 import unittest
 from pathlib import Path
 from unittest import mock
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from contextlib import nullcontext
 
 import live
 from grade_boundary import GradeRefused, _authorize_fixture
+from harnesses.login import LoginRequired, auth_death
 
 CODEX_CHAT = """I'm using `poteto-mode`. I'll identify the command first.
 
@@ -333,7 +334,8 @@ class RunOverrides(unittest.TestCase):
                 live.run_case(harness, "principle-steer-run", "HEAD", Path("/unused"), 0, model="m")
 
     def test_the_cli_passes_model_and_effort_to_every_case(self):
-        with tempfile.TemporaryDirectory(prefix="pstack-overrides-") as tmp, mock.patch.object(live, "run_case") as run_case:
+        with tempfile.TemporaryDirectory(prefix="pstack-overrides-") as tmp, mock.patch.object(live, "run_case") as run_case, \
+                mock.patch.object(live, "preflight"):
             live.main(["run", "--harness", "codex", "--case", "a", "--case", "b", "--model", "gpt-6-luna", "--effort", "xhigh", "--out", tmp])
         self.assertEqual([c.args[1] for c in run_case.call_args_list], ["a", "b"])
         self.assertEqual({c.args[-2:] for c in run_case.call_args_list}, {("gpt-6-luna", "xhigh")})
@@ -355,6 +357,187 @@ class RunOverrides(unittest.TestCase):
                                                                  ((binary, hashlib.sha256(b"identity").hexdigest()),), "/usr/bin:/bin", "/bin/sh"))
             argv = claude_code._command(run, "go", 0).argv
         self.assertEqual(argv[-5:], ("--effort", "high", "--model", "claude-sonnet-5-5", "go"))
+
+
+def fake_cli(directory, name, script):
+    path = Path(directory) / name
+    path.write_text("#!/bin/sh\n" + script)
+    path.chmod(0o755)
+    return path
+
+
+class LoginPreflight(unittest.TestCase):
+    """A wave stops on a login the CLI reports gone, before any case spends a token."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-preflight-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+
+    def wave(self, harness, *patches):
+        stderr = io.StringIO()
+        with mock.patch.object(live, "run_case") as run_case, redirect_stderr(stderr):
+            for patch in patches:
+                self.enterContext(patch)
+            code = live.main(["run", "--harness", harness, "--case", "a", "--case", "b", "--out", str(self.tmp / "out")])
+        return code, run_case, stderr.getvalue()
+
+    def claude(self, script):
+        from harnesses import claude_code
+        return mock.patch.object(claude_code, "CLAUDE_BINARY", fake_cli(self.tmp, "claude", script))
+
+    def codex(self, script, with_auth=True):
+        home = self.tmp / "codex-home"
+        home.mkdir(exist_ok=True)
+        if with_auth:
+            (home / "auth.json").write_text("{}")
+        binary = fake_cli(self.tmp, "codex", script)
+        return mock.patch.dict(os.environ, {"CODEX_HOME": str(home), "CODEX_BIN": str(binary)})
+
+    def grok(self, expires_at):
+        from harnesses import grok
+        home = self.tmp / "grok-home"
+        home.mkdir(exist_ok=True)
+        (home / "auth.json").write_text(json.dumps({"xai": {"key": "k", "expires_at": expires_at}}))
+        return mock.patch.object(grok, "host_grok_home", return_value=home)
+
+    def assertStopped(self, outcome, cli, command):
+        code, run_case, stderr = outcome
+        self.assertEqual(code, 3)
+        run_case.assert_not_called()
+        self.assertEqual(list((self.tmp / "out").iterdir()), [])
+        self.assertIn(f"{cli} login is not usable", stderr)
+        self.assertIn(f"Run `{command}`", stderr)
+
+    def test_claude_code_reporting_no_login_stops_the_wave(self):
+        outcome = self.wave("claude-code", self.claude('echo \'{"loggedIn": false}\'; exit 1\n'))
+        self.assertStopped(outcome, "claude", "claude auth login")
+
+    def test_claude_code_exiting_zero_with_loggedin_false_still_stops_the_wave(self):
+        outcome = self.wave("claude-code", self.claude('echo \'{"loggedIn": false}\'\n'))
+        self.assertStopped(outcome, "claude", "claude auth login")
+
+    def test_codex_login_status_failing_stops_the_wave(self):
+        script = 'case "$1" in --version) echo codex 1;; *) echo "Not logged in" >&2; exit 1;; esac\n'
+        self.assertStopped(self.wave("codex", self.codex(script)), "codex", "codex login")
+
+    def test_codex_without_an_auth_file_stops_the_wave_even_when_the_cli_says_logged_in(self):
+        script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
+        self.assertStopped(self.wave("codex", self.codex(script, with_auth=False)), "codex", "codex login")
+
+    def test_grok_with_an_expired_host_token_stops_the_wave(self):
+        self.assertStopped(self.wave("grok", self.grok("2020-01-01T00:00:00Z")), "grok", "grok login")
+
+    def test_a_valid_login_lets_every_case_run(self):
+        script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
+        code, run_case, _ = self.wave("codex", self.codex(script))
+        self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+
+    def test_a_login_that_dies_mid_wave_stops_the_wave_after_its_error_verdict(self):
+        from harnesses import codex
+        died = LoginRequired(codex.LOGIN, "turn 0 exited 1")
+        stderr = io.StringIO()
+        with mock.patch.object(live, "preflight"), mock.patch.object(live, "run_case", side_effect=[died]) as run_case, redirect_stderr(stderr):
+            code = live.main(["run", "--harness", "codex", "--case", "a", "--case", "b", "--out", str(self.tmp / "out")])
+        self.assertEqual((code, run_case.call_count), (3, 1))
+        self.assertIn("Run `codex login`", stderr.getvalue())
+
+
+class AuthDeath(unittest.TestCase):
+    """A turn that ended on an auth failure is the harness failing, not the skill under test."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-auth-death-")
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name).resolve()
+
+    def record(self, stderr="", stream="", exit_code=1, timed_out=False):
+        (self.tmp / "err").write_text(stderr)
+        (self.tmp / "out").write_text(stream)
+        return {"exit_code": exit_code, "timed_out": timed_out, "stderr": str(self.tmp / "err"), "stream": str(self.tmp / "out")}
+
+    def test_each_cli_expired_login_message_is_an_auth_death(self):
+        from harnesses import claude_code, codex, grok
+        cases = [(claude_code.LOGIN, {"stream": '{"type":"result","is_error":true,"result":"Invalid API key \u00b7 Please run /login"}\n'}),
+                 (claude_code.LOGIN, {"stderr": "Login expired \u00b7 Please run /login"}),
+                 (codex.LOGIN, {"stderr": "Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again."}),
+                 (grok.LOGIN, {"stderr": "Authentication required. Run `grok login` to re-authenticate."})]
+        for login, streams in cases:
+            with self.subTest(cli=login.cli, streams=list(streams)):
+                self.assertTrue(auth_death(login, self.record(**streams)))
+
+    def test_a_turn_that_exited_zero_or_timed_out_or_died_for_another_reason_is_not_an_auth_death(self):
+        from harnesses import claude_code
+        login = claude_code.LOGIN
+        text = "Please run /login"
+        for name, record in (("exit zero", self.record(stderr=text, exit_code=0)),
+                             ("timed out", self.record(stderr=text, exit_code=-9, timed_out=True)),
+                             ("other failure", self.record(stderr="segmentation fault"))):
+            with self.subTest(name):
+                self.assertIsNone(auth_death(login, record))
+
+    def test_a_login_message_quoted_early_in_a_longer_stream_is_not_an_auth_death(self):
+        from harnesses import claude_code
+        stream = '{"type":"assistant","text":"the docs say Please run /login"}\n{"type":"result","is_error":true,"result":"max turns"}\n'
+        record = self.record(stream=stream)
+        self.assertIsNone(auth_death(claude_code.LOGIN, record))
+
+    def test_drive_ends_the_run_at_the_dying_turn_and_names_the_login(self):
+        from harnesses import claude_code
+        turns = []
+
+        def turn(run, text, index):
+            turns.append(index)
+            return {"index": index, **self.record(stderr="Not logged in \u00b7 Please run /login")}
+
+        module = mock.Mock(SHARES_HOST_TMP=False, LOGIN=claude_code.LOGIN, turn=turn)
+        run = live.Run(self.tmp, "claude-code", {"id": "x", "fixture": "relay", "turns": ["one", "two"]}, "0" * 40, 60)
+        with mock.patch.object(live, "_write_record"):
+            login, detail = live.drive(module, run, object())
+        self.assertEqual((login.cli, turns), ("claude", [0]))
+        self.assertIn("turn 0 exited 1", detail)
+        self.assertIn("Not logged in", detail)
+
+    def test_drive_reports_a_login_that_died_in_prepare(self):
+        from harnesses import grok
+        module = mock.Mock(SHARES_HOST_TMP=False, LOGIN=grok.LOGIN, prepare=mock.Mock(side_effect=LoginRequired(grok.LOGIN, "token expired")))
+        run = live.Run(self.tmp, "grok", {"id": "x", "fixture": "relay", "turns": ["one"]}, "0" * 40, 60)
+        self.assertEqual(live.drive(module, run, object()), (grok.LOGIN, "token expired"))
+        module.turn.assert_not_called()
+
+
+@unittest.skipUnless((platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64"),
+                     "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
+class ErrorRun(unittest.TestCase):
+    def test_a_run_that_dies_on_auth_is_graded_error_not_fail_and_stops_the_wave(self):
+        import report
+        from harnesses import codex
+        case = live.load_case("principle-steer-run")
+        case["turns"] = ["first", "second"]
+        case["tmp_lock"] = False
+        with tempfile.TemporaryDirectory(prefix="pstack-live-error-") as tmp:
+            out = Path(tmp).resolve()
+
+            def turn(run, text, index):
+                (run.root / "err").write_text("Please log out and sign in again.")
+                (run.root / "out").write_bytes(b"")
+                return {"index": index, "session_id": "s", "argv": ["codex", text], "exit_code": 1, "timed_out": False,
+                        "duration_s": 0.1, "stream": str(run.root / "out"), "stderr": str(run.root / "err")}
+
+            output = io.StringIO()
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(codex, "prepare"), \
+                    mock.patch.object(codex, "turn", side_effect=turn) as turns, redirect_stdout(output):
+                with self.assertRaisesRegex(live.LoginRequired, "Run `codex login`"):
+                    live.run_case("codex", case["id"], "HEAD", out, 0)
+            [root] = [p.parent for p in out.rglob("verdict.json")]
+            verdict = json.loads((root / "verdict.json").read_text())
+            table = report.render(out, upstream=out)
+        self.assertEqual(turns.call_count, 1)
+        self.assertEqual({r["verdict"] for r in verdict["promises"].values()}, {"ERROR"})
+        self.assertEqual(set(verdict["promises"]), set(case["promises"]))
+        self.assertEqual(verdict["error"]["relogin"], "codex login")
+        self.assertEqual(set(json.loads(output.getvalue())["verdicts"].values()), {"ERROR"})
+        self.assertIn("codex pass rate: none graded (ERROR", table)
 
 
 class MakeProject(unittest.TestCase):

@@ -17,7 +17,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from grade_boundary import create_file, grade, GradeRefused, read_file, _before_turns, _lookup, _seal, _write_record
+from grade_boundary import create_file, grade, GradeRefused, read_file, _before_turns, _json, _lookup, _seal, _write_record
+from harnesses.login import LoginRequired, auth_death, error_verdict
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -62,6 +63,13 @@ class Run:
 def adapter(name):
     sys.path.insert(0, str(HERE))
     return importlib.import_module(HARNESSES[name])
+
+
+def preflight(harness):
+    """Refuse a wave whose login is gone before any case spends a token. An adapter with no `preflight` has no free check."""
+    check = getattr(adapter(harness), "preflight", None)
+    if check:
+        check()
 
 
 def load_case(case_id):
@@ -241,6 +249,28 @@ def fixture_lock(fixture):
     return handle
 
 
+def drive(module, run, authorization):
+    """Prepare the run and play its turns. Returns (login, detail) when a login died before or during a turn, else None."""
+    try:
+        module.prepare(run)
+    except LoginRequired as expired:
+        return expired.login, expired.detail
+    login = getattr(module, "LOGIN", None)
+    lock = fixture_lock(run.case["fixture"]) if module.SHARES_HOST_TMP and run.case.get("tmp_lock", True) else None
+    try:
+        for i, text in enumerate(run.case["turns"]):
+            record = module.turn(run, text, i)
+            run.turns.append(record)
+            _write_record(authorization, meta(run))
+            dead = login and auth_death(login, record)
+            if dead:
+                return login, f"turn {i} exited {record['exit_code']} with {dead!r}"
+    finally:
+        if lock:
+            lock.close()
+    return None
+
+
 def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, model=None, effort=None):
     if hermes_retain_out is not None and harness != "hermes":
         raise ValueError("--hermes-retain-out requires --harness hermes")
@@ -268,19 +298,15 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     authorization = _before_turns(run)
     pair = None
     try:
-        module.prepare(run)
-        lock = fixture_lock(case["fixture"]) if module.SHARES_HOST_TMP and case.get("tmp_lock", True) else None
-        try:
-            for i, text in enumerate(case["turns"]):
-                record = module.turn(run, text, i)
-                run.turns.append(record)
-                _write_record(authorization, meta(run))
-        finally:
-            if lock:
-                lock.close()
-        trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
-        _seal(authorization, meta(run), trace)
-        verdict = grade(authorization)
+        died = drive(module, run, authorization)
+        if died:
+            verdict = error_verdict(case, harness, commit, *died)
+            with create_file(root / "verdict.json") as stream:
+                stream.write(_json(verdict))
+        else:
+            trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
+            _seal(authorization, meta(run), trace)
+            verdict = grade(authorization)
     except BaseException as original:
         owner = getattr(run, "_hermes_evidence", None)
         if owner is not None and retention is not None:
@@ -305,6 +331,8 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     print(json.dumps({"run": str(root), "authorization_id": authorization._id, "case": case_id, "harness": harness, "n": index,
                       **({"hermes_pair": str(pair.root)} if pair is not None else {}),
                       "verdicts": {p: v["verdict"] for p, v in verdict["promises"].items()}}))
+    if died:
+        raise LoginRequired(*died)
     return root
 
 
@@ -336,9 +364,14 @@ def main(argv=None):
     if args.cmd == "run":
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
-        for case_id in args.case:
-            for n in range(args.runs):
-                run_case(args.harness, case_id, args.skills_at, out, n, args.hermes_retain_out, args.model, args.effort)
+        try:
+            preflight(args.harness)
+            for case_id in args.case:
+                for n in range(args.runs):
+                    run_case(args.harness, case_id, args.skills_at, out, n, args.hermes_retain_out, args.model, args.effort)
+        except LoginRequired as expired:
+            print(f"wave stopped: {expired}", file=sys.stderr)
+            return 3
         return 0
     if args.cmd == "grade":
         for run_id in args.run_ids:

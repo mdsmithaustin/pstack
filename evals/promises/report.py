@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import ledger
+from harnesses.login import ERROR
 
 HARNESSES = ("claude-code", "codex", "hermes", "grok")
 
@@ -41,6 +42,22 @@ def cell(results):
     return ", ".join(f"{v} {n}" for v, n in sorted(counts.items()))
 
 
+def pass_rates(cells):
+    """One line per harness. An ERROR verdict is a run a dead login ended, so it leaves the denominator."""
+    counts = collections.defaultdict(collections.Counter)
+    for (_, harness), results in cells.items():
+        counts[harness].update(v for v, _ in results)
+    lines = []
+    for harness in HARNESSES:
+        tally = counts.get(harness)
+        if not tally:
+            continue
+        graded = sum(n for v, n in tally.items() if v != ERROR)
+        rate = f"{tally['PASS']} of {graded}" if graded else "none graded"
+        lines.append(f"{harness} pass rate: {rate}" + (f" (ERROR {tally[ERROR]} excluded)" if tally[ERROR] else ""))
+    return lines
+
+
 def render(out, upstream=None):
     book = ledger.load()
     cells = collect(out)
@@ -60,5 +77,6 @@ def render(out, upstream=None):
     lines.append("")
     lines.append(f"{len(pids)} promises, {sum(totals.values())} verdicts: " +
                  ", ".join(f"{v} {n}" for v, n in sorted(totals.items())))
+    lines += pass_rates(cells)
     lines += listing_states(out)
     return "\n".join(lines)
