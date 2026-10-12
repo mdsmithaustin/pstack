@@ -97,7 +97,7 @@ Live runs spend model budget. Codex and Hermes draw on the same ChatGPT plan whe
 
 ## Known oracle gaps
 
-These heuristic edges are open and none has moved a live verdict. Fix one only after a live run's verdict moves because of it. Work it red-first, and run a differential over every saved corpus against `main`. Both counts must be 0: correct replies that fail at head but pass on `main`, and negated replies that pass at head but fail on `main`. A new FAIL needs proof of the defect. See [Run live cases](#run-live-cases) for unresolved evidence and judge referrals.
+These heuristic edges are open. One has moved live verdicts: the pasted-command edge sent `blast-radius-proves-one-fact-by-running-code` to `INCONCLUSIVE` and the judge in the three [df58112 runs](results/2026-10-08-sync-df58112.md) on Claude Code (`relay-u7cognyo`), Hermes (`relay-triw8a0x`), and Grok (`relay-28yiwbfu`). No other listed edge is recorded as moving a live verdict. Fix one only after a live run's verdict moves because of it. Work it red-first, and run a differential over every saved corpus against `main`. Both counts must be 0: correct replies that fail at head but pass on `main`, and negated replies that pass at head but fail on `main`. A new FAIL needs proof of the defect. See [Run live cases](#run-live-cases) for unresolved evidence and judge referrals.
 
 **Promise oracles**
 

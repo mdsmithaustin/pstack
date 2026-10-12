@@ -2844,6 +2844,9 @@ class SyncDf58112Edges(unittest.TestCase):
 
 class RunRootTmp(unittest.TestCase):
     def run_root(self):
+        patch = mock.patch.object(oracles, "SCRATCH_PREFIXES", ())
+        patch.start()
+        self.addCleanup(patch.stop)
         folder = tempfile.TemporaryDirectory(dir=HERE)
         self.addCleanup(folder.cleanup)
         root = Path(folder.name).resolve()
