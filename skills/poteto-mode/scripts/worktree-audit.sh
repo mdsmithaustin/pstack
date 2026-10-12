@@ -109,7 +109,9 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 			esac
 		done < "$status_out"
 		while IFS= read -r -d '' nested; do
-			kept=$((kept + 1)); printf '# kept: %s/\n' "${nested%/.git}" >> "$kept_paths"
+			line="# kept: ${nested%/.git}/"
+			grep -qxF -- "$line" "$kept_paths" && continue
+			kept=$((kept + 1)); printf '%s\n' "$line" >> "$kept_paths"
 		done < "$nested_out"
 		[ "$wip" -gt 0 ] && dirty="wip:$wip"
 		[ "$kept" -gt 0 ] && dirty="${dirty:+$dirty,}kept:$kept"

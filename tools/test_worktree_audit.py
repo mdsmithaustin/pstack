@@ -297,6 +297,20 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         (worktree / "sub" / ".audit" / "d.tsv").write_text("trail\n", encoding="utf-8")
         self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
 
+    def test_untracked_nested_checkout_is_counted_once(self):
+        worktree = self.merged_worktree("wt-scratch")
+        scratch = worktree / "scratch"
+        scratch.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=scratch, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (scratch / "notes.txt").write_text("trail\n", encoding="utf-8")
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        fields = next(line.split("\t") for line in lines if line.endswith(f"\t{worktree}"))
+        self.assertEqual((fields[3], fields[7]), ("kept:1", "hold-kept"))
+        self.assertEqual(lines.count(f"# kept: {worktree}/scratch/"), 1, result.stdout)
+
     def test_unreadable_status_is_never_safe(self):
         worktree = self.merged_worktree("wt-corrupt")
         (worktree / ".audit").mkdir()
