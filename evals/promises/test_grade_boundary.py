@@ -334,6 +334,30 @@ class ControllerBoundary(BoundaryFixtures):
 
 @unittest.skipUnless(NATIVE, "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class NativeParentBoundary(BoundaryFixtures):
+    def test_help_links_retain_skill_directory_proof_in_native_snapshots(self):
+        case = live.load_case("poteto-help-run")
+        pid = "poteto-help-finds-need-and-routes"
+        recorded = json.loads((live.HERE / "testdata/traces/oracle-edges/hermes-poteto-help-indented-prompt.json").read_text())
+        for installed in (False, True):
+            if installed:
+                skills = self.project / ".agents/skills"
+                (skills / "poteto-mode").mkdir(parents=True)
+                (skills / "poteto-mode/SKILL.md").write_text("installed skill\n")
+                (skills / "interrogate").mkdir()
+            for path, verdict in ((None, "FAIL"), ("interrogate/SKILL.md", "FAIL"),
+                                  ("poteto-mode/SKILL.md", "FAIL"), ("README.md", "PASS"),
+                                  ("skills/interrogate/SKILL.md", "PASS"), ("unknown/SKILL.md", "PASS")):
+                with self.subTest(installed=installed, path=path):
+                    reply = recorded["final_reply"] if path is None else (
+                        "Use /interrogate.\n\n```text\n/interrogate the branch\n```\n\n"
+                        "https://github.com/mdsmithaustin/pstack/blob/main/" + path)
+                    trace = {**recorded, "final_reply": reply}
+                    record = {**self.record(case), "harness": trace["harness"]}
+                    result = live.grade(self.authority(case, trace, record=record))["promises"][pid]
+                    self.assertEqual(result["verdict"], verdict, result)
+                    if verdict == "FAIL":
+                        self.assertTrue(any("skills/" in failure for failure in result["failures"]), result)
+
     def test_project_traversal_errors_return_cli_refusal_receipts(self):
         case = self.deslop()
         base = self.repository()
