@@ -32,6 +32,7 @@ SHELL_WRAPPERS = {"bash", "sh", "zsh", "/bin/bash", "/bin/sh", "/bin/zsh"}
 PERSONA_LINE = re.compile(r"persona: ([\w-]+)")
 REPLY_PERSONA_LINE = re.compile(r"^persona: ([\w-]+)[ \t]*$", re.M)
 AVAILABLE_SKILLS = "### Available skills"
+LISTING_END = re.compile(r"</skills_instructions>|\n#")
 SKILL_INJECTION = re.compile(r"^<skill>\n<name>([^<]+)</name>\n<path>([^<]+)</path>")
 
 
@@ -269,7 +270,7 @@ def harvest_rollout(data, prompts=None):
                 text = text_of(payload.get("content"))
                 hit = SKILL_INJECTION.match(text)
                 if payload.get("role") == "developer" and listed is None and AVAILABLE_SKILLS in text:
-                    listed = live.listed_skills(text.split(AVAILABLE_SKILLS, 1)[1].split("\n#", 1)[0])
+                    listed = live.listed_skills(LISTING_END.split(text.split(AVAILABLE_SKILLS, 1)[1], 1)[0])
                 if payload.get("role") == "user" and hit:
                     injected.append({"name": hit.group(1), "path": hit.group(2), "turn": turn if prompts is not None else None})
                 if payload.get("role") == "user" and upcoming and text.strip() == upcoming[0][1].strip():
