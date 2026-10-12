@@ -146,9 +146,11 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 
 	# Most recent chat whose transcript operated in this worktree. Match path
 	# followed by "/" or a quote so glint-482 does not match glint-482-r37.
+	# Case-insensitive because transcripts on case-insensitive disks can spell
+	# the path in another case.
 	last="-"; recent=no
 	if [ -d "$transcripts" ]; then
-		matches=$(rg -l -F -e "${wt}/" -e "${wt}\"" "$transcripts" 2>/dev/null || :)
+		matches=$(rg -l -F -i -e "${wt}/" -e "${wt}\"" "$transcripts" 2>/dev/null || :)
 		chat=$(printf '%s\n' "$matches" | python3 -c '
 import datetime
 import os
