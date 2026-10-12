@@ -9,54 +9,43 @@ _spec = importlib.util.spec_from_file_location("skill_references", ROOT / "tools
 skill_references = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(skill_references)
 
-USER_FACING_SKILLS = frozenset({"poteto-help"})
-USER_FACING = {
-    "skills/architect/SKILL.md": ["Use for /architect,", '"/architect with checkpoint,"'],
-    "skills/arena/SKILL.md": ["Use for /arena,"],
-    "skills/correct/SKILL.md": ["Use for /correct."],
-    "skills/create-verification-skill/SKILL.md": ["Use for /create-verification-skill,",
-                                                  "Point the user at `/maintain-verification-skill`"],
-    "skills/deslop/SKILL.md": ["Use for /deslop,", "and on `/deslop`,"],
-    "skills/figure-it-out/SKILL.md": ["Use for /figure-it-out or"],
-    "skills/ketchup/SKILL.md": ["Use for /ketchup.", "the last message they wrote before `/ketchup`"],
-    "skills/maintain-verification-skill/SKILL.md": ["Use for /maintain-verification-skill",
-                                                    "point at `/create-verification-skill`"],
-    "skills/poteto-mode/SKILL.md": ["Use for poteto, /poteto-mode,"],
-    "skills/pstack-harness/SKILL.md": ["Run `/setup-pstack` to register it.\""],
-    "skills/reflect/SKILL.md": ['the user says "reflect" or "/reflect"'],
-    "skills/setup-pstack/SKILL.md": ["Use for /setup-pstack,", "4 of 4 `/poteto-mode` runs",
-                                     "I can generate one with /create-verification-skill.\""],
-    "skills/show-me-your-work/SKILL.md": ["Use for /show-me-your-work,"],
-    "skills/swarm/SKILL.md": ["Use for /swarm,"],
-    "skills/technical-writing/SKILL.md": ["Use for /technical-writing"],
-}
-# A mode's `reminder:` frontmatter reaches the model every turn while that mode is on. It names
-# the mode already active, so it is model-facing text that loads nothing.
-MODE_REMINDERS = {
-    "skills/poteto-mode/SKILL.md": ["apply /poteto-mode."],
-}
-EXEMPT = {rel: USER_FACING.get(rel, []) + MODE_REMINDERS.get(rel, []) for rel in USER_FACING | MODE_REMINDERS}
 
-
-def exempt(rel, spelling, line):
-    if rel.split("/")[1] in USER_FACING_SKILLS:
-        return True
-    return any(spelling in passage and passage in line for passage in EXEMPT.get(rel, ()))
+def tracked_repo(tmp, files):
+    root = Path(tmp)
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    subprocess.run(["git", "init", "-q", tmp], check=True)
+    subprocess.run(["git", "-C", tmp, "add", "."], check=True)
+    return root
 
 
 class SkillReferenceSpelling(unittest.TestCase):
     def test_model_facing_text_never_spells_a_skill_with_a_slash_or_dollar(self):
-        found = [f"{rel}:{number}: {spelling}" for rel, number, spelling, line in skill_references.sigils()
-                 if not exempt(rel, spelling, line)]
-        self.assertEqual(found, [], 'write "Use the **name** skill." as its own sentence or step; a passage that '
-                                    "quotes the user or text shown to the user goes in USER_FACING")
+        self.assertEqual(skill_references.violations(), [],
+                         'write "Use the **name** skill." as its own sentence or step; a passage that quotes the '
+                         "user or text shown to the user goes in USER_FACING in tools/skill-references.py")
 
     def test_every_exempt_passage_still_matches(self):
-        hits = skill_references.sigils()
-        stale = [f"{rel}: {passage}" for rel, passages in EXEMPT.items() for passage in passages
-                 if not any(r == rel and spelling in passage and passage in line for r, _, spelling, line in hits)]
-        self.assertEqual(stale, [], "remove USER_FACING or MODE_REMINDERS passages that no longer hold a "
-                                    "/name or $name spelling")
+        self.assertEqual(skill_references.stale_exemptions(), [],
+                         "remove USER_FACING or MODE_REMINDERS passages in tools/skill-references.py that no "
+                         "longer hold a /name or $name spelling")
+
+    def test_a_skill_may_spell_itself_only_on_its_description_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "---\ndescription: Use for /demo.\n---\nThen run /demo.\n",
+                "skills/other/SKILL.md": "---\ndescription: Use for /other.\n---\n",
+            })
+            self.assertEqual(skill_references.violations(root), ["skills/demo/SKILL.md:4: /demo"])
+
+    def test_a_description_line_may_not_spell_another_skill(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "---\ndescription: Use for /demo, then /other.\n---\n",
+                "skills/other/SKILL.md": "---\ndescription: Use for /other.\n---\n",
+            })
+            self.assertEqual(skill_references.violations(root), ["skills/demo/SKILL.md:2: /other"])
 
     def test_the_scan_skips_untracked_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:
