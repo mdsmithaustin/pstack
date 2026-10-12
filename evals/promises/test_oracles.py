@@ -2717,6 +2717,81 @@ class SealedUnmatchedFanOut(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class SyncDf58112Edges(unittest.TestCase):
+    help_menu = "Get set up. Start a task with /poteto-mode. Pick a skill for a situation. Fix a run that went wrong. Make pstack my own."
+
+    def grade_help(self, trace, case_id="poteto-help-run"):
+        return grade("poteto-help-finds-need-and-routes", trace, load_case(case_id))
+
+    def test_an_indented_example_prompt_is_a_code_block(self):
+        trace = load_trace("oracle-edges/hermes-poteto-help-indented-prompt.json")
+        trace["final_reply"] = trace["final_reply"].replace("blob/main/", "blob/main/skills/")
+        result = self.grade_help(trace)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_public_link_without_the_skills_directory_fails(self):
+        result = self.grade_help(load_trace("oracle-edges/hermes-poteto-help-indented-prompt.json"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertTrue(any("skills/" in f for f in result["failures"]), result)
+        self.assertFalse(any("code block" in f for f in result["failures"]), result)
+
+    def test_indented_prose_after_a_list_item_is_not_a_code_block(self):
+        reply = ("Use /interrogate.\n\n- first step\n\n    still the list item\n\n"
+                 "https://github.com/mdsmithaustin/pstack/blob/main/skills/interrogate/SKILL.md")
+        result = self.grade_help(minimal(final_reply=reply))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertIn("no example prompt in a code block", result["failures"])
+
+    def test_one_live_link_among_dead_ones_passes_the_link_check(self):
+        reply = ("Use /interrogate.\n\n```text\n/interrogate the branch\n```\n\n"
+                 "https://github.com/mdsmithaustin/pstack/blob/main/interrogate/SKILL.md\n"
+                 "https://github.com/mdsmithaustin/pstack/blob/main/skills/interrogate/SKILL.md")
+        self.assertEqual(self.grade_help(minimal(final_reply=reply))["verdict"], PASS)
+
+    def test_a_link_to_a_repo_root_file_is_not_a_dead_link(self):
+        reply = ("Use /interrogate.\n\n```text\n/interrogate the branch\n```\n\n"
+                 "https://github.com/mdsmithaustin/pstack/blob/main/README.md")
+        self.assertEqual(self.grade_help(minimal(final_reply=reply))["verdict"], PASS)
+
+    def test_the_async_and_grok_ask_tools_count_as_a_question(self):
+        for name in ("codex-request-user-input-async.json", "grok-ask-user-question.json"):
+            trace = load_trace("oracle-edges/" + name)
+            call = trace["events"][0]
+            call["input"] = {"questions": [{"question": self.help_menu, "title": self.help_menu}]}
+            result = self.grade_help(trace, "poteto-help-unclear-run")
+            self.assertEqual(result["verdict"], PASS, (name, result))
+
+    def test_sealed_codex_briefs_do_not_prove_fewer_than_two_runners(self):
+        trace = load_trace("oracle-edges/codex-architect-sealed-briefs.json")
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_one_sealed_spawn_still_fails_the_runner_count(self):
+        trace = load_trace("oracle-edges/codex-architect-sealed-briefs.json")
+        trace["spawns"] = trace["spawns"][:1]
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_the_safety_fact_wording_names_the_one_fact(self):
+        result = grade("blast-radius-finds-breakage", load_trace("oracle-edges/hermes-blast-radius-safety-fact.json"), load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_reply_citing_only_its_own_proof_script_needs_a_judge(self):
+        result = grade("blast-radius-finds-breakage", load_trace("oracle-edges/codex-blast-radius-own-proof-script.json"), load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertTrue(result.get("needs_judge"), result)
+
+    def test_a_safety_fact_over_only_the_proof_script_is_not_a_pass(self):
+        trace = load_trace("oracle-edges/codex-blast-radius-own-proof-script.json")
+        trace["final_reply"] += "\nThe one fact it is safe because of: every caller passes offset 0."
+        result = grade("blast-radius-finds-breakage", trace, load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_a_reply_that_cites_nothing_but_the_diff_still_fails(self):
+        result = grade("blast-radius-finds-breakage", minimal(final_reply="The change to relay/cache.py looks safe to me."), load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
 class RationaleReadPaths(unittest.TestCase):
     def arena_reads(self, commands, brief="Write `design-notes.md` with your reasoning."):
         calls = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"description": f"cand {c}", "prompt": brief}} for s, c in zip((7, 9, 11, 13, 15), "ABCDE")]

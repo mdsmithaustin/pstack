@@ -1,0 +1,47 @@
+{
+ "harness": "grok",
+ "cli_version": "1.0.46",
+ "model": "grok-4.7-build",
+ "effort": "high",
+ "exit_code": 0,
+ "entry": "injected",
+ "worklist": [],
+ "spawns": [],
+ "files_read": [],
+ "final_reply": "",
+ "events": [
+  {
+   "kind": "tool_call",
+   "name": "ask_user_question",
+   "input": {
+    "questions": [
+     {
+      "question": "Want to pick a model for each role and a reasoning budget now?",
+      "options": [
+       {
+        "label": "Now (Recommended)",
+        "description": "Type /setup-pstack before the first task. It writes ~/.agents/pstack-models.md. The getting-started steps above still stand."
+       },
+       {
+        "label": "Later",
+        "description": "Every role keeps its default model until you run /setup-pstack."
+       }
+      ]
+     }
+    ]
+   },
+   "id": "call-36f074ed-34c1-4085-8e1f-0d8920fa4b91-7",
+   "seq": 17,
+   "turn": 0
+  },
+  {
+   "kind": "tool_result",
+   "name": "ask_user_question",
+   "ok": true,
+   "output_head": "No user is available to answer questions in this non-interactive session. Continue with your best judgment; do not wait for clarification.",
+   "id": "call-36f074ed-34c1-4085-8e1f-0d8920fa4b91-7",
+   "seq": 18,
+   "turn": 0
+  }
+ ]
+}

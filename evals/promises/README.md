@@ -93,6 +93,30 @@ A turn whose text is `/compact` compacts the session. Claude Code sends it throu
 
 Live runs spend model budget. Codex and Hermes draw on the same ChatGPT plan when Hermes uses the `openai-codex` provider. A Feature case takes about 5 minutes on Claude Code and over 20 minutes on Codex.
 
+## Known oracle gaps
+
+These heuristic edges are open and none has moved a live verdict. Fix one only after a live run's verdict moves because of it. Work it red-first, and run a differential over every saved corpus against `main`. Both counts must be 0: correct replies that fail at head but pass on `main`, and negated replies that pass at head but fail on `main`. A new FAIL needs proof of the defect. Anything the oracle cannot resolve returns `INCONCLUSIVE` with `needs_judge`.
+
+**Promise oracles**
+
+- Nothing in `report.py` or `live.py` reads `needs_judge`. A person reads those runs. In the PR #156 corpus, 122 of 308 correct review-verdict replies went to the judge.
+- `reply_label` reads these label shapes differently from the pre-#156 oracle: underscore-wrapped and backtick-wrapped labels, labels ended by a newline, `Role:` with its value on the next line, a bold prefix before the role, topic-first headings such as `## Parser - Explorer 2`, separator-free `## Explorer 2 Findings`, and findings-first headings.
+- The arena base check fails `Based on the judge's scores I kept candidate 2` and markup-wrapped bases (`_candidate 2_`, `[candidate 2](...)`), which the pre-#156 oracle passed through a `base` substring match.
+- The sources check passes commit-only shapes: comma lists of hashes, consecutive commit-only lines, and `Sources searched:` labels.
+- Timing: the `SOURCES_SECTION` whitespace run is quadratic on pathological tails. Absolute-path `classify` is slow on paths with 100k components. `edits()` is slower than before on 200 KB python-bound commands.
+- `blast-radius-proves-one-fact-by-running-code` returns `PASS` only when the first 40 characters of a run command appear in the reply. A run that executed real code and pasted an output block instead goes to the judge.
+- `blast-radius-finds-breakage` treats a cited file as the agent's own only when it is under a scratch path. A proof script written inside the project still counts as a file beyond the diff.
+- `architect-sketches-before-implementation` reports "no sketch phase visible" for a run whose briefs are sealed. The verdict is right and the reason is not.
+- `poteto-help-finds-need-and-routes` accepts a triple-backtick fence or an indented block that follows a paragraph. It does not accept `~~~` fences or a block nested in a list item. Its link check proves only a public link that drops `skills/`. It does not prove that any other link resolves.
+
+**Canon `steering-review-asks` oracle**
+
+- `.mock.calls` on a non-clipboard mock counts as a clipboard read.
+- A `readText(el)` rendered helper is excluded as clipboard.
+- A fake clipboard bound to an unrecognized constructor counts as rendered, as on trunk.
+- Disjoint fragments of one tail fail the present ask.
+- The `clipboard_reads` fixed point is quadratic on thousands of chained links.
+
 ## Parent grading authority
 
 Trusted setup issues a parent-grade authorization before candidate turns. It captures the selected project identity, baseline order, skill pin, case, reference bytes, oracle code, and owned workspace allocation. It stores this authority in a private controller directory adjacent to `--out`, outside each run root and Hermes's run-root mount. The controller directory contains an issuer key and signed run authorizations. Candidate records, copied manifests, trace paths, and Git discovery output cannot add permission grants. Keep the controller directory at its original path.
