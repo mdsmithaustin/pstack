@@ -628,6 +628,26 @@ class ErrorRun(unittest.TestCase):
                          {p: "ERROR" for p in verdict["promises"] if p != "persona-delivery-hermes-grok"})
         self.assertIn("claude-code pass rate: none graded (ERROR 10 excluded)", table)
 
+    def test_a_harvest_refusal_after_an_auth_death_stops_the_batch_before_any_verdict(self):
+        from harnesses import claude_code
+        case = live.load_case("feature-run")
+        case["tmp_lock"] = False
+
+        def turn(run, text, index):
+            (run.root / "err").write_bytes(b"")
+            return {"index": index, "session_id": "s", "argv": ["claude", text], "exit_code": 1, "timed_out": False,
+                    "duration_s": 4.7, "stream": str(FIXTURES / "claude-code-401-last-line.jsonl"), "stderr": str(run.root / "err")}
+
+        with tempfile.TemporaryDirectory(prefix="pstack-live-harvest-refused-") as tmp:
+            out = Path(tmp).resolve()
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(claude_code, "prepare"), \
+                    mock.patch.object(claude_code, "turn", side_effect=turn), \
+                    mock.patch.object(claude_code, "harvest", side_effect=GradeRefused("input_changed", "linked transcript")):
+                with self.assertRaisesRegex(GradeRefused, "linked transcript"):
+                    live.run_case("claude-code", case["id"], "HEAD", out, 0)
+            written = sorted(p.name for p in out.rglob("*.json") if p.name in ("trace.json", "verdict.json"))
+        self.assertEqual(written, [])
+
     def test_regrading_a_run_whose_login_died_before_any_turn_is_refused_and_keeps_its_verdict(self):
         from harnesses import codex
         case = live.load_case("principle-steer-run")

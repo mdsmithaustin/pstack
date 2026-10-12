@@ -299,13 +299,14 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     pair = None
     try:
         died = drive(module, run, authorization)
-        if died:
-            verdict = error_verdict(case, harness, commit, death_record(*died))
-            write_file(root / "verdict.json", _json(verdict))
+        error = died and death_record(*died)
         if run.turns or not died:
             trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
             _seal(authorization, meta(run), trace)
-            verdict = grade_run(authorization)
+            verdict = grade_run(authorization, error)
+        else:
+            verdict = error_verdict(case, harness, commit, error)
+            write_file(root / "verdict.json", _json(verdict))
     except BaseException as original:
         owner = getattr(run, "_hermes_evidence", None)
         if owner is not None and retention is not None:
@@ -335,13 +336,14 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     return root
 
 
-def grade_run(authorization):
+def grade_run(authorization, error=None):
     _, state = authorization._controller.load(authorization._id)
     target = Path(state["output"]["path"]) / "verdict.json"
-    try:
-        error = json.loads(read_file(target)).get("error")
-    except FileNotFoundError:
-        error = None
+    if error is None:
+        try:
+            error = json.loads(read_file(target)).get("error")
+        except FileNotFoundError:
+            pass
     verdict = grade(authorization)
     if error:
         verdict = error_verdict(state["case"], verdict["harness"], verdict["skills_at"], error, verdict["promises"])
