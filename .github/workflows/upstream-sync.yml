@@ -119,8 +119,10 @@ jobs:
                  didn't load on its own" row in skills/poteto-help/SKILL.md.
             4. Every SKILL.md frontmatter `name:` must equal its directory
                name. Verify after editing.
-            5. Preserve root agents/*.md as upstream source. After any agent
-               change, run python3 tools/generate-subagents.py and then
+            5. Preserve root agents/*.md as upstream source, except
+               agents/poteto-agent.md: keep the port body that PORTING.md
+               records and port only changes that leave it intact. After any
+               agent change, run python3 tools/generate-subagents.py and then
                python3 tools/generate-subagents.py --check. Both commands
                must exit zero. Commit the generated installed role bundle
                with its source. Keep the persona contract, native format

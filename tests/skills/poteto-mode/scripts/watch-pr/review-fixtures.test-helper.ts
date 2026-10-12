@@ -105,7 +105,10 @@ export function reviewBodiesResponse(args: {
             args.prAuthor === null
               ? null
               : { login: args.prAuthor ?? "mdsmithaustin" },
-          reviewThreads: { nodes: [] },
+          reviewThreads: {
+            pageInfo: { hasNextPage: false, endCursor: null },
+            nodes: [],
+          },
           reviewRequests: { nodes: [] },
           reviews: { nodes: (args.reviews ?? []).map(reviewNode) },
           comments: { nodes: (args.comments ?? []).map(commentNode) },

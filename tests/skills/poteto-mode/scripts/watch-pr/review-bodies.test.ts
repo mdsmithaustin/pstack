@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { parseReviewState } from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
+import {
+  buildReviewState,
+  parseReviewStatePage,
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import {
   HEADS,
   botReview,
@@ -20,14 +23,16 @@ function flagged(args: {
   readonly comments?: readonly RestComment[];
   readonly prAuthor?: string | null;
 }) {
-  const state = parseReviewState(
-    reviewBodiesResponse({
-      headRefOid: args.head,
-      reviews: args.reviews,
-      ...(args.comments === undefined ? {} : { comments: args.comments }),
-      ...(args.prAuthor === undefined ? {} : { prAuthor: args.prAuthor }),
-    })
-  );
+  const state = buildReviewState([
+    parseReviewStatePage(
+      reviewBodiesResponse({
+        headRefOid: args.head,
+        reviews: args.reviews,
+        ...(args.comments === undefined ? {} : { comments: args.comments }),
+        ...(args.prAuthor === undefined ? {} : { prAuthor: args.prAuthor }),
+      })
+    ),
+  ]);
   return state;
 }
 

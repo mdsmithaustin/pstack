@@ -48,6 +48,12 @@ class WorktreeAuditTranscriptSlugTest(unittest.TestCase):
             git("add", "README.md")
             git("commit", "-q", "-m", "init")
 
+            origin = tmp / "origin.git"
+            git("init", "-q", "--bare", str(origin))
+            git("remote", "add", "origin", str(origin))
+            git("push", "-q", "origin", "main")
+            git("fetch", "-q", "origin")
+
             worktree = tmp / "my_repo.v2-wt"
             git("worktree", "add", "-q", "-b", "wt-branch", str(worktree))
 
@@ -68,12 +74,70 @@ class WorktreeAuditTranscriptSlugTest(unittest.TestCase):
             )
 
             lines = [line for line in result.stdout.splitlines() if line.strip()]
-            header, *rows = lines
+            base, header, *rows = lines
+            self.assertEqual(base, "# base: origin/main")
             self.assertEqual(header.split("\t")[6:8], ["LAST_CHAT", "BUCKET"])
             row = next(r for r in rows if r.endswith(str(worktree)))
             fields = row.split("\t")
             self.assertEqual(fields[6], date.today().strftime("%Y-%m-%d"))
             self.assertEqual(fields[7], "verify-recent-chat")
+
+
+
+class WorktreeAuditBaseTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="pstack-worktree-audit-base-")
+        self.tmp = Path(self._tmp.name).resolve()
+        self.env = dict(os.environ, HOME=str(self.tmp / "home"),
+                        GIT_AUTHOR_NAME="pstack-test", GIT_AUTHOR_EMAIL="pstack-test@example.com",
+                        GIT_COMMITTER_NAME="pstack-test", GIT_COMMITTER_EMAIL="pstack-test@example.com")
+        (self.tmp / "home").mkdir()
+        self.repo = self.tmp / "repo"
+        self.repo.mkdir()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def git(self, *args: str) -> None:
+        subprocess.run(["git", *args], cwd=self.repo, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    def audit(self, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["bash", str(SCRIPT), *args], cwd=self.repo, env=self.env,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def init(self, branch: str) -> None:
+        self.git("init", "-q", "-b", branch)
+        (self.repo / "README.md").write_text("repro\n", encoding="utf-8")
+        self.git("add", "README.md")
+        self.git("commit", "-q", "-m", "init")
+
+    def test_no_remote_base_exits_1(self):
+        self.init("main")
+        result = self.audit()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("no base ref", result.stderr)
+
+    def test_unknown_option_exits_2(self):
+        self.init("main")
+        self.assertEqual(self.audit("--bogus").returncode, 2)
+
+    @unittest.skipUnless(_have("rg") and _have("jq"), "worktree-audit.sh shells out to rg and jq")
+    def test_master_default_branch_reports_merged(self):
+        self.init("master")
+        origin = self.tmp / "origin.git"
+        self.git("init", "-q", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        worktree = self.tmp / "wt"
+        self.git("worktree", "add", "-q", "-b", "done", str(worktree))
+        self.git("push", "-q", "origin", "master")
+        self.git("fetch", "-q", "origin")
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        self.assertEqual(lines[0], "# base: origin/master")
+        row = next(r for r in lines[2:] if r.endswith(str(worktree)))
+        self.assertEqual(row.split("\t")[2], "YES")
 
 
 if __name__ == "__main__":

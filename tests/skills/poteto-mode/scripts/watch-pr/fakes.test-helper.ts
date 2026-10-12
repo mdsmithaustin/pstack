@@ -8,6 +8,8 @@ import type {
   PullRequestFacts,
   Repository,
   FlaggedReview,
+  RawReviewThread,
+  ReviewStatePage,
   ReviewThread,
   RollupPage,
   UnreadReview,
@@ -19,6 +21,7 @@ export interface FakeReaderOptions {
   readonly fastPath?: ChecksFastPath;
   readonly rollupPages?: readonly RollupPage[];
   readonly threads?: readonly ReviewThread[];
+  readonly threadPages?: readonly Pick<ReviewStatePage, "threads" | "endCursor">[];
   readonly pendingBots?: readonly string[];
   readonly flaggedReviews?: readonly FlaggedReview[];
   readonly unreadReviews?: readonly UnreadReview[];
@@ -26,6 +29,15 @@ export interface FakeReaderOptions {
   readonly openPullRequests?: readonly OpenPullRequest[];
   readonly origin?: Repository | null;
   readonly current?: PrContext;
+}
+
+function toRawThread(thread: ReviewThread): RawReviewThread {
+  return {
+    id: thread.id,
+    firstComment: thread.firstComment,
+    resolved: false,
+    botLogin: thread.bot?.login ?? null,
+  };
 }
 
 export function passingCheck(name = "ci"): Check {
@@ -84,6 +96,7 @@ export function fakeReader(
     isDraft: false,
   };
   let page = 0;
+  let threadPage = 0;
   return {
     calls,
     async originRepo() {
@@ -112,10 +125,14 @@ export function fakeReader(
       calls.push(`checkRollupPage:${after ?? "null"}`);
       return options.rollupPages?.[page++] ?? { checks: [], endCursor: null };
     },
-    async reviewState() {
-      calls.push("reviewState");
+    async reviewStatePage(_requested, after) {
+      calls.push(`reviewStatePage:${after ?? "null"}`);
       return {
-        threads: options.threads ?? [],
+        ...(options.threadPages?.[threadPage++] ?? {
+          threads: (options.threads ?? []).map(toRawThread),
+          endCursor: null,
+        }),
+        reviewLogins: [],
         pendingBots: options.pendingBots ?? [],
         flaggedReviews: options.flaggedReviews ?? [],
         unreadReviews: options.unreadReviews ?? [],

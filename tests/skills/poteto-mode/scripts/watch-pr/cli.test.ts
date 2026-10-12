@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { type CliRuntime, main, parseArgs } from "../../../../../skills/poteto-mode/scripts/watch-pr/cli.ts";
 import { fakeReader, passingCheck } from "./fakes.test-helper.ts";
 import { renderJson, renderPretty } from "../../../../../skills/poteto-mode/scripts/watch-pr/render.ts";
-import { parseReviewState } from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
+import {
+  buildReviewState,
+  parseReviewStatePage,
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import type { GitHubReader, WatcherVerdict } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 import {
@@ -248,13 +251,15 @@ describe("bot review findings in the output", () => {
     readonly reviews: readonly RestReview[];
     readonly comments?: readonly RestComment[];
   }): GitHubReader {
-    const state = parseReviewState(
-      reviewBodiesResponse({
-        headRefOid: args.head,
-        reviews: args.reviews,
-        ...(args.comments === undefined ? {} : { comments: args.comments }),
-      })
-    );
+    const state = buildReviewState([
+      parseReviewStatePage(
+        reviewBodiesResponse({
+          headRefOid: args.head,
+          reviews: args.reviews,
+          ...(args.comments === undefined ? {} : { comments: args.comments }),
+        })
+      ),
+    ]);
     return fakeReader({
       facts: { headRefOid: args.head },
       commitRollups: [{ oid: args.head, state: "SUCCESS" }],

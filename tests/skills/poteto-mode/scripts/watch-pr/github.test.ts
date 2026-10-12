@@ -1,13 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import {
   WatcherQueryError,
+  buildReviewState,
   mapRollupNode,
   orderStack,
   parsePullRequest,
-  parseReviewState,
+  parseReviewStatePage,
   parseRollupPage,
   resolveChecks,
   resolveContext,
+  resolveReviewState,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import {
   fakeReader,
@@ -249,6 +251,7 @@ function reviewStateResponse(args: {
   readonly threads?: readonly unknown[];
   readonly reviews?: readonly unknown[];
   readonly reviewRequests?: readonly unknown[];
+  readonly pageInfo?: { readonly hasNextPage: boolean; readonly endCursor: string | null };
 }) {
   return {
     data: {
@@ -256,7 +259,10 @@ function reviewStateResponse(args: {
         pullRequest: {
           headRefOid: "head",
           author: { login: "octocat" },
-          reviewThreads: { nodes: args.threads ?? [] },
+          reviewThreads: {
+            pageInfo: args.pageInfo ?? { hasNextPage: false, endCursor: null },
+            nodes: args.threads ?? [],
+          },
           reviews: {
             nodes: (args.reviews ?? []).map((review) => ({
               url: "https://github.com/owner/repo/pull/42#pullrequestreview-1",
@@ -273,6 +279,9 @@ function reviewStateResponse(args: {
     },
   };
 }
+
+const parseReviewState = (response: unknown) =>
+  buildReviewState([parseReviewStatePage(response)]);
 
 describe("parseReviewState", () => {
   it("ignores reviews and review requests whose account was deleted", () => {
@@ -458,6 +467,124 @@ describe("parseReviewState", () => {
 
   it("reports no pending review bots when there are no review requests", () => {
     expect(parseReviewState(reviewStateResponse({})).pendingBots).toEqual([]);
+  });
+});
+
+describe("review thread pagination", () => {
+  const thread = (id: string, resolved = false) => ({
+    id,
+    firstComment: {
+      authorLogin: "someone",
+      body: "please fix",
+      path: "a.ts",
+      line: 1,
+      createdAt: "now",
+    },
+    resolved,
+    botLogin: null,
+  });
+
+  it("keeps walking pages until the cursor is exhausted", async () => {
+    const reader = fakeReader({
+      threadPages: [
+        { threads: [thread("one")], endCursor: "next" },
+        { threads: [thread("two")], endCursor: "last" },
+        { threads: [thread("three")], endCursor: null },
+      ],
+    });
+    const state = await resolveReviewState(reader, context);
+    expect(state.threads.map((item) => item.id)).toEqual(["one", "two", "three"]);
+    expect(reader.calls).toEqual([
+      "reviewStatePage:null",
+      "reviewStatePage:next",
+      "reviewStatePage:last",
+    ]);
+  });
+
+  it("sees an unresolved thread that sits past the first page", async () => {
+    const reader = fakeReader({
+      threadPages: [
+        { threads: [thread("early", true)], endCursor: "next" },
+        { threads: [thread("late")], endCursor: null },
+      ],
+    });
+    const state = await resolveReviewState(reader, context);
+    expect(state.threads.map((item) => item.id)).toEqual(["late"]);
+  });
+
+  it("stops after a single page when the cursor is exhausted", async () => {
+    const reader = fakeReader({
+      threadPages: [{ threads: [thread("only")], endCursor: null }],
+    });
+    expect((await resolveReviewState(reader, context)).threads).toHaveLength(1);
+    expect(reader.calls).toEqual(["reviewStatePage:null"]);
+  });
+
+  it("counts Bugbot review passes across every page", async () => {
+    const bugbot = (id: string, runId: string) => ({
+      id,
+      firstComment: {
+        authorLogin: "bugbot",
+        body: `RUN_ID: ${runId}`,
+        path: "a.ts",
+        line: 1,
+        createdAt: "now",
+      },
+      resolved: false,
+      botLogin: "bugbot",
+    });
+    const reader = fakeReader({
+      threadPages: [
+        { threads: [bugbot("one", "run-1")], endCursor: "next" },
+        { threads: [bugbot("two", "run-2")], endCursor: null },
+      ],
+    });
+    const state = await resolveReviewState(reader, context);
+    expect(state.threads.map((item) => item.bot)).toEqual([
+      { login: "bugbot", passes: 2 },
+      { login: "bugbot", passes: 2 },
+    ]);
+  });
+
+  it("drops resolved threads from later pages too", async () => {
+    const reader = fakeReader({
+      threadPages: [
+        { threads: [thread("one")], endCursor: "next" },
+        { threads: [thread("two", true)], endCursor: null },
+      ],
+    });
+    expect(
+      (await resolveReviewState(reader, context)).threads.map((item) => item.id)
+    ).toEqual(["one"]);
+  });
+
+  it("returns the cursor only while another page exists", () => {
+    const cursor = (hasNextPage: boolean) =>
+      parseReviewStatePage(
+        reviewStateResponse({ pageInfo: { hasNextPage, endCursor: "cursor" } })
+      ).endCursor;
+    expect(cursor(true)).toBe("cursor");
+    expect(cursor(false)).toBeNull();
+  });
+
+  it("rejects a page that omits pageInfo instead of assuming one page", () => {
+    const response = {
+      data: {
+        repository: {
+          pullRequest: {
+            headRefOid: "head",
+            author: { login: "octocat" },
+            reviewThreads: { nodes: [] },
+            reviews: { nodes: [] },
+            reviewRequests: { nodes: [] },
+            comments: { nodes: [] },
+          },
+        },
+      },
+    };
+    expect(() => parseReviewStatePage(response)).toThrow(
+      "missing reviewThreads.pageInfo"
+    );
   });
 });
 

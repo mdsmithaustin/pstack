@@ -175,7 +175,7 @@ if argv[:2] == ["api", "graphql"]:
     if "query ReviewThreads" in query:
         out({"data": {"repository": {"pullRequest": {
             "headRefOid": head, "author": author,
-            "reviewThreads": {"nodes": state["threads"]},
+            "reviewThreads": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": state["threads"]},
             "reviewRequests": {"nodes": state["review_requests"]},
             "reviews": {"nodes": state["reviews"]},
             "comments": {"nodes": state["comments"]},
@@ -815,7 +815,8 @@ class WorktreeAuditPromises(FakeGhSandbox):
         listing_before = self.git("worktree", "list", "--porcelain", cwd=repo)
         branches_before = self.git("branch", "--list", cwd=repo)
         result = self.run_cmd(["bash", AUDIT_SH], cwd=repo, expect=0)
-        lines = result.stdout.splitlines()
+        base, *lines = result.stdout.splitlines()
+        self.assertEqual(base, "# base: origin/main")
         self.assertEqual(lines[0].split("\t"), ["SIZE", "AGE", "MERGED", "DIRTY", "REMOTE", "PR", "LAST_CHAT", "BUCKET", "WORKTREE"])
         rows = {Path(f[8]).name: f for f in (line.split("\t") for line in lines[1:])}
         today = date.today().strftime("%Y-%m-%d")

@@ -18,7 +18,7 @@ export const REVIEW_CONNECTION_LIMITS = {
   comments: 100,
 } as const;
 export const REVIEW_THREADS_QUERY =
-  "\nquery ReviewThreads($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      headRefOid\n      author { login }\n      reviewThreads(first: 100) {\n        nodes {\n          id\n          isResolved\n          comments(first: 10) {\n            nodes {\n              body\n              createdAt\n              path\n              line\n              author { login __typename }\n            }\n          }\n        }\n      }\n      reviewRequests(first: 50) {\n        nodes {\n          requestedReviewer {\n            __typename\n            ... on Bot { login }\n          }\n        }\n      }\n      reviews(last: 100) {\n        nodes {\n          body\n          state\n          url\n          commit { oid }\n          author { login __typename }\n        }\n      }\n      comments(last: 100) {\n        nodes {\n          body\n          url\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
+  "\nquery ReviewThreads($owner: String!, $repo: String!, $pr: Int!, $after: String) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      headRefOid\n      author { login }\n      reviewThreads(first: 100, after: $after) {\n        pageInfo {\n          hasNextPage\n          endCursor\n        }\n        nodes {\n          id\n          isResolved\n          comments(first: 10) {\n            nodes {\n              body\n              createdAt\n              path\n              line\n              author { login __typename }\n            }\n          }\n        }\n      }\n      reviewRequests(first: 50) {\n        nodes {\n          requestedReviewer {\n            __typename\n            ... on Bot { login }\n          }\n        }\n      }\n      reviews(last: 100) {\n        nodes {\n          body\n          state\n          url\n          commit { oid }\n          author { login __typename }\n        }\n      }\n      comments(last: 100) {\n        nodes {\n          body\n          url\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
 export const PR_COMMIT_STATUS_QUERY =
   "\nquery PrCommitStatuses($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      commits(last: 50) {\n        nodes {\n          commit {\n            oid\n            statusCheckRollup {\n              state\n            }\n          }\n        }\n      }\n    }\n  }\n}\n";
 export const PR_CHECK_ROLLUP_QUERY =
@@ -478,15 +478,16 @@ function parseBodyReviews(
   const report = flagReviewBodies({ headRefOid, prAuthor, reviews, comments });
   return { flaggedReviews: report.flagged, unreadReviews: report.unread };
 }
-export function parseReviewState(value: unknown): T.ReviewState {
+export function parseReviewStatePage(value: unknown): T.ReviewStatePage {
   const pullRequest = record(
     at(value, ["data", "repository", "pullRequest"]),
     "pullRequest"
   );
-  const threadNodes = list(
-    at(pullRequest, ["reviewThreads", "nodes"]),
-    "reviewThreads.nodes"
+  const reviewThreads = record(
+    at(pullRequest, ["reviewThreads"]),
+    "reviewThreads"
   );
+  const threadNodes = list(reviewThreads.nodes, "reviewThreads.nodes");
   const reviewNodes = list(
     at(pullRequest, ["reviews", "nodes"]),
     "reviews.nodes"
@@ -524,12 +525,7 @@ export function parseReviewState(value: unknown): T.ReviewState {
         ]
       : [];
   });
-  const threads: {
-    readonly id: string;
-    readonly firstComment: T.ReviewComment | null;
-    readonly resolved: boolean;
-    readonly botLogin: string | null;
-  }[] = [];
+  const threads: T.RawReviewThread[] = [];
   for (const node of threadNodes) {
     const thread = record(node, "review thread");
     if (typeof thread.isResolved !== "boolean")
@@ -547,6 +543,28 @@ export function parseReviewState(value: unknown): T.ReviewState {
       botLogin: threadBotLogin(firstNode, firstComment),
     });
   }
+  const page = record(reviewThreads.pageInfo, "reviewThreads.pageInfo");
+  if (typeof page.hasNextPage !== "boolean")
+    missing("reviewThreads.pageInfo.hasNextPage", page.hasNextPage);
+  const cursor = optionalString(
+    page.endCursor,
+    "reviewThreads.pageInfo.endCursor"
+  );
+  return {
+    threads,
+    endCursor: page.hasNextPage && cursor ? cursor : null,
+    reviewLogins,
+    pendingBots,
+    ...parseBodyReviews(pullRequest, reviewNodes),
+  };
+}
+// Bot pass counts come from every thread on every page, so the pages are
+// accumulated before any count is taken.
+export function buildReviewState(
+  pages: T.NonEmpty<T.ReviewStatePage>
+): T.ReviewState {
+  const [{ reviewLogins, pendingBots, flaggedReviews, unreadReviews }] = pages;
+  const threads = pages.flatMap((page) => page.threads);
   const keys = new Set<string>();
   let keyless = false;
   for (const thread of threads) {
@@ -575,7 +593,8 @@ export function parseReviewState(value: unknown): T.ReviewState {
               },
       })),
     pendingBots,
-    ...parseBodyReviews(pullRequest, reviewNodes),
+    flaggedReviews,
+    unreadReviews,
   };
 }
 export function parsePullRequest(
@@ -726,10 +745,13 @@ export class GhGitHubReader implements T.GitHubReader {
     if (after !== null) argv.push("-f", `after=${after}`);
     return parseRollupPage(await runJson(argv));
   }
-  async reviewState(context: T.PrContext): Promise<T.ReviewState> {
-    return parseReviewState(
-      await runJson(graphqlArgs(REVIEW_THREADS_QUERY, context))
-    );
+  async reviewStatePage(
+    context: T.PrContext,
+    after: string | null
+  ): Promise<T.ReviewStatePage> {
+    const argv = graphqlArgs(REVIEW_THREADS_QUERY, context);
+    if (after !== null) argv.push("-f", `after=${after}`);
+    return parseReviewStatePage(await runJson(argv));
   }
   async commitRollups(
     context: T.PrContext
@@ -774,6 +796,19 @@ export async function resolveChecks(
     after = page.endCursor;
   } while (after !== null);
   return { source: "graphql-rollup", checks };
+}
+export async function resolveReviewState(
+  reader: T.GitHubReader,
+  context: T.PrContext
+): Promise<T.ReviewState> {
+  const first = await reader.reviewStatePage(context, null);
+  const pages: [T.ReviewStatePage, ...T.ReviewStatePage[]] = [first];
+  for (let after = first.endCursor; after !== null; ) {
+    const page = await reader.reviewStatePage(context, after);
+    pages.push(page);
+    after = page.endCursor;
+  }
+  return buildReviewState(pages);
 }
 export async function resolveContext(args: {
   readonly reader: T.GitHubReader;

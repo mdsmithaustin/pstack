@@ -46,7 +46,7 @@ function commandOutput(
     );
     chmodSync(git, 0o755);
     chmodSync(gh, 0o755);
-    const script = `import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(SOURCE_DIR, "github.ts"))}; import { parsePrNumber } from ${JSON.stringify(join(SOURCE_DIR, "types.ts"))}; const reader = new GhGitHubReader(); const context = await resolveContext({ reader, owner: "explicit", repo: "override", pr: parsePrNumber(14) }); for (const operation of [() => reader.pullRequest(context), () => reader.openPullRequests(context), () => reader.checksFastPath(context), () => reader.checkRollupPage(context, null), () => reader.reviewState(context), () => reader.commitRollups(context)]) { try { await operation(); } catch {} } console.log(JSON.stringify(context));`;
+    const script = `import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(SOURCE_DIR, "github.ts"))}; import { parsePrNumber } from ${JSON.stringify(join(SOURCE_DIR, "types.ts"))}; const reader = new GhGitHubReader(); const context = await resolveContext({ reader, owner: "explicit", repo: "override", pr: parsePrNumber(14) }); for (const operation of [() => reader.pullRequest(context), () => reader.openPullRequests(context), () => reader.checksFastPath(context), () => reader.checkRollupPage(context, null), () => reader.reviewStatePage(context, "page-2"), () => reader.commitRollups(context)]) { try { await operation(); } catch {} } console.log(JSON.stringify(context));`;
     const result = Bun.spawnSync([process.execPath, "-e", script], {
       cwd: SOURCE_DIR,
       env: {
@@ -152,6 +152,13 @@ describe("repository host inference", () => {
         .every((command) =>
           command.includes("--hostname\nexample.com\n")
         )
+    ).toBe(true);
+    expect(
+      commands.some(
+        (command) =>
+          command.includes("after=page-2\n") &&
+          command.includes("--hostname\nexample.com\n")
+      )
     ).toBe(true);
   });
 

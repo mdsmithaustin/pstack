@@ -115,6 +115,22 @@ export interface ReviewState {
   readonly flaggedReviews: readonly FlaggedReview[];
   readonly unreadReviews: readonly UnreadReview[];
 }
+export interface RawReviewThread {
+  readonly id: string;
+  readonly firstComment: ReviewComment | null;
+  readonly resolved: boolean;
+  readonly botLogin: string | null;
+}
+// Every page repeats the review, request, and comment connections; only the
+// review threads advance with the cursor.
+export interface ReviewStatePage {
+  readonly threads: readonly RawReviewThread[];
+  readonly endCursor: string | null;
+  readonly reviewLogins: readonly string[];
+  readonly pendingBots: readonly string[];
+  readonly flaggedReviews: readonly FlaggedReview[];
+  readonly unreadReviews: readonly UnreadReview[];
+}
 interface CheckDetails {
   readonly name: string;
   readonly reportedState: string;
@@ -449,7 +465,10 @@ export interface GitHubReader {
     context: PrContext,
     after: string | null
   ): Promise<RollupPage>;
-  reviewState(context: PrContext): Promise<ReviewState>;
+  reviewStatePage(
+    context: PrContext,
+    after: string | null
+  ): Promise<ReviewStatePage>;
   commitRollups(context: PrContext): Promise<readonly CommitRollup[]>;
 }
 export interface PollingOptions {
