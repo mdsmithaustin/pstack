@@ -417,6 +417,11 @@ class LoginPreflight(unittest.TestCase):
         outcome = self.wave("claude-code", self.claude('echo \'{"loggedIn": false}\'\n'))
         self.assertStopped(outcome, "claude", "claude auth login")
 
+    def test_claude_code_status_does_not_see_credentials_only_the_host_shell_exports(self):
+        script = 'if [ -n "$ANTHROPIC_API_KEY" ]; then echo \'{"loggedIn": true}\'; else echo \'{"loggedIn": false}\'; exit 1; fi\n'
+        outcome = self.wave("claude-code", self.claude(script), mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "host-only"}))
+        self.assertStopped(outcome, "claude", "claude auth login")
+
     def test_codex_login_status_failing_stops_the_wave(self):
         script = 'case "$1" in --version) echo codex 1;; *) echo "Not logged in" >&2; exit 1;; esac\n'
         self.assertStopped(self.wave("codex", self.codex(script)), "codex", "codex login")

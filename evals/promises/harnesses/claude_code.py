@@ -201,12 +201,15 @@ def store(run):
 
 
 def preflight():
-    """Ask the CLI for its login status. The CLI refreshes an expired access token itself when it runs, so this fails only
-    when it reports no login."""
+    """Ask the CLI for its login status under the few variables a turn keeps, so an API key or config directory the host shell
+    exports cannot report a login the turns never see. The CLI refreshes an expired access token itself when it runs, so this
+    fails only when it reports no login."""
     binary = CLAUDE_BINARY if CLAUDE_BINARY.is_file() else shutil.which("claude")
     if not binary:
         raise LoginRequired(LOGIN, "no claude binary to ask")
-    out = check_status(LOGIN, [binary, "auth", "status"])
+    env = {"HOME": os.environ["HOME"], "USER": os.environ.get("USER", ""), "LOGNAME": os.environ.get("LOGNAME", ""),
+           "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8", "TERM": "dumb", "CLAUDE_SECURESTORAGE_CONFIG_DIR": ""}
+    out = check_status(LOGIN, [binary, "auth", "status"], env=env)
     try:
         logged_in = json.loads(out).get("loggedIn")
     except ValueError:
