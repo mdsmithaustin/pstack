@@ -1,0 +1,27 @@
+{
+ "harness": "claude-code",
+ "cli_version": "2.1.289",
+ "model": "claude-opus-5-5",
+ "effort": "high",
+ "exit_code": 1,
+ "duration_s": 4.7,
+ "entry": "injected",
+ "events": [
+  {
+   "seq": 0,
+   "turn": 0,
+   "kind": "user",
+   "text": "/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both."
+  },
+  {
+   "seq": 1,
+   "turn": 0,
+   "kind": "text",
+   "text": "Failed to authenticate. API Error: 401 OAuth access token has expired. Re-authenticate to continue."
+  }
+ ],
+ "files_read": [],
+ "worklist": [],
+ "spawns": [],
+ "final_reply": "Failed to authenticate. API Error: 401 OAuth access token has expired. Re-authenticate to continue."
+}

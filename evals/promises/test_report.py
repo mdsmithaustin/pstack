@@ -45,6 +45,17 @@ class Render(unittest.TestCase):
         self.assertIn("| `p1` | ERROR 1, PASS 1 | ERROR |", table)
         self.assertIn("ERROR 3, FAIL 1, INCONCLUSIVE 1, PASS 1", table)
 
+    def test_a_run_whose_transcript_could_not_be_read_counts_only_the_promises_that_apply(self):
+        recorded = Path(__file__).resolve().parent / "testdata" / "harvest_refused" / "hermes-feature-run-verdict.json"
+        with tempfile.TemporaryDirectory() as out:
+            run = Path(out) / "tally"
+            run.mkdir()
+            (run / "verdict.json").write_bytes(recorded.read_bytes())
+            table = report.render(Path(out), upstream=Path(out))
+        self.assertIn("hermes pass rate: 0 of 10\n", table + "\n")
+        self.assertIn("| `persona-delivery-hermes-grok` |  |  | INCONCLUSIVE |  |  |", table)
+        self.assertNotIn("claude-effort-applies-via-effort-agents", table)
+
     def test_a_harness_with_no_error_prints_a_plain_pass_rate(self):
         with tempfile.TemporaryDirectory() as out:
             self.run_dir(out, "a", "grok", {"p1": "PASS", "p2": "PASS", "p3": "FAIL"})

@@ -593,6 +593,62 @@ class ErrorRun(unittest.TestCase):
         self.assertEqual(json.loads(output.getvalue())["verdicts"], {promise: "PASS"})
         self.assertIn("claude-code pass rate: 1 of 1", table)
 
+    def claude_feature_run_that_never_started(self, out):
+        from harnesses import claude_code
+        case = live.load_case("feature-run")
+        case["tmp_lock"] = False
+        trace = json.loads((FIXTURES / "claude-code-never-started-trace.json").read_text())
+
+        def turn(run, text, index):
+            (run.root / "err").write_bytes(b"")
+            return {"index": index, "session_id": "s", "argv": ["claude", text], "exit_code": 1, "timed_out": False,
+                    "duration_s": 4.7, "stream": str(FIXTURES / "claude-code-401-last-line.jsonl"), "stderr": str(run.root / "err")}
+
+        output = io.StringIO()
+        with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(claude_code, "prepare"), \
+                mock.patch.object(claude_code, "turn", side_effect=turn), \
+                mock.patch.object(claude_code, "harvest", return_value=trace), redirect_stdout(output):
+            with self.assertRaisesRegex(live.LoginRequired, "Run `claude auth login`"):
+                live.run_case("claude-code", case["id"], "HEAD", out, 0)
+        return json.loads(output.getvalue())["authorization_id"]
+
+    def test_regrading_a_run_a_dead_login_ended_keeps_its_error_marks(self):
+        import report
+        with tempfile.TemporaryDirectory(prefix="pstack-live-regrade-") as tmp:
+            out = Path(tmp).resolve()
+            run_id = self.claude_feature_run_that_never_started(out)
+            with redirect_stdout(io.StringIO()):
+                code = live.main(["grade", run_id, "--out", str(out)])
+            [root] = [p.parent for p in out.rglob("verdict.json")]
+            verdict = json.loads((root / "verdict.json").read_text())
+            table = report.render(out, upstream=out)
+        self.assertEqual(code, 0)
+        self.assertEqual(verdict["error"]["relogin"], "claude auth login")
+        self.assertEqual({p: r["verdict"] for p, r in verdict["promises"].items() if not r.get("not_applicable")},
+                         {p: "ERROR" for p in verdict["promises"] if p != "persona-delivery-hermes-grok"})
+        self.assertIn("claude-code pass rate: none graded (ERROR 10 excluded)", table)
+
+    def test_regrading_a_run_whose_login_died_before_any_turn_is_refused_and_keeps_its_verdict(self):
+        from harnesses import codex
+        case = live.load_case("principle-steer-run")
+        case["tmp_lock"] = False
+        with tempfile.TemporaryDirectory(prefix="pstack-live-regrade-") as tmp:
+            out = Path(tmp).resolve()
+            output = io.StringIO()
+            with mock.patch.object(live, "load_case", return_value=case), redirect_stdout(output), \
+                    mock.patch.object(codex, "prepare", side_effect=LoginRequired(codex.LOGIN, "no login at auth.json")):
+                with self.assertRaises(live.LoginRequired):
+                    live.run_case("codex", case["id"], "HEAD", out, 0)
+            [root] = [p.parent for p in out.rglob("verdict.json")]
+            before = (root / "verdict.json").read_bytes()
+            with redirect_stderr(io.StringIO()) as refusal:
+                code = live.main(["grade", json.loads(output.getvalue())["authorization_id"], "--out", str(out)])
+            after = (root / "verdict.json").read_bytes()
+        self.assertEqual(code, 2)
+        self.assertIn("not sealed", refusal.getvalue())
+        self.assertEqual(after, before)
+        self.assertEqual({r["verdict"] for r in json.loads(after)["promises"].values()}, {"ERROR"})
+
 
 class ErrorVerdict(unittest.TestCase):
     def test_pass_and_fail_survive_an_auth_death_and_only_the_undecided_become_error(self):
@@ -609,6 +665,33 @@ class ErrorVerdict(unittest.TestCase):
         self.assertTrue(verdict["promises"]["d"]["not_applicable"])
         self.assertEqual(verdict["promises"]["c"]["failures"], ["codex login died: turn 0 exited 1"])
         self.assertEqual(verdict["error"]["relogin"], "codex login")
+
+    def test_a_claude_run_that_never_started_keeps_the_hermes_and_grok_promise_out(self):
+        import oracles
+        import report
+        from harnesses import claude_code
+        case = live.load_case("feature-run")
+        trace = json.loads((FIXTURES / "claude-code-never-started-trace.json").read_text())
+        graded = {pid: oracles.check(pid, trace, case, None) for pid in case["promises"]}
+        self.assertIn("run never started", graded["persona-delivery-hermes-grok"]["failures"][0])
+        verdict = error_verdict(case, "claude-code", "0" * 40, death_record(claude_code.LOGIN, "turn 0 exited 1"), graded)
+        gated = {pid for pid, r in verdict["promises"].items() if r.get("not_applicable")}
+        self.assertEqual(gated, {"persona-delivery-hermes-grok"})
+        self.assertEqual({r["verdict"] for pid, r in verdict["promises"].items() if pid not in gated}, {"ERROR"})
+        with tempfile.TemporaryDirectory(prefix="pstack-error-verdict-") as tmp:
+            (Path(tmp) / "verdict.json").write_text(json.dumps(verdict))
+            table = report.render(Path(tmp), upstream=Path(tmp))
+        self.assertIn("claude-code pass rate: none graded (ERROR 10 excluded)", table)
+        self.assertNotIn("persona-delivery-hermes-grok", table)
+
+    def test_an_undecided_promise_that_needs_a_judge_keeps_the_flag_and_excerpt_on_its_error(self):
+        import oracles
+        from harnesses import codex
+        case = {"id": "x", "promises": ["a"]}
+        graded = {"a": oracles.inconclusive("wording needs a judge", "seq 4", needs_judge=True, excerpt="the reply says pass")}
+        verdict = error_verdict(case, "codex", "0" * 40, death_record(codex.LOGIN, "turn 1 exited 1"), graded)
+        self.assertEqual(verdict["promises"]["a"], {"verdict": "ERROR", "failures": ["codex login died: turn 1 exited 1"], "evidence": [],
+                                                    "needs_judge": True, "excerpt": "the reply says pass"})
 
     def test_a_dead_codex_run_marks_error_only_the_promises_that_apply_to_codex(self):
         import report
