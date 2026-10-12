@@ -3310,7 +3310,7 @@
   },
   "worktree-cleanup-pauses-on-uncommitted": {
    "check": "static",
-   "claim": "The Worktree cleanup playbook deletes only evidence-cleared worktrees and stops for the user's decision on any worktree holding uncommitted work.",
+   "claim": "The Worktree cleanup playbook deletes only evidence-cleared worktrees and stops for the user's decision on any worktree holding uncommitted work or kept files.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/worktree-cleanup.md",
@@ -3318,11 +3318,19 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/worktree-cleanup.md",
-     "quote": "Per Autonomy, clean and merged and not-in-use proceeds. `wip` and in-use pause."
+     "quote": "Per Autonomy, clean and merged and not-in-use proceeds. `wip`, `kept`, and in-use pause."
     },
     {
      "file": "skills/poteto-mode/scripts/worktree-audit.sh",
      "quote": "wip:*) bucket=hold-wip"
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/worktree-cleanup.md",
+     "quote": "Never run `git worktree remove` or `rm -rf` on a worktree whose `DIRTY` shows `kept:`"
+    },
+    {
+     "file": "skills/poteto-mode/scripts/worktree-audit.sh",
+     "quote": "kept:*) bucket=hold-kept"
     }
    ],
    "harness_sensitive": false,

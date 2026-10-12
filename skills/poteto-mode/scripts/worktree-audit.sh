@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # Read-only worktree prune audit. Classifies every git worktree by size, merge
-# state, uncommitted work, remote/PR state, and the most recent chat that
-# operated in it. Emits a table sorted by size with a suggested bucket. Never
-# deletes anything; deletion stays a human-gated step in the playbook.
+# state, uncommitted work, kept files, remote/PR state, and the most recent chat
+# that operated in it. Emits a table sorted by size with a suggested bucket,
+# then one "# kept: <path>" line per kept file. Never deletes anything; deletion
+# stays a human-gated step in the playbook.
+#
+# Kept files are untracked or ignored paths that are not a known build cache,
+# such as a decision trail or saved eval runs. No branch holds them, and
+# `git worktree remove` deletes ignored files even without --force, so a
+# worktree with kept files is never bucketed safe.
 #
 # Usage: worktree-audit.sh [-b|--base <ref>] [repo-path]
 #   repo-path defaults to the current repo.
@@ -29,7 +35,7 @@ cd "$repo" || exit 1
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "error: not a git repo: $repo" >&2; exit 1; }
 
 # Main worktree is the first entry; everything else is a candidate.
-main_wt=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
+main_wt=$(git worktree list --porcelain | sed -n 's/^worktree //p' | head -1)
 
 if [ -z "$base" ]; then
 	for cand in "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null)" origin/main origin/master; do
@@ -50,7 +56,8 @@ git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 || { echo "error
 
 # PR state by branch, fetched once. Empty if gh is unavailable.
 prs=$(mktemp)
-trap 'rm -f "$prs"' EXIT
+kept_paths=$(mktemp)
+trap 'rm -f "$prs" "$kept_paths"' EXIT
 gh pr list --author "@me" --state all --limit 1000 \
 	--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
 
@@ -62,10 +69,18 @@ transcripts="$HOME/.claude/projects/$slug"
 [ -d "$transcripts" ] || transcripts="$HOME/.codex/sessions"
 now=$(date +%s)
 
+is_build_cache() {
+	local name=${1%/}
+	case "${name##*/}" in
+	node_modules|.venv|venv|__pycache__|*.pyc|.pytest_cache|.mypy_cache|.ruff_cache|.tox|dist|build|target|.next|.turbo|.parcel-cache|.gradle|.DS_Store) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
 echo "# base: $base"
 printf "SIZE\tAGE\tMERGED\tDIRTY\tREMOTE\tPR\tLAST_CHAT\tBUCKET\tWORKTREE\n"
 
-git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt; do
+git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt; do
 	[ "$wt" = "$main_wt" ] && continue
 
 	size=$(du -sh "$wt" 2>/dev/null | awk '{print $1}')
@@ -77,12 +92,20 @@ git worktree list --porcelain | awk '/^worktree /{print $2}' | while read -r wt;
 	# real signal; merge-base only catches fast-forward/rebase merges.
 	git merge-base --is-ancestor "$head" "$base" 2>/dev/null && merged=YES || merged=no
 
-	# Distinguish real WIP (tracked edits) from disposable untracked scratch.
-	porcelain=$(git -C "$wt" status --porcelain 2>/dev/null)
-	if [ -z "$porcelain" ]; then dirty=clean
-	elif grep -qv '^??' <<< "$porcelain"; then
-		dirty="wip:$(printf '%s\n' "$porcelain" | grep -cv '^??')"
-	else dirty="scratch:$(printf '%s\n' "$porcelain" | grep -c '^??')"; fi
+	wip=0 kept=0
+	while IFS= read -r -d '' entry; do
+		case "${entry:0:2}" in
+		'??'|'!!')
+			is_build_cache "${entry:3}" && continue
+			kept=$((kept + 1)); printf '# kept: %s/%s\n' "$wt" "${entry:3}" >> "$kept_paths" ;;
+		R?|?R|C?|?C) wip=$((wip + 1)); IFS= read -r -d '' _ ;;
+		*) wip=$((wip + 1)) ;;
+		esac
+	done < <(git -C "$wt" status --porcelain -z --ignored --untracked-files=normal 2>/dev/null)
+	dirty=""
+	[ "$wip" -gt 0 ] && dirty="wip:$wip"
+	[ "$kept" -gt 0 ] && dirty="${dirty:+$dirty,}kept:$kept"
+	dirty=${dirty:-clean}
 
 	branch=$(git -C "$wt" symbolic-ref --quiet --short HEAD 2>/dev/null || echo "")
 	if [ -z "$branch" ]; then remote=detached
@@ -122,7 +145,7 @@ print(last, "yes" if recent else "no", sep="\t")
 		IFS=$'\t' read -r last recent <<< "$chat"
 	fi
 
-	case "$dirty" in wip:*) bucket=hold-wip ;; *)
+	case "$dirty" in wip:*) bucket=hold-wip ;; kept:*) bucket=hold-kept ;; *)
 		case "$pr" in *OPEN*) bucket=hold-open-pr ;; *)
 			if [ "$recent" = yes ]; then bucket=verify-recent-chat
 			elif [ "$merged" = YES ] || [ "$pr" != "-" ]; then bucket=safe
@@ -133,3 +156,4 @@ print(last, "yes" if recent else "no", sep="\t")
 	printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
 		"$size" "$age" "$merged" "$dirty" "$remote" "$pr" "$last" "$bucket" "$wt"
 done | sort -t$'\t' -k1,1 -rh || exit $?
+cat "$kept_paths"

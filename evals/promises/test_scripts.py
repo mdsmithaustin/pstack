@@ -849,7 +849,7 @@ class WorktreeAuditPromises(FakeGhSandbox):
         self.assertEqual(len(wip_kept), 4096)
         self.assertEqual(
             sorted(set(kept) - set(wip_kept)),
-            [f"# kept: {trail}/.audit/", f"# kept: {self.tmp / 'wt-scratch'}/notes.tmp"],
+            [f"# kept: {self.tmp / 'wt-scratch'}/notes.tmp", f"# kept: {trail}/.audit/"],
         )
 
         from datetime import datetime, timedelta, timezone

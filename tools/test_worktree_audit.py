@@ -167,6 +167,7 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         (cache / "node_modules").mkdir()
         (cache / "node_modules" / "dep.js").write_text("x\n", encoding="utf-8")
         spaced = add("wt with space")
+        self.git("config", "status.showUntrackedFiles", "no")
 
         result = self.audit()
         self.assertEqual(result.returncode, 0, result.stderr)
