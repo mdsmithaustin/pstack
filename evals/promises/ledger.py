@@ -27,6 +27,23 @@ def load(path=LEDGER):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def canonical(ledger):
+    return json.dumps(ledger, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def format_ledger(path, check=False):
+    path = Path(path)
+    current = path.read_text(encoding="utf-8")
+    wanted = canonical(json.loads(current))
+    if current == wanted:
+        return 0
+    if check:
+        print(f"{path.name} is not in canonical form; run python3 evals/promises/ledger.py format")
+        return 1
+    path.write_text(wanted, encoding="utf-8")
+    return 0
+
+
 def classifiable(guide_dir):
     return {u.key: u for u in units.guide_units(guide_dir) if u.kind not in SKIPPED_KINDS}
 
@@ -176,12 +193,17 @@ def main(argv=None):
     a.add_argument("--upstream", help="cursor/plugins pstack/ directory at the pinned or incoming sha")
     a.add_argument("--upstream-ref", help="a git ref holding cursor/plugins, such as upstream/main; read through git archive")
     a.add_argument("--ledger", default=str(LEDGER))
+    f = sub.add_parser("format", help="rewrite the ledger in canonical form, with sorted keys")
+    f.add_argument("--check", action="store_true", help="exit 1 instead of rewriting when the ledger is not canonical")
+    f.add_argument("--ledger", default=str(LEDGER))
     o = sub.add_parser("owners")
     o.add_argument("--upstream")
     o.add_argument("--upstream-ref")
     o.add_argument("--ledger", default=str(LEDGER))
     o.add_argument("promises", nargs="*")
     args = parser.parse_args(argv)
+    if args.cmd == "format":
+        return format_ledger(args.ledger, args.check)
     ledger = load(args.ledger)
     with upstream_tree(args.upstream, args.upstream_ref) as upstream:
         if args.cmd == "owners":

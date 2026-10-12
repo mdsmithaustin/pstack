@@ -175,6 +175,11 @@ class TestStaticPromises(unittest.TestCase):
             self.assertTrue(leaf.is_file(), name)
             self.assertIn(rule, normalize(read(leaf)), name)
 
+    def test_principle_promise_owners_are_the_pinned_leaves(self):
+        promise = json.loads(read(ROOT / "evals" / "promises" / "ledger.json"))["promises"]["principle-leaf-summaries-match"]
+        self.assertEqual(sorted(promise["owners"]), sorted(f"skills/{name}/SKILL.md" for name in PRINCIPLE_RULES))
+        self.assertIn(f"Each of the {len(PRINCIPLE_RULES)} principle links", promise["claim"])
+
     def test_playbook_directory_complete(self):
         text = guide_text()
         self.assertIn("(../../skills/poteto-mode/playbooks/)", text)

@@ -37,6 +37,7 @@ run() {
 run lint "cross-suite references" . "${py[@]}" tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
 run lint "subagent bundle" . "${py[@]}" tools/generate-subagents.py --check
 run lint "promise ledger" . "${py[@]}" evals/promises/ledger.py audit
+run lint "promise ledger canonical form" . "${py[@]}" evals/promises/ledger.py format --check
 run lint "pstack-models default" . "${py[@]}" skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
 run lint "skill reference spelling" . "${py[@]}" -m unittest discover -s tools -p test_skill_references.py
 

@@ -1,4 +1,7 @@
+import contextlib
 import copy
+import io
+import json
 import shutil
 import tempfile
 import unittest
@@ -7,6 +10,42 @@ from pathlib import Path
 import ledger
 
 GUIDE = ledger.ROOT / "docs" / "guide"
+
+
+class CanonicalFormTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-ledger-")
+        self.addCleanup(tmp.cleanup)
+        self.path = Path(tmp.name) / "ledger.json"
+
+    def shuffled(self):
+        def shuffle(node):
+            if isinstance(node, dict):
+                return {k: shuffle(node[k]) for k in reversed(list(node))}
+            if isinstance(node, list):
+                return [shuffle(item) for item in node]
+            return node
+        book = shuffle(ledger.load())
+        self.path.write_text(json.dumps(book, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def test_the_committed_ledger_is_canonical(self):
+        self.assertEqual(ledger.main(["format", "--check"]), 0)
+
+    def test_a_reordered_ledger_fails_the_check_and_names_the_fix(self):
+        self.shuffled()
+        before = self.path.read_text(encoding="utf-8")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = ledger.main(["format", "--check", "--ledger", str(self.path)])
+        self.assertEqual(code, 1)
+        self.assertIn("python3 evals/promises/ledger.py format", out.getvalue())
+        self.assertEqual(self.path.read_text(encoding="utf-8"), before)
+
+    def test_format_restores_the_committed_bytes_from_a_reordered_copy(self):
+        self.shuffled()
+        self.assertEqual(ledger.main(["format", "--ledger", str(self.path)]), 0)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), ledger.LEDGER.read_text(encoding="utf-8"))
+        self.assertEqual(ledger.main(["format", "--check", "--ledger", str(self.path)]), 0)
 
 
 class AuditTest(unittest.TestCase):
