@@ -98,20 +98,27 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 	git merge-base --is-ancestor "$head" "$base" 2>/dev/null && merged=YES || merged=no
 
 	wip=0 kept=0 dirty=""
+	covering=()
 	if git -C "$wt" status --porcelain -z --ignored=matching --untracked-files=normal --ignore-submodules=none > "$status_out" 2>/dev/null && find "$wt" -mindepth 2 -name .git -prune -print0 > "$nested_out" 2>/dev/null; then
 		while IFS= read -r -d '' entry; do
 			case "${entry:0:2}" in
 			'??'|'!!')
-				[ "${entry:0:2}" = '!!' ] && is_build_cache "${entry:3}" && continue
-				kept=$((kept + 1)); printf '# kept: %s/%s\n' "$wt" "${entry:3}" >> "$kept_paths" ;;
+				path="$wt/${entry:3}"
+				if [ "${entry:0:2}" = '!!' ] && is_build_cache "${entry:3}"; then
+					covering+=("$path"); continue
+				fi
+				kept=$((kept + 1)); printf '# kept: %s\n' "$path" >> "$kept_paths"
+				covering+=("$path") ;;
 			R?|?R|C?|?C) wip=$((wip + 1)); IFS= read -r -d '' _ ;;
 			*) wip=$((wip + 1)) ;;
 			esac
 		done < "$status_out"
 		while IFS= read -r -d '' nested; do
-			line="# kept: ${nested%/.git}/"
-			grep -qxF -- "$line" "$kept_paths" && continue
-			kept=$((kept + 1)); printf '%s\n' "$line" >> "$kept_paths"
+			dir="${nested%/.git}/"
+			for c in ${covering[@]+"${covering[@]}"}; do
+				case "$c" in */) case "$dir" in "$c"*) continue 2 ;; esac ;; esac
+			done
+			kept=$((kept + 1)); printf '# kept: %s\n' "$dir" >> "$kept_paths"
 		done < "$nested_out"
 		[ "$wip" -gt 0 ] && dirty="wip:$wip"
 		[ "$kept" -gt 0 ] && dirty="${dirty:+$dirty,}kept:$kept"

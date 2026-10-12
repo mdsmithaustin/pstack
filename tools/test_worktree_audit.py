@@ -311,6 +311,35 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         self.assertEqual((fields[3], fields[7]), ("kept:1", "hold-kept"))
         self.assertEqual(lines.count(f"# kept: {worktree}/scratch/"), 1, result.stdout)
 
+    def test_untracked_parent_covers_a_nested_checkout(self):
+        worktree = self.merged_worktree("wt-notes")
+        nested = worktree / "notes" / "repo"
+        nested.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=nested, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (nested / "notes.txt").write_text("trail\n", encoding="utf-8")
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        fields = next(line.split("\t") for line in lines if line.endswith(f"\t{worktree}"))
+        self.assertEqual((fields[3], fields[7]), ("kept:1", "hold-kept"))
+        self.assertEqual([line for line in lines if line.startswith("# kept: ")],
+                         [f"# kept: {worktree}/notes/"], result.stdout)
+
+    def test_ignored_build_cache_covers_a_nested_checkout(self):
+        worktree = self.merged_worktree("wt-venv")
+        (self.repo / ".gitignore").write_text(".audit/\n.venv/\n", encoding="utf-8")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore virtualenv")
+        self.git("-C", str(worktree), "merge", "-q", "--ff-only", "main")
+        self.git("push", "-q", "origin", "main")
+        nested = worktree / ".venv" / "src" / "pkg"
+        nested.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=nested, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (nested / "package.py").write_text("pass\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("clean", "safe"))
+
     def test_unreadable_status_is_never_safe(self):
         worktree = self.merged_worktree("wt-corrupt")
         (worktree / ".audit").mkdir()
