@@ -9,6 +9,7 @@ import {
 } from "./policy.ts";
 import type * as T from "./types.ts";
 import {
+  failRounds,
   latestVerdict,
   parseCommitSha,
   type CommitSha,
@@ -47,6 +48,11 @@ export interface GateReport {
   readonly headSha: CommitSha | null;
   readonly localPatchId: PatchId | null;
   readonly verdict: VerdictReading;
+  /**
+   * Autopilot-full's third-FAIL count. `complete` is false when the PR has
+   * more comments than the read holds, so `count` is a lower bound.
+   */
+  readonly failRounds: { readonly count: number; readonly complete: boolean };
   readonly gates: readonly GateResult[];
   readonly ready: boolean;
 }
@@ -372,6 +378,12 @@ export async function evaluateGates(args: {
     headSha,
     localPatchId,
     verdict,
+    failRounds: {
+      count: failRounds(conversation.comments, conversation.prAuthor),
+      complete: !conversation.truncated.some(
+        (truncation) => truncation.connection === "comments"
+      ),
+    },
     gates,
     ready: gates.every((result) => result.ok),
   };

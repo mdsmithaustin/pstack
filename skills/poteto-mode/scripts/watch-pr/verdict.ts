@@ -161,3 +161,41 @@ export function latestVerdict(
   }
   return latest === null ? { kind: "absent" } : latest.reading;
 }
+
+const RESET_PREFIX = "Fail-count reset:";
+
+function isReset(comment: IssueComment): boolean {
+  const first = comment.body.split(/\r?\n/).find((line) => line.trim() !== "");
+  return (
+    first?.startsWith(RESET_PREFIX) === true &&
+    first.slice(RESET_PREFIX.length).trim() !== ""
+  );
+}
+
+/**
+ * Autopilot-full's third-FAIL stop. Counts the distinct `Head` SHAs of
+ * well-formed FAIL blocks from trusted commenters, read exactly as
+ * `latestVerdict` reads them. Only blocks posted after the newest trusted
+ * `Fail-count reset: <reason>` comment count; a FAIL in the same second as the
+ * reset stays in the count, so a tie never hides a stop.
+ */
+export function failRounds(
+  comments: readonly IssueComment[],
+  prAuthor: string | null
+): number {
+  const trusted = comments.filter((comment) =>
+    isTrustedComment(comment, prAuthor)
+  );
+  const resetAt = Math.max(
+    Number.NEGATIVE_INFINITY,
+    ...trusted.filter(isReset).map((comment) => Date.parse(comment.createdAt))
+  );
+  const heads = new Set<CommitSha>();
+  for (const comment of trusted) {
+    if (Date.parse(comment.createdAt) < resetAt) continue;
+    const reading = readComment(comment);
+    if (reading.kind === "recorded" && reading.record.verdict === "FAIL")
+      heads.add(reading.record.head);
+  }
+  return heads.size;
+}

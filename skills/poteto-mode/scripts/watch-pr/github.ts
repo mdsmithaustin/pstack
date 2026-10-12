@@ -658,9 +658,26 @@ export class GhGitHubReader implements T.GitHubReader {
     const result = await run(["git", "remote", "get-url", "origin"]);
     return result.code === 0 ? parseRemote(result.stdout) : null;
   }
+  private async currentBranch(): Promise<string> {
+    const result = await run(["git", "branch", "--show-current"]);
+    return result.code === 0 ? result.stdout.trim() : "";
+  }
   async currentPr(pr: T.PrNumber | null): Promise<T.PrContext> {
     const argv: [string, ...string[]] = ["gh", "pr", "view"];
+    const origin = await this.originRepo();
     if (pr !== null) argv.push(String(pr));
+    else if (origin !== null) {
+      const branch = await this.currentBranch();
+      if (branch === "")
+        throw new WatcherQueryError({
+          kind: "command-exit",
+          retryable: true,
+          code: 1,
+          detail: "HEAD is detached, so the current PR is unknown; pass --pr",
+        });
+      argv.push(branch);
+    }
+    if (origin !== null) argv.push("--repo", repoArg(origin));
     argv.push("--json", "number,url");
     const object = record(await runJson(argv), "current PR");
     const parsed = parsePrUrl(string(object.url, "current PR.url"));

@@ -22,7 +22,7 @@ function reportLines(report: GateReport): readonly string[] {
   );
 }
 const headline = (label: string, report: GateReport): string =>
-  `${label}: pr=#${report.pr.number} ${report.ready ? "READY" : "NOT READY"} head=${report.headSha ?? "unknown"}`;
+  `${label}: pr=#${report.pr.number} ${report.ready ? "READY" : "NOT READY"} head=${report.headSha ?? "unknown"} fail-rounds=${report.failRounds.count}${report.failRounds.complete ? "" : "+"}`;
 
 function receiptLine(
   label: "MERGED" | "QUEUED",
