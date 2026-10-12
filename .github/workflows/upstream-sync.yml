@@ -96,26 +96,23 @@ jobs:
                skill's `agents/openai.yaml` (policy: allow_implicit_invocation:
                false) and keep its implicit_allowed false in
                tools/skill-trigger-cases.json. When upstream removes it, delete
-               that file, add the skill to AUTO_INVOCABLE in
-               tools/test_skill_invocation_policy.py, and set its
-               implicit_allowed to true. Write every incoming load of another
-               skill as "Use the **x** skill" with the bare name, per the
-               PORTING.md row for sibling-skill loads, never as `/x` or `$x`.
-               A passage that quotes what the user types goes in USER_FACING in
-               tools/test_skill_references.py. When a skill directory is added,
-               renamed, or removed, update each list that names skills:
+               that file and set its implicit_allowed to true. Write every
+               incoming load of another skill as "Use the **x** skill" with the
+               bare name, per the PORTING.md row for sibling-skill loads, never
+               as `/x` or `$x`. A passage that quotes what the user types goes
+               in USER_FACING in tools/skill-references.py. When a skill
+               directory is added, renamed, or removed, update each list that
+               names skills:
                - PSTACK_SKILLS in skills/setup-pstack/scripts/skill-listing.py.
                - The skill's row in tools/skill-trigger-cases.json.
                - In evals/promises/test_static.py, PLAYBOOK_FILES for a
                  poteto-mode playbook, PRINCIPLE_RULES for a principle-*
                  skill, and GUIDE_SLASH_SKILLS when docs/guide names the
                  skill as /x. A playbook added or removed also changes the
-                 two `25` counts in test_twenty_five_playbooks, the
-                 twenty-five-playbooks promise in evals/promises/ledger.json,
+                 twenty-five-playbooks promise in evals/promises/ledger.json
                  and the "twenty-five" in README.md and
                  docs/guide/02-poteto-mode.md.
-               - For a skill with no agents/openai.yaml gate, AUTO_INVOCABLE
-                 in tools/test_skill_invocation_policy.py and the "A skill
+               - For a skill with no agents/openai.yaml gate, the "A skill
                  didn't load on its own" row in skills/poteto-help/SKILL.md.
             4. Every SKILL.md frontmatter `name:` must equal its directory
                name. Verify after editing.
