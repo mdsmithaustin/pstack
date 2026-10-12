@@ -5,10 +5,11 @@
 # then one "# kept: <path>" line per kept file. Never deletes anything; deletion
 # stays a human-gated step in the playbook.
 #
-# Kept files are untracked or ignored paths that are not a known build cache,
-# such as a decision trail or saved eval runs. No branch holds them, and
-# `git worktree remove` deletes ignored files even without --force, so a
-# worktree with kept files is never bucketed safe.
+# Kept files are untracked paths, and ignored paths whose name is not a known
+# build cache, such as a decision trail or saved eval runs. No commit records
+# them, and `git worktree remove` deletes ignored files even without --force,
+# so a worktree with kept files is never bucketed safe. Neither is one whose
+# `git status` fails (DIRTY unreadable).
 #
 # Usage: worktree-audit.sh [-b|--base <ref>] [repo-path]
 #   repo-path defaults to the current repo.
@@ -57,7 +58,8 @@ git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 || { echo "error
 # PR state by branch, fetched once. Empty if gh is unavailable.
 prs=$(mktemp)
 kept_paths=$(mktemp)
-trap 'rm -f "$prs" "$kept_paths"' EXIT
+status_out=$(mktemp)
+trap 'rm -f "$prs" "$kept_paths" "$status_out"' EXIT
 gh pr list --author "@me" --state all --limit 1000 \
 	--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
 
@@ -92,19 +94,20 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 	# real signal; merge-base only catches fast-forward/rebase merges.
 	git merge-base --is-ancestor "$head" "$base" 2>/dev/null && merged=YES || merged=no
 
-	wip=0 kept=0
-	while IFS= read -r -d '' entry; do
-		case "${entry:0:2}" in
-		'??'|'!!')
-			is_build_cache "${entry:3}" && continue
-			kept=$((kept + 1)); printf '# kept: %s/%s\n' "$wt" "${entry:3}" >> "$kept_paths" ;;
-		R?|?R|C?|?C) wip=$((wip + 1)); IFS= read -r -d '' _ ;;
-		*) wip=$((wip + 1)) ;;
-		esac
-	done < <(git -C "$wt" status --porcelain -z --ignored --untracked-files=normal 2>/dev/null)
-	dirty=""
-	[ "$wip" -gt 0 ] && dirty="wip:$wip"
-	[ "$kept" -gt 0 ] && dirty="${dirty:+$dirty,}kept:$kept"
+	wip=0 kept=0 dirty=""
+	if git -C "$wt" status --porcelain -z --ignored --untracked-files=normal > "$status_out" 2>/dev/null; then
+		while IFS= read -r -d '' entry; do
+			case "${entry:0:2}" in
+			'??'|'!!')
+				[ "${entry:0:2}" = '!!' ] && is_build_cache "${entry:3}" && continue
+				kept=$((kept + 1)); printf '# kept: %s/%s\n' "$wt" "${entry:3}" >> "$kept_paths" ;;
+			R?|?R|C?|?C) wip=$((wip + 1)); IFS= read -r -d '' _ ;;
+			*) wip=$((wip + 1)) ;;
+			esac
+		done < "$status_out"
+		[ "$wip" -gt 0 ] && dirty="wip:$wip"
+		[ "$kept" -gt 0 ] && dirty="${dirty:+$dirty,}kept:$kept"
+	else dirty=unreadable; fi
 	dirty=${dirty:-clean}
 
 	branch=$(git -C "$wt" symbolic-ref --quiet --short HEAD 2>/dev/null || echo "")
@@ -145,7 +148,7 @@ print(last, "yes" if recent else "no", sep="\t")
 		IFS=$'\t' read -r last recent <<< "$chat"
 	fi
 
-	case "$dirty" in wip:*) bucket=hold-wip ;; kept:*) bucket=hold-kept ;; *)
+	case "$dirty" in wip:*) bucket=hold-wip ;; kept:*) bucket=hold-kept ;; unreadable) bucket=review ;; *)
 		case "$pr" in *OPEN*) bucket=hold-open-pr ;; *)
 			if [ "$recent" = yes ]; then bucket=verify-recent-chat
 			elif [ "$merged" = YES ] || [ "$pr" != "-" ]; then bucket=safe
