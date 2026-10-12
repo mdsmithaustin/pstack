@@ -69,6 +69,7 @@ export type VerdictReading =
  * a comment is not a claim.
  */
 const BLOCK_KEYS = ["Verdict", "Head", "Patch-id", "Docs"] as const;
+const VERDICT_PREFIX = "Verdict:";
 
 function enumMember<const V extends readonly string[]>(
   values: V,
@@ -104,7 +105,7 @@ function field<T>(
 
 function readComment(comment: IssueComment): VerdictReading {
   const lines = comment.body.split(/\r?\n/).filter((line) => line.trim() !== "");
-  if (lines[0]?.startsWith("Verdict:") !== true) return { kind: "absent" };
+  if (lines[0]?.startsWith(VERDICT_PREFIX) !== true) return { kind: "absent" };
   const verdict = field(lines, 0, (text) => enumMember(VERDICTS, text));
   const head = field(lines, 1, parseCommitSha);
   const patchId = field(lines, 2, parsePatchId);
@@ -170,7 +171,7 @@ const FAIL_ROUND_LIMIT = 3;
 type RoundEvent =
   | { readonly kind: "reset"; readonly at: number }
   | { readonly kind: "stopped"; readonly at: number }
-  | { readonly kind: "fail"; readonly at: number; readonly head: CommitSha };
+  | { readonly kind: "fail"; readonly at: number; readonly round: string };
 const TIE_ORDER = { reset: 0, stopped: 1, fail: 2 } as const;
 
 type FailRoundState = "open" | "stop" | "stopped";
@@ -179,20 +180,27 @@ export interface FailRounds {
   readonly state: FailRoundState;
 }
 
+/**
+ * Any trusted `Verdict:` claim whose word is not PASS or PASS+NOTES is a FAIL
+ * round, malformed or not, so a slipped block cannot keep the stop open. Its
+ * round is its Head when that parses, and the comment itself otherwise.
+ */
 function roundEvent(comment: IssueComment): RoundEvent | null {
   const at = Date.parse(comment.createdAt);
-  const first = comment.body.split(/\r?\n/).find((line) => line.trim() !== "");
+  const lines = comment.body.split(/\r?\n/).filter((line) => line.trim() !== "");
+  const first = lines[0];
   if (
     first?.startsWith(RESET_PREFIX) === true &&
     first.slice(RESET_PREFIX.length).trim() !== ""
   )
     return { kind: "reset", at };
   if (first?.startsWith(STOPPED_PREFIX) === true) return { kind: "stopped", at };
-  const reading = readComment(comment);
-  if (reading.kind !== "recorded" || reading.record.verdict !== "FAIL") return null;
-  if (comment.body.split(/\r?\n/).some((line) => line.trim() === SECURITY_ASK_LINE))
-    return null;
-  return { kind: "fail", at, head: reading.record.head };
+  if (first?.startsWith(VERDICT_PREFIX) !== true) return null;
+  const word = first.slice(VERDICT_PREFIX.length).trim();
+  if (word === "PASS" || word === "PASS+NOTES") return null;
+  if (lines.some((line) => line.trim() === SECURITY_ASK_LINE)) return null;
+  const head = field(lines, 1, parseCommitSha);
+  return { kind: "fail", at, round: head.kind === "ok" ? head.value : comment.url };
 }
 
 export function failRounds(
@@ -203,15 +211,15 @@ export function failRounds(
     .filter((comment) => isTrustedComment(comment, prAuthor))
     .flatMap((comment) => roundEvent(comment) ?? [])
     .sort((a, b) => a.at - b.at || TIE_ORDER[a.kind] - TIE_ORDER[b.kind]);
-  const heads = new Set<CommitSha>();
+  const rounds = new Set<string>();
   let phase: FailRoundState | "granted" = "open";
   for (const event of events) {
     if (event.kind === "reset") phase = "granted";
     else if (event.kind === "stopped") phase = "stopped";
     else {
-      heads.add(event.head);
-      if (phase !== "open" || heads.size >= FAIL_ROUND_LIMIT) phase = "stop";
+      rounds.add(event.round);
+      if (phase !== "open" || rounds.size >= FAIL_ROUND_LIMIT) phase = "stop";
     }
   }
-  return { count: heads.size, state: phase === "granted" ? "open" : phase };
+  return { count: rounds.size, state: phase === "granted" ? "open" : phase };
 }
