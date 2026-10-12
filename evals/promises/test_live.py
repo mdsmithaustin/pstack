@@ -15,7 +15,7 @@ from contextlib import nullcontext
 
 import live
 from grade_boundary import GradeRefused, _authorize_fixture
-from harnesses.login import LoginRequired, auth_death, error_verdict
+from harnesses.login import LoginRequired, auth_death, death_record, error_verdict
 
 FIXTURES = Path(__file__).resolve().parent / "testdata" / "auth_death"
 
@@ -602,7 +602,7 @@ class ErrorVerdict(unittest.TestCase):
                   "b": {"verdict": "FAIL", "failures": ["f"], "evidence": []},
                   "c": {"verdict": "INCONCLUSIVE", "failures": ["run killed"], "evidence": []},
                   "d": {"verdict": "INCONCLUSIVE", "failures": ["applies elsewhere"], "evidence": [], "not_applicable": True}}
-        verdict = error_verdict(case, "codex", "0" * 40, codex.LOGIN, "turn 0 exited 1", graded)
+        verdict = error_verdict(case, "codex", "0" * 40, death_record(codex.LOGIN, "turn 0 exited 1"), graded)
         self.assertEqual({p: r["verdict"] for p, r in verdict["promises"].items()},
                          {"a": "PASS", "b": "FAIL", "c": "ERROR", "d": "INCONCLUSIVE"})
         self.assertEqual(verdict["promises"]["a"], graded["a"])
@@ -614,7 +614,7 @@ class ErrorVerdict(unittest.TestCase):
         import report
         from harnesses import codex
         case = live.load_case("feature-run")
-        verdict = error_verdict(case, "codex", "0" * 40, codex.LOGIN, "no login at auth.json")
+        verdict = error_verdict(case, "codex", "0" * 40, death_record(codex.LOGIN, "no login at auth.json"))
         gated = {pid for pid, r in verdict["promises"].items() if r.get("not_applicable")}
         self.assertEqual(gated, {"claude-effort-applies-via-effort-agents", "persona-delivery-hermes-grok"})
         self.assertEqual({r["verdict"] for pid, r in verdict["promises"].items() if pid not in gated}, {"ERROR"})
@@ -634,7 +634,7 @@ class ErrorVerdict(unittest.TestCase):
                 continue
             for harness in report.HARNESSES:
                 with self.subTest(case=case_id, harness=harness):
-                    verdict = error_verdict(case, harness, "0" * 40, codex.LOGIN, "probe")
+                    verdict = error_verdict(case, harness, "0" * 40, death_record(codex.LOGIN, "probe"))
                     self.assertEqual(set(verdict["promises"]), set(case["promises"]))
 
 

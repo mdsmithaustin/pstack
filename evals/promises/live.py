@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from grade_boundary import create_file, grade, GradeRefused, read_file, write_file, _before_turns, _json, _lookup, _seal, _write_record
-from harnesses.login import LoginRequired, auth_death, error_verdict
+from harnesses.login import LoginRequired, auth_death, death_record, error_verdict
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -306,7 +306,7 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
             graded = grade(authorization)
         verdict = graded
         if died:
-            verdict = error_verdict(case, harness, commit, *died, graded and graded["promises"])
+            verdict = error_verdict(case, harness, commit, death_record(*died), graded and graded["promises"])
             write_file(root / "verdict.json", _json(verdict))
     except BaseException as original:
         owner = getattr(run, "_hermes_evidence", None)
