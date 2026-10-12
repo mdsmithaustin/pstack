@@ -211,6 +211,39 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         (worktree / "dist" / "important.txt").write_text("keep\n", encoding="utf-8")
         self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
 
+    def test_ignored_file_in_a_non_ignored_cache_named_dir_is_kept(self):
+        worktree = self.merged_worktree("wt-ignored-dist")
+        (self.repo / ".gitignore").write_text("*.log\n", encoding="utf-8")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore logs")
+        self.git("-C", str(worktree), "merge", "-q", "--ff-only", "main")
+        self.git("push", "-q", "origin", "main")
+        (worktree / "dist").mkdir()
+        (worktree / "dist" / "run.log").write_text("trail\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
+
+    def test_untracked_file_in_an_ignored_submodule_is_held(self):
+        sub = self.tmp / "sub"
+        sub.mkdir()
+        for args in (("init", "-q", "-b", "main"), ("commit", "-q", "--allow-empty", "-m", "sub")):
+            subprocess.run(["git", *args], cwd=sub, env=self.env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.init("main")
+        self.git("-c", "protocol.file.allow=always", "submodule", "add", "-q", str(sub), "sub")
+        self.git("config", "-f", ".gitmodules", "submodule.sub.ignore", "all")
+        self.git("add", ".gitmodules")
+        self.git("commit", "-q", "-m", "submodule")
+        origin = self.tmp / "origin.git"
+        self.git("init", "-q", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "-q", "origin", "main")
+        self.git("fetch", "-q", "origin")
+        worktree = self.tmp / "wt-sub"
+        self.git("worktree", "add", "-q", "-b", "wt-sub", str(worktree), "main")
+        subprocess.run(["git", "-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init"], cwd=worktree,
+                       env=self.env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (worktree / "sub" / "notes.txt").write_text("trail\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("wip:1", "hold-wip"))
+
     def test_unreadable_status_is_never_safe(self):
         worktree = self.merged_worktree("wt-corrupt")
         (worktree / ".audit").mkdir()

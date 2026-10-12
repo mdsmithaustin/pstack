@@ -95,7 +95,7 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 	git merge-base --is-ancestor "$head" "$base" 2>/dev/null && merged=YES || merged=no
 
 	wip=0 kept=0 dirty=""
-	if git -C "$wt" status --porcelain -z --ignored --untracked-files=normal > "$status_out" 2>/dev/null; then
+	if git -C "$wt" status --porcelain -z --ignored=matching --untracked-files=normal --ignore-submodules=none > "$status_out" 2>/dev/null; then
 		while IFS= read -r -d '' entry; do
 			case "${entry:0:2}" in
 			'??'|'!!')
