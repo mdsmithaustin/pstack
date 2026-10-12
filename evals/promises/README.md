@@ -30,7 +30,13 @@ The user guide in `docs/guide/` tells readers what pstack does. This directory c
 - A static promise has neither a quote nor a test, or one of its quotes is missing from its file.
 - A script promise has no test, or a live or install promise has no case of its own kind.
 
+The ledger loader rejects duplicate keys at any level with a `ValueError` that names the key. This applies to `audit`, `owners`, `format`, and `format --check`.
+
 The audit also lists live and install promises whose only cases are `deferred`. Those promises have a check on record that does not run yet, so they are not failures.
+
+`ledger.json` stays in canonical form: `json.dumps(..., indent=1, sort_keys=True, ensure_ascii=False)` plus a trailing newline. Keys sort at every level to reduce conflicts from branches appending entries at section ends. After any edit, run `python3 evals/promises/ledger.py format` to rewrite the file. `python3 evals/promises/ledger.py format --check` exits 1 without writing and prints the fix command when the file is not canonical. CI and `tools/gate-check.sh lint` run that check.
+
+`format` encodes the canonical text as UTF-8 before opening a temporary file beside the ledger, then replaces the ledger atomically with `os.replace`. An encoding error, including a lone surrogate, leaves the original file untouched. The ledger remains a single file. Two branches can still conflict when they add ids in the same sorted gap or after the last key.
 
 CI runs the audit against the port guide. Add `--upstream-ref upstream/main` (after `git fetch upstream`) to audit upstream's guide as well. The upstream-sync workflow and step 5 of **Syncing from upstream** in `PORTING.md` run that form.
 
@@ -40,7 +46,7 @@ CI runs the audit against the port guide. Add `--upstream-ref upstream/main` (af
 2. Add the key to `units` with its `file`, `sources`, `text`, and `class`. Copy `file` and `text` from `units.guide_units()` output, not from the error line, because the error line is truncated.
 3. If the unit is a promise, reuse an existing promise id when the claim is the same. Otherwise add a promise with `claim`, `check`, `harness_sensitive`, and `owners`, and bind it with a quote, a test, or a case. Set `harness_sensitive` to true when the behavior depends on harness tools such as spawning, the worklist carrier, or the skill entry, so each harness needs its own evidence.
 4. Delete the entry of any `stale` unit that a reworded sentence replaced. Move its promise to the new unit.
-5. Rerun the audit until it prints `0 problem(s)`.
+5. Run `python3 evals/promises/ledger.py format`, then rerun the audit until it prints `0 problem(s)`.
 
 ## Run the model-free checks
 

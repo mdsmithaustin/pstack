@@ -35,6 +35,7 @@ jobs:
       - name: Guide promise ledger and model-free promise checks
         run: |
           python3 evals/promises/ledger.py audit
+          python3 evals/promises/ledger.py format --check
           python3 -m unittest discover -s evals/promises -p 'test_*.py'
       - name: Verify-command oracle contract tests
         working-directory: evals/verify-commands/oracles

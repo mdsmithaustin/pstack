@@ -1,4 +1,8 @@
+import contextlib
 import copy
+import io
+import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -7,6 +11,80 @@ from pathlib import Path
 import ledger
 
 GUIDE = ledger.ROOT / "docs" / "guide"
+
+
+class CanonicalFormTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-ledger-")
+        self.addCleanup(tmp.cleanup)
+        self.path = Path(tmp.name) / "ledger.json"
+
+    def shuffled(self):
+        def shuffle(node):
+            if isinstance(node, dict):
+                return {k: shuffle(node[k]) for k in reversed(list(node))}
+            if isinstance(node, list):
+                return [shuffle(item) for item in node]
+            return node
+        book = shuffle(ledger.load())
+        self.path.write_text(json.dumps(book, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def test_the_committed_ledger_is_canonical(self):
+        self.assertEqual(ledger.main(["format", "--check"]), 0)
+
+    def test_crlf_is_rejected_and_rewritten_to_canonical_lf_bytes(self):
+        # The documented JSON serialization uses LF, regardless of input newlines.
+        before = b'{\r\n "a": 1\r\n}\r\n'
+        wanted = b'{\n "a": 1\n}\n'
+        self.path.write_bytes(before)
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = ledger.main(["format", "--check", "--ledger", str(self.path)])
+        self.assertEqual(code, 1)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(ledger.main(["format", "--ledger", str(self.path)]), 0)
+        self.assertEqual(self.path.read_bytes(), wanted)
+
+    def test_a_reordered_ledger_fails_the_check_and_names_the_fix(self):
+        self.shuffled()
+        before = self.path.read_text(encoding="utf-8")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = ledger.main(["format", "--check", "--ledger", str(self.path)])
+        self.assertEqual(code, 1)
+        self.assertIn("python3 evals/promises/ledger.py format", out.getvalue())
+        self.assertEqual(self.path.read_text(encoding="utf-8"), before)
+
+    def test_format_restores_the_committed_bytes_from_a_reordered_copy(self):
+        self.shuffled()
+        self.assertEqual(ledger.main(["format", "--ledger", str(self.path)]), 0)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), ledger.LEDGER.read_text(encoding="utf-8"))
+        self.assertEqual(ledger.main(["format", "--check", "--ledger", str(self.path)]), 0)
+
+    def test_format_that_cannot_encode_leaves_the_ledger_and_its_folder_untouched(self):
+        book = ledger.load()
+        book["promises"]["surrogate"] = {"claim": "\ud800"}
+        self.path.write_text(json.dumps(book, indent=1) + "\n", encoding="utf-8")
+        before = self.path.read_bytes()
+        with self.assertRaises(UnicodeEncodeError):
+            ledger.main(["format", "--ledger", str(self.path)])
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual([p.name for p in self.path.parent.iterdir()], ["ledger.json"])
+
+    def test_format_replaces_the_ledger_without_truncating_it_in_place(self):
+        self.shuffled()
+        inode = self.path.stat().st_ino
+        ledger.main(["format", "--ledger", str(self.path)])
+        self.assertNotEqual(self.path.stat().st_ino, inode)
+        self.assertEqual([p.name for p in self.path.parent.iterdir()], ["ledger.json"])
+
+    def test_a_duplicated_key_is_an_error_naming_the_key_not_a_silent_last_wins(self):
+        duplicated = '{\n "promises": {},\n "units": {\n  "05-build:7": {"class": "context"},\n  "05-build:7": {"class": "promise"}\n }\n}\n'
+        self.path.write_text(duplicated, encoding="utf-8")
+        for argv in (["format", "--check"], ["format"], ["audit"]):
+            with self.subTest(argv=argv):
+                with self.assertRaisesRegex(ValueError, "duplicate key '05-build:7'"):
+                    ledger.main([*argv, "--ledger", str(self.path)])
+        self.assertEqual(self.path.read_text(encoding="utf-8"), duplicated)
 
 
 class AuditTest(unittest.TestCase):

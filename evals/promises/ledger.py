@@ -5,6 +5,8 @@ import ast
 import contextlib
 import io
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -23,8 +25,50 @@ SKIPPED_KINDS = {"heading", "image"}
 RENAMED = {"poteto-tdd": "tdd", "poteto-teach": "teach"}
 
 
+def unique_keys(pairs):
+    seen = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(f"duplicate key {key!r}; keep one entry and delete the other")
+        seen[key] = value
+    return seen
+
+
+def parse(text):
+    return json.loads(text, object_pairs_hook=unique_keys)
+
+
 def load(path=LEDGER):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return parse(Path(path).read_text(encoding="utf-8"))
+
+
+def canonical(ledger):
+    return json.dumps(ledger, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def write_atomically(path, data):
+    fd, temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+        shutil.copymode(path, temp)
+        os.replace(temp, path)
+    except BaseException:
+        os.unlink(temp)
+        raise
+
+
+def format_ledger(path, check=False):
+    path = Path(path)
+    current = path.read_bytes().decode("utf-8")
+    wanted = canonical(parse(current))
+    if current == wanted:
+        return 0
+    if check:
+        print(f"{path.name} is not in canonical form; run python3 evals/promises/ledger.py format")
+        return 1
+    write_atomically(path, wanted.encode("utf-8"))
+    return 0
 
 
 def classifiable(guide_dir):
@@ -176,12 +220,17 @@ def main(argv=None):
     a.add_argument("--upstream", help="cursor/plugins pstack/ directory at the pinned or incoming sha")
     a.add_argument("--upstream-ref", help="a git ref holding cursor/plugins, such as upstream/main; read through git archive")
     a.add_argument("--ledger", default=str(LEDGER))
+    f = sub.add_parser("format", help="rewrite the ledger in canonical form, with sorted keys")
+    f.add_argument("--check", action="store_true", help="exit 1 instead of rewriting when the ledger is not canonical")
+    f.add_argument("--ledger", default=str(LEDGER))
     o = sub.add_parser("owners")
     o.add_argument("--upstream")
     o.add_argument("--upstream-ref")
     o.add_argument("--ledger", default=str(LEDGER))
     o.add_argument("promises", nargs="*")
     args = parser.parse_args(argv)
+    if args.cmd == "format":
+        return format_ledger(args.ledger, args.check)
     ledger = load(args.ledger)
     with upstream_tree(args.upstream, args.upstream_ref) as upstream:
         if args.cmd == "owners":
