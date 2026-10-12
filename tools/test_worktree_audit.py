@@ -369,6 +369,21 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         (transcripts / "s.jsonl").write_text(json.dumps({"cwd": f"{worktree}/"}) + "\n", encoding="utf-8")
         self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
 
+    def test_recent_chat_found_when_transcript_spells_the_path_in_lowercase(self):
+        self.merged_worktree("wt-plain")
+        worktree = self.tmp / "WT-Case"
+        self.git("worktree", "add", "-q", "-b", "wt-case", str(worktree), "main")
+        slug = re.sub(r"[^a-zA-Z0-9]", "-", str(self.repo))
+        transcripts = self.tmp / "home" / ".claude" / "projects" / slug
+        transcripts.mkdir(parents=True)
+        (transcripts / "s.jsonl").write_text(json.dumps({"cwd": f"{str(worktree).lower()}/"}) + "\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
+
+    def test_prunable_worktree_holds(self):
+        worktree = self.merged_worktree("wt-gone")
+        shutil.rmtree(worktree)
+        self.assertEqual(self.row(worktree), ("unreadable", "hold-kept"))
+
     def test_unreadable_status_is_never_safe(self):
         worktree = self.merged_worktree("wt-corrupt")
         (worktree / ".audit").mkdir()
