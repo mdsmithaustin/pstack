@@ -8,10 +8,10 @@
 # Kept files are untracked paths, and ignored paths whose name is not a known
 # build cache, such as a decision trail or saved eval runs. No commit records
 # them, and `git worktree remove` deletes ignored files even without --force,
-# so a worktree with kept files is never bucketed safe. Neither is one whose
-# `git status` fails (DIRTY unreadable).
-# A populated submodule counts as one kept path, because the superproject's
-# git status never lists files a submodule ignores.
+# so a worktree with kept files is never bucketed safe.
+# A nested git checkout, such as a populated submodule, counts as one kept
+# path, because the superproject's git status never lists files it ignores.
+# If git status or the scan for nested checkouts fails, DIRTY reads unreadable.
 #
 # Usage: worktree-audit.sh [-b|--base <ref>] [repo-path]
 #   repo-path defaults to the current repo.
@@ -61,7 +61,8 @@ git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 || { echo "error
 prs=$(mktemp)
 kept_paths=$(mktemp)
 status_out=$(mktemp)
-trap 'rm -f "$prs" "$kept_paths" "$status_out"' EXIT
+nested_out=$(mktemp)
+trap 'rm -f "$prs" "$kept_paths" "$status_out" "$nested_out"' EXIT
 gh pr list --author "@me" --state all --limit 1000 \
 	--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
 
@@ -97,7 +98,7 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 	git merge-base --is-ancestor "$head" "$base" 2>/dev/null && merged=YES || merged=no
 
 	wip=0 kept=0 dirty=""
-	if git -C "$wt" status --porcelain -z --ignored=matching --untracked-files=normal --ignore-submodules=none > "$status_out" 2>/dev/null; then
+	if git -C "$wt" status --porcelain -z --ignored=matching --untracked-files=normal --ignore-submodules=none > "$status_out" 2>/dev/null && find "$wt" -mindepth 2 -name .git -prune -print0 > "$nested_out" 2>/dev/null; then
 		while IFS= read -r -d '' entry; do
 			case "${entry:0:2}" in
 			'??'|'!!')
@@ -107,9 +108,9 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 			*) wip=$((wip + 1)) ;;
 			esac
 		done < "$status_out"
-		while IFS= read -r -d '' sm; do
-			kept=$((kept + 1)); printf '# kept: %s/%s/\n' "$wt" "$sm" >> "$kept_paths"
-		done < <(git -C "$wt" submodule foreach --quiet 'printf "%s\0" "$displaypath"' 2>/dev/null)
+		while IFS= read -r -d '' nested; do
+			kept=$((kept + 1)); printf '# kept: %s/\n' "${nested%/.git}" >> "$kept_paths"
+		done < "$nested_out"
 		[ "$wip" -gt 0 ] && dirty="wip:$wip"
 		[ "$kept" -gt 0 ] && dirty="${dirty:+$dirty,}kept:$kept"
 	else dirty=unreadable; fi

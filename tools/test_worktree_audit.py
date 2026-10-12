@@ -276,6 +276,27 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         self.assertIn(f"# kept: {worktree}/sub/", result.stdout.splitlines())
         self.assertEqual(trail.read_text(encoding="utf-8"), "trail\n")
 
+    def test_ignored_trail_in_a_gitlink_without_gitmodules_is_kept(self):
+        sub = self.tmp / "sub"
+        sub.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=sub, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (sub / ".gitignore").write_text(".audit/\n", encoding="utf-8")
+        for args in (("add", ".gitignore"), ("commit", "-q", "-m", "ignore trail")):
+            subprocess.run(["git", *args], cwd=sub, env=self.env, check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        sub_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=sub, env=self.env, check=True,
+                                  stdout=subprocess.PIPE, text=True).stdout.strip()
+        worktree = self.merged_worktree("wt-gitlink")
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{sub_head},sub")
+        self.git("commit", "-q", "-m", "gitlink without gitmodules")
+        self.git("-C", str(worktree), "merge", "-q", "--ff-only", "main")
+        self.git("push", "-q", "origin", "main")
+        self.git("clone", "-q", str(sub), str(worktree / "sub"))
+        (worktree / "sub" / ".audit").mkdir()
+        (worktree / "sub" / ".audit" / "d.tsv").write_text("trail\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
+
     def test_unreadable_status_is_never_safe(self):
         worktree = self.merged_worktree("wt-corrupt")
         (worktree / ".audit").mkdir()
