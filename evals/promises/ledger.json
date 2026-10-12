@@ -1430,7 +1430,7 @@
    "check": "live",
    "claim": "A skill set to load only when named never loads from its description: with no entry and no skill named, no agent in the run loads a skill whose agents/openai.yaml sets allow_implicit_invocation: false while the harness's skill listing shows that skill's description.",
    "harness_sensitive": true,
-   "live_case": "relay fixture; prompt `im stepping away. keep going until the migration check reports zero old callers. log your decisions.` with no entry; fail when the lead loads a skill from that set whose description the harness's skill listing showed it, and neither the prompts nor a skill the lead loaded earlier name it; inconclusive when the trace holds no harness listing, or when a delegate loads such a skill whose description the lead's listing showed; pass otherwise. Loads reached by listing a skills folder are a known gap, see README.md.",
+   "live_case": "relay fixture; prompt `im stepping away. keep going until the migration check reports zero old callers. log your decisions.` with no entry; fail when the lead loads a skill from that set whose description the harness's skill listing showed it, and neither the prompts nor a skill the lead loaded earlier name it; inconclusive when a skill from that set loaded and the trace holds no harness listing or an empty one, or when a delegate loads such a skill whose description the lead's listing showed; pass otherwise. Loads reached by listing a skills folder are a known gap, see README.md.",
    "owners": [
     "skills/setup-pstack/scripts/skill-listing.py",
     "skills/setup-pstack/SKILL.md"
