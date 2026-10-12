@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location("skill_references", ROOT / "tools" / "skill-references.py")
@@ -39,6 +40,28 @@ class SkillReferenceSpelling(unittest.TestCase):
             })
             self.assertEqual(skill_references.violations(root), ["skills/demo/SKILL.md:4: /demo"])
 
+    def test_a_body_line_that_starts_with_description_is_not_exempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "---\ndescription: Use for /demo.\n---\ndescription: then run /demo again\n",
+            })
+            self.assertEqual(skill_references.violations(root), ["skills/demo/SKILL.md:4: /demo"])
+
+    def test_a_folded_description_may_spell_its_own_skill_on_any_continuation_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "---\nname: demo\ndescription: >-\n  Build a page.\n  Use for /demo, not /other.\nicon: x\n---\nBody.\n",
+                "skills/other/SKILL.md": "---\ndescription: Use for /other.\n---\n",
+            })
+            self.assertEqual(skill_references.violations(root), ["skills/demo/SKILL.md:5: /other"])
+
+    def test_a_key_after_a_folded_description_is_not_part_of_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "---\ndescription: >-\n  Build a page.\nreminder: apply /demo.\n---\n",
+            })
+            self.assertEqual(skill_references.violations(root), ["skills/demo/SKILL.md:4: /demo"])
+
     def test_a_description_line_may_not_spell_another_skill(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = tracked_repo(tmp, {
@@ -46,6 +69,18 @@ class SkillReferenceSpelling(unittest.TestCase):
                 "skills/other/SKILL.md": "---\ndescription: Use for /other.\n---\n",
             })
             self.assertEqual(skill_references.violations(root), ["skills/demo/SKILL.md:2: /other"])
+
+    def test_an_exempt_passage_missing_from_its_file_is_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "Say /demo to start.\n",
+                "skills/other/SKILL.md": "Nothing here.\n",
+            })
+            table = {"skills/demo/SKILL.md": ["Say /demo to start.", "Say /demo to pause."],
+                     "skills/other/SKILL.md": ["Run /other."]}
+            with mock.patch.object(skill_references, "EXEMPT", table):
+                self.assertEqual(skill_references.stale_exemptions(root),
+                                 ["skills/demo/SKILL.md: Say /demo to pause.", "skills/other/SKILL.md: Run /other."])
 
     def test_the_scan_skips_untracked_markdown(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -56,7 +91,7 @@ class SkillReferenceSpelling(unittest.TestCase):
             subprocess.run(["git", "init", "-q", tmp], check=True)
             subprocess.run(["git", "-C", tmp, "add", "skills/demo/SKILL.md"], check=True)
             self.assertEqual(skill_references.sigils(root),
-                             [("skills/demo/SKILL.md", 1, "/demo", "Then run /demo.")])
+                             [("skills/demo/SKILL.md", 1, "/demo", "Then run /demo.", False)])
 
     def test_the_scan_skips_a_tracked_file_deleted_from_disk(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -68,7 +103,7 @@ class SkillReferenceSpelling(unittest.TestCase):
             subprocess.run(["git", "-C", tmp, "add", "skills"], check=True)
             (root / "skills/demo/notes.md").unlink()
             self.assertEqual(skill_references.sigils(root),
-                             [("skills/demo/SKILL.md", 1, "/demo", "Then run /demo.")])
+                             [("skills/demo/SKILL.md", 1, "/demo", "Then run /demo.", False)])
 
     def test_the_scan_finds_a_slash_and_a_dollar_spelling(self):
         names = skill_references.skill_names(ROOT)

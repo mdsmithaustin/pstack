@@ -40,6 +40,7 @@ class Sigil(NamedTuple):
     line: int
     spelling: str
     text: str
+    in_description: bool
 
 
 def skill_names(root: Path) -> list[str]:
@@ -56,14 +57,35 @@ def sigil_pattern(name: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![\w./}}-])[/$]{re.escape(name)}(?![\w/-])")
 
 
+def description_lines(lines: list[str]) -> set[int]:
+    """Line numbers of the frontmatter `description:` value, including a folded continuation."""
+    if not lines or lines[0].strip() != "---":
+        return set()
+    found: set[int] = set()
+    inside = False
+    for number, line in enumerate(lines[1:], 2):
+        if line.strip() == "---":
+            break
+        if line.startswith("description:"):
+            inside = True
+        elif inside and not line.startswith((" ", "\t")):
+            inside = False
+        if inside:
+            found.add(number)
+    return found
+
+
 def sigils(root: Path = ROOT) -> list[Sigil]:
     compiled = {name: sigil_pattern(name) for name in skill_names(root)}
     hits = []
     for path in model_facing_files(root):
         rel = path.relative_to(root).as_posix()
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        described = description_lines(lines)
+        for number, line in enumerate(lines, 1):
             for pattern in compiled.values():
-                hits += [Sigil(rel, number, match.group(0), line) for match in pattern.finditer(line)]
+                hits += [Sigil(rel, number, match.group(0), line, number in described)
+                         for match in pattern.finditer(line)]
     return hits
 
 
@@ -71,7 +93,7 @@ def exempt(hit: Sigil) -> bool:
     skill = hit.file.split("/")[1]
     if skill in USER_FACING_SKILLS:
         return True
-    if hit.file == f"skills/{skill}/SKILL.md" and hit.spelling == f"/{skill}" and hit.text.startswith("description:"):
+    if hit.file == f"skills/{skill}/SKILL.md" and hit.spelling == f"/{skill}" and hit.in_description:
         return True
     return any(hit.spelling in passage and passage in hit.text for passage in EXEMPT.get(hit.file, ()))
 

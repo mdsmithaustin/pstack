@@ -105,6 +105,9 @@ jobs:
                names skills:
                - PSTACK_SKILLS in skills/setup-pstack/scripts/skill-listing.py.
                - The skill's row in tools/skill-trigger-cases.json.
+               - A row in README.md's "all skills" table, which
+                 evals/promises/test_static.py checks against the skill
+                 directories.
                - In evals/promises/test_static.py, PLAYBOOK_FILES for a
                  poteto-mode playbook, PRINCIPLE_RULES for a principle-*
                  skill, and GUIDE_SLASH_SKILLS when docs/guide names the
