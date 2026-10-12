@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { parseReviewState } from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
+import {
+  buildReviewState,
+  parseReviewStatePage,
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import {
   applyQueueSnapshot,
   classifyPr,
@@ -48,13 +51,15 @@ async function snapshotAt(args: {
   readonly comments?: readonly RestComment[];
   readonly reader?: Parameters<typeof fakeReader>[0];
 }): Promise<PrSnapshot> {
-  const state = parseReviewState(
-    reviewBodiesResponse({
-      headRefOid: args.head,
-      reviews: args.reviews,
-      ...(args.comments === undefined ? {} : { comments: args.comments }),
-    })
-  );
+  const state = buildReviewState([
+    parseReviewStatePage(
+      reviewBodiesResponse({
+        headRefOid: args.head,
+        reviews: args.reviews,
+        ...(args.comments === undefined ? {} : { comments: args.comments }),
+      })
+    ),
+  ]);
   return readSnapshot({
     reader: fakeReader({
       facts: { headRefOid: args.head },

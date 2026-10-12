@@ -409,7 +409,7 @@ describe("parseConversation truncation", () => {
   });
 
   it("uses the same limits as the watcher's review query", () => {
-    expect(REVIEW_THREADS_QUERY).toContain("reviewThreads(first: 100)");
+    expect(REVIEW_THREADS_QUERY).toContain("reviewThreads(first: 100, after: $after)");
     expect(REVIEW_THREADS_QUERY).toContain("reviewRequests(first: 50)");
     expect(REVIEW_THREADS_QUERY).toContain("reviews(last: 100)");
     expect(REVIEW_THREADS_QUERY).toContain("comments(last: 100)");

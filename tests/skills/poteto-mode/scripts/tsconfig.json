@@ -10,5 +10,5 @@
     "typeRoots": ["../../../../skills/poteto-mode/scripts/node_modules"],
     "types": ["bun-types"]
   },
-  "include": ["watch-pr/*.ts", "orch/*.ts"]
+  "include": ["*.ts", "watch-pr/*.ts", "orch/*.ts"]
 }

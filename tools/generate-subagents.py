@@ -14,6 +14,7 @@ ROLE_SKILLS = {
     "poteto-agent": ["poteto-mode"],
 }
 ROLE_SIGNATURES = {"comment-sicko": "Yes... Ha ha ha... Yes!"}
+LEGACY_ALIASES = {"comment-sicko": ["Comment Sicko"]}
 
 
 def generate(root: Path) -> str:
@@ -42,7 +43,7 @@ def generate(root: Path) -> str:
             raise ValueError(f"{path.name}: is_background must be true or false")
         roles.append({
             "id": path.stem,
-            "aliases": list(dict.fromkeys([path.stem, metadata["name"]])),
+            "aliases": list(dict.fromkeys([path.stem, metadata["name"], *LEGACY_ALIASES.get(path.stem, [])])),
             "description": metadata["description"],
             "body": parts[2],
             "background": metadata.get("is_background") == "true",

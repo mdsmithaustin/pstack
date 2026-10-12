@@ -136,9 +136,13 @@ describe("PRs with no checks", () => {
     const snapshot = await readSnapshot({
       reader: {
         ...reader,
-        async reviewState() {
+        async reviewStatePage() {
           return {
-            threads: [{ id: "unresolved", firstComment: null, bot: null }],
+            threads: [
+              { id: "unresolved", firstComment: null, resolved: false, botLogin: null },
+            ],
+            endCursor: null,
+            reviewLogins: [],
             pendingBots: [],
             flaggedReviews: [],
             unreadReviews: [],
@@ -172,7 +176,7 @@ describe("snapshot query planning", () => {
     expect(snapshot.ci.kind).toBe("ci-pending");
     expect(reader.calls).toEqual([
       "pullRequest",
-      "reviewState",
+      "reviewStatePage:null",
       "checksFastPath",
     ]);
   });
@@ -376,11 +380,13 @@ describe("pending review bots", () => {
     let pending = true;
     const reader = {
       ...base,
-      async reviewState() {
+      async reviewStatePage() {
         const bots = pending ? ["copilot-pull-request-reviewer"] : [];
         pending = false;
         return {
           threads: [],
+          endCursor: null,
+          reviewLogins: [],
           pendingBots: bots,
           flaggedReviews: [],
           unreadReviews: [],
