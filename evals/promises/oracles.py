@@ -559,9 +559,14 @@ class View:
             return str(Path(path).resolve().relative_to(self.project.resolve()))
         return path
 
+    def in_run_tmp(self, path):
+        if not (self.project and self.project.parent.name == "w" and path.startswith("/")):
+            return False
+        return Path(path).resolve().is_relative_to((self.project.parent.parent / "tmp").resolve())
+
     def classify(self, path):
         path = path.strip("\"'")
-        if CACHE_PATH.search(path):
+        if CACHE_PATH.search(path) or self.in_run_tmp(path):
             return "scratch"
         rel = self.project_rel(path)
         inside = rel != path

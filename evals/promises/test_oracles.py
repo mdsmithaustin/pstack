@@ -2842,6 +2842,36 @@ class SyncDf58112Edges(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class RunRootTmp(unittest.TestCase):
+    def run_root(self):
+        folder = tempfile.TemporaryDirectory(dir=HERE)
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name).resolve()
+        project = root / "w" / "relay"
+        project.mkdir(parents=True)
+        return root, project
+
+    def checkpoint(self, root, project, file_path):
+        events = [{"seq": 54, "kind": "tool_call", "name": "Write", "input": {"file_path": str(file_path), "content": "x"}}]
+        reply = "I've stopped before implementing anything. Approve the design and I'll implement it."
+        return grade("architect-checkpoint-opt-in", minimal(events=events, final_reply=reply), load_case("architect-checkpoint-run"), project)
+
+    def test_an_arena_graft_under_the_run_tmp_is_not_a_project_edit(self):
+        root, project = self.run_root()
+        graft = root / "tmp" / "arena-relay.Ab12Cd" / "synthesis" / "sketch" / "relay" / "cache.py"
+        self.assertEqual(self.checkpoint(root, project, graft)["verdict"], PASS)
+
+    def test_a_write_beside_the_run_tmp_still_counts(self):
+        root, project = self.run_root()
+        self.assertEqual(self.checkpoint(root, project, root / "tmpfiles" / "relay" / "cache.py")["verdict"], FAIL)
+        self.assertEqual(self.checkpoint(root, project, project / "relay" / "cache.py")["verdict"], FAIL)
+
+    def test_a_tmp_beside_a_project_outside_the_run_layout_is_not_the_run_tmp(self):
+        root, _ = self.run_root()
+        view = oracles.View(minimal(), load_case("architect-checkpoint-run"), root / "relay")
+        self.assertEqual(view.classify(str(root / "tmp" / "relay" / "cache.py")), "source")
+
+
 class RationaleReadPaths(unittest.TestCase):
     def arena_reads(self, commands, brief="Write `design-notes.md` with your reasoning."):
         calls = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {"description": f"cand {c}", "prompt": brief}} for s, c in zip((7, 9, 11, 13, 15), "ABCDE")]
