@@ -32,7 +32,7 @@ The user guide in `docs/guide/` tells readers what pstack does. This directory c
 
 The audit also lists live and install promises whose only cases are `deferred`. Those promises have a check on record that does not run yet, so they are not failures.
 
-`ledger.json` stays in canonical form: `json.dumps(..., indent=1, sort_keys=True, ensure_ascii=False)` plus a trailing newline. Keys sort at every level, so an entry lands at its sorted place and two branches that add different entries merge without a conflict. After any edit, run `python3 evals/promises/ledger.py format` to rewrite the file. `format --check` exits 1 without writing when the file is not canonical. CI and `tools/gate-check.sh lint` run that check.
+`ledger.json` stays in canonical form: `json.dumps(..., indent=1, sort_keys=True, ensure_ascii=False)` plus a trailing newline. Keys sort at every level to reduce conflicts from branches appending entries at section ends. After any edit, run `python3 evals/promises/ledger.py format` to rewrite the file. `python3 evals/promises/ledger.py format --check` exits 1 without writing and prints the fix command when the file is not canonical. CI and `tools/gate-check.sh lint` run that check.
 
 CI runs the audit against the port guide. Add `--upstream-ref upstream/main` (after `git fetch upstream`) to audit upstream's guide as well. The upstream-sync workflow and step 5 of **Syncing from upstream** in `PORTING.md` run that form.
 
