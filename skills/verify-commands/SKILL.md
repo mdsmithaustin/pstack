@@ -25,6 +25,7 @@ Inherit the command that already worked in this repo, verbatim, before deriving 
 | `grep -c 'LITERAL' file == 0` while an instruction or comment quotes `LITERAL` | the gate trips on comment text, not on code | describe the forbidden thing by concept, not by literal |
 | `! grep -q PATTERN file` when a sibling change legitimately adds `PATTERN` elsewhere in the file | a file-wide negative is unsatisfiable across regions | scope it: `awk '/^def f/,/^def /' file \| grep`, or an AST check, or a unit test |
 | a test-name filter that matches zero tests | exit 0 with nothing asserted | list tests first (`--collect-only`, `--list`), then run the one named test |
+| `npm test \| tail -20` whose exit status is read as the verdict | a pipeline exits with its last command's status, so `tail` reports 0 while `npm test` failed | `set -o pipefail` before the pipeline (bash, zsh), or read `${PIPESTATUS[0]}` (bash) right after it |
 
 The anchor trap has a family: `npm ls`, `yarn list`, `docker ps`, and `kubectl get` all print column or tree prefixes. `|| echo default` is acceptable only when absence is the default and the value is not used in a comparison meant to detect absence.
 
