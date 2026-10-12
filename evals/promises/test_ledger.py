@@ -2,6 +2,7 @@ import contextlib
 import copy
 import io
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -46,6 +47,32 @@ class CanonicalFormTest(unittest.TestCase):
         self.assertEqual(ledger.main(["format", "--ledger", str(self.path)]), 0)
         self.assertEqual(self.path.read_text(encoding="utf-8"), ledger.LEDGER.read_text(encoding="utf-8"))
         self.assertEqual(ledger.main(["format", "--check", "--ledger", str(self.path)]), 0)
+
+    def test_format_that_cannot_encode_leaves_the_ledger_and_its_folder_untouched(self):
+        book = ledger.load()
+        book["promises"]["surrogate"] = {"claim": "\ud800"}
+        self.path.write_text(json.dumps(book, indent=1) + "\n", encoding="utf-8")
+        before = self.path.read_bytes()
+        with self.assertRaises(UnicodeEncodeError):
+            ledger.main(["format", "--ledger", str(self.path)])
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual([p.name for p in self.path.parent.iterdir()], ["ledger.json"])
+
+    def test_format_replaces_the_ledger_without_truncating_it_in_place(self):
+        self.shuffled()
+        inode = self.path.stat().st_ino
+        ledger.main(["format", "--ledger", str(self.path)])
+        self.assertNotEqual(self.path.stat().st_ino, inode)
+        self.assertEqual([p.name for p in self.path.parent.iterdir()], ["ledger.json"])
+
+    def test_a_duplicated_key_is_an_error_naming_the_key_not_a_silent_last_wins(self):
+        duplicated = '{\n "promises": {},\n "units": {\n  "05-build:7": {"class": "context"},\n  "05-build:7": {"class": "promise"}\n }\n}\n'
+        self.path.write_text(duplicated, encoding="utf-8")
+        for argv in (["format", "--check"], ["format"], ["audit"]):
+            with self.subTest(argv=argv):
+                with self.assertRaisesRegex(ValueError, "duplicate key '05-build:7'"):
+                    ledger.main([*argv, "--ledger", str(self.path)])
+        self.assertEqual(self.path.read_text(encoding="utf-8"), duplicated)
 
 
 class AuditTest(unittest.TestCase):

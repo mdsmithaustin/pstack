@@ -176,9 +176,23 @@ class TestStaticPromises(unittest.TestCase):
             self.assertIn(rule, normalize(read(leaf)), name)
 
     def test_principle_promise_owners_are_the_pinned_leaves(self):
-        promise = json.loads(read(ROOT / "evals" / "promises" / "ledger.json"))["promises"]["principle-leaf-summaries-match"]
-        self.assertEqual(sorted(promise["owners"]), sorted(f"skills/{name}/SKILL.md" for name in PRINCIPLE_RULES))
-        self.assertIn(f"Each of the {len(PRINCIPLE_RULES)} principle links", promise["claim"])
+        pid = "principle-leaf-summaries-match"
+        promise = json.loads(read(ROOT / "evals" / "promises" / "ledger.json"))["promises"][pid]
+        fix = (
+            f"upstream added or removed a principle, so edit promise {pid} in evals/promises/ledger.json: "
+            f"set its owners to one skills/<name>/SKILL.md per PRINCIPLE_RULES key and its claim to "
+            f"'Each of the {len(PRINCIPLE_RULES)} principle links'"
+        )
+        self.assertEqual(
+            sorted(promise["owners"]),
+            sorted(f"skills/{name}/SKILL.md" for name in PRINCIPLE_RULES),
+            f"{pid} lists owners {promise['owners']}; {fix}",
+        )
+        self.assertIn(
+            f"Each of the {len(PRINCIPLE_RULES)} principle links",
+            promise["claim"],
+            f"{pid} claims {promise['claim']!r}; {fix}",
+        )
 
     def test_playbook_directory_complete(self):
         text = guide_text()

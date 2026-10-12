@@ -5,6 +5,8 @@ import ast
 import contextlib
 import io
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -23,24 +25,49 @@ SKIPPED_KINDS = {"heading", "image"}
 RENAMED = {"poteto-tdd": "tdd", "poteto-teach": "teach"}
 
 
+def unique_keys(pairs):
+    seen = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(f"duplicate key {key!r}; keep one entry and delete the other")
+        seen[key] = value
+    return seen
+
+
+def parse(text):
+    return json.loads(text, object_pairs_hook=unique_keys)
+
+
 def load(path=LEDGER):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return parse(Path(path).read_text(encoding="utf-8"))
 
 
 def canonical(ledger):
     return json.dumps(ledger, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
 
 
+def write_atomically(path, data):
+    fd, temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+        shutil.copymode(path, temp)
+        os.replace(temp, path)
+    except BaseException:
+        os.unlink(temp)
+        raise
+
+
 def format_ledger(path, check=False):
     path = Path(path)
     current = path.read_text(encoding="utf-8")
-    wanted = canonical(json.loads(current))
+    wanted = canonical(parse(current))
     if current == wanted:
         return 0
     if check:
         print(f"{path.name} is not in canonical form; run python3 evals/promises/ledger.py format")
         return 1
-    path.write_text(wanted, encoding="utf-8")
+    write_atomically(path, wanted.encode("utf-8"))
     return 0
 
 
