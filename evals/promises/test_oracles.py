@@ -6,6 +6,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import live
 import oracles
@@ -2752,6 +2753,41 @@ class SyncDf58112Edges(unittest.TestCase):
         reply = ("Use /interrogate.\n\n```text\n/interrogate the branch\n```\n\n"
                  "https://github.com/mdsmithaustin/pstack/blob/main/README.md")
         self.assertEqual(self.grade_help(minimal(final_reply=reply))["verdict"], PASS)
+
+    def test_public_links_use_the_approved_skills_snapshot(self):
+        from grade_boundary import GradeRefused
+
+        with tempfile.TemporaryDirectory(dir=HERE) as folder:
+            skills = Path(folder) / "skills"
+            for name in ("poteto-mode", "interrogate"):
+                (skills / name).mkdir(parents=True)
+
+            def exists(path, kind=None):
+                if not Path(path).is_relative_to(skills):
+                    raise GradeRefused("unapproved_path", path)
+                return Path(path).is_dir() if kind == "dir" else Path(path).exists()
+
+            reader = mock.Mock(skills=skills, exists=exists)
+            with mock.patch.object(oracles, "_IO", reader):
+                trace = load_trace("oracle-edges/hermes-poteto-help-indented-prompt.json")
+                result = self.grade_help(trace)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertTrue(any("skills/" in f for f in result["failures"]), result)
+                for path in ("README.md", "skills/interrogate/SKILL.md", "/x", "./x", "../x"):
+                    with self.subTest(path=path):
+                        trace["final_reply"] = ("Use /interrogate.\n\n```text\n/interrogate the branch\n```\n\n"
+                                                "https://github.com/mdsmithaustin/pstack/blob/main/" + path)
+                        self.assertEqual(self.grade_help(trace)["verdict"], PASS)
+
+    def test_a_failed_skill_lookup_does_not_prove_a_dead_link(self):
+        from grade_boundary import GradeRefused
+
+        trace = load_trace("oracle-edges/hermes-poteto-help-indented-prompt.json")
+        for error in (GradeRefused("unapproved_path", HERE), OSError("lookup failed")):
+            with self.subTest(error=error):
+                reader = mock.Mock(skills=HERE / "skills-snapshot", exists=mock.Mock(side_effect=error))
+                with mock.patch.object(oracles, "_IO", reader):
+                    self.assertEqual(self.grade_help(trace)["verdict"], PASS)
 
     def test_the_async_and_grok_ask_tools_count_as_a_question(self):
         for name in ("codex-request-user-input-async.json", "grok-ask-user-question.json"):

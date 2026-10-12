@@ -2481,9 +2481,14 @@ def has_code_block(reply):
     return False
 
 
-def link_drops_skills_dir(link_path):
+def link_drops_skills_dir(link_path, skills_root):
     first = link_path.split("/", 1)[0]
-    return first != "skills" and _is_dir(ROOT / "skills" / first)
+    if first in ("", ".", "..", "skills"):
+        return False
+    try:
+        return _is_dir(Path(skills_root) / first)
+    except Exception:
+        return False
 
 
 @oracle("poteto-help-finds-need-and-routes")
@@ -2511,7 +2516,7 @@ def poteto_help(view):
             failures.append("no example prompt in a code block")
         if PUBLIC_COPY not in reply:
             failures.append("no link to the public copy of the file the answer came from")
-        elif links and all(link_drops_skills_dir(path) for path in links):
+        elif links and all(link_drops_skills_dir(path, view.skills_root) for path in links):
             failures.append(f"every public link drops the skills/ directory and would 404: {links[:3]}")
     if failures:
         if not reply and view.killed:
