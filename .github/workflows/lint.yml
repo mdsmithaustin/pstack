@@ -26,6 +26,10 @@ jobs:
         run: python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
       - name: Installed subagent bundle matches upstream sources
         run: python3 tools/generate-subagents.py --check
+      - name: Install zsh for the verify-commands shell test
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
       - name: Skill lint and runtime command tests
         run: python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Guide promise ledger and model-free promise checks
