@@ -105,7 +105,7 @@ These heuristic edges are open and none has moved a live verdict. Fix one only a
 - The sources check passes commit-only shapes: comma lists of hashes, consecutive commit-only lines, and `Sources searched:` labels.
 - Timing: the `SOURCES_SECTION` whitespace run is quadratic on pathological tails. Absolute-path `classify` is slow on paths with 100k components. `edits()` is slower than before on 200 KB python-bound commands.
 - `blast-radius-proves-one-fact-by-running-code` returns `PASS` only when the first 40 characters of a run command appear in the reply. A run that executed real code and pasted an output block instead goes to the judge.
-- `blast-radius-finds-breakage` treats a cited file as the agent's own only when it is under a scratch path. A proof script written inside the project still counts as a file beyond the diff.
+- `blast-radius-finds-breakage` treats a cited file as scratch only when it is under an absolute scratch path such as /tmp or /private/tmp. A project-relative proof script still counts as a file beyond the diff.
 - `architect-sketches-before-implementation` reports "no sketch phase visible" for a run whose briefs are sealed. The verdict is right and the reason is not.
 - `poteto-help-finds-need-and-routes` accepts a triple-backtick fence or an indented block that follows a paragraph. It does not accept `~~~` fences or a block nested in a list item. Its link check proves only a public link that drops `skills/`. It does not prove that any other link resolves.
 

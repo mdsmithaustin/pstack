@@ -2533,12 +2533,12 @@ def blast_finds(view):
     diff_files = set((view.case.get("expect") or {}).get("diff_files") or [])
     cited = set(re.findall(r"(?<![\w/.-])(/?[\w/.-]+\.(?:py|ts|sh|md|json))\b", view.final_reply))
     outside = sorted(f for f in cited if f.lstrip("/") not in diff_files and not any(f.endswith("/" + d) or d.endswith("/" + f) for d in diff_files))
-    ran = [f for f in outside if view.classify(f) == "scratch"]
+    ran = [f for f in outside if f.startswith("/") and view.classify(f) == "scratch"]
     beyond = [f.lstrip("/") for f in outside if f not in ran]
     fact = re.search(r"one (?:safety )?fact|safety fact|safe because", view.final_reply, re.I)
-    evidence = [f"files cited beyond the diff: {beyond[:5]}", f"files the run wrote itself: {ran[:3]}", f"one-fact wording: {bool(fact)}"]
+    evidence = [f"files cited beyond the diff: {beyond[:5]}", f"scratch files cited: {ran[:3]}", f"one-fact wording: {bool(fact)}"]
     if not beyond and ran:
-        return inconclusive("the only files cited beyond the diff are ones the run wrote; breakage beyond the diff needs a judge",
+        return inconclusive("the only files cited beyond the diff are scratch files; breakage beyond the diff needs a judge",
                             *evidence, needs_judge=True, excerpt=excerpt_of(view.final_reply))
     if not beyond:
         return failed("reply names nothing beyond the diff", *evidence)

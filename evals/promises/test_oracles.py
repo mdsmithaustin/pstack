@@ -2812,6 +2812,20 @@ class SyncDf58112Edges(unittest.TestCase):
         result = grade("blast-radius-finds-breakage", load_trace("oracle-edges/hermes-blast-radius-safety-fact.json"), load_case("blast-radius-run"))
         self.assertEqual(result["verdict"], PASS, result)
 
+    def test_a_relative_verify_file_keeps_the_safety_fact_reply_passing(self):
+        trace = load_trace("oracle-edges/hermes-blast-radius-safety-fact.json")
+        trace["final_reply"] += "\nThe safety fact also holds for relay/ingest.py and verify_token.py."
+        result = grade("blast-radius-finds-breakage", trace, load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("verify_token.py", result["evidence"][0])
+
+    def test_relative_scratch_names_count_as_files_beyond_the_diff(self):
+        for path in ("verify_token.py", "tmp/x.py", "scratch.py", "repro.py", "baseline.py"):
+            with self.subTest(path=path):
+                trace = minimal(final_reply=f"The safety fact holds for {path}; relay/cache.py changed.")
+                result = grade("blast-radius-finds-breakage", trace, load_case("blast-radius-run"))
+                self.assertEqual(result["verdict"], PASS, result)
+
     def test_a_reply_citing_only_its_own_proof_script_needs_a_judge(self):
         result = grade("blast-radius-finds-breakage", load_trace("oracle-edges/codex-blast-radius-own-proof-script.json"), load_case("blast-radius-run"))
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)
