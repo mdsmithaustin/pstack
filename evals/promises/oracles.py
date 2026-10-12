@@ -62,7 +62,7 @@ PATH_FIELDS = ("file_path", "path", "target_file", "target_path", "filename", "f
 SPAWN_TOOLS = {"Agent", "Task", "spawn_agent", "spawn_subagent", "delegate_task", "SubAgentActivity"}
 WAIT_TOOLS = {"get_command_or_subagent_output", "wait_agent", "TaskOutput"}
 FOLLOWUP_TOOLS = {"followup_task", "send_message"}
-ASK_TOOLS = {"AskUserQuestion", "ask_user", "request_user_input", "AskQuestion", "ask_question"}
+ASK_TOOLS = {"AskUserQuestion", "ask_user", "request_user_input", "request_user_input_async", "ask_user_question", "AskQuestion", "ask_question"}
 PRIVATE_PREFIXES = (".claude/", ".agents/", ".codex/", ".hermes/", ".grok/", ".git/")
 CACHE_PATH = re.compile(r"(?:^|/)(?:__pycache__|\.pytest_cache)(?:/|$)|\.pyc$|(?:^|/)node_modules/\.cache(?:/|$)")
 HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
@@ -559,9 +559,14 @@ class View:
             return str(Path(path).resolve().relative_to(self.project.resolve()))
         return path
 
+    def in_run_tmp(self, path):
+        if not (self.project and self.project.parent.name == "w" and path.startswith("/")):
+            return False
+        return Path(path).resolve().is_relative_to((self.project.parent.parent / "tmp").resolve())
+
     def classify(self, path):
         path = path.strip("\"'")
-        if CACHE_PATH.search(path):
+        if CACHE_PATH.search(path) or self.in_run_tmp(path):
             return "scratch"
         rel = self.project_rel(path)
         inside = rel != path
@@ -2464,6 +2469,31 @@ def bro(view):
 
 HELP_SECTIONS = ("get set up", "start a task", "pick a skill", "fix a run", "make pstack my own")
 PUBLIC_COPY = "github.com/mdsmithaustin/pstack/blob/main/"
+PUBLIC_LINK = re.compile(re.escape(PUBLIC_COPY) + r"([^\s)>\]\"'`#?]+)")
+LIST_ITEM = re.compile(r"\s*(?:[-*+]|\d+[.)])\s")
+INDENTED_CODE = re.compile(r"(?: {4}|\t)\S")
+
+
+def has_code_block(reply):
+    if "```" in reply:
+        return True
+    lines = reply.split("\n")
+    for n, line in enumerate(lines):
+        if INDENTED_CODE.match(line) and (n == 0 or not lines[n - 1].strip()):
+            before = lines[n - 2] if n >= 2 else ""
+            if not before.strip() or not (before[0].isspace() or LIST_ITEM.match(before)):
+                return True
+    return False
+
+
+def link_drops_skills_dir(link_path, skills_root):
+    first = link_path.split("/", 1)[0]
+    if first in ("", ".", "..", "skills"):
+        return False
+    try:
+        return _is_dir(Path(skills_root) / first)
+    except Exception:
+        return False
 
 
 @oracle("poteto-help-finds-need-and-routes")
@@ -2483,13 +2513,16 @@ def poteto_help(view):
             failures.append("the unclear need got no multiple-choice question over the help sections")
     else:
         named = [n for n in expect.get("names_any", []) if n.lower() in reply.lower()]
-        evidence += [f"expected names in the reply: {named}", f"code block: {'```' in reply}", f"public link: {PUBLIC_COPY in reply}"]
+        links = PUBLIC_LINK.findall(reply)
+        evidence += [f"expected names in the reply: {named}", f"code block: {has_code_block(reply)}", f"public link: {PUBLIC_COPY in reply}"]
         if not named:
             failures.append(f"the reply names none of {expect.get('names_any')}")
-        if "```" not in reply:
+        if not has_code_block(reply):
             failures.append("no example prompt in a code block")
         if PUBLIC_COPY not in reply:
             failures.append("no link to the public copy of the file the answer came from")
+        elif links and all(link_drops_skills_dir(path, view.skills_root) for path in links):
+            failures.append(f"every public link drops the skills/ directory and would 404: {links[:3]}")
     if failures:
         if not reply and view.killed:
             return inconclusive("run killed before a reply", *evidence)
@@ -2503,10 +2536,15 @@ def blast_finds(view):
     if gate:
         return gate
     diff_files = set((view.case.get("expect") or {}).get("diff_files") or [])
-    cited = set(re.findall(r"\b[\w/.-]+\.(?:py|ts|sh|md|json)\b", view.final_reply))
-    beyond = sorted(f for f in cited if f not in diff_files and not any(f.endswith("/" + d) or d.endswith("/" + f) for d in diff_files))
-    fact = re.search(r"one fact|safe because", view.final_reply, re.I)
-    evidence = [f"files cited beyond the diff: {beyond[:5]}", f"one-fact wording: {bool(fact)}"]
+    cited = set(re.findall(r"(?<![\w/.-])(/?[\w/.-]+\.(?:py|ts|sh|md|json))\b", view.final_reply))
+    outside = sorted(f for f in cited if f.lstrip("/") not in diff_files and not any(f.endswith("/" + d) or d.endswith("/" + f) for d in diff_files))
+    ran = [f for f in outside if f.startswith("/") and view.classify(f) == "scratch"]
+    beyond = [f.lstrip("/") for f in outside if f not in ran]
+    fact = re.search(r"one (?:safety )?fact|safety fact|safe because", view.final_reply, re.I)
+    evidence = [f"files cited beyond the diff: {beyond[:5]}", f"scratch files cited: {ran[:3]}", f"one-fact wording: {bool(fact)}"]
+    if not beyond and ran:
+        return inconclusive("the only files cited beyond the diff are scratch files; breakage beyond the diff needs a judge",
+                            *evidence, needs_judge=True, excerpt=excerpt_of(view.final_reply))
     if not beyond:
         return failed("reply names nothing beyond the diff", *evidence)
     return passed(*evidence) if fact else inconclusive("breakage beyond the diff named; the one-fact framing needs a judge",
@@ -3177,7 +3215,10 @@ def architect_arena(view):
     wave = view.waves(runners)[0] if runners else []
     evidence = [f"arena skill read: {read}", f"runner spawns: {len(runners)}", f"first runner wave: {len(wave)}",
                 f"briefs that lead with caller usage: {callers}"]
+    sealed = [s for s in view.spawns if s.get("x_prompt_encrypted") and s not in runners and not view.supports(s)]
     if len(runners) < 2:
+        if len(runners) + len(sealed) >= 2:
+            return inconclusive("sealed briefs hide which spawns were the runners; two sketches cannot be ruled out", *evidence)
         return inconclusive("run killed before the sketch fan-out", *evidence) if view.killed else failed("fewer than two runner sketches", *evidence)
     if len(wave) < 2:
         return failed("runners spawned sequentially", *evidence)

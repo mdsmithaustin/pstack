@@ -301,6 +301,13 @@ def _copy_skill_inputs(source, destination):
             finally:
                 playbooks.close()
         destination.mkdir(parents=True, mode=0o700)
+        for name in os.listdir(root.fd):
+            try:
+                directory = stat.S_ISDIR(root.info(name).st_mode)
+            except (GradeRefused, FileNotFoundError):
+                continue
+            if directory:
+                (destination / name).mkdir(exist_ok=True, mode=0o700)
         for rel in paths:
             target = destination / rel
             target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

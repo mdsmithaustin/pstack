@@ -6,6 +6,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import live
 import oracles
@@ -2715,6 +2716,163 @@ class SealedUnmatchedFanOut(unittest.TestCase):
         events = [{"seq": 9, "kind": "tool_call", "name": "Agent", "input": {}}]
         result = grade("how-fans-out-explorers-for-big-subsystem", minimal(events=events, spawns=spawns, final_reply="x"), load_case("how-wide-run"))
         self.assertEqual(result["verdict"], FAIL, result)
+
+
+class SyncDf58112Edges(unittest.TestCase):
+    help_menu = "Get set up. Start a task with /poteto-mode. Pick a skill for a situation. Fix a run that went wrong. Make pstack my own."
+
+    def grade_help(self, trace, case_id="poteto-help-run"):
+        return grade("poteto-help-finds-need-and-routes", trace, load_case(case_id))
+
+    def test_an_indented_example_prompt_is_a_code_block(self):
+        trace = load_trace("oracle-edges/hermes-poteto-help-indented-prompt.json")
+        trace["final_reply"] = trace["final_reply"].replace("blob/main/", "blob/main/skills/")
+        result = self.grade_help(trace)
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_public_link_without_the_skills_directory_fails(self):
+        result = self.grade_help(load_trace("oracle-edges/hermes-poteto-help-indented-prompt.json"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertTrue(any("skills/" in f for f in result["failures"]), result)
+        self.assertFalse(any("code block" in f for f in result["failures"]), result)
+
+    def test_indented_prose_after_a_list_item_is_not_a_code_block(self):
+        reply = ("Use /interrogate.\n\n- first step\n\n    still the list item\n\n"
+                 "https://github.com/mdsmithaustin/pstack/blob/main/skills/interrogate/SKILL.md")
+        result = self.grade_help(minimal(final_reply=reply))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertIn("no example prompt in a code block", result["failures"])
+
+    def test_one_live_link_among_dead_ones_passes_the_link_check(self):
+        reply = ("Use /interrogate.\n\n```text\n/interrogate the branch\n```\n\n"
+                 "https://github.com/mdsmithaustin/pstack/blob/main/interrogate/SKILL.md\n"
+                 "https://github.com/mdsmithaustin/pstack/blob/main/skills/interrogate/SKILL.md")
+        self.assertEqual(self.grade_help(minimal(final_reply=reply))["verdict"], PASS)
+
+    def test_a_link_to_a_repo_root_file_is_not_a_dead_link(self):
+        reply = ("Use /interrogate.\n\n```text\n/interrogate the branch\n```\n\n"
+                 "https://github.com/mdsmithaustin/pstack/blob/main/README.md")
+        self.assertEqual(self.grade_help(minimal(final_reply=reply))["verdict"], PASS)
+
+    def test_public_links_use_the_approved_skills_snapshot(self):
+        from grade_boundary import GradeRefused
+
+        with tempfile.TemporaryDirectory(dir=HERE) as folder:
+            skills = Path(folder) / "skills"
+            for name in ("poteto-mode", "interrogate"):
+                (skills / name).mkdir(parents=True)
+
+            def exists(path, kind=None):
+                if not Path(path).is_relative_to(skills):
+                    raise GradeRefused("unapproved_path", path)
+                return Path(path).is_dir() if kind == "dir" else Path(path).exists()
+
+            reader = mock.Mock(skills=skills, exists=exists)
+            with mock.patch.object(oracles, "_IO", reader):
+                trace = load_trace("oracle-edges/hermes-poteto-help-indented-prompt.json")
+                result = self.grade_help(trace)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertTrue(any("skills/" in f for f in result["failures"]), result)
+                for path in ("README.md", "skills/interrogate/SKILL.md", "/x", "./x", "../x"):
+                    with self.subTest(path=path):
+                        trace["final_reply"] = ("Use /interrogate.\n\n```text\n/interrogate the branch\n```\n\n"
+                                                "https://github.com/mdsmithaustin/pstack/blob/main/" + path)
+                        self.assertEqual(self.grade_help(trace)["verdict"], PASS)
+
+    def test_a_failed_skill_lookup_does_not_prove_a_dead_link(self):
+        from grade_boundary import GradeRefused
+
+        trace = load_trace("oracle-edges/hermes-poteto-help-indented-prompt.json")
+        for error in (GradeRefused("unapproved_path", HERE), OSError("lookup failed")):
+            with self.subTest(error=error):
+                reader = mock.Mock(skills=HERE / "skills-snapshot", exists=mock.Mock(side_effect=error))
+                with mock.patch.object(oracles, "_IO", reader):
+                    self.assertEqual(self.grade_help(trace)["verdict"], PASS)
+
+    def test_the_async_and_grok_ask_tools_count_as_a_question(self):
+        for name in ("codex-request-user-input-async.json", "grok-ask-user-question.json"):
+            trace = load_trace("oracle-edges/" + name)
+            call = trace["events"][0]
+            call["input"] = {"questions": [{"question": self.help_menu, "title": self.help_menu}]}
+            result = self.grade_help(trace, "poteto-help-unclear-run")
+            self.assertEqual(result["verdict"], PASS, (name, result))
+
+    def test_sealed_codex_briefs_do_not_prove_fewer_than_two_runners(self):
+        trace = load_trace("oracle-edges/codex-architect-sealed-briefs.json")
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_one_sealed_spawn_still_fails_the_runner_count(self):
+        trace = load_trace("oracle-edges/codex-architect-sealed-briefs.json")
+        trace["spawns"] = trace["spawns"][:1]
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_the_safety_fact_wording_names_the_one_fact(self):
+        result = grade("blast-radius-finds-breakage", load_trace("oracle-edges/hermes-blast-radius-safety-fact.json"), load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_relative_verify_file_keeps_the_safety_fact_reply_passing(self):
+        trace = load_trace("oracle-edges/hermes-blast-radius-safety-fact.json")
+        trace["final_reply"] += "\nThe safety fact also holds for relay/ingest.py and verify_token.py."
+        result = grade("blast-radius-finds-breakage", trace, load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertIn("verify_token.py", result["evidence"][0])
+
+    def test_relative_scratch_names_count_as_files_beyond_the_diff(self):
+        for path in ("verify_token.py", "tmp/x.py", "scratch.py", "repro.py", "baseline.py"):
+            with self.subTest(path=path):
+                trace = minimal(final_reply=f"The safety fact holds for {path}; relay/cache.py changed.")
+                result = grade("blast-radius-finds-breakage", trace, load_case("blast-radius-run"))
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_reply_citing_only_its_own_proof_script_needs_a_judge(self):
+        result = grade("blast-radius-finds-breakage", load_trace("oracle-edges/codex-blast-radius-own-proof-script.json"), load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertTrue(result.get("needs_judge"), result)
+
+    def test_a_safety_fact_over_only_the_proof_script_is_not_a_pass(self):
+        trace = load_trace("oracle-edges/codex-blast-radius-own-proof-script.json")
+        trace["final_reply"] += "\nThe one fact it is safe because of: every caller passes offset 0."
+        result = grade("blast-radius-finds-breakage", trace, load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_a_reply_that_cites_nothing_but_the_diff_still_fails(self):
+        result = grade("blast-radius-finds-breakage", minimal(final_reply="The change to relay/cache.py looks safe to me."), load_case("blast-radius-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
+
+class RunRootTmp(unittest.TestCase):
+    def run_root(self):
+        patch = mock.patch.object(oracles, "SCRATCH_PREFIXES", ())
+        patch.start()
+        self.addCleanup(patch.stop)
+        folder = tempfile.TemporaryDirectory(dir=HERE)
+        self.addCleanup(folder.cleanup)
+        root = Path(folder.name).resolve()
+        project = root / "w" / "relay"
+        project.mkdir(parents=True)
+        return root, project
+
+    def checkpoint(self, root, project, file_path):
+        events = [{"seq": 54, "kind": "tool_call", "name": "Write", "input": {"file_path": str(file_path), "content": "x"}}]
+        reply = "I've stopped before implementing anything. Approve the design and I'll implement it."
+        return grade("architect-checkpoint-opt-in", minimal(events=events, final_reply=reply), load_case("architect-checkpoint-run"), project)
+
+    def test_an_arena_graft_under_the_run_tmp_is_not_a_project_edit(self):
+        root, project = self.run_root()
+        graft = root / "tmp" / "arena-relay.Ab12Cd" / "synthesis" / "sketch" / "relay" / "cache.py"
+        self.assertEqual(self.checkpoint(root, project, graft)["verdict"], PASS)
+
+    def test_a_write_beside_the_run_tmp_still_counts(self):
+        root, project = self.run_root()
+        self.assertEqual(self.checkpoint(root, project, root / "tmpfiles" / "relay" / "cache.py")["verdict"], FAIL)
+        self.assertEqual(self.checkpoint(root, project, project / "relay" / "cache.py")["verdict"], FAIL)
+
+    def test_a_tmp_beside_a_project_outside_the_run_layout_is_not_the_run_tmp(self):
+        root, _ = self.run_root()
+        view = oracles.View(minimal(), load_case("architect-checkpoint-run"), root / "relay")
+        self.assertEqual(view.classify(str(root / "tmp" / "relay" / "cache.py")), "source")
 
 
 class RationaleReadPaths(unittest.TestCase):

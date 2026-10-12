@@ -1,0 +1,37 @@
+{
+ "harness": "codex",
+ "cli_version": "0.160.0",
+ "model": "gpt-6.1-sol",
+ "effort": "high",
+ "exit_code": 0,
+ "entry": "injected",
+ "worklist": [],
+ "spawns": [],
+ "files_read": [],
+ "final_reply": "",
+ "events": [
+  {
+   "kind": "tool_call",
+   "name": "request_user_input_async",
+   "input": {
+    "questions": [
+     {
+      "title": "Which queue should I run, and which GitHub repository should receive the PRs? Send the queue items or a queue link and the repository URL. This checkout has no queue file or configured Git remote."
+     }
+    ]
+   },
+   "id": "call_XA7tVqaDHmn7AYh8UqPSa4ma",
+   "seq": 24,
+   "turn": 0
+  },
+  {
+   "kind": "tool_result",
+   "name": "request_user_input_async",
+   "ok": true,
+   "output_head": "{\"accepted\":true}",
+   "id": "call_XA7tVqaDHmn7AYh8UqPSa4ma",
+   "seq": 25,
+   "turn": 0
+  }
+ ]
+}
