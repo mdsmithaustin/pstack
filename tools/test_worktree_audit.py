@@ -185,6 +185,41 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         self.assertEqual((trail / ".audit" / "decisions.tsv").read_text(encoding="utf-8"), "ts\tphase\n")
         self.assertTrue(spaced.is_dir())
 
+    def merged_worktree(self, name: str) -> Path:
+        self.init("main")
+        (self.repo / ".gitignore").write_text(".audit/\n", encoding="utf-8")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore")
+        origin = self.tmp / "origin.git"
+        self.git("init", "-q", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "-q", "origin", "main")
+        self.git("fetch", "-q", "origin")
+        path = self.tmp / name
+        self.git("worktree", "add", "-q", "-b", name, str(path), "main")
+        return path
+
+    def row(self, worktree: Path) -> tuple[str, str]:
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        fields = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(f"\t{worktree}"))
+        return fields[3], fields[7]
+
+    def test_untracked_file_in_a_cache_named_dir_is_kept(self):
+        worktree = self.merged_worktree("wt-dist")
+        (worktree / "dist").mkdir()
+        (worktree / "dist" / "important.txt").write_text("keep\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
+
+    def test_unreadable_status_is_never_safe(self):
+        worktree = self.merged_worktree("wt-corrupt")
+        (worktree / ".audit").mkdir()
+        (worktree / ".audit" / "decisions.tsv").write_text("ts\n", encoding="utf-8")
+        git_dir = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=worktree, env=self.env,
+                                 check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
+        Path(git_dir, "index").write_bytes(b"not an index")
+        self.assertEqual(self.row(worktree), ("unreadable", "review"))
+
 
 if __name__ == "__main__":
     unittest.main()
