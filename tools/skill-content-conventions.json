@@ -7,7 +7,8 @@
     "gpt-5.6": "name gpt-6 models; the resolver runs gpt-6.1 where Codex lists it",
     "environment: \"cloud\"": "workers are local; spawn a background agent in its own worktree",
     "cloud_base_branch": "give the worker a worktree at the branch's SHA and name it in the brief",
-    "cloud-sleeper": "arm the audit tick through the harness loop facility"
+    "cloud-sleeper": "arm the audit tick through the harness loop facility",
+    "/tmp/arena-": "use a fresh mktemp -d per arena run; a fixed /tmp path reuses stale candidates"
   },
   "skill_prefixes": [
     "principle-"
