@@ -140,5 +140,50 @@ class WorktreeAuditBaseTest(unittest.TestCase):
         self.assertEqual(row.split("\t")[2], "YES")
 
 
+@unittest.skipUnless(_have("rg") and _have("jq"), "worktree-audit.sh shells out to rg and jq")
+class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
+    def test_trails_and_notes_hold_while_build_caches_stay_safe(self):
+        self.init("master")
+        (self.repo / ".gitignore").write_text(".audit/\nnode_modules/\n", encoding="utf-8")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore")
+        origin = self.tmp / "origin.git"
+        self.git("init", "-q", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "-q", "origin", "master")
+        self.git("fetch", "-q", "origin")
+
+        def add(name: str) -> Path:
+            path = self.tmp / name
+            self.git("worktree", "add", "-q", "-b", name.replace(" ", "-"), str(path), "master")
+            return path
+
+        trail = add("wt-trail")
+        (trail / ".audit").mkdir()
+        (trail / ".audit" / "decisions.tsv").write_text("ts\tphase\n", encoding="utf-8")
+        notes = add("wt-notes")
+        (notes / "notes.md").write_text("findings\n", encoding="utf-8")
+        cache = add("wt-cache")
+        (cache / "node_modules").mkdir()
+        (cache / "node_modules" / "dep.js").write_text("x\n", encoding="utf-8")
+        spaced = add("wt with space")
+
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        self.assertEqual(lines[0], "# base: origin/master")
+        rows = {Path(f[8]).name: (f[3], f[7]) for f in (line.split("\t") for line in lines[2:] if not line.startswith("#"))}
+        self.assertEqual(rows, {
+            "wt-trail": ("kept:1", "hold-kept"),
+            "wt-notes": ("kept:1", "hold-kept"),
+            "wt-cache": ("clean", "safe"),
+            "wt with space": ("clean", "safe"),
+        }, result.stdout)
+        kept = sorted(line for line in lines if line.startswith("# kept: "))
+        self.assertEqual(kept, [f"# kept: {notes}/notes.md", f"# kept: {trail}/.audit/"], result.stdout)
+        self.assertEqual((trail / ".audit" / "decisions.tsv").read_text(encoding="utf-8"), "ts\tphase\n")
+        self.assertTrue(spaced.is_dir())
+
+
 if __name__ == "__main__":
     unittest.main()
