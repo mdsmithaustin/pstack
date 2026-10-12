@@ -60,7 +60,8 @@ prs=$(mktemp)
 kept_paths=$(mktemp)
 status_out=$(mktemp)
 nested_out=$(mktemp)
-trap 'rm -f "$prs" "$kept_paths" "$status_out" "$nested_out"' EXIT
+index_out=$(mktemp)
+trap 'rm -f "$prs" "$kept_paths" "$status_out" "$nested_out" "$index_out"' EXIT
 gh pr list --author "@me" --state all --limit 1000 \
 	--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
 
@@ -97,13 +98,15 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 
 	wip=0 kept=0 dirty=""
 	covering=()
-	if git -C "$wt" status --porcelain -z --ignored=matching --untracked-files=normal --ignore-submodules=none > "$status_out" 2>/dev/null && find "$wt" -mindepth 2 -name .git -prune -print0 > "$nested_out" 2>/dev/null; then
+	if git -C "$wt" status --porcelain -z --ignored=matching --untracked-files=normal --ignore-submodules=none > "$status_out" 2>/dev/null \
+		&& git -C "$wt" ls-files -v -z > "$index_out" 2>/dev/null \
+		&& find "$wt" -mindepth 2 -name .git -prune -print0 > "$nested_out" 2>/dev/null; then
 		while IFS= read -r -d '' entry; do
 			case "${entry:0:2}" in
 			'??'|'!!')
 				path="$wt/${entry:3}"
 				if [ "${entry:0:2}" = '!!' ] && is_build_cache "${entry:3}"; then
-					covering+=("$path"); continue
+					continue
 				fi
 				kept=$((kept + 1)); printf '# kept: %s\n' "$path" >> "$kept_paths"
 				covering+=("$path") ;;
@@ -111,6 +114,12 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 			*) wip=$((wip + 1)) ;;
 			esac
 		done < "$status_out"
+		# Status hides edits to skip-worktree (S) and assume-unchanged (lowercase) entries.
+		while IFS= read -r -d '' entry; do
+			case "${entry:0:1}" in
+			S|[[:lower:]]) [ -e "$wt/${entry:2}" ] || [ -L "$wt/${entry:2}" ] && wip=$((wip + 1)) ;;
+			esac
+		done < "$index_out"
 		while IFS= read -r -d '' nested; do
 			dir="${nested%/.git}/"
 			for c in ${covering[@]+"${covering[@]}"}; do
@@ -139,7 +148,7 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 	# followed by "/" or a quote so glint-482 does not match glint-482-r37.
 	last="-"; recent=no
 	if [ -d "$transcripts" ]; then
-		matches=$(rg -l -e "${wt}/" -e "${wt}\"" "$transcripts" 2>/dev/null || :)
+		matches=$(rg -l -F -e "${wt}/" -e "${wt}\"" "$transcripts" 2>/dev/null || :)
 		chat=$(printf '%s\n' "$matches" | python3 -c '
 import datetime
 import os
@@ -161,7 +170,7 @@ print(last, "yes" if recent else "no", sep="\t")
 		IFS=$'\t' read -r last recent <<< "$chat"
 	fi
 
-	case "$dirty" in wip:*) bucket=hold-wip ;; kept:*) bucket=hold-kept ;; unreadable) bucket=review ;; *)
+	case "$dirty" in wip:*) bucket=hold-wip ;; kept:*|unreadable) bucket=hold-kept ;; *)
 		case "$pr" in *OPEN*) bucket=hold-open-pr ;; *)
 			if [ "$recent" = yes ]; then bucket=verify-recent-chat
 			elif [ "$merged" = YES ] || [ "$pr" != "-" ]; then bucket=safe

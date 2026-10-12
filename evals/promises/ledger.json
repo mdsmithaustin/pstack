@@ -3326,11 +3326,11 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/worktree-cleanup.md",
-     "quote": "Never run `git worktree remove` or `rm -rf` on a worktree whose `DIRTY` shows `kept:`"
+     "quote": "Remove a worktree only when its `DIRTY` reads `clean`."
     },
     {
      "file": "skills/poteto-mode/scripts/worktree-audit.sh",
-     "quote": "kept:*) bucket=hold-kept"
+     "quote": "kept:*|unreadable) bucket=hold-kept"
     }
    ],
    "harness_sensitive": false,
