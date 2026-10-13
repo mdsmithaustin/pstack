@@ -251,6 +251,32 @@ describe("merge-gate", () => {
       expect(commentCalls(result.port)).toEqual([]);
     });
 
+    it("prints failRounds in the JSON report and in the pretty headline", async () => {
+      const comments = ["a", "b", "c"].map((digit, index) =>
+        issueComment({
+          createdAt: `2026-10-02T1${index}:00:00Z`,
+          body: verdictBody({ verdict: "FAIL", head: digit.repeat(40) }),
+        })
+      );
+      const json = await run([...MERGE_ARGS, "--check"], { port: { comments } });
+      expect(parsed(json.stdout).report.failRounds).toEqual({
+        count: 3,
+        state: "stop",
+        complete: true,
+      });
+      const pretty = await run([...MERGE_ARGS, "--check", "--pretty"], {
+        port: { comments },
+      });
+      expect(pretty.stdout.join("")).toContain("fail-rounds=3 fail-state=stop");
+      const partial = await run([...MERGE_ARGS, "--check", "--pretty"], {
+        port: {
+          comments,
+          truncated: [{ connection: "comments", total: 150, limit: 100 }],
+        },
+      });
+      expect(partial.stdout.join("")).toContain("fail-rounds=3+ fail-state=stop");
+    });
+
     it("needs neither a subject nor a body file", async () => {
       const result = await run(["--pr", "1", "--check"]);
       expect(result.exitCode).toBe(0);

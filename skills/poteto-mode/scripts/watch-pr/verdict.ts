@@ -69,6 +69,7 @@ export type VerdictReading =
  * a comment is not a claim.
  */
 const BLOCK_KEYS = ["Verdict", "Head", "Patch-id", "Docs"] as const;
+const VERDICT_PREFIX = "Verdict:";
 
 function enumMember<const V extends readonly string[]>(
   values: V,
@@ -104,7 +105,7 @@ function field<T>(
 
 function readComment(comment: IssueComment): VerdictReading {
   const lines = comment.body.split(/\r?\n/).filter((line) => line.trim() !== "");
-  if (lines[0]?.startsWith("Verdict:") !== true) return { kind: "absent" };
+  if (lines[0]?.startsWith(VERDICT_PREFIX) !== true) return { kind: "absent" };
   const verdict = field(lines, 0, (text) => enumMember(VERDICTS, text));
   const head = field(lines, 1, parseCommitSha);
   const patchId = field(lines, 2, parsePatchId);
@@ -160,4 +161,60 @@ export function latestVerdict(
     if (latest === null || at >= latest.at) latest = { at, reading };
   }
   return latest === null ? { kind: "absent" } : latest.reading;
+}
+
+const RESET_PREFIX = "Fail-count reset:";
+const STOPPED_PREFIX = "Stopped:";
+const OPERATOR_ASK_LINE = "Operator ask: open";
+const FAIL_ROUND_LIMIT = 3;
+
+type RoundEvent =
+  | { readonly kind: "reset"; readonly at: number }
+  | { readonly kind: "stopped"; readonly at: number }
+  | { readonly kind: "fail"; readonly at: number; readonly round: string };
+const TIE_ORDER = { reset: 0, stopped: 1, fail: 2 } as const;
+
+type FailRoundState = "open" | "stop" | "stopped";
+export interface FailRounds {
+  readonly count: number;
+  readonly state: FailRoundState;
+}
+
+function roundEvent(comment: IssueComment): RoundEvent | null {
+  const at = Date.parse(comment.createdAt);
+  const lines = comment.body.split(/\r?\n/).filter((line) => line.trim() !== "");
+  const first = lines[0];
+  if (
+    first?.startsWith(RESET_PREFIX) === true &&
+    first.slice(RESET_PREFIX.length).trim() !== ""
+  )
+    return { kind: "reset", at };
+  if (first?.startsWith(STOPPED_PREFIX) === true) return { kind: "stopped", at };
+  if (first?.startsWith(VERDICT_PREFIX) !== true) return null;
+  const word = first.slice(VERDICT_PREFIX.length).trim();
+  if (word === "PASS" || word === "PASS+NOTES") return null;
+  if (lines.some((line) => line.trim() === OPERATOR_ASK_LINE)) return null;
+  const head = field(lines, 1, parseCommitSha);
+  return { kind: "fail", at, round: head.kind === "ok" ? head.value : comment.url };
+}
+
+export function failRounds(
+  comments: readonly IssueComment[],
+  prAuthor: string | null
+): FailRounds {
+  const events = comments
+    .filter((comment) => isTrustedComment(comment, prAuthor))
+    .flatMap((comment) => roundEvent(comment) ?? [])
+    .sort((a, b) => a.at - b.at || TIE_ORDER[a.kind] - TIE_ORDER[b.kind]);
+  const rounds = new Set<string>();
+  let phase: FailRoundState | "granted" = "open";
+  for (const event of events) {
+    if (event.kind === "reset") phase = "granted";
+    else if (event.kind === "stopped") phase = "stopped";
+    else {
+      rounds.add(event.round);
+      if (phase !== "open" || rounds.size >= FAIL_ROUND_LIMIT) phase = "stop";
+    }
+  }
+  return { count: rounds.size, state: phase === "granted" ? "open" : phase };
 }

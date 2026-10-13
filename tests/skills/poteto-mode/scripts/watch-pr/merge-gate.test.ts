@@ -41,6 +41,66 @@ const detailOf = (gateReport: GateReport, gate: string): string =>
   gateReport.gates.find((result) => result.gate === gate)?.detail ?? "missing";
 
 describe("evaluateGates", () => {
+  describe("failRounds", () => {
+    const fail = (digit: string, createdAt: string) =>
+      issueComment({
+        createdAt,
+        body: verdictBody({ verdict: "FAIL", head: digit.repeat(40) }),
+      });
+
+    it("counts the distinct Heads of FAIL blocks and reports the read complete", async () => {
+      const { report: counted } = await report({
+        port: {
+          comments: [
+            fail("a", "2026-10-02T10:00:00Z"),
+            fail("b", "2026-10-02T11:00:00Z"),
+            fail("b", "2026-10-02T11:30:00Z"),
+          ],
+        },
+      });
+      expect(counted.failRounds).toEqual({ count: 2, state: "open", complete: true });
+    });
+
+    it("counts a malformed FAIL block as a round, so a slipped third FAIL stops", async () => {
+      const { report: slipped } = await report({
+        port: {
+          comments: [
+            fail("a", "2026-10-02T10:00:00Z"),
+            fail("b", "2026-10-02T11:00:00Z"),
+            issueComment({
+              createdAt: "2026-10-02T12:00:00Z",
+              body: verdictBody({ verdict: "FAIL", head: "c".repeat(40), docs: "PASS" }),
+            }),
+          ],
+        },
+      });
+      expect(slipped.verdict.kind).toBe("malformed");
+      expect(slipped.failRounds).toEqual({ count: 3, state: "stop", complete: true });
+    });
+
+    it("reports zero for a PR with only passing blocks", async () => {
+      const { report: clean } = await report();
+      expect(clean.failRounds).toEqual({ count: 0, state: "open", complete: true });
+    });
+
+    it("marks the count incomplete when the PR has more comments than the read holds", async () => {
+      const { report: partial } = await report({
+        port: {
+          comments: [fail("a", "2026-10-02T10:00:00Z")],
+          truncated: [{ connection: "comments", total: 150, limit: 100 }],
+        },
+      });
+      expect(partial.failRounds).toEqual({ count: 1, state: "open", complete: false });
+    });
+
+    it("stays complete when only another connection is truncated", async () => {
+      const { report: other } = await report({
+        port: { truncated: [{ connection: "reviewThreads", total: 150, limit: 100 }] },
+      });
+      expect(other.failRounds.complete).toBe(true);
+    });
+  });
+
   it("is ready when every gate holds, and lists all nine gates in order", async () => {
     const { report: ready } = await report();
     expect(ready.ready).toBe(true);

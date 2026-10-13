@@ -189,3 +189,84 @@ describe("repository host inference", () => {
     expect(result.commands).toContain("--hostname\nexample.com\n");
   });
 });
+
+function currentPrRun(gitScript: string): {
+  result: { context?: unknown; error?: string };
+  commands: string[][];
+} {
+  const directory = mkdtempSync(join(tmpdir(), "watch-pr-current-"));
+  try {
+    const log = join(directory, "commands");
+    writeFileSync(log, "");
+    const git = join(directory, "git");
+    const gh = join(directory, "gh");
+    writeFileSync(git, `#!/bin/sh\n${gitScript}\n`);
+    writeFileSync(
+      gh,
+      "#!/bin/sh\nprintf '%s\\n' '---' \"$@\" >> \"$WATCH_PR_COMMANDS\"\nprintf '%s\\n' '{\"number\":14,\"url\":\"https://github.com/team/project/pull/14\"}'\n"
+    );
+    chmodSync(git, 0o755);
+    chmodSync(gh, 0o755);
+    const script = `import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(SOURCE_DIR, "github.ts"))}; try { console.log(JSON.stringify({ context: await resolveContext({ reader: new GhGitHubReader(), owner: null, repo: null, pr: null }) })); } catch (error) { console.log(JSON.stringify({ error: error.message })); }`;
+    const spawned = Bun.spawnSync([process.execPath, "-e", script], {
+      cwd: SOURCE_DIR,
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH ?? ""}`,
+        WATCH_PR_COMMANDS: log,
+      },
+    });
+    if (spawned.exitCode !== 0)
+      throw new Error(new TextDecoder().decode(spawned.stderr));
+    return {
+      result: JSON.parse(new TextDecoder().decode(spawned.stdout)),
+      commands: readFileSync(log, "utf8")
+        .split("---\n")
+        .filter(Boolean)
+        .map((command) => command.trimEnd().split("\n")),
+    };
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+const gitScript = (remote: string, branch: string): string =>
+  `case "$1" in remote) ${remote === "" ? "exit 1" : `printf '%s\\n' '${remote}'`};; branch) printf '%s\\n' '${branch}';; esac`;
+
+describe("current PR lookup without --pr", () => {
+  it("passes the origin repo and the checked-out branch to gh pr view", () => {
+    const { result, commands } = currentPrRun(
+      gitScript("https://github.com/team/project.git", "feature-x")
+    );
+    expect(commands).toEqual([
+      ["pr", "view", "feature-x", "--repo", "team/project", "--json", "number,url"],
+    ]);
+    expect(result.context).toEqual({
+      host: "github.com",
+      owner: "team",
+      repo: "project",
+      number: 14,
+    });
+  });
+
+  it("prefixes the host for a GHES origin", () => {
+    const { commands } = currentPrRun(
+      gitScript("ssh://git@example.com/team/project.git", "feature-x")
+    );
+    expect(commands).toEqual([
+      ["pr", "view", "feature-x", "--repo", "example.com/team/project", "--json", "number,url"],
+    ]);
+  });
+
+  it("stops without calling gh when HEAD is detached", () => {
+    const { result, commands } = currentPrRun(
+      gitScript("https://github.com/team/project.git", "")
+    );
+    expect(commands).toEqual([]);
+    expect(result.error).toContain("detached");
+  });
+
+  it("keeps the bare lookup when the checkout has no origin to resolve", () => {
+    const { commands } = currentPrRun(gitScript("", "feature-x"));
+    expect(commands).toEqual([["pr", "view", "--json", "number,url"]]);
+  });
+});

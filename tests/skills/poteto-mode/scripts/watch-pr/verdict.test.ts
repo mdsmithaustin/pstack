@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { latestVerdict } from "../../../../../skills/poteto-mode/scripts/watch-pr/verdict.ts";
+import { failRounds, latestVerdict } from "../../../../../skills/poteto-mode/scripts/watch-pr/verdict.ts";
 import {
   HEAD,
+  MOVED_HEAD,
   PATCH,
   issueComment,
   verdictBody,
@@ -253,5 +254,333 @@ describe("latestVerdict", () => {
       const bot = { ...issueComment({ association: "OWNER" }), author: { login: "some-app", isBot: true } };
       expect(read([bot])).toEqual({ kind: "absent" });
     });
+  });
+});
+
+describe("failRounds", () => {
+  const head = (digit: string) => digit.repeat(40);
+  const fail = (digit: string, createdAt: string, extra = {}) =>
+    issueComment({
+      createdAt,
+      body: verdictBody({ verdict: "FAIL", head: head(digit) }),
+      ...extra,
+    });
+  const count = (comments: Parameters<typeof failRounds>[0]) =>
+    failRounds(comments, PR_AUTHOR).count;
+
+  it("counts one FAIL block per distinct Head, whatever the array order", () => {
+    const rounds = [
+      fail("a", "2026-10-02T10:00:00Z"),
+      fail("b", "2026-10-02T11:00:00Z"),
+      fail("c", "2026-10-02T12:00:00Z"),
+    ];
+    expect(count(rounds)).toBe(3);
+    expect(count([...rounds].reverse())).toBe(3);
+  });
+
+  it("counts a second FAIL at the same Head once", () => {
+    expect(
+      count([
+        fail("a", "2026-10-02T10:00:00Z"),
+        fail("a", "2026-10-02T11:00:00Z"),
+      ])
+    ).toBe(1);
+  });
+
+  it("ignores PASS and PASS+NOTES blocks", () => {
+    expect(
+      count([
+        issueComment({ body: verdictBody({ verdict: "PASS", head: head("a") }) }),
+        issueComment({
+          body: verdictBody({ verdict: "PASS+NOTES", head: head("b") }),
+        }),
+        fail("c", "2026-10-02T12:00:00Z"),
+      ])
+    ).toBe(1);
+  });
+
+  it("counts a malformed FAIL claim, by its Head when it parses and on its own when not", () => {
+    expect(
+      count([
+        fail("a", "2026-10-02T10:00:00Z"),
+        issueComment({ body: `Verdict: FAIL\nHead: ${head("a")}` }),
+        issueComment({
+          body: verdictBody({ verdict: "FAIL", head: head("b"), docs: "PASS" }),
+        }),
+        issueComment({
+          body: verdictBody({ verdict: "FAIL", head: head("d").toUpperCase() }),
+        }),
+        issueComment({ body: "Verdict: FAIL" }),
+      ])
+    ).toBe(4);
+  });
+
+  it("counts a claim whose word is neither PASS nor PASS+NOTES as a FAIL", () => {
+    expect(
+      count(
+        ["pass", "fail", "", "PASS (with notes)"].map((word, index) =>
+          issueComment({
+            body: verdictBody({ verdict: "PASS", head: head(String(index)) }).replace(
+              "Verdict: PASS",
+              `Verdict: ${word}`
+            ),
+          })
+        )
+      )
+    ).toBe(4);
+  });
+
+  it("counts nothing for a PASS or PASS+NOTES claim, even a malformed one", () => {
+    expect(
+      count([
+        issueComment({ body: `Verdict: PASS\nHead: ${head("a")}` }),
+        issueComment({
+          body: verdictBody({ verdict: "PASS+NOTES", head: head("b"), docs: "PASS" }),
+        }),
+      ])
+    ).toBe(0);
+  });
+
+  it("counts nothing for quoted or decorated blocks", () => {
+    expect(
+      count([
+        issueComment({
+          body: `Earlier round:\n\n${verdictBody({ verdict: "FAIL", head: head("b") })}`,
+        }),
+        issueComment({
+          body: verdictBody({ verdict: "FAIL", head: head("c") }).replace(
+            "Verdict: FAIL",
+            "**Verdict: FAIL**"
+          ),
+        }),
+      ])
+    ).toBe(0);
+  });
+
+  it("counts nothing from an untrusted commenter or a bot", () => {
+    const forged = fail("a", "2026-10-02T10:00:00Z", {
+      login: "drive-by",
+      association: "untrusted",
+    });
+    const bot = {
+      ...fail("b", "2026-10-02T11:00:00Z"),
+      author: { login: "some-app", isBot: true },
+    };
+    expect(count([forged, bot])).toBe(0);
+  });
+
+  it("counts a FAIL from the PR author and from a trusted association", () => {
+    expect(
+      count([
+        fail("a", "2026-10-02T10:00:00Z", {
+          login: PR_AUTHOR,
+          association: "untrusted",
+        }),
+        fail("b", "2026-10-02T11:00:00Z", {
+          login: "reviewer-agent",
+          association: "COLLABORATOR",
+        }),
+      ])
+    ).toBe(2);
+  });
+
+  describe("state", () => {
+    const state = (comments: Parameters<typeof failRounds>[0]) =>
+      failRounds(comments, PR_AUTHOR).state;
+    const marker = (createdAt: string, body: string, extra = {}) =>
+      issueComment({ createdAt, body, ...extra });
+    const reset = (createdAt: string, body = "Fail-count reset: operator allowed one more round") =>
+      marker(createdAt, body);
+    const stopped = (createdAt: string, body = "Stopped: open findings filed as #301, #302") =>
+      marker(createdAt, body);
+    const askOnly = (digit: string, createdAt: string) =>
+      issueComment({
+        createdAt,
+        body: verdictBody({
+          verdict: "FAIL",
+          head: head(digit),
+          prose: "Operator ask: open",
+        }),
+      });
+    const rounds = [
+      fail("a", "2026-10-02T10:00:00Z"),
+      fail("b", "2026-10-02T11:00:00Z"),
+      fail("c", "2026-10-02T12:00:00Z"),
+    ];
+
+    it("stays open below three counted FAIL rounds and stops at the third", () => {
+      expect(state([])).toBe("open");
+      expect(state(rounds.slice(0, 2))).toBe("open");
+      expect(state(rounds)).toBe("stop");
+      expect(state([...rounds].reverse())).toBe("stop");
+    });
+
+    it("stops at a third round whose FAIL block is malformed", () => {
+      const slipped = (digit: string, createdAt: string) =>
+        issueComment({
+          createdAt,
+          body: verdictBody({ verdict: "FAIL", head: head(digit), docs: "PASS" }),
+        });
+      expect(
+        failRounds([...rounds.slice(0, 2), slipped("c", "2026-10-02T12:00:00Z")], PR_AUTHOR)
+      ).toEqual({ count: 3, state: "stop" });
+      const everyRoundSlipped = "abcdef"
+        .split("")
+        .map((digit, index) => slipped(digit, `2026-10-02T1${index}:00:00Z`));
+      expect(failRounds(everyRoundSlipped, PR_AUTHOR)).toEqual({ count: 6, state: "stop" });
+    });
+
+    it("grants exactly one more round after a reset: the next FAIL stops", () => {
+      expect(state([...rounds, reset("2026-10-02T12:30:00Z")])).toBe("open");
+      const once = [...rounds, reset("2026-10-02T12:30:00Z"), fail("d", "2026-10-02T13:00:00Z")];
+      expect(state(once)).toBe("stop");
+      expect(failRounds(once, PR_AUTHOR)).toEqual({ count: 4, state: "stop" });
+    });
+
+    it("grants one round per reset, newest first", () => {
+      const twice = [
+        ...rounds,
+        reset("2026-10-02T12:30:00Z"),
+        fail("d", "2026-10-02T13:00:00Z"),
+        stopped("2026-10-02T13:10:00Z"),
+        reset("2026-10-02T13:30:00Z"),
+      ];
+      expect(state(twice)).toBe("open");
+      expect(state([...twice, fail("e", "2026-10-02T14:00:00Z")])).toBe("stop");
+    });
+
+    it("holds a stop until the next reset, even below three heads", () => {
+      const early = [fail("a", "2026-10-02T10:00:00Z"), reset("2026-10-02T10:30:00Z"), fail("b", "2026-10-02T11:00:00Z")];
+      expect(failRounds(early, PR_AUTHOR)).toEqual({ count: 2, state: "stop" });
+      expect(state([...early, fail("b", "2026-10-02T11:30:00Z")])).toBe("stop");
+      expect(
+        state([...early, stopped("2026-10-02T11:10:00Z"), fail("b", "2026-10-02T11:30:00Z")])
+      ).toBe("stop");
+    });
+
+    it("orders a FAIL in the same second as a reset after it, so a tie stops", () => {
+      expect(
+        state([...rounds.slice(0, 2), fail("c", "2026-10-02T12:30:00Z"), reset("2026-10-02T12:30:00Z")])
+      ).toBe("stop");
+    });
+
+    it("ignores a reset from an untrusted commenter or a bot", () => {
+      const forged = marker("2026-10-02T12:30:00Z", "Fail-count reset: please", {
+        login: "drive-by",
+        association: "untrusted",
+      });
+      const bot = { ...reset("2026-10-02T12:40:00Z"), author: { login: "some-app", isBot: true } };
+      expect(state([...rounds, forged, bot])).toBe("stop");
+    });
+
+    it("ignores a reset with no reason, a quoted reset, and a decorated one", () => {
+      for (const body of [
+        "Fail-count reset:",
+        "Fail-count reset:   ",
+        "Noting that\nFail-count reset: later",
+        "**Fail-count reset: now**",
+        "fail-count reset: now",
+      ])
+        expect(state([...rounds, reset("2026-10-02T12:30:00Z", body)])).toBe("stop");
+    });
+
+    it("reads a reset whose reason is followed by prose, after leading blank lines", () => {
+      expect(
+        state([...rounds, reset("2026-10-02T12:30:00Z", "\n\nFail-count reset: operator go\n\nBecause.")])
+      ).toBe("open");
+    });
+
+    it("reads a trusted Stopped: comment newer than every FAIL as stopped", () => {
+      expect(state([...rounds, stopped("2026-10-02T12:30:00Z")])).toBe("stopped");
+      expect(state([...rounds, stopped("2026-10-02T12:30:00Z", "\nStopped:\n\n- #301")])).toBe(
+        "stopped"
+      );
+    });
+
+    it("stops again on a FAIL newer than the Stopped: comment", () => {
+      expect(
+        state([...rounds, stopped("2026-10-02T12:30:00Z"), fail("d", "2026-10-02T13:00:00Z")])
+      ).toBe("stop");
+    });
+
+    it("orders a FAIL in the same second as Stopped: after it, so a tie stops", () => {
+      expect(
+        state([...rounds.slice(0, 2), fail("c", "2026-10-02T12:30:00Z"), stopped("2026-10-02T12:30:00Z")])
+      ).toBe("stop");
+    });
+
+    it("lets a newer reset supersede Stopped:, and keeps Stopped: on a same-second tie", () => {
+      expect(state([...rounds, stopped("2026-10-02T12:30:00Z"), reset("2026-10-02T12:40:00Z")])).toBe(
+        "open"
+      );
+      expect(state([...rounds, stopped("2026-10-02T12:30:00Z"), reset("2026-10-02T12:30:00Z")])).toBe(
+        "stopped"
+      );
+    });
+
+    it("ignores a Stopped: comment from an untrusted commenter, quoted, or decorated", () => {
+      const forged = marker("2026-10-02T12:30:00Z", "Stopped: by a drive-by", {
+        login: "drive-by",
+        association: "untrusted",
+      });
+      expect(state([...rounds, forged])).toBe("stop");
+      for (const body of ["Earlier:\nStopped: x", "**Stopped:** x", "stopped: x", "> Stopped: x"])
+        expect(state([...rounds, stopped("2026-10-02T12:30:00Z", body)])).toBe("stop");
+    });
+
+    it("skips a FAIL marked Operator ask: open, in the count and the stop", () => {
+      const asked = [...rounds.slice(0, 2), askOnly("c", "2026-10-02T12:00:00Z")];
+      expect(failRounds(asked, PR_AUTHOR)).toEqual({ count: 2, state: "open" });
+      expect(
+        state([...rounds, reset("2026-10-02T12:30:00Z"), askOnly("d", "2026-10-02T13:00:00Z")])
+      ).toBe("open");
+    });
+
+    it("counts the third FAIL with the retired Security ask marker", () => {
+      const third = issueComment({
+        createdAt: "2026-10-02T12:00:00Z",
+        body: verdictBody({
+          verdict: "FAIL",
+          head: head("c"),
+          prose: "Security ask: open",
+        }),
+      });
+      expect(failRounds([...rounds.slice(0, 2), third], PR_AUTHOR)).toEqual({
+        count: 3,
+        state: "stop",
+      });
+    });
+
+    it("counts a FAIL whose Operator ask line is quoted, decorated, or mid-sentence", () => {
+      for (const prose of [
+        "> Operator ask: open",
+        "**Operator ask: open**",
+        "The Operator ask: open line is for ask-only rounds.",
+      ])
+        expect(
+          count([
+            ...rounds.slice(0, 2),
+            issueComment({
+              createdAt: "2026-10-02T12:00:00Z",
+              body: verdictBody({ verdict: "FAIL", head: head("c"), prose }),
+            }),
+          ])
+        ).toBe(3);
+    });
+  });
+
+  it("uses a distinct Head even when the patch-id repeats", () => {
+    expect(
+      count([
+        issueComment({
+          createdAt: "2026-10-02T10:00:00Z",
+          body: verdictBody({ verdict: "FAIL", head: HEAD }),
+        }),
+        issueComment({
+          createdAt: "2026-10-02T11:00:00Z",
+          body: verdictBody({ verdict: "FAIL", head: MOVED_HEAD }),
+        }),
+      ])
+    ).toBe(2);
   });
 });
