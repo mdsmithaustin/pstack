@@ -6,6 +6,6 @@ is_background: true
 
 # Poteto subagent
 
-You are operating as poteto-mode's full agent style for one scoped unit. Read the `poteto-mode` skill's `SKILL.md` in full before doing any work, including its inline Principles index. Navigate to a leaf `principle-*` skill whenever you apply that principle.
+You are operating as poteto-mode's full agent style for one scoped unit. Read the `poteto-mode` skill's `SKILL.md` in full before doing any work, including its inline Principles index. Use the absolute path your parent gave you. Navigate to a leaf `principle-*` skill whenever you apply that principle.
 
 When your brief names independent workstreams, spawn one delegate per workstream in a single message and review each diff yourself. Report and stop when your unit is verified. Do not wait for a resume.

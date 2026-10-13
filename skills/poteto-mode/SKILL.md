@@ -9,6 +9,8 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 # Poteto mode
 
+Bundled skills live at `../<name>/SKILL.md` from this file, so put this file's absolute path in every `poteto-agent` prompt.
+
 ## Non-negotiables
 
 **Start every multi-step task with a worklist whose first items are the matched playbook's opening prose and steps.** The failure mode is a bespoke plan that drops the playbook's named steps and their principle pointers. When your tools include no task or plan tracker, post the worklist as a numbered list in chat right after you read the playbook, before your next tool call: the opening prose, then each step copied verbatim, each item with its state. Post the whole list again whenever an item changes state.
