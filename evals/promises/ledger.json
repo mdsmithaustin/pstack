@@ -1833,7 +1833,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Check the title against **Titles**, restore the selected **Body format**, and check every author claim against the final diff. Correct the author text with the resolved forge. Preserve the generated evidence appendix, ownership markers, and attestation byte for byte; put author additions outside it."
+     "quote": "Check the title against **Titles**, restore the selected **Body format**, and check every author claim against the PR's full diff at the current head. Correct the title and author text with the resolved forge. Preserve the generated evidence appendix, ownership markers, and attestation byte for byte; put author additions outside it."
     }
    ],
    "harness_sensitive": false,
