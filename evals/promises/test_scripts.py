@@ -799,6 +799,14 @@ class WorktreeAuditPromises(FakeGhSandbox):
         for index in range(4096):
             (wip / f"generated-{index:04d}.tmp").touch()
         (add("wt-scratch", "scratch-br") / "notes.tmp").write_text("scratch\n")
+        (repo / ".git" / "info" / "exclude").write_text(".audit/\nnode_modules/\n")
+        trail = add("wt-trail", "trail-br")
+        (trail / ".audit").mkdir()
+        (trail / ".audit" / "decisions.tsv").write_text("ts\tphase\n")
+        cache = add("wt-cache", "cache-br")
+        (cache / "node_modules").mkdir()
+        (cache / "node_modules" / "dep.js").write_text("x\n")
+        add("wt spaced", "spaced-br")
         for name, branch in (("wt-unmerged", "unmerged-br"), ("wt-openpr", "openpr-br")):
             path = add(name, branch)
             (path / "work.txt").write_text(name)
@@ -818,20 +826,30 @@ class WorktreeAuditPromises(FakeGhSandbox):
         base, *lines = result.stdout.splitlines()
         self.assertEqual(base, "# base: origin/main")
         self.assertEqual(lines[0].split("\t"), ["SIZE", "AGE", "MERGED", "DIRTY", "REMOTE", "PR", "LAST_CHAT", "BUCKET", "WORKTREE"])
-        rows = {Path(f[8]).name: f for f in (line.split("\t") for line in lines[1:])}
+        rows = {Path(f[8]).name: f for f in (line.split("\t") for line in lines[1:] if not line.startswith("#"))}
         today = date.today().strftime("%Y-%m-%d")
         got = {name: tuple(f[2:8]) for name, f in rows.items()}
         self.assertEqual(
             got,
             {
                 "wt-merged": ("YES", "clean", "no-remote", "-", "-", "safe"),
-                "wt-wip": ("YES", "wip:1", "no-remote", "-", "-", "hold-wip"),
-                "wt-scratch": ("YES", "scratch:1", "no-remote", "-", "-", "safe"),
+                "wt-wip": ("YES", "wip:1,kept:4096", "no-remote", "-", "-", "hold-wip"),
+                "wt-scratch": ("YES", "kept:1", "no-remote", "-", "-", "hold-kept"),
+                "wt-trail": ("YES", "kept:1", "no-remote", "-", "-", "hold-kept"),
+                "wt-cache": ("YES", "clean", "no-remote", "-", "-", "safe"),
+                "wt spaced": ("YES", "clean", "no-remote", "-", "-", "safe"),
                 "wt-unmerged": ("no", "clean", "no-remote", "-", "-", "review"),
                 "wt-openpr": ("no", "clean", "no-remote", "#9/OPEN", "-", "hold-open-pr"),
                 "wt-chat": ("YES", "clean", "no-remote", "-", today, "verify-recent-chat"),
             },
             result.stdout,
+        )
+        kept = [line for line in lines if line.startswith("# kept: ")]
+        wip_kept = [line for line in kept if line.startswith(f"# kept: {wip}/")]
+        self.assertEqual(len(wip_kept), 4096)
+        self.assertEqual(
+            sorted(set(kept) - set(wip_kept)),
+            [f"# kept: {self.tmp / 'wt-scratch'}/notes.tmp", f"# kept: {trail}/.audit/"],
         )
 
         from datetime import datetime, timedelta, timezone
@@ -887,6 +905,7 @@ class WorktreeAuditPromises(FakeGhSandbox):
         self.assertEqual(self.git("branch", "--list", cwd=repo), branches_before)
         self.assertEqual((self.tmp / "wt-wip" / "README.md").read_text(), "edited, not committed\n")
         self.assertEqual((self.tmp / "wt-scratch" / "notes.tmp").read_text(), "scratch\n")
+        self.assertEqual((trail / ".audit" / "decisions.tsv").read_text(), "ts\tphase\n")
         for name in rows:
             self.assertTrue((self.tmp / name).is_dir(), f"{name} was deleted")
 

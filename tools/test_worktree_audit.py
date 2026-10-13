@@ -140,5 +140,259 @@ class WorktreeAuditBaseTest(unittest.TestCase):
         self.assertEqual(row.split("\t")[2], "YES")
 
 
+@unittest.skipUnless(_have("rg") and _have("jq"), "worktree-audit.sh shells out to rg and jq")
+class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
+    def test_trails_and_notes_hold_while_build_caches_stay_safe(self):
+        self.init("master")
+        (self.repo / ".gitignore").write_text(".audit/\nnode_modules/\n", encoding="utf-8")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore")
+        origin = self.tmp / "origin.git"
+        self.git("init", "-q", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "-q", "origin", "master")
+        self.git("fetch", "-q", "origin")
+
+        def add(name: str) -> Path:
+            path = self.tmp / name
+            self.git("worktree", "add", "-q", "-b", name.replace(" ", "-"), str(path), "master")
+            return path
+
+        trail = add("wt-trail")
+        (trail / ".audit").mkdir()
+        (trail / ".audit" / "decisions.tsv").write_text("ts\tphase\n", encoding="utf-8")
+        notes = add("wt-notes")
+        (notes / "notes.md").write_text("findings\n", encoding="utf-8")
+        cache = add("wt-cache")
+        (cache / "node_modules").mkdir()
+        (cache / "node_modules" / "dep.js").write_text("x\n", encoding="utf-8")
+        spaced = add("wt with space")
+        self.git("config", "status.showUntrackedFiles", "no")
+
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        self.assertEqual(lines[0], "# base: origin/master")
+        rows = {Path(f[8]).name: (f[3], f[7]) for f in (line.split("\t") for line in lines[2:] if not line.startswith("#"))}
+        self.assertEqual(rows, {
+            "wt-trail": ("kept:1", "hold-kept"),
+            "wt-notes": ("kept:1", "hold-kept"),
+            "wt-cache": ("clean", "safe"),
+            "wt with space": ("clean", "safe"),
+        }, result.stdout)
+        kept = sorted(line for line in lines if line.startswith("# kept: "))
+        self.assertEqual(kept, [f"# kept: {notes}/notes.md", f"# kept: {trail}/.audit/"], result.stdout)
+        self.assertEqual((trail / ".audit" / "decisions.tsv").read_text(encoding="utf-8"), "ts\tphase\n")
+        self.assertTrue(spaced.is_dir())
+
+    def merged_worktree(self, name: str) -> Path:
+        self.init("main")
+        (self.repo / ".gitignore").write_text(".audit/\n", encoding="utf-8")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore")
+        origin = self.tmp / "origin.git"
+        self.git("init", "-q", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "-q", "origin", "main")
+        self.git("fetch", "-q", "origin")
+        path = self.tmp / name
+        self.git("worktree", "add", "-q", "-b", name, str(path), "main")
+        return path
+
+    def row(self, worktree: Path) -> tuple[str, str]:
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        fields = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(f"\t{worktree}"))
+        return fields[3], fields[7]
+
+    def test_untracked_file_in_a_cache_named_dir_is_kept(self):
+        worktree = self.merged_worktree("wt-dist")
+        (worktree / "dist").mkdir()
+        (worktree / "dist" / "important.txt").write_text("keep\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
+
+    def test_ignored_file_in_a_non_ignored_cache_named_dir_is_kept(self):
+        worktree = self.merged_worktree("wt-ignored-dist")
+        (self.repo / ".gitignore").write_text("*.log\n", encoding="utf-8")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore logs")
+        self.git("-C", str(worktree), "merge", "-q", "--ff-only", "main")
+        self.git("push", "-q", "origin", "main")
+        (worktree / "dist").mkdir()
+        (worktree / "dist" / "run.log").write_text("trail\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
+
+    def test_untracked_file_in_an_ignored_submodule_is_held(self):
+        sub = self.tmp / "sub"
+        sub.mkdir()
+        for args in (("init", "-q", "-b", "main"), ("commit", "-q", "--allow-empty", "-m", "sub")):
+            subprocess.run(["git", *args], cwd=sub, env=self.env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.init("main")
+        self.git("-c", "protocol.file.allow=always", "submodule", "add", "-q", str(sub), "sub")
+        self.git("config", "-f", ".gitmodules", "submodule.sub.ignore", "all")
+        self.git("add", ".gitmodules")
+        self.git("commit", "-q", "-m", "submodule")
+        origin = self.tmp / "origin.git"
+        self.git("init", "-q", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "-q", "origin", "main")
+        self.git("fetch", "-q", "origin")
+        worktree = self.tmp / "wt-sub"
+        self.git("worktree", "add", "-q", "-b", "wt-sub", str(worktree), "main")
+        subprocess.run(["git", "-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init"], cwd=worktree,
+                       env=self.env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (worktree / "sub" / "notes.txt").write_text("trail\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("wip:1,kept:1", "hold-wip"))
+
+    def test_ignored_trail_in_a_clean_populated_submodule_is_kept(self):
+        sub = self.tmp / "sub"
+        sub.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=sub, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (sub / ".gitignore").write_text(".audit/\n", encoding="utf-8")
+        for args in (("add", ".gitignore"), ("commit", "-q", "-m", "ignore trail")):
+            subprocess.run(["git", *args], cwd=sub, env=self.env, check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.init("main")
+        self.git("-c", "protocol.file.allow=always", "submodule", "add", "-q", str(sub), "sub")
+        self.git("config", "-f", ".gitmodules", "submodule.sub.ignore", "all")
+        self.git("add", ".gitmodules")
+        self.git("commit", "-q", "-m", "submodule")
+        origin = self.tmp / "origin.git"
+        self.git("init", "-q", "--bare", str(origin))
+        self.git("remote", "add", "origin", str(origin))
+        self.git("push", "-q", "origin", "main")
+        self.git("fetch", "-q", "origin")
+        worktree = self.tmp / "wt-sub-trail"
+        self.git("worktree", "add", "-q", "-b", "wt-sub-trail", str(worktree), "main")
+        subprocess.run(["git", "-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init"], cwd=worktree,
+                       env=self.env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (worktree / "sub" / ".audit").mkdir()
+        trail = worktree / "sub" / ".audit" / "d.tsv"
+        trail.write_text("trail\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"# kept: {worktree}/sub/", result.stdout.splitlines())
+        self.assertEqual(trail.read_text(encoding="utf-8"), "trail\n")
+
+    def test_ignored_trail_in_a_gitlink_without_gitmodules_is_kept(self):
+        sub = self.tmp / "sub"
+        sub.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=sub, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (sub / ".gitignore").write_text(".audit/\n", encoding="utf-8")
+        for args in (("add", ".gitignore"), ("commit", "-q", "-m", "ignore trail")):
+            subprocess.run(["git", *args], cwd=sub, env=self.env, check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        sub_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=sub, env=self.env, check=True,
+                                  stdout=subprocess.PIPE, text=True).stdout.strip()
+        worktree = self.merged_worktree("wt-gitlink")
+        self.git("update-index", "--add", "--cacheinfo", f"160000,{sub_head},sub")
+        self.git("commit", "-q", "-m", "gitlink without gitmodules")
+        self.git("-C", str(worktree), "merge", "-q", "--ff-only", "main")
+        self.git("push", "-q", "origin", "main")
+        self.git("clone", "-q", str(sub), str(worktree / "sub"))
+        (worktree / "sub" / ".audit").mkdir()
+        (worktree / "sub" / ".audit" / "d.tsv").write_text("trail\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("kept:1", "hold-kept"))
+
+    def test_untracked_nested_checkout_is_counted_once(self):
+        worktree = self.merged_worktree("wt-scratch")
+        scratch = worktree / "scratch"
+        scratch.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=scratch, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (scratch / "notes.txt").write_text("trail\n", encoding="utf-8")
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        fields = next(line.split("\t") for line in lines if line.endswith(f"\t{worktree}"))
+        self.assertEqual((fields[3], fields[7]), ("kept:1", "hold-kept"))
+        self.assertEqual(lines.count(f"# kept: {worktree}/scratch/"), 1, result.stdout)
+
+    def test_untracked_parent_covers_a_nested_checkout(self):
+        worktree = self.merged_worktree("wt-notes")
+        nested = worktree / "notes" / "repo"
+        nested.mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=nested, env=self.env, check=True,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (nested / "notes.txt").write_text("trail\n", encoding="utf-8")
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        fields = next(line.split("\t") for line in lines if line.endswith(f"\t{worktree}"))
+        self.assertEqual((fields[3], fields[7]), ("kept:1", "hold-kept"))
+        self.assertEqual([line for line in lines if line.startswith("# kept: ")],
+                         [f"# kept: {worktree}/notes/"], result.stdout)
+
+    def test_nested_checkout_in_an_ignored_build_cache_is_kept(self):
+        worktree = self.merged_worktree("wt-venv")
+        (self.repo / ".gitignore").write_text(".audit/\n.venv/\n", encoding="utf-8")
+        self.git("add", ".gitignore")
+        self.git("commit", "-q", "-m", "ignore virtualenv")
+        self.git("-C", str(worktree), "merge", "-q", "--ff-only", "main")
+        self.git("push", "-q", "origin", "main")
+        nested = worktree / ".venv" / "src" / "pkg"
+        nested.mkdir(parents=True)
+        (nested / "package.py").write_text("pass\n", encoding="utf-8")
+        for args in (("init", "-q", "-b", "main"), ("add", "package.py"), ("commit", "-q", "-m", "unpushed")):
+            subprocess.run(["git", *args], cwd=nested, env=self.env, check=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = self.audit()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        fields = next(line.split("\t") for line in lines if line.endswith(f"\t{worktree}"))
+        self.assertEqual((fields[3], fields[7]), ("kept:1", "hold-kept"))
+        self.assertEqual([line for line in lines if line.startswith("# kept: ")],
+                         [f"# kept: {worktree}/.venv/src/pkg/"], result.stdout)
+
+    def test_skip_worktree_edit_is_wip(self):
+        worktree = self.merged_worktree("wt-skip")
+        (worktree / "README.md").write_text("local secret\n", encoding="utf-8")
+        self.git("-C", str(worktree), "update-index", "--skip-worktree", "README.md")
+        self.assertEqual(self.row(worktree), ("wip:1", "hold-wip"))
+
+    def test_assume_unchanged_edit_is_wip(self):
+        worktree = self.merged_worktree("wt-assume")
+        (worktree / "README.md").write_text("local edit\n", encoding="utf-8")
+        self.git("-C", str(worktree), "update-index", "--assume-unchanged", "README.md")
+        self.assertEqual(self.row(worktree), ("wip:1", "hold-wip"))
+
+    def test_recent_chat_found_for_worktree_path_with_regex_characters(self):
+        self.merged_worktree("wt-plain")
+        worktree = self.tmp / "wt (a) [b]+"
+        self.git("worktree", "add", "-q", "-b", "wt-regex", str(worktree), "main")
+        slug = re.sub(r"[^a-zA-Z0-9]", "-", str(self.repo))
+        transcripts = self.tmp / "home" / ".claude" / "projects" / slug
+        transcripts.mkdir(parents=True)
+        (transcripts / "s.jsonl").write_text(json.dumps({"cwd": f"{worktree}/"}) + "\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
+
+    def test_recent_chat_found_when_transcript_spells_the_path_in_lowercase(self):
+        self.merged_worktree("wt-plain")
+        worktree = self.tmp / "WT-Case"
+        self.git("worktree", "add", "-q", "-b", "wt-case", str(worktree), "main")
+        slug = re.sub(r"[^a-zA-Z0-9]", "-", str(self.repo))
+        transcripts = self.tmp / "home" / ".claude" / "projects" / slug
+        transcripts.mkdir(parents=True)
+        (transcripts / "s.jsonl").write_text(json.dumps({"cwd": f"{str(worktree).lower()}/"}) + "\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
+
+    def test_prunable_worktree_holds(self):
+        worktree = self.merged_worktree("wt-gone")
+        shutil.rmtree(worktree)
+        self.assertEqual(self.row(worktree), ("unreadable", "hold-kept"))
+
+    def test_unreadable_status_is_never_safe(self):
+        worktree = self.merged_worktree("wt-corrupt")
+        (worktree / ".audit").mkdir()
+        (worktree / ".audit" / "decisions.tsv").write_text("ts\n", encoding="utf-8")
+        git_dir = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], cwd=worktree, env=self.env,
+                                 check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
+        Path(git_dir, "index").write_bytes(b"not an index")
+        self.assertEqual(self.row(worktree), ("unreadable", "hold-kept"))
+
+
 if __name__ == "__main__":
     unittest.main()
