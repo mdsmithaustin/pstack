@@ -1,20 +1,29 @@
-# A linked worktree has no .venv of its own, so the local check uses the one in
-# the main checkout, found through the shared git directory.
-templates:
-  python: '"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"'
-
-pre-commit:
-  commands:
-    cross-suite-references:
-      run: '{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'
-    personal-paths:
-      run: '{python} tools/check-personal-paths.py'
-    skill-ci-check-fast:
-      run: skill-ci check --fast
-
-pre-push:
-  commands:
-    skill-ci-check:
-      run: skill-ci check
-    personal-paths:
-      run: '{python} tools/check-personal-paths.py'
+{
+  "pre-commit": {
+    "commands": {
+      "cross-suite-references": {
+        "run": "{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills"
+      },
+      "personal-paths": {
+        "run": "{python} tools/check-personal-paths.py --source index"
+      },
+      "skill-ci-check-fast": {
+        "run": "skill-ci check --fast"
+      }
+    }
+  },
+  "pre-push": {
+    "commands": {
+      "personal-paths": {
+        "run": "{python} tools/check-personal-paths.py --source pre-push",
+        "use_stdin": true
+      },
+      "skill-ci-check": {
+        "run": "skill-ci check"
+      }
+    }
+  },
+  "templates": {
+    "python": "\"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python\""
+  }
+}

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import re
 import stat
@@ -28,7 +29,7 @@ EXCEPTIONS = {
 
 
 def display_path(path):
-    redacted = re.sub(r"/(Users|home)/[^/]+", r"/\1/<redacted>", path)
+    redacted = re.sub(r"(^|/)(Users|home)/[^/]+", r"\1\2/<redacted>", path)
     return redacted.encode("unicode_escape").decode("ascii")
 
 
@@ -54,27 +55,54 @@ def tracked_bytes(root, name):
         os.close(directory)
 
 
-def main():
-    try:
-        root = subprocess.run(["git", "rev-parse", "--show-toplevel"], check=True,
-                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.rstrip(b"\n")
-        inventory = subprocess.run(["git", "ls-files", "-z"], cwd=os.fsdecode(root), check=True,
-                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout
-        if not inventory or not inventory.endswith(b"\0"):
-            raise OSError("empty or invalid inventory")
-    except (OSError, subprocess.CalledProcessError):
-        print("ERROR: cannot acquire a nonempty tracked-file inventory", file=sys.stderr)
-        return 2
+def git_bytes(root, *args, input=None):
+    return subprocess.run(["git", *args], cwd=os.fsdecode(root) if root is not None else None, input=input, check=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout
 
+
+def blob_files(root, tip=None):
+    inventory = git_bytes(root, "ls-tree", "-rz", "--full-tree", tip) if tip else git_bytes(root, "ls-files", "--stage", "-z")
+    if not inventory or not inventory.endswith(b"\0"):
+        raise OSError("empty or invalid inventory")
+    entries = []
+    for record in inventory[:-1].split(b"\0"):
+        metadata, name = record.split(b"\t", 1)
+        if tip:
+            mode, kind, object_id = metadata.split()
+            stage = b"0"
+        else:
+            mode, object_id, stage = metadata.split()
+        if mode not in (b"100644", b"100755", b"120000") or stage != b"0":
+            raise OSError("unsupported index or tree entry")
+        entries.append((os.fsdecode(name), object_id))
+    blobs = git_bytes(root, "cat-file", "--batch", input=b"".join(oid + b"\n" for _, oid in entries))
+    offset = 0
+    files = []
+    for name, oid in entries:
+        end = blobs.index(b"\n", offset)
+        actual, kind, size = blobs[offset:end].split()
+        if actual != oid or kind != b"blob":
+            raise OSError("invalid blob")
+        offset = end + 1
+        size = int(size)
+        files.append((name, blobs[offset:offset + size]))
+        offset += size + 1
+    return files
+
+
+def scan(root, files):
     used = set()
     findings = []
     checked = 0
-    for name in sorted({os.fsdecode(value) for value in inventory[:-1].split(b"\0")}):
+    for name, content in sorted(files):
         try:
-            content = tracked_bytes(root, name)
+            if content is None:
+                content = tracked_bytes(root, name)
         except OSError:
             print(f"ERROR: cannot inspect tracked file {display_path(name)}", file=sys.stderr)
             return 2
+        for match in HOME_PATH.finditer("/" + name):
+            findings.append(f"{display_path(name)}:0: personal home path /{match['kind']}/<redacted>")
         if b"\0" in content:
             continue
         checked += 1
@@ -99,6 +127,35 @@ def main():
         return 2
     print(f"PASS personal paths: checked {checked} tracked text files")
     return 0
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--source", choices=("worktree", "index", "pre-push"), default="worktree")
+    args = parser.parse_args()
+    try:
+        root = git_bytes(None, "rev-parse", "--show-toplevel").rstrip(b"\n")
+        if args.source == "worktree":
+            inventory = git_bytes(root, "ls-files", "-z")
+            if not inventory or not inventory.endswith(b"\0"):
+                raise OSError("empty or invalid inventory")
+            snapshots = [[(os.fsdecode(name), None) for name in set(inventory[:-1].split(b"\0"))]]
+        elif args.source == "index":
+            snapshots = [blob_files(root)]
+        else:
+            tips = set()
+            for line in sys.stdin:
+                fields = line.split()
+                if len(fields) != 4 or any(not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", fields[i]) for i in (1, 3)):
+                    raise OSError("invalid push input")
+                if set(fields[1]) != {"0"}:
+                    tips.add(fields[1])
+            snapshots = [blob_files(root, tip) for tip in sorted(tips)]
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        print("ERROR: cannot acquire a nonempty tracked-file inventory", file=sys.stderr)
+        return 2
+    results = [scan(root, files) for files in snapshots]
+    return max(results, default=0)
 
 
 if __name__ == "__main__":

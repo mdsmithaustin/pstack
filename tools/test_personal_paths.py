@@ -1,4 +1,7 @@
 import importlib.util
+import json
+import shlex
+import shutil
 import os
 import subprocess
 import sys
@@ -40,9 +43,9 @@ class PersonalPathsCLI(unittest.TestCase):
         self.git("add", "--", name)
         return path
 
-    def scan(self, cwd=None):
-        return subprocess.run([sys.executable, str(CHECKER)], cwd=cwd or self.root,
-                              capture_output=True, text=True, timeout=10)
+    def scan(self, cwd=None, source="worktree", input=None):
+        return subprocess.run([sys.executable, str(CHECKER), "--source", source], cwd=cwd or self.root,
+                              input=input, capture_output=True, text=True, timeout=10)
 
     def test_tracked_leak_fails_then_symbolic_homes_pass(self):
         account = "private-account-731"
@@ -106,7 +109,8 @@ class PersonalPathsCLI(unittest.TestCase):
         self.track(name, home_path("home", "private-person") + "/project")
         done = self.scan()
         self.assertEqual((done.returncode, done.stdout, done.stderr),
-                         (1, "notes/Users/<redacted>/record.txt:1: personal home path /home/<redacted>\n", ""))
+                         (1, "notes/Users/<redacted>/record.txt:0: personal home path /Users/<redacted>\n"
+                             "notes/Users/<redacted>/record.txt:1: personal home path /home/<redacted>\n", ""))
 
     def test_filename_account_is_completely_redacted_in_acquisition_errors(self):
         name = "notes" + home_path("Users", "person@personal-domain") + "/record.txt"
@@ -170,6 +174,129 @@ class PersonalPathsCLI(unittest.TestCase):
         for done in (missing, initialized):
             self.assertEqual((done.returncode, done.stdout, done.stderr),
                              (2, "", "ERROR: cannot acquire a nonempty tracked-file inventory\n"))
+
+    def commit(self):
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture")
+        return subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.root,
+                              check=True, capture_output=True, text=True).stdout.strip()
+
+    def push_input(self, *tips):
+        return "".join(f"refs/heads/local{i} {tip} refs/heads/remote{i} {'0' * 40}\n"
+                       for i, tip in enumerate(tips))
+
+    def test_index_scans_staged_bytes_despite_unstaged_edits(self):
+        file = self.track("notes.txt", home_path("Users", "staged-secret"))
+        file.write_text("clean")
+        done = self.scan(source="index")
+        self.assertEqual((done.returncode, done.stdout, done.stderr),
+                         (1, "notes.txt:1: personal home path /Users/<redacted>\n", ""))
+        self.git("add", "notes.txt")
+        file.write_text(home_path("home", "unstaged-secret"))
+        self.assertEqual(self.scan(source="index").returncode, 0)
+
+    def test_push_scans_all_supplied_tips_and_ignores_deleted_refs_and_history(self):
+        file = self.track("notes.txt", home_path("Users", "committed-secret"))
+        leaking = self.commit()
+        file.write_text("clean")
+        self.git("add", "notes.txt")
+        clean = self.commit()
+        self.assertEqual(self.scan(source="pre-push", input=self.push_input(clean)).returncode, 0)
+        done = self.scan(source="pre-push", input=self.push_input(clean, leaking, "0" * 40))
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("notes.txt:1: personal home path /Users/<redacted>", done.stdout)
+        self.assertNotIn("committed-secret", done.stdout + done.stderr)
+        self.assertEqual(self.scan(source="pre-push", input=self.push_input("0" * 40)).returncode, 0)
+        for invalid in ("not a push record\n", self.push_input("f" * 40)):
+            self.assertEqual(self.scan(source="pre-push", input=invalid).returncode, 2)
+
+    def test_filename_paths_at_root_and_nested_are_checked_in_every_mode(self):
+        for kind in ("Users", "home"):
+            for prefix in ("", "nested/"):
+                name = prefix + kind + "/filename-secret/record.bin"
+                self.track(name, b"\0clean")
+        tip = self.commit()
+        for source in ("worktree", "index", "pre-push"):
+            done = self.scan(source=source, input=self.push_input(tip))
+            self.assertEqual(done.returncode, 1, done.stderr)
+            self.assertEqual(done.stdout.count(":0: personal home path"), 4)
+            self.assertNotIn("filename-secret", done.stdout + done.stderr)
+
+    def test_root_filename_is_redacted_in_acquisition_and_exception_errors(self):
+        for kind in ("Users", "home"):
+            name = kind + "/diagnostic-secret/record.txt"
+            file = self.track(name, "clean")
+            file.unlink()
+            done = self.scan()
+            self.assertEqual(done.stderr,
+                             f"ERROR: cannot inspect tracked file {kind}/<redacted>/record.txt\n")
+            self.assertNotIn("diagnostic-secret", done.stdout + done.stderr)
+            file.write_text("clean")
+        original = personal_paths.EXCEPTIONS
+        self.addCleanup(setattr, personal_paths, "EXCEPTIONS", original)
+        import contextlib
+        import io
+        for kind in ("Users", "home"):
+            personal_paths.EXCEPTIONS = {(f"{kind}/diagnostic-secret/record.txt", kind, "fixture")}
+            errors = io.StringIO()
+            with contextlib.redirect_stderr(errors):
+                result = personal_paths.scan(os.fsencode(self.root), [("clean.txt", b"clean")])
+            self.assertEqual(result, 2)
+            self.assertEqual(errors.getvalue(),
+                             f"ERROR: unused personal-path exception for {kind}/<redacted>/record.txt\n")
+
+    def test_index_and_tip_scan_symlink_blobs_without_following_targets(self):
+        link = self.root / "link"
+        link.symlink_to(home_path("home", "symlink-secret") + "/missing")
+        self.git("add", "link")
+        tip = self.commit()
+        link.unlink()
+        link.symlink_to("clean")
+        for source in ("index", "pre-push"):
+            done = self.scan(source=source, input=self.push_input(tip))
+            self.assertEqual((done.returncode, done.stdout, done.stderr),
+                             (1, "link:1: personal home path /home/<redacted>\n", ""))
+
+    @unittest.skipUnless(shutil.which("lefthook"), "native hook regression requires Lefthook")
+    def test_native_hooks_use_index_and_forward_push_stdin(self):
+        self.commit()
+        config = json.loads((ROOT / "lefthook.yml").read_text(encoding="utf-8"))
+        config["templates"]["python"] = shlex.quote(sys.executable)
+        (self.root / "lefthook.yml").write_text(json.dumps(config))
+        tools = self.root / "tools"
+        tools.mkdir(exist_ok=True)
+        (tools / "check-personal-paths.py").write_bytes(CHECKER.read_bytes())
+        hooks = self.root / ".git/hooks"
+        for hook in ("pre-commit", "pre-push"):
+            path = hooks / hook
+            path.write_text("#!/bin/sh\nexec lefthook run " + hook +
+                            ' --command personal-paths --no-auto-install --force "$@"\n')
+            path.chmod(0o755)
+        file = self.track("notes.txt", home_path("Users", "native-secret"))
+        file.write_text("clean")
+        done = subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                               "-c", "core.hooksPath=.git/hooks", "commit", "-qm", "blocked"], cwd=self.root, capture_output=True, text=True)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("notes.txt:1: personal home path /Users/<redacted>", done.stdout + done.stderr)
+        leaking = self.commit()
+        remote = self.root / "remote.git"
+        self.git("init", "--bare", "-q", str(remote))
+        self.git("remote", "add", "fixture", str(remote))
+        def push(tip):
+            return subprocess.run(["git", "-c", "core.hooksPath=.git/hooks", "push", "fixture", f"{tip}:refs/heads/result"],
+                                  cwd=self.root, capture_output=True, text=True, timeout=30)
+        done = push(leaking)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("notes.txt:1: personal home path /Users/<redacted>", done.stdout + done.stderr)
+        self.assertNotIn("native-secret", done.stdout + done.stderr)
+        self.git("add", "notes.txt")
+        clean = self.commit()
+        file.write_text(home_path("home", "unstaged-secret"))
+        done = push(clean)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        published = subprocess.run(["git", "--git-dir", str(remote), "rev-parse", "refs/heads/result"],
+                                   check=True, capture_output=True, text=True).stdout.strip()
+        self.assertEqual(published, clean)
 
 
 class GateInterpreter(unittest.TestCase):
