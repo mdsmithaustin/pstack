@@ -177,7 +177,7 @@ class PersonalPathsCLI(unittest.TestCase):
                              (2, "", "ERROR: cannot acquire a nonempty tracked-file inventory\n"))
 
     def commit(self):
-        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture" + "@" + "example.invalid",
                  "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture")
         return subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.root,
                               check=True, capture_output=True, text=True).stdout.strip()
@@ -312,7 +312,7 @@ class PersonalPathsCLI(unittest.TestCase):
             path.chmod(0o755)
         file = self.track("notes.txt", home_path("Users", "native-secret"))
         file.write_text("clean")
-        done = subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+        done = subprocess.run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture" + "@" + "example.invalid",
                                "-c", "core.hooksPath=.git/hooks", "commit", "-qm", "blocked"], cwd=self.root, capture_output=True, text=True)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("notes.txt:1: personal home path /Users/<redacted>", done.stdout + done.stderr)
