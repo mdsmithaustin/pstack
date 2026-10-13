@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import platform
+import pwd
 import shlex
 import signal
 import stat
@@ -16,7 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PYTHON_ROOT = Path("/Users/msmith1/.local/share/mise/installs/python/3.14.7")
+_HOST_ACCOUNT = pwd.getpwuid(os.getuid())
+PYTHON_ROOT = Path(_HOST_ACCOUNT.pw_dir) / ".local/share/mise/installs/python/3.14.7"
 PYTHON = PYTHON_ROOT / "bin/python3.14"
 GIT_ROOT = Path("/Library/Developer/CommandLineTools")
 GIT = GIT_ROOT / "usr/bin/git"

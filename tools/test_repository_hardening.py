@@ -83,12 +83,20 @@ class RepositoryHardening(unittest.TestCase):
         self.assertIn("non_fast_forward", rules)
 
     def test_hook_keeps_the_fast_contract(self) -> None:
-        hook = (ROOT / "lefthook.yml").read_text(encoding="utf-8")
-        python_runs = re.findall(r"^\s+run: (.*python.*)$", hook, re.MULTILINE)
-        self.assertEqual(python_runs, ["'{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'"])
-        self.assertIn("""python: '"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"'""", hook)
-        self.assertIn("    skill-ci-check-fast:\n      run: skill-ci check --fast\n", hook)
-        self.assertIn("pre-push:\n  commands:\n    skill-ci-check:\n      run: skill-ci check\n", hook)
+        hook = json.loads((ROOT / "lefthook.yml").read_text(encoding="utf-8"))
+        commit = hook["pre-commit"]["commands"]
+        push = hook["pre-push"]["commands"]
+        self.assertEqual(commit["cross-suite-references"]["run"],
+                         "{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills")
+        self.assertEqual(commit["personal-paths"]["run"],
+                         "{python} tools/check-personal-paths.py --source index")
+        self.assertEqual(push["personal-paths"]["run"],
+                         "{python} tools/check-personal-paths.py --source pre-push")
+        self.assertTrue(push["personal-paths"]["use_stdin"])
+        self.assertEqual(hook["templates"]["python"],
+                         '\"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python\"')
+        self.assertEqual(commit["skill-ci-check-fast"]["run"], "skill-ci check --fast")
+        self.assertEqual(push["skill-ci-check"]["run"], "skill-ci check")
 
 
 if __name__ == "__main__":

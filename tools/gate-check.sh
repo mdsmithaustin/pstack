@@ -12,7 +12,7 @@ cd "$(git rev-parse --show-toplevel)"
 # no-mistakes runs in worktrees where mise and the .venv are unavailable, so the
 # interpreter comes from the environment, then the native 3.14 that evals/promises
 # pins (Python 3.12 fails its native fsmonitor test on this host), then CI's 3.12.
-pinned=/Users/msmith1/.local/share/mise/installs/python/3.14.7/bin/python3.14
+pinned=$HOME/.local/share/mise/installs/python/3.14.7/bin/python3.14
 if [[ -n ${PSTACK_GATE_PYTHON:-} ]]; then
   py=("$PSTACK_GATE_PYTHON")
 elif [[ -x $pinned ]]; then
@@ -35,6 +35,7 @@ run() {
 }
 
 run lint "cross-suite references" . "${py[@]}" tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
+run lint "personal paths" . "${py[@]}" tools/check-personal-paths.py
 run lint "subagent bundle" . "${py[@]}" tools/generate-subagents.py --check
 run lint "promise ledger" . "${py[@]}" evals/promises/ledger.py audit
 run lint "promise ledger canonical form" . "${py[@]}" evals/promises/ledger.py format --check

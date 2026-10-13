@@ -24,6 +24,8 @@ jobs:
           bun-version: "1.4.0"
       - name: No unconditional dependency on another suite's skills
         run: python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
+      - name: No personal home paths in tracked files
+        run: python3 tools/check-personal-paths.py
       - name: Installed subagent bundle matches upstream sources
         run: python3 tools/generate-subagents.py --check
       - name: Install zsh and rg for the verify-commands shell and worktree-audit tests
