@@ -9,7 +9,7 @@ Answer the user's question about pstack, hand them a prompt they can send, and l
 
 A message that asks for work, such as "use pstack to fix this bug", is not a help question. Use the **poteto-mode** skill and do the work under it.
 
-This file maps questions to the skills and guide pages that hold the answers. Those files own the details. Read the file you route to before you quote it, and trust it when it disagrees with this map. Read a sibling skill from the installed skills root. The README and guide pages don't ship with an installed skill, so read them from a pstack checkout when the session runs in one, and otherwise from their public copy. Give the user the file's public copy: `https://github.com/mdsmithaustin/pstack/blob/main/` followed by its path.
+This file maps questions to the skills and guide pages that hold the answers. Those files own the details. Read the file you route to before you quote it, and trust it when it disagrees with this map. Read a sibling skill from the installed skills root. The README and guide pages don't ship with an installed skill, so read them from a pstack checkout when the session runs in one, and otherwise from their public copy. Give the user the file's public copy: `https://github.com/mdsmithaustin/pstack/blob/main/` followed by its repository path, such as `skills/how/SKILL.md` or `docs/guide/01-setup.md`. A skill's file sits under `skills/`, so a path relative to the skills root, such as `how/SKILL.md`, 404s.
 
 ## Find out what they need
 
