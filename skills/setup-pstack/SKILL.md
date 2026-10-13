@@ -1,9 +1,11 @@
 ---
 name: setup-pstack
-description: Check installed pstack personas, optionally register native agents, and configure which models pstack uses per role and at what reasoning budget. Detects your available models and writes a config file that overrides the skill defaults. Use for /setup-pstack, "configure pstack models", "pstack budget", or changing pstack's model choices.
+description: Check installed pstack personas, optionally register native agents, configure which models pstack uses per role and at what reasoning budget, and set up a repository PR template. Use for /setup-pstack, "configure pstack models", "pstack budget", "set up pstack PR templates", or changing pstack's model choices.
 ---
 
 # Setup pstack
+
+For a request scoped to PR templates, run step 0e only. A full setup runs all applicable steps below.
 
 Write the pstack models config, a file that sets pstack's model and reasoning effort per role. Agents resolve it per role with this skill's resolver. A workspace `.agents/pstack-models.md` sits over the user's `~/.agents/pstack-models.md`, a harness section beats a flat line in either file, and a role neither file names falls back to the shipped default in `examples/pstack-models.md`. So this is an override layer, not a requirement.
 
@@ -80,6 +82,10 @@ multi_agent = true
 ```
 
 Edit a file only after the user says yes, and keep every other key. The change applies from the next session. Without a session to confirm, report the signals and any possible causes, say spawning is unverified, and offer no edit.
+
+### 0e. Set up the repository PR template
+
+For a full setup in a Git repository, follow [references/pr-template.md](references/pr-template.md). Preserve existing repository templates and explicit choices. When none exists, install the bundled poteto template and, when no-mistakes is configured, select it through `pr.template`. Report the files changed and whether trusted-default-branch activation is pending. Skip this step outside a repository or when the request only changes models, budgets, or host settings.
 
 ### 1. Detect available models and efforts
 

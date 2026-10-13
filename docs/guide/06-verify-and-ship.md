@@ -118,6 +118,10 @@ The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) 
 
 When a repository gates pushes through [no-mistakes](https://kunchenguid.github.io/no-mistakes/), the agent publishes each branch and opens each PR through the no-mistakes pipeline, and restacks with `no-mistakes rerun` once a run ends. It pushes nothing else except work-in-progress snapshots under `refs/pstack/wip/`, or under the agent ref convention the repository names. When the gate is broken, it stops and reports. It pushes around the gate only after you say "bypass no-mistakes" in the session. An agent in a Docker sandbox commits and leaves the push to the host. Run `no-mistakes init` in your main checkout, from the exact path spelling that git reports, because on a case-insensitive disk no-mistakes matches the spelling `init` used.
 
+Poteto uses the repository's selected PR template or documented format. Without one, it keeps Why, What changed, Scope, Blast Radius, and Verification, with Tradeoffs when needed. A full `/setup-pstack` in a repository installs the default template only when there is no existing template or custom format. For a repository using no-mistakes, setup also fills a missing `pr.template` selection. Existing templates and explicit selections stay in place.
+
+No-mistakes reads that template and its configuration from the trusted default branch, so both must land before template mode activates. Until then, generic pipeline runs can replace the author sections. After publication, the opening playbook restores the selected format and preserves generated evidence. It repeats this check after later updates. See the [template setup instructions](../../skills/setup-pstack/references/pr-template.md).
+
 ## Drive the PR to merge-ready with Babysit
 
 An open PR starts collecting blockers immediately. Checks fail, reviewers comment, trunk moves. Hand that churn to the [Babysit playbook](../../skills/poteto-mode/playbooks/babysit.md):

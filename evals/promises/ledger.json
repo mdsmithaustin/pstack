@@ -1827,6 +1827,20 @@
     "skills/deslop/SKILL.md"
    ]
   },
+  "opening-a-pr-finalizes-body-preserving-evidence": {
+   "check": "static",
+   "claim": "After each publication, finalize the selected author format without changing generated evidence.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "Check the title against **Titles**, restore the selected **Body format**, and check every author claim against the final diff. Correct the author text with the resolved forge. Preserve the generated evidence appendix, ownership markers, and attestation byte for byte; put author additions outside it."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
   "opening-a-pr-gated-bypass-needs-the-user-word": {
    "check": "static",
    "claim": "In a gated repository the agent publishes around the gate only when the user said \"bypass no-mistakes\" in the current session.",
@@ -1890,6 +1904,20 @@
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
      "quote": "When your brief says the repository is gated, or the repository commits `.no-mistakes.yaml`, commit on a feature branch and never push. Report the branch, the head SHA, and that a gated publish is needed."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
+  "opening-a-pr-selected-body-format": {
+   "check": "static",
+   "claim": "PR body format follows the explicit user format, then the repository format, then poteto defaults with five required sections.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "Follow the user's explicit format, then the repository's selected PR template or documented format. Otherwise use the poteto defaults below."
     }
    ],
    "harness_sensitive": false,
@@ -2772,6 +2800,20 @@
     "skills/setup-pstack/SKILL.md"
    ],
    "scenario": "setup-run"
+  },
+  "setup-preserves-and-selects-pr-template": {
+   "check": "static",
+   "claim": "Full repository setup preserves existing formats, installs a default when none exists, and configures a missing no-mistakes template selection.",
+   "evidence": [
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "When none exists, install the bundled poteto template and, when no-mistakes is configured, select it through `pr.template`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/SKILL.md"
+   ]
   },
   "setup-pstack-invocable": {
    "check": "install",
@@ -4205,6 +4247,14 @@
    ],
    "text": "On Claude Code a written effort applies once setup has registered pstack's effort agents."
   },
+  "1a1b38db32ed": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "port"
+   ],
+   "text": "See the [template setup instructions](../../skills/setup-pstack/references/pr-template.md)."
+  },
   "1a401f997daa": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -4375,6 +4425,15 @@
     "port"
    ],
    "text": "It drafts `.agents/skills/<your-name>-mode/SKILL.md` following the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md), runs the draft through [`/unslop`](../../skills/unslop/SKILL.md), and opens a PR from a worktree so you review it like any other change."
+  },
+  "1f8575b05b2c": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-finalizes-body-preserving-evidence",
+   "sources": [
+    "port"
+   ],
+   "text": "After publication, the opening playbook restores the selected format and preserves generated evidence."
   },
   "1fdd824ec19e": {
    "class": "promise",
@@ -6624,6 +6683,15 @@
    ],
    "text": "You describe the API to a hypothetical user and work back to the implementation."
   },
+  "668f09989d76": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-selected-body-format",
+   "sources": [
+    "port"
+   ],
+   "text": "Poteto uses the repository's selected PR template or documented format."
+  },
   "670984349ecf": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -7539,6 +7607,15 @@
    ],
    "text": "A swarm of fresh verifiers starts a round at the owner's code-ready head and again at every later push that changes the patch."
   },
+  "7e7cc9da08ed": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "setup-preserves-and-selects-pr-template",
+   "sources": [
+    "port"
+   ],
+   "text": "Existing templates and explicit selections stay in place."
+  },
   "7f02f8b1458a": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -8294,6 +8371,15 @@
     "port"
    ],
    "text": "When the gate is broken, it stops and reports."
+  },
+  "98be6a0a22ac": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-selected-body-format",
+   "sources": [
+    "port"
+   ],
+   "text": "Without one, it keeps Why, What changed, Scope, Blast Radius, and Verification, with Tradeoffs when needed."
   },
   "991be44a8207": {
    "class": "context",
@@ -9287,6 +9373,15 @@
    ],
    "text": "[`/no-comments`](../../skills/no-comments/SKILL.md) spawns [Comment Sicko](../../agents/comment-sicko.md), a read-only reviewer with a short keep list: license headers, doc comments on a public API, links that explain what code can't, behavior forced by an external dependency you can't reshape."
   },
+  "b5c0187a1d55": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-finalizes-body-preserving-evidence",
+   "sources": [
+    "port"
+   ],
+   "text": "It repeats this check after later updates."
+  },
   "b5d1112f1561": {
    "class": "promise",
    "file": "08-principles.md",
@@ -9610,6 +9705,15 @@
     "port"
    ],
    "text": "**The real constraints.** \"repro first\", \"don't change any code yet\", \"zero behavior change\", and \"let me review before proceeding\" each change what the agent does."
+  },
+  "c09cc0a93c69": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "setup-preserves-and-selects-pr-template",
+   "sources": [
+    "port"
+   ],
+   "text": "A full `/setup-pstack` in a repository installs the default template only when there is no existing template or custom format."
   },
   "c19a8e5553df": {
    "class": "promise",
@@ -10355,6 +10459,14 @@
    ],
    "text": "Next: [Run work while you sleep](./07-overnight.md)."
   },
+  "d3ccc848d19a": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "port"
+   ],
+   "text": "No-mistakes reads that template and its configuration from the trusted default branch, so both must land before template mode activates."
+  },
   "d3d387b0e057": {
    "class": "promise",
    "file": "04-design.md",
@@ -10715,6 +10827,15 @@
    ],
    "text": "It drafts `.cursor/skills/<your-name>-mode/SKILL.md` through Cursor's built-in `create-skill` flow, runs the draft through [`/unslop`](../../skills/unslop/SKILL.md), and opens a PR from a worktree so you review it like any other change."
   },
+  "e006725fda01": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "setup-preserves-and-selects-pr-template",
+   "sources": [
+    "port"
+   ],
+   "text": "For a repository using no-mistakes, setup also fills a missing `pr.template` selection."
+  },
   "e01e6ffc40e1": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -10837,6 +10958,14 @@
     "port"
    ],
    "text": "[Sequence Work into Verifiable Units](../../skills/principle-sequence-verifiable-units/SKILL.md) ends each small unit in a check before starting the next."
+  },
+  "e39a2b0963f1": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Until then, generic pipeline runs can replace the author sections."
   },
   "e40471966311": {
    "class": "context",
