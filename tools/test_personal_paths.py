@@ -210,6 +210,43 @@ class PersonalPathsCLI(unittest.TestCase):
         for invalid in ("not a push record\n", self.push_input("f" * 40)):
             self.assertEqual(self.scan(source="pre-push", input=invalid).returncode, 2)
 
+    def test_index_allows_missing_fixtures_but_worktree_requires_used_exceptions(self):
+        self.git("rm", "-r", "--cached", ".")
+        self.track("clean.txt", "clean")
+        done = self.scan(source="index")
+        self.assertEqual((done.returncode, done.stdout, done.stderr),
+                         (0, "PASS personal paths: checked 1 tracked text files\n", ""))
+        self.track("PORTING.md", home_path("Users", "you") + "/fixture")
+        done = self.scan(source="index")
+        self.assertEqual((done.returncode, done.stdout, done.stderr),
+                         (0, "PASS personal paths: checked 2 tracked text files\n", ""))
+        done = self.scan()
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("ERROR: unused personal-path exception", done.stderr)
+        self.track("PORTING.md", home_path("Users", "you-private") + "/project")
+        done = self.scan(source="index")
+        self.assertEqual((done.returncode, done.stdout, done.stderr),
+                         (1, "PORTING.md:1: personal home path /Users/<redacted>\n", ""))
+
+    def test_push_allows_older_and_multiple_tips_with_missing_fixtures(self):
+        self.git("rm", "-r", "--cached", ".")
+        self.track("clean.txt", "clean")
+        older = self.commit()
+        self.track("PORTING.md", home_path("Users", "you") + "/fixture")
+        partial = self.commit()
+        for tips in ((older,), (older, partial)):
+            done = self.scan(source="pre-push", input=self.push_input(*tips))
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(done.stderr, "")
+            self.assertEqual(done.stdout.count("PASS personal paths:"), len(tips))
+        self.track("PORTING.md", home_path("Users", "you-private") + "/project")
+        leaking = self.commit()
+        done = self.scan(source="pre-push", input=self.push_input(older, partial, leaking))
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("PORTING.md:1: personal home path /Users/<redacted>", done.stdout)
+        self.assertEqual(done.stderr, "")
+        self.assertNotIn("you-private", done.stdout)
+
     def test_filename_paths_at_root_and_nested_are_checked_in_every_mode(self):
         for kind in ("Users", "home"):
             for prefix in ("", "nested/"):

@@ -90,7 +90,7 @@ def blob_files(root, tip=None):
     return files
 
 
-def scan(root, files):
+def scan(root, files, validate_exceptions=True):
     used = set()
     findings = []
     checked = 0
@@ -114,7 +114,7 @@ def scan(root, files):
                 else:
                     findings.append(f"{display_path(name)}:{line}: personal home path /{match['kind']}/<redacted>")
     stale = EXCEPTIONS - used
-    if stale:
+    if validate_exceptions and stale:
         for name in sorted({entry[0] for entry in stale}):
             print(f"ERROR: unused personal-path exception for {display_path(name)}", file=sys.stderr)
         return 2
@@ -154,7 +154,7 @@ def main():
     except (OSError, ValueError, subprocess.CalledProcessError):
         print("ERROR: cannot acquire a nonempty tracked-file inventory", file=sys.stderr)
         return 2
-    results = [scan(root, files) for files in snapshots]
+    results = [scan(root, files, validate_exceptions=args.source == "worktree") for files in snapshots]
     return max(results, default=0)
 
 
