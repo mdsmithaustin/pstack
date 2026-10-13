@@ -85,7 +85,8 @@ class RepositoryHardening(unittest.TestCase):
     def test_hook_keeps_the_fast_contract(self) -> None:
         hook = (ROOT / "lefthook.yml").read_text(encoding="utf-8")
         python_runs = re.findall(r"^\s+run: (.*python.*)$", hook, re.MULTILINE)
-        self.assertEqual(python_runs, ["'{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'"])
+        self.assertEqual(python_runs, ["'{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'",
+                                      "'{python} tools/check-personal-paths.py'", "'{python} tools/check-personal-paths.py'"])
         self.assertIn("""python: '"$(git rev-parse --path-format=absolute --git-common-dir)/../.venv/bin/python"'""", hook)
         self.assertIn("    skill-ci-check-fast:\n      run: skill-ci check --fast\n", hook)
         self.assertIn("pre-push:\n  commands:\n    skill-ci-check:\n      run: skill-ci check\n", hook)

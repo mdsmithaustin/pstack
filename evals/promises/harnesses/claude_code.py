@@ -87,10 +87,12 @@ class ConfinedCommand:
 
 
 CLAUDE_VERSION = "2.1.295"
-CLAUDE_BINARY = Path(f"/Users/msmith1/.local/share/claude/versions/{CLAUDE_VERSION}")
+_HOST_ACCOUNT = pwd.getpwuid(os.getuid())
+_HOST_HOME = Path(_HOST_ACCOUNT.pw_dir)
+CLAUDE_BINARY = _HOST_HOME / ".local/share/claude/versions" / CLAUDE_VERSION
 CLAUDE_SHA256 = "0116ee2e0a513900b633d9951367f18747686478e2b462805b8c31609f047f70"
-PYTHON_ROOT = Path("/Users/msmith1/.local/share/mise/installs/python/3.14.7")
-NODE_ROOT = Path("/Users/msmith1/.local/share/mise/installs/node/24.20.0")
+PYTHON_ROOT = _HOST_HOME / ".local/share/mise/installs/python/3.14.7"
+NODE_ROOT = _HOST_HOME / ".local/share/mise/installs/node/24.20.0"
 GIT_ROOT = Path("/Library/Developer/CommandLineTools")
 RG_BINARY = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path/rg")
 PINNED_TOOLS = (
@@ -126,11 +128,10 @@ def _digest(path):
 
 @lru_cache(maxsize=1)
 def _host_runtime():
-    account = pwd.getpwuid(os.getuid())
-    if (platform.system(), platform.release(), platform.machine(), account.pw_dir, account.pw_name) != (
-            "Darwin", "25.6.0", "arm64", "/Users/msmith1", "msmith1"):
+    account = _HOST_ACCOUNT
+    if (platform.system(), platform.release(), platform.machine()) != ("Darwin", "25.6.0", "arm64"):
         raise IsolationUnavailable("Claude filesystem isolation supports only the measured Darwin 25.6.0 arm64 runtime")
-    home = Path(account.pw_dir)
+    home = _HOST_HOME
     files = (CLAUDE_BINARY, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
         "/", "/usr/share/icu/icudt78l.dat", "/dev/null", "/dev/random", "/dev/urandom", "/private/etc/hosts",
         "/private/var/run/resolv.conf", "/private/var/db/timezone/zoneinfo/America/Denver")))

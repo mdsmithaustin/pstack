@@ -7,6 +7,8 @@ pre-commit:
   commands:
     cross-suite-references:
       run: '{python} tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills'
+    personal-paths:
+      run: '{python} tools/check-personal-paths.py'
     skill-ci-check-fast:
       run: skill-ci check --fast
 
@@ -14,3 +16,5 @@ pre-push:
   commands:
     skill-ci-check:
       run: skill-ci check
+    personal-paths:
+      run: '{python} tools/check-personal-paths.py'

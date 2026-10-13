@@ -629,7 +629,6 @@ class RuntimeAdmission(unittest.TestCase):
         git = Path("/Library/Developer/CommandLineTools/usr/bin/git")
         fingerprints = {path: digests[0] for path, digests in claude_code.PINNED_TOOLS}
         fingerprints[claude_code.CLAUDE_BINARY] = claude_code.CLAUDE_SHA256
-        account = Mock(pw_dir="/Users/msmith1", pw_name="msmith1")
         self.addCleanup(claude_code._host_runtime.cache_clear)
         for digest in ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
                        "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae"):
@@ -639,7 +638,6 @@ class RuntimeAdmission(unittest.TestCase):
                 with patch.object(claude_code.platform, "system", return_value="Darwin"), \
                         patch.object(claude_code.platform, "release", return_value="25.6.0"), \
                         patch.object(claude_code.platform, "machine", return_value="arm64"), \
-                        patch.object(claude_code.pwd, "getpwuid", return_value=account), \
                         patch.object(Path, "is_symlink", return_value=False), \
                         patch.object(Path, "is_file", return_value=True), \
                         patch.object(Path, "exists", return_value=True), \
@@ -648,8 +646,9 @@ class RuntimeAdmission(unittest.TestCase):
                 self.assertEqual(dict(runtime.fingerprints)[git], digest)
 
 
-@unittest.skipUnless((platform.system(), platform.release(), platform.machine(), str(Path.home())) ==
-                     ("Darwin", "25.6.0", "arm64", "/Users/msmith1"), "requires the measured Claude runtime")
+@unittest.skipUnless((platform.system(), platform.release(), platform.machine()) ==
+                     ("Darwin", "25.6.0", "arm64") and os.access("/usr/bin/sandbox-exec", os.X_OK),
+                     "requires the measured Claude runtime")
 class NativeGit(unittest.TestCase):
     def test_confined_path_resolves_native_git_without_the_selection_shim(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -671,13 +670,13 @@ class NativeGit(unittest.TestCase):
             self.assertTrue((run.project / ".git" / "HEAD").is_file())
 
     def test_the_confined_user_scope_cannot_read_the_host_claude_directory(self):
-        host = Path.home() / ".claude"
-        if not host.is_dir():
-            self.skipTest("the host has no ~/.claude to protect")
         with tempfile.TemporaryDirectory() as tmp:
             run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": "tally"}, "0" * 40, 60)
             run.project.mkdir(parents=True)
             state = claude_code._bind_paths(run, claude_code._host_runtime())
+            host = state.runtime.home / ".claude"
+            if not host.is_dir():
+                self.skipTest("the host has no ~/.claude to protect")
             for argv in (["/bin/ls", str(host)], ["/bin/cat", str(host / "settings.json")], ["/bin/ls", str(host / "skills")]):
                 with self.subTest(argv=argv[0]):
                     done = subprocess.run(["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0), *argv], cwd=run.project,
