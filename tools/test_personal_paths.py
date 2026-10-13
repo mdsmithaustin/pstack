@@ -45,6 +45,7 @@ class PersonalPathsCLI(unittest.TestCase):
 
     def scan(self, cwd=None, source="worktree", input=None):
         return subprocess.run([sys.executable, str(CHECKER), "--source", source], cwd=cwd or self.root,
+                              env={**os.environ, "GIT_CEILING_DIRECTORIES": str(Path(cwd or self.root).parent)},
                               input=input, capture_output=True, text=True, timeout=10)
 
     def test_tracked_leak_fails_then_symbolic_homes_pass(self):
@@ -141,7 +142,7 @@ class PersonalPathsCLI(unittest.TestCase):
             external = Path(outside) / "external.txt"
             external.write_text(home_path("Users", "external-secret"))
             link = self.root / "linked.txt"
-            link.symlink_to(external)
+            link.symlink_to(os.path.relpath(external, self.root))
             self.git("add", "linked.txt")
             done = self.scan()
             self.assertEqual((done.returncode, done.stdout, done.stderr),
