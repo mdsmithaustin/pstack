@@ -3369,7 +3369,7 @@
   },
   "worklist-falls-back-to-numbered-list": {
    "check": "live",
-   "claim": "When the structured task tool is off, the same worklist appears as a numbered list with states in chat.",
+   "claim": "When the structured task tool is off, poteto-mode requires the same worklist as a numbered list with states in chat. Retained runs show inconsistent compliance.",
    "harness_sensitive": true,
    "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
    "owners": [
@@ -4852,6 +4852,18 @@
    ],
    "text": "Each role maps to a model and, when you want to pin it, a reasoning effort (`sonnet@high`)."
   },
+  "2bbac29c0df6": {
+   "also": [
+    "worklist-falls-back-to-numbered-list"
+   ],
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "worklist-in-native-task-tool",
+   "sources": [
+    "port"
+   ],
+   "text": "Watch the todo list, or the numbered list in chat that `/poteto-mode` requires when the task tools are off."
+  },
   "2bfd37e5c3be": {
    "class": "context",
    "file": "04-design.md",
@@ -5223,6 +5235,14 @@
     "upstream"
    ],
    "text": "It's a checkable finish condition, an isolated worktree or cloud agent, and a decision log you audit in the morning."
+  },
+  "35d9ca20df5f": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "The [retained runs](../../PORTING.md#guide-promise-fixes) met the full fallback requirement in only 1 of 3 Claude Code runs and did not show reliable compliance on Hermes."
   },
   "360bce6ebc52": {
    "class": "context",
@@ -8530,18 +8550,6 @@
    ],
    "text": "`/reflect` improves skills from one session."
   },
-  "9bd9a9e66390": {
-   "also": [
-    "worklist-falls-back-to-numbered-list"
-   ],
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "worklist-in-native-task-tool",
-   "sources": [
-    "port"
-   ],
-   "text": "Watch the todo list, or the numbered list in chat when the task tools are off."
-  },
   "9bf656ea5891": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -11215,7 +11223,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "9bd9a9e66390"
+    "2bbac29c0df6"
    ],
    "promise": "worklist-in-native-task-tool",
    "sources": [
