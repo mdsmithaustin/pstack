@@ -3595,7 +3595,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "fcf9c8ddab41"
+    "c9016f92b729"
    ],
    "promise": "show-me-your-work-spawns-trail-reviewer",
    "sources": [
@@ -10144,6 +10144,18 @@
    ],
    "text": "On Claude Code and Grok Build those roles run at your session effort, and on Codex the `## codex` section pins its own."
   },
+  "c9016f92b729": {
+   "also": [
+    "show-me-your-work-review-ends-with-attention"
+   ],
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "show-me-your-work-spawns-trail-reviewer",
+   "sources": [
+    "port"
+   ],
+   "text": "Before the skill hands back its summary, it spawns a reviewer on the `trail reviewer` role, following [Spawn a role](../../skills/pstack-harness/SKILL.md#spawn-a-role) for model resolution and execution-identity disclosure, to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
+  },
   "c90f8c31210e": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -11824,18 +11836,6 @@
     "port"
    ],
    "text": "A misreading shows up in the restatement, where it costs one message to correct."
-  },
-  "fcf9c8ddab41": {
-   "also": [
-    "show-me-your-work-review-ends-with-attention"
-   ],
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "show-me-your-work-spawns-trail-reviewer",
-   "sources": [
-    "port"
-   ],
-   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review when it allows none, labeled as one in the verdict and the reply), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
   },
   "fd1240f7af47": {
    "class": "promise",
