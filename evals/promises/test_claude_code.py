@@ -24,9 +24,12 @@ class Preflight(unittest.TestCase):
         self.enterContext(patch.object(claude_code.shutil, "which", return_value=None))
 
     def test_missing_executable_reports_installation_before_login(self):
-        with patch.object(claude_code, "check_status", side_effect=AssertionError("status called without a CLI")):
+        with patch.object(claude_code, "check_status", side_effect=AssertionError("status called without a CLI")), \
+                patch.object(live, "run_case") as run_case:
             with self.assertRaises(RuntimeError) as raised:
-                live.preflight("claude-code")
+                live.main(["run", "--harness", "claude-code", "--case", "first",
+                           "--out", str(self.binary.parent / "out")])
+        run_case.assert_not_called()
         self.assertIs(type(raised.exception), RuntimeError)
         self.assertEqual(str(raised.exception), "claude executable missing; install Claude Code before running live cases")
 
