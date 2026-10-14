@@ -5,6 +5,25 @@ node_modules/
 __pycache__/
 *.pyc
 
+/.agents/skills
+/.claude/skills
+/skills-lock.json
+/.gitnexus/
+/.audit/
+/decisions.tsv
+/children.tsv
+
+**/.claude/scheduled_tasks.lock
+**/.claude/scheduled_tasks.json
+**/.claude/routines/.state/
+**/.claude/worktrees/
+**/.claude/checkpoints/
+**/.claude/mailbox/
+**/.claude/agent-registry.json
+**/.claude/agent-memory-local
+**/.claude/first-run
+**/.claude/assistant-daemon-state.json
+
 # Behavioral eval runs write raw agent transcripts. Never commit them.
 # Leading **/ so the rules reach a runs directory wherever a run writes one,
 # not only the one at the repository root. That includes the per-skill evals
