@@ -59,6 +59,26 @@ Invocation metadata, worker output, and observation messages have size limits.
 Each evaluator execution has a two-second deadline. Missing observations,
 unsupported metadata, or exceeded limits prevent acceptance.
 
+The lifecycle observation case checks whether the application reaped its one
+child and closed its cleanup pipe writer. A private worker owns both resources,
+and the broker samples their kernel state before observer repair. The generated
+CLI stub requires that evaluator runtime and is not a standalone host process
+probe. The default
+`python3 tools/check-lifecycle.py` command returns zero for a reaped child and
+closed writer, or one for omitted cleanup. Its authenticated `--repair-first`
+mode performs real owner cleanup before sampling and fails the observation-order
+check, even if its exit and final resources are clean. The broker retains frozen
+application facts, first-observation facts, observer action order, actual worker
+execution, and a separate safety teardown record. It measures writer cleanup,
+not application stdout reader cleanup. A failed or missing observation cannot
+pass because the outer shell exits nonzero. Lifecycle grading accepts only the
+actual fact-derived worker exit, while bytecode grading still requires zero.
+Each state retains at most eight attempts of at most 32 KiB each. The existing
+16 KiB ceiling on the whole broker response is stricter than the 32 KiB
+retained-attempt bound. A ninth attempt
+latches failure and launches no worker. Forced status 97 launches no lifecycle
+resource and must make the outer gate return nonzero.
+
 `spec-probes` and `runtime-probes` allow several valid response shapes. Their
 grader-only expectations name the relevant fixture facts and unacceptable
 claims. A cross-family judge scores the response. Process assertions separately
@@ -88,8 +108,17 @@ without blockers. These checks validate the instrument, not skill quality.
 
 Start with one paired repetition. Replace the skill name for each corpus.
 
+Fixture bootstraps that create files, including the verify-commands fixtures,
+need `--sandbox workspace-write` in the answer invocation. Use it for bootstrap
+writes in the disposable model workspace. Use `read-only` for answer tasks that
+only inspect attached files. Resolve the adapter's absolute path before the run
+because isolated answer workspaces do not contain repository tools.
+The executable oracle keeps its prepared tree immutable to candidates.
+
 ```sh
+tools="$(git rev-parse --show-toplevel)/tools"
 skill-ci run skills/verify-commands --agent codex --runs 1 \
+  --codex-cmd "$tools/codex-project-only exec --json --skip-git-repo-check --sandbox workspace-write" \
   --codex-model gpt-6.1-sol --out /private/tmp/verify-commands-sol-screen
 
 skill-ci run skills/verify-commands --agent claude --runs 1 \
@@ -109,8 +138,8 @@ only for threshold-close or disputed answers after inspecting the first
 verdict's prompt and rationale. `skill-ci run` always uses a Claude
 judge, so invoke the pinned harness directly for a cross-family comparison.
 
-Resolve adapter paths before starting. Answer runs execute in isolated
-workspaces, where a repository-relative adapter path does not exist.
+Follow the [paid-screen sandbox and adapter guidance](#paid-screen) when
+adapting this example to another corpus.
 
 ```sh
 skill=runtime-probes

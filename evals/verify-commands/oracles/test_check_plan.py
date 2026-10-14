@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import struct
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -30,6 +31,198 @@ class PlanReplayTests(unittest.TestCase):
             root = Path(directory).resolve()
             (root / "output.md").write_text(f"```sh\n{script}\n```\n", encoding="utf-8")
             return MODULE.evaluate("bytecode-controls", root)
+
+    def replay_lifecycle(self, script, extra_states=(), timeout=None):
+        definition, bootstrap = MODULE.load_case("lifecycle-observation")
+        definition = json.loads(json.dumps(definition))
+        definition["states"].extend(extra_states)
+        if timeout is not None:
+            for state in definition["states"]:
+                state["timeout_seconds"] = timeout
+        return MODULE.replay(MODULE.parse_plan(f"```sh\n{script}\n```\n"), definition, bootstrap)
+
+    def lifecycle_record(self, state):
+        return state["lifecycle_checks"][0]["attempts"][0]["record"]
+
+    def assert_lifecycle_teardown(self, record):
+        self.assertEqual(record["teardown"]["failure"], None, record)
+        self.assertEqual(record["teardown"]["writer"], "closed")
+        self.assertEqual(record["teardown"]["child_absent"], True)
+        self.assertEqual(record["teardown"]["subreaper_restored"], 0)
+        self.assertEqual(record["teardown"]["direct_children_after"], record["baseline_direct_children"])
+        self.assertEqual(record["teardown"]["frozen_sha256_after"], record["frozen_sha256"])
+
+    def test_lifecycle_public_cli_retains_clean_and_dirty_facts_and_actual_exits(self):
+        code, result = self.evaluate_sample("lifecycle-observation", "valid-lifecycle-observation.md")
+        self.assertEqual((code, result["status"]), (0, "pass"), result)
+        self.assertEqual(result["states"], ["cleanup-present", "cleanup-omitted", "forced-operation-failure"])
+        self.assertEqual(len(result["control_evidence"]), 2)
+        for state, expected in zip(result["control_evidence"], [("reaped", "closed", 0), ("zombie", "open", 1)]):
+            record = self.lifecycle_record(state)
+            for name in ("application", "observation"):
+                self.assertEqual((record["facts"][name]["child"], record["facts"][name]["writer"]), expected[:2])
+            self.assertEqual((state["exit"], record["execution"]["exit"]), (expected[2], expected[2]))
+            self.assertEqual(record["facts"]["actions"], [{"action": "application_snapshot", "sequence": 1}, {"action": "candidate_observation", "sequence": 2}])
+            worker, child = record["worker_identity"], record["registered_child_identity"]
+            self.assertEqual((worker["uid"], child["uid"], child["parent"]), (65533, 65533, worker["pid"]))
+            self.assertEqual((worker["parent"], worker["session"], worker["group"]), (record["broker_pid"], worker["pid"], worker["pid"]))
+            self.assertNotEqual(record["broker_pid"], 1)
+            self.assertEqual((record["pipe"]["writer_owner"], record["pipe"]["reader_owner"], record["pipe"]["sole_writer"]), (worker["pid"], record["broker_pid"], True))
+            self.assertEqual(record["pipe"]["role"], "application_cleanup_writer")
+            self.assert_lifecycle_teardown(record)
+
+    def test_lifecycle_repair_first_is_authenticated_and_rejected_with_an_outer_zero_control(self):
+        state = {"name": "omitted-outer-zero", "bootstrap_state": "cleanup-omitted", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "zombie", "writer": "open"}}]}
+        code, result = self.replay_lifecycle("set -eu\npython3 tools/check-lifecycle.py --repair-first", [state])
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+        control = next(item for item in result["control_evidence"] if item["state"] == "omitted-outer-zero")
+        self.assertEqual((control["exit"], control["exit_matches"], control["missing_operations"]), (0, True, []))
+        attempt = control["lifecycle_checks"][0]["attempts"][0]
+        self.assertEqual((attempt["application_matches"], attempt["execution_matches"], attempt["protocol_matches"], attempt["order_matches"]), (True, True, True, False))
+        self.assertIn("observer_repair_preceded_observation", attempt["failure_causes"])
+        record = attempt["record"]
+        self.assertEqual((record["facts"]["application"]["child"], record["facts"]["application"]["writer"]), ("zombie", "open"))
+        self.assertEqual((record["facts"]["observation"]["child"], record["facts"]["observation"]["writer"]), ("reaped", "closed"))
+        self.assertEqual(record["execution"]["exit"], 0)
+        self.assertEqual(record["owner_diagnostics"]["repair"]["waitpid"], [record["registered_child_identity"]["pid"], 0])
+        self.assert_lifecycle_teardown(record)
+
+    def test_lifecycle_invalid_attempt_stays_invalid_in_either_order(self):
+        for commands in [("--repair-first", ""), ("", "--repair-first")]:
+            with self.subTest(commands=commands):
+                script = "\n".join(f"python3 tools/check-lifecycle.py {argument} || true" for argument in commands) + "\nexit 1"
+                code, result = self.replay_lifecycle(script)
+                self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+                for state in result["control_evidence"]:
+                    check = state["lifecycle_checks"][0]
+                    self.assertEqual(len(check["attempts"]), 2)
+                    self.assertEqual([item["order_matches"] for item in check["attempts"]], [argument == "" for argument in commands])
+                    self.assertEqual(check["matches"], False)
+                    for attempt in check["attempts"]:
+                        self.assert_lifecycle_teardown(attempt["record"])
+
+    def test_eight_lifecycle_attempts_run_and_ninth_latches_failure_without_a_worker(self):
+        for count in (8, 9):
+            with self.subTest(count=count):
+                script = "\n".join("python3 tools/check-lifecycle.py || result=$?" for _ in range(count)) + "\nexit ${result:-0}"
+                code, result = self.replay_lifecycle(script)
+                self.assertEqual((code, result["status"]), (0, "pass") if count == 8 else (1, "candidate_failure"), result)
+                for state in result["control_evidence"]:
+                    check = state["lifecycle_checks"][0]
+                    self.assertEqual(len(check["attempts"]), 8)
+                    self.assertEqual(check["attempt_limit_exceeded"], count == 9)
+                    workers = [attempt["record"]["worker_identity"]["pid"] for attempt in check["attempts"]]
+                    self.assertEqual(len(set(workers)), 8)
+                    for attempt in check["attempts"]:
+                        self.assertLessEqual(len(json.dumps(attempt["record"]).encode()), 32768)
+                        self.assert_lifecycle_teardown(attempt["record"])
+
+    def test_candidate_failure_and_timeout_preserve_completed_lifecycle_observation(self):
+        for suffix, timeout, wanted_timeout in [("exit 7", None, False), ("sleep 10", 1, True)]:
+            with self.subTest(suffix=suffix):
+                code, result = self.replay_lifecycle("python3 tools/check-lifecycle.py\n" + suffix, timeout=timeout)
+                self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+                for state in result["control_evidence"]:
+                    self.assertEqual(state["timed_out"], wanted_timeout)
+                    self.assertEqual(state["lifecycle_checks"][0]["matches"], True)
+                    self.assert_lifecycle_teardown(self.lifecycle_record(state))
+
+    def test_real_lifecycle_worker_failures_recover_only_owned_children(self):
+        faults = [("worker-timeout", "worker_timeout", 1), ("missing-registration", "protocol", 1), ("identity-failure", "identity", 1), ("missing-observation", "missing_observation", 1), ("death-before-registration", "missing_registration", 1), ("before-fork-failure", "missing_registration", 0)]
+        for fault, cause, recovered_count in faults:
+            with self.subTest(fault=fault):
+                state = {"name": fault, "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "zombie", "writer": "open"}}]}
+                code, result = self.replay_lifecycle("set -eu\npython3 tools/check-lifecycle.py", [state])
+                self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+                control = next(item for item in result["control_evidence"] if item["state"] == fault)
+                self.assertEqual((control["exit_matches"], control["missing_operations"]), (True, []))
+                record = self.lifecycle_record(control)
+                self.assertEqual(record["facts"]["failure"]["cause"], cause)
+                self.assertEqual(record["facts"]["observation"], None)
+                self.assert_lifecycle_teardown(record)
+                recovered = record["teardown"]["recovered_child"]
+                self.assertEqual(int(recovered is not None), recovered_count)
+                if recovered:
+                    self.assertEqual((recovered["parent"], recovered["uid"], recovered["session"], recovered["group"]), (record["broker_pid"], 65533, record["worker_identity"]["session"], record["worker_identity"]["group"]))
+                    self.assertEqual(record["teardown"]["recovered_identity_use"], "teardown_only")
+                if fault == "death-before-registration":
+                    self.assertEqual(record["registered_child_identity"], None)
+                    self.assertEqual(record["facts"]["application"], None)
+                    self.assertEqual(record["execution"]["exit"], 23)
+
+    def test_lifecycle_crash_and_wrong_status_fail_despite_expected_outer_nonzero(self):
+        for fault, actual in [("signaled-worker", -9), ("wrong-status", 97)]:
+            with self.subTest(fault=fault):
+                state = {"name": fault, "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "zombie", "writer": "open"}}]}
+                code, result = self.replay_lifecycle("set -eu\npython3 tools/check-lifecycle.py", [state])
+                self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+                control = next(item for item in result["control_evidence"] if item["state"] == fault)
+                attempt = control["lifecycle_checks"][0]["attempts"][0]
+                self.assertEqual((control["exit_matches"], attempt["application_matches"], attempt["order_matches"], attempt["execution_matches"]), (True, True, True, False))
+                self.assertEqual(attempt["record"]["execution"]["exit"], actual)
+                self.assert_lifecycle_teardown(attempt["record"])
+
+    def test_lifecycle_broker_preserves_an_unrelated_baseline_child(self):
+        runtime = MODULE.CONTAINER_PROGRAM.split('\nroot = Path("/work")', 1)[0]
+        program = r'''
+broker = os.fork()
+if broker == 0:
+    project = Path("/work/baseline-control")
+    project.mkdir()
+    unrelated = os.fork()
+    if unrelated == 0:
+        os._exit(31)
+    unrelated_pidfd = os.pidfd_open(unrelated)
+    lifecycle_ready(unrelated_pidfd, time.monotonic() + 2)
+    original = lifecycle_identity(unrelated)
+    original_descriptors = sorted(os.listdir("/proc/self/fd"))
+    records = []
+    for configuration in [{"cleanup": True, "fault": None}, {"cleanup": False, "fault": None}, {"cleanup": False, "fault": "death-before-registration"}]:
+        (project / "lifecycle-state.json").write_text(json.dumps(configuration))
+        outcome = execute_lifecycle_operation({"arguments": [sys.executable, "tools/check-lifecycle.py"], "script_index": 1}, project)
+        records.append(outcome["lifecycle"])
+        lifecycle_same_identity(lifecycle_identity(unrelated), original)
+        assert lifecycle_identity(unrelated).state == "Z"
+        assert lifecycle_children() == {unrelated}
+        assert sorted(os.listdir("/proc/self/fd")) == original_descriptors
+    separate_wait = lifecycle_wait(unrelated, unrelated_pidfd, time.monotonic() + 2)
+    os.close(unrelated_pidfd)
+    print(json.dumps({"records": records, "unrelated": dataclasses.asdict(original), "separate_wait": separate_wait, "remaining": sorted(lifecycle_children())}), flush=True)
+    os._exit(0)
+_, status = os.waitpid(broker, 0)
+raise SystemExit(os.waitstatus_to_exitcode(status))
+'''
+        command = MODULE.docker_command()
+        command[-1] = runtime + program
+        completed = subprocess.run(command, input=b"", capture_output=True, timeout=15)
+        self.assertEqual(completed.returncode, 0, completed.stderr.decode())
+        result = json.loads(completed.stdout)
+        self.assertEqual((result["separate_wait"]["exit"], result["remaining"]), (31, []))
+        self.assertEqual(len(result["records"]), 3)
+        for record in result["records"]:
+            self.assertNotEqual(record["broker_pid"], 1)
+            self.assertEqual(record["baseline_direct_children"], [result["unrelated"]["pid"]])
+            self.assert_lifecycle_teardown(record)
+
+    def test_lifecycle_worker_output_bound_fails_without_erasing_facts(self):
+        state = {"name": "output-limit", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "zombie", "writer": "open"}}]}
+        code, result = self.replay_lifecycle("set -eu\npython3 tools/check-lifecycle.py", [state])
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+        record = self.lifecycle_record(next(item for item in result["control_evidence"] if item["state"] == "output-limit"))
+        self.assertEqual(record["receipt_failure"], "lifecycle evidence exceeded its byte bound")
+        self.assertEqual((record["facts"]["application"]["child"], record["facts"]["observation"]["child"]), ("zombie", "zombie"))
+        self.assertEqual(record["execution"]["exit"], 1)
+        self.assert_lifecycle_teardown(record)
+
+    def test_lifecycle_measured_pipe_has_eof_while_worker_and_child_are_alive(self):
+        state = {"name": "writer-ownership", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "zombie", "writer": "open"}}]}
+        code, result = self.replay_lifecycle("set -eu\npython3 tools/check-lifecycle.py", [state])
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+        record = self.lifecycle_record(next(item for item in result["control_evidence"] if item["state"] == "writer-ownership"))
+        self.assertEqual(record["teardown"]["sole_writer_control"], {"worker_alive": True, "child_alive": True, "pipe_eof": True})
+        self.assertEqual(record["facts"]["application"], None)
+        self.assertEqual(record["facts"]["observation"], None)
+        self.assert_lifecycle_teardown(record)
 
     def test_bytecode_controls_observe_literal_imported_values_with_fresh_namespaces(self):
         code, result = self.evaluate_sample("bytecode-controls", "valid-bytecode-controls.md")
