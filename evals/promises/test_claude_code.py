@@ -15,6 +15,39 @@ import live
 from harnesses import claude_code
 
 
+class Preflight(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-claude-preflight-")
+        self.addCleanup(tmp.cleanup)
+        self.binary = Path(tmp.name) / "claude"
+        self.enterContext(patch.object(claude_code, "CLAUDE_BINARY", self.binary))
+        self.enterContext(patch.object(claude_code.shutil, "which", return_value=None))
+
+    def test_missing_executable_reports_installation_before_login(self):
+        with patch.object(claude_code, "check_status", side_effect=AssertionError("status called without a CLI")):
+            with self.assertRaises(RuntimeError) as raised:
+                live.preflight("claude-code")
+        self.assertIs(type(raised.exception), RuntimeError)
+        self.assertEqual(str(raised.exception), "claude executable missing; install Claude Code before running live cases")
+
+    def test_installed_but_logged_out_still_reports_login(self):
+        self.binary.write_text("#!/bin/sh\nprintf '%s\\n' '{\"loggedIn\": false}'\n")
+        self.binary.chmod(0o755)
+        with self.assertRaises(claude_code.LoginRequired) as raised:
+            live.preflight("claude-code")
+        self.assertEqual(raised.exception.login, claude_code.LOGIN)
+        self.assertEqual(raised.exception.detail, "`claude auth status` reports loggedIn False")
+        self.assertIn("Run `claude auth login`", str(raised.exception))
+
+    def test_authenticated_status_remains_usable(self):
+        self.binary.write_text("#!/bin/sh\nprintf '%s\\n' '{\"loggedIn\": true}'\n")
+        self.binary.chmod(0o755)
+        with patch.object(live, "run_case") as run_case:
+            code = live.main(["run", "--harness", "claude-code", "--case", "first", "--case", "second",
+                              "--out", str(self.binary.parent / "out")])
+        self.assertEqual((code, [call.args[1] for call in run_case.call_args_list]), (0, ["first", "second"]))
+
+
 def session_rows(cwd):
     return [
         {"type": "user", "cwd": cwd, "message": {"role": "user", "content": "/poteto-mode fix it"}},
