@@ -42,7 +42,7 @@ Read `references/reviewer-prompt.md` and fill in the same template for every rev
 
 ## Step 4, Synthesize
 
-As results come back, build a unified picture. Parse every reviewer's findings. Merge findings that describe the same issue differently, and note which models raised each one. State which models the reviewers ran on first, and count arms that shared a model as one reviewer. Findings two or more models raised independently are the highest signal. Read a lone model's finding, but weight it accordingly. Note disagreements. If one model flags something and another explicitly says the opposite, that is context for the verdict.
+As results come back, build a unified picture. Before you merge anything, state which models the reviewers ran on and count arms that shared a model as one reviewer. Parse every reviewer's findings. Merge findings that describe the same issue differently, and note which models raised each one. Findings two or more models raised independently are the highest signal. Read a lone model's finding, but weight it accordingly. Note disagreements. If one model flags something and another explicitly says the opposite, that is context for the verdict.
 
 ## Step 5, Lead Judgment
 
