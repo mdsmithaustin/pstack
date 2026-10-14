@@ -1,6 +1,6 @@
 # pstack
 
-> this is a CLI-agnostic port of [cursor/plugins/pstack](https://github.com/cursor/plugins/tree/main/pstack) by [poteto](https://x.com/poteto), reworked to install with [`npx skills`](https://skills.sh) and run in **Claude Code**, **Codex**, **Hermes**, and **Grok Build**. [PORTING.md](./PORTING.md) records the port changes.
+> this is a CLI-agnostic port of [cursor/plugins/pstack](https://github.com/cursor/plugins/tree/main/pstack) by [poteto](https://x.com/poteto), reworked to install with [`npx skills`](https://skills.sh) and run in **Claude Code**, **Codex**, **Hermes**, and **Grok Build**. the workflows are poteto's; [PORTING.md](./PORTING.md) records the port changes.
 
 This repository is an independent community port. It is not affiliated with, maintained by, or endorsed by Poteto. It aims to stay in sync with her upstream work while adapting it to these CLIs.
 
