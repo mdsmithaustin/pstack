@@ -43,8 +43,10 @@ if _pstack_os.getuid() != 65533:
         _pstack_os._exit(int(_pstack_reply.split()[1]))
     if _pstack_reply.startswith("{"):
         _pstack_outcome = _pstack_json.loads(_pstack_reply)
-        _pstack_os.write(1, bytes.fromhex(_pstack_outcome["stdout"]))
-        _pstack_os.write(2, bytes.fromhex(_pstack_outcome["stderr"]))
+        for _pstack_descriptor, _pstack_name in ((1, "stdout"), (2, "stderr")):
+            _pstack_data = bytes.fromhex(_pstack_outcome[_pstack_name])
+            if _pstack_data:
+                _pstack_os.write(_pstack_descriptor, _pstack_data)
         _pstack_os._exit(_pstack_outcome["exit"])
     if _pstack_reply != "OK":
         print(_pstack_reply, file=_pstack_sys.stderr)
@@ -170,8 +172,23 @@ def execute_observed_operation(receipt, specifications, project):
         for specification in specifications
     ):
         raise ValueError("unsupported evaluator operation")
+    subject_settings = {"PYTHONPYCACHEPREFIX", "PYTHONDONTWRITEBYTECODE"}
+    if any(
+        name.startswith(("PYTHON", "LD_")) and name not in subject_settings
+        for name in receipt["environment"]
+    ):
+        raise ValueError("unsupported observer startup environment")
+    settings = {name: value for name, value in receipt["environment"].items() if name in subject_settings}
+    if any(len(value.encode("utf-8")) > 2048 for value in settings.values()):
+        raise ValueError("observer cache setting is too large")
     reader, writer = os.pipe()
-    environment = {**receipt["environment"], "PSTACK_OBSERVATION_FD": str(writer)}
+    environment = {
+        "HOME": str(project.parent / "home"),
+        "LANG": "C.UTF-8",
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        **settings,
+        "PSTACK_OBSERVATION_FD": str(writer),
+    }
     process = None
     try:
         process = subprocess.Popen(
@@ -279,8 +296,14 @@ def serve_evidence(listener, stop_reader, result_writer, specifications, project
                             raise RuntimeError("incomplete evaluator response")
                         outcome = json.loads(response.decode("utf-8"))
                         value = outcome["observation"]
-                        if outcome["failure"] is not None or value is None:
+                        if outcome["failure"] is not None or value is None or outcome["exit"] != 0:
                             invalid_observations.update(required)
+                        if value is not None:
+                            value["execution"] = {
+                                "exit": outcome["exit"],
+                                "stdout_hex": outcome["stdout"],
+                                "stderr_hex": outcome["stderr"],
+                            }
                         for index in required:
                             if value is None:
                                 continue

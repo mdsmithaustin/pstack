@@ -44,8 +44,17 @@ class PlanReplayTests(unittest.TestCase):
             [control["behavior_checks"][0]["observation"]["cache_prefix"] for control in controls],
             ["/fresh-baseline", "/fresh-mutated", "/fresh-restored"],
         )
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"]["execution"] for control in controls],
+            [
+                {"exit": 0, "stdout_hex": "626173656c696e650a", "stderr_hex": ""},
+                {"exit": 0, "stdout_hex": "6d75746174696f6e0a", "stderr_hex": ""},
+                {"exit": 0, "stdout_hex": "626173656c696e650a", "stderr_hex": ""},
+            ],
+        )
         for control in controls:
-            self.assertEqual(control["behavior_checks"][0]["observation"]["observer_uid"], 65533)
+            observation = control["behavior_checks"][0]["observation"]
+            self.assertEqual(observation["observer_uid"], 65533)
             self.assertEqual((control["stdout"], control["stderr"], control["exit"]), ("", "", 0))
             receipt = control["fixture_receipt"]
             self.assertEqual((receipt["source_size"], receipt["source_mtime_ns"]), (35, 1700000000000000000))
@@ -167,23 +176,25 @@ class PlanReplayTests(unittest.TestCase):
         self.assertEqual([control["state"] for control in result["failed_states"]], ["forced-operation-failure"])
         self.assertEqual(result["failed_states"][0]["exit_matches"], False)
 
-    def test_inspect_environment_preserves_valid_observer_execution(self):
+    def test_unsupported_startup_settings_do_not_enter_the_observer_worker(self):
+        for setting in ("PYTHONINSPECT=1", "PYTHONSAFEPATH=1", "PYTHONWARNINGS=ignore", "LD_LIBRARY_PATH=/usr/local/lib"):
+            with self.subTest(setting=setting):
+                code, result = self.evaluate_bytecode_script(
+                    f"set -eu\n{setting} PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py"
+                )
+                self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+                self.assertEqual([state["state"] for state in result["failed_states"]], ["baseline", "mutated", "restored"])
+                for control in result["control_evidence"]:
+                    self.assertEqual((control["exit"], control["stdout"], control["behavior_checks"][0]["observation"]), (125, "", None))
+                    self.assertIn("unsupported observer startup environment", control["stderr"])
+
+    def test_unused_closed_stderr_preserves_valid_observer_execution(self):
         code, result = self.evaluate_bytecode_script(
-            "set -eu\nPYTHONINSPECT=1 PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py"
+            "set -eu\nPYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py 2>&-"
         )
         self.assertEqual((code, result["status"]), (0, "pass"), result)
-        self.assertEqual(
-            [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
-            ["baseline", "mutation", "baseline"],
-        )
-
-    def test_failed_import_returns_stderr_without_a_trusted_observation(self):
-        code, result = self.evaluate_bytecode_script("set -eu\nPYTHONSAFEPATH=1 python3 tools/observe.py")
-        self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
-        self.assertEqual([state["state"] for state in result["failed_states"]], ["baseline", "mutated", "restored"])
-        for control in result["control_evidence"]:
-            self.assertEqual((control["exit"], control["stdout"], control["behavior_checks"][0]["observation"]), (1, "", None))
-            self.assertIn("ModuleNotFoundError: No module named 'subject'", control["stderr"])
+        self.assertEqual([control["stdout"] for control in result["control_evidence"]], ["baseline\n", "mutation\n", "baseline\n"])
+        self.assertEqual([control["exit"] for control in result["control_evidence"]], [0, 0, 0])
 
     def test_controller_receives_observer_output_and_propagates_its_exit(self):
         code, result = self.evaluate_bytecode_script(

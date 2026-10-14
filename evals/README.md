@@ -31,11 +31,17 @@ The bytecode control case seeds timestamp-based Python caches before replacing
 equal-size source with the original timestamp. Its baseline, mutation, and
 restoration controls require literal imported values. An authenticated observer
 invocation hands execution to an evaluator worker under a separate user ID.
-The worker runs the captured CLI arguments, working directory, and Python
-environment settings against the immutable fixture. It supplies imported values through
-a private descriptor. The original CLI receives the worker's output and exit
-status. Candidate value reports cannot establish acceptance. Source hashes, cache paths,
-and disabled bytecode writes do not establish executed behavior.
+The worker runs the captured CLI arguments and working directory against the
+immutable fixture. Its startup environment belongs to the evaluator. Only
+`PYTHONPYCACHEPREFIX` and `PYTHONDONTWRITEBYTECODE` environment settings are
+copied from the caller, with a 2048-byte limit per value. Other Python startup
+settings and loader overrides are rejected. The worker supplies imported values
+through a private descriptor. The evaluator records its actual output and exit
+status with those values and requires a zero operation exit. The original CLI
+forwards that output and status. The outer gate's exit is checked separately in
+every control, including forced failure. Candidate output and value reports
+cannot establish imported behavior. Source hashes, cache paths, and disabled
+bytecode writes do not establish executed behavior.
 The prepared control tree is read-only, and setup commands stay outside the
 returned gate. The checker runs as a Python script entrypoint. Equivalent paths,
 environment cache prefixes, and native `-B` and `-X pycache_prefix` options are
