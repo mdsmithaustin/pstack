@@ -26,7 +26,7 @@ import type * as T from "./types.ts";
 import { parsePatchId, type CommitSha, type IssueComment, type PatchId } from "./verdict.ts";
 
 export const CONVERSATION_QUERY =
-  "\nquery MergeGateConversation($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      author { login }\n      reviewThreads(first: 1) { totalCount }\n      reviewRequests(first: 1) { totalCount }\n      reviews(first: 1) { totalCount }\n      comments(last: 100) {\n        totalCount\n        nodes {\n          body\n          url\n          createdAt\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
+  "\nquery MergeGateConversation($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      author { login }\n      reviewRequests(first: 1) { totalCount }\n      reviews(first: 1) { totalCount }\n      comments(last: 100) {\n        totalCount\n        nodes {\n          body\n          url\n          createdAt\n          authorAssociation\n          author { login __typename }\n        }\n      }\n    }\n  }\n}\n";
 
 const MERGE_QUEUE_QUERY =
   "\nquery MergeGateQueue($owner: String!, $repo: String!, $branch: String!) {\n  repository(owner: $owner, name: $repo) {\n    mergeQueue(branch: $branch) { id }\n  }\n}\n";

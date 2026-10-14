@@ -676,7 +676,7 @@ class MergeGatePromises(GitHubSandbox):
         self.assertEqual(record["receipt"]["patchId"], self.patch_id)
         self.assertEqual(
             self.merge_calls(),
-            [["pr", "merge", "7", "--repo", "octo/widgets", "--squash", "--match-head-commit", self.head,
+            [["pr", "merge", "7", "--repo", "github.com/octo/widgets", "--squash", "--match-head-commit", self.head,
               "--subject", "Land the widget", "--body-file", str(self.tmp / "body.txt")]],
         )
 
@@ -828,7 +828,7 @@ class WorktreeAuditPromises(FakeGhSandbox):
         branches_before = self.git("branch", "--list", cwd=repo)
         result = self.run_cmd(["bash", AUDIT_SH], cwd=repo, expect=0)
         self.assertEqual(self.calls(), [[
-            "pr", "list", "--repo", "octo/widgets", "--author", "@me",
+            "pr", "list", "--repo", "github.com/octo/widgets", "--author", "@me",
             "--state", "all", "--limit", "1000", "--json", "number,state,headRefName",
         ]])
         base, *lines = result.stdout.splitlines()

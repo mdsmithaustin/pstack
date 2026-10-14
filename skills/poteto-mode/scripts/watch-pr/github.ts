@@ -646,12 +646,12 @@ export function graphqlArgs(
     "-F",
     `pr=${context.number}`,
   ];
-  if (context.host !== "github.com") argv.push("--hostname", context.host);
+  argv.push("--hostname", context.host);
   return argv;
 }
 
 export const repoArg = (repository: T.Repository): string =>
-  `${repository.host === "github.com" ? "" : `${repository.host}/`}${repository.owner}/${repository.repo}`;
+  `${repository.host}/${repository.owner}/${repository.repo}`;
 
 export class GhGitHubReader implements T.GitHubReader {
   async originRepo(): Promise<T.Repository | null> {

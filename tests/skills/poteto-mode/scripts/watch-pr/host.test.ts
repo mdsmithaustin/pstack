@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:http";
+import { createSecureContext, TLSSocket } from "node:tls";
 
 const SOURCE_DIR = join(import.meta.dir, "../../../../../skills/poteto-mode/scripts/watch-pr");
 
@@ -157,17 +159,20 @@ describe("repository host inference", () => {
     ).toBe(true);
   });
 
-  it("keeps public GitHub gh arguments", () => {
-    const result = commandOutput("https://github.com/team/project.git");
+  it("binds every public GitHub query despite ambient GH_HOST", () => {
+    const result = commandOutput("https://github.com/team/project.git", "example.invalid");
     expect(result.context).toEqual({
       host: "github.com",
       owner: "explicit",
       repo: "override",
       number: 14,
     });
-    expect(result.commands).toContain("--repo\nexplicit/override\n");
-    expect(result.commands).not.toContain("--hostname\n");
-    expect(result.commands).not.toContain("--repo\ngithub.com/");
+    const commands = result.commands.split("---\n").filter(Boolean);
+    expect(commands).toHaveLength(6);
+    for (const command of commands.slice(0, 3))
+      expect(command).toContain("--repo\ngithub.com/explicit/override\n");
+    for (const command of commands.slice(3))
+      expect(command).toContain("--hostname\ngithub.com\n");
   });
 
   it("uses GH_HOST when explicit context has no origin", () => {
@@ -254,7 +259,7 @@ describe("current PR lookup without --pr", () => {
       gitScript("https://github.com/team/project.git", "feature-x")
     );
     expect(commands).toEqual([
-      ["pr", "view", "feature-x", "--repo", "team/project", "--json", "number,url"],
+      ["pr", "view", "feature-x", "--repo", "github.com/team/project", "--json", "number,url"],
     ]);
     expect(result.context).toEqual({
       host: "github.com",
@@ -292,7 +297,7 @@ describe("current PR lookup without --pr", () => {
       gitScript("git@github.com:team/project.git", "someone-feature", "refs/pull/14/head")
     );
     expect(commands).toEqual([
-      ["pr", "view", "14", "--repo", "team/project", "--json", "number,url"],
+      ["pr", "view", "14", "--repo", "github.com/team/project", "--json", "number,url"],
     ]);
     expect(result.context).toEqual({ host: "github.com", owner: "team", repo: "project", number: 14 });
   });
@@ -317,7 +322,7 @@ describe("current PR lookup without --pr", () => {
         );
         const host = new URL(origin).hostname;
         expect(commands).toEqual([
-          ["pr", "view", "14", "--repo", host === "github.com" ? "team/project" : "example.com/team/project", "--json", "number,url"],
+          ["pr", "view", "14", "--repo", `${host}/team/project`, "--json", "number,url"],
         ]);
         expect(result.context).toEqual({ host, owner: "team", repo: "project", number: 14 });
       }
@@ -332,7 +337,7 @@ describe("current PR lookup without --pr", () => {
       27
     );
     expect(commands).toEqual([
-      ["pr", "view", "someone-feature", "--repo", "team/project", "--json", "number,url"],
+      ["pr", "view", "someone-feature", "--repo", "github.com/team/project", "--json", "number,url"],
     ]);
     expect(result.context).toEqual({ host: "github.com", owner: "team", repo: "project", number: 27 });
   });
@@ -361,7 +366,84 @@ describe("current PR lookup without --pr", () => {
   it("uses branch lookup for ordinary and invalid pull-request tracking refs", () => {
     for (const tracking of ["refs/heads/feature-x", "refs/pull/14/merge", "refs/pull/0/head"])
       expect(currentPrRun(gitScript("https://github.com/team/project.git", "feature-x", tracking)).commands).toEqual([
-        ["pr", "view", "feature-x", "--repo", "team/project", "--json", "number,url"],
+        ["pr", "view", "feature-x", "--repo", "github.com/team/project", "--json", "number,url"],
       ]);
   });
+});
+
+describe("real gh host routing", () => {
+  it("keeps watcher and merge requests on their resolved HTTPS host", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "watch-pr-https-"));
+    const requests: { target: string; path: string }[] = [];
+    const cert = join(directory, "cert.pem");
+    const key = join(directory, "key.pem");
+    const generated = Bun.spawnSync([
+      "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+      "-keyout", key, "-out", cert, "-days", "1", "-subj", "/CN=api.github.com",
+      "-addext", "subjectAltName=DNS:api.github.com,DNS:example.com,DNS:example.invalid",
+    ]);
+    expect(generated.exitCode).toBe(0);
+    const secureContext = createSecureContext({ key: readFileSync(key), cert: readFileSync(cert) });
+    const server = createServer();
+    server.on("connect", (request, socket) => {
+      socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      const tls = new TLSSocket(socket, { isServer: true, secureContext });
+      let input = "";
+      tls.on("error", () => {});
+      tls.on("data", (data) => {
+        input += data.toString();
+        if (!input.includes("\r\n\r\n")) return;
+        tls.removeAllListeners("data");
+        requests.push({ target: request.url ?? "", path: input.split(" ")[1] ?? "" });
+        tls.end('HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}');
+      });
+    });
+    try {
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      if (address === null || typeof address === "string") throw new Error("proxy address missing");
+      const git = join(directory, "git");
+      writeFileSync(git, "#!/bin/sh\nprintf '%s\\n' 'https://github.com/team/project.git'\n");
+      chmodSync(git, 0o755);
+      for (const scenario of [
+        { operation: "reader.openPullRequests(context)", host: "github.com", target: "api.github.com:443", path: "/graphql" },
+        { operation: "port.conversation(context)", host: "github.com", target: "api.github.com:443", path: "/graphql" },
+        { operation: "port.conversation(context)", host: "example.com", target: "example.com:443", path: "/api/graphql" },
+      ]) {
+        requests.length = 0;
+        const script = `
+          import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(SOURCE_DIR, "github.ts"))};
+          import { GhGitMergePort } from ${JSON.stringify(join(SOURCE_DIR, "merge-effects.ts"))};
+          const reader = new GhGitHubReader();
+          const port = new GhGitMergePort();
+          const context = ${scenario.host === "github.com"
+            ? 'await resolveContext({ reader, owner: "team", repo: "project", pr: 14 })'
+            : '{ host: "example.com", owner: "team", repo: "project", number: 14 }'};
+          try { await ${scenario.operation}; } catch {}
+          console.log(JSON.stringify(context));
+        `;
+        const child = Bun.spawn([process.execPath, "-e", script], {
+          cwd: directory,
+          env: {
+            ...process.env, PATH: `${directory}:${process.env.PATH ?? ""}`,
+            GH_HOST: "example.invalid", GH_TOKEN: "test", GH_ENTERPRISE_TOKEN: "test",
+            GH_CONFIG_DIR: directory, SSL_CERT_FILE: cert,
+            HTTPS_PROXY: `http://127.0.0.1:${address.port}`, NO_PROXY: "", no_proxy: "",
+          }, stdout: "pipe", stderr: "pipe",
+        });
+        const [code, stdout, stderr] = await Promise.all([
+          child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
+        ]);
+        expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+        expect(JSON.parse(stdout)).toEqual({ host: scenario.host, owner: "team", repo: "project", number: 14 });
+        expect(requests.length).toBeGreaterThan(0);
+        for (const request of requests)
+          expect(request).toEqual({ target: scenario.target, path: scenario.path });
+      }
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
 });

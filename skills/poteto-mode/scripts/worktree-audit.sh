@@ -81,7 +81,7 @@ host = url.hostname or ""
 parts = re.sub(r"\.git$", "", url.path.rstrip("/")).lstrip("/").split("/")
 if not re.fullmatch(r"[a-z\d](?:[a-z\d.-]*[a-z\d])?", host, re.I) or any(part in ("", ".", "..") for part in parts):
     sys.exit(0)
-print(f"{host + '/' if host != 'github.com' else ''}{'/'.join(parts)}")
+print(f"{host}/{'/'.join(parts)}")
 PY
 ) || pr_repo=""
 echo "[]" > "$prs"

@@ -22,7 +22,7 @@ function evaluate(late: "resolved" | "unresolved" | "failed"): {
       reviewRequests: { nodes: [] }, reviews: { nodes: [] }, comments: { nodes: [] },
     } } } });
     const conversation = { data: { repository: { pullRequest: {
-      author: { login: "mdsmithaustin" }, reviewThreads: { totalCount: 101 },
+      author: { login: "mdsmithaustin" },
       reviewRequests: { totalCount: 0 }, reviews: { totalCount: 0 },
       comments: { totalCount: 1, nodes: [{ body: verdictBody(), url: "https://github.com/owner/repo/pull/1#issuecomment-1", createdAt: "2026-10-02T12:00:00Z", authorAssociation: "OWNER", author: { login: "mdsmithaustin", __typename: "User" } }] },
     } } } };
@@ -38,6 +38,12 @@ function evaluate(late: "resolved" | "unresolved" | "failed"): {
     writeFileSync(join(directory, "gh"), `#!${process.execPath}
 import { readFileSync, appendFileSync } from "node:fs";
 const args = process.argv.slice(2);
+const target = args[0] === "api"
+  ? args[args.indexOf("--hostname") + 1]
+  : args[args.indexOf("--repo") + 1];
+if (target !== (args[0] === "api" ? "github.com" : "github.com/owner/repo")) {
+  console.error("request reached ambient host"); process.exit(1);
+}
 const fixtures = JSON.parse(readFileSync(${JSON.stringify(join(directory, "fixtures.json"))}, "utf8"));
 const query = args.find(arg => arg.startsWith("query=")) ?? "";
 appendFileSync(${JSON.stringify(join(directory, "queries"))}, JSON.stringify(args) + "\\n");
@@ -63,7 +69,7 @@ const concrete = new GhGitMergePort();
 const port = { conversation: concrete.conversation.bind(concrete), usesMergeQueue: concrete.usesMergeQueue.bind(concrete), patchId: async () => ${JSON.stringify(PATCH)} };
 try { const report = await evaluateGates({ reader: new GhGitHubReader(), port, context: { host: "github.com", owner: "owner", repo: "repo", number: parsePrNumber(1) } }); console.log(JSON.stringify({ ready: report.ready, failed: report.gates.filter(gate => !gate.ok).map(gate => gate.gate), threads: report.gates.find(gate => gate.gate === "threads").detail })); }
 catch (error) { console.log(JSON.stringify({ error: error.message })); }`;
-    const spawned = Bun.spawnSync([process.execPath, "-e", script], { cwd: directory, env: { ...process.env, PATH: `${directory}:${process.env.PATH ?? ""}` } });
+    const spawned = Bun.spawnSync([process.execPath, "-e", script], { cwd: directory, env: { ...process.env, GH_HOST: "example.invalid", PATH: `${directory}:${process.env.PATH ?? ""}` } });
     if (spawned.exitCode !== 0) throw new Error(new TextDecoder().decode(spawned.stderr));
     return {
       result: JSON.parse(new TextDecoder().decode(spawned.stdout)),

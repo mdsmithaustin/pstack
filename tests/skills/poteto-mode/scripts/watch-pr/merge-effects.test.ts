@@ -62,7 +62,7 @@ function runPort(
 ): any {
   const result = Bun.spawnSync([process.execPath, "-e", portScript(body)], {
     cwd,
-    env: { ...process.env, PATH: path },
+    env: { ...process.env, PATH: path, GH_HOST: "example.invalid" },
   });
   if (result.exitCode !== 0) throw new Error(decode(result.stderr));
   return JSON.parse(decode(result.stdout));
@@ -247,7 +247,7 @@ describe("GhGitMergePort gh commands", () => {
           "merge",
           "7",
           "--repo",
-          "o/r",
+          "github.com/o/r",
           "--squash",
           "--match-head-commit",
           HEAD,
@@ -256,6 +256,9 @@ describe("GhGitMergePort gh commands", () => {
           "--body-file",
           "/tmp/b.md",
           "---",
+        ]);
+        expect(argv().slice(14)).toEqual([
+          "pr", "view", "7", "--repo", "github.com/o/r", "--json", "state,mergedAt,mergeCommit",
         ]);
       }
     );
@@ -320,6 +323,7 @@ describe("GhGitMergePort gh commands", () => {
         expect(sent).toContain("branch=release/2");
         expect(sent).toContain("owner=o");
         expect(sent).toContain("repo=r");
+        expect(sent.slice(-4)).toEqual(["--hostname", "github.com", "-f", "branch=release/2"]);
       }
     );
   });
@@ -362,7 +366,7 @@ describe("GhGitMergePort gh commands", () => {
         "comment",
         "7",
         "--repo",
-        "o/r",
+        "github.com/o/r",
         "--body",
         "merge-gate override: why",
         "",
@@ -379,7 +383,6 @@ describe("parseConversation truncation", () => {
         pullRequest: {
           author: { login: "a" },
           comments: { totalCount: counts.comments ?? 0, nodes: [] },
-          reviewThreads: { totalCount: counts.reviewThreads ?? 0 },
           reviewRequests: { totalCount: counts.reviewRequests ?? 0 },
           reviews: { totalCount: counts.reviews ?? 0 },
         },
