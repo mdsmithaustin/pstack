@@ -27,6 +27,38 @@ artifact and runs it against healthy and faulty fixture states in a pinned,
 networkless container. Its unit tests cover valid alternatives, false-green
 commands, and attempts to forge execution evidence.
 
+The bytecode control case seeds timestamp-based Python caches before replacing
+equal-size source with the original timestamp. Its baseline, mutation, and
+restoration controls require literal imported values. An expected-mismatch
+control imports `baseline` successfully while `expected.txt` contains `mutation`.
+The outer gate must reject that mismatch despite the zero observer exit. A gate
+that only prints fresh imported values fails this control. An authenticated observer
+invocation hands execution to an evaluator worker under a separate user ID.
+The worker runs the captured CLI arguments and working directory against the
+immutable fixture. Its startup environment belongs to the evaluator. Only
+`PYTHONPYCACHEPREFIX` and `PYTHONDONTWRITEBYTECODE` environment settings are
+copied from the caller, with a 2048-byte limit per value. Other Python startup
+settings and loader overrides are rejected. The worker supplies imported values
+through a private descriptor. The broker-owned imported literal and actual
+operation exit establish behavior, and acceptance requires a zero operation exit.
+The evaluator retains the worker's stdout and stderr losslessly with those records.
+The original CLI forwards the worker's output and status, then exits before
+running its checker body. The outer gate's output and exit remain separate
+candidate results. The evaluator checks that exit in every control, including
+forced status 97. Candidate output and value reports cannot establish imported
+behavior. Source hashes and cache paths do not establish executed behavior.
+`PYTHONDONTWRITEBYTECODE` prevents cache writes but still permits reads of valid
+prepopulated caches.
+The prepared control tree is read-only, and setup commands stay outside the
+returned gate. The checker runs as a Python script entrypoint. Equivalent paths,
+environment cache prefixes, and native `-B` and `-X pycache_prefix` options are
+supported. Loading the checker through stdin, `-c`, or `runpy` does not satisfy
+that CLI contract. A controller can launch the checker as its own script process.
+The gate has no writable filesystem and cannot create cache directories.
+Invocation metadata, worker output, and observation messages have size limits.
+Each evaluator execution has a two-second deadline. Missing observations,
+unsupported metadata, or exceeded limits prevent acceptance.
+
 `spec-probes` and `runtime-probes` allow several valid response shapes. Their
 grader-only expectations name the relevant fixture facts and unacceptable
 claims. A cross-family judge scores the response. Process assertions separately

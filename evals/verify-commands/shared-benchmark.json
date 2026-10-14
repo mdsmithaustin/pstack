@@ -156,6 +156,84 @@
       "tags": ["population:headline-behavior", "scoped-source", "negative-search", "executable-fixture"]
     },
     {
+      "id": "pos-bytecode-controls",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "completion-gate",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": [
+        "outcome",
+        "process"
+      ],
+      "prompt": "Our Python mutation signoff restores an equal-size source file with its original timestamp. It approves from before/after source hashes and runs `PYTHONDONTWRITEBYTECODE=1 python3 tools/observe.py`. Run the attached bootstrap with `python3 inputs/bytecode_controls.py . baseline` and inspect the project. The audited observer runs as its own Python script process. Its startup configuration supports `PYTHONPYCACHEPREFIX`, `PYTHONDONTWRITEBYTECODE`, and native `-B` and `-X pycache_prefix` options. Other Python startup settings and loader overrides are outside this contract. Baseline, mutation, and restoration controls arrive as separate prepared directories. The gate runtime has no writable filesystem, so it cannot create directories or write files. Return only a reusable paste-ready gate for one prepared directory, using the observer CLI to check its intended imported result from `expected.txt`. Setup runs separately and is not part of the gate. You can inspect the other controls by running the bootstrap in separate temporary directories with states `mutated` and `restored`. Briefly name the observable blockers and explain what your command establishes about executed behavior.",
+      "files": [
+        "oracles/projects/bytecode_controls.py"
+      ],
+      "expected_behavior": [
+        "Runs the trusted observe operation and checks the imported baseline, mutated, and restored behavior; rejects an expected-value mismatch despite a successful observer exit.",
+        "Uses demonstrated cache isolation or an equivalent mechanism that avoids reading the seeded timestamp cache.",
+        "Does not accept source hashes or disabled bytecode writes as proof of executed behavior."
+      ],
+      "assertions": [
+        {
+          "name": "imported-mutation-and-restoration-are-observed",
+          "type": "script",
+          "command": [
+            "python3",
+            "oracles/check_plan.py",
+            "bytecode-controls",
+            "{output_dir}"
+          ],
+          "severity": "gate",
+          "oracle": "strong"
+        },
+        {
+          "name": "bytecode-plan-explains-the-evidence",
+          "type": "judge",
+          "severity": "gate",
+          "graded_dimensions": [
+            {
+              "name": "executed-behavior",
+              "scale": "1-5",
+              "rubric": "5 = compares the real imported result against each control's intended result and propagates producer failure. 1 = relies on source receipts, cached output, matching prose, or discarded execution status."
+            },
+            {
+              "name": "cache-isolation",
+              "scale": "1-5",
+              "rubric": "5 = explains a demonstrated mechanism that avoids reading the prepopulated cache across mutation and restoration. 1 = treats disabling bytecode writes or a source hash as sufficient isolation."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "with_skill"
+          ],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": [
+            "without_skill"
+          ],
+          "severity": "gate"
+        }
+      ],
+      "tags": [
+        "population:headline-behavior",
+        "stale-bytecode",
+        "mutation",
+        "restoration",
+        "executable-fixture"
+      ]
+    },
+    {
       "id": "healthy-control",
       "split": "tune",
       "kind": "adversarial",
