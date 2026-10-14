@@ -4320,6 +4320,15 @@
    ],
    "text": "**Correcting the same mistake by hand.** A correction in chat helps one run. `/correct` fixes the repo so no later run repeats it."
   },
+  "1a8a4a4147be": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-reviewers-on-different-models",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to the configured reviewer panel, which may run on one model."
+  },
   "1a8bb2d8254d": {
    "class": "promise",
    "file": "01-setup.md",
@@ -5960,15 +5969,6 @@
    ],
    "text": "In the 2026-10-03 run of the guide-promise evals, Hermes and Grok Build loaded such a skill without being asked."
   },
-  "4cc94348b2c5": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "interrogate-reviewers-on-different-models",
-   "sources": [
-    "port"
-   ],
-   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to reviewers on different models."
-  },
   "4d1f50b5fd58": {
    "class": "context",
    "file": "07-overnight.md",
@@ -6117,12 +6117,13 @@
    "text": "Short works because the playbook holds the structure, and a Custom Mode keeps `/poteto-mode` in context on every turn."
   },
   "54955dc0e6fb": {
-   "class": "promise",
+   "class": "substituted",
    "file": "04-design.md",
-   "promise": "interrogate-multi-reviewer-adversarial",
+   "ported_as": [
+    "df586522413a"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "`/interrogate` has other models try to break the result."
   },
@@ -7217,7 +7218,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "4cc94348b2c5"
+    "1a8a4a4147be"
    ],
    "promise": "interrogate-reviewers-on-different-models",
    "sources": [
@@ -10852,6 +10853,15 @@
     "port"
    ],
    "text": "\"new task\" tells `/poteto-mode` to re-match rather than continue the prior playbook."
+  },
+  "df586522413a": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-multi-reviewer-adversarial",
+   "sources": [
+    "port"
+   ],
+   "text": "`/interrogate` has reviewers try to break the result."
   },
   "df656a69cd86": {
    "class": "context",
