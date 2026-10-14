@@ -1117,7 +1117,7 @@
   },
   "eval-blinds-candidates": {
    "check": "static",
-   "claim": "The Eval playbook gives candidates an organic task in sanitized directories with no eval, candidate, or arena wording and no knowledge of each other.",
+   "claim": "The Eval playbook gives candidates an organic task in sanitized directories with no eval, candidate, or arena wording and no knowledge of each other. Transcript review records returned grading-content exposure and coverage, and synthesis keeps raw grades separate from timing-specific validity.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/eval.md",
@@ -1130,6 +1130,18 @@
     {
      "file": "skills/poteto-mode/playbooks/eval.md",
      "quote": "Don't tell the candidate other candidates exist."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/eval.md",
+     "quote": "In the existing per-candidate notes, record confirmed exposure, no exposure found within stated coverage, or unverified coverage."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/eval.md",
+     "quote": "Keep raw grades separate from validity notes for each affected criterion."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/eval.md",
+     "quote": "After confirmed exposure, mark affected later observations unsupported as blinded comparison evidence."
     }
    ],
    "harness_sensitive": false,
