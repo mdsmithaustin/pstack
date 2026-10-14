@@ -424,36 +424,40 @@ class WorktreeAuditRepositoryTest(WorktreeAuditBaseTest):
         self.env.update(PATH=f"{bin_dir}:{self.env['PATH']}", AUDIT_GH_LOG=str(self.tmp / "gh-log"))
         return worktree
 
-    def test_queries_the_audited_origin_instead_of_the_default_parent(self):
-        for remote, repository in [
-            ("git@github.com:fork/project.git", "fork/project"),
-            ("https://github.com/fork/project.git", "fork/project"),
-            ("ssh://git@example.com/fork/project.git", "example.com/fork/project"),
-        ]:
-            with self.subTest(remote=remote):
-                if (self.repo / ".git").exists():
-                    self.tearDown()
-                    self.setUp()
-                worktree = self.fixture(remote)
-                result = self.audit("-b", "main", str(self.repo))
-                self.assertEqual(result.returncode, 0, result.stderr)
-                row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
-                self.assertEqual((row[2], row[5], row[7]), ("no", "#17/OPEN", "hold-open-pr"))
-                args = json.loads((self.tmp / "gh-log").read_text())
-                self.assertEqual(args[args.index("--repo") + 1], repository)
+    def assert_origin_query(self, remote: str, repository: str) -> None:
+        worktree = self.fixture(remote)
+        result = self.audit("-b", "main", str(self.repo))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
+        self.assertEqual((row[2], row[5], row[7]), ("no", "#17/OPEN", "hold-open-pr"))
+        args = json.loads((self.tmp / "gh-log").read_text())
+        self.assertEqual(args[args.index("--repo") + 1], repository)
 
-    def test_unresolved_origin_keeps_pr_state_unknown_without_querying_gh(self):
-        for remote in [None, "/local/origin.git", "https://github.com/fork/project.git?token=PUBLIC_TEST_SENTINEL"]:
-            with self.subTest(remote=remote):
-                if (self.repo / ".git").exists():
-                    self.tearDown()
-                    self.setUp()
-                worktree = self.fixture(remote)
-                result = self.audit("-b", "main")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
-                self.assertEqual((row[2], row[5], row[7]), ("no", "-", "review"))
-                self.assertFalse((self.tmp / "gh-log").exists())
+    def test_queries_the_audited_scp_origin_instead_of_the_default_parent(self):
+        self.assert_origin_query("git@github.com:fork/project.git", "fork/project")
+
+    def test_queries_the_audited_https_origin(self):
+        self.assert_origin_query("https://github.com/fork/project.git", "fork/project")
+
+    def test_queries_the_audited_enterprise_origin(self):
+        self.assert_origin_query("ssh://git@example.com/fork/project.git", "example.com/fork/project")
+
+    def assert_unknown_origin(self, remote: str | None) -> None:
+        worktree = self.fixture(remote)
+        result = self.audit("-b", "main")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
+        self.assertEqual((row[2], row[5], row[7]), ("no", "-", "review"))
+        self.assertFalse((self.tmp / "gh-log").exists())
+
+    def test_missing_origin_keeps_pr_state_unknown_without_querying_gh(self):
+        self.assert_unknown_origin(None)
+
+    def test_local_origin_keeps_pr_state_unknown_without_querying_gh(self):
+        self.assert_unknown_origin("/local/origin.git")
+
+    def test_invalid_origin_keeps_pr_state_unknown_without_querying_gh(self):
+        self.assert_unknown_origin("https://github.com/fork/project.git?token=PUBLIC_TEST_SENTINEL")
 
 
 if __name__ == "__main__":

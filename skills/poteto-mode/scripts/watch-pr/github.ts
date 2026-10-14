@@ -665,8 +665,15 @@ export class GhGitHubReader implements T.GitHubReader {
   async currentPr(pr: T.PrNumber | null): Promise<T.PrContext> {
     const argv: [string, ...string[]] = ["gh", "pr", "view"];
     const origin = await this.originRepo();
+    if (origin === null)
+      throw new WatcherQueryError({
+        kind: "command-exit",
+        retryable: true,
+        code: 1,
+        detail: "origin repository is unknown; pass --owner, --repo, and --pr",
+      });
     if (pr !== null) argv.push(String(pr));
-    else if (origin !== null) {
+    else {
       const branch = await this.currentBranch();
       if (branch === "")
         throw new WatcherQueryError({
@@ -675,9 +682,16 @@ export class GhGitHubReader implements T.GitHubReader {
           code: 1,
           detail: "HEAD is detached, so the current PR is unknown; pass --pr",
         });
-      argv.push(branch);
+      const tracking = await run([
+        "git", "config", "--get", `branch.${branch}.merge`,
+      ]);
+      const trackedPr =
+        tracking.code === 0
+          ? /^refs\/pull\/([1-9]\d*)\/head$/.exec(tracking.stdout.trim())?.[1]
+          : undefined;
+      argv.push(trackedPr ?? branch);
     }
-    if (origin !== null) argv.push("--repo", repoArg(origin));
+    argv.push("--repo", repoArg(origin));
     argv.push("--json", "number,url");
     const object = record(await runJson(argv), "current PR");
     const parsed = parsePrUrl(string(object.url, "current PR.url"));

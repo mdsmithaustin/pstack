@@ -99,11 +99,13 @@ export function parseConversation(value: unknown): Conversation {
   });
   const truncated = (
     Object.keys(REVIEW_CONNECTION_LIMITS) as (keyof typeof REVIEW_CONNECTION_LIMITS)[]
-  ).flatMap((connection): readonly Truncation[] => {
-    const total = connectionTotal(pullRequest, connection);
-    const limit = REVIEW_CONNECTION_LIMITS[connection];
-    return total > limit ? [{ connection, total, limit }] : [];
-  });
+  )
+    .filter((connection) => connection !== "reviewThreads")
+    .flatMap((connection): readonly Truncation[] => {
+      const total = connectionTotal(pullRequest, connection);
+      const limit = REVIEW_CONNECTION_LIMITS[connection];
+      return total > limit ? [{ connection, total, limit }] : [];
+    });
   return {
     truncated,
     prAuthor:
