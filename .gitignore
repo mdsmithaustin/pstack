@@ -5,8 +5,6 @@ node_modules/
 __pycache__/
 *.pyc
 
-/.agents/skills
-/.claude/skills
 /skills-lock.json
 /.gitnexus/
 /.audit/
