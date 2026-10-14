@@ -64,7 +64,8 @@ The isolated Python parser supports
 Python 3.9.6 with Expat 2.2.8. Its parent enforces a three-second deadline.
 
 Collection retains at most 32 JUnit records. Its 24,576-character JUnit evidence
-budget counts serialized record data and artifact names, including JSON escaping.
+budget counts JSON-serialized archive record data, including escaping, plus
+artifact-name length before escaping.
 Bodies retain at most 2,048 characters, and other record fields retain at most
 256 characters. Logs retain the last four members with the final 8,192 characters each.
 Field truncation and omitted records produce limit gaps. Final JSON is at most
