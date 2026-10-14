@@ -1170,6 +1170,53 @@
    ],
    "scenario": "eval-run"
   },
+  "failed-check-recovers-junit-evidence": {
+   "check": "static",
+   "claim": "The failed-check diagnostic command recovers JUnit failure and error records from the exact Actions run when its log ends before the assertion.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/scripts/watch-pr/README.md",
+     "quote": "`failed-check-evidence` reads logs and JUnit artifacts for one Actions run and the head SHA that the failed check tested."
+    },
+    {
+     "file": "skills/poteto-mode/scripts/watch-pr/README.md",
+     "quote": "Both failure and error records on one testcase remain separate."
+    },
+    {
+     "file": "skills/poteto-mode/scripts/watch-pr/README.md",
+     "quote": "Logs that end before an assertion can coexist with a recovered JUnit traceback."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/scripts/watch-pr/README.md",
+    "skills/poteto-mode/scripts/watch-pr/failed-check-evidence.ts",
+    "skills/poteto-mode/scripts/watch-pr/junit-archive.py"
+   ]
+  },
+  "failed-check-verifies-head-and-preserves-gaps-read-only": {
+   "check": "static",
+   "claim": "The failed-check diagnostic command verifies the checked head, keeps unavailable artifacts as explicit evidence gaps, and never reruns CI.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/scripts/watch-pr/README.md",
+     "quote": "The command verifies the run ID, SHA, and attempt before retrieval and again after collection."
+    },
+    {
+     "file": "skills/poteto-mode/scripts/watch-pr/README.md",
+     "quote": "Missing, expired, inaccessible, malformed, unsafe, and over-limit data remain explicit gaps."
+    },
+    {
+     "file": "skills/poteto-mode/scripts/watch-pr/README.md",
+     "quote": "It does not rerun, cancel, or dispatch CI."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/scripts/watch-pr/README.md",
+    "skills/poteto-mode/scripts/watch-pr/failed-check-evidence.ts"
+   ]
+  },
   "feature-map-example-shipped": {
    "check": "static",
    "claim": "create-verification-skill ships references/feature-map-example/ with a README index and one file per feature carrying the four required H2 sections.",
@@ -6701,6 +6748,15 @@
    ],
    "text": "For example, you could swipe through a review queue and have each swipe ask the bot to act on that item."
   },
+  "67210f36df64": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "failed-check-recovers-junit-evidence",
+   "sources": [
+    "port"
+   ],
+   "text": "When a failed Actions log ends before the assertion, the bundled [failed-check diagnostic command](../../skills/poteto-mode/scripts/watch-pr/README.md) can recover JUnit failure and error records from that exact run."
+  },
   "67221f82b859": {
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -11181,6 +11237,15 @@
     "port"
    ],
    "text": "**Polishing an abstract plan.** Adversarial review of a plan with no code behind it invents risks that will never happen. Settle the open questions with prototypes, then review what got built."
+  },
+  "e9d5c7f9fe6b": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "failed-check-verifies-head-and-preserves-gaps-read-only",
+   "sources": [
+    "port"
+   ],
+   "text": "It verifies the checked head, keeps unavailable artifacts as evidence gaps, and never reruns CI."
   },
   "e9f5e2116574": {
    "class": "context",
