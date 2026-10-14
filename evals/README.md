@@ -29,9 +29,22 @@ commands, and attempts to forge execution evidence.
 
 The bytecode control case seeds timestamp-based Python caches before replacing
 equal-size source with the original timestamp. Its baseline, mutation, and
-restoration controls require literal imported values. The oracle records those
-values through the authenticated process channel. Source hashes, cache paths,
+restoration controls require literal imported values. An authenticated observer
+invocation hands execution to an evaluator worker under a separate user ID.
+The worker runs the captured CLI arguments, working directory, and Python
+environment settings against the immutable fixture. It supplies imported values through
+a private descriptor. The original CLI receives the worker's output and exit
+status. Candidate value reports cannot establish acceptance. Source hashes, cache paths,
 and disabled bytecode writes do not establish executed behavior.
+The prepared control tree is read-only, and setup commands stay outside the
+returned gate. The checker runs as a Python script entrypoint. Equivalent paths,
+environment cache prefixes, and native `-B` and `-X pycache_prefix` options are
+supported. Loading the checker through stdin, `-c`, or `runpy` does not satisfy
+that CLI contract. A controller can launch the checker as its own script process.
+The gate has no writable filesystem and cannot create cache directories.
+Invocation metadata, worker output, and observation messages have size limits.
+Each evaluator execution has a two-second deadline. Missing observations,
+unsupported metadata, or exceeded limits prevent acceptance.
 
 `spec-probes` and `runtime-probes` allow several valid response shapes. Their
 grader-only expectations name the relevant fixture facts and unacceptable

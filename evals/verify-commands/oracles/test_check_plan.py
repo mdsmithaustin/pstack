@@ -45,6 +45,8 @@ class PlanReplayTests(unittest.TestCase):
             ["/fresh-baseline", "/fresh-mutated", "/fresh-restored"],
         )
         for control in controls:
+            self.assertEqual(control["behavior_checks"][0]["observation"]["observer_uid"], 65533)
+            self.assertEqual((control["stdout"], control["stderr"], control["exit"]), ("", "", 0))
             receipt = control["fixture_receipt"]
             self.assertEqual((receipt["source_size"], receipt["source_mtime_ns"]), (35, 1700000000000000000))
             self.assertEqual(struct.unpack("<III", bytes.fromhex(receipt["cache_header_hex"])[4:]), (0, 1700000000, 35))
@@ -61,6 +63,39 @@ class PlanReplayTests(unittest.TestCase):
             self.assertEqual((control["exit"], control["exit_matches"], control["missing_operations"]), (0, True, []))
             self.assertEqual(control["behavior_checks"][0]["observation"]["dont_write_bytecode"], True)
             self.assertEqual(control["behavior_checks"][0]["matches"], False)
+
+    def test_native_cache_prefix_options_and_equivalent_script_paths_pass(self):
+        for command in (
+            "python3 -B -X pycache_prefix=/native-prefix ./tools/observe.py",
+            "python3 -Xpycache_prefix=/attached-prefix -- tools/../tools/observe.py",
+        ):
+            with self.subTest(command=command):
+                code, result = self.evaluate_bytecode_script("set -eu\n" + command)
+                self.assertEqual((code, result["status"]), (0, "pass"), result)
+                self.assertEqual(
+                    [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
+                    ["baseline", "mutation", "baseline"],
+                )
+
+    def test_native_no_write_flag_alone_still_reads_stale_cache(self):
+        code, result = self.evaluate_bytecode_script("set -eu\npython3 -B tools/observe.py")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored"])
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
+            ["baseline", "baseline", "mutation"],
+        )
+
+    def test_stdin_runpy_wrapper_is_outside_the_script_entrypoint_contract(self):
+        code, result = self.evaluate_bytecode_script(
+            "set -eu\npython3 -B - <<'PY'\nimport runpy\nrunpy.run_path('tools/observe.py', run_name='__main__')\nPY"
+        )
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"] for control in result["control_evidence"]],
+            [None, None, None],
+        )
+        self.assertIn("REJECT", result["control_evidence"][0]["stderr"])
 
     def test_source_hash_receipts_do_not_establish_executed_bytecode_behavior(self):
         code, result = self.evaluate_sample("bytecode-controls", "hash-only-bytecode.md")
@@ -131,6 +166,40 @@ class PlanReplayTests(unittest.TestCase):
         self.assertEqual((code, result["status"]), (1, "candidate_failure"))
         self.assertEqual([control["state"] for control in result["failed_states"]], ["forced-operation-failure"])
         self.assertEqual(result["failed_states"][0]["exit_matches"], False)
+
+    def test_inspect_environment_preserves_valid_observer_execution(self):
+        code, result = self.evaluate_bytecode_script(
+            "set -eu\nPYTHONINSPECT=1 PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py"
+        )
+        self.assertEqual((code, result["status"]), (0, "pass"), result)
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
+            ["baseline", "mutation", "baseline"],
+        )
+
+    def test_failed_import_returns_stderr_without_a_trusted_observation(self):
+        code, result = self.evaluate_bytecode_script("set -eu\nPYTHONSAFEPATH=1 python3 tools/observe.py")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+        self.assertEqual([state["state"] for state in result["failed_states"]], ["baseline", "mutated", "restored"])
+        for control in result["control_evidence"]:
+            self.assertEqual((control["exit"], control["stdout"], control["behavior_checks"][0]["observation"]), (1, "", None))
+            self.assertIn("ModuleNotFoundError: No module named 'subject'", control["stderr"])
+
+    def test_controller_receives_observer_output_and_propagates_its_exit(self):
+        code, result = self.evaluate_bytecode_script(
+            "python3 - <<'PY'\n"
+            "import os, subprocess, sys\n"
+            "from pathlib import Path\n"
+            "result = subprocess.run(['python3', 'tools/observe.py'], "
+            "env=dict(os.environ, PYTHONPYCACHEPREFIX='/controller'), capture_output=True, text=True)\n"
+            "sys.stdout.write(result.stdout)\n"
+            "sys.stderr.write(result.stderr)\n"
+            "raise SystemExit(result.returncode or (0 if result.stdout == Path('expected.txt').read_text() else 1))\n"
+            "PY"
+        )
+        self.assertEqual((code, result["status"]), (0, "pass"), result)
+        self.assertEqual([control["stdout"] for control in result["control_evidence"]], ["baseline\n", "mutation\n", "baseline\n"])
+        self.assertEqual([control["exit"] for control in result["control_evidence"]], [0, 0, 0])
 
     def test_two_different_valid_commands_pass_real_replays(self):
         for sample in ("valid-stale-npm.md", "valid-stale-direct.md"):

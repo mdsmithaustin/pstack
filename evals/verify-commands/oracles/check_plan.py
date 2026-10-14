@@ -31,20 +31,26 @@ from pathlib import Path
 
 TRACE_PROLOGUE = """
 import os as _pstack_os
+import json as _pstack_json
 import socket as _pstack_socket
 import sys as _pstack_sys
-with _pstack_socket.socket(_pstack_socket.AF_UNIX, _pstack_socket.SOCK_STREAM) as _pstack_client:
-    _pstack_client.connect(_pstack_os.environ["PSTACK_EVIDENCE_SOCKET"])
-    _pstack_client.sendall(b"ready\\n")
-    _pstack_reply = _pstack_client.recv(1024).decode("ascii", "strict").strip()
-if _pstack_reply.startswith("EXIT "):
-    raise SystemExit(int(_pstack_reply.split()[1]))
-if _pstack_reply != "OK":
-    print(_pstack_reply, file=_pstack_sys.stderr)
-    raise SystemExit(125)
+if _pstack_os.getuid() != 65533:
+    with _pstack_socket.socket(_pstack_socket.AF_UNIX, _pstack_socket.SOCK_STREAM) as _pstack_client:
+        _pstack_client.connect(_pstack_os.environ["PSTACK_EVIDENCE_SOCKET"])
+        _pstack_client.sendall(b"ready\\n")
+        _pstack_reply = _pstack_client.makefile("rb").readline(16385).decode("ascii", "strict").strip()
+    if _pstack_reply.startswith("EXIT "):
+        _pstack_os._exit(int(_pstack_reply.split()[1]))
+    if _pstack_reply.startswith("{"):
+        _pstack_outcome = _pstack_json.loads(_pstack_reply)
+        _pstack_os.write(1, bytes.fromhex(_pstack_outcome["stdout"]))
+        _pstack_os.write(2, bytes.fromhex(_pstack_outcome["stderr"]))
+        _pstack_os._exit(_pstack_outcome["exit"])
+    if _pstack_reply != "OK":
+        print(_pstack_reply, file=_pstack_sys.stderr)
+        raise SystemExit(125)
 """
 TRACE_OBSERVER = """
-import json as _pstack_json
 def _pstack_observe(behavior, cache):
     _pstack_payload = {
         "kind": "observation",
@@ -52,13 +58,12 @@ def _pstack_observe(behavior, cache):
         "cache": cache,
         "cache_prefix": _pstack_sys.pycache_prefix,
         "dont_write_bytecode": _pstack_sys.dont_write_bytecode,
+        "observer_uid": _pstack_os.getuid(),
     }
-    with _pstack_socket.socket(_pstack_socket.AF_UNIX, _pstack_socket.SOCK_STREAM) as _pstack_client:
-        _pstack_client.connect(_pstack_os.environ["PSTACK_EVIDENCE_SOCKET"])
-        _pstack_client.sendall((_pstack_json.dumps(_pstack_payload) + "\\n").encode("utf-8"))
-        _pstack_reply = _pstack_client.recv(1024).decode("ascii", "strict").strip()
-    if _pstack_reply != "OK":
+    _pstack_message = (_pstack_json.dumps(_pstack_payload) + "\\n").encode("utf-8")
+    if len(_pstack_message) > 4096:
         raise SystemExit(125)
+    _pstack_os.write(int(_pstack_os.environ["PSTACK_OBSERVATION_FD"]), _pstack_message)
 """
 PR_SET_DUMPABLE = 4
 
@@ -90,11 +95,26 @@ def unique_object(pairs):
 def peer_process(connection):
     pid, _, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
     process = Path("/proc") / str(pid)
+    lifetime = (process / "stat").read_text().rsplit(")", 1)[1].split()[19]
     raw = (process / "cmdline").read_bytes()
-    arguments = tuple(part.decode("utf-8", "replace") for part in raw.split(b"\0") if part)
+    raw_environment = (process / "environ").read_bytes()
+    if len(raw) > 16384 or len(raw_environment) > 32768:
+        raise ValueError("operation metadata is too large")
+    arguments = tuple(part.decode("utf-8", "strict") for part in raw.removesuffix(b"\0").split(b"\0"))
+    entries = []
+    for entry in raw_environment.removesuffix(b"\0").split(b"\0"):
+        if not entry:
+            continue
+        name, separator, value = entry.partition(b"=")
+        if not separator or not name:
+            raise ValueError("invalid operation environment")
+        entries.append((name.decode("utf-8", "strict"), value.decode("utf-8", "strict")))
+    environment = unique_object(entries)
     cwd = Path(os.readlink(process / "cwd")).resolve()
     executable = Path(os.readlink(process / "exe")).resolve()
-    return cwd, executable, arguments
+    if lifetime != (process / "stat").read_text().rsplit(")", 1)[1].split()[19]:
+        raise ValueError("operation process changed during capture")
+    return (cwd, executable, arguments), environment
 
 
 def operation_matches(specification, event, project):
@@ -114,24 +134,117 @@ def operation_matches(specification, event, project):
     if not expected_script.is_relative_to(root):
         raise RuntimeError("invalid required operation")
     cwd, executable, arguments = event
+    script_index = 1
+    while script_index < len(arguments):
+        option = arguments[script_index]
+        if option == "-B" or option.startswith("-Xpycache_prefix="):
+            script_index += 1
+        elif (
+            option == "-X"
+            and script_index + 1 < len(arguments)
+            and arguments[script_index + 1].startswith("pycache_prefix=")
+        ):
+            script_index += 2
+        elif option == "--":
+            script_index += 1
+            break
+        else:
+            break
     if (
         executable != Path(sys.executable).resolve()
         or not cwd.is_relative_to(root)
-        or len(arguments) < 2
-        or not arguments[1]
-        or arguments[1].startswith("-")
-        or tuple(arguments[2:]) != tuple(expected_arguments[1:])
+        or script_index >= len(arguments)
+        or not arguments[script_index]
+        or arguments[script_index].startswith("-")
+        or tuple(arguments[script_index + 1:]) != tuple(expected_arguments[1:])
     ):
         return False
-    actual_script = (cwd / arguments[1]).resolve(strict=True)
+    actual_script = (cwd / arguments[script_index]).resolve(strict=True)
     return actual_script.is_relative_to(root) and actual_script == expected_script
 
 
-def serve_evidence(listener, stop_reader, result_writer, specifications, project, forced_exit):
+def execute_observed_operation(receipt, specifications, project):
+    event = (Path(receipt["cwd"]), Path(receipt["executable"]), tuple(receipt["arguments"]))
+    if not any(
+        "expected_behavior" in specification and operation_matches(specification, event, project)
+        for specification in specifications
+    ):
+        raise ValueError("unsupported evaluator operation")
+    reader, writer = os.pipe()
+    environment = {**receipt["environment"], "PSTACK_OBSERVATION_FD": str(writer)}
+    process = None
+    try:
+        process = subprocess.Popen(
+            list(event[2]), executable=str(event[1]), cwd=event[0], env=environment,
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            user=65533, group=65533, extra_groups=[], start_new_session=True,
+            pass_fds=(writer,),
+            preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0)),
+        )
+        os.close(writer)
+        writer = None
+        try:
+            stdout, stderr = process.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, 9)
+            process.communicate()
+            raise ValueError("evaluator operation timed out")
+        message = os.read(reader, 4097)
+        if len(message) > 4096 or len(stdout) > 2048 or len(stderr) > 2048:
+            raise ValueError("evaluator operation output is too large")
+        observation = json.loads(message.decode("utf-8"), object_pairs_hook=unique_object) if message else None
+        if observation is not None and (
+            not isinstance(observation, dict)
+            or set(observation) != {"kind", "behavior", "cache", "cache_prefix", "dont_write_bytecode", "observer_uid"}
+            or observation["kind"] != "observation"
+            or observation["observer_uid"] != 65533
+            or not isinstance(observation["behavior"], str)
+            or len(observation["behavior"].encode()) > 128
+            or not isinstance(observation["cache"], str)
+            or len(observation["cache"].encode()) > 2048
+            or not (observation["cache_prefix"] is None or isinstance(observation["cache_prefix"], str))
+            or not isinstance(observation["dont_write_bytecode"], bool)
+        ):
+            raise ValueError("invalid evaluator observation")
+        return {
+            "observation": {key: value for key, value in observation.items() if key != "kind"} if observation else None,
+            "stdout": stdout.hex(), "stderr": stderr.hex(),
+            "exit": process.returncode if process.returncode >= 0 else 125,
+            "failure": "evaluator operation was signaled" if process.returncode < 0 else None,
+        }
+    finally:
+        if writer is not None:
+            os.close(writer)
+        os.close(reader)
+        if process is not None:
+            try:
+                os.killpg(process.pid, 9)
+            except ProcessLookupError:
+                pass
+            process.wait()
+
+
+def serve_imports(connection, specifications, project):
+    with connection, connection.makefile("rb") as requests:
+        while True:
+            message = requests.readline(65537)
+            if not message:
+                return
+            try:
+                if len(message) > 65536 or not message.endswith(b"\n"):
+                    raise ValueError("evaluator request is too large")
+                receipt = json.loads(message.decode("utf-8"), object_pairs_hook=unique_object)
+                outcome = execute_observed_operation(receipt, specifications, project)
+            except (OSError, ValueError) as error:
+                outcome = {"observation": None, "stdout": "", "stderr": str(error).encode().hex(), "exit": 125, "failure": str(error)}
+            connection.sendall((json.dumps(outcome) + "\n").encode("utf-8"))
+
+
+def serve_evidence(listener, stop_reader, result_writer, specifications, project, forced_exit, broker):
     events = set()
-    accepted_starts = set()
     observations = {}
     invalid_observations = set()
+    responses = broker.makefile("rb")
     try:
         while True:
             readable, _, _ = select.select([listener, stop_reader], [], [])
@@ -141,45 +254,42 @@ def serve_evidence(listener, stop_reader, result_writer, specifications, project
             with connection:
                 matching = []
                 try:
-                    event = peer_process(connection)
+                    event, environment = peer_process(connection)
                     matching = [
                         index for index, specification in enumerate(specifications)
                         if operation_matches(specification, event, project)
                     ]
-                    pid, _, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
                     message = read_message(connection)
-                    if not matching:
+                    if not matching or message != b"ready\n":
                         raise ValueError("untrusted operation")
-                    if message == b"ready\n":
-                        events.add(event)
-                        if forced_exit is None:
-                            accepted_starts.add((pid, event))
-                        reply = f"EXIT {forced_exit}" if forced_exit is not None else "OK"
-                    else:
-                        value = json.loads(message.decode("utf-8"), object_pairs_hook=unique_object)
-                        if (
-                            (pid, event) not in accepted_starts
-                            or not isinstance(value, dict)
-                            or set(value) != {"kind", "behavior", "cache", "cache_prefix", "dont_write_bytecode"}
-                            or value["kind"] != "observation"
-                            or not isinstance(value["behavior"], str)
-                            or len(value["behavior"].encode()) > 128
-                            or not isinstance(value["cache"], str)
-                            or len(value["cache"].encode()) > 2048
-                            or not (value["cache_prefix"] is None or isinstance(value["cache_prefix"], str))
-                            or not isinstance(value["dont_write_bytecode"], bool)
-                        ):
-                            raise ValueError("invalid imported observation")
-                        required = [index for index in matching if "expected_behavior" in specifications[index]]
-                        if not required:
-                            raise ValueError("unexpected imported observation")
+                    if len(events) >= 128 and event not in events:
+                        raise ValueError("too many observed operations")
+                    events.add(event)
+                    required = [index for index in matching if "expected_behavior" in specifications[index]]
+                    reply = f"EXIT {forced_exit}" if forced_exit is not None else "OK"
+                    if required and forced_exit is None:
+                        cwd, executable, arguments = event
+                        request = (json.dumps({"cwd": str(cwd), "executable": str(executable),
+                            "arguments": list(arguments), "environment": environment}) + "\n").encode("utf-8")
+                        if len(request) > 65536:
+                            raise ValueError("evaluator request is too large")
+                        broker.sendall(request)
+                        response = responses.readline(16385)
+                        if len(response) > 16384 or not response.endswith(b"\n"):
+                            raise RuntimeError("incomplete evaluator response")
+                        outcome = json.loads(response.decode("utf-8"))
+                        value = outcome["observation"]
+                        if outcome["failure"] is not None or value is None:
+                            invalid_observations.update(required)
                         for index in required:
+                            if value is None:
+                                continue
                             if index in observations:
                                 if observations[index]["behavior"] != value["behavior"]:
                                     observations[index]["conflicting_behavior"] = value["behavior"]
                             else:
-                                observations[index] = {key: item for key, item in value.items() if key != "kind"}
-                        reply = "OK"
+                                observations[index] = value
+                        reply = json.dumps({key: outcome[key] for key in ("stdout", "stderr", "exit")})
                 except (OSError, ValueError):
                     invalid_observations.update(
                         index for index in matching if "expected_behavior" in specifications[index]
@@ -199,6 +309,8 @@ def serve_evidence(listener, stop_reader, result_writer, specifications, project
         }
     except BaseException as error:
         payload = {"events": [], "error": f"{type(error).__name__}: {error}"}
+    responses.close()
+    broker.close()
     with os.fdopen(result_writer, "w") as output:
         json.dump(payload, output)
 
@@ -206,6 +318,19 @@ def serve_evidence(listener, stop_reader, result_writer, specifications, project
 def start_evidence_server(listener, specifications, project, forced_exit):
     stop_reader, stop_writer = os.pipe()
     result_reader, result_writer = os.pipe()
+    broker_client, broker_server = socket.socketpair()
+    broker_pid = os.fork()
+    if broker_pid == 0:
+        broker_client.close()
+        listener.close()
+        for descriptor in (stop_reader, stop_writer, result_reader, result_writer):
+            os.close(descriptor)
+        try:
+            serve_imports(broker_server, specifications, project)
+        except BaseException:
+            os._exit(126)
+        os._exit(0)
+    broker_server.close()
     server_pid = os.fork()
     if server_pid == 0:
         os.close(stop_writer)
@@ -215,14 +340,15 @@ def start_evidence_server(listener, specifications, project, forced_exit):
         os.setuid(65534)
         if ctypes.CDLL(None).prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) != 0:
             os._exit(126)
-        serve_evidence(listener, stop_reader, result_writer, specifications, project, forced_exit)
+        serve_evidence(listener, stop_reader, result_writer, specifications, project, forced_exit, broker_client)
         os._exit(0)
     os.close(stop_reader)
     os.close(result_writer)
-    return server_pid, stop_writer, result_reader
+    broker_client.close()
+    return server_pid, stop_writer, result_reader, broker_pid
 
 
-def finish_evidence_server(server_pid, stop_writer, result_reader):
+def finish_evidence_server(server_pid, stop_writer, result_reader, broker_pid):
     os.write(stop_writer, b"stop")
     os.close(stop_writer)
     chunks = []
@@ -233,8 +359,9 @@ def finish_evidence_server(server_pid, stop_writer, result_reader):
         chunks.append(chunk)
     os.close(result_reader)
     _, status = os.waitpid(server_pid, 0)
+    _, broker_status = os.waitpid(broker_pid, 0)
     payload = json.loads(b"".join(chunks))
-    if status != 0 or "error" in payload:
+    if status != 0 or broker_status != 0 or "error" in payload:
         raise RuntimeError(payload.get("error", f"evidence server exited with status {status}"))
     return {
         "events": {
@@ -302,7 +429,7 @@ def run_case(root, plan, definition, bootstrap):
         listener.bind(str(evidence_path))
         evidence_path.chmod(0o666)
         listener.listen()
-        server_pid, stop_writer, result_reader = start_evidence_server(
+        server_pid, stop_writer, result_reader, broker_pid = start_evidence_server(
             listener, state["required_operations"], project, state.get("force_exit")
         )
         environment = {
@@ -324,7 +451,7 @@ def run_case(root, plan, definition, bootstrap):
                 "stdout": "",
                 "stderr": "candidate working directory does not exist",
             })
-            finish_evidence_server(server_pid, stop_writer, result_reader)
+            finish_evidence_server(server_pid, stop_writer, result_reader, broker_pid)
             listener.close()
             shutil.rmtree(run_root)
             continue
@@ -352,7 +479,7 @@ def run_case(root, plan, definition, bootstrap):
             os.killpg(process.pid, 9)
         except ProcessLookupError:
             pass
-        seen = finish_evidence_server(server_pid, stop_writer, result_reader)
+        seen = finish_evidence_server(server_pid, stop_writer, result_reader, broker_pid)
         listener.close()
         expected_zero = state["exit"] == "zero"
         exit_matches = not timed_out and ((process.returncode == 0) == expected_zero)
