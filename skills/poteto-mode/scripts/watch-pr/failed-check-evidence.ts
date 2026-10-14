@@ -147,17 +147,17 @@ interface ArchiveResult {
 }
 function archiveResult(value: unknown, scope: string, allowance: number): ArchiveResult {
   const raw = object(value);
-  const expandedBytes = integer(raw.expandedBytes);
-  if (expandedBytes > Math.min(8 * 1024 * 1024, allowance)) throw new EvidenceReadError("malformed", "invalid archive byte accounting");
   if ("error" in raw) {
     const kind = raw.errorKind;
     if (kind !== "unsafe" && kind !== "unavailable") throw new EvidenceReadError("malformed", "invalid archive error kind");
-    return { expandedBytes, records: [], logs: [], gaps: [{ kind, scope, detail: text(raw.error), omitted: 0 }] };
+    throw new EvidenceReadError(kind, text(raw.error));
   }
+  const expandedBytes = integer(raw.expandedBytes);
+  if (expandedBytes > Math.min(8 * 1024 * 1024, allowance)) throw new EvidenceReadError("malformed", "invalid archive byte accounting");
   const rows = array(raw.records);
   const logs = array(raw.logs);
   const gaps = array(raw.gaps);
-  if (rows.length > LIMITS.records || logs.length > 4 || gaps.length > 5)
+  if (rows.length > LIMITS.records || logs.length > 4 || gaps.length > 4)
     throw new EvidenceReadError("malformed", "over-limit archive response");
   return {
     expandedBytes,
@@ -170,8 +170,8 @@ function archiveResult(value: unknown, scope: string, allowance: number): Archiv
     logs: logs.map((value) => { const row = object(value); return { member: text(row.member), text: text(row.text, 8192) }; }),
     gaps: gaps.map((value) => {
       const row = object(value);
-      if (row.kind !== "limit" && row.kind !== "unsafe") throw new EvidenceReadError("malformed", "invalid archive gap kind");
-      return { kind: row.kind, scope, detail: text(row.detail), omitted: integer(row.omitted) };
+      if (row.kind !== "limit") throw new EvidenceReadError("malformed", "invalid archive gap kind");
+      return { kind: "limit", scope, detail: text(row.detail), omitted: integer(row.omitted) };
     }),
   };
 }
@@ -269,7 +269,6 @@ export class GhFailedCheckReader implements FailedCheckReader {
             const result = await archive(`${prefix}/artifacts/${artifactId}/zip`, "junit", scope);
             if (result === null) continue;
             for (const gap of result.gaps) addGap(gap.kind, gap.scope, gap.detail, gap.omitted);
-            if (result.records.length === 0 && result.gaps.some((gap) => gap.kind === "unsafe" || gap.kind === "unavailable")) continue;
             if (result.records.length === 0) addGap("missing", scope, "no JUnit failure or error records found");
             if (request.attempt > 1) addGap("attempt-unbound", scope, "artifact metadata does not establish its rerun attempt");
             for (const row of result.records) {
