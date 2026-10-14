@@ -4,6 +4,7 @@ import stat
 import struct
 import sys
 import zipfile
+import zlib
 from xml.parsers import expat
 
 
@@ -41,7 +42,7 @@ def directory(data):
     if end + 22 + comment != len(data) or offset + size != end:
         raise ValueError("invalid ZIP directory range")
     cursor = offset
-    ranges = []
+    ranges = {}
     names = set()
     while cursor < end:
         if cursor + 46 > end or data[cursor:cursor + 4] != b"PK\x01\x02":
@@ -69,17 +70,18 @@ def directory(data):
         extra_fields(data[local + 30 + local_name:begin])
         if not flags & 8 and (header[6], header[7], header[8]) != (crc, compressed, expanded):
             raise ValueError("inconsistent ZIP sizes or checksum")
-        ranges.append((local, begin + compressed))
+        ranges[local] = (begin, begin + compressed)
         cursor = next_cursor
         if len(ranges) > MAX_ENTRIES:
             raise ValueError("ZIP entry limit exceeded")
     if cursor != end or len(ranges) != count:
         raise ValueError("inconsistent ZIP entry count")
     previous = 0
-    for begin, finish in sorted(ranges):
-        if begin < previous:
+    for local, (_, finish) in sorted(ranges.items()):
+        if local < previous:
             raise ValueError("overlapping ZIP members")
         previous = finish
+    return ranges
 
 
 def junit(data, member):
@@ -156,7 +158,7 @@ def junit(data, member):
 
 
 def read_archive(data, mode, allowance):
-    directory(data)
+    ranges = directory(data)
     result = {"records": [], "logs": [], "gaps": [], "expandedBytes": 0}
     names = set()
     omitted = 0
@@ -183,23 +185,27 @@ def read_archive(data, mode, allowance):
             if entry.is_dir():
                 if entry.file_size:
                     raise ValueError("nonempty ZIP directory")
-            chunks = []
-            size = 0
-            with archive.open(entry) as stream:
-                while True:
-                    chunk = stream.read(16384)
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    result["expandedBytes"] += len(chunk)
-                    if size > MAX_MEMBER or result["expandedBytes"] > min(MAX_EXPANDED, allowance) or size > max(1, entry.compress_size) * 100:
-                        raise ValueError("ZIP expanded-byte limit exceeded")
-                    chunks.append(chunk)
-            if size != entry.file_size:
+            begin, finish = ranges[entry.header_offset]
+            compressed = memoryview(data)[begin:finish]
+            limit = min(MAX_MEMBER, min(MAX_EXPANDED, allowance) - result["expandedBytes"], max(1, entry.compress_size) * 100)
+            if entry.compress_type == zipfile.ZIP_STORED:
+                if len(compressed) > limit:
+                    raise ValueError("ZIP expanded-byte limit exceeded")
+                content = bytes(compressed)
+            else:
+                decoder = zlib.decompressobj(-15)
+                content = decoder.decompress(compressed, limit + 1)
+                if len(content) > limit:
+                    raise ValueError("ZIP expanded-byte limit exceeded")
+                if not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+                    raise ValueError("incomplete or trailing ZIP compressed stream")
+            if len(content) != entry.file_size:
                 raise ValueError("inconsistent ZIP expanded size")
+            if zlib.crc32(content) != entry.CRC:
+                raise ValueError("inconsistent ZIP member CRC")
+            result["expandedBytes"] += len(content)
             if entry.is_dir():
                 continue
-            content = b"".join(chunks)
             if mode == "logs":
                 value = content.decode("utf-8", errors="strict")
                 if len(result["logs"]) < 4:
@@ -207,7 +213,7 @@ def read_archive(data, mode, allowance):
                     result["logs"].append({"member": name[:256], "text": value[:8192]})
                 else:
                     omitted += 1
-            elif name.lower().endswith(".xml") or content.lstrip().startswith((b"<", b"\xff\xfe", b"\xfe\xff")):
+            elif name.lower().endswith(".xml") or content.lstrip().startswith((b"<", b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff")):
                 records, dropped, fields = junit(content, name)
                 omitted += dropped
                 truncated += fields
@@ -247,7 +253,7 @@ def main():
         if len(data) > MAX_ARCHIVE:
             raise ValueError("ZIP download limit exceeded")
         result = read_archive(data, mode, allowance)
-    except (ValueError, IndexError, zipfile.BadZipFile, RuntimeError, NotImplementedError, UnicodeError, expat.ExpatError, struct.error) as error:
+    except (ValueError, IndexError, zipfile.BadZipFile, RuntimeError, NotImplementedError, UnicodeError, expat.ExpatError, struct.error, zlib.error) as error:
         result = {"error": str(error)[:256], "errorKind": "unsafe"}
     print(json.dumps(result, ensure_ascii=True))
 

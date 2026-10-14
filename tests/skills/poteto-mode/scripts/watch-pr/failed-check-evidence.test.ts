@@ -18,8 +18,8 @@ interface Fixture {
 function fixture(): Fixture {
   return JSON.parse(readFileSync(join(import.meta.dir, "fixtures/failed-check-226.json"), "utf8"));
 }
-function zip(entries: Record<string, string>, options: { permissions?: number; deflate?: boolean } = {}): Buffer {
-  const program = "import io,json,sys,zipfile\nv=json.load(sys.stdin);b=io.BytesIO()\nwith zipfile.ZipFile(b,'w') as z:\n for n,t in v['entries'].items():\n  i=zipfile.ZipInfo(n);i.external_attr=v.get('permissions',0o100644)<<16;i.compress_type=zipfile.ZIP_DEFLATED if v.get('deflate') else zipfile.ZIP_STORED;z.writestr(i,t)\nsys.stdout.buffer.write(b.getvalue())";
+function zip(entries: Record<string, string>, options: { permissions?: number; deflate?: boolean; declaredContent?: string } = {}): Buffer {
+  const program = "import io,json,struct,sys,zipfile,zlib\nv=json.load(sys.stdin);b=io.BytesIO()\nwith zipfile.ZipFile(b,'w') as z:\n for n,t in v['entries'].items():\n  i=zipfile.ZipInfo(n);i.external_attr=v.get('permissions',0o100644)<<16;i.compress_type=zipfile.ZIP_DEFLATED if v.get('deflate') else zipfile.ZIP_STORED;z.writestr(i,t)\ndata=bytearray(b.getvalue())\nif 'declaredContent' in v:\n content=v['declaredContent'].encode();central=data.index(b'PK\\x01\\x02');crc=zlib.crc32(content)\n struct.pack_into('<I',data,14,crc);struct.pack_into('<I',data,22,len(content));struct.pack_into('<I',data,central+16,crc);struct.pack_into('<I',data,central+24,len(content))\nsys.stdout.buffer.write(data)";
   const result = Bun.spawnSync(["python3", "-c", program], { stdin: Buffer.from(JSON.stringify({ entries, ...options })) });
   if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
   return Buffer.from(result.stdout);
@@ -260,6 +260,12 @@ describe("untrusted archive bytes through the production reader", () => {
     const result = command({ input: onlyAvailable(fixture()), archives: { "22601": bytes } });
     expect(result.report.gaps).toEqual([{ kind: "unsafe", scope: "artifact 22601 test-results-linux", detail: expect.stringContaining("CRC"), omitted: 0 }]);
   });
+  it("recovers a complete deflated member literally", () => {
+    const result = command({ input: onlyAvailable(fixture()), archives: { "22601": zip({ "results.xml": xml }, { deflate: true }) } });
+    expect(result.code).toBe(0);
+    expect(verified(result.report).map((row) => [row.testName, row.body])).toEqual([["literal safe test", "literal failure evidence"]]);
+    expect(result.report.gaps).toEqual([]);
+  });
   for (const [name, value, localOffset, centralOffset] of [["encryption", 1, 6, 8], ["unsupported compression", 99, 8, 10]] as const) {
     it(`rejects ${name} before decompressing the member`, () => {
       const bytes = zip({ "results.xml": xml });
@@ -274,6 +280,16 @@ describe("untrusted archive bytes through the production reader", () => {
     const result = command({ input: onlyAvailable(fixture()), archives: { "22601": bytes } });
     expect(result.report.gaps).toEqual([{ kind: "unsafe", scope: "artifact 22601 test-results-linux", detail: "inconsistent ZIP sizes or checksum", omitted: 0 }]);
   });
+  for (const deflate of [false, true]) {
+    it(`rejects incomplete declared ${deflate ? "deflated" : "stored"} member content and preserves another artifact`, () => {
+      const input = fixture(); input.artifacts.artifacts = input.artifacts.artifacts.slice(0, 2); input.artifacts.total_count = 2;
+      const bytes = zip({ "results.xml": xml + "<trailing>" }, { deflate, declaredContent: xml });
+      const result = command({ input, archives: { "22601": bytes } });
+      expect(result.code).toBe(2);
+      expect(verified(result.report).map((row) => [row.artifactId, row.testName, row.body])).toEqual([["22602", "retains second artifact", "AssertionError: second artifact evidence"]]);
+      expect(result.report.gaps).toEqual([{ kind: "unsafe", scope: "artifact 22601 test-results-linux", detail: "inconsistent ZIP expanded size", omitted: 0 }]);
+    });
+  }
   it("rejects ZIP64 before standard-library entry allocation", () => {
     const bytes = zip({ "results.xml": xml }); bytes.writeUInt16LE(65535, bytes.lastIndexOf(Buffer.from("PK\x05\x06")) + 10);
     const result = command({ input: onlyAvailable(fixture()), archives: { "22601": bytes } });
@@ -284,5 +300,12 @@ describe("untrusted archive bytes through the production reader", () => {
     const result = command({ input: onlyAvailable(fixture()), archives: { "22601": zip({ "results.xml": content }) } });
     expect(result.code).toBe(0);
     expect(verified(result.report).map((row) => [row.testName, row.kind, row.message, row.body])).toEqual([["literal & case", "failure", "& expected", "<trace>& untouched 😀"], ["literal & case", "error", "", "escaped <payload>"]]);
+  });
+  it("recovers UTF-8 marked JUnit content with a non-XML suffix beside another record", () => {
+    const marked = '\uFEFF<testsuite><testcase name="marked JUnit case"><error>UTF-8 BOM evidence</error></testcase></testsuite>';
+    const result = command({ input: onlyAvailable(fixture()), archives: { "22601": zip({ "results.xml": xml, "second.junit": marked }) } });
+    expect(result.code).toBe(0);
+    expect(verified(result.report).map((row) => [row.member, row.testName, row.kind, row.body])).toEqual([["results.xml", "literal safe test", "failure", "literal failure evidence"], ["second.junit", "marked JUnit case", "error", "UTF-8 BOM evidence"]]);
+    expect(result.report.gaps).toEqual([]);
   });
 });

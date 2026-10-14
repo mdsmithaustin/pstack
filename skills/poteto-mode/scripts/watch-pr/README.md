@@ -62,7 +62,7 @@ element. DTD and entity declarations and external resolution are forbidden,
 including declarations in UTF-16 input. The isolated Python parser supports
 Python 3.9.6 with Expat 2.2.8. Its parent enforces a three-second deadline.
 
-Collection retains at most 32 JUnit records and 24 KiB of evidence characters.
+Collection retains at most 32 JUnit records within a 24,576-character evidence budget.
 Bodies retain at most 2,048 characters, and other record fields retain at most
 256 characters. Logs retain at most four members with 8,192 characters each.
 Field truncation and omitted records produce limit gaps. Final JSON is at most
