@@ -73,7 +73,9 @@ execution, and a separate safety teardown record. It measures writer cleanup,
 not application stdout reader cleanup. A failed or missing observation cannot
 pass because the outer shell exits nonzero. Lifecycle grading accepts only the
 actual fact-derived worker exit, while bytecode grading still requires zero.
-Each state retains at most eight attempts of at most 32 KiB each. A ninth attempt
+Each state retains at most eight attempts of at most 32 KiB each. The existing
+16 KiB ceiling on the whole broker response is stricter than the 32 KiB
+retained-attempt bound. A ninth attempt
 latches failure and launches no worker. Forced status 97 launches no lifecycle
 resource and must make the outer gate return nonzero.
 

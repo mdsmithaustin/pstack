@@ -27,7 +27,7 @@
         "outcome",
         "process"
       ],
-      "prompt": "Our completion probe reports a clean process after its observer has repaired it. Run the attached bootstrap with `python3 inputs/lifecycle_observation.py . cleanup-present`, inspect the generated project and its old example. The checker targets the prepared Linux evaluator and requires its private runtime. Return a paste-ready completion check in a fenced shell block. Briefly name the observable result that blocks completion and explain when the measurement happens.",
+      "prompt": "We need a completion check for application cleanup. Run the attached bootstrap with `python3 inputs/lifecycle_observation.py . cleanup-present`, inspect the generated project and its command example. The checker targets the prepared Linux evaluator and requires its private runtime. Return a paste-ready completion check in a fenced shell block. Briefly name the observable result that blocks completion and explain when the measurement happens.",
       "files": [
         "oracles/projects/lifecycle_observation.py"
       ],

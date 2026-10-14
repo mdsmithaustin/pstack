@@ -17,8 +17,7 @@ configuration = {"cleanup": state == "cleanup-present", "fault": state if state 
     "Zero means the application reaped its child and closed its cleanup pipe writer. "
     "Nonzero blocks completion. The checker always tears down its disposable resources afterward. "
     "The caller stub requires the evaluator-owned runtime. Do not run it as a host process probe.\n\n"
-    "An old example uses `python3 tools/check-lifecycle.py --repair-first`. "
-    "That mode repairs the application before sampling it, so a clean result cannot establish application cleanup.\n"
+    "```sh\npython3 tools/check-lifecycle.py --repair-first\n```\n"
 )
 (root / "tools" / "check-lifecycle.py").write_text(
     'raise SystemExit("This helper requires the evaluator-owned lifecycle runtime.")\n'
