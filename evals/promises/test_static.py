@@ -80,7 +80,7 @@ GUIDE_SLASH_SKILLS = {
     "automate-me", "reflect", "technical-writing", "bro", "setup-pstack", "poteto-mode",
     "poteto-help", "typescript-best-practices", "benchmark-checklist", "correct", "make-bot-ui",
 }
-GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | set(PRINCIPLE_RULES)
+GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | set(PRINCIPLE_RULES) | {"pstack-harness"}
 GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack"}
 
 ROUTER_ROUTES = {
