@@ -1384,6 +1384,14 @@ class PanelDiversityNote(ResolveRunner, unittest.TestCase):
         arms = self.resolve("claude-code", "interrogate reviewers", user="interrogate reviewers: opus, sonnet, sonnet\n")
         self.assertEqual([arm.get("notes") for arm in arms], [None, None, None])
 
+    def test_a_panel_mixing_a_model_and_inherit_parent_gets_no_note(self):
+        for role in ("arena runners", "architect runners", "interrogate reviewers"):
+            for models in (("opus", "inherit-parent"), ("inherit-parent", "opus")):
+                with self.subTest(role=role, models=models):
+                    arms = self.resolve("claude-code", role, user=f"{role}: {', '.join(models)}\n")
+                    self.assertEqual([arm["model"] for arm in arms], list(models))
+                    self.assertEqual([arm.get("notes") for arm in arms], [None, None])
+
     def test_two_releases_of_one_gpt6_tier_count_as_one_model(self):
         arms = self.resolve(
             "codex", "interrogate reviewers",
