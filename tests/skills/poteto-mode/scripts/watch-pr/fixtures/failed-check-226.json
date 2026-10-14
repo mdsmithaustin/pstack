@@ -1,0 +1,63 @@
+{
+  "run": {
+    "id": 9100226,
+    "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "run_attempt": 1,
+    "status": "completed",
+    "conclusion": "failure"
+  },
+  "artifacts": {
+    "total_count": 4,
+    "artifacts": [
+      {
+        "id": 22601,
+        "name": "test-results-linux",
+        "size_in_bytes": 1024,
+        "expired": false,
+        "workflow_run": {
+          "id": 9100226,
+          "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "id": 22602,
+        "name": "test-results-macos",
+        "size_in_bytes": 1024,
+        "expired": false,
+        "workflow_run": {
+          "id": 9100226,
+          "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "id": 22603,
+        "name": "test-results-expired",
+        "size_in_bytes": 1024,
+        "expired": true,
+        "workflow_run": {
+          "id": 9100226,
+          "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "id": 22604,
+        "name": "test-results-inaccessible",
+        "size_in_bytes": 1024,
+        "expired": false,
+        "workflow_run": {
+          "id": 9100226,
+          "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ]
+  },
+  "jobLog": "2026-10-01T12:00:00Z Run bun test\n2026-10-01T12:00:01Z Starting failed-check diagnostic tests\n[log truncated before assertion]\n",
+  "archives": {
+    "22601": {
+      "junit/results.xml": "<?xml version=\"1.0\"?><testsuites><testsuite name=\"checks\"><testcase classname=\"FailedCheckEvidence\" name=\"recovers truncated assertion\"><failure message=\"expected checked head\" type=\"AssertionError\">Traceback: fixture_test.py:42\nAssertionError: expected aaaaaaaa, got bbbbbbbb</failure><error message=\"transport disconnected\" type=\"ConnectionError\">ConnectionError: artifact stream disconnected</error></testcase></testsuite></testsuites>"
+    },
+    "22602": {
+      "results.xml": "<testsuite name=\"macos\"><testcase classname=\"ArchiveEvidence\" name=\"retains second artifact\"><failure message=\"missing failure text\">AssertionError: second artifact evidence</failure></testcase></testsuite>"
+    }
+  }
+}
