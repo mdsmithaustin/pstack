@@ -458,7 +458,7 @@ def _write_record(handle, record):
         root.close()
 
 
-def _seal(handle, record, trace, *, write=True):
+def _seal(handle, record, trace, *, error=None, write=True):
     _, state = handle._controller.load(handle._id)
     if {k: v for k, v in record.items() if k != "turns"} != {k: v for k, v in state["record"].items() if k != "turns"}:
         raise GradeRefused("input_changed", "record conflicts with pre-turn controller metadata", handle._id)
@@ -486,6 +486,7 @@ def _seal(handle, record, trace, *, write=True):
             raise GradeRefused("input_changed", "raw inputs differ from controller inputs", handle._id)
     finally:
         root.close()
+    state["error"] = None if error is None else dict(error)
     state["sealed"] = True
     handle._controller.save(state)
 
@@ -509,12 +510,32 @@ def _authorize_retained(out, root, *, project, original_project, output, case, w
         raise GradeRefused("input_changed", "record does not match the reviewed original mapping")
     if Path(output).resolve() == Path(root).resolve():
         raise GradeRefused("output_unsafe", "retained grades need a separate diagnostic directory")
+    try:
+        previous = json.loads(prior)
+    except ValueError as error:
+        raise GradeRefused("input_changed", "retained prior verdict is not valid JSON") from error
+    if not isinstance(previous, dict):
+        raise GradeRefused("input_changed", "retained prior verdict must be an object")
+    error = previous.get("error")
+    if error is not None:
+        if not isinstance(error, dict) or set(error) != {"cli", "relogin", "detail"} or any(
+                not isinstance(value, str) or not value.strip() for value in error.values()):
+            raise GradeRefused("input_changed", "retained error must contain cli, relogin, and detail strings")
+        expected = {"case": case["id"], "harness": record["harness"], "skills_at": record["skills_at"]}
+        if any(previous.get(key) != value for key, value in expected.items()):
+            raise GradeRefused("input_changed", "retained error does not match the reviewed run")
+        from live import HARNESSES, adapter
+        harness = record["harness"]
+        login = getattr(adapter(harness), "LOGIN", None) if harness in HARNESSES else None
+        if login is None or (error["cli"], error["relogin"]) != (login.cli, login.relogin):
+            raise GradeRefused("input_changed", "retained error does not match the harness login")
+        error = dict(error)
     controller = _Controller(out, create=True)
     handle = controller.issue(root, project, case, record, worktrees=worktrees, output=output, original_project=original_project)
-    _seal(handle, record, trace, write=False)
     _, state = controller.load(handle._id)
     state["prior_verdict_digest"] = hashlib.sha256(prior).hexdigest()
     controller.save(state)
+    _seal(handle, record, trace, error=error, write=False)
     return handle
 
 
@@ -713,9 +734,15 @@ def grade(authorization):
             raw.close()
         output = _Root.open(state["output"]["path"], state["output"]["identity"])
         try:
-            output.info("verdict.json")
+            target = output.info("verdict.json")
         except FileNotFoundError:
-            pass
+            target = None
+        error = state.get("error")
+        if "error" not in state and target is not None and stat.S_ISREG(target.st_mode):
+            try:
+                error = json.loads(output.read("verdict.json")).get("error")
+            except FileNotFoundError:
+                pass
         trees = _approved_trees(state)
         private = _Root.open(state["private"]["path"], state["private"]["identity"])
         try:
@@ -794,6 +821,10 @@ def grade(authorization):
         expected = {"case": state["case"]["id"], "harness": state["record"]["harness"], "skills_at": state["record"]["skills_at"]}
         if any(verdict.get(k) != v for k, v in expected.items()) or set(verdict["promises"]) != set(state["case"]["promises"]):
             raise GradeRefused("boundary_unavailable", "worker result does not match the authorized case")
+        if error:
+            from harnesses.login import error_verdict
+            verdict = error_verdict(state["case"], state["record"]["harness"], state["record"]["skills_at"],
+                                    error, verdict["promises"])
         output.write("verdict.json", _json(verdict))
         return verdict
     except GradeRefused as refusal:
