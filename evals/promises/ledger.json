@@ -3595,7 +3595,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "fcf9c8ddab41"
+    "c9016f92b729"
    ],
    "promise": "show-me-your-work-spawns-trail-reviewer",
    "sources": [
@@ -4319,6 +4319,15 @@
     "port"
    ],
    "text": "**Correcting the same mistake by hand.** A correction in chat helps one run. `/correct` fixes the repo so no later run repeats it."
+  },
+  "1a8a4a4147be": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-reviewers-on-different-models",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to the configured reviewer panel, which may run on one model."
   },
   "1a8bb2d8254d": {
    "class": "promise",
@@ -5960,15 +5969,6 @@
    ],
    "text": "In the 2026-10-03 run of the guide-promise evals, Hermes and Grok Build loaded such a skill without being asked."
   },
-  "4cc94348b2c5": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "interrogate-reviewers-on-different-models",
-   "sources": [
-    "port"
-   ],
-   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to reviewers on different models."
-  },
   "4d1f50b5fd58": {
    "class": "context",
    "file": "07-overnight.md",
@@ -6117,12 +6117,13 @@
    "text": "Short works because the playbook holds the structure, and a Custom Mode keeps `/poteto-mode` in context on every turn."
   },
   "54955dc0e6fb": {
-   "class": "promise",
+   "class": "substituted",
    "file": "04-design.md",
-   "promise": "interrogate-multi-reviewer-adversarial",
+   "ported_as": [
+    "df586522413a"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "`/interrogate` has other models try to break the result."
   },
@@ -7217,7 +7218,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "4cc94348b2c5"
+    "1a8a4a4147be"
    ],
    "promise": "interrogate-reviewers-on-different-models",
    "sources": [
@@ -10143,6 +10144,18 @@
    ],
    "text": "On Claude Code and Grok Build those roles run at your session effort, and on Codex the `## codex` section pins its own."
   },
+  "c9016f92b729": {
+   "also": [
+    "show-me-your-work-review-ends-with-attention"
+   ],
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "show-me-your-work-spawns-trail-reviewer",
+   "sources": [
+    "port"
+   ],
+   "text": "Before the skill hands back its summary, it spawns a reviewer on the `trail reviewer` role, following [Spawn a role](../../skills/pstack-harness/SKILL.md#spawn-a-role) for model resolution and execution-identity disclosure, to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
+  },
   "c90f8c31210e": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -10852,6 +10865,15 @@
     "port"
    ],
    "text": "\"new task\" tells `/poteto-mode` to re-match rather than continue the prior playbook."
+  },
+  "df586522413a": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-multi-reviewer-adversarial",
+   "sources": [
+    "port"
+   ],
+   "text": "`/interrogate` has reviewers try to break the result."
   },
   "df656a69cd86": {
    "class": "context",
@@ -11814,18 +11836,6 @@
     "port"
    ],
    "text": "A misreading shows up in the restatement, where it costs one message to correct."
-  },
-  "fcf9c8ddab41": {
-   "also": [
-    "show-me-your-work-review-ends-with-attention"
-   ],
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "show-me-your-work-spawns-trail-reviewer",
-   "sources": [
-    "port"
-   ],
-   "text": "Before the skill hands back its summary, it spawns a reviewer on your configured `trail reviewer` model, or on another model of the same family if that matches the model that did the work and your config allows one (a same-model review when it allows none, labeled as one in the verdict and the reply), to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
   },
   "fd1240f7af47": {
    "class": "promise",
