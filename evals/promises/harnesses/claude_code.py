@@ -206,7 +206,7 @@ def preflight():
     but omit exported API keys and config overrides so they cannot mask a missing login."""
     binary = CLAUDE_BINARY if CLAUDE_BINARY.is_file() else shutil.which("claude")
     if not binary:
-        raise LoginRequired(LOGIN, "no claude binary to ask")
+        raise RuntimeError("claude executable missing; install Claude Code before running live cases")
     env = {"HOME": os.environ["HOME"], "USER": os.environ.get("USER", ""), "LOGNAME": os.environ.get("LOGNAME", ""),
            "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8", "TERM": "dumb", "CLAUDE_SECURESTORAGE_CONFIG_DIR": ""}
     out = check_status(LOGIN, [binary, "auth", "status"], env=env)
