@@ -108,8 +108,15 @@ without blockers. These checks validate the instrument, not skill quality.
 
 Start with one paired repetition. Replace the skill name for each corpus.
 
+The verify-commands bootstraps create files in the disposable model workspace,
+so use `--sandbox workspace-write`. Resolve the adapter's absolute path before
+the run because isolated answer workspaces do not contain repository tools.
+The executable oracle keeps its prepared tree immutable to candidates.
+
 ```sh
+tools="$(git rev-parse --show-toplevel)/tools"
 skill-ci run skills/verify-commands --agent codex --runs 1 \
+  --codex-cmd "$tools/codex-project-only exec --json --skip-git-repo-check --sandbox workspace-write" \
   --codex-model gpt-6.1-sol --out /private/tmp/verify-commands-sol-screen
 
 skill-ci run skills/verify-commands --agent claude --runs 1 \
