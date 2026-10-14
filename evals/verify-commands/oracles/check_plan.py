@@ -25,6 +25,7 @@ import struct
 import subprocess
 import sys
 import tarfile
+import time
 from pathlib import Path
 
 
@@ -42,7 +43,48 @@ if _pstack_reply != "OK":
     print(_pstack_reply, file=_pstack_sys.stderr)
     raise SystemExit(125)
 """
+TRACE_OBSERVER = """
+import json as _pstack_json
+def _pstack_observe(behavior, cache):
+    _pstack_payload = {
+        "kind": "observation",
+        "behavior": behavior,
+        "cache": cache,
+        "cache_prefix": _pstack_sys.pycache_prefix,
+        "dont_write_bytecode": _pstack_sys.dont_write_bytecode,
+    }
+    with _pstack_socket.socket(_pstack_socket.AF_UNIX, _pstack_socket.SOCK_STREAM) as _pstack_client:
+        _pstack_client.connect(_pstack_os.environ["PSTACK_EVIDENCE_SOCKET"])
+        _pstack_client.sendall((_pstack_json.dumps(_pstack_payload) + "\\n").encode("utf-8"))
+        _pstack_reply = _pstack_client.recv(1024).decode("ascii", "strict").strip()
+    if _pstack_reply != "OK":
+        raise SystemExit(125)
+"""
 PR_SET_DUMPABLE = 4
+
+
+def read_message(connection):
+    deadline = time.monotonic() + 1
+    message = bytearray()
+    while True:
+        connection.settimeout(max(0.001, deadline - time.monotonic()))
+        chunk = connection.recv(4097 - len(message))
+        if not chunk or time.monotonic() > deadline:
+            raise ValueError("incomplete evidence message")
+        message.extend(chunk)
+        if len(message) > 4096:
+            raise ValueError("evidence message is too large")
+        if message.endswith(b"\n"):
+            return bytes(message)
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate observation key")
+        result[key] = value
+    return result
 
 
 def peer_process(connection):
@@ -87,6 +129,9 @@ def operation_matches(specification, event, project):
 
 def serve_evidence(listener, stop_reader, result_writer, specifications, project, forced_exit):
     events = set()
+    accepted_starts = set()
+    observations = {}
+    invalid_observations = set()
     try:
         while True:
             readable, _, _ = select.select([listener, stop_reader], [], [])
@@ -94,17 +139,51 @@ def serve_evidence(listener, stop_reader, result_writer, specifications, project
                 break
             connection, _ = listener.accept()
             with connection:
-                connection.settimeout(1)
+                matching = []
                 try:
-                    connection.recv(64)
                     event = peer_process(connection)
-                    trusted = any(operation_matches(specification, event, project) for specification in specifications)
+                    matching = [
+                        index for index, specification in enumerate(specifications)
+                        if operation_matches(specification, event, project)
+                    ]
+                    pid, _, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                    message = read_message(connection)
+                    if not matching:
+                        raise ValueError("untrusted operation")
+                    if message == b"ready\n":
+                        events.add(event)
+                        if forced_exit is None:
+                            accepted_starts.add((pid, event))
+                        reply = f"EXIT {forced_exit}" if forced_exit is not None else "OK"
+                    else:
+                        value = json.loads(message.decode("utf-8"), object_pairs_hook=unique_object)
+                        if (
+                            (pid, event) not in accepted_starts
+                            or not isinstance(value, dict)
+                            or set(value) != {"kind", "behavior", "cache", "cache_prefix", "dont_write_bytecode"}
+                            or value["kind"] != "observation"
+                            or not isinstance(value["behavior"], str)
+                            or len(value["behavior"].encode()) > 128
+                            or not isinstance(value["cache"], str)
+                            or len(value["cache"].encode()) > 2048
+                            or not (value["cache_prefix"] is None or isinstance(value["cache_prefix"], str))
+                            or not isinstance(value["dont_write_bytecode"], bool)
+                        ):
+                            raise ValueError("invalid imported observation")
+                        required = [index for index in matching if "expected_behavior" in specifications[index]]
+                        if not required:
+                            raise ValueError("unexpected imported observation")
+                        for index in required:
+                            if index in observations:
+                                if observations[index]["behavior"] != value["behavior"]:
+                                    observations[index]["conflicting_behavior"] = value["behavior"]
+                            else:
+                                observations[index] = {key: item for key, item in value.items() if key != "kind"}
+                        reply = "OK"
                 except (OSError, ValueError):
-                    trusted = False
-                if trusted:
-                    events.add(event)
-                    reply = f"EXIT {forced_exit}" if forced_exit is not None else "OK"
-                else:
+                    invalid_observations.update(
+                        index for index in matching if "expected_behavior" in specifications[index]
+                    )
                     reply = "REJECT"
                 try:
                     connection.sendall((reply + "\n").encode("ascii"))
@@ -114,11 +193,14 @@ def serve_evidence(listener, stop_reader, result_writer, specifications, project
             "events": [
                 {"cwd": str(cwd), "executable": str(executable), "arguments": list(arguments)}
                 for cwd, executable, arguments in sorted(events)
-            ]
+            ],
+            "observations": observations,
+            "invalid_observations": sorted(invalid_observations),
         }
     except BaseException as error:
         payload = {"events": [], "error": f"{type(error).__name__}: {error}"}
-    os.write(result_writer, json.dumps(payload).encode("utf-8"))
+    with os.fdopen(result_writer, "w") as output:
+        json.dump(payload, output)
 
 
 def start_evidence_server(listener, specifications, project, forced_exit):
@@ -155,8 +237,12 @@ def finish_evidence_server(server_pid, stop_writer, result_reader):
     if status != 0 or "error" in payload:
         raise RuntimeError(payload.get("error", f"evidence server exited with status {status}"))
     return {
-        (Path(event["cwd"]), Path(event["executable"]), tuple(event["arguments"]))
-        for event in payload["events"]
+        "events": {
+            (Path(event["cwd"]), Path(event["executable"]), tuple(event["arguments"]))
+            for event in payload["events"]
+        },
+        "observations": {int(index): value for index, value in payload["observations"].items()},
+        "invalid_observations": set(payload["invalid_observations"]),
     }
 
 
@@ -164,7 +250,11 @@ def instrument_operations(project, specifications):
     paths = {specification["args"][0] for specification in specifications}
     for relative in paths:
         target = project / relative
-        target.write_text(TRACE_PROLOGUE + target.read_text())
+        observer = TRACE_OBSERVER if any(
+            specification["args"][0] == relative and "expected_behavior" in specification
+            for specification in specifications
+        ) else ""
+        target.write_text(TRACE_PROLOGUE + observer + target.read_text())
 
 
 def operation_seen(specification, events, project):
@@ -178,7 +268,9 @@ def run_case(root, plan, definition, bootstrap):
         "name": "forced-operation-failure",
         "bootstrap_state": base_state["name"],
         "exit": "nonzero",
-        "required_operations": base_state["required_operations"][:1],
+        "required_operations": [
+            {key: value for key, value in base_state["required_operations"][0].items() if key != "expected_behavior"}
+        ],
         "force_exit": 97,
     }
     states = [*definition["states"], forced_state]
@@ -267,8 +359,22 @@ def run_case(root, plan, definition, bootstrap):
         missing_operations = [
             specification
             for specification in state["required_operations"]
-            if not operation_seen(specification, seen, project)
+            if not operation_seen(specification, seen["events"], project)
         ]
+        behavior_checks = []
+        for index, specification in enumerate(state["required_operations"]):
+            if "expected_behavior" not in specification:
+                continue
+            observation = seen["observations"].get(index)
+            behavior_checks.append({
+                "operation": specification,
+                "expected": specification["expected_behavior"],
+                "observation": observation,
+                "matches": observation is not None
+                and observation["behavior"] == specification["expected_behavior"]
+                and "conflicting_behavior" not in observation
+                and index not in seen["invalid_observations"],
+            })
         results.append({
             "state": state["name"],
             "exit": process.returncode,
@@ -276,7 +382,9 @@ def run_case(root, plan, definition, bootstrap):
             "exit_matches": exit_matches,
             "timed_out": timed_out,
             "missing_operations": missing_operations,
-            "observed_commands": [list(arguments) for _, _, arguments in sorted(seen)],
+            "observed_commands": [list(arguments) for _, _, arguments in sorted(seen["events"])],
+            "behavior_checks": behavior_checks,
+            "fixture_receipt": json.loads(setup.stdout) if behavior_checks else None,
             "stdout": stdout[-1000:],
             "stderr": stderr[-1000:],
         })
@@ -446,14 +554,20 @@ def replay(plan: dict, definition: dict, bootstrap: Path) -> tuple[int, dict]:
     failed = [
         state for state in measured["states"]
         if not state["exit_matches"] or state["missing_operations"]
+        or any(not check["matches"] for check in state.get("behavior_checks", []))
     ]
+    control_evidence = [state for state in measured["states"] if state.get("behavior_checks")]
     if failed:
-        return 1, {"status": "candidate_failure", "failed_states": failed}
-    return 0, {
-        "status": "pass",
-        "states": [state["state"] for state in measured["states"]],
-        "operation_evidence": "authenticated by the container evidence server",
-    }
+        result = {"status": "candidate_failure", "failed_states": failed}
+    else:
+        result = {
+            "status": "pass",
+            "states": [state["state"] for state in measured["states"]],
+            "operation_evidence": "authenticated by the container evidence server",
+        }
+    if control_evidence:
+        result["control_evidence"] = control_evidence
+    return (1 if failed else 0), result
 
 
 def evaluate(case_id: str, output_dir: Path) -> tuple[int, dict]:

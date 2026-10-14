@@ -32,9 +32,12 @@ if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
     "import subject\n"
     "observed_behavior = subject.value()\n"
     "observed_cache = subject.__cached__\n"
+    "if '_pstack_observe' in globals():\n"
+    "    _pstack_observe(observed_behavior, observed_cache)\n"
     "print(observed_behavior, flush=True)\n"
 )
 (root / "expected.txt").write_text(source_value + "\n")
+(root / "control-name.txt").write_text(state + "\n")
 print(json.dumps({
     "state": state,
     "source_size": after.st_size,

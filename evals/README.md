@@ -27,6 +27,12 @@ artifact and runs it against healthy and faulty fixture states in a pinned,
 networkless container. Its unit tests cover valid alternatives, false-green
 commands, and attempts to forge execution evidence.
 
+The bytecode control case seeds timestamp-based Python caches before replacing
+equal-size source with the original timestamp. Its baseline, mutation, and
+restoration controls require literal imported values. The oracle records those
+values through the authenticated process channel. Source hashes, cache paths,
+and disabled bytecode writes do not establish executed behavior.
+
 `spec-probes` and `runtime-probes` allow several valid response shapes. Their
 grader-only expectations name the relevant fixture facts and unacceptable
 claims. A cross-family judge scores the response. Process assertions separately

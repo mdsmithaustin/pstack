@@ -41,6 +41,14 @@
       {"name": "compatibility-retained", "exit": "zero", "required_operations": [{"program": "python", "args": ["packages/api/tools/verify-scenario.py", "legacy_fetch_uses_new_client"]}]}
     ]
   },
+  "bytecode-controls": {
+    "bootstrap": "bytecode_controls.py",
+    "states": [
+      {"name": "baseline", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/observe.py"], "expected_behavior": "baseline"}]},
+      {"name": "mutated", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/observe.py"], "expected_behavior": "mutation"}]},
+      {"name": "restored", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/observe.py"], "expected_behavior": "baseline"}]}
+    ]
+  },
   "healthy-control": {
     "bootstrap": "healthy_control.py",
     "states": [

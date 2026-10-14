@@ -3,6 +3,7 @@ import io
 import json
 import os
 import shutil
+import struct
 import tarfile
 import tempfile
 import unittest
@@ -23,6 +24,113 @@ class PlanReplayTests(unittest.TestCase):
             output = root / "output.md"
             shutil.copyfile(ROOT / "samples" / sample_name, output)
             return MODULE.evaluate(case_id, root)
+
+    def evaluate_bytecode_script(self, script):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "output.md").write_text(f"```sh\n{script}\n```\n", encoding="utf-8")
+            return MODULE.evaluate("bytecode-controls", root)
+
+    def test_bytecode_controls_observe_literal_imported_values_with_fresh_namespaces(self):
+        code, result = self.evaluate_sample("bytecode-controls", "valid-bytecode-controls.md")
+        self.assertEqual((code, result["status"]), (0, "pass"), result)
+        self.assertEqual(result["states"], ["baseline", "mutated", "restored", "forced-operation-failure"])
+        controls = result["control_evidence"]
+        self.assertEqual(
+            [(control["state"], control["behavior_checks"][0]["observation"]["behavior"]) for control in controls],
+            [("baseline", "baseline"), ("mutated", "mutation"), ("restored", "baseline")],
+        )
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"]["cache_prefix"] for control in controls],
+            ["/fresh-baseline", "/fresh-mutated", "/fresh-restored"],
+        )
+        for control in controls:
+            receipt = control["fixture_receipt"]
+            self.assertEqual((receipt["source_size"], receipt["source_mtime_ns"]), (35, 1700000000000000000))
+            self.assertEqual(struct.unpack("<III", bytes.fromhex(receipt["cache_header_hex"])[4:]), (0, 1700000000, 35))
+
+    def test_prepopulated_timestamp_cache_is_read_despite_no_write_setting_and_rejected(self):
+        code, result = self.evaluate_sample("bytecode-controls", "no-write-bytecode.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+        self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored"])
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
+            ["baseline", "baseline", "mutation"],
+        )
+        for control in result["failed_states"]:
+            self.assertEqual((control["exit"], control["exit_matches"], control["missing_operations"]), (0, True, []))
+            self.assertEqual(control["behavior_checks"][0]["observation"]["dont_write_bytecode"], True)
+            self.assertEqual(control["behavior_checks"][0]["matches"], False)
+
+    def test_source_hash_receipts_do_not_establish_executed_bytecode_behavior(self):
+        code, result = self.evaluate_sample("bytecode-controls", "hash-only-bytecode.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"] for control in result["control_evidence"]],
+            [None, None, None],
+        )
+        self.assertIn("tools/subject.py", result["control_evidence"][0]["stdout"])
+
+    def test_expected_stdout_cannot_replace_wrong_authenticated_imports(self):
+        code, result = self.evaluate_sample("bytecode-controls", "forged-bytecode-output.md")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        mutated = result["failed_states"][0]
+        self.assertEqual((mutated["stdout"], mutated["behavior_checks"][0]["observation"]["behavior"]), ("mutation\n", "baseline"))
+
+    def test_wrong_then_correct_and_correct_then_wrong_imports_both_fail(self):
+        default = "python3 tools/observe.py"
+        fresh = "PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py"
+        for commands in ((default, fresh), (fresh, default)):
+            with self.subTest(commands=commands):
+                code, result = self.evaluate_bytecode_script("set -eu\n" + "\n".join(commands))
+                self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+                self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored"])
+                observed = result["failed_states"][0]["behavior_checks"][0]["observation"]
+                self.assertEqual(
+                    (observed["behavior"], observed["conflicting_behavior"]),
+                    ("baseline", "mutation") if commands[0] == default else ("mutation", "baseline"),
+                )
+
+    def test_repeated_correct_imports_with_different_cache_paths_pass(self):
+        code, result = self.evaluate_bytecode_script(
+            "set -eu\nPYTHONPYCACHEPREFIX=/first python3 tools/observe.py\n"
+            "PYTHONPYCACHEPREFIX=/second python3 tools/observe.py"
+        )
+        self.assertEqual((code, result["status"]), (0, "pass"), result)
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
+            ["baseline", "mutation", "baseline"],
+        )
+
+    def test_unrelated_socket_sender_cannot_forge_imported_behavior(self):
+        code, result = self.evaluate_bytecode_script(
+            "set -eu\npython3 tools/observe.py\npython3 - <<'PY'\n"
+            "import json, os, socket\n"
+            "with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:\n"
+            "    client.connect(os.environ['PSTACK_EVIDENCE_SOCKET'])\n"
+            "    client.sendall((json.dumps({'kind': 'observation', 'behavior': 'mutation', 'cache': '/fake', "
+            "'cache_prefix': '/fake', 'dont_write_bytecode': True}) + '\\n').encode())\n"
+            "    print(client.recv(1024).decode().strip())\nPY"
+        )
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        mutated = result["failed_states"][0]
+        self.assertEqual(mutated["stdout"], "baseline\nREJECT\n")
+        self.assertEqual(mutated["behavior_checks"][0]["observation"]["behavior"], "baseline")
+
+    def test_import_observation_survives_a_later_checker_output_failure(self):
+        code, result = self.evaluate_bytecode_script("set -eu\nPYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py >/dev/full")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertEqual(
+            [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
+            ["baseline", "mutation", "baseline"],
+        )
+        self.assertEqual([control["exit_matches"] for control in result["control_evidence"]], [False, False, False])
+
+    def test_ignored_forced_status_fails_even_with_correct_imported_values(self):
+        code, result = self.evaluate_bytecode_script("PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py || true")
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"))
+        self.assertEqual([control["state"] for control in result["failed_states"]], ["forced-operation-failure"])
+        self.assertEqual(result["failed_states"][0]["exit_matches"], False)
 
     def test_two_different_valid_commands_pass_real_replays(self):
         for sample in ("valid-stale-npm.md", "valid-stale-direct.md"):
