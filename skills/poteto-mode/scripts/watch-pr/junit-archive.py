@@ -9,7 +9,7 @@ from xml.parsers import expat
 
 
 MAX_ARCHIVE = 8 * 1024 * 1024
-MAX_ENTRIES = 128
+MAX_ENTRIES = 4096
 MAX_MEMBER = 1024 * 1024
 MAX_EXPANDED = 8 * 1024 * 1024
 MAX_OUTPUT = 64 * 1024
@@ -84,6 +84,10 @@ def directory(data):
     return ranges
 
 
+class NonJUnit(Exception):
+    pass
+
+
 def junit(data, member):
     parser = expat.ParserCreate(namespace_separator="}")
     stack = []
@@ -94,10 +98,15 @@ def junit(data, member):
     omitted = 0
     truncated = 0
     evidence = 0
-    is_junit = False
+    body_truncated = False
 
     def reject(*args):
         raise ValueError("XML DTD or entity declaration is forbidden")
+
+    def doctype(name, *args):
+        if name.rsplit("}", 1)[-1] not in ("testsuite", "testsuites"):
+            raise NonJUnit()
+        reject()
 
     def clipped(value, limit=256):
         nonlocal truncated
@@ -106,29 +115,31 @@ def junit(data, member):
         return value[:limit]
 
     def start(name, attributes):
-        nonlocal testcase, failure, elements, is_junit
+        nonlocal testcase, failure, elements, body_truncated
         name = name.rsplit("}", 1)[-1]
+        if not stack and name not in ("testsuite", "testsuites"):
+            raise NonJUnit()
         elements += 1
         if elements > 50000 or len(stack) >= 64 or sum(len(k) + len(v) for k, v in attributes.items()) > 16384:
             raise ValueError("XML element, depth or attribute limit exceeded")
-        if not stack:
-            is_junit = name in ("testsuite", "testsuites")
-        if is_junit and name == "testcase":
+        if name == "testcase":
             if testcase is not None:
                 raise ValueError("nested JUnit testcase")
             testcase = {"testName": clipped(attributes.get("name", "")), "classname": clipped(attributes.get("classname", ""))}
-        if is_junit and name in ("failure", "error"):
+        if name in ("failure", "error"):
             if testcase is None or not stack or stack[-1] != "testcase" or failure is not None:
                 raise ValueError("JUnit failure or error lacks a direct testcase")
+            body_truncated = False
             failure = dict(testcase, member=clipped(member), kind=name, message=clipped(attributes.get("message", "")), type=clipped(attributes.get("type", "")), body="")
         stack.append(name)
 
     def text(value):
-        nonlocal truncated
+        nonlocal truncated, body_truncated
         if failure is not None:
             remaining = 2048 - len(failure["body"])
-            if len(value) > remaining:
+            if len(value) > remaining and not body_truncated:
                 truncated += 1
+                body_truncated = True
             failure["body"] += value[:remaining]
 
     def end(name):
@@ -146,24 +157,28 @@ def junit(data, member):
             testcase = None
         stack.pop()
 
-    parser.StartDoctypeDeclHandler = reject
+    parser.StartDoctypeDeclHandler = doctype
     parser.EntityDeclHandler = reject
     parser.ExternalEntityRefHandler = reject
     parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
     parser.StartElementHandler = start
     parser.EndElementHandler = end
     parser.CharacterDataHandler = text
-    parser.Parse(data, True)
+    try:
+        parser.Parse(data, True)
+    except NonJUnit:
+        return [], 0, 0
     return records, omitted, truncated
 
 
-def read_archive(data, mode, allowance):
+def read_archive(data, mode, allowance, result):
     ranges = directory(data)
-    result = {"records": [], "logs": [], "gaps": [], "expandedBytes": 0}
     names = set()
     omitted = 0
     truncated = 0
     evidence = 0
+    skipped = 0
+    executables = 0
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         entries = archive.infolist()
         if len(entries) > MAX_ENTRIES:
@@ -176,15 +191,19 @@ def read_archive(data, mode, allowance):
             if not name or "\x00" in name or "\\" in name or name.startswith("/") or ":" in parts[0] or any(part in ("", ".", "..") for part in parts) or name in names:
                 raise ValueError("unsafe ZIP member path")
             names.add(name)
-            if kind not in (0, stat.S_IFREG, stat.S_IFDIR) or (not entry.is_dir() and permissions & 0o111):
+            if kind not in (0, stat.S_IFREG, stat.S_IFDIR):
                 raise ValueError("symlink, special or executable ZIP member")
             if entry.flag_bits & 1 or entry.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
                 raise ValueError("encrypted or unsupported ZIP member")
-            if entry.file_size > MAX_MEMBER or entry.file_size > max(1, entry.compress_size) * 100:
-                raise ValueError("ZIP member size or compression ratio limit exceeded")
             if entry.is_dir():
                 if entry.file_size:
                     raise ValueError("nonempty ZIP directory")
+            if entry.file_size > MAX_MEMBER or entry.file_size > max(1, entry.compress_size) * 100 or entry.file_size > min(MAX_EXPANDED, allowance) - result["expandedBytes"]:
+                if not entry.is_dir() and permissions & 0o111:
+                    executables += 1
+                else:
+                    skipped += 1
+                continue
             begin, finish = ranges[entry.header_offset]
             compressed = memoryview(data)[begin:finish]
             limit = min(MAX_MEMBER, min(MAX_EXPANDED, allowance) - result["expandedBytes"], max(1, entry.compress_size) * 100)
@@ -192,9 +211,11 @@ def read_archive(data, mode, allowance):
                 if len(compressed) > limit:
                     raise ValueError("ZIP expanded-byte limit exceeded")
                 content = bytes(compressed)
+                result["expandedBytes"] += len(content)
             else:
                 decoder = zlib.decompressobj(-15)
                 content = decoder.decompress(compressed, limit + 1)
+                result["expandedBytes"] += len(content)
                 if len(content) > limit:
                     raise ValueError("ZIP expanded-byte limit exceeded")
                 if not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
@@ -203,17 +224,23 @@ def read_archive(data, mode, allowance):
                 raise ValueError("inconsistent ZIP expanded size")
             if zlib.crc32(content) != entry.CRC:
                 raise ValueError("inconsistent ZIP member CRC")
-            result["expandedBytes"] += len(content)
             if entry.is_dir():
                 continue
+            if permissions & 0o111:
+                executables += 1
+                continue
             if mode == "logs":
-                value = content.decode("utf-8", errors="strict")
-                if len(result["logs"]) < 4:
-                    truncated += int(len(value) > 8192 or len(name) > 256)
-                    result["logs"].append({"member": name[:256], "text": value[:8192]})
-                else:
+                try:
+                    value = content.decode("utf-8", errors="strict")
+                except UnicodeError:
+                    skipped += 1
+                    continue
+                truncated += int(len(value) > 8192 or len(name) > 256)
+                if len(result["logs"]) == 4:
+                    result["logs"].pop(0)
                     omitted += 1
-            elif name.lower().endswith(".xml") or content.lstrip().startswith((b"<", b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff")):
+                result["logs"].append({"member": name[:256], "text": value[-8192:]})
+            elif name.lower().endswith(".xml") or content.lstrip().removeprefix(b"\xef\xbb\xbf").lstrip().startswith((b"<?xml", b"<testsuite", b"\xff\xfe", b"\xfe\xff")):
                 records, dropped, fields = junit(content, name)
                 omitted += dropped
                 truncated += fields
@@ -224,6 +251,10 @@ def read_archive(data, mode, allowance):
                     else:
                         result["records"].append(record)
                         evidence += cost
+    if skipped:
+        result["gaps"].append({"kind": "limit", "detail": "over-limit or unreadable archive members skipped", "omitted": skipped})
+    if executables:
+        result["gaps"].append({"kind": "unsafe", "detail": "executable ZIP members skipped", "omitted": executables})
     if omitted:
         result["gaps"].append({"kind": "limit", "detail": "archive evidence omitted", "omitted": omitted})
     if truncated:
@@ -232,7 +263,7 @@ def read_archive(data, mode, allowance):
         if result["records"]:
             result["records"].pop()
         elif result["logs"]:
-            result["logs"].pop()
+            result["logs"].pop(0)
         else:
             raise ValueError("archive output limit exceeded")
         if not any(gap["detail"] == "archive output omitted" for gap in result["gaps"]):
@@ -242,9 +273,11 @@ def read_archive(data, mode, allowance):
 
 
 def main():
+    result = {"records": [], "logs": [], "gaps": [], "expandedBytes": 0}
+    allowance = MAX_EXPANDED
     try:
         if sys.version_info < (3, 9):
-            print(json.dumps({"error": "Python 3.9 or newer is required", "errorKind": "unavailable"}))
+            print(json.dumps({"error": "Python 3.9 or newer is required", "errorKind": "unavailable", "expandedBytes": 0}))
             return
         mode, allowance = sys.argv[1], int(sys.argv[2])
         if mode not in ("junit", "logs") or not 0 < allowance <= 32 * 1024 * 1024:
@@ -252,9 +285,9 @@ def main():
         data = sys.stdin.buffer.read(MAX_ARCHIVE + 1)
         if len(data) > MAX_ARCHIVE:
             raise ValueError("ZIP download limit exceeded")
-        result = read_archive(data, mode, allowance)
+        result = read_archive(data, mode, allowance, result)
     except (ValueError, IndexError, zipfile.BadZipFile, RuntimeError, NotImplementedError, UnicodeError, expat.ExpatError, struct.error, zlib.error) as error:
-        result = {"error": str(error)[:256], "errorKind": "unsafe"}
+        result = {"error": str(error)[:256], "errorKind": "unsafe", "expandedBytes": min(result["expandedBytes"], MAX_EXPANDED, allowance)}
     print(json.dumps(result, ensure_ascii=True))
 
 

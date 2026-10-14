@@ -147,17 +147,17 @@ interface ArchiveResult {
 }
 function archiveResult(value: unknown, scope: string, allowance: number): ArchiveResult {
   const raw = object(value);
+  const expandedBytes = integer(raw.expandedBytes);
+  if (expandedBytes > Math.min(8 * 1024 * 1024, allowance)) throw new EvidenceReadError("malformed", "invalid archive byte accounting");
   if ("error" in raw) {
     const kind = raw.errorKind;
     if (kind !== "unsafe" && kind !== "unavailable") throw new EvidenceReadError("malformed", "invalid archive error kind");
-    throw new EvidenceReadError(kind, text(raw.error));
+    return { expandedBytes, records: [], logs: [], gaps: [{ kind, scope, detail: text(raw.error), omitted: 0 }] };
   }
-  const expandedBytes = integer(raw.expandedBytes);
-  if (expandedBytes > Math.min(8 * 1024 * 1024, allowance)) throw new EvidenceReadError("malformed", "invalid archive byte accounting");
   const rows = array(raw.records);
   const logs = array(raw.logs);
   const gaps = array(raw.gaps);
-  if (rows.length > LIMITS.records || logs.length > 4 || gaps.length > 4)
+  if (rows.length > LIMITS.records || logs.length > 4 || gaps.length > 5)
     throw new EvidenceReadError("malformed", "over-limit archive response");
   return {
     expandedBytes,
@@ -170,8 +170,8 @@ function archiveResult(value: unknown, scope: string, allowance: number): Archiv
     logs: logs.map((value) => { const row = object(value); return { member: text(row.member), text: text(row.text, 8192) }; }),
     gaps: gaps.map((value) => {
       const row = object(value);
-      if (row.kind !== "limit") throw new EvidenceReadError("malformed", "invalid archive gap kind");
-      return { kind: "limit", scope, detail: text(row.detail), omitted: integer(row.omitted) };
+      if (row.kind !== "limit" && row.kind !== "unsafe") throw new EvidenceReadError("malformed", "invalid archive gap kind");
+      return { kind: row.kind, scope, detail: text(row.detail), omitted: integer(row.omitted) };
     }),
   };
 }
@@ -269,6 +269,7 @@ export class GhFailedCheckReader implements FailedCheckReader {
             const result = await archive(`${prefix}/artifacts/${artifactId}/zip`, "junit", scope);
             if (result === null) continue;
             for (const gap of result.gaps) addGap(gap.kind, gap.scope, gap.detail, gap.omitted);
+            if (result.records.length === 0 && result.gaps.some((gap) => gap.kind === "unsafe" || gap.kind === "unavailable")) continue;
             if (result.records.length === 0) addGap("missing", scope, "no JUnit failure or error records found");
             if (request.attempt > 1) addGap("attempt-unbound", scope, "artifact metadata does not establish its rerun attempt");
             for (const row of result.records) {
@@ -299,7 +300,7 @@ export function renderEvidence(report: FailedCheckEvidence, pretty = false): { r
     omitted++;
     const gap: EvidenceGap = { kind: "limit", scope: "output", detail: "serialized evidence omitted", omitted };
     const gaps = [...output.gaps.filter((row) => row.detail !== gap.detail), gap];
-    if (output.kind === "verified" && output.logs.length) output = { ...output, logs: output.logs.slice(0, -1), gaps };
+    if (output.kind === "verified" && output.logs.length) output = { ...output, logs: output.logs.slice(1), gaps };
     else if (output.kind === "verified" && output.records.length) output = { ...output, records: output.records.slice(0, -1), gaps };
     else if (gaps.length > 1) output = { ...output, gaps: [...gaps.slice(0, -2), gap] };
     else throw new Error("diagnostic identity exceeds output budget");

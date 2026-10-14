@@ -225,8 +225,6 @@ describe("untrusted archive bytes through the production reader", () => {
     ["drive path", () => zip({ "C:/escape.xml": xml }), "unsafe ZIP member path"],
     ["backslash", () => zip({ "dir\\escape.xml": xml }), "unsafe ZIP member path"],
     ["symlink", () => zip({ "results.xml": xml }, { permissions: 0o120777 }), "symlink, special or executable ZIP member"],
-    ["executable", () => zip({ "results.xml": xml }, { permissions: 0o100755 }), "symlink, special or executable ZIP member"],
-    ["compression bomb", () => zip({ "results.xml": "x".repeat(500000) }, { deflate: true }), "ZIP member size or compression ratio limit exceeded"],
     ["deep XML", () => zip({ "results.xml": "<testsuite>" + "<a>".repeat(64) + "</a>".repeat(64) + "</testsuite>" }), "XML element, depth or attribute limit exceeded"],
     ["large XML attributes", () => zip({ "results.xml": `<testsuite name="${"x".repeat(16385)}"/>` }), "XML element, depth or attribute limit exceeded"],
     ["XML element count", () => zip({ "results.xml": `<testsuite>${"<a/>".repeat(50000)}</testsuite>` }), "XML element, depth or attribute limit exceeded"],
@@ -242,11 +240,84 @@ describe("untrusted archive bytes through the production reader", () => {
       expect(result.report.gaps).toEqual([{ kind: "unsafe", scope: "artifact 22601 test-results-linux", detail: expect.stringContaining(detail), omitted: 0 }]);
     });
   }
+  it("preserves JUnit beside large, HTML and coverage members", () => {
+    const result = command({ input: onlyAvailable(fixture()), archives: { "22601": zip({
+      "video.webm": "v".repeat(1024 * 1024 + 1),
+      "report.html": "<!DOCTYPE html><html>report",
+      "index.html": "<!doctype html><html>report",
+      "bom.html": "\uFEFF<!doctype html><html>report",
+      "coverage.xml": `<coverage>${"<line/>".repeat(50001)}</coverage>`,
+      "jacoco.xml": '<!DOCTYPE report SYSTEM "report.dtd"><report/>',
+      "results.xml": xml,
+    }) } });
+    expect(verified(result.report).map((row) => [row.testName, row.body])).toEqual([["literal safe test", "literal failure evidence"]]);
+    expect(result.report.gaps).toEqual([{ kind: "limit", scope: "artifact 22601 test-results-linux", detail: "over-limit or unreadable archive members skipped", omitted: 1 }]);
+  });
+  it("skips executable and over-compressed members without erasing JUnit", () => {
+    const bytes = zip({ "helper.sh": "echo helper", "results.xml": xml });
+    bytes.writeUInt32LE(0o100755 * 65536, bytes.indexOf(Buffer.from("PK\x01\x02")) + 38);
+    const result = command({ input: onlyAvailable(fixture()), archives: { "22601": bytes } });
+    expect(verified(result.report).map((row) => row.testName)).toEqual(["literal safe test"]);
+    expect(result.report.gaps).toEqual([{ kind: "unsafe", scope: "artifact 22601 test-results-linux", detail: "executable ZIP members skipped", omitted: 1 }]);
+    const compressed = command({ input: onlyAvailable(fixture()), archives: { "22601": zip({ "trace.txt": "x".repeat(500000), "results.xml": xml }, { deflate: true }) } });
+    expect(verified(compressed.report).map((row) => row.testName)).toEqual(["literal safe test"]);
+    expect(compressed.report.gaps[0]?.omitted).toBe(1);
+  });
+  it("keeps earlier JUnit when other members exceed the archive inflation budget", () => {
+    const content = Array.from({ length: 20000 }, (_, i) => String(i).padStart(8, "0")).join("").repeat(6);
+    const entries = { "results.xml": xml, ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`trace-${i}.txt`, content])) };
+    const result = command({ input: onlyAvailable(fixture()), archives: { "22601": zip(entries, { deflate: true }) } });
+    expect(verified(result.report).map((row) => [row.testName, row.body])).toEqual([["literal safe test", "literal failure evidence"]]);
+    expect(result.report.gaps).toEqual([{ kind: "limit", scope: "artifact 22601 test-results-linux", detail: "over-limit or unreadable archive members skipped", omitted: 2 }]);
+  });
+  it("counts each multiline failure and error body truncation once", () => {
+    const body = "traceback line\n".repeat(200);
+    const result = command({ input: onlyAvailable(fixture()), archives: { "22601": zip({ "results.xml": `<testsuite><testcase name="long"><failure>${body}</failure><error>${body}</error></testcase></testsuite>` }) } });
+    expect(verified(result.report).map((row) => [row.kind, row.body])).toEqual([
+      ["failure", "traceback line\n".repeat(136) + "tracebac"],
+      ["error", "traceback line\n".repeat(136) + "tracebac"],
+    ]);
+    expect(result.report.gaps).toEqual([{ kind: "limit", scope: "artifact 22601 test-results-linux", detail: "archive evidence fields truncated", omitted: 2 }]);
+  });
+  it("keeps later log tails despite large and non-UTF-8 members", () => {
+    const entries = Object.fromEntries(Array.from({ length: 129 }, (_, i) => [`job-${i}.txt`, "setup\n"]));
+    entries["large.txt"] = "x".repeat(1024 * 1024 + 1);
+    entries["binary.txt"] = "x";
+    entries["failed-job.txt"] = "s".repeat(9000) + "AssertionError: final log evidence";
+    const bytes = zip(entries);
+    const start = bytes.indexOf(Buffer.from("binary.txt"));
+    bytes[start + "binary.txt".length] = 255;
+    const central = bytes.indexOf(Buffer.from("binary.txt"), start + 1) - 46;
+    const crc = 0xff000000;
+    bytes.writeUInt32LE(crc, start - 30 + 14);
+    bytes.writeUInt32LE(crc, central + 16);
+    const result = command({ input: onlyAvailable(fixture()), logs: bytes });
+    if (result.report.kind !== "verified") throw new Error("wrong receipt kind");
+    expect(result.report.logs.map((row) => row.member)).toEqual(["job-126.txt", "job-127.txt", "job-128.txt", "failed-job.txt"]);
+    expect(result.report.logs.at(-1)?.text).toBe("s".repeat(8158) + "AssertionError: final log evidence");
+    expect(result.report.gaps.map((gap) => [gap.detail, gap.omitted])).toEqual([
+      ["over-limit or unreadable archive members skipped", 2],
+      ["archive evidence omitted", 126],
+      ["archive evidence fields truncated", 1],
+    ]);
+    expect(verified(result.report)).toHaveLength(2);
+  });
+  it("preserves later safe evidence after four rejected archives", () => {
+    const input = onlyAvailable(fixture());
+    const first = input.artifacts.artifacts[0];
+    input.artifacts.artifacts = Array.from({ length: 5 }, (_, i) => ({ ...first, id: 22601 + i }));
+    input.artifacts.total_count = 5;
+    const archives = Object.fromEntries(Array.from({ length: 4 }, (_, i) => [String(22601 + i), zip({ "../unsafe.xml": xml })]));
+    archives["22605"] = zip({ "results.xml": xml });
+    const result = command({ input, archives });
+    expect(verified(result.report).map((row) => [row.artifactId, row.testName])).toEqual([["22605", "literal safe test"]]);
+    expect(result.report.gaps.map((gap) => gap.kind)).toEqual(["unsafe", "unsafe", "unsafe", "unsafe"]);
+  });
   it("rejects a forged low entry count before allocating the ZIP member list", () => {
     const bytes = zip(Object.fromEntries(Array.from({ length: 129 }, (_, i) => [`${i}.txt`, "x"])));
     const end = bytes.lastIndexOf(Buffer.from("PK\x05\x06")); bytes.writeUInt16LE(1, end + 8); bytes.writeUInt16LE(1, end + 10);
     const result = command({ input: onlyAvailable(fixture()), archives: { "22601": bytes } });
-    expect(result.report.gaps).toEqual([{ kind: "unsafe", scope: "artifact 22601 test-results-linux", detail: "ZIP entry limit exceeded", omitted: 0 }]);
+    expect(result.report.gaps).toEqual([{ kind: "unsafe", scope: "artifact 22601 test-results-linux", detail: "inconsistent ZIP entry count", omitted: 0 }]);
   });
   it("rejects UTF-16 entity declarations through the actual parser callbacks", () => {
     const program = "import io,sys,zipfile\nb=io.BytesIO()\nwith zipfile.ZipFile(b,'w') as z:z.writestr('results.xml','<?xml version=\"1.0\" encoding=\"UTF-16\"?><!DOCTYPE testsuite [<!ENTITY x \"BAD\">]><testsuite/>'.encode('utf-16'))\nsys.stdout.buffer.write(b.getvalue())";

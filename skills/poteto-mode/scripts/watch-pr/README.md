@@ -37,7 +37,9 @@ rerun attempt produced them.
 
 Missing, expired, inaccessible, malformed, unsafe, and over-limit data remain
 explicit gaps. One unavailable artifact does not suppress safe records from
-other artifacts. An unsafe or corrupt archive contributes no partial records.
+other artifacts. Structural ZIP corruption or unsafe paths, links, encryption
+and unsupported compression reject the archive without partial records. Executable and over-limit
+members produce gaps while safe sibling records remain available.
 Logs that end before an assertion can coexist with a recovered JUnit traceback.
 
 Exit 0 means a verified receipt without gaps. Exit 2 means the receipt has gaps.
@@ -50,21 +52,29 @@ The command reads at most two inventory pages of 50 artifacts. It downloads at
 most eight artifact archives plus the requested attempt's log archive. Each
 download is at most 8 MiB, and downloads share a 32 MiB budget.
 
-Archives allow at most 128 entries, 1 MiB per expanded member, 8 MiB expanded
+Archives allow at most 4,096 entries, 1 MiB per expanded member, 8 MiB expanded
 per archive, and 32 MiB expanded across collection. The maximum compression
 ratio is 100. The reader validates the directory before allocating ZIP entries.
 It rejects ZIP64, multidisk archives, unsafe paths, duplicate members, links,
-special members, Unix executable permissions, encryption, unsupported compression, and corrupt
-sizes or checksums. It never extracts or executes archive contents.
+special members, encryption, unsupported compression, and corrupt
+sizes or checksums. It skips executable members and members above the size,
+compression ratio or remaining inflation budget with explicit gaps. Rejected
+archives charge their measured inflation bytes to the collection budget.
+It never extracts or executes archive contents.
 
-XML allows depth 64, 50,000 elements per document, and 16 KiB of attributes per
+Only XML candidates with a JUnit root are parsed for evidence. HTML and
+coverage documents do not suppress JUnit sibling records.
+
+JUnit XML allows depth 64, 50,000 elements per document, and 16 KiB of attributes per
 element. DTD and entity declarations and external resolution are forbidden,
 including declarations in UTF-16 input. The isolated Python parser supports
 Python 3.9.6 with Expat 2.2.8. Its parent enforces a three-second deadline.
 
 Collection retains at most 32 JUnit records within a 24,576-character evidence budget.
 Bodies retain at most 2,048 characters, and other record fields retain at most
-256 characters. Logs retain at most four members with 8,192 characters each.
+256 characters. Logs retain the last four readable members with the final
+8,192 characters each.
+Non-UTF-8 log members produce gaps without suppressing readable siblings.
 Field truncation and omitted records produce limit gaps. Final JSON is at most
 64 KiB, including escaping and pretty formatting. It remains valid JSON when
 evidence is omitted.
