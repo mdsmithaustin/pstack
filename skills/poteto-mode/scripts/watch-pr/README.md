@@ -57,12 +57,14 @@ It rejects ZIP64, multidisk archives, unsafe paths, duplicate members, links,
 special members, Unix executable permissions, encryption, unsupported compression, and corrupt
 sizes or checksums. It never extracts or executes archive contents.
 
-XML allows depth 64, 50,000 elements per document, and 16 KiB of attributes per
-element. DTD and entity declarations and external resolution are forbidden,
-including declarations in UTF-16 input. The isolated Python parser supports
+XML allows depth 64, 50,000 elements per document, and 16,384 combined attribute
+name and value characters per element. DTD and entity declarations and external
+resolution are forbidden, including declarations in UTF-16 input.
+The isolated Python parser supports
 Python 3.9.6 with Expat 2.2.8. Its parent enforces a three-second deadline.
 
-Collection retains at most 32 JUnit records within a 24,576-character evidence budget.
+Collection retains at most 32 JUnit records. Its 24,576-character JUnit evidence
+budget counts serialized record data and artifact names, including JSON escaping.
 Bodies retain at most 2,048 characters, and other record fields retain at most
 256 characters. Logs retain the last four members with the final 8,192 characters each.
 Field truncation and omitted records produce limit gaps. Final JSON is at most
