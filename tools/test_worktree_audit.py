@@ -394,5 +394,67 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         self.assertEqual(self.row(worktree), ("unreadable", "hold-kept"))
 
 
+@unittest.skipUnless(_have("rg") and _have("jq"), "worktree-audit.sh shells out to rg and jq")
+class WorktreeAuditRepositoryTest(WorktreeAuditBaseTest):
+    def fixture(self, remote: str | None) -> Path:
+        self.init("main")
+        if remote is not None:
+            self.git("remote", "add", "origin", remote)
+        self.git("remote", "add", "upstream", "https://github.com/parent/project.git")
+        worktree = self.tmp / "wt"
+        self.git("worktree", "add", "-q", "-b", "feature-x", str(worktree))
+        (worktree / "change.txt").write_text("unmerged\n", encoding="utf-8")
+        subprocess.run(["git", "add", "change.txt"], cwd=worktree, env=self.env, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "change"], cwd=worktree,
+                       env=self.env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        gh = bin_dir / "gh"
+        gh.write_text(
+            f"#!{sys.executable}\nimport json, os, sys\n"
+            "from pathlib import Path\n"
+            "args = sys.argv[1:]\n"
+            "Path(os.environ['AUDIT_GH_LOG']).write_text(json.dumps(args))\n"
+            "repo = args[args.index('--repo') + 1] if '--repo' in args else 'parent/project'\n"
+            "state = 'OPEN' if repo in ('fork/project', 'example.com/fork/project') else 'MERGED'\n"
+            "print(json.dumps([{'number': 17, 'state': state, 'headRefName': 'feature-x'}]))\n",
+            encoding="utf-8",
+        )
+        gh.chmod(0o755)
+        self.env.update(PATH=f"{bin_dir}:{self.env['PATH']}", AUDIT_GH_LOG=str(self.tmp / "gh-log"))
+        return worktree
+
+    def test_queries_the_audited_origin_instead_of_the_default_parent(self):
+        for remote, repository in [
+            ("git@github.com:fork/project.git", "fork/project"),
+            ("https://github.com/fork/project.git", "fork/project"),
+            ("ssh://git@example.com/fork/project.git", "example.com/fork/project"),
+        ]:
+            with self.subTest(remote=remote):
+                if (self.repo / ".git").exists():
+                    self.tearDown()
+                    self.setUp()
+                worktree = self.fixture(remote)
+                result = self.audit("-b", "main", str(self.repo))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
+                self.assertEqual((row[2], row[5], row[7]), ("no", "#17/OPEN", "hold-open-pr"))
+                args = json.loads((self.tmp / "gh-log").read_text())
+                self.assertEqual(args[args.index("--repo") + 1], repository)
+
+    def test_unresolved_origin_keeps_pr_state_unknown_without_querying_gh(self):
+        for remote in [None, "/local/origin.git", "https://github.com/fork/project.git?token=PUBLIC_TEST_SENTINEL"]:
+            with self.subTest(remote=remote):
+                if (self.repo / ".git").exists():
+                    self.tearDown()
+                    self.setUp()
+                worktree = self.fixture(remote)
+                result = self.audit("-b", "main")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
+                self.assertEqual((row[2], row[5], row[7]), ("no", "-", "review"))
+                self.assertFalse((self.tmp / "gh-log").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

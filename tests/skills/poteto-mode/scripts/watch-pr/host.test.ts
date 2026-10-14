@@ -82,15 +82,10 @@ describe("repository host inference", () => {
     });
   });
 
-  it("uses the current GHES PR URL when origin is unavailable", () => {
-    expect(
+  it("refuses PR-number lookup when origin is unavailable", () => {
+    expect(() =>
       readerOutput("exit 1", "https://example.com/team/project/pull/14")
-    ).toEqual({
-      host: "example.com",
-      owner: "team",
-      repo: "project",
-      number: 14,
-    });
+    ).toThrow("origin");
   });
 
   it("uses a GHES HTTPS origin remote", () => {
@@ -120,12 +115,12 @@ describe("repository host inference", () => {
       "ssh://git:PUBLIC_TEST_SENTINEL@" + "example.com/team/project.git",
       "https://example.com:443/team/project.git",
     ]) {
-      expect(
+      expect(() =>
         readerOutput(
           `printf '%s\\n' '${remote}'`,
           "https://github.com/public/repo/pull/14"
         )
-      ).toEqual({ host: "github.com", owner: "public", repo: "repo", number: 14 });
+      ).toThrow("origin");
     }
   }, 20_000);
 
@@ -229,8 +224,8 @@ function currentPrRun(gitScript: string): {
     rmSync(directory, { recursive: true, force: true });
   }
 }
-const gitScript = (remote: string, branch: string): string =>
-  `case "$1" in remote) ${remote === "" ? "exit 1" : `printf '%s\\n' '${remote}'`};; branch) printf '%s\\n' '${branch}';; esac`;
+const gitScript = (remote: string, branch: string, tracking = ""): string =>
+  `case "$1" in remote) ${remote === "" ? "exit 1" : `printf '%s\\n' '${remote}'`};; branch) printf '%s\\n' '${branch}';; config) printf '%s\\n' '${tracking}';; esac`;
 
 describe("current PR lookup without --pr", () => {
   it("passes the origin repo and the checked-out branch to gh pr view", () => {
@@ -265,8 +260,35 @@ describe("current PR lookup without --pr", () => {
     expect(result.error).toContain("detached");
   });
 
-  it("keeps the bare lookup when the checkout has no origin to resolve", () => {
-    const { commands } = currentPrRun(gitScript("", "feature-x"));
-    expect(commands).toEqual([["pr", "view", "--json", "number,url"]]);
+  it("refuses lookup without calling gh when origin is unavailable", () => {
+    const { result, commands } = currentPrRun(gitScript("", "feature-x"));
+    expect(result.error).toContain("origin");
+    expect(commands).toEqual([]);
+  });
+
+  it("uses the tracked pull-request number in the origin fork", () => {
+    const { result, commands } = currentPrRun(
+      gitScript("git@github.com:team/project.git", "someone-feature", "refs/pull/14/head")
+    );
+    expect(commands).toEqual([
+      ["pr", "view", "14", "--repo", "team/project", "--json", "number,url"],
+    ]);
+    expect(result.context).toEqual({ host: "github.com", owner: "team", repo: "project", number: 14 });
+  });
+
+  it("keeps the Enterprise origin for a tracked pull request", () => {
+    const { commands } = currentPrRun(
+      gitScript("ssh://git@example.com/team/project.git", "someone-feature", "refs/pull/14/head")
+    );
+    expect(commands).toEqual([
+      ["pr", "view", "14", "--repo", "example.com/team/project", "--json", "number,url"],
+    ]);
+  });
+
+  it("uses branch lookup for ordinary and invalid pull-request tracking refs", () => {
+    for (const tracking of ["refs/heads/feature-x", "refs/pull/14/merge", "refs/pull/0/head"])
+      expect(currentPrRun(gitScript("https://github.com/team/project.git", "feature-x", tracking)).commands).toEqual([
+        ["pr", "view", "feature-x", "--repo", "team/project", "--json", "number,url"],
+      ]);
   });
 });

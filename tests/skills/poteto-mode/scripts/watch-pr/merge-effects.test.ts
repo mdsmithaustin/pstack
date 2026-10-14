@@ -387,13 +387,12 @@ describe("parseConversation truncation", () => {
     },
   });
 
-  it("reports each connection whose total exceeds what the reads fetch", () => {
+  it("reports only nonpaginated connections whose totals exceed the read limits", () => {
     expect(
       parseConversation(
         page({ reviewThreads: 101, reviewRequests: 51, reviews: 101, comments: 101 })
       ).truncated
     ).toEqual([
-      { connection: "reviewThreads", total: 101, limit: 100 },
       { connection: "reviewRequests", total: 51, limit: 50 },
       { connection: "reviews", total: 101, limit: 100 },
       { connection: "comments", total: 101, limit: 100 },
