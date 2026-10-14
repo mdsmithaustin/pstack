@@ -246,6 +246,10 @@ remote) case "$3" in
 origin) ${remote === "" ? "exit 1" : `printf '%s\\n' '${remote}'`};;
 ${Object.entries(aliases).map(([name, url]) => `${name}) printf '%s\\n' '${url}';;`).join("\n")}
 *) exit 1;; esac;;
+ls-remote) case "$3" in
+origin) printf '%s\\n' '${remote}';;
+${Object.entries(aliases).map(([name, url]) => `${name}) printf '%s\\n' '${url}';;`).join("\n")}
+*) printf '%s\\n' "$3";; esac;;
 branch) printf '%s\\n' '${branch}';;
 config) case "$3" in
 'branch.${branch}.merge') printf '%s\\n' '${tracking}';;
@@ -371,8 +375,99 @@ describe("current PR lookup without --pr", () => {
   });
 });
 
+describe("native Git tracking identity through the watcher CLI", () => {
+  for (const named of [false, true]) {
+    for (const scenario of [
+      { name: "matching", effective: "https://github.com/team/project.git", url: "https://github.com/team/project.git", from: "", to: "", selector: "14" },
+      { name: "rewritten away to another owner", effective: "https://github.com/fork/project.git", url: "https://github.com/team/project.git", from: "https://github.com/team/", to: "https://github.com/fork/", selector: "feature-x" },
+      { name: "rewritten away to another host", effective: "https://example.com/team/project.git", url: "https://github.com/team/project.git", from: "https://github.com/", to: "https://example.com/", selector: "feature-x" },
+      { name: "rewritten toward origin", effective: "https://github.com/team/project.git", url: "https://github.com/fork/project.git", from: "https://github.com/fork/", to: "https://github.com/team/", selector: "14" },
+      { name: "mismatched repository", effective: "https://github.com/team/other.git", url: "https://github.com/team/other.git", from: "", to: "", selector: "feature-x" },
+      { name: "detached HEAD", effective: "https://github.com/team/project.git", url: "https://github.com/team/project.git", from: "", to: "", selector: "", refusal: "detached" },
+      { name: "unavailable origin", effective: "https://github.com/team/project.git", url: "https://github.com/team/project.git", from: "", to: "", selector: "", refusal: "origin" },
+    ]) {
+      it(`${named ? "named" : "direct"} tracking ${scenario.name}`, () => {
+        const directory = mkdtempSync(join(tmpdir(), "watch-pr-native-"));
+        const env = {
+          ...process.env,
+          GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1",
+          GH_HOST: "example.invalid", WATCH_PR_COMMANDS: join(directory, "commands"),
+          PATH: `${directory}:${process.env.PATH ?? ""}`,
+        };
+        const git = (...args: string[]) => {
+          const result = Bun.spawnSync(["git", ...args], { cwd: directory, env });
+          expect(result.exitCode, new TextDecoder().decode(result.stderr)).toBe(0);
+          return new TextDecoder().decode(result.stdout).trim();
+        };
+        try {
+          git("init", "-q", "-b", "feature-x");
+          git("remote", "add", "origin", "git@github.com:team/project.git");
+          if (named) git("remote", "add", "mirror", scenario.url);
+          git("config", "branch.feature-x.remote", named ? "mirror" : scenario.url);
+          git("config", "branch.feature-x.merge", "refs/pull/14/head");
+          if (scenario.from) git("config", `url.${scenario.to}.insteadOf`, scenario.from);
+          expect(git("ls-remote", "--get-url", named ? "mirror" : scenario.url)).toBe(
+            scenario.effective
+          );
+          if ("refusal" in scenario) {
+            if (scenario.refusal === "origin") git("remote", "remove", "origin");
+            else {
+              git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-q", "--allow-empty", "--no-gpg-sign", "-m", "fixture");
+              git("checkout", "-q", "--detach");
+            }
+          }
+          writeFileSync(env.WATCH_PR_COMMANDS, "");
+          writeFileSync(join(directory, "gh"), `#!/bin/sh
+printf '%s\\n' '---' "$@" >> "$WATCH_PR_COMMANDS"
+case "$3" in 14) number=14;; *) number=27;; esac
+case "$7" in
+number,url) printf '{"number":%s,"url":"https://github.com/team/project/pull/%s"}\\n' "$number" "$number";;
+*) printf '%s\\n' '{"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED","headRefOid":"abc","headRefName":"feature-x","baseRefName":"main","state":"MERGED","mergedAt":"2026-10-01T00:00:00Z","isDraft":false}';;
+esac
+`);
+          chmodSync(join(directory, "gh"), 0o755);
+          const result = Bun.spawnSync([process.execPath, join(SOURCE_DIR, "watch-pr"), "--status-only"], {
+            cwd: directory, env,
+          });
+          if ("refusal" in scenario) {
+            expect(result.exitCode).toBe(7);
+            expect(new TextDecoder().decode(result.stdout)).toContain(scenario.refusal);
+            expect(readFileSync(env.WATCH_PR_COMMANDS, "utf8")).toBe("");
+            return;
+          }
+          expect(result.exitCode, new TextDecoder().decode(result.stderr)).toBe(0);
+          const output = JSON.parse(new TextDecoder().decode(result.stdout));
+          expect(output.rows[0].context).toEqual({
+            host: "github.com", owner: "team", repo: "project",
+            number: scenario.selector === "14" ? 14 : 27,
+          });
+          const commands = readFileSync(env.WATCH_PR_COMMANDS, "utf8").split("---\n").filter(Boolean);
+          expect(commands[0]?.trimEnd().split("\n")).toEqual([
+            "pr", "view", scenario.selector, "--repo", "github.com/team/project", "--json", "number,url",
+          ]);
+        } finally {
+          rmSync(directory, { recursive: true, force: true });
+        }
+      });
+    }
+  }
+});
+
 describe("real gh host routing", () => {
-  it("keeps watcher and merge requests on their resolved HTTPS host", async () => {
+  it("selects the attachment host token despite ambient GH_HOST", () => {
+    expect(Bun.which("gh"), "required executable missing from PATH: gh").not.toBeNull();
+    for (const [host, token] of [["github.com", "public-test-token"], ["example.com", "enterprise-test-token"]]) {
+      const result = Bun.spawnSync(["gh", "auth", "token", "--hostname", host], {
+        env: { ...process.env, GH_HOST: "example.invalid", GH_TOKEN: "public-test-token", GH_ENTERPRISE_TOKEN: "enterprise-test-token" },
+      });
+      expect(result.exitCode, new TextDecoder().decode(result.stderr)).toBe(0);
+      expect(new TextDecoder().decode(result.stdout).trim()).toBe(token);
+    }
+  });
+
+  it("keeps watcher, merge, and workflow commands on their resolved HTTPS host", async () => {
+    for (const tool of ["gh", "openssl"])
+      expect(Bun.which(tool), `required executable missing from PATH: ${tool}`).not.toBeNull();
     const directory = mkdtempSync(join(tmpdir(), "watch-pr-https-"));
     const requests: { target: string; path: string }[] = [];
     const cert = join(directory, "cert.pem");
@@ -409,11 +504,25 @@ describe("real gh host routing", () => {
         { operation: "reader.openPullRequests(context)", host: "github.com", target: "api.github.com:443", path: "/graphql" },
         { operation: "port.conversation(context)", host: "github.com", target: "api.github.com:443", path: "/graphql" },
         { operation: "port.conversation(context)", host: "example.com", target: "example.com:443", path: "/api/graphql" },
+        ...[
+          ["pr", "edit", "14", "-R", "github.com/team/project", "--base", "main"],
+          ["pr", "view", "14", "-R", "github.com/team/project", "--json", "state,mergedAt,mergeStateStatus,statusCheckRollup,autoMergeRequest"],
+          ["pr", "view", "14", "-R", "github.com/team/project", "--json", "body,comments"],
+          ["pr", "diff", "14", "-R", "github.com/team/project"],
+          ["pr", "view", "feature-x", "-R", "github.com/team/project", "--json", "baseRefName"],
+          ["pr", "view", "14", "-R", "github.com/team/project", "--json", "title,body,author,createdAt,mergedAt,labels,closingIssuesReferences,comments,reviews,files"],
+          ["pr", "comment", "14", "-R", "github.com/team/project", "--body", "test"],
+        ].map((argv) => ({ operation: `command(${JSON.stringify(argv)})`, host: "github.com", target: "api.github.com:443", path: null })),
+        { operation: 'command(["api", "--hostname", "github.com", "--method", "POST", "repos/team/project/pulls/14/comments/1/replies", "-f", "body=test"])', host: "github.com", target: "api.github.com:443", path: "/repos/team/project/pulls/14/comments/1/replies" },
       ]) {
         requests.length = 0;
         const script = `
           import { GhGitHubReader, resolveContext } from ${JSON.stringify(join(SOURCE_DIR, "github.ts"))};
           import { GhGitMergePort } from ${JSON.stringify(join(SOURCE_DIR, "merge-effects.ts"))};
+          async function command(argv) {
+            const child = Bun.spawn(["gh", ...argv], { stdout: "ignore", stderr: "ignore" });
+            await child.exited;
+          }
           const reader = new GhGitHubReader();
           const port = new GhGitMergePort();
           const context = ${scenario.host === "github.com"
@@ -437,8 +546,10 @@ describe("real gh host routing", () => {
         expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
         expect(JSON.parse(stdout)).toEqual({ host: scenario.host, owner: "team", repo: "project", number: 14 });
         expect(requests.length).toBeGreaterThan(0);
-        for (const request of requests)
-          expect(request).toEqual({ target: scenario.target, path: scenario.path });
+        for (const request of requests) {
+          expect(request.target).toBe(scenario.target);
+          if (scenario.path !== null) expect(request.path).toBe(scenario.path);
+        }
       }
     } finally {
       server.closeAllConnections();

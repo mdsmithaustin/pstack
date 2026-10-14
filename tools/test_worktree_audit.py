@@ -448,6 +448,8 @@ class WorktreeAuditRepositoryTest(WorktreeAuditBaseTest):
     def test_real_gh_uses_public_origin_despite_ambient_host(self):
         self.fixture("https://github.com/fork/project.git")
         real_gh = shutil.which("gh")
+        self.assertIsNotNone(real_gh, "required executable missing from PATH: gh")
+        self.assertIsNotNone(shutil.which("openssl"), "required executable missing from PATH: openssl")
         cert = self.tmp / "cert.pem"
         key = self.tmp / "key.pem"
         subprocess.run([

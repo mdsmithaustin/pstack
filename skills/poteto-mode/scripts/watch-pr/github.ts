@@ -696,9 +696,8 @@ export class GhGitHubReader implements T.GitHubReader {
         ]);
         if (remote.code === 0) {
           const name = remote.stdout.trim();
-          trackingRepo = parseRemote(name);
-          if (trackingRepo === null && name !== "") {
-            const url = await run(["git", "remote", "get-url", name]);
+          if (name !== "") {
+            const url = await run(["git", "ls-remote", "--get-url", name]);
             if (url.code === 0) trackingRepo = parseRemote(url.stdout);
           }
         }
