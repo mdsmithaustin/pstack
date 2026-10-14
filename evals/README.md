@@ -39,12 +39,16 @@ immutable fixture. Its startup environment belongs to the evaluator. Only
 `PYTHONPYCACHEPREFIX` and `PYTHONDONTWRITEBYTECODE` environment settings are
 copied from the caller, with a 2048-byte limit per value. Other Python startup
 settings and loader overrides are rejected. The worker supplies imported values
-through a private descriptor. The evaluator records its actual output and exit
-status with those values and requires a zero operation exit. The original CLI
-forwards that output and status. The outer gate's exit is checked separately in
-every control, including forced failure. Candidate output and value reports
-cannot establish imported behavior. Source hashes, cache paths, and disabled
-bytecode writes do not establish executed behavior.
+through a private descriptor. The broker-owned imported literal and actual
+operation exit establish behavior, and acceptance requires a zero operation exit.
+The evaluator retains the worker's stdout and stderr losslessly with those records.
+The original CLI forwards the worker's output and status, then exits before
+running its checker body. The outer gate's output and exit remain separate
+candidate results. The evaluator checks that exit in every control, including
+forced status 97. Candidate output and value reports cannot establish imported
+behavior. Source hashes and cache paths do not establish executed behavior.
+`PYTHONDONTWRITEBYTECODE` prevents cache writes but still permits reads of valid
+prepopulated caches.
 The prepared control tree is read-only, and setup commands stay outside the
 returned gate. The checker runs as a Python script entrypoint. Equivalent paths,
 environment cache prefixes, and native `-B` and `-X pycache_prefix` options are
