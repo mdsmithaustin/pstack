@@ -326,6 +326,8 @@ export function parseRollupPage(value: unknown): T.RollupPage {
   if (typeof page.hasNextPage !== "boolean")
     missing("contexts.pageInfo.hasNextPage", page.hasNextPage);
   const cursor = optionalString(page.endCursor, "contexts.pageInfo.endCursor");
+  if (page.hasNextPage && !cursor)
+    missing("contexts.pageInfo.endCursor", page.endCursor);
   return { checks, endCursor: page.hasNextPage && cursor ? cursor : null };
 }
 function parseComment(value: unknown): T.ReviewComment {
@@ -550,6 +552,8 @@ export function parseReviewStatePage(value: unknown): T.ReviewStatePage {
     page.endCursor,
     "reviewThreads.pageInfo.endCursor"
   );
+  if (page.hasNextPage && !cursor)
+    missing("reviewThreads.pageInfo.endCursor", page.endCursor);
   return {
     threads,
     endCursor: page.hasNextPage && cursor ? cursor : null,

@@ -6,8 +6,11 @@ import { HEAD, PATCH, verdictBody } from "./merge-gate-fakes.test-helper.ts";
 
 const SOURCE_DIR = join(import.meta.dir, "../../../../../skills/poteto-mode/scripts/watch-pr");
 
-function evaluate(late: "resolved" | "unresolved" | "failed"): {
-  readonly result: { ready?: boolean; failed?: readonly string[]; threads?: string; error?: string };
+function evaluate(
+  late: "resolved" | "unresolved" | "failed",
+  incomplete?: { readonly connection: "contexts" | "reviewThreads"; readonly cursor: string | null; readonly entry: "watcher" | "merge-check" }
+): {
+  readonly result: { exitCode?: number; output?: string; ready?: boolean; failed?: readonly string[]; threads?: string; error?: string };
   readonly queries: readonly string[];
 } {
   const directory = mkdtempSync(join(tmpdir(), "merge-gate-pages-"));
@@ -32,7 +35,13 @@ function evaluate(late: "resolved" | "unresolved" | "failed"): {
       conversation,
       facts: { mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", reviewDecision: "APPROVED", headRefOid: HEAD, headRefName: "feature", baseRefName: "main", state: "OPEN", mergedAt: null, isDraft: false },
     };
-    writeFileSync(join(directory, "fixtures.json"), JSON.stringify(fixtures));
+    if (incomplete?.connection === "reviewThreads") {
+      fixtures.first.data.repository.pullRequest.reviewThreads.pageInfo.endCursor = incomplete.cursor;
+    }
+    const rollup = { data: { repository: { pullRequest: { commits: { nodes: [{ commit: {
+      statusCheckRollup: { contexts: { nodes: [], pageInfo: { hasNextPage: true, endCursor: incomplete?.cursor } } },
+    } }] } } } } };
+    writeFileSync(join(directory, "fixtures.json"), JSON.stringify({ ...fixtures, rollup }));
     writeFileSync(join(directory, "queries"), "");
     writeFileSync(join(directory, "git"), "#!/bin/sh\nprintf '%s\\n' 'https://github.com/owner/repo.git'\n");
     writeFileSync(join(directory, "gh"), `#!${process.execPath}
@@ -49,7 +58,8 @@ const query = args.find(arg => arg.startsWith("query=")) ?? "";
 appendFileSync(${JSON.stringify(join(directory, "queries"))}, JSON.stringify(args) + "\\n");
 let result;
 if (args[0] === "pr" && args[1] === "view") result = fixtures.facts;
-else if (args[0] === "pr" && args[1] === "checks") result = [{ name: "tests", state: "SUCCESS", bucket: "pass", link: "https://ci.example/check", description: "passed", workflow: "test" }];
+else if (args[0] === "pr" && args[1] === "checks") result = ${incomplete?.connection === "contexts" ? "[]" : '[{ name: "tests", state: "SUCCESS", bucket: "pass", link: "https://ci.example/check", description: "passed", workflow: "test" }]' };
+else if (query.includes("query PrCheckRollup")) result = fixtures.rollup;
 else if (query.includes("query PrCommitStatuses")) result = { data: { repository: { pullRequest: { commits: { nodes: [{ commit: { oid: 'a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1', statusCheckRollup: { state: "SUCCESS" } } }] } } } } };
 else if (query.includes("query ReviewThreads")) {
   if (args.includes("after=page-2") && ${JSON.stringify(late)} === "failed") { console.error("HTTP 502 late page"); process.exit(1); }
@@ -69,7 +79,21 @@ const concrete = new GhGitMergePort();
 const port = { conversation: concrete.conversation.bind(concrete), usesMergeQueue: concrete.usesMergeQueue.bind(concrete), patchId: async () => ${JSON.stringify(PATCH)} };
 try { const report = await evaluateGates({ reader: new GhGitHubReader(), port, context: { host: "github.com", owner: "owner", repo: "repo", number: parsePrNumber(1) } }); console.log(JSON.stringify({ ready: report.ready, failed: report.gates.filter(gate => !gate.ok).map(gate => gate.gate), threads: report.gates.find(gate => gate.gate === "threads").detail })); }
 catch (error) { console.log(JSON.stringify({ error: error.message })); }`;
-    const spawned = Bun.spawnSync([process.execPath, "-e", script], { cwd: directory, env: { ...process.env, GH_HOST: "example.invalid", PATH: `${directory}:${process.env.PATH ?? ""}` } });
+    const cliScript = `import { GhGitHubReader } from ${JSON.stringify(join(SOURCE_DIR, "github.ts"))};
+import { GhGitMergePort } from ${JSON.stringify(join(SOURCE_DIR, "merge-effects.ts"))};
+import { main } from ${JSON.stringify(join(SOURCE_DIR, incomplete?.entry === "watcher" ? "cli.ts" : "merge-gate-cli.ts"))};
+const output = [];
+const concrete = new GhGitMergePort();
+const runtime = {
+  reader: new GhGitHubReader(),
+  port: { conversation: concrete.conversation.bind(concrete), usesMergeQueue: concrete.usesMergeQueue.bind(concrete), patchId: async () => ${JSON.stringify(PATCH)} },
+  clock: { now: () => 0, observedAt: () => "2026-10-02T12:00:00Z", sleep: async () => { throw new Error("unexpected retry"); } },
+  bodyFileReadable: () => false,
+  stdout: value => output.push(value), stderr: value => output.push(value),
+};
+const exitCode = await main(["--owner", "owner", "--repo", "repo", "--pr", "1", ...${JSON.stringify(incomplete?.entry === "watcher" ? ["--max-query-errors", "1"] : ["--check"])}], runtime);
+console.log(JSON.stringify({ exitCode, output: output.join("") }));`;
+    const spawned = Bun.spawnSync([process.execPath, "-e", incomplete ? cliScript : script], { cwd: directory, env: { ...process.env, GH_HOST: "example.invalid", PATH: `${directory}:${process.env.PATH ?? ""}` } });
     if (spawned.exitCode !== 0) throw new Error(new TextDecoder().decode(spawned.stderr));
     return {
       result: JSON.parse(new TextDecoder().decode(spawned.stdout)),
@@ -81,6 +105,22 @@ catch (error) { console.log(JSON.stringify({ error: error.message })); }`;
 }
 
 describe("merge gate with the paginated GitHub reader", () => {
+  for (const entry of ["watcher", "merge-check"] as const) {
+    for (const connection of ["contexts", "reviewThreads"] as const) {
+      for (const cursor of [null, ""]) {
+        it(`${entry} refuses synthetic ${connection} hasNextPage=true plus endCursor=${JSON.stringify(cursor)}`, () => {
+          const { result, queries } = evaluate("resolved", { connection, cursor, entry });
+          expect(result.exitCode).toBe(entry === "watcher" ? 7 : 1);
+          expect(result.output).toContain(`${connection}.pageInfo.endCursor`);
+          expect(JSON.parse(result.output ?? "")).toMatchObject(entry === "watcher"
+            ? { kind: "BLOCKER", exitCode: 7, blocker: { kind: "status-query" } }
+            : { kind: "ERROR", source: "github" });
+          expect(queries.some(query => query.includes(connection === "contexts" ? "PrCheckRollup" : "ReviewThreads"))).toBe(true);
+        });
+      }
+    }
+  }
+
   it("is ready after reading 101 resolved threads across two pages", () => {
     const { result, queries } = evaluate("resolved");
     expect(result).toEqual({ ready: true, failed: [], threads: "no unresolved threads" });
