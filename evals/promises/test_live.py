@@ -612,6 +612,37 @@ class ErrorRun(unittest.TestCase):
                 live.run_case("claude-code", case["id"], "HEAD", out, 0)
         return json.loads(output.getvalue())["authorization_id"]
 
+    def test_first_publication_already_has_the_sealed_error_when_return_is_interrupted(self):
+        import grade_boundary
+
+        class Interrupted(BaseException):
+            pass
+
+        with tempfile.TemporaryDirectory(prefix="pstack-first-error-") as tmp:
+            out = Path(tmp).resolve()
+            writes = []
+            write = grade_boundary._Root.write
+
+            def interrupt_after_publication(root, name, data):
+                result = write(root, name, data)
+                if name == "verdict.json":
+                    writes.append(json.loads(data))
+                    raise Interrupted()
+                return result
+
+            with mock.patch.object(grade_boundary._Root, "write", interrupt_after_publication):
+                with self.assertRaises(Interrupted):
+                    self.claude_feature_run_that_never_started(out)
+            self.assertEqual(len(writes), 1)
+            self.assertEqual(writes[0]["error"]["relogin"], "claude auth login")
+            self.assertEqual({r["verdict"] for r in writes[0]["promises"].values() if not r.get("not_applicable")}, {"ERROR"})
+            controller = grade_boundary._Controller(out)
+            self.addCleanup(controller.root.close)
+            [envelope] = [p for p in controller.root.path.glob("*.json") if p.name != "key.json"]
+            handle, state = controller.load(envelope.stem)
+            self.assertEqual(state["error"], writes[0]["error"])
+            self.assertEqual(live.grade(handle), writes[0])
+
     def test_regrading_a_run_a_dead_login_ended_keeps_its_error_marks(self):
         import report
         with tempfile.TemporaryDirectory(prefix="pstack-live-regrade-") as tmp:
