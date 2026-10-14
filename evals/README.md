@@ -108,9 +108,11 @@ without blockers. These checks validate the instrument, not skill quality.
 
 Start with one paired repetition. Replace the skill name for each corpus.
 
-The verify-commands bootstraps create files in the disposable model workspace,
-so use `--sandbox workspace-write`. Resolve the adapter's absolute path before
-the run because isolated answer workspaces do not contain repository tools.
+Fixture bootstraps that create files, including the verify-commands fixtures,
+need `--sandbox workspace-write` in the answer invocation. Use it for bootstrap
+writes in the disposable model workspace. Use `read-only` for answer tasks that
+only inspect attached files. Resolve the adapter's absolute path before the run
+because isolated answer workspaces do not contain repository tools.
 The executable oracle keeps its prepared tree immutable to candidates.
 
 ```sh
@@ -136,14 +138,8 @@ only for threshold-close or disputed answers after inspecting the first
 verdict's prompt and rationale. `skill-ci run` always uses a Claude
 judge, so invoke the pinned harness directly for a cross-family comparison.
 
-Fixture bootstraps that create files, including the verify-commands fixtures,
-need `--sandbox workspace-write` in the answer invocation. This permits writes
-only in the disposable model workspace. The later executable oracle still
-keeps its prepared tree immutable to candidates. Use `read-only` for answer
-tasks that only inspect attached files.
-
-Resolve adapter paths before starting. Answer runs execute in isolated
-workspaces, where a repository-relative adapter path does not exist.
+Follow the [paid-screen sandbox and adapter guidance](#paid-screen) when
+adapting this example to another corpus.
 
 ```sh
 skill=runtime-probes
