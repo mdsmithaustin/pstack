@@ -1528,7 +1528,9 @@ describe("CLI bot core regressions", () => {
     };
     const sourceArm = normal("claude-code", workModel);
     expect(sourceArm).toEqual({ role: "trail reviewer", arm: 1, model: "fable", effort: "high", source: "workspace ## claude-code",
-      notes: ["trail reviewer matched work model opus; stepped up to fable"], step: "up" });
+      notes: ["trail reviewer matched work model opus; stepped up to fable",
+        "fable is in no line of your config; it is allowed only through the shipped default of a role your config leaves unbound"],
+      step: "up" });
     const resolutionContext = { workModel, resolvedArm: sourceArm };
     const path = await input(dir, "source-reviewer.json", {
       unit: "u", role: sourceArm.role, arm: sourceArm.arm, authority: "verifier", requestId: "source-reviewer",
