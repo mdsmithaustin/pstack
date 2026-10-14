@@ -185,7 +185,7 @@ describe("repository host inference", () => {
   });
 });
 
-function currentPrRun(gitScript: string): {
+function currentPrRun(gitScript: string, branchPr = 14): {
   result: { context?: unknown; error?: string };
   commands: string[][];
 } {
@@ -198,7 +198,12 @@ function currentPrRun(gitScript: string): {
     writeFileSync(git, `#!/bin/sh\n${gitScript}\n`);
     writeFileSync(
       gh,
-      "#!/bin/sh\nprintf '%s\\n' '---' \"$@\" >> \"$WATCH_PR_COMMANDS\"\nprintf '%s\\n' '{\"number\":14,\"url\":\"https://github.com/team/project/pull/14\"}'\n"
+      `#!/bin/sh
+printf '%s\\n' '---' "$@" >> "$WATCH_PR_COMMANDS"
+case "$3" in 14) number=14;; *) number=${branchPr};; esac
+case "$5" in example.com/*) host=example.com;; *) host=github.com;; esac
+printf '{"number":%s,"url":"https://%s/team/project/pull/%s"}\\n' "$number" "$host" "$number"
+`
     );
     chmodSync(git, 0o755);
     chmodSync(gh, 0o755);
@@ -224,8 +229,24 @@ function currentPrRun(gitScript: string): {
     rmSync(directory, { recursive: true, force: true });
   }
 }
-const gitScript = (remote: string, branch: string, tracking = ""): string =>
-  `case "$1" in remote) ${remote === "" ? "exit 1" : `printf '%s\\n' '${remote}'`};; branch) printf '%s\\n' '${branch}';; config) printf '%s\\n' '${tracking}';; esac`;
+const gitScript = (
+  remote: string,
+  branch: string,
+  tracking = "",
+  trackingRemote = "origin",
+  aliases: Readonly<Record<string, string>> = {}
+): string =>
+  `case "$1" in
+remote) case "$3" in
+origin) ${remote === "" ? "exit 1" : `printf '%s\\n' '${remote}'`};;
+${Object.entries(aliases).map(([name, url]) => `${name}) printf '%s\\n' '${url}';;`).join("\n")}
+*) exit 1;; esac;;
+branch) printf '%s\\n' '${branch}';;
+config) case "$3" in
+'branch.${branch}.merge') printf '%s\\n' '${tracking}';;
+'branch.${branch}.remote') ${trackingRemote === "" ? "exit 1" : `printf '%s\\n' '${trackingRemote}'`};;
+*) exit 1;; esac;;
+*) exit 1;; esac`;
 
 describe("current PR lookup without --pr", () => {
   it("passes the origin repo and the checked-out branch to gh pr view", () => {
@@ -277,12 +298,64 @@ describe("current PR lookup without --pr", () => {
   });
 
   it("keeps the Enterprise origin for a tracked pull request", () => {
-    const { commands } = currentPrRun(
+    const { result, commands } = currentPrRun(
       gitScript("ssh://git@example.com/team/project.git", "someone-feature", "refs/pull/14/head")
     );
     expect(commands).toEqual([
       ["pr", "view", "14", "--repo", "example.com/team/project", "--json", "number,url"],
     ]);
+    expect(result.context).toEqual({ host: "example.com", owner: "team", repo: "project", number: 14 });
+  });
+
+  it("resolves matching tracking aliases and direct URLs against origin identity", () => {
+    for (const origin of ["https://github.com/team/project.git", "https://example.com/team/project.git"]) {
+      const url = origin.replace("https://", "ssh://git@");
+      for (const trackingRemote of ["mirror", url]) {
+        const { result, commands } = currentPrRun(
+          gitScript(origin, "someone-feature", "refs/pull/14/head", trackingRemote, { mirror: url }),
+          27
+        );
+        const host = new URL(origin).hostname;
+        expect(commands).toEqual([
+          ["pr", "view", "14", "--repo", host === "github.com" ? "team/project" : "example.com/team/project", "--json", "number,url"],
+        ]);
+        expect(result.context).toEqual({ host, owner: "team", repo: "project", number: 14 });
+      }
+    }
+  });
+
+  it("uses the branch PR when upstream has a colliding PR number", () => {
+    const { result, commands } = currentPrRun(
+      gitScript("https://github.com/team/project.git", "someone-feature", "refs/pull/14/head", "upstream", {
+        upstream: "https://github.com/parent/project.git",
+      }),
+      27
+    );
+    expect(commands).toEqual([
+      ["pr", "view", "someone-feature", "--repo", "team/project", "--json", "number,url"],
+    ]);
+    expect(result.context).toEqual({ host: "github.com", owner: "team", repo: "project", number: 27 });
+  });
+
+  it("falls back to the branch for unresolved or mismatched tracking identities", () => {
+    for (const trackingRemote of [
+      "", "missing", ".", "invalid",
+      "https://example.com/team/other.git",
+      "https://example.com/other/project.git",
+      "https://example.net/team/project.git",
+      "https://github.com/team/project.git",
+    ]) {
+      const { result, commands } = currentPrRun(
+        gitScript("https://example.com/team/project.git", "someone-feature", "refs/pull/14/head", trackingRemote, {
+          invalid: "/local/repository",
+        }),
+        27
+      );
+      expect(commands).toEqual([
+        ["pr", "view", "someone-feature", "--repo", "example.com/team/project", "--json", "number,url"],
+      ]);
+      expect(result.context).toEqual({ host: "example.com", owner: "team", repo: "project", number: 27 });
+    }
   });
 
   it("uses branch lookup for ordinary and invalid pull-request tracking refs", () => {

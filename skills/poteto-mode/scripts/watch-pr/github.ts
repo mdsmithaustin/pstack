@@ -689,7 +689,26 @@ export class GhGitHubReader implements T.GitHubReader {
         tracking.code === 0
           ? /^refs\/pull\/([1-9]\d*)\/head$/.exec(tracking.stdout.trim())?.[1]
           : undefined;
-      argv.push(trackedPr ?? branch);
+      let trackingRepo: T.Repository | null = null;
+      if (trackedPr !== undefined) {
+        const remote = await run([
+          "git", "config", "--get", `branch.${branch}.remote`,
+        ]);
+        if (remote.code === 0) {
+          const name = remote.stdout.trim();
+          trackingRepo = parseRemote(name);
+          if (trackingRepo === null && name !== "") {
+            const url = await run(["git", "remote", "get-url", name]);
+            if (url.code === 0) trackingRepo = parseRemote(url.stdout);
+          }
+        }
+      }
+      argv.push(
+        trackedPr !== undefined && trackingRepo !== null &&
+        repoArg(trackingRepo).toLowerCase() === repoArg(origin).toLowerCase()
+          ? trackedPr
+          : branch
+      );
     }
     argv.push("--repo", repoArg(origin));
     argv.push("--json", "number,url");
