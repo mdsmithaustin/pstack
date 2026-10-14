@@ -280,7 +280,7 @@ a config written before the panels shrank to three entries still lists four pane
 
 ## automations
 
-pstack also ships a dormant [benny automation pack](./automations/benny/). benny triages slack issue reports, then reproduces and fixes confirmed bugs with real ui evidence. its files are not registered as slash skills.
+pstack also ships a dormant [benny automation pack](./automations/benny/). benny triages slack issue reports, then reproduces confirmed bugs with real ui evidence and may prepare a small draft fix. its files are not registered as slash skills.
 
 to set it up, point your agent at [`FOR_AGENTS.md`](./automations/benny/FOR_AGENTS.md). setup copies the pack into the target repository at `.agents/automations/benny/`, enables pstack there for shared skills, and keeps user configuration outside the copied pack. benny needs a scheduled agent runner (claude code scheduled agents, or any cron-driven job that invokes your CLI).
 
