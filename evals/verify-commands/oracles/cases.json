@@ -56,5 +56,12 @@
       {"name": "healthy", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/verify-release.py"]}]},
       {"name": "broken", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/verify-release.py"]}]}
     ]
+  },
+  "lifecycle-observation": {
+    "bootstrap": "lifecycle_observation.py",
+    "states": [
+      {"name": "cleanup-present", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "reaped", "writer": "closed"}}]},
+      {"name": "cleanup-omitted", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "zombie", "writer": "open"}}]}
+    ]
   }
 }

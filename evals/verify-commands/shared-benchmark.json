@@ -16,6 +16,65 @@
   },
   "cases": [
     {
+      "id": "pos-lifecycle-observation",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "completion-gate",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": [
+        "outcome",
+        "process"
+      ],
+      "prompt": "Our completion probe reports a clean process after its observer has repaired it. Run the attached bootstrap with `python3 inputs/lifecycle_observation.py . cleanup-present`, inspect the generated project and its old example. The checker targets the prepared Linux evaluator and requires its private runtime. Return a paste-ready completion check in a fenced shell block. Briefly name the observable result that blocks completion and explain when the measurement happens.",
+      "files": [
+        "oracles/projects/lifecycle_observation.py"
+      ],
+      "expected_behavior": [
+        "Observes application-owned child reaping and cleanup pipe writer closure before observer repair.",
+        "Propagates a non-zero observation exit and distinguishes application cleanup from later safety teardown."
+      ],
+      "assertions": [
+        {
+          "name": "application-cleanup-is-observed-before-repair",
+          "type": "script",
+          "command": [
+            "python3",
+            "oracles/check_plan.py",
+            "lifecycle-observation",
+            "{output_dir}"
+          ],
+          "severity": "gate",
+          "oracle": "strong"
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "with_skill"
+          ],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": [
+            "without_skill"
+          ],
+          "severity": "gate"
+        }
+      ],
+      "tags": [
+        "population:headline-behavior",
+        "lifecycle-observation",
+        "observer-repair",
+        "executable-fixture"
+      ]
+    },
+    {
       "id": "pos-stale-summary",
       "split": "tune",
       "kind": "positive",
