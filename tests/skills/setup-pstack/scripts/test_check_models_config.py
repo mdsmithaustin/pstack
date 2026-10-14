@@ -512,10 +512,13 @@ class Resolve(ResolveRunner, unittest.TestCase):
 
     def test_panel_comes_from_one_line(self):
         user = USER_FILE + "arena runners: fable@high, opus@xhigh, sonnet@high\n"
-        arms = self.resolve("claude-code", "arena runners", user=user, workspace="arena runners: opus\n")
+        arms = self.resolve("claude-code", "arena runners", user=user, workspace="arena runners: opus, sonnet\n")
         self.assertEqual(
             arms,
-            [{"role": "arena runners", "arm": 1, "model": "opus", "effort": "inherit-parent", "source": "workspace flat"}],
+            [
+                {"role": "arena runners", "arm": 1, "model": "opus", "effort": "inherit-parent", "source": "workspace flat"},
+                {"role": "arena runners", "arm": 2, "model": "sonnet", "effort": "inherit-parent", "source": "workspace flat"},
+            ],
         )
 
     def test_hermes_has_no_alias_translation(self):
@@ -1026,8 +1029,8 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
                 arm = self.reviewer("claude-code", work_model, user=f"trail reviewer: {alias}@high\n")
                 self.assertEqual((arm["model"], arm["effort"], arm["step"]), expected)
                 self.assertEqual(
-                    arm["notes"],
-                    [f"trail reviewer matched work model {alias}; stepped {expected[2]} to {expected[0]}"],
+                    arm["notes"][0],
+                    f"trail reviewer matched work model {alias}; stepped {expected[2]} to {expected[0]}",
                 )
 
     def test_a_full_claude_model_id_maps_to_its_alias_on_codex(self):
@@ -1273,7 +1276,15 @@ class GrokResolve(ResolveRunner, unittest.TestCase):
         self.assertEqual([(a["model"], a["effort"]) for a in arms], [("grok-4.7", "inherit-parent")] * 3)
         self.assertEqual(
             [a["notes"] for a in arms],
-            [["fable translated to grok-4.7"], ["opus translated to grok-4.7"], ["sonnet translated to grok-4.7"]],
+            [
+                [
+                    "fable translated to grok-4.7",
+                    "arena runners resolves to one distinct model (grok-4.7), so agreement between its arms "
+                    "is not independent confirmation",
+                ],
+                ["opus translated to grok-4.7"],
+                ["sonnet translated to grok-4.7"],
+            ],
         )
 
     def test_grok_never_consults_the_codex_catalog(self):
@@ -1282,6 +1293,130 @@ class GrokResolve(ResolveRunner, unittest.TestCase):
             codex_catalog=catalog_json("gpt-6.1-sol", "gpt-6-sol"),
         )
         self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6-sol", "high", None))
+
+
+class ShippedDefaultLeak(ResolveRunner, unittest.TestCase):
+    def notes(self, harness, role, **kwargs):
+        return [arm.get("notes", []) for arm in self.resolve(harness, role, **kwargs)]
+
+    def test_a_role_the_partial_config_omits_names_itself_and_the_fix(self):
+        [arm] = self.resolve("claude-code", "hardest tasks", user="feature, refactoring: sonnet\n")
+        self.assertEqual(arm["source"], "skill default")
+        self.assertEqual(
+            arm["notes"],
+            [
+                "hardest tasks is not bound in your config, and the shipped default opus appears in none of "
+                "your lines; add a `hardest tasks:` line to pstack-models.md to choose its model"
+            ],
+        )
+
+    def test_a_panel_flags_only_the_arms_whose_model_the_config_never_uses(self):
+        arms = self.resolve("claude-code", "arena runners", user="feature, refactoring: sonnet\n")
+        self.assertEqual(
+            [("notes" in arm, arm["model"]) for arm in arms],
+            [(True, "fable"), (True, "opus"), (False, "sonnet")],
+        )
+
+    def test_a_default_whose_model_the_config_uses_elsewhere_gets_no_note(self):
+        self.assertEqual(self.notes("claude-code", "swarm workers", user="feature, refactoring: sonnet\n"), [[]])
+
+    def test_a_workspace_file_alone_makes_the_config_partial(self):
+        [arm] = self.resolve("claude-code", "hardest tasks", workspace="feature, refactoring: sonnet\n")
+        self.assertIn("hardest tasks is not bound", arm["notes"][0])
+
+    def test_no_config_means_the_shipped_defaults_are_intended(self):
+        self.assertEqual(self.notes("claude-code", "hardest tasks"), [[]])
+
+    def test_a_role_the_config_binds_gets_no_note(self):
+        self.assertEqual(self.notes("claude-code", "feature", user="feature, refactoring: sonnet\n"), [[]])
+
+    def test_an_inheriting_default_never_leaks_a_model(self):
+        self.assertEqual(self.notes("claude-code", "default", user="feature, refactoring: sonnet\n"), [[]])
+
+    def test_codex_compares_translated_models(self):
+        arms = self.resolve("codex", "arena runners", user="feature, refactoring: sonnet\n")
+        self.assertEqual(
+            [(arm["model"], "notes" in arm) for arm in arms],
+            [("gpt-6-sol", False), ("gpt-6-sol", False), ("gpt-6-luna", True)],
+        )
+        self.assertIn("gpt-6-luna", arms[2]["notes"][0])
+
+    def test_a_step_up_onto_a_model_only_a_shipped_default_allows_says_so(self):
+        [arm] = self.resolve(
+            "claude-code", "trail reviewer", user="feature, refactoring: sonnet\ntrail reviewer: opus\n",
+            work_model="opus@xhigh",
+        )
+        self.assertEqual((arm["model"], arm["step"]), ("fable", "up"))
+        self.assertEqual(
+            arm["notes"],
+            [
+                "trail reviewer matched work model opus; stepped up to fable",
+                "fable is in no line of your config; it is allowed only through the shipped default of a role "
+                "your config leaves unbound",
+            ],
+        )
+
+    def test_a_step_that_lands_on_a_model_the_config_names_gets_no_note(self):
+        [arm] = self.resolve(
+            "claude-code", "trail reviewer", user="trail reviewer: opus\nhow explorer: fable\n",
+            work_model="opus@xhigh",
+        )
+        self.assertEqual(arm["model"], "fable")
+        self.assertEqual(arm["notes"], ["trail reviewer matched work model opus; stepped up to fable"])
+
+
+class PanelDiversityNote(ResolveRunner, unittest.TestCase):
+    def test_a_panel_on_one_model_notes_it_on_the_first_arm_only(self):
+        arms = self.resolve("claude-code", "interrogate reviewers", user="interrogate reviewers: opus, opus@high, opus@max\n")
+        self.assertEqual(
+            [arm.get("notes") for arm in arms],
+            [
+                [
+                    "interrogate reviewers resolves to one distinct model (opus), so agreement between its arms "
+                    "is not independent confirmation"
+                ],
+                None,
+                None,
+            ],
+        )
+
+    def test_a_panel_with_two_models_gets_no_note(self):
+        arms = self.resolve("claude-code", "interrogate reviewers", user="interrogate reviewers: opus, sonnet, sonnet\n")
+        self.assertEqual([arm.get("notes") for arm in arms], [None, None, None])
+
+    def test_two_releases_of_one_gpt6_tier_count_as_one_model(self):
+        arms = self.resolve(
+            "codex", "interrogate reviewers",
+            user="## codex\ninterrogate reviewers: gpt-6.1-sol@xhigh, gpt-6-sol@high\n",
+            codex_catalog=catalog_json("gpt-6.1-sol", "gpt-6-sol"),
+        )
+        self.assertIn("one distinct model", arms[0]["notes"][-1])
+
+    def test_grok_defaults_resolve_every_panel_to_one_model(self):
+        for role in ("arena runners", "architect runners", "interrogate reviewers"):
+            with self.subTest(role=role):
+                arms = self.resolve("grok", role)
+                self.assertIn("(grok-4.7)", arms[0]["notes"][-1])
+
+    def test_the_cross_judge_pool_picks_one_arm_so_it_gets_no_note(self):
+        arms = self.resolve("grok", "arena cross-judge pool")
+        self.assertNotIn("one distinct model", " ".join(arms[0].get("notes", [])))
+
+    def test_an_inheriting_panel_names_the_parent_model(self):
+        arms = self.resolve("hermes", "arena runners")
+        self.assertIn("one distinct model (the parent model)", arms[0]["notes"][-1])
+
+    def test_a_single_arm_panel_is_one_model(self):
+        [arm] = self.resolve("claude-code", "architect runners", user="architect runners: opus\n")
+        self.assertIn("one distinct model (opus)", arm["notes"][-1])
+
+    def test_a_role_outside_the_panel_set_gets_no_note(self):
+        [arm] = self.resolve("grok", "swarm workers")
+        self.assertNotIn("one distinct model", " ".join(arm.get("notes", [])))
+
+    def test_the_claude_code_defaults_are_a_diverse_panel(self):
+        arms = self.resolve("claude-code", "interrogate reviewers")
+        self.assertEqual([arm.get("notes") for arm in arms], [None, None, None])
 
 
 class ResolveExitCodes(unittest.TestCase):

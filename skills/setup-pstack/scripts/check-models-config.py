@@ -25,6 +25,7 @@ PANEL_ROLES = {
     "arena runners", "arena cross-judge pool",
     "architect runners", "interrogate reviewers",
 }
+AGREEING_PANELS = PANEL_ROLES - {"arena cross-judge pool"}
 REFLECT_SHORTHANDS = {"divergent", "synthesizer", "tooling", "judgment"}
 
 EFFORT_ORDER = ("none", "low", "medium", "high", "xhigh", "max", "ultra")
@@ -414,6 +415,48 @@ def step_reviewer(
     return reviewer._replace(model=model, effort=effort, notes=notes, step=step)
 
 
+def _written_tiers(layers: list[Layer], harness: str) -> frozenset[str] | None:
+    user_layers = layers[:4]
+    if not any(layer.roles for layer in user_layers):
+        return None
+    return frozenset(
+        _tier(_resolve_model(model, None, harness)[0])
+        for layer in user_layers
+        for entries in layer.roles.values()
+        for model, _ in entries
+    )
+
+
+def _default_leak_note(arm: ResolvedArm, written: frozenset[str] | None) -> str | None:
+    if written is None or arm.model == INHERIT or _tier(arm.model) in written:
+        return None
+    if arm.step in ("up", "down"):
+        return (
+            f"{arm.model} is in no line of your config; it is allowed only through the shipped default "
+            "of a role your config leaves unbound"
+        )
+    if arm.source.startswith("skill default"):
+        return (
+            f"{arm.role} is not bound in your config, and the shipped default {arm.model} appears in none of "
+            f"your lines; add a `{arm.role}:` line to {CONFIG_NAME} to choose its model"
+        )
+    return None
+
+
+def _panel_diversity_note(arms: list[ResolvedArm]) -> str | None:
+    if arms[0].role not in AGREEING_PANELS or len({_tier(arm.model) for arm in arms}) > 1:
+        return None
+    shown = "the parent model" if arms[0].model == INHERIT else arms[0].model
+    return (
+        f"{arms[0].role} resolves to one distinct model ({shown}), so agreement between its arms "
+        "is not independent confirmation"
+    )
+
+
+def _with_notes(arm: ResolvedArm, *notes: str | None) -> ResolvedArm:
+    return arm._replace(notes=(*arm.notes, *(n for n in notes if n)))
+
+
 def build_layers(harness: str, workspace: dict, user: dict, skill_default: dict) -> list[Layer]:
     return [
         Layer(f"workspace ## {harness}", workspace.get(harness, {})),
@@ -495,11 +538,17 @@ def _resolve_main(argv: list[str]) -> int:
         allowed = frozenset(
             arm.model for role in ROLES for arm in resolve_role(role, args.harness, layers, listed)
         ) - {INHERIT}
+    written = _written_tiers(layers, args.harness)
     for role in args.roles or sorted(ROLES):
-        for arm in resolve_role(role, args.harness, layers, listed):
-            if args.work_model and role == "trail reviewer":
-                arm = step_reviewer(arm, work_model, work_effort, args.harness, allowed, listed)
-                arm = arm._replace(notes=(*arm.notes, *unusable))
+        arms = resolve_role(role, args.harness, layers, listed)
+        if args.work_model and role == "trail reviewer":
+            arms = [
+                _with_notes(step_reviewer(arm, work_model, work_effort, args.harness, allowed, listed), *unusable)
+                for arm in arms
+            ]
+        arms = [_with_notes(arm, _default_leak_note(arm, written)) for arm in arms]
+        arms[0] = _with_notes(arms[0], _panel_diversity_note(arms))
+        for arm in arms:
             print(arm.to_json())
     return 0
 

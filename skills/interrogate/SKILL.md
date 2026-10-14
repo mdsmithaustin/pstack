@@ -36,13 +36,13 @@ For each reviewer:
 - `model` and effort: that reviewer's resolved arm, per **Spawn a role**.
 - `readonly`: `true`
 
-If the Task tool rejects a configured entry or a table default, use the **pstack-harness** skill to handle it. When it rejects a table default, also open a separate PR to update the default table. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.
+If the Task tool rejects a configured entry or a table default, use the **pstack-harness** skill to handle it. When it rejects a table default, also open a separate PR to update the table and `setup-pstack/examples/pstack-models.md`, the file the resolver reads. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.
 
 Read `references/reviewer-prompt.md` and fill in the same template for every reviewer with the stated intent, the diff or file contents, the rubric from `references/rubric.md`, and the code-quality lens from `references/code-quality-review.md`.
 
 ## Step 4, Synthesize
 
-As results come back, build a unified picture. Parse every reviewer's findings. Merge findings that describe the same issue differently, and note which models raised each one. Findings two or more models raised independently are the highest signal. Read a lone model's finding, but weight it accordingly. Note disagreements. If one model flags something and another explicitly says the opposite, that is context for the verdict.
+As results come back, build a unified picture. Parse every reviewer's findings. Merge findings that describe the same issue differently, and note which models raised each one. State which models the reviewers ran on first, and count arms that shared a model as one reviewer. Findings two or more models raised independently are the highest signal. Read a lone model's finding, but weight it accordingly. Note disagreements. If one model flags something and another explicitly says the opposite, that is context for the verdict.
 
 ## Step 5, Lead Judgment
 
