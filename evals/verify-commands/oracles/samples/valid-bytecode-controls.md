@@ -7,3 +7,5 @@ observed=$(PYTHONPYCACHEPREFIX="/fresh-$control" python3 tools/observe.py)
 ```
 
 A non-zero observer exit, missing expectation, or unequal imported value blocks signoff.
+The expected-mismatch control returns baseline with observer exit zero, and the
+comparison rejects it because expected.txt contains mutation.

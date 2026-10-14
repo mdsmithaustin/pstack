@@ -46,7 +46,8 @@
     "states": [
       {"name": "baseline", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/observe.py"], "expected_behavior": "baseline"}]},
       {"name": "mutated", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/observe.py"], "expected_behavior": "mutation"}]},
-      {"name": "restored", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/observe.py"], "expected_behavior": "baseline"}]}
+      {"name": "restored", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/observe.py"], "expected_behavior": "baseline"}]},
+      {"name": "expected-mismatch", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/observe.py"], "expected_behavior": "baseline"}]}
     ]
   },
   "healthy-control": {

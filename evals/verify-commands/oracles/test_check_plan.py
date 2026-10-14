@@ -34,15 +34,15 @@ class PlanReplayTests(unittest.TestCase):
     def test_bytecode_controls_observe_literal_imported_values_with_fresh_namespaces(self):
         code, result = self.evaluate_sample("bytecode-controls", "valid-bytecode-controls.md")
         self.assertEqual((code, result["status"]), (0, "pass"), result)
-        self.assertEqual(result["states"], ["baseline", "mutated", "restored", "forced-operation-failure"])
+        self.assertEqual(result["states"], ["baseline", "mutated", "restored", "expected-mismatch", "forced-operation-failure"])
         controls = result["control_evidence"]
         self.assertEqual(
             [(control["state"], control["behavior_checks"][0]["observation"]["behavior"]) for control in controls],
-            [("baseline", "baseline"), ("mutated", "mutation"), ("restored", "baseline")],
+            [("baseline", "baseline"), ("mutated", "mutation"), ("restored", "baseline"), ("expected-mismatch", "baseline")],
         )
         self.assertEqual(
             [control["behavior_checks"][0]["observation"]["cache_prefix"] for control in controls],
-            ["/fresh-baseline", "/fresh-mutated", "/fresh-restored"],
+            ["/fresh-baseline", "/fresh-mutated", "/fresh-restored", "/fresh-expected-mismatch"],
         )
         self.assertEqual(
             [control["behavior_checks"][0]["observation"]["execution"] for control in controls],
@@ -50,12 +50,16 @@ class PlanReplayTests(unittest.TestCase):
                 {"exit": 0, "stdout_hex": "626173656c696e650a", "stderr_hex": ""},
                 {"exit": 0, "stdout_hex": "6d75746174696f6e0a", "stderr_hex": ""},
                 {"exit": 0, "stdout_hex": "626173656c696e650a", "stderr_hex": ""},
+                {"exit": 0, "stdout_hex": "626173656c696e650a", "stderr_hex": ""},
             ],
         )
         for control in controls:
             observation = control["behavior_checks"][0]["observation"]
             self.assertEqual(observation["observer_uid"], 65533)
-            self.assertEqual((control["stdout"], control["stderr"], control["exit"]), ("", "", 0))
+            self.assertEqual(
+                (control["stdout"], control["stderr"], control["exit"]),
+                ("", "", 1 if control["state"] == "expected-mismatch" else 0),
+            )
             receipt = control["fixture_receipt"]
             self.assertEqual((receipt["source_size"], receipt["source_mtime_ns"]), (35, 1700000000000000000))
             self.assertEqual(struct.unpack("<III", bytes.fromhex(receipt["cache_header_hex"])[4:]), (0, 1700000000, 35))
@@ -63,36 +67,54 @@ class PlanReplayTests(unittest.TestCase):
     def test_prepopulated_timestamp_cache_is_read_despite_no_write_setting_and_rejected(self):
         code, result = self.evaluate_sample("bytecode-controls", "no-write-bytecode.md")
         self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
-        self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored"])
+        self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored", "expected-mismatch"])
         self.assertEqual(
             [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
-            ["baseline", "baseline", "mutation"],
+            ["baseline", "baseline", "mutation", "baseline"],
         )
         for control in result["failed_states"]:
-            self.assertEqual((control["exit"], control["exit_matches"], control["missing_operations"]), (0, True, []))
+            mismatch = control["state"] == "expected-mismatch"
+            self.assertEqual((control["exit"], control["exit_matches"], control["missing_operations"]), (0, not mismatch, []))
             self.assertEqual(control["behavior_checks"][0]["observation"]["dont_write_bytecode"], True)
-            self.assertEqual(control["behavior_checks"][0]["matches"], False)
+            self.assertEqual(control["behavior_checks"][0]["matches"], mismatch)
 
     def test_native_cache_prefix_options_and_equivalent_script_paths_pass(self):
         for command in (
             "python3 -B -X pycache_prefix=/native-prefix ./tools/observe.py",
-            "python3 -Xpycache_prefix=/attached-prefix -- tools/../tools/observe.py",
+            "python3 -Xpycache_prefix=/attached-prefix tools/../tools/observe.py",
         ):
             with self.subTest(command=command):
-                code, result = self.evaluate_bytecode_script("set -eu\n" + command)
+                code, result = self.evaluate_bytecode_script(
+                    "set -eu\nobserved=$(" + command + ")\n[ \"$observed\" = \"$(cat expected.txt)\" ]"
+                )
                 self.assertEqual((code, result["status"]), (0, "pass"), result)
                 self.assertEqual(
                     [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
-                    ["baseline", "mutation", "baseline"],
+                    ["baseline", "mutation", "baseline", "baseline"],
                 )
+
+    def test_fresh_cache_print_only_gate_rejects_expected_mismatch(self):
+        code, result = self.evaluate_bytecode_script(
+            "set -eu\nPYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py"
+        )
+        self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
+        self.assertEqual([state["state"] for state in result["failed_states"]], ["expected-mismatch"])
+        mismatch = result["failed_states"][0]
+        self.assertEqual((mismatch["exit"], mismatch["exit_matches"], mismatch["missing_operations"]), (0, False, []))
+        check = mismatch["behavior_checks"][0]
+        self.assertTrue(check["matches"])
+        self.assertEqual(check["observation"]["behavior"], "baseline")
+        self.assertEqual(check["observation"]["execution"],
+                         {"exit": 0, "stdout_hex": "626173656c696e650a", "stderr_hex": ""})
+        self.assertEqual(mismatch["fixture_receipt"]["expected_value"], "mutation")
 
     def test_native_no_write_flag_alone_still_reads_stale_cache(self):
         code, result = self.evaluate_bytecode_script("set -eu\npython3 -B tools/observe.py")
         self.assertEqual((code, result["status"]), (1, "candidate_failure"))
-        self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored"])
+        self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored", "expected-mismatch"])
         self.assertEqual(
             [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
-            ["baseline", "baseline", "mutation"],
+            ["baseline", "baseline", "mutation", "baseline"],
         )
 
     def test_stdin_runpy_wrapper_is_outside_the_script_entrypoint_contract(self):
@@ -102,7 +124,7 @@ class PlanReplayTests(unittest.TestCase):
         self.assertEqual((code, result["status"]), (1, "candidate_failure"))
         self.assertEqual(
             [control["behavior_checks"][0]["observation"] for control in result["control_evidence"]],
-            [None, None, None],
+            [None, None, None, None],
         )
         self.assertIn("REJECT", result["control_evidence"][0]["stderr"])
 
@@ -111,7 +133,7 @@ class PlanReplayTests(unittest.TestCase):
         self.assertEqual((code, result["status"]), (1, "candidate_failure"))
         self.assertEqual(
             [control["behavior_checks"][0]["observation"] for control in result["control_evidence"]],
-            [None, None, None],
+            [None, None, None, None],
         )
         self.assertIn("tools/subject.py", result["control_evidence"][0]["stdout"])
 
@@ -128,7 +150,7 @@ class PlanReplayTests(unittest.TestCase):
             with self.subTest(commands=commands):
                 code, result = self.evaluate_bytecode_script("set -eu\n" + "\n".join(commands))
                 self.assertEqual((code, result["status"]), (1, "candidate_failure"))
-                self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored"])
+                self.assertEqual([control["state"] for control in result["failed_states"]], ["mutated", "restored", "expected-mismatch"])
                 observed = result["failed_states"][0]["behavior_checks"][0]["observation"]
                 self.assertEqual(
                     (observed["behavior"], observed["conflicting_behavior"]),
@@ -138,12 +160,13 @@ class PlanReplayTests(unittest.TestCase):
     def test_repeated_correct_imports_with_different_cache_paths_pass(self):
         code, result = self.evaluate_bytecode_script(
             "set -eu\nPYTHONPYCACHEPREFIX=/first python3 tools/observe.py\n"
-            "PYTHONPYCACHEPREFIX=/second python3 tools/observe.py"
+            'observed=$(PYTHONPYCACHEPREFIX=/second python3 tools/observe.py)\n'
+            '[ "$observed" = "$(cat expected.txt)" ]'
         )
         self.assertEqual((code, result["status"]), (0, "pass"), result)
         self.assertEqual(
             [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
-            ["baseline", "mutation", "baseline"],
+            ["baseline", "mutation", "baseline", "baseline"],
         )
 
     def test_unrelated_socket_sender_cannot_forge_imported_behavior(self):
@@ -166,12 +189,15 @@ class PlanReplayTests(unittest.TestCase):
         self.assertEqual((code, result["status"]), (1, "candidate_failure"))
         self.assertEqual(
             [control["behavior_checks"][0]["observation"]["behavior"] for control in result["control_evidence"]],
-            ["baseline", "mutation", "baseline"],
+            ["baseline", "mutation", "baseline", "baseline"],
         )
-        self.assertEqual([control["exit_matches"] for control in result["control_evidence"]], [False, False, False])
+        self.assertEqual([control["exit_matches"] for control in result["control_evidence"]], [False, False, False, True])
 
     def test_ignored_forced_status_fails_even_with_correct_imported_values(self):
-        code, result = self.evaluate_bytecode_script("PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py || true")
+        code, result = self.evaluate_bytecode_script(
+            'if observed=$(PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py); then\n'
+            '  [ "$observed" = "$(cat expected.txt)" ]\nelse\n  true\nfi'
+        )
         self.assertEqual((code, result["status"]), (1, "candidate_failure"))
         self.assertEqual([control["state"] for control in result["failed_states"]], ["forced-operation-failure"])
         self.assertEqual(result["failed_states"][0]["exit_matches"], False)
@@ -183,18 +209,19 @@ class PlanReplayTests(unittest.TestCase):
                     f"set -eu\n{setting} PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py"
                 )
                 self.assertEqual((code, result["status"]), (1, "candidate_failure"), result)
-                self.assertEqual([state["state"] for state in result["failed_states"]], ["baseline", "mutated", "restored"])
+                self.assertEqual([state["state"] for state in result["failed_states"]], ["baseline", "mutated", "restored", "expected-mismatch"])
                 for control in result["control_evidence"]:
                     self.assertEqual((control["exit"], control["stdout"], control["behavior_checks"][0]["observation"]), (125, "", None))
                     self.assertIn("unsupported observer startup environment", control["stderr"])
 
     def test_unused_closed_stderr_preserves_valid_observer_execution(self):
         code, result = self.evaluate_bytecode_script(
-            "set -eu\nPYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py 2>&-"
+            'set -eu\nobserved=$(PYTHONPYCACHEPREFIX=/fresh python3 tools/observe.py 2>&-)\n'
+            'printf "%s\\n" "$observed"\n[ "$observed" = "$(cat expected.txt)" ]'
         )
         self.assertEqual((code, result["status"]), (0, "pass"), result)
-        self.assertEqual([control["stdout"] for control in result["control_evidence"]], ["baseline\n", "mutation\n", "baseline\n"])
-        self.assertEqual([control["exit"] for control in result["control_evidence"]], [0, 0, 0])
+        self.assertEqual([control["stdout"] for control in result["control_evidence"]], ["baseline\n", "mutation\n", "baseline\n", "baseline\n"])
+        self.assertEqual([control["exit"] for control in result["control_evidence"]], [0, 0, 0, 1])
 
     def test_controller_receives_observer_output_and_propagates_its_exit(self):
         code, result = self.evaluate_bytecode_script(
@@ -209,8 +236,8 @@ class PlanReplayTests(unittest.TestCase):
             "PY"
         )
         self.assertEqual((code, result["status"]), (0, "pass"), result)
-        self.assertEqual([control["stdout"] for control in result["control_evidence"]], ["baseline\n", "mutation\n", "baseline\n"])
-        self.assertEqual([control["exit"] for control in result["control_evidence"]], [0, 0, 0])
+        self.assertEqual([control["stdout"] for control in result["control_evidence"]], ["baseline\n", "mutation\n", "baseline\n", "baseline\n"])
+        self.assertEqual([control["exit"] for control in result["control_evidence"]], [0, 0, 0, 1])
 
     def test_two_different_valid_commands_pass_real_replays(self):
         for sample in ("valid-stale-npm.md", "valid-stale-direct.md"):

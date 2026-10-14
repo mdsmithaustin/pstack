@@ -13,6 +13,7 @@ controls = {
     "baseline": ("baseline", "baseline"),
     "mutated": ("baseline", "mutation"),
     "restored": ("mutation", "baseline"),
+    "expected-mismatch": ("baseline", "baseline"),
 }
 if state not in controls:
     raise SystemExit(f"unknown state: {state}")
@@ -36,7 +37,8 @@ if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
     "    _pstack_observe(observed_behavior, observed_cache)\n"
     "print(observed_behavior, flush=True)\n"
 )
-(root / "expected.txt").write_text(source_value + "\n")
+expected_value = "mutation" if state == "expected-mismatch" else source_value
+(root / "expected.txt").write_text(expected_value + "\n")
 (root / "control-name.txt").write_text(state + "\n")
 print(json.dumps({
     "state": state,
@@ -47,4 +49,5 @@ print(json.dumps({
     "cache_header_hex": cache.read_bytes()[:16].hex(),
     "cached_value": cached_value,
     "intended_value": source_value,
+    "expected_value": expected_value,
 }, sort_keys=True))

@@ -147,9 +147,6 @@ def operation_matches(specification, event, project):
             and arguments[script_index + 1].startswith("pycache_prefix=")
         ):
             script_index += 2
-        elif option == "--":
-            script_index += 1
-            break
         else:
             break
     if (

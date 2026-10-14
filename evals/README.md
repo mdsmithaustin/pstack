@@ -29,7 +29,10 @@ commands, and attempts to forge execution evidence.
 
 The bytecode control case seeds timestamp-based Python caches before replacing
 equal-size source with the original timestamp. Its baseline, mutation, and
-restoration controls require literal imported values. An authenticated observer
+restoration controls require literal imported values. An expected-mismatch
+control imports `baseline` successfully while `expected.txt` contains `mutation`.
+The outer gate must reject that mismatch despite the zero observer exit. A gate
+that only prints fresh imported values fails this control. An authenticated observer
 invocation hands execution to an evaluator worker under a separate user ID.
 The worker runs the captured CLI arguments and working directory against the
 immutable fixture. Its startup environment belongs to the evaluator. Only
