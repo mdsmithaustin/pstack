@@ -412,7 +412,7 @@ describe("native Git tracking identity through the watcher CLI", () => {
           if ("refusal" in scenario) {
             if (scenario.refusal === "origin") git("remote", "remove", "origin");
             else {
-              git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-q", "--allow-empty", "--no-gpg-sign", "-m", "fixture");
+              git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "--allow-empty", "--no-gpg-sign", "-m", "fixture");
               git("checkout", "-q", "--detach");
             }
           }
