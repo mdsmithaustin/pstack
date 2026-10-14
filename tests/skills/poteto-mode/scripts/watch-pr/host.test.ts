@@ -409,7 +409,7 @@ describe("native Git tracking identity through the watcher CLI", () => {
           expect(git("ls-remote", "--get-url", named ? "mirror" : scenario.url)).toBe(
             scenario.effective
           );
-          if ("refusal" in scenario) {
+          if (scenario.refusal !== undefined) {
             if (scenario.refusal === "origin") git("remote", "remove", "origin");
             else {
               git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "--allow-empty", "--no-gpg-sign", "-m", "fixture");
@@ -429,7 +429,7 @@ esac
           const result = Bun.spawnSync([process.execPath, join(SOURCE_DIR, "watch-pr"), "--status-only"], {
             cwd: directory, env,
           });
-          if ("refusal" in scenario) {
+          if (scenario.refusal !== undefined) {
             expect(result.exitCode).toBe(7);
             expect(new TextDecoder().decode(result.stdout)).toContain(scenario.refusal);
             expect(readFileSync(env.WATCH_PR_COMMANDS, "utf8")).toBe("");
