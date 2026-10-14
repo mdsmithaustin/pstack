@@ -138,6 +138,11 @@ Babysit watches the PR with a bundled watcher and takes blockers in order: confl
 
 Babysit stops at merge-ready. It never merges, even with everything green, because merging is a different decision.
 
+When a failed Actions log ends before the assertion, the bundled
+[failed-check diagnostic command](../../skills/poteto-mode/scripts/watch-pr/README.md)
+can recover JUnit failure and error records from that exact run. It verifies the
+checked head, keeps unavailable artifacts as evidence gaps, and never reruns CI.
+
 ## Land the stack with Shipping
 
 Green is not the same as safe. When you're ready to land, say so:
