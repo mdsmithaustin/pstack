@@ -217,7 +217,7 @@ class TestStaticPromises(unittest.TestCase):
     def test_readme_has_a_row_for_every_non_principle_skill(self):
         rows = re.findall(r"^\| \[`/([a-z0-9-]+)`\]\(\./skills/\1/SKILL\.md\) \|", read(ROOT / "README.md"), flags=re.M)
         shipped = sorted(p.parent.name for p in SKILLS.glob("*/SKILL.md") if not p.parent.name.startswith("principle-"))
-        self.assertEqual(sorted(rows), shipped, "README.md's 'all skills' table needs one row per skill directory")
+        self.assertEqual(sorted(rows), shipped, "README.md's 'all skills' table needs one row per non-principle skill directory")
 
     def test_playbook_directory_complete(self):
         text = guide_text()

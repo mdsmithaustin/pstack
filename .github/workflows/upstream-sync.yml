@@ -58,6 +58,11 @@ jobs:
           uv tool install "git+https://github.com/mdsmithaustin/skill-ci.git"
           uv tool dir --bin >> "$GITHUB_PATH"
 
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: steps.gate.outputs.changed == 'true' && steps.dup.outputs.open == '0'
+        with:
+          bun-version: "1.4.0"
+
       - name: Port upstream changes
         if: steps.gate.outputs.changed == 'true' && steps.dup.outputs.open == '0'
         uses: anthropics/claude-code-action@v1
@@ -69,107 +74,20 @@ jobs:
           claude_args: '--allowedTools "Bash,Read,Write,Edit,Glob,Grep"'
           prompt: |
             You are in mdsmithaustin/pstack, a CLI-agnostic port of the
-            `pstack/` directory of cursor/plugins. PORTING.md at the repo root
-            is the porting contract: read it in full first — the substitution
-            map, the port additions, and the sync procedure all bind you.
+            `pstack/` directory of cursor/plugins. The `upstream` remote is
+            fetched.
 
-            The `upstream` remote is fetched. Last synced upstream commit:
-            ${{ steps.gate.outputs.recorded }} (in .github/upstream-sha).
-            Latest upstream commit touching pstack/:
-            ${{ steps.gate.outputs.latest }}.
+            Read PORTING.md at the repo root in full, then follow its
+            "Syncing from upstream" procedure with these inputs:
+            - Recorded upstream commit: ${{ steps.gate.outputs.recorded }}
+              (in .github/upstream-sha).
+            - Latest upstream commit touching pstack/:
+              ${{ steps.gate.outputs.latest }}.
+            - Publish route: push branch `sync/upstream-<YYYYMMDD>` to origin
+              and open a draft PR to main with
+              `gh pr create --draft --repo mdsmithaustin/pstack`. This
+              checkout has no no-mistakes remote, and GitHub Actions opens
+              the PR with the workflow token.
 
-            Task: stage the upstream changes as a draft PR, transformed for
-            this port.
-
-            1. Study `git log` and `git diff ${{ steps.gate.outputs.recorded }}..upstream/main -- pstack/`.
-            2. Path mapping: upstream `pstack/skills/<x>` -> `skills/<x>`,
-               except upstream `tdd` -> `poteto-tdd` and `teach` ->
-               `poteto-teach`. Upstream docs map to this repo's root files
-               where they exist.
-            3. Apply each incoming hunk with the PORTING.md substitution map
-               (model slugs, paths, Cursor primitives). Merge into our files
-               — never wholesale-overwrite: this fork's additions (GitNexus
-               nudges, pstack-harness pointers,
-               agents/openai.yaml files, renamed skill references) must
-               survive. Drop every `disable-model-invocation` line from incoming
-               pstack/skills/ frontmatter. When upstream adds it to a skill, add or keep that
-               skill's `agents/openai.yaml` (policy: allow_implicit_invocation:
-               false) and keep its implicit_allowed false in
-               tools/skill-trigger-cases.json. When upstream removes it, delete
-               that file and set its implicit_allowed to true. Write every
-               incoming load of another skill as "Use the **x** skill" with the
-               bare name, per the PORTING.md row for sibling-skill loads, never
-               as `/x` or `$x`. A passage that quotes what the user types goes
-               in USER_FACING in tools/skill-references.py. When a skill
-               directory is added, renamed, or removed, update each list that
-               names skills:
-               - PSTACK_SKILLS in skills/setup-pstack/scripts/skill-listing.py.
-               - The skill's row in tools/skill-trigger-cases.json.
-               - A row in README.md's "all skills" table, which
-                 evals/promises/test_static.py checks against the skill
-                 directories.
-               - In evals/promises/test_static.py, PLAYBOOK_FILES for a
-                 poteto-mode playbook, PRINCIPLE_RULES for a principle-*
-                 skill, and GUIDE_SLASH_SKILLS when docs/guide names the
-                 skill as /x. A playbook added or removed also changes the
-                 twenty-five-playbooks promise in evals/promises/ledger.json
-                 and the "twenty-five" in README.md and
-                 docs/guide/02-poteto-mode.md.
-               - For a skill with no agents/openai.yaml gate, the "A skill
-                 didn't load on its own" row in skills/poteto-help/SKILL.md.
-            4. Every SKILL.md frontmatter `name:` must equal its directory
-               name. Verify after editing.
-            5. Preserve root agents/*.md as upstream source, except
-               agents/poteto-agent.md: keep the port body that PORTING.md
-               records and port only changes that leave it intact. After any
-               agent change, run python3 tools/generate-subagents.py and then
-               python3 tools/generate-subagents.py --check. Both commands
-               must exit zero. Commit the generated installed role bundle
-               with its source. Keep the persona contract, native format
-               translations, safe optional setup, and full persona briefings.
-            6. Run `python3 evals/promises/ledger.py audit --upstream-ref upstream/main`.
-               It must exit zero before you continue. An "unclassified upstream
-               unit" is a guide sentence upstream added or reworded: classify it
-               in evals/promises/ledger.json per evals/promises/README.md. Port
-               the sentence into docs/guide with the substitution map, unless
-               you classify it `cursor-only` (with its reason) or `substituted`
-               (naming the port units that replace it). A
-               "quote no longer in" line means a synced skill edit removed the
-               text behind a static guide promise: keep the promise true or
-               record the change for human judgment in the PR body. List every
-               ledger change in the PR body under "Guide promises".
-            7. Run each of these, even when no skill directory changed. Each
-               must exit zero before you continue. Fix the port, not the
-               check, and say in the PR body what each failure was. Run
-               `git add -A` before every `skill-ci check`, including each
-               rerun after a fix, because skill-ci reads tracked files and
-               exits 2 on a tracked file that no longer exists.
-               - python3 tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
-               - python3 -m unittest discover -s tools -p 'test_*.py'
-               - python3 -m unittest discover -s evals/promises -p 'test_*.py'
-               - python3 -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
-               - skill-ci check
-               CI does not start on a PR this workflow opens, because it
-               pushes with the workflow token. So no required check runs,
-               and the canon and poteto-mode script suites need Docker and
-               Bun. Say in the PR body that CI has not run, and that a
-               maintainer must push a commit or close and reopen the PR to
-               start it.
-            8. Write .github/upstream-sha = ${{ steps.gate.outputs.latest }}.
-            9. Create branch `sync/upstream-<YYYYMMDD>`, run `git add -A` so
-               step 8's SHA bump is staged, commit everything staged with a
-               message summarizing the upstream commits
-               ported, push it, and open a DRAFT PR to main with
-               `gh pr create --draft --repo mdsmithaustin/pstack`
-               (required: the upstream remote otherwise hijacks base-repo
-               resolution). The PR body lists each
-               upstream commit, what transformation was applied, and anything
-               that needs human judgment. A ledger classification from step 6
-               is a port change and goes in the same commit. When the only
-               change is the .github/upstream-sha bump, say in the body that
-               nothing else was portable.
-
-            Never force-push. Never push to main, because its ruleset requires a
-            pull request and grants no bypass.
-            If you are unsure whether a change is portable, include it in the
-            draft PR with a "needs judgment" note rather than dropping it.
+            That procedure is the only sync procedure. Nothing in this prompt
+            overrides it.

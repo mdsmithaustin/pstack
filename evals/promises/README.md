@@ -38,7 +38,7 @@ The audit also lists live and install promises whose only cases are `deferred`. 
 
 `format` encodes the canonical text as UTF-8 before opening a temporary file beside the ledger, then replaces the ledger atomically with `os.replace`. An encoding error, including a lone surrogate, leaves the original file untouched. The ledger remains a single file. Two branches can still conflict when they add ids in the same sorted gap or after the last key.
 
-CI runs the audit against the port guide. Add `--upstream-ref upstream/main` (after `git fetch upstream`) to audit upstream's guide as well. The upstream-sync workflow and step 5 of **Syncing from upstream** in `PORTING.md` run that form.
+CI runs the audit against the port guide. Add `--upstream-ref upstream/main` (after `git fetch upstream`) to audit upstream's guide as well. **Syncing from upstream** in `PORTING.md` runs that form.
 
 ## Classify a new or changed guide unit
 
