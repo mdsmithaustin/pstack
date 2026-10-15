@@ -1,12 +1,15 @@
 import json
 import copy
+import io
 import os
 import platform
 import signal
+import stat
 import subprocess
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -935,6 +938,447 @@ class NativeParentBoundary(BoundaryFixtures):
             with self.assertRaises(GradeRefused):
                 live.grade(authority)
         self.assertFalse((self.root / "verdict.json").exists())
+
+
+@unittest.skipUnless(NATIVE, "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
+class SealedErrorBoundary(BoundaryFixtures):
+    def death(self):
+        return {"cli": "claude", "relogin": "claude auth login", "detail": "  accepted terminal death\n"}
+
+    def error_authority(self, *, error=True, legacy=False):
+        case = live.load_case("feature-run")
+        trace = json.loads((live.HERE / "testdata/auth_death/claude-code-never-started-trace.json").read_bytes())
+        record = {**self.record(case), "harness": "claude-code"}
+        handle = self.authority(case, trace, record=record)
+        _seal(handle, record, trace, error=self.death() if error else None)
+        if legacy:
+            _, state = handle._controller.load(handle._id)
+            del state["error"]
+            handle._controller.save(state)
+        return handle
+
+    def invoke(self, handle, cli):
+        if not cli:
+            return live.grade(handle)
+        output = io.StringIO()
+        controller = handle._controller.root.path
+        out = controller.parent / controller.name.removeprefix(".").removesuffix("-grade-controller")
+        with redirect_stdout(output):
+            self.assertEqual(live.main(["grade", handle._id, "--out", str(out)]), 0)
+        return json.loads(output.getvalue())
+
+    def publications(self, handle, cli):
+        writes = []
+        write = _Root.write
+
+        def observe(root, name, data):
+            result = write(root, name, data)
+            if name == "verdict.json":
+                writes.append(data)
+            return result
+
+        with mock.patch.object(_Root, "write", observe):
+            result = self.invoke(handle, cli)
+        self.assertEqual(writes, [grade_boundary._json(result)])
+        return result
+
+    def test_signed_null_and_object_ignore_every_regular_target_for_both_callers(self):
+        target = self.root / "verdict.json"
+        for has_error in (False, True):
+            handle = self.error_authority(error=has_error)
+            _, state = handle._controller.load(handle._id)
+            self.assertEqual(state["error"], self.death() if has_error else None)
+            raw = {name: (self.root / name).read_bytes() for name in ("run.json", "trace.json")}
+            ordinary = live.grade(handle)
+            expected_bytes = target.read_bytes()
+            forged = {**ordinary, "error": {**self.death(), "detail": "forged conflicting death"}}
+            for cli in (False, True):
+                for content in (None, grade_boundary._json(forged), b'{}\n', b'not JSON\n'):
+                    with self.subTest(error=has_error, cli=cli, content=content):
+                        if target.exists():
+                            target.unlink()
+                        if content is not None:
+                            target.write_bytes(content)
+                        result = self.publications(handle, cli)
+                        self.assertEqual(result, ordinary)
+                        self.assertEqual(target.read_bytes(), expected_bytes)
+                        self.assertEqual({name: (self.root / name).read_bytes() for name in raw}, raw)
+                        self.assertEqual(handle._controller.load(handle._id)[1], state)
+            if has_error:
+                self.assertEqual(ordinary["error"], self.death())
+                self.assertEqual({r["verdict"] for r in ordinary["promises"].values() if not r.get("not_applicable")}, {"ERROR"})
+            else:
+                self.assertNotIn("error", ordinary)
+                self.assertEqual({r["verdict"] for r in ordinary["promises"].values()}, {"INCONCLUSIVE"})
+
+    def test_legacy_registered_callers_recover_only_intact_output_without_signing_it(self):
+        handle = self.error_authority(legacy=True)
+        envelope = handle._controller.root.read(handle._id + ".json")
+        target = self.root / "verdict.json"
+        for cli in (False, True):
+            for error in (self.death(), None, {}, False):
+                with self.subTest(cli=cli, error=error):
+                    target.write_bytes(grade_boundary._json({"error": error, "promises": {"old": {"verdict": "PASS"}}}))
+                    result = self.publications(handle, cli)
+                    if error:
+                        self.assertEqual(result["error"], self.death())
+                        self.assertEqual({r["verdict"] for r in result["promises"].values() if not r.get("not_applicable")}, {"ERROR"})
+                    else:
+                        self.assertNotIn("error", result)
+                    self.assertNotIn("old", result["promises"])
+                    self.assertEqual(handle._controller.root.read(handle._id + ".json"), envelope)
+            target.unlink()
+            self.assertNotIn("error", self.publications(handle, cli))
+            self.assertEqual(handle._controller.root.read(handle._id + ".json"), envelope)
+
+    def retained(self):
+        handle = self.error_authority()
+        result = live.grade(handle)
+        diagnostic = self.assets / "diagnostic"
+        diagnostic.mkdir(exist_ok=True)
+        case = handle._controller.load(handle._id)[1]["case"]
+        retained = _authorize_retained(self.assets / "retained", self.root, project=self.project,
+            original_project=self.project, output=diagnostic, case=case)
+        return retained, diagnostic, result
+
+    def test_new_and_legacy_retained_populations_keep_raw_bytes_and_separate_authority(self):
+        handle, diagnostic, original = self.retained()
+        raw = {name: (self.root / name).read_bytes() for name in ("run.json", "trace.json", "verdict.json")}
+        _, state = handle._controller.load(handle._id)
+        self.assertEqual(state["error"], self.death())
+        self.assertEqual(state["prior_verdict_digest"], grade_boundary.hashlib.sha256(raw["verdict.json"]).hexdigest())
+        self.assertEqual(self.publications(handle, False), original)
+        del state["error"]
+        handle._controller.save(state)
+        envelope = handle._controller.root.read(handle._id + ".json")
+        for cli in (False, True):
+            for prior in (None, b'{}\n', raw["verdict.json"]):
+                with self.subTest(cli=cli, prior=prior):
+                    target = diagnostic / "verdict.json"
+                    if target.exists():
+                        target.unlink()
+                    if prior is not None:
+                        target.write_bytes(prior)
+                    result = self.publications(handle, cli)
+                    self.assertEqual(result.get("error"), self.death() if prior == raw["verdict.json"] else None)
+                    self.assertEqual(handle._controller.root.read(handle._id + ".json"), envelope)
+                    self.assertEqual({name: (self.root / name).read_bytes() for name in raw}, raw)
+        before = (diagnostic / "verdict.json").read_bytes()
+        (self.root / "verdict.json").write_bytes(b'{}\n')
+        with self.assertRaisesRegex(GradeRefused, "retained raw verdict changed"):
+            live.grade(handle)
+        self.assertEqual((diagnostic / "verdict.json").read_bytes(), before)
+
+    def test_retained_admission_rejects_malformed_and_unassociated_error_records(self):
+        handle = self.error_authority()
+        valid = live.grade(handle)
+        record = (self.root / "run.json").read_bytes()
+        output = self.assets / "diagnostic"
+        output.mkdir()
+        case = handle._controller.load(handle._id)[1]["case"]
+        invalid = [b'not JSON', b'[]', grade_boundary._json({**valid, "error": []})]
+        for field in ("cli", "relogin", "detail"):
+            invalid.extend(grade_boundary._json({**valid, "error": {**self.death(), field: value}})
+                           for value in ("", " \n", 7, None))
+            missing = self.death()
+            del missing[field]
+            invalid.append(grade_boundary._json({**valid, "error": missing}))
+        invalid.append(grade_boundary._json({**valid, "error": {**self.death(), "extra": "x"}}))
+        for field in ("case", "harness", "skills_at"):
+            invalid.append(grade_boundary._json({**valid, field: "different"}))
+        for field in ("cli", "relogin"):
+            invalid.append(grade_boundary._json({**valid, "error": {**self.death(), field: "different"}}))
+        for prior in invalid:
+            with self.subTest(prior=prior):
+                (self.root / "verdict.json").write_bytes(prior)
+                with self.assertRaises(GradeRefused):
+                    _authorize_retained(self.assets / "retained", self.root, project=self.project,
+                        original_project=self.project, output=output, case=case)
+                self.assertFalse((output / "verdict.json").exists())
+                self.assertEqual((self.root / "verdict.json").read_bytes(), prior)
+        for harness in ("unknown", "hermes"):
+            with self.subTest(harness=harness):
+                modified = {**json.loads(record), "harness": harness}
+                (self.root / "run.json").write_bytes(grade_boundary._json(modified))
+                (self.root / "verdict.json").write_bytes(grade_boundary._json({**valid, "harness": harness}))
+                with self.assertRaisesRegex(GradeRefused, "harness login"):
+                    _authorize_retained(self.assets / "retained", self.root, project=self.project,
+                        original_project=self.project, output=output, case=case)
+        (self.root / "run.json").write_bytes(record)
+        for prior in ({"unrelated": "ordinary prior"}, {**valid, "error": None}):
+            (self.root / "verdict.json").write_bytes(grade_boundary._json(prior))
+            retained = _authorize_retained(self.assets / "retained", self.root, project=self.project,
+                original_project=self.project, output=output, case=case)
+            self.assertIsNone(retained._controller.load(retained._id)[1]["error"])
+            self.assertNotIn("error", live.grade(retained))
+
+    def test_retained_digest_is_saved_while_unsealed_before_the_first_complete_seal(self):
+        handle = self.error_authority()
+        live.grade(handle)
+        prior = (self.root / "verdict.json").read_bytes()
+        diagnostic = self.assets / "diagnostic"
+        diagnostic.mkdir()
+        case = handle._controller.load(handle._id)[1]["case"]
+        captured = []
+
+        def interrupt(handle, record, trace, *, error, write):
+            captured.append(handle)
+            _, state = handle._controller.load(handle._id)
+            self.assertFalse(state["sealed"])
+            self.assertEqual(state["prior_verdict_digest"], grade_boundary.hashlib.sha256(prior).hexdigest())
+            self.assertEqual(error, self.death())
+            self.assertFalse(write)
+            raise InterruptedError("before final seal")
+
+        with mock.patch.object(grade_boundary, "_seal", interrupt):
+            with self.assertRaisesRegex(InterruptedError, "before final seal"):
+                _authorize_retained(self.assets / "retained", self.root, project=self.project,
+                    original_project=self.project, output=diagnostic, case=case)
+        [retained] = captured
+        registered = grade_boundary._lookup(self.assets / "retained", retained._id)
+        with self.assertRaisesRegex(GradeRefused, "not sealed"):
+            live.grade(registered)
+        self.assertFalse((diagnostic / "verdict.json").exists())
+        self.assertEqual((self.root / "verdict.json").read_bytes(), prior)
+
+    def test_current_actual_pass_and_literal_check_fail_survive_new_and_legacy_retention(self):
+        for decided in ("PASS", "FAIL"):
+            with self.subTest(decided=decided):
+                if decided == "PASS":
+                    case = live.load_case("feature-boundary-run")
+                    trace = json.loads((live.HERE / "testdata/auth_death/claude-code-after-ipc-trace.json").read_bytes())
+                    record = {**self.record(case), "harness": "claude-code"}
+                    pid = "poteto-mode-triggers-architect-on-boundary-crossing"
+                else:
+                    case = self.deslop([{"cmd": "python3 check.py", "stdout": "expected\n"}])
+                    (self.project / "check.py").write_text("print('actual-unexpected')\n")
+                    record = self.record(case, baseline=self.repository())
+                    trace = self.trace()
+                    pid = "deslop-cleans-code-slop"
+                case["promises"].append("reply-carries-commands-and-outputs")
+                trace["final_reply"] = ""
+                authority = self.authority(case, trace, record=record)
+                current = live.grade(authority)
+                self.assertEqual(current["promises"][pid]["verdict"], decided)
+                if decided == "FAIL":
+                    self.assertEqual(current["promises"][pid]["failures"], [
+                        "check failed after the pass: python3 check.py printed 'actual-unexpected\\n', expected 'expected\\n'"])
+                error = self.death() if decided == "PASS" else {"cli": "codex", "relogin": "codex login", "detail": "accepted death"}
+                _seal(authority, record, trace, error=error)
+                complete = live.grade(authority)
+                self.assertEqual(complete["promises"][pid], current["promises"][pid])
+                self.assertEqual(complete["promises"]["reply-carries-commands-and-outputs"]["verdict"], "ERROR")
+                diagnostic = self.assets / ("diagnostic-" + decided)
+                diagnostic.mkdir()
+                retained = _authorize_retained(self.assets / ("retained-" + decided), self.root,
+                    project=self.project, original_project=self.project, output=diagnostic, case=case)
+                for legacy in (False, True):
+                    if legacy:
+                        _, state = retained._controller.load(retained._id)
+                        del state["error"]
+                        retained._controller.save(state)
+                    result = self.publications(retained, legacy)
+                    self.assertEqual(result["promises"][pid], current["promises"][pid])
+                    self.assertEqual(result["promises"]["reply-carries-commands-and-outputs"]["verdict"], "ERROR")
+
+    def test_legacy_malformed_content_fails_before_publication_and_raw_refusal_precedes_decode(self):
+        handle = self.error_authority(legacy=True)
+        target = self.root / "verdict.json"
+        for content, exception in ((b'not JSON', ValueError), (b'[]', AttributeError),
+                                   (b'{"error":{"cli":"claude"}}', KeyError), (b'{"error":[1]}', TypeError)):
+            for cli in (False, True):
+                with self.subTest(content=content, cli=cli):
+                    target.write_bytes(content)
+                    with self.assertRaises(exception):
+                        self.invoke(handle, cli)
+                    self.assertEqual(target.read_bytes(), content)
+        raw = self.root / "trace.json"
+        raw.unlink()
+        with self.assertRaisesRegex(GradeRefused, "input_changed"):
+            live.grade(handle)
+        self.assertEqual(target.read_bytes(), content)
+
+    def test_legacy_read_is_bound_and_a_substitution_refusal_is_not_swallowed(self):
+        handle = self.error_authority(legacy=True)
+        target = self.root / "verdict.json"
+        prior = grade_boundary._json({"error": self.death()})
+        target.write_bytes(prior)
+        read = _Root.read
+        reads = []
+
+        def substitute(root, name):
+            if root.path == self.root and name == "verdict.json":
+                reads.append(root.identity())
+                raise GradeRefused("input_changed", "substituted output")
+            return read(root, name)
+
+        with mock.patch.object(_Root, "read", substitute):
+            with self.assertRaisesRegex(GradeRefused, "substituted output"):
+                live.grade(handle)
+        self.assertEqual(reads, [handle._controller.load(handle._id)[1]["output"]["identity"]])
+        self.assertEqual(target.read_bytes(), prior)
+
+    def test_unsafe_output_shapes_refuse_for_each_authority_and_directory_is_not_read(self):
+        target = self.root / "verdict.json"
+        for legacy, has_error in ((False, False), (False, True), (True, True)):
+            handle = self.error_authority(error=has_error, legacy=legacy)
+            for shape, reason in (("symlink", "unsafe_link"), ("hardlink", "unsafe_link"),
+                                  ("fifo", "unsafe_object"), ("directory", "output_unsafe")):
+                with self.subTest(legacy=legacy, error=has_error, shape=shape):
+                    if shape == "symlink":
+                        target.symlink_to(self.write_marker)
+                    elif shape == "hardlink":
+                        os.link(self.write_marker, target)
+                    elif shape == "fifo":
+                        os.mkfifo(target)
+                    else:
+                        target.mkdir()
+                    read = _Root.read
+
+                    def reject_directory_read(root, name):
+                        if root.path == self.root and name == "verdict.json":
+                            self.fail("unsafe output was read")
+                        return read(root, name)
+
+                    with mock.patch.object(_Root, "read", reject_directory_read), \
+                            mock.patch.object(grade_boundary.subprocess, "Popen", wraps=subprocess.Popen) as launch:
+                        with self.assertRaises(GradeRefused) as refusal:
+                            live.grade(handle)
+                    self.assertEqual(refusal.exception.receipt["reason"], reason)
+                    self.assertEqual(launch.call_count, 1 if shape == "directory" else 0)
+                    self.assertEqual(self.write_marker.read_bytes(), b"outside-original\n")
+                    if shape == "directory":
+                        target.rmdir()
+                    else:
+                        target.unlink()
+
+    def test_pre_replacement_and_post_rename_failures_keep_the_existing_publication_contract(self):
+        target = self.root / "verdict.json"
+        for legacy in (False, True):
+            handle = self.error_authority(legacy=legacy)
+            prior = grade_boundary._json({"error": self.death(), "prior": "sentinel"})
+            for after_rename in (False, True):
+                with self.subTest(legacy=legacy, after_rename=after_rename):
+                    target.write_bytes(prior)
+                    rename = os.rename
+                    sync = os.fsync
+                    renamed = []
+
+                    def observe_rename(source, destination, **kwargs):
+                        if destination == "verdict.json" and not after_rename:
+                            raise OSError("before replacement")
+                        result = rename(source, destination, **kwargs)
+                        if destination == "verdict.json":
+                            renamed.append(True)
+                        return result
+
+                    def fail_directory_sync(fd):
+                        if after_rename and stat.S_ISDIR(os.fstat(fd).st_mode):
+                            raise OSError("after rename")
+                        return sync(fd)
+
+                    with mock.patch.object(os, "rename", observe_rename), mock.patch.object(os, "fsync", fail_directory_sync):
+                        with self.assertRaises(GradeRefused) as refusal:
+                            live.grade(handle)
+                    self.assertEqual(refusal.exception.receipt["reason"], "output_unsafe")
+                    self.assertEqual(renamed, [True] if after_rename else [])
+                    if after_rename:
+                        result = json.loads(target.read_bytes())
+                        self.assertEqual(result["error"], self.death())
+                        self.assertEqual({r["verdict"] for r in result["promises"].values() if not r.get("not_applicable")}, {"ERROR"})
+                        self.assertNotIn("prior", result)
+                    else:
+                        self.assertEqual(target.read_bytes(), prior)
+
+    def test_raw_and_runtime_refusals_precede_legacy_reads_and_cli_stops_at_the_first_id(self):
+        for legacy in (False, True):
+            handle = self.error_authority(legacy=legacy)
+            target = self.root / "verdict.json"
+            target.write_bytes(b'not JSON')
+            with mock.patch.object(grade_boundary, "_runtime", side_effect=GradeRefused("boundary_unavailable", "runtime refused")):
+                with self.assertRaisesRegex(GradeRefused, "runtime refused"):
+                    live.grade(handle)
+            (self.root / "run.json").write_bytes(b'{}\n')
+            output, error = io.StringIO(), io.StringIO()
+            with redirect_stdout(output), redirect_stderr(error):
+                code = live.main(["grade", handle._id, "0" * 32, "--out", str(self.out)])
+            self.assertEqual(code, 2)
+            self.assertEqual(output.getvalue(), "")
+            receipt = json.loads(error.getvalue())["refusal"]
+            self.assertEqual(receipt["run_id"], handle._id)
+            self.assertEqual(receipt["reason"], "input_changed")
+            self.assertEqual(target.read_bytes(), b'not JSON')
+
+    def test_worker_identity_refusal_and_exact_promise_population_precede_error_finalization(self):
+        target = self.root / "verdict.json"
+        for legacy in (False, True):
+            handle = self.error_authority(legacy=legacy)
+            for flaw in ("invocation", "refusal", "case", "harness", "skills_at", "missing", "extra"):
+                with self.subTest(legacy=legacy, flaw=flaw):
+                    prior = grade_boundary._json({"error": self.death()})
+                    target.write_bytes(prior)
+
+                    class Worker:
+                        returncode = 0
+
+                        def __init__(self, argv, **kwargs):
+                            self.result_fd = os.dup(kwargs["pass_fds"][0])
+
+                        def communicate(worker, data):
+                            config = json.loads(data)
+                            verdict = {"case": config["case"]["id"], "harness": config["record"]["harness"],
+                                       "skills_at": config["record"]["skills_at"],
+                                       "promises": {pid: {"verdict": "INCONCLUSIVE"} for pid in config["case"]["promises"]}}
+                            result = {"invocation": config["invocation"], "verdict": verdict}
+                            if flaw == "invocation":
+                                result["invocation"] = "other invocation"
+                            elif flaw == "refusal":
+                                result["refusal"] = {"reason": "unsafe_link", "detail": "worker refused"}
+                            elif flaw == "missing":
+                                verdict["promises"].pop(next(iter(verdict["promises"])))
+                            elif flaw == "extra":
+                                verdict["promises"]["extra"] = {"verdict": "PASS"}
+                            else:
+                                verdict[flaw] = "other"
+                            os.write(worker.result_fd, grade_boundary._json(result))
+                            os.close(worker.result_fd)
+                            return b"", b""
+
+                    with mock.patch.object(grade_boundary.subprocess, "Popen", Worker):
+                        with self.assertRaises(GradeRefused) as refusal:
+                            live.grade(handle)
+                    self.assertEqual(refusal.exception.receipt["reason"], "unsafe_link" if flaw == "refusal" else "boundary_unavailable")
+                    self.assertEqual(target.read_bytes(), prior)
+
+    def test_trusted_reseal_detaches_error_and_default_null_replaces_it(self):
+        handle = self.error_authority()
+        _, state = handle._controller.load(handle._id)
+        error = self.death()
+        _seal(handle, state["record"], state["trace"], error=error)
+        error["detail"] = "caller mutation"
+        self.assertEqual(live.grade(handle)["error"], self.death())
+        _seal(handle, state["record"], state["trace"])
+        self.assertIsNone(handle._controller.load(handle._id)[1]["error"])
+        self.assertNotIn("error", live.grade(handle))
+
+    def test_both_module_import_orders_admit_retained_login_without_launching_a_model(self):
+        handle = self.error_authority()
+        live.grade(handle)
+        for first, second in (("grade_boundary", "live"), ("live", "grade_boundary")):
+            output = self.assets / ("import-output-" + first)
+            output.mkdir()
+            script = f"import {first}; import {second}; " + (
+                "from pathlib import Path; import live; import grade_boundary; "
+                f"handle = grade_boundary._authorize_retained(Path({str(self.assets / ('import-retained-' + first))!r}), "
+                f"Path({str(self.root)!r}), project=Path({str(self.project)!r}), "
+                f"original_project=Path({str(self.project)!r}), output=Path({str(output)!r}), "
+                "case=live.load_case('feature-run')); "
+                f"assert handle._controller.load(handle._id)[1]['error'] == {self.death()!r}; "
+                "print('import identities PASS')")
+            result = subprocess.run([str(grade_boundary.PYTHON), "-B", "-c", script], cwd=live.HERE,
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "import identities PASS\n")
 
 
 @unittest.skipUnless(NATIVE, "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
