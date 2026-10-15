@@ -45,8 +45,8 @@ CI runs the audit against the port guide. Add `--upstream-ref upstream/main` (af
 1. Run `python3 evals/promises/ledger.py audit --upstream-ref upstream/main`. Each `unclassified` line names a unit key, its page, and its text.
 2. Add the key to `units` with its `file`, `sources`, `text`, and `class`. Copy `file` and `text` from `units.guide_units()` output, not from the error line, because the error line is truncated.
 3. If the unit is a promise, reuse an existing promise id when the claim is the same. Otherwise add a promise with `claim`, `check`, `harness_sensitive`, and `owners`, and bind it with a quote, a test, or a case. Set `harness_sensitive` to true when the behavior depends on harness tools such as spawning, the worklist carrier, or the skill entry, so each harness needs its own evidence.
-4. Delete the entry of any `stale` unit that a reworded sentence replaced. Move its promise to the new unit.
-5. Run `python3 evals/promises/ledger.py format`, then rerun the audit until it prints `0 problem(s)`.
+4. Delete the replaced stale port unit and move its promise to the new unit. Retain an upstream unit still present in the fetched upstream guide. For a `substituted` upstream unit, update its `ported_as` mapping to the new port unit.
+5. Run `python3 evals/promises/ledger.py format`, then rerun the audit until it prints `0 problem(s)`. For an upstream sync only, follow [the sync procedure's bounded human-judgment hold](../../PORTING.md#syncing-from-upstream). Its local hold does not waive authoritative CI or configured publication gates.
 
 ## Run the model-free checks
 
