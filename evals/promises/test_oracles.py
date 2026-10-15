@@ -77,6 +77,85 @@ def feature_items(skills_root=ROOT / "skills"):
     return items
 
 
+class InterruptedEvidence(unittest.TestCase):
+    def test_reply_eligibility_uses_only_exact_false_completeness(self):
+        for metadata, expected in (({}, PASS), ({"x_evidence_complete": True}, PASS),
+                                   ({"x_evidence_complete": False}, INCONCLUSIVE)):
+            with self.subTest(metadata=metadata):
+                trace = minimal(events=[read(0, "how/SKILL.md")], final_reply="The function reads the cache.", **metadata)
+                self.assertEqual(grade("how-narrow-question-no-explorers", trace, feature_case())["verdict"], expected)
+
+    def test_killed_nonempty_answer_is_not_a_completed_narrow_answer(self):
+        trace = minimal(events=[read(0, "how/SKILL.md")], final_reply="Failed to authenticate: 401", exit_code=1)
+        self.assertEqual(grade("how-narrow-question-no-explorers", trace, feature_case())["verdict"], INCONCLUSIVE)
+        trace["spawns"] = [{"seq": 2, "prompt_head": "Explorer. Explore read-only."}]
+        self.assertEqual(grade("how-narrow-question-no-explorers", trace, feature_case())["verdict"], FAIL)
+
+    def test_interrogate_preserves_order_failure_before_reply_gate(self):
+        pid, case = "interrogate-multi-reviewer-adversarial", load_case("interrogate-run")
+        trace = minimal(events=[read(0, "interrogate/SKILL.md")], exit_code=1, final_reply="Failed to authenticate: 401",
+                        spawns=[{"seq": 2, "prompt_head": "Reviewer. Review read-only."},
+                                {"seq": 2, "prompt_head": "Reviewer. Review read-only."}])
+        self.assertEqual(grade(pid, trace, case)["verdict"], INCONCLUSIVE)
+        trace["spawns"][1]["seq"] = 4
+        self.assertEqual(grade(pid, trace, case)["verdict"], FAIL)
+        trace["spawns"] = trace["spawns"][:1]
+        self.assertEqual(grade(pid, trace, case)["verdict"], INCONCLUSIVE)
+
+    def test_interrogate_requires_synthesis_but_refers_unlabeled_text(self):
+        trace = minimal(events=[read(0, "interrogate/SKILL.md")], final_reply="The reviewers agree on the changes.",
+                        spawns=[{"seq": 2, "prompt_head": "Reviewer. Review read-only."} for _ in range(2)])
+        result = grade("interrogate-multi-reviewer-adversarial", trace, load_case("interrogate-run"))
+        self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True))
+        trace["final_reply"] = "Verdict. Accept the change."
+        self.assertEqual(grade("interrogate-multi-reviewer-adversarial", trace, load_case("interrogate-run"))["verdict"], PASS)
+
+    def test_read_only_edits_fail_even_before_a_route_or_answer(self):
+        trace = minimal(events=[edit(0, "/w/relay/cache.py")], exit_code=-9)
+        for pid, case in (("read-only-phrase-pins-investigation", load_case("route-investigation")),
+                          ("interrogate-sorts-four-buckets-no-auto-apply", load_case("interrogate-run"))):
+            with self.subTest(pid=pid):
+                self.assertEqual(grade(pid, trace, case)["verdict"], FAIL)
+
+    def test_route_and_log_are_local_proofs(self):
+        trace = minimal(events=[read(0, "figure-it-out/SKILL.md")], x_evidence_complete=False)
+        case = load_case("overnight-run")
+        self.assertEqual(grade("step-away-routes-to-figure-it-out", trace, case)["verdict"], PASS)
+        self.assertEqual(grade("overnight-contract-routes-to-figure-it-out", trace, case)["verdict"], INCONCLUSIVE)
+        trace["events"] += [edit(2, "/w/relay/decisions.tsv")]
+        self.assertEqual(grade("overnight-contract-routes-to-figure-it-out", trace, case)["verdict"], PASS)
+        trace["events"].insert(0, read(-1, "poteto-mode/playbooks/feature.md"))
+        self.assertEqual(grade("overnight-contract-routes-to-figure-it-out", trace, case)["verdict"], FAIL)
+
+    def test_tests_only_snapshot_does_not_invent_source_order_violation(self):
+        pid, case = "bug-fix-uses-poteto-tdd-when-cheap", load_case("bug-fix-run")
+        for extra, expected in (({}, FAIL), ({"exit_code": -9}, INCONCLUSIVE),
+                                ({"x_evidence_complete": False}, INCONCLUSIVE)):
+            with self.subTest(extra=extra):
+                trace = minimal(events=[edit(0, "/w/relay/tests/test_cache.py")], **extra)
+                self.assertEqual(grade(pid, trace, case)["verdict"], expected)
+                trace["events"] = [edit(0, "/w/relay/cache.py")]
+                self.assertEqual(grade(pid, trace, case)["verdict"], FAIL)
+
+    def test_structured_help_question_is_local_but_forbidden_edit_fails(self):
+        question = {"seq": 1, "kind": "tool_call", "name": "AskUserQuestion", "input": {
+            "question": "Get set up, start a task, pick a skill, or fix a run?"}}
+        trace = minimal(events=[question], exit_code=-9, x_evidence_complete=False)
+        pid, case = "poteto-help-finds-need-and-routes", load_case("poteto-help-unclear-run")
+        self.assertEqual(grade(pid, trace, case)["verdict"], PASS)
+        trace["events"] += [edit(2, "/w/relay/cache.py")]
+        self.assertEqual(grade(pid, trace, case)["verdict"], FAIL)
+
+    def test_architect_launches_do_not_prove_completed_sketches(self):
+        trace = minimal(events=[read(0, "arena/SKILL.md")], final_reply="Design complete.",
+                        spawns=[{"seq": 2, "prompt_head": "Runner. Design sketch with caller usage first."} for _ in range(2)])
+        pid = "architect-runs-arena-for-sketches"
+        self.assertEqual(grade(pid, trace, feature_case())["verdict"], INCONCLUSIVE)
+        trace["spawns"][1]["seq"] = 4
+        trace["x_evidence_complete"] = False
+        self.assertEqual(grade(pid, trace, feature_case())["verdict"], FAIL)
+
+
 class ProbeTraces(unittest.TestCase):
     def verdicts(self, name, case=None):
         trace = load_trace(name)
