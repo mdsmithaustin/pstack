@@ -167,6 +167,8 @@ def plain(command):
 def completion_gate(view):
     if view.killed:
         return inconclusive("run killed; the last text is not a completion reply")
+    if view.trace.get("x_evidence_complete") is False:
+        return inconclusive("evidence snapshot is incomplete; the last text is not a completion reply")
     if not view.final_reply:
         return inconclusive("no final reply")
     return None
@@ -1124,7 +1126,14 @@ def routing(view):
 @oracle("step-away-routes-to-figure-it-out")
 def step_away(view):
     result = route_verdict(view)
+    incomplete = view.killed or view.trace.get("x_evidence_complete") is False
+    opening = opening_worklist(view)
+    observed = first_route_read(view, "figure-it-out") or (opening and identify_playbook(opening["items"], view.skills_root))
+    if result["verdict"] != PASS and incomplete and not observed:
+        return inconclusive("run ended before the figure-it-out route", *result["evidence"])
     if result["verdict"] == PASS and not view.skill_read("figure-it-out", anywhere=False):
+        if incomplete:
+            return inconclusive("run ended before the lead read figure-it-out/SKILL.md", *result["evidence"])
         return failed("figure-it-out/SKILL.md was never read by the lead", *result["evidence"])
     return result
 
@@ -1157,14 +1166,22 @@ def read_only_pin(view):
         evidence = [f"turn {turn} playbook reads: {[PLAYBOOK.match(r).group(1) for r in reads if PLAYBOOK.match(r)]}"]
         failures, more = no_edits_verdict(view, turn)
         evidence += more
+        if not routed and not failures and (view.killed or view.trace.get("x_evidence_complete") is False):
+            return inconclusive("run ended before investigation was read in the new-task turn", *evidence)
         if not routed:
             failures.insert(0, "investigation.md not read in the `new task` turn")
         return failed(failures, *evidence) if failures else passed(*evidence)
     result = route_verdict(view)
     failures, evidence = no_edits_verdict(view)
+    if failures:
+        return failed(failures, *result["evidence"], *evidence)
     if result["verdict"] != PASS:
+        opening = opening_worklist(view)
+        observed = first_route_read(view, None) or (opening and identify_playbook(opening["items"], view.skills_root))
+        if not observed and (view.killed or view.trace.get("x_evidence_complete") is False):
+            return inconclusive("run ended before the investigation route", *result["evidence"], *evidence)
         return result
-    return failed(failures, *result["evidence"], *evidence) if failures else passed(*result["evidence"], *evidence)
+    return passed(*result["evidence"], *evidence)
 
 
 def runs_watcher(command):
@@ -1393,7 +1410,7 @@ def reply_inconclusive(view):
         return inconclusive("every check ran; promise not exercised", *evidence)
     gate = completion_gate(view)
     if gate:
-        return gate
+        return verdict(INCONCLUSIVE, gate["failures"], evidence)
     if "inconclusive" in view.final_reply.lower():
         return passed(*evidence, "reply says inconclusive")
     return failed("a check failed to run and the reply does not say inconclusive", *evidence)
@@ -1427,9 +1444,16 @@ def routes_and_runs(view):
     siblings = sorted({SKILL_FILE.match(r).group(1) for r in view.all_reads()
                        if SKILL_FILE.match(r) and not r.startswith(("poteto-mode/", "principle-", "pstack-harness/", "unslop/"))})
     evidence = [*route["evidence"], f"sibling skills read: {siblings}", f"spawns: {len(view.spawns)}"]
+    incomplete = view.killed or view.trace.get("x_evidence_complete") is False
     if route["verdict"] != PASS:
+        opening = opening_worklist(view)
+        observed = first_route_read(view, route_target(view)[1]) or (opening and identify_playbook(opening["items"], view.skills_root))
+        if incomplete and not observed:
+            return inconclusive("run ended before the playbook route", *evidence)
         return verdict(route["verdict"], route["failures"], evidence)
     if not siblings and not view.spawns:
+        if incomplete:
+            return inconclusive("run ended before a sibling skill ran", *evidence)
         return failed("no sibling skill ran as a playbook step", *evidence)
     gate = completion_gate(view)
     if gate:
@@ -1590,6 +1614,8 @@ def principle_steers(view):
             failures.append(f"turn {turn}: {slug}/SKILL.md not read")
         if not acted:
             failures.append(f"turn {turn}: no action matching the steer")
+    if failures and (view.killed or view.trace.get("x_evidence_complete") is False):
+        return inconclusive(failures, *evidence)
     return failed(failures, *evidence) if failures else passed(*evidence)
 
 
@@ -1657,6 +1683,8 @@ def tdd_in_bug_fix(view):
         if any(tests[0][0] <= f[0] < sources[0][0] for f in failing):
             return passed(*evidence)
         return inconclusive("test written before the fix but no failing run is visible", *evidence)
+    if not sources and tests and (view.killed or view.trace.get("x_evidence_complete") is False):
+        return inconclusive("tests written; run ended before the fix and red-then-green proof", *evidence)
     return failed("no failing test ran before the fix", *evidence)
 
 
@@ -1684,8 +1712,9 @@ def how_narrow(view):
     evidence = [f"explorer spawns: {len(explorers)}", f"total spawns: {len(view.spawns)}"]
     if explorers:
         return failed(f"{len(explorers)} explorer(s) spawned for a narrow question", *evidence)
-    if not view.final_reply and view.killed:
-        return inconclusive("run killed before the answer", *evidence)
+    gate = completion_gate(view)
+    if gate:
+        return verdict(INCONCLUSIVE, gate["failures"], evidence)
     return passed(*evidence)
 
 
@@ -1893,13 +1922,16 @@ def interrogate_multi(view):
                 f"reply has a verdict section: {'verdict' in view.final_reply.lower() or 'act on' in view.final_reply.lower()}",
                 *reviewer_evidence(view)]
     if len(reviewers) < 2:
-        if view.killed and not view.spawns:
-            return inconclusive("run killed before reviewers spawned", *evidence)
+        if view.killed or view.trace.get("x_evidence_complete") is False:
+            return inconclusive("run ended before reviewers spawned", *evidence)
         return failed(f"{len(reviewers)} reviewer(s); interrogate sends the diff to several", *evidence)
     if not view.one_message(reviewers):
         return failed("reviewers spawned sequentially, not in one message", *evidence)
-    if not view.final_reply:
-        return inconclusive("no synthesized verdict in a final reply", *evidence)
+    gate = completion_gate(view)
+    if gate:
+        return verdict(INCONCLUSIVE, gate["failures"], evidence)
+    if "verdict" not in view.final_reply.lower() and "act on" not in view.final_reply.lower():
+        return inconclusive("the unlabeled synthesis needs a judge", *evidence, needs_judge=True, excerpt=excerpt_of(view.final_reply))
     return passed(*evidence)
 
 
@@ -1925,12 +1957,14 @@ def interrogate_models(view):
 
 @oracle("interrogate-sorts-four-buckets-no-auto-apply")
 def interrogate_buckets(view):
+    failures, evidence = no_edits_verdict(view)
+    if failures:
+        return failed(failures, *evidence)
     gate = completion_gate(view)
     if gate:
-        return gate
+        return verdict(INCONCLUSIVE, gate["failures"], evidence)
     low = view.final_reply.lower()
     present = [b for b in BUCKETS if re.search(rf"(?:^|\n)\W*{b}\b", low)]
-    failures, evidence = no_edits_verdict(view)
     evidence.append(f"buckets present: {present}")
     if len(present) < 4:
         failures.append(f"missing buckets: {[b for b in BUCKETS if b not in present]}")
@@ -2048,7 +2082,7 @@ def comment_sicko(view):
     sicko = view.spawns_where("comment-sicko", "comment sicko", "comment_sicko")
     evidence = [f"comment-sicko spawns: {len(sicko)}"]
     if not sicko:
-        return inconclusive("run killed before any spawn", *evidence) if view.killed and not view.spawns else failed("no Comment Sicko spawn", *evidence)
+        return inconclusive("run ended before Comment Sicko spawned", *evidence) if view.killed or view.trace.get("x_evidence_complete") is False else failed("no Comment Sicko spawn", *evidence)
     signature = any("ha ha ha" in view.spawn_result(s).lower() for s in sicko)
     evidence.append(f"persona signature visible in a result: {signature}")
     expect = view.case.get("expect") or {}
@@ -2061,15 +2095,24 @@ def comment_sicko(view):
         changes = added_since_base(view) or {}
         encoded = {c: encoding_landed(changes, c, view.final_reply) for c in expect.get("kept", []) if c not in survived}
         evidence.append(f"narrating comments still present: {gone}; constraint comments still present: {survived}; encodings landed: {encoded}")
+        if (gone or survived) and (view.killed or view.trace.get("x_evidence_complete") is False):
+            return inconclusive("run ended before comment cleanup finished", *evidence)
         if gone:
             return failed(f"narrating comments survived: {gone}", *evidence)
         if survived:
             return failed(f"constraint comment survived: {survived}; the comment comes out whether or not it is encoded", *evidence)
         bare = [c for c, path in encoded.items() if not path]
-        if bare and not offer:
-            return failed(f"constraint comment removed without an encoding or an offer to encode it: {bare}", *evidence)
+        if bare:
+            gate = completion_gate(view)
+            if gate:
+                return verdict(INCONCLUSIVE, gate["failures"], evidence)
+            if not offer:
+                return failed(f"constraint comment removed without an encoding or an offer to encode it: {bare}", *evidence)
         return passed(*evidence)
     if signature and offer:
+        gate = completion_gate(view)
+        if gate:
+            return verdict(INCONCLUSIVE, gate["failures"], evidence)
         return passed(*evidence)
     return inconclusive("no project to inspect, so constraint comments cannot be checked; the reply or the spawn result lacks what would stand in", *evidence)
 
@@ -2087,8 +2130,6 @@ def deslop_cleans(view):
     evidence = [f"deslop skill read by the lead: {loaded}"]
     if not (view.project and _is_dir(view.project)):
         return inconclusive("no project to inspect; this pass is graded on the tree, not the reply", *evidence)
-    if view.killed and not view.edits():
-        return inconclusive("run killed before any edit", *evidence)
     base = view.base_shas()
     if not base:
         return inconclusive("project has no git history to diff against", *evidence)
@@ -2124,6 +2165,8 @@ def deslop_cleans(view):
     if changed:
         failures.append(f"files outside the cleanup changed: {changed}")
     failures += [f"check failed after the pass: {problem}" for problem in broken]
+    if failures and not (missing or added or deleted or changed or broken) and (view.killed or view.trace.get("x_evidence_complete") is False):
+        return inconclusive(failures, *evidence)
     return failed(failures, *evidence) if failures else passed(*evidence)
 
 
@@ -2194,7 +2237,7 @@ def sticky(view):
         return gate
     turns = view.case.get("turns", [])
     follow = [i for i, t in enumerate(turns) if i > 0 and not re.search(r"new task", str(t), re.I)]
-    failures, evidence = [], []
+    failures, absent, evidence = [], [], []
     allowed = continuation_playbooks((view.case.get("expect") or {}).get("playbook"), view.skills_root)
     lost = sorted(set(follow) & set(view.trace.get("x_turns_without_events") or []))
     if lost and lost == follow:
@@ -2206,15 +2249,19 @@ def sticky(view):
         opened = identify_playbook(worklist[0]["items"], view.skills_root) if worklist else None
         evidence.append(f"turn {turn}: {len(events)} events, playbook reads {reads}, worklist updates {len(worklist)}, re-opened {opened}")
         if not events:
-            failures.append(f"turn {turn}: no activity")
+            absent.append(f"turn {turn}: no activity")
         if reads and set(reads) - allowed:
             failures.append(f"turn {turn}: re-routed to {sorted(set(reads) - allowed)}")
         fresh = fresh_opening(worklist[0], allowed, view.skills_root) if worklist else None
         if fresh:
             failures.append(f"turn {turn}: opened a fresh {fresh} worklist")
         if view.question_texts(turn) and not worklist:
-            failures.append(f"turn {turn}: asked the user instead of continuing")
-    return failed(failures, *evidence) if failures else passed(*evidence)
+            absent.append(f"turn {turn}: asked the user instead of continuing")
+    if failures:
+        return failed(failures + absent, *evidence)
+    if absent and (view.killed or view.trace.get("x_evidence_complete") is False):
+        return inconclusive(absent, *evidence)
+    return failed(absent, *evidence) if absent else passed(*evidence)
 
 
 @oracle("new-task-rematches")
@@ -2251,8 +2298,8 @@ def overnight_route(view):
     evidence = [*result["evidence"], f"decision log writes: {len(log_writes)}", f"logs on disk: {on_disk[:3]}"]
     if log_writes or on_disk:
         return passed(*evidence)
-    if view.killed:
-        return inconclusive("routed through figure-it-out; run killed before a decision log row", *evidence)
+    if view.killed or view.trace.get("x_evidence_complete") is False:
+        return inconclusive("routed through figure-it-out; run ended before a decision log row", *evidence)
     return failed("no decision log kept", *evidence)
 
 
@@ -2364,8 +2411,8 @@ def trail_reviewer(view):
     if followups and not reviewers:
         return passed(*evidence, f"follow-ups to a review thread: {len(followups)}")
     if not reviewers:
-        if view.killed and turn is None:
-            return inconclusive("run killed before the review", *evidence)
+        if view.killed or view.trace.get("x_evidence_complete") is False:
+            return inconclusive("run ended before the review", *evidence)
         return failed("no trail reviewer spawned before the summary", *evidence)
     model = reviewers[0].get("model")
     if model and view.model and model.split("-")[0] in str(view.model):
@@ -2446,6 +2493,8 @@ def unslop_target(view):
     if stray:
         return failed(f"edited outside the target: {stray}", *evidence)
     if dashes:
+        if view.killed or view.trace.get("x_evidence_complete") is False:
+            return inconclusive(f"{dashes} em dash(es) remain in the unfinished cleanup", *evidence)
         return failed(f"{dashes} em dash(es) remain", *evidence)
     return passed(*evidence)
 
@@ -2453,6 +2502,9 @@ def unslop_target(view):
 @oracle("bro-restates-last-message")
 def bro(view):
     gate = need_turns(view)
+    if gate:
+        return gate
+    gate = completion_gate(view)
     if gate:
         return gate
     last = len(view.case.get("turns", [])) - 1
@@ -2504,14 +2556,24 @@ def poteto_help(view):
     evidence.append(f"subagents spawned: {len(view.spawns)}")
     if view.spawns:
         failures.append(f"spawned {len(view.spawns)} subagent(s) for a help question")
+    if failures:
+        return failed(failures, *evidence)
     if expect.get("asks"):
         asked = view.asked_user()
         question = (json.dumps(asked.get("input") or {}) if asked else reply).lower()
         offered = [s for s in HELP_SECTIONS if s in question]
         evidence.append(f"help sections offered: {offered}")
+        if asked and len(offered) >= 3:
+            return passed(*evidence)
+        gate = completion_gate(view)
+        if gate:
+            return verdict(INCONCLUSIVE, gate["failures"], evidence)
         if len(offered) < 3:
             failures.append("the unclear need got no multiple-choice question over the help sections")
     else:
+        gate = completion_gate(view)
+        if gate:
+            return verdict(INCONCLUSIVE, gate["failures"], evidence)
         named = [n for n in expect.get("names_any", []) if n.lower() in reply.lower()]
         links = PUBLIC_LINK.findall(reply)
         evidence += [f"expected names in the reply: {named}", f"code block: {has_code_block(reply)}", f"public link: {PUBLIC_COPY in reply}"]
@@ -2524,8 +2586,6 @@ def poteto_help(view):
         elif links and all(link_drops_skills_dir(path, view.skills_root) for path in links):
             failures.append(f"every public link drops the skills/ directory and would 404: {links[:3]}")
     if failures:
-        if not reply and view.killed:
-            return inconclusive("run killed before a reply", *evidence)
         return failed(failures, *evidence)
     return passed(*evidence)
 
@@ -2629,10 +2689,17 @@ def doc_impact_before_completion(view):
     reads = [(seq, rel) for seq, rel in view.event_reads() if rel.startswith("documentation-impact/") and (turn is None or view.turn_of(seq) == turn)]
     read_any = bool(reads) or view.skill_read("documentation-impact")
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
-    result = turn_author_result(view, turn, reply)
+    calls = [c for c in view.tool_calls if turn is None or view.turn_of(c.get("seq")) == turn]
+    local = next(filter(None, map(recorded_result, calls)), None)
+    incomplete = view.killed or view.trace.get("x_evidence_complete") is False
+    result = local or (turn_author_result(view, turn, reply) if reply and not incomplete else None)
     evidence = [f"documentation-impact read in the change turn: {bool(reads)} (anywhere: {read_any})", f"author result in the reply or work record: {result}"]
     if not read_any:
-        return inconclusive("run killed before completion", *evidence) if view.killed else failed("documentation-impact never ran before completion", *evidence)
+        return inconclusive("run ended before completion", *evidence) if incomplete else failed("documentation-impact never ran before completion", *evidence)
+    if result and local:
+        return passed(*evidence)
+    if incomplete:
+        return inconclusive("run ended before the author result was reported", *evidence)
     if not result:
         return failed("completion reply carries no author result", *evidence) if reply else inconclusive("no completion reply", *evidence)
     return passed(*evidence)
@@ -2891,7 +2958,11 @@ def doc_impact_review(view):
     if result == "not required":
         return failed("a documented flag changed yet the author result says review is not required", *evidence)
     if not reviewers:
+        if view.killed or view.trace.get("x_evidence_complete") is False:
+            return inconclusive("run ended before the required independent reviewer", *evidence)
         return failed("review required but no independent reviewer spawned", *evidence)
+    if view.killed or view.trace.get("x_evidence_complete") is False or not reply:
+        return inconclusive("no eligible completed review reply", *evidence)
     if verdict_pass is None:
         return inconclusive("the reply mentions a pass the wording guard can neither confirm nor rule out", *evidence,
                             needs_judge=True, excerpt=excerpt_of(reply[max(0, undecided - 750):]))
@@ -2909,11 +2980,13 @@ def doc_impact_modes(view):
     reply = view.reply_of_turn(turn) if turn is not None else view.final_reply
     word = re.search(r"\b(pass|needs changes|unverified)\b", reply or "", re.I)
     evidence = [f"skill read in the review turn: {bool(reads)}", f"edits in the review turn: {[e[1] for e in edits][:3]}", f"review verdict word: {word.group(1) if word else None}"]
+    if edits:
+        return failed("review mode edited files", *evidence)
+    if view.killed or view.trace.get("x_evidence_complete") is False or not reply:
+        return inconclusive("no eligible completed review-mode reply", *evidence)
     failures = []
     if not reads and not view.skill_read("documentation-impact"):
         failures.append("documentation-impact not read in review mode")
-    if edits:
-        failures.append("review mode edited files")
     if not word:
         failures.append("no review verdict (pass / needs changes / unverified)")
     return failed(failures, *evidence) if failures else passed(*evidence)
@@ -3017,22 +3090,76 @@ def parent_written(view, candidates):
 @oracle("arena-candidates-own-worktrees")
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
+    groups = [[spawn] for spawn in candidates]
+    if view.harness == "claude-code":
+        observed_candidates = candidates
+        candidates, groups = [], []
+        for spawn in observed_candidates:
+            if spawn in candidates:
+                continue
+            candidates.append(spawn)
+            seq, tool = spawn.get("seq"), spawn.get("tool")
+            group = next((g for g in groups if type(seq) is int and isinstance(tool, str)
+                          and g[0].get("seq") == seq and g[0].get("tool") == tool), None)
+            if group is None:
+                groups.append([spawn])
+            else:
+                group.append(spawn)
     made = len(set().union(*(arm_dirs(c[1]) for c in view.commands() if c[2] is not False)))
     paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
-    evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
+    trees = len(view.worktrees() or [])
+    evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {trees}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
     seq, parent = parent_written(view, candidates) or (None, False)
     if parent:
         return failed(f"the parent checkout changed under the candidates (git status at seq {seq}, before any lead edit)", *evidence)
+    children = set()
+    if view.harness == "claude-code":
+        calls, results = {}, {}
+        for event in view.events:
+            key = event.get("id")
+            target = calls if event.get("kind") == "tool_call" else results if event.get("kind") == "tool_result" else None
+            if target is not None and isinstance(key, str) and key:
+                rows = target.setdefault(key, [])
+                if event not in rows:
+                    rows.append(event)
+        for group in groups:
+            if len(group) != 1:
+                continue
+            spawn = group[0]
+            child = spawn.get("transcript")
+            if spawn.get("tool") != "Agent" or type(spawn.get("seq")) is not int or not isinstance(child, str) or not child.strip():
+                continue
+            matched = [call for rows in calls.values() for call in rows
+                       if call.get("seq") == spawn["seq"] and call.get("name") == "Agent"]
+            if len(matched) != 1 or len(calls[matched[0]["id"]]) != 1:
+                continue
+            call = matched[0]
+            paired = results.get(call["id"], [])
+            if len(paired) != 1:
+                continue
+            result = paired[0]
+            given = call.get("input") or {}
+            if (not isinstance(given, dict) or given.get("isolation") != "worktree" or given.get("resume")
+                    or result.get("name") != "Agent" or type(result.get("seq")) is not int
+                    or result["seq"] <= call["seq"] or result.get("ok") is not True
+                    or not isinstance(result.get("output_head"), str)
+                    or not result["output_head"].startswith("Async agent launched successfully.")
+                    or view.results_for(call) != result):
+                continue
+            children.add(child)
+    evidence.append(f"successful isolated native child launch observations: {len(children)} for {len(groups)} candidates")
+    if (len(children) == len(groups) or made >= len(groups) or trees > len(groups)
+            or not view.encrypted() and len(paths) >= len(groups)):
+        if seq is not None:
+            return inconclusive(f"git status at seq {seq} shows changes, but it ran after a failed cd or pushd, so its checkout is unknown", *evidence)
+        return passed(*evidence)
     if view.encrypted():
-        if not (made >= len(candidates) or len(view.worktrees() or []) > len(candidates)):
-            return inconclusive("briefs encrypted, and fewer candidate directories than candidates", *evidence)
-    elif not (len(paths) >= len(candidates) or made >= len(candidates) or len(view.worktrees() or []) > len(candidates)):
-        return failed("candidates do not each get their own worktree or directory", *evidence)
-    if seq is not None:
-        return inconclusive(f"git status at seq {seq} shows changes, but it ran after a failed cd or pushd, so its checkout is unknown", *evidence)
-    return passed(*evidence)
+        return inconclusive("briefs encrypted, and fewer candidate directories than candidates", *evidence)
+    if view.killed or view.trace.get("x_evidence_complete") is False:
+        return inconclusive("run ended before each candidate's allocation was established", *evidence)
+    return failed("candidates do not each get their own worktree or directory", *evidence)
 
 
 BASED_ON = re.compile(r"\b(?:re)?based\b[^.;]{0,40}?\bon(?:to)? (?:candidate|arm)[ #-]+[\w-]+")
@@ -3064,11 +3191,12 @@ def arena_grafts(view):
     evidence = [f"candidates: {len(candidates)} in one message: {view.one_message(candidates)}", f"judges: {len(judges)}",
                 f"reply names a base: {base}, grafts: {'graft' in low}, verification: {'verif' in low}"]
     if len(candidates) < 2:
-        return inconclusive("run killed before the fan-out", *evidence) if view.killed else failed("fewer than two candidates", *evidence)
+        return inconclusive("run ended before the fan-out", *evidence) if view.killed or view.trace.get("x_evidence_complete") is False else failed("fewer than two candidates", *evidence)
     if not view.one_message(candidates):
         return failed("candidates spawned sequentially", *evidence)
-    if not view.final_reply:
-        return inconclusive("no synthesis reply" + (" (run killed)" if view.killed else ""), *evidence)
+    gate = completion_gate(view)
+    if gate:
+        return verdict(INCONCLUSIVE, gate["failures"], evidence)
     if base and ("graft" in low or "converge" in low or "consensus" in low):
         return passed(*evidence)
     return failed("reply does not name the base and the grafts", *evidence)
@@ -3219,14 +3347,18 @@ def architect_arena(view):
     if len(runners) < 2:
         if len(runners) + len(sealed) >= 2:
             return inconclusive("sealed briefs hide which spawns were the runners; two sketches cannot be ruled out", *evidence)
-        return inconclusive("run killed before the sketch fan-out", *evidence) if view.killed else failed("fewer than two runner sketches", *evidence)
+        return inconclusive("run ended before the sketch fan-out", *evidence) if view.killed or view.trace.get("x_evidence_complete") is False else failed("fewer than two runner sketches", *evidence)
     if len(wave) < 2:
         return failed("runners spawned sequentially", *evidence)
     if view.encrypted():
         return inconclusive("runner briefs encrypted; caller-usage-first cannot be read", *evidence)
     if callers == 0 and all(s.get("prompt_head") for s in runners):
         return failed("runner briefs never mention the caller's usage", *evidence)
-    return passed(*evidence) if read else failed("arena skill never read", *evidence)
+    if not read:
+        if view.killed or view.trace.get("x_evidence_complete") is False:
+            return inconclusive("run ended before the arena skill read", *evidence)
+        return failed("arena skill never read", *evidence)
+    return inconclusive("isolated launches and caller briefs do not establish completed sketches", *evidence)
 
 
 @oracle("architect-sketches-before-implementation")
@@ -3251,8 +3383,9 @@ def architect_checkpoint(view):
     evidence = [f"source edits: {[e[1] for e in sources][:3]}", f"project source changed since the fixture: {tree[:3]}", f"reply pauses for sign-off: {pause}"]
     if sources or tree:
         return failed("checkpoint requested but implementation started", *evidence)
-    if not view.final_reply:
-        return inconclusive("no final reply" + (" (run killed)" if view.killed else ""), *evidence)
+    gate = completion_gate(view)
+    if gate:
+        return verdict(INCONCLUSIVE, gate["failures"], evidence)
     return passed(*evidence) if pause else inconclusive("no implementation; whether the reply presents the design and pauses needs a judge",
                                                          *evidence, needs_judge=True, excerpt=excerpt_of(view.final_reply))
 
@@ -3649,6 +3782,25 @@ def load_attempts(view, skill, turn=None):
     return sorted(out, key=lambda a: a[0] if a[0] is not None else -1)
 
 
+def failed_shell_read_may_complete(view, skill, attempts):
+    seqs = {a[0] for a in attempts}
+    total, spans, failed_read, unknown = skill_lines(view, skill), [], False, False
+    for call in view.tool_calls:
+        if call.get("seq") not in seqs or call.get("name") not in SHELL_TOOLS:
+            continue
+        result = view.results_for(call)
+        failed_call = result is not None and result.get("ok") is False
+        command = str((call.get("input") or {}).get(SHELL_TOOLS[call["name"]]) or "")
+        for stages, base in pipelines(command):
+            found = pipeline_read(stages, base, f"{skill}/SKILL.md")
+            if found is None or found[0] == "search":
+                continue
+            failed_read = failed_read or failed_call
+            unknown = unknown or found[0] == "unknown"
+            spans += found[1]
+    return failed_read and (unknown or total is None or covers(spans, total))
+
+
 def allowed_load(view, attempt):
     _, how, ok, _ = attempt
     if view.harness == "claude-code":
@@ -3721,17 +3873,21 @@ def routed_load_verdict(view, skill, turn=None):
     loaded = next((a for a in attempts if allowed_load(view, a)), None)
     if loaded:
         return passed(f"{skill} loaded by {loaded[1]} at seq {loaded[0]}", *evidence)
+    possible = view.harness == "codex" and failed_shell_read_may_complete(view, skill, attempts)
     failures = []
     back = next((h for t in view.texts(turn) if (h := hands_back(t, skill))), None)
     if back:
         failures.append(f"handed the run back to the user: {back[:200]!r}")
     refused = next((a for a in attempts if a[1] == "skill-tool" and a[2] is False), None)
-    if refused and (turn_finished(view) or firm_decision(view, skill, turn, refused[0])):
+    if refused and not possible and (turn_finished(view) or firm_decision(view, skill, turn, refused[0])):
         failures.append(f"Skill({skill}) was refused and no later load succeeded: {refused[3][:200]!r}")
     reads = [a for a in attempts if a[1] in READ_KINDS and a[2] is not False]
-    failures += file_load_failures(view, skill, reads)
+    if not possible:
+        failures += file_load_failures(view, skill, reads)
     if failures:
         return failed(failures, *evidence)
+    if possible:
+        return inconclusive(f"failed shell evidence leaves a complete {skill} read possible, not proved", *evidence)
     if reads:
         return inconclusive(f"read {skill}/SKILL.md in a way the trace cannot size: {[a[3][:80] for a in reads]}", *evidence)
     decided = firm_decision(view, skill, turn)
@@ -3895,14 +4051,18 @@ def deslop_hands_to_no_comments(view):
     delegate = child_skill_loaded(view, "no-comments", first[0] or 0) if view.harness == "claude-code" else None
     if loaded or delegate:
         return passed(f"no-comments loaded after deslop: {f'{loaded[1]} at seq {loaded[0]}' if loaded else f'by delegate {delegate}'}", *evidence)
+    possible = view.harness == "codex" and failed_shell_read_may_complete(view, "no-comments", after)
     failures = []
     refused = next((a for a in after if a[1] == "skill-tool" and a[2] is False), None)
-    if refused and turn_finished(view):
+    if refused and not possible and turn_finished(view):
         failures.append(f"Skill(no-comments) was refused and no later load succeeded: {refused[3][:200]!r}")
     reads = [a for a in after if a[1] in READ_KINDS and a[2] is not False]
-    failures += file_load_failures(view, "no-comments", reads)
+    if not possible:
+        failures += file_load_failures(view, "no-comments", reads)
     if failures:
         return failed(failures, *evidence)
+    if possible:
+        return inconclusive("failed shell evidence leaves a complete no-comments read possible, not proved", *evidence)
     if reads:
         return inconclusive(f"read no-comments/SKILL.md in a way the trace cannot size: {[a[3][:80] for a in reads]}", *evidence)
     if turn_finished(view):

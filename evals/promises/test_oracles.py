@@ -98,6 +98,7 @@ class InterruptedEvidence(unittest.TestCase):
                                 {"seq": 2, "prompt_head": "Reviewer. Review read-only."}])
         self.assertEqual(grade(pid, trace, case)["verdict"], INCONCLUSIVE)
         trace["spawns"][1]["seq"] = 4
+        trace["events"].append(text(3, "First reviewer returned."))
         self.assertEqual(grade(pid, trace, case)["verdict"], FAIL)
         trace["spawns"] = trace["spawns"][:1]
         self.assertEqual(grade(pid, trace, case)["verdict"], INCONCLUSIVE)
@@ -152,8 +153,276 @@ class InterruptedEvidence(unittest.TestCase):
         pid = "architect-runs-arena-for-sketches"
         self.assertEqual(grade(pid, trace, feature_case())["verdict"], INCONCLUSIVE)
         trace["spawns"][1]["seq"] = 4
+        trace["events"].append(text(3, "First sketch returned."))
         trace["x_evidence_complete"] = False
         self.assertEqual(grade(pid, trace, feature_case())["verdict"], FAIL)
+
+    def test_existing_reply_gate_consumers_reject_incomplete_answers(self):
+        pids = ("reply-carries-commands-and-outputs", "reply-says-inconclusive-when-check-cannot-run",
+                "poteto-mode-routes-to-playbook", "poteto-mode-reads-principles-and-names-applied",
+                "how-explains-current-code", "why-reports-cited-history", "why-reports-null-results",
+                "how-why-reports-name-sources-searched", "interrogate-sorts-four-buckets-no-auto-apply",
+                "swarm-workers-report-pass-issues-blocked", "swarm-returns-one-report-with-gaps",
+                "show-me-your-work-review-ends-with-attention", "blast-radius-finds-breakage",
+                "technical-writing-picks-mode-then-sentences", "arena-second-opinion-includes-current-design")
+        trace = minimal(events=[read(0, "poteto-mode/playbooks/feature.md"), read(1, "how/SKILL.md")]
+                        + bash(2, "python3 -m unittest", ok=False, head="python3: command not found"),
+                        final_reply="The completed report.", x_evidence_complete=False)
+        for pid in pids:
+            with self.subTest(pid=pid):
+                result = grade(pid, trace, feature_case())
+                self.assertEqual((result["verdict"], result["failures"]),
+                                 (INCONCLUSIVE, ["evidence snapshot is incomplete; the last text is not a completion reply"]), result)
+
+    def test_missing_route_is_unknown_but_wrong_route_fails(self):
+        for pid, case in (("step-away-routes-to-figure-it-out", load_case("overnight-run")),
+                          ("read-only-phrase-pins-investigation", load_case("route-investigation")),
+                          ("poteto-mode-routes-to-playbook", feature_case())):
+            with self.subTest(pid=pid):
+                trace = minimal(events=bash(0, "ls"), x_evidence_complete=False)
+                self.assertEqual(grade(pid, trace, case)["verdict"], INCONCLUSIVE)
+                trace["events"] = [read(0, "poteto-mode/playbooks/research.md")]
+                self.assertEqual(grade(pid, trace, case)["verdict"], FAIL)
+
+    def test_principle_action_is_local_proof_but_missing_action_is_not(self):
+        case = dict(feature_case(), turns=["work", "apply the principle"], expect={"steers": [
+            {"turn": 1, "principle": "principle-prove-it-works", "command": "run-proof"}]})
+        trace = minimal(events=[dict(read(0, "principle-prove-it-works/SKILL.md"), turn=1)], x_evidence_complete=False)
+        self.assertEqual(grade("principle-name-steers-agent", trace, case)["verdict"], INCONCLUSIVE)
+        trace["events"] += [dict(e, turn=1) for e in bash(2, "run-proof")]
+        self.assertEqual(grade("principle-name-steers-agent", trace, case)["verdict"], PASS)
+
+    def test_missing_trail_review_in_last_turn_stays_unknown(self):
+        case = dict(load_case("overnight-run"), turns=["work", "finish"])
+        trace = minimal(events=[dict(read(0, "show-me-your-work/SKILL.md"), turn=1)], x_evidence_complete=False)
+        pid = "show-me-your-work-spawns-trail-reviewer"
+        self.assertEqual(grade(pid, trace, case)["verdict"], INCONCLUSIVE)
+        trace["spawns"] = [{"seq": 1, "turn": 1, "tool": "Agent", "prompt_head": "Review the decision trail."}]
+        trace["events"] += [{"seq": 1, "turn": 1, "kind": "tool_call", "name": "Agent", "input": {}}]
+        self.assertEqual(grade(pid, trace, case)["verdict"], PASS)
+
+    def test_selected_documentation_replies_cannot_borrow_final_text(self):
+        case = load_case("doc-impact-run")
+        events = [dict(read(0, "documentation-impact/SKILL.md"), turn=0),
+                  dict(text(1, "Author result: independent review required. The review passed."), turn=0),
+                  dict(read(3, "documentation-impact/SKILL.md"), turn=1), dict(text(4, "Review mode pass."), turn=1)]
+        trace = minimal(events=events, final_reply="Review mode pass.", x_evidence_complete=False,
+                        spawns=[{"seq": 1, "turn": 0, "tool": "Agent", "prompt_head": "Trail reviewer. Review documentation-impact."}])
+        for pid in ("poteto-runs-documentation-impact-before-completion", "documentation-impact-independent-review-pass-required",
+                    "documentation-impact-modes-invocable"):
+            with self.subTest(pid=pid):
+                self.assertEqual(grade(pid, trace, case)["verdict"], INCONCLUSIVE)
+        trace["events"].append({"seq": 2, "turn": 0, "kind": "tool_call", "name": "update_plan", "input": {
+            "plan": [{"step": "Author result: independent review required.", "status": "completed"}]}})
+        self.assertEqual(grade("poteto-runs-documentation-impact-before-completion", trace, case)["verdict"], PASS)
+        trace["events"].append(dict(edit(5, "/w/relay/README.md"), turn=1))
+        self.assertEqual(grade("documentation-impact-modes-invocable", trace, case)["verdict"], FAIL)
+        trace["events"][1]["text"] = "Author result: independent review not required."
+        self.assertEqual(grade("documentation-impact-independent-review-pass-required", trace, case)["verdict"], FAIL)
+
+    def test_graft_and_checkpoint_reply_gates_preserve_positive_violations(self):
+        trace = minimal(events=[read(0, "arena/SKILL.md")], final_reply="Base with grafts.", x_evidence_complete=False,
+                        spawns=[{"seq": 2, "tool": "Agent", "prompt_head": f"Candidate {n}"} for n in range(2)])
+        self.assertEqual(grade("arena-fans-out-and-grafts", trace, load_case("arena-run"))["verdict"], INCONCLUSIVE)
+        trace["spawns"][1]["seq"] = 4
+        trace["events"].append(text(3, "First candidate returned."))
+        self.assertEqual(grade("arena-fans-out-and-grafts", trace, load_case("arena-run"))["verdict"], FAIL)
+        checkpoint = minimal(events=[read(0, "architect/SKILL.md")], final_reply="Waiting for your sign-off.", x_evidence_complete=False)
+        case = load_case("architect-checkpoint-run")
+        self.assertEqual(grade("architect-checkpoint-opt-in", checkpoint, case)["verdict"], INCONCLUSIVE)
+        checkpoint["events"].append(edit(2, "/w/relay/cache.py"))
+        self.assertEqual(grade("architect-checkpoint-opt-in", checkpoint, case)["verdict"], FAIL)
+
+    def test_sticky_absence_and_bro_reply_need_eligible_evidence(self):
+        case = dict(feature_case(), turns=["work", "continue"])
+        trace = minimal(events=[dict(read(0, "poteto-mode/playbooks/feature.md"), turn=0)], x_evidence_complete=False)
+        self.assertEqual(grade("poteto-mode-sticky", trace, case)["verdict"], INCONCLUSIVE)
+        trace["events"] += [dict(read(1, "poteto-mode/playbooks/bug-fix.md"), turn=1)]
+        self.assertEqual(grade("poteto-mode-sticky", trace, case)["verdict"], FAIL)
+        trace = minimal(events=[dict(text(0, "A long earlier answer with several details."), turn=0),
+                                dict(text(1, "Short answer."), turn=1)], final_reply="Short answer.", x_evidence_complete=False)
+        self.assertEqual(grade("bro-restates-last-message", trace, load_case("bro-run"))["verdict"], INCONCLUSIVE)
+        trace["x_evidence_complete"] = True
+        self.assertEqual(grade("bro-restates-last-message", trace, load_case("bro-run"))["verdict"], PASS)
+
+    def test_unslop_partial_cleanup_is_unknown_but_stray_edit_fails(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"README.md": "Before.\n"})
+        (project / "README.md").write_text("Partly cleaned — still here.\n")
+        trace = minimal(events=[edit(0, str(project / "README.md"))], x_evidence_complete=False)
+        case = dict(feature_case(), expect={"only": ["README.md"]})
+        self.assertEqual(grade("unslop-takes-target-and-rules", trace, case, project)["verdict"], INCONCLUSIVE)
+        (project / "README.md").write_text("Cleaned.\n")
+        self.assertEqual(grade("unslop-takes-target-and-rules", trace, case, project)["verdict"], PASS)
+        (project / "stray.py").write_text("x = 1\n")
+        self.assertEqual(grade("unslop-takes-target-and-rules", trace, case, project)["verdict"], FAIL)
+
+
+class NativeArenaAllocation(unittest.TestCase):
+    def trace(self):
+        events, spawns = [], []
+        for n, seq in enumerate((2, 4)):
+            events += [{"seq": seq, "kind": "tool_call", "name": "Agent", "id": f"call-{n}",
+                        "input": {"isolation": "worktree", "prompt": "Implement a candidate."}},
+                       {"seq": seq + 1, "kind": "tool_result", "name": "Agent", "id": f"call-{n}",
+                        "ok": True, "output_head": "Async agent launched successfully. Read the result later."}]
+            spawns.append({"seq": seq, "tool": "Agent", "prompt_head": "Implement a candidate.", "transcript": f"opaque-child-{n}"})
+        return minimal(events=events, spawns=spawns, cwd="/w/relay")
+
+    def decision(self, trace):
+        return grade("arena-candidates-own-worktrees", trace, load_case("arena-run"))["verdict"]
+
+    def test_native_launch_proof_survives_without_any_paths(self):
+        trace = self.trace()
+        self.assertEqual(self.decision(trace), PASS)
+        trace["x_evidence_complete"] = False
+        self.assertEqual(self.decision(trace), PASS)
+        trace["harness"] = "grok"
+        self.assertEqual(self.decision(trace), INCONCLUSIVE)
+
+    def test_whole_row_duplicates_enlarge_neither_obligations_nor_credit(self):
+        for field, index in (("spawns", 0), ("events", 0), ("events", 1)):
+            with self.subTest(field=field, index=index):
+                trace = self.trace()
+                trace[field].append(dict(trace[field][index]))
+                self.assertEqual(self.decision(trace), PASS)
+
+    def test_ambiguous_or_unproved_launches_cannot_earn_native_credit(self):
+        mutations = {
+            "failed result": lambda t: t["events"][1].update(ok=False),
+            "truthy result": lambda t: t["events"][1].update(ok=1),
+            "result before call": lambda t: t["events"][1].update(seq=1),
+            "missing result": lambda t: t["events"].pop(1),
+            "unrelated acknowledgment": lambda t: t["events"][1].update(output_head="Read this. Async agent launched successfully."),
+            "clipped acknowledgment": lambda t: t["events"][1].update(output_head="Async agent launched success"),
+            "missing acknowledgment": lambda t: t["events"][1].update(output_head=""),
+            "wrong result tool": lambda t: t["events"][1].update(name="Task"),
+            "missing call ID": lambda t: t["events"][0].pop("id"),
+            "empty call ID": lambda t: t["events"][0].update(id=""),
+            "ambiguous launch at same sequence": lambda t: t["events"].append(dict(t["events"][0], id="another-call")),
+            "reused call ID": lambda t: t["events"][2].update(id="call-0"),
+            "missing spawn sequence": lambda t: t["spawns"][0].pop("seq"),
+            "missing identity": lambda t: t["spawns"][0].pop("transcript"),
+            "malformed identity": lambda t: t["spawns"][0].update(transcript={"path": "child"}),
+            "reused child": lambda t: t["spawns"][1].update(transcript="opaque-child-0"),
+            "resume": lambda t: t["events"][0]["input"].update(resume="old-child"),
+            "no isolation": lambda t: t["events"][0]["input"].pop("isolation"),
+            "wrong spawn sequence": lambda t: t["spawns"][0].update(seq=1),
+            "wrong spawn tool": lambda t: t["spawns"][0].update(tool="Task"),
+            "conflicting spawn": lambda t: t["spawns"].append(dict(t["spawns"][0], transcript="other-child")),
+            "conflicting call": lambda t: t["events"].append(dict(t["events"][0], extra="conflict")),
+            "ID at new sequence": lambda t: t["events"].append(dict(t["events"][0], seq=6)),
+            "conflicting result": lambda t: t["events"].append(dict(t["events"][1], seq=6, ok=False)),
+            "result extra-field conflict": lambda t: t["events"].append(dict(t["events"][1], extra="conflict")),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                trace = self.trace()
+                mutate(trace)
+                self.assertEqual(self.decision(trace), FAIL)
+                trace["x_evidence_complete"] = False
+                self.assertEqual(self.decision(trace), INCONCLUSIVE)
+
+    def test_partial_evidence_groups_are_not_summed(self):
+        trace = self.trace()
+        trace["events"].pop(3)
+        trace["events"] += bash(6, "mkdir -p /w/tmp/arena/candidate-one")
+        self.assertEqual(self.decision(trace), FAIL)
+        trace["events"] += bash(8, "mkdir -p /w/tmp/arena/candidate-two")
+        self.assertEqual(self.decision(trace), PASS)
+
+    def test_judge_is_excluded_but_distinct_unresolved_candidate_is_not(self):
+        trace = self.trace()
+        trace["spawns"].append({"seq": 6, "tool": "Agent", "prompt_head": "Cross-judge the candidates."})
+        self.assertEqual(self.decision(trace), PASS)
+        trace["spawns"].append({"seq": 8, "tool": "Agent", "prompt_head": "Implement another candidate."})
+        self.assertEqual(self.decision(trace), FAIL)
+
+    def test_parent_mutation_and_unknown_checkout_precede_native_credit(self):
+        trace = self.trace()
+        trace["events"] += bash(7, "git status --short", head=" M relay/cache.py")
+        self.assertEqual(self.decision(trace), FAIL)
+        trace = self.trace()
+        trace["events"] += bash(6, "cd /missing", ok=False) + bash(8, "git status --short", head=" M relay/cache.py")
+        self.assertEqual(self.decision(trace), INCONCLUSIVE)
+
+
+class FailedShellReadUncertainty(unittest.TestCase):
+    path = ".agents/skills/figure-it-out/SKILL.md"
+
+    def routed(self, events, project, **extra):
+        trace = minimal(events=events, harness="codex", final_reply="Plan set.", **extra)
+        return grade("routed-skill-loads-when-named", trace, load_case("name-only-route-figure-it-out"), project)
+
+    def test_failed_whole_and_complementary_reads_leave_uncertainty(self):
+        project = installed_skill(self, "figure-it-out", 30)
+        for events in (shell(0, f"cat {self.path} missing.md", ok=False),
+                       shell(0, f"cat {self.path} && false", ok=False),
+                       shell(0, f"sed -n '1,20p' {self.path}") + shell(2, f"tail -n 10 {self.path}", ok=False),
+                       shell(0, f"sed -n '1,20p' {self.path}", ok=False) + shell(2, f"tail -n 10 {self.path}", ok=False),
+                       shell(0, f"sed -n '1,20p' {self.path}") + shell(2, f"cat {self.path}", ok=False)):
+            with self.subTest(events=events):
+                self.assertEqual(self.routed(events, project)["verdict"], INCONCLUSIVE)
+
+    def test_bounded_partial_union_and_failed_search_still_fail(self):
+        project = installed_skill(self, "figure-it-out", 30)
+        for events in (shell(0, f"head -n 1 {self.path}", ok=False),
+                       shell(0, f"sed -n '1,10p' {self.path}") + shell(2, f"sed -n '5,20p' {self.path}", ok=False),
+                       shell(0, f"rg line {self.path}", ok=False),
+                       shell(0, f"cat {self.path} | rg line", ok=False)):
+            with self.subTest(events=events):
+                self.assertEqual(self.routed(events, project)["verdict"], FAIL)
+
+    def test_full_input_not_truncated_detail_drives_uncertainty(self):
+        project = installed_skill(self, "figure-it-out", 30)
+        events = shell(0, "echo " + "x" * 250 + f"; cat {self.path} missing.md", ok=False)
+        self.assertEqual(self.routed(events, project)["verdict"], INCONCLUSIVE)
+
+    def test_refusal_does_not_prove_omission_but_hand_back_does(self):
+        project = installed_skill(self, "figure-it-out", 30)
+        events = skill_call(0, "figure-it-out", ok=False) + shell(2, f"python3 {self.path}", ok=False)
+        self.assertEqual(self.routed(events, project)["verdict"], INCONCLUSIVE)
+        events.append(text(4, "Run /figure-it-out yourself."))
+        self.assertEqual(self.routed(events, project)["verdict"], FAIL)
+
+    def test_successful_whole_read_still_passes(self):
+        project = installed_skill(self, "figure-it-out", 30)
+        self.assertEqual(self.routed(shell(0, f"cat {self.path}"), project)["verdict"], PASS)
+
+    def test_claude_failed_reads_do_not_replace_skill_tool_policy(self):
+        project = installed_skill(self, "figure-it-out", 30)
+        trace = minimal(events=shell(0, f"cat {self.path}") + shell(2, f"cat {self.path}", ok=False), final_reply="Done.")
+        self.assertEqual(grade("routed-skill-loads-when-named", trace, load_case("name-only-route-figure-it-out"), project)["verdict"], FAIL)
+
+    def test_missing_total_is_uncertain_and_unreturned_calls_keep_existing_policy(self):
+        case = dict(load_case("name-only-route-figure-it-out"), expect={"skill": "nonexistent-read-target"})
+        trace = minimal(events=shell(0, "head -n 1 .agents/skills/nonexistent-read-target/SKILL.md", ok=False),
+                        harness="codex", final_reply="Done.")
+        self.assertEqual(grade("routed-skill-loads-when-named", trace, case)["verdict"], INCONCLUSIVE)
+        project = installed_skill(self, "figure-it-out", 30)
+        trace = minimal(events=shell(0, f"cat {self.path}")[:1], harness="codex", final_reply="Done.")
+        self.assertEqual(grade("routed-skill-loads-when-named", trace, load_case("name-only-route-figure-it-out"), project)["verdict"], PASS)
+        trace["exit_code"] = -9
+        self.assertEqual(grade("routed-skill-loads-when-named", trace, load_case("name-only-route-figure-it-out"), project)["verdict"], INCONCLUSIVE)
+
+    def test_routing_possible_spans_stay_in_selected_turn(self):
+        project = installed_skill(self, "figure-it-out", 30)
+        events = shell(0, f"head -n 20 {self.path}", turn=0) + shell(2, f"tail -n 10 {self.path}", ok=False, turn=1)
+        trace = minimal(events=events, harness="codex", final_reply="Done.", x_compactions=[{"turn": 0, "source": "native"}])
+        self.assertEqual(grade("routed-skill-loads-after-compaction", trace, load_case("name-only-route-after-compact"), project)["verdict"], FAIL)
+
+    def test_handoff_possible_spans_stay_strictly_after_deslop(self):
+        project = installed_skill(self, "no-comments", 30)
+        path = ".agents/skills/no-comments/SKILL.md"
+        for before, after, expected in (([], shell(4, f"cat {path} missing.md", ok=False), INCONCLUSIVE),
+                                        ([], shell(4, f"head -n 20 {path}") + shell(6, f"tail -n 10 {path}", ok=False), INCONCLUSIVE),
+                                        (shell(0, f"head -n 20 {path}"), shell(4, f"tail -n 10 {path}", ok=False), FAIL),
+                                        ([], shell(4, f"head -n 1 {path}", ok=False), FAIL),
+                                        ([], shell(4, f"cat {path}"), PASS)):
+            with self.subTest(expected=expected, before=before, after=after):
+                trace = minimal(events=before + shell(2, "cat .agents/skills/deslop/SKILL.md") + after, harness="codex", final_reply="Done.")
+                self.assertEqual(grade("deslop-hands-unsettled-comments-to-no-comments", trace, load_case("deslop-handoff"), project)["verdict"], expected)
 
 
 class ProbeTraces(unittest.TestCase):
@@ -1034,6 +1303,15 @@ class LiveFalseFails(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL)
         self.assertTrue(result["failures"][0].startswith("constraint comment removed without an encoding or an offer"))
 
+    def test_incomplete_comment_cleanup_and_offer_are_not_violations(self):
+        case = load_case("no-comments-run")
+        trace = self.sicko_trace("Failed to authenticate")
+        trace["x_evidence_complete"] = False
+        self.assertEqual(grade("no-comments-spawns-comment-sicko", trace, case, self.rollup(comment_survives=True))["verdict"], INCONCLUSIVE)
+        self.assertEqual(grade("no-comments-spawns-comment-sicko", trace, case, self.rollup(test_changes=False))["verdict"], INCONCLUSIVE)
+        trace["spawns"] = [{"seq": 1, "tool": "Agent", "prompt_head": "Another role."}]
+        self.assertEqual(grade("no-comments-spawns-comment-sicko", trace, case)["verdict"], INCONCLUSIVE)
+
     def test_constraint_comment_that_survives_fails(self):
         case = load_case("no-comments-run")
         reply = "Deleted 19 comments. Encoding offered for the constraint."
@@ -1065,6 +1343,17 @@ class DeslopPass(unittest.TestCase):
         events = trace.pop("events", [read(0, "deslop/SKILL.md"), edit(1, "roster/report.py")])
         trace.setdefault("x_baseline", live.baseline(project) if project.is_dir() else None)
         return grade("deslop-cleans-code-slop", minimal(events=events, final_reply="Removed 8 lines.", **trace), case or load_case("deslop-run"), project)
+
+    def test_incomplete_cleanup_keeps_local_pass_and_positive_failures(self):
+        self.assertEqual(self.grade(self.roster(), x_evidence_complete=False)["verdict"], PASS)
+        shim = self.CLEAN_REPORT + "\n\ndef filter_rows(rows, team):\n    return count_by_team(rows, team)\n"
+        project = self.roster(report=shim)
+        self.assertEqual(self.grade(project, x_evidence_complete=False)["verdict"], INCONCLUSIVE)
+        (project / "extra.py").write_text("x = 1\n")
+        self.assertEqual(self.grade(project, x_evidence_complete=False)["verdict"], FAIL)
+        case = load_case("deslop-run")
+        case["expect"] = dict(case["expect"], checks=[{"cmd": "python3 -c 'raise SystemExit(1)'"}])
+        self.assertEqual(self.grade(self.roster(), case=case, x_evidence_complete=False)["verdict"], FAIL)
 
     def test_a_clean_tree_with_green_tests_passes(self):
         result = self.grade(self.roster())
@@ -1268,10 +1557,10 @@ class OracleFalseVerdicts(unittest.TestCase):
         view = oracles.View(minimal(events=events, spawns=spawns, harness="codex"), load_case("feature-run"), None)
         self.assertEqual(view.spawn_result(spawns[0]), "started\nha ha ha, MUST KILL")
 
-    def test_a_run_with_one_clean_turn_is_not_dead(self):
+    def test_a_started_run_does_not_prove_steers_in_failed_turns(self):
         case = load_case("principle-steer-run")
         result = grade("principle-name-steers-agent", self.dead_run([0, 1, 1]), case)
-        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
 
     def test_find_exec_unexpanded_variables_and_quoted_bodies_are_not_edits(self):
         self.assertEqual(oracles.shell_writes("find relay tests -name __pycache__ -type d -exec rm -rf {} +"), [])
@@ -2008,7 +2297,7 @@ class SpawnIdentity(unittest.TestCase):
                   {"seq": 123, "kind": "tool_call", "name": "delegate_task", "input": {}},
                   {"seq": 125, "kind": "tool_call", "name": "delegate_task", "input": {}}]
         result = grade("architect-runs-arena-for-sketches", minimal(events=events, spawns=spawns, harness="hermes"), load_case("architect-run"))
-        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
         self.assertIn("runner spawns: 3", result["evidence"])
 
     def test_a_later_extra_runner_keeps_the_first_wave_and_the_full_brief_carries_callers(self):
@@ -2022,7 +2311,7 @@ class SpawnIdentity(unittest.TestCase):
                   text(38, "These three differ only in policy details, so I'm spawning a fourth runner."), calls[4],
                   {"seq": 45, "kind": "tool_call", "name": "Agent", "input": {"description": "Arena cross-judge (fable)"}}]
         result = grade("architect-runs-arena-for-sketches", minimal(events=events, spawns=spawns), load_case("architect-run"))
-        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
         self.assertIn("briefs that lead with caller usage: 4", result["evidence"])
 
     def test_sequential_runners_still_fail(self):
