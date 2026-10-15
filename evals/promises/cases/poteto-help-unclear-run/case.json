@@ -5,7 +5,7 @@
  "fixture": "tally",
  "entry": "poteto-help",
  "turns": [
-  "i just installed this and i'm not sure where to start"
+  "can you help me with pstack?"
  ],
  "timeout_s": {
   "default": 600,
