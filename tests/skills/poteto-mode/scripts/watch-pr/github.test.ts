@@ -89,6 +89,37 @@ describe("parseRollupPage", () => {
     },
   });
 
+  for (const connection of ["contexts", "reviewThreads"] as const) {
+    const parse = (pageInfo: object) => connection === "contexts"
+      ? parseRollupPage(rollupResponse({ contexts: { nodes: [], pageInfo } }))
+      : parseReviewStatePage({ data: { repository: { pullRequest: {
+          headRefOid: "head", author: { login: "octocat" },
+          reviewThreads: { nodes: [], pageInfo },
+          reviews: { nodes: [] }, reviewRequests: { nodes: [] }, comments: { nodes: [] },
+        } } } });
+
+    for (const endCursor of [null, ""]) {
+      it(`rejects synthetic ${connection} hasNextPage=true plus endCursor=${JSON.stringify(endCursor)}`, () => {
+        expect(() => parse({ hasNextPage: true, endCursor })).toThrow(
+          `${connection}.pageInfo.endCursor`
+        );
+      });
+    }
+
+    it(`rejects ${connection} with an omitted endCursor`, () => {
+      expect(() => parse({ hasNextPage: true })).toThrow(
+        `${connection}.pageInfo.endCursor`
+      );
+    });
+
+    it(`preserves ${connection} continuation and terminal pages`, () => {
+      expect(parse({ hasNextPage: true, endCursor: "next" }).endCursor).toBe("next");
+      for (const endCursor of [null, "", "last"]) {
+        expect(parse({ hasNextPage: false, endCursor }).endCursor).toBeNull();
+      }
+    });
+  }
+
   it("throws when the PR has zero commits", () => {
     expect(() =>
       parseRollupPage({

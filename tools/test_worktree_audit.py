@@ -5,6 +5,9 @@ import json
 import os
 import re
 import shutil
+import socketserver
+import ssl
+import threading
 import subprocess
 import sys
 import tempfile
@@ -392,6 +395,132 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
                                  check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
         Path(git_dir, "index").write_bytes(b"not an index")
         self.assertEqual(self.row(worktree), ("unreadable", "hold-kept"))
+
+
+class WorktreeAuditRepositoryTest(WorktreeAuditBaseTest):
+    def setUp(self):
+        self.assertIsNotNone(shutil.which("rg"), "required executable missing from PATH: rg")
+        self.assertIsNotNone(shutil.which("jq"), "required executable missing from PATH: jq")
+        super().setUp()
+
+    def fixture(self, remote: str | None) -> Path:
+        self.init("main")
+        if remote is not None:
+            self.git("remote", "add", "origin", remote)
+        self.git("remote", "add", "upstream", "https://github.com/parent/project.git")
+        worktree = self.tmp / "wt"
+        self.git("worktree", "add", "-q", "-b", "feature-x", str(worktree))
+        (worktree / "change.txt").write_text("unmerged\n", encoding="utf-8")
+        subprocess.run(["git", "add", "change.txt"], cwd=worktree, env=self.env, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "change"], cwd=worktree,
+                       env=self.env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        gh = bin_dir / "gh"
+        gh.write_text(
+            f"#!{sys.executable}\nimport json, os, sys\n"
+            "from pathlib import Path\n"
+            "args = sys.argv[1:]\n"
+            "Path(os.environ['AUDIT_GH_LOG']).write_text(json.dumps(args))\n"
+            "repo = args[args.index('--repo') + 1] if '--repo' in args else 'parent/project'\n"
+            "state = 'OPEN' if repo in ('github.com/fork/project', 'example.com/fork/project') else 'MERGED'\n"
+            "print(json.dumps([{'number': 17, 'state': state, 'headRefName': 'feature-x'}]))\n",
+            encoding="utf-8",
+        )
+        gh.chmod(0o755)
+        self.env.update(PATH=f"{bin_dir}:{self.env['PATH']}", AUDIT_GH_LOG=str(self.tmp / "gh-log"), GH_HOST="example.invalid")
+        return worktree
+
+    def assert_origin_query(self, remote: str, repository: str) -> None:
+        worktree = self.fixture(remote)
+        result = self.audit("-b", "main", str(self.repo))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
+        self.assertEqual((row[2], row[5], row[7]), ("no", "#17/OPEN", "hold-open-pr"))
+        args = json.loads((self.tmp / "gh-log").read_text())
+        self.assertEqual(args[args.index("--repo") + 1], repository)
+
+    def test_queries_the_audited_scp_origin_instead_of_the_default_parent(self):
+        self.assert_origin_query("git@github.com:fork/project.git", "github.com/fork/project")
+
+    def test_queries_the_audited_https_origin(self):
+        self.assert_origin_query("https://github.com/fork/project.git", "github.com/fork/project")
+
+    def test_queries_the_audited_enterprise_origin(self):
+        self.assert_origin_query("ssh://git@example.com/fork/project.git", "example.com/fork/project")
+
+    def test_real_gh_uses_public_origin_despite_ambient_host(self):
+        self.fixture("https://github.com/fork/project.git")
+        real_gh = shutil.which("gh")
+        self.assertIsNotNone(real_gh, "required executable missing from PATH: gh")
+        self.assertIsNotNone(shutil.which("openssl"), "required executable missing from PATH: openssl")
+        cert = self.tmp / "cert.pem"
+        key = self.tmp / "key.pem"
+        subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-keyout", str(key), "-out", str(cert), "-days", "1",
+            "-subj", "/CN=api.github.com",
+            "-addext", "subjectAltName=DNS:api.github.com,DNS:example.invalid",
+        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        requests = []
+
+        class Proxy(socketserver.BaseRequestHandler):
+            def handle(self):
+                self.request.settimeout(5)
+                connect = b""
+                while b"\r\n\r\n" not in connect:
+                    data = self.request.recv(4096)
+                    if not data:
+                        return
+                    connect += data
+                target = connect.split(b" ")[1].decode()
+                self.request.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                with context.wrap_socket(self.request, server_side=True) as tls:
+                    message = b""
+                    while b"\r\n\r\n" not in message:
+                        data = tls.recv(4096)
+                        if not data:
+                            return
+                        message += data
+                    requests.append((target, message.split(b" ")[1].decode()))
+                    tls.sendall(b'HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}')
+
+        (self.tmp / "bin" / "gh").unlink()
+        (self.tmp / "bin" / "gh").symlink_to(real_gh)
+        with socketserver.ThreadingTCPServer(("127.0.0.1", 0), Proxy) as proxy:
+            worker = threading.Thread(target=proxy.serve_forever, daemon=True)
+            worker.start()
+            self.env.update(
+                GH_TOKEN="test", GH_ENTERPRISE_TOKEN="test", GH_CONFIG_DIR=str(self.tmp),
+                SSL_CERT_FILE=str(cert), HTTPS_PROXY=f"http://127.0.0.1:{proxy.server_address[1]}",
+                NO_PROXY="", no_proxy="",
+            )
+            try:
+                result = self.audit("-b", "main")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(requests, [("api.github.com:443", "/graphql")])
+            finally:
+                proxy.shutdown()
+                worker.join()
+
+    def assert_unknown_origin(self, remote: str | None) -> None:
+        worktree = self.fixture(remote)
+        result = self.audit("-b", "main")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
+        self.assertEqual((row[2], row[5], row[7]), ("no", "-", "review"))
+        self.assertFalse((self.tmp / "gh-log").exists())
+
+    def test_missing_origin_keeps_pr_state_unknown_without_querying_gh(self):
+        self.assert_unknown_origin(None)
+
+    def test_local_origin_keeps_pr_state_unknown_without_querying_gh(self):
+        self.assert_unknown_origin("/local/origin.git")
+
+    def test_invalid_origin_keeps_pr_state_unknown_without_querying_gh(self):
+        self.assert_unknown_origin("https://github.com/fork/project.git?token=PUBLIC_TEST_SENTINEL")
 
 
 if __name__ == "__main__":

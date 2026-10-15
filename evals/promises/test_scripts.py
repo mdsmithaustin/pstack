@@ -676,7 +676,7 @@ class MergeGatePromises(GitHubSandbox):
         self.assertEqual(record["receipt"]["patchId"], self.patch_id)
         self.assertEqual(
             self.merge_calls(),
-            [["pr", "merge", "7", "--repo", "octo/widgets", "--squash", "--match-head-commit", self.head,
+            [["pr", "merge", "7", "--repo", "github.com/octo/widgets", "--squash", "--match-head-commit", self.head,
               "--subject", "Land the widget", "--body-file", str(self.tmp / "body.txt")]],
         )
 
@@ -777,6 +777,8 @@ class BabysitWatcherPromises(GitHubSandbox):
 
 @unittest.skipUnless(shutil.which("rg") and shutil.which("jq"), "worktree-audit.sh shells out to rg and jq")
 class WorktreeAuditPromises(FakeGhSandbox):
+    redirect_fetch = True
+
     def test_worktree_cleanup_classifies_worktrees(self):
         repo = self.tmp / "audit-repo"
         bare = self.tmp / "audit-origin.git"
@@ -787,6 +789,8 @@ class WorktreeAuditPromises(FakeGhSandbox):
         self.git("commit", "-q", "-m", "base", cwd=repo)
         self.git("push", "-q", "origin", "HEAD:main", cwd=repo)
         self.git("fetch", "-q", "origin", "main", cwd=repo)
+        self.git("remote", "set-url", "origin", ORIGIN_URL, cwd=repo)
+        self.env["FAKE_GIT_ORIGIN"] = str(bare)
 
         def add(name, branch):
             path = self.tmp / name
@@ -823,6 +827,10 @@ class WorktreeAuditPromises(FakeGhSandbox):
         listing_before = self.git("worktree", "list", "--porcelain", cwd=repo)
         branches_before = self.git("branch", "--list", cwd=repo)
         result = self.run_cmd(["bash", AUDIT_SH], cwd=repo, expect=0)
+        self.assertEqual(self.calls(), [[
+            "pr", "list", "--repo", "github.com/octo/widgets", "--author", "@me",
+            "--state", "all", "--limit", "1000", "--json", "number,state,headRefName",
+        ]])
         base, *lines = result.stdout.splitlines()
         self.assertEqual(base, "# base: origin/main")
         self.assertEqual(lines[0].split("\t"), ["SIZE", "AGE", "MERGED", "DIRTY", "REMOTE", "PR", "LAST_CHAT", "BUCKET", "WORKTREE"])

@@ -326,6 +326,8 @@ export function parseRollupPage(value: unknown): T.RollupPage {
   if (typeof page.hasNextPage !== "boolean")
     missing("contexts.pageInfo.hasNextPage", page.hasNextPage);
   const cursor = optionalString(page.endCursor, "contexts.pageInfo.endCursor");
+  if (page.hasNextPage && !cursor)
+    missing("contexts.pageInfo.endCursor", page.endCursor);
   return { checks, endCursor: page.hasNextPage && cursor ? cursor : null };
 }
 function parseComment(value: unknown): T.ReviewComment {
@@ -550,6 +552,8 @@ export function parseReviewStatePage(value: unknown): T.ReviewStatePage {
     page.endCursor,
     "reviewThreads.pageInfo.endCursor"
   );
+  if (page.hasNextPage && !cursor)
+    missing("reviewThreads.pageInfo.endCursor", page.endCursor);
   return {
     threads,
     endCursor: page.hasNextPage && cursor ? cursor : null,
@@ -646,12 +650,12 @@ export function graphqlArgs(
     "-F",
     `pr=${context.number}`,
   ];
-  if (context.host !== "github.com") argv.push("--hostname", context.host);
+  argv.push("--hostname", context.host);
   return argv;
 }
 
 export const repoArg = (repository: T.Repository): string =>
-  `${repository.host === "github.com" ? "" : `${repository.host}/`}${repository.owner}/${repository.repo}`;
+  `${repository.host}/${repository.owner}/${repository.repo}`;
 
 export class GhGitHubReader implements T.GitHubReader {
   async originRepo(): Promise<T.Repository | null> {
@@ -665,8 +669,15 @@ export class GhGitHubReader implements T.GitHubReader {
   async currentPr(pr: T.PrNumber | null): Promise<T.PrContext> {
     const argv: [string, ...string[]] = ["gh", "pr", "view"];
     const origin = await this.originRepo();
+    if (origin === null)
+      throw new WatcherQueryError({
+        kind: "command-exit",
+        retryable: true,
+        code: 1,
+        detail: "origin repository is unknown; pass --owner, --repo, and --pr",
+      });
     if (pr !== null) argv.push(String(pr));
-    else if (origin !== null) {
+    else {
       const branch = await this.currentBranch();
       if (branch === "")
         throw new WatcherQueryError({
@@ -675,9 +686,34 @@ export class GhGitHubReader implements T.GitHubReader {
           code: 1,
           detail: "HEAD is detached, so the current PR is unknown; pass --pr",
         });
-      argv.push(branch);
+      const tracking = await run([
+        "git", "config", "--get", `branch.${branch}.merge`,
+      ]);
+      const trackedPr =
+        tracking.code === 0
+          ? /^refs\/pull\/([1-9]\d*)\/head$/.exec(tracking.stdout.trim())?.[1]
+          : undefined;
+      let trackingRepo: T.Repository | null = null;
+      if (trackedPr !== undefined) {
+        const remote = await run([
+          "git", "config", "--get", `branch.${branch}.remote`,
+        ]);
+        if (remote.code === 0) {
+          const name = remote.stdout.trim();
+          if (name !== "") {
+            const url = await run(["git", "ls-remote", "--get-url", name]);
+            if (url.code === 0) trackingRepo = parseRemote(url.stdout);
+          }
+        }
+      }
+      argv.push(
+        trackedPr !== undefined && trackingRepo !== null &&
+        repoArg(trackingRepo).toLowerCase() === repoArg(origin).toLowerCase()
+          ? trackedPr
+          : branch
+      );
     }
-    if (origin !== null) argv.push("--repo", repoArg(origin));
+    argv.push("--repo", repoArg(origin));
     argv.push("--json", "number,url");
     const object = record(await runJson(argv), "current PR");
     const parsed = parsePrUrl(string(object.url, "current PR.url"));

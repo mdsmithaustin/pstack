@@ -256,8 +256,7 @@ function reviewBodiesGate(
 }
 
 function threadsGate(
-  row: Extract<T.PrSnapshot, { kind: "open" }>,
-  conversation: Conversation
+  row: Extract<T.PrSnapshot, { kind: "open" }>
 ): Outcome {
   const blocker = threadBlocker(row);
   const problems: string[] = [];
@@ -271,7 +270,6 @@ function threadsGate(
       `${plural(blocker.threads.length, "unresolved review thread")}: ${places.join(", ")}`
     );
   }
-  problems.push(...truncationProblems(conversation, ["reviewThreads"]));
   return problems.length === 0
     ? pass("no unresolved threads")
     : fail(problems.join("; "));
@@ -362,7 +360,7 @@ export async function evaluateGates(args: {
     checks: open === null ? notEvaluated : checksGate(open),
     "review-bodies":
       open === null ? notEvaluated : reviewBodiesGate(open, conversation),
-    threads: open === null ? notEvaluated : threadsGate(open, conversation),
+    threads: open === null ? notEvaluated : threadsGate(open),
     mergeability: mergeabilityGate(snapshot),
     draft: draftGate(facts.isDraft),
     "merge-queue":
