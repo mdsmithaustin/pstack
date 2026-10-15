@@ -397,8 +397,12 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         self.assertEqual(self.row(worktree), ("unreadable", "hold-kept"))
 
 
-@unittest.skipUnless(_have("rg") and _have("jq"), "worktree-audit.sh shells out to rg and jq")
 class WorktreeAuditRepositoryTest(WorktreeAuditBaseTest):
+    def setUp(self):
+        self.assertIsNotNone(shutil.which("rg"), "required executable missing from PATH: rg")
+        self.assertIsNotNone(shutil.which("jq"), "required executable missing from PATH: jq")
+        super().setUp()
+
     def fixture(self, remote: str | None) -> Path:
         self.init("main")
         if remote is not None:
