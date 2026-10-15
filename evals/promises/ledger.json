@@ -2251,7 +2251,7 @@
    "check": "live",
    "claim": "/poteto-help infers what the user needs, asks one multiple-choice question when that stays unclear, and answers with an example prompt and a link to the public copy of the file the answer came from, without starting the work.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompts `/poteto-help which skill should i use to review this branch?` (case poteto-help-run) and `/poteto-help i just installed this and i'm not sure where to start` (case poteto-help-unclear-run); pass when no project file changes and no subagent spawns, the first reply names `/interrogate` or Code review with a code-block prompt and a github.com/mdsmithaustin/pstack/blob/main/ link, and the second asks over at least three of the five help sections.",
+   "live_case": "tally fixture; prompts `/poteto-help which skill should i use to review this branch?` (case poteto-help-run) and `/poteto-help can you help me with pstack?` (case poteto-help-unclear-run); pass when no project file changes and no subagent spawns, the first reply names `/interrogate` or Code review with a code-block prompt and a github.com/mdsmithaustin/pstack/blob/main/ link, and the second asks over at least three of the five help sections.",
    "owners": [
     "skills/poteto-help/SKILL.md"
    ],
