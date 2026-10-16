@@ -9,7 +9,7 @@ Clean AI slop out of the code a branch changed, and leave behavior unchanged. Us
 
 ## Scope
 
-Use the caller's files or diff. Otherwise diff against the branch this one builds on, including the working tree and untracked files (`git status --short`): the pull request's base when one is open (`gh pr view <branch> -R <owner>/<repo> --json baseRefName`, with `<owner>/<repo>` from origin's fetch URL), else the branch it was cut from (`git branch -vv` or `git reflog show <branch>`), else `main`. On a stacked branch, `main` would pull the parent's commits into the diff. Edit only inside the hunks the branch added or changed. Read whatever the rules need to judge them: callers, types, existing helpers, and the rest of the file. Slop you notice elsewhere goes in the report and stays untouched.
+Use the caller's files or diff. Otherwise diff against the branch this one builds on, including the working tree and untracked files (`git status --short`): the pull request's base when one is open (`gh pr view <branch> -R <host>/<owner>/<repo> --json baseRefName`, with `<host>/<owner>/<repo>` from origin's fetch URL), else the branch it was cut from (`git branch -vv` or `git reflog show <branch>`), else `main`. On a stacked branch, `main` would pull the parent's commits into the diff. Edit only inside the hunks the branch added or changed. Read whatever the rules need to judge them: callers, types, existing helpers, and the rest of the file. Slop you notice elsewhere goes in the report and stays untouched.
 
 ## Process
 

@@ -302,8 +302,8 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
         error = died and death_record(*died)
         if run.turns or not died:
             trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
-            _seal(authorization, meta(run), trace)
-            verdict = grade_run(authorization, error)
+            _seal(authorization, meta(run), trace, error=error)
+            verdict = grade(authorization)
         else:
             verdict = error_verdict(case, harness, commit, error)
             write_file(root / "verdict.json", _json(verdict))
@@ -334,21 +334,6 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     if died:
         raise LoginRequired(*died)
     return root
-
-
-def grade_run(authorization, error=None):
-    _, state = authorization._controller.load(authorization._id)
-    target = Path(state["output"]["path"]) / "verdict.json"
-    if error is None:
-        try:
-            error = json.loads(read_file(target)).get("error")
-        except FileNotFoundError:
-            pass
-    verdict = grade(authorization)
-    if error:
-        verdict = error_verdict(state["case"], verdict["harness"], verdict["skills_at"], error, verdict["promises"])
-        write_file(target, _json(verdict))
-    return verdict
 
 
 def meta(run):
@@ -391,7 +376,7 @@ def main(argv=None):
     if args.cmd == "grade":
         for run_id in args.run_ids:
             try:
-                print(json.dumps(grade_run(_lookup(args.out, run_id))))
+                print(json.dumps(grade(_lookup(args.out, run_id))))
             except GradeRefused as refusal:
                 print(json.dumps({"refusal": refusal.receipt}), file=sys.stderr)
                 return 2

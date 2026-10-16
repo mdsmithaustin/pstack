@@ -40,7 +40,7 @@ Pick the base a future maintainer can extend most easily without breaking invari
 
 Walk each losing candidate's rationale and the cross-judge's scores once more for what is worth porting into the base, usually one or two things per candidate, not most of it. Read only the parts of a losing artifact you will graft. Fold each graft in by hand, per the **redesign-from-first-principles** principle skill, so the result stays coherent under one mental model. Don't paste mechanically.
 
-If the candidates converge on one shape, that is strong agreement. Note it and ship the consensus shape. No graft is needed. If they wildly diverge, Phase A was under-specified. Reframe and re-run rather than averaging the divergence. Before the re-run, remove this run's candidate worktrees and their branches and delete its scratch directory.
+If the candidates converge on one shape, note the convergence subject to Phase D's actual-model disclosure and one-model limitation. Ship the consensus shape. No graft is needed. If they wildly diverge, Phase A was under-specified. Reframe and re-run rather than averaging the divergence. Before the re-run, remove this run's candidate worktrees and their branches and delete its scratch directory.
 
 ## Phase F: Verify
 

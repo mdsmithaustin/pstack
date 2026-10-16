@@ -95,7 +95,7 @@ describe("evaluateGates", () => {
 
     it("stays complete when only another connection is truncated", async () => {
       const { report: other } = await report({
-        port: { truncated: [{ connection: "reviewThreads", total: 150, limit: 100 }] },
+        port: { truncated: [{ connection: "reviewRequests", total: 60, limit: 50 }] },
       });
       expect(other.failRounds.complete).toBe(true);
     });
@@ -367,7 +367,6 @@ describe("evaluateGates", () => {
 
   describe("truncated reads fail closed", () => {
     const cases = [
-      ["reviewThreads", 150, 100, "threads", "more than 100 review threads (150); cannot verify"],
       ["reviewRequests", 60, 50, "review-bodies", "more than 50 review requests (60); cannot verify"],
       ["reviews", 120, 100, "review-bodies", "more than 100 reviews (120); cannot verify"],
       ["comments", 130, 100, "review-bodies", "more than 100 PR comments (130); cannot verify"],
@@ -381,13 +380,14 @@ describe("evaluateGates", () => {
         expect(detailOf(result, gate)).toContain(detail);
       });
 
-    it("keeps real findings in the detail next to the truncation", async () => {
+    it("reports unresolved threads alongside nonpaginated truncation", async () => {
       const { report: result } = await report({
         threads: [unresolvedThread()],
-        port: { truncated: [{ connection: "reviewThreads", total: 150, limit: 100 }] },
+        port: { truncated: [{ connection: "reviewRequests", total: 60, limit: 50 }] },
       });
       expect(detailOf(result, "threads")).toContain("1 unresolved review thread");
-      expect(detailOf(result, "threads")).toContain("more than 100 review threads");
+      expect(failedNames(result)).toEqual(["review-bodies", "threads"]);
+      expect(detailOf(result, "review-bodies")).toContain("more than 50 review requests (60); cannot verify");
     });
   });
 

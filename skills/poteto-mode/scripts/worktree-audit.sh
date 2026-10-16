@@ -62,8 +62,33 @@ status_out=$(mktemp)
 nested_out=$(mktemp)
 index_out=$(mktemp)
 trap 'rm -f "$prs" "$kept_paths" "$status_out" "$nested_out" "$index_out"' EXIT
-gh pr list --author "@me" --state all --limit 1000 \
-	--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
+pr_repo=$(python3 - "$(git remote get-url origin 2>/dev/null)" <<'PY'
+import re
+import sys
+from urllib.parse import urlsplit
+
+remote = sys.argv[1].strip()
+if re.search(r"[\s\\%?#]", remote):
+    sys.exit(0)
+scp = re.fullmatch(r"git@([^:/]+):([^:]+)", remote) if "://" not in remote else None
+if scp:
+    remote = f"https://{scp[1]}/{scp[2]}"
+match = re.fullmatch(r"(?:https://[^/:@]+|ssh://git@[^/:@]+)(/[a-z\d_.-]+/[a-z\d_.-]+/?)", remote, re.I)
+if not match:
+    sys.exit(0)
+url = urlsplit(remote)
+host = url.hostname or ""
+parts = re.sub(r"\.git$", "", url.path.rstrip("/")).lstrip("/").split("/")
+if not re.fullmatch(r"[a-z\d](?:[a-z\d.-]*[a-z\d])?", host, re.I) or any(part in ("", ".", "..") for part in parts):
+    sys.exit(0)
+print(f"{host}/{'/'.join(parts)}")
+PY
+) || pr_repo=""
+echo "[]" > "$prs"
+if [ -n "$pr_repo" ]; then
+	gh pr list --repo "$pr_repo" --author "@me" --state all --limit 1000 \
+		--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
+fi
 
 # Transcript stores, per CLI. Claude Code slugs the workspace path by turning
 # every character that isn't a letter or digit into "-"; Codex keeps a flat

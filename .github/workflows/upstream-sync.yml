@@ -5,8 +5,8 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
 
 concurrency:
   group: upstream-sync
@@ -83,11 +83,13 @@ jobs:
               (in .github/upstream-sha).
             - Latest upstream commit touching pstack/:
               ${{ steps.gate.outputs.latest }}.
-            - Publish route: push branch `sync/upstream-<YYYYMMDD>` to origin
-              and open a draft PR to main with
-              `gh pr create --draft --repo mdsmithaustin/pstack`. This
-              checkout has no no-mistakes remote, and GitHub Actions opens
-              the PR with the workflow token.
+            - Publish route: this checkout commits .no-mistakes.yaml but
+              has no initialized no-mistakes gate. Prepare the sync, then
+              stop before pushing or opening a PR. Report publication as
+              blocked, the upstream commits, local branch and head, checks,
+              and the need to resume in an initialized gated checkout.
+              This temporary checkout does not preserve local commits for
+              the maintainer. The workflow token is not a gate exemption.
 
             That procedure is the only sync procedure. Nothing in this prompt
             overrides it.
