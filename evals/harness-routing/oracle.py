@@ -266,7 +266,7 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
         routing = axis("INCONCLUSIVE", ["routing coverage is incomplete or contains unsupported commands or unverified foreign reads"], unsupported + pending_reads + unverified_foreign)
     else:
         routing = axis("PASS", ["required routes proven; no foreign runtime read in supported command coverage"])
-    exposures, unknown_context, returned = [], list(unverified_foreign), []
+    exposures, unknown_context, returned = [], [], []
     for command in trace.commands:
         if command.result_line is None or command.output is None:
             unknown_context.append(command.result_line or command.call_line)
