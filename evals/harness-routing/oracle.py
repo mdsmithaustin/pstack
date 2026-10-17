@@ -192,27 +192,39 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
         actions.append({"line": line, "item": item, "verified_type": item.get("type") in {
             "command_execution", "mcp_tool_call", "collab_tool_call", "collab_agent_tool_call",
             "file_change", "todo_list", "plan_update", "user_input", "request_user_input"}})
+    read_commands = {command.call_line: read_parts(command, workspace, files) for command in trace.commands}
+    for action in actions:
+        parts = read_commands.get(action["line"])
+        if parts is not None:
+            action["read_paths"] = [part[0] for part in parts]
     positions = {s["line"] for s in trace.statements}
     if decision_line is not None and (type(decision_line) is not int or decision_line not in positions):
         raise ValueError("first decision must identify a saved assistant statement")
     if action_line is not None and (type(action_line) is not int or action_line not in {a["line"] for a in actions}):
         raise ValueError("first action must identify a saved action")
+    if action_line is not None and read_commands.get(action_line) is not None:
+        raise ValueError("first substantive action cannot identify a pure file read")
     cutoffs = [p for p in (final_line, decision_line, action_line) if p is not None]
     cutoff = min(cutoffs) if cutoffs else None
     coverage = {name: [] for name in files}
     failures, late, unsupported = [], [], []
-    observations, pending_reads = [], []
+    observations, pending_reads, unverified_foreign = [], [], []
     for command in trace.commands:
-        parts = read_parts(command, workspace, files)
+        parts = read_commands[command.call_line]
         if parts is None:
             unsupported.append(command.call_line)
             continue
         paths = [p[0] for p in parts]
+        foreign_paths = [name for name in paths if name in forbidden]
         if command.result_line is None:
             pending_reads.append(command.call_line)
+            if foreign_paths:
+                unverified_foreign.append(command.call_line)
             continue
         if command.exit_code != 0 or command.status != "completed":
             failures.extend((name, command.result_line) for name in paths if name in required)
+            if foreign_paths:
+                unverified_foreign.append(command.call_line)
             continue
         expected = b"".join(p[3] for p in parts)
         try:
@@ -220,6 +232,8 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
         except UnicodeEncodeError:
             actual = None
         if actual != expected:
+            if foreign_paths:
+                unverified_foreign.append(command.call_line)
             continue
         for path, start, end, _ in parts:
             observation = {"path": path, "start": start, "end": end,
@@ -248,11 +262,11 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
     foreign = [name for name in forbidden if any(b > a for a, b, _ in coverage[name])]
     if foreign:
         routing = axis("FAIL", [f"verified nonempty foreign runtime read {name}" for name in foreign], [o["result_line"] for o in observations if o["path"] in foreign])
-    elif trace.issues or missing or unsupported or pending_reads:
-        routing = axis("INCONCLUSIVE", ["routing coverage is incomplete or contains unsupported commands"], unsupported)
+    elif trace.issues or missing or unsupported or pending_reads or unverified_foreign:
+        routing = axis("INCONCLUSIVE", ["routing coverage is incomplete or contains unsupported commands or unverified foreign reads"], unsupported + pending_reads + unverified_foreign)
     else:
         routing = axis("PASS", ["required routes proven; no foreign runtime read in supported command coverage"])
-    exposures, unknown_context, returned = [], [], []
+    exposures, unknown_context, returned = [], list(unverified_foreign), []
     for command in trace.commands:
         if command.result_line is None or command.output is None:
             unknown_context.append(command.result_line or command.call_line)
@@ -367,6 +381,7 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
             "final_line": final_line, "cutoff_line": cutoff,
             "ordering_basis": "reviewed decision or action" if decision_line is not None or action_line is not None else "final answer only",
             "observations": observations, "unsupported_command_lines": unsupported,
+            "unverified_foreign_read_lines": sorted(set(unverified_foreign)),
             "statements": list(trace.statements),
             "actions": actions, "returned_context": sorted(returned, key=lambda r: r["line"]),
             "context": {"coverage": "unverified" if trace.issues or unknown_context or not trace.records else "all paired saved returned fields", "issues": list(trace.issues), "unpaired_context_lines": sorted(set(unknown_context)), "exposures": exposures,

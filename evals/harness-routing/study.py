@@ -55,6 +55,10 @@ def inventory(root: Path):
     return result
 
 
+def fixture_text(value):
+    return value if isinstance(value, str) else json.dumps(value, indent=2) + "\n"
+
+
 def load_cases(path: Path):
     data = read_json(path)
     cases = data.get("cases", [])
@@ -65,7 +69,8 @@ def load_cases(path: Path):
     for case in cases:
         if not case["required"] or "SKILL.md" not in case["required"] or not case["prompt"]:
             raise ValueError("case requires an organic prompt and entry-file requirement")
-        for value in (case["name"], case["prompt"], *case["fixtures"]):
+        for value in (case["name"], case["prompt"], *case["fixtures"],
+                      *(fixture_text(value) for value in case["fixtures"].values())):
             if any(re.search(rf"\b{word}", value, re.I) for word in FORBIDDEN):
                 raise ValueError(f"introduced disclosure in {case['label']}")
     return cases
@@ -184,7 +189,7 @@ def freeze(source: Path, output: Path, executable: Path, model: str, effort: str
         for relative, value in case["fixtures"].items():
             path = package / relative
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(value if isinstance(value, str) else json.dumps(value, indent=2) + "\n", encoding="utf-8")
+            path.write_text(fixture_text(value), encoding="utf-8")
         workspace = neutral / case["name"]
         shutil.copytree(package, workspace)
         prompt = "Read skills/pstack-harness/SKILL.md in full before handling this request. Use only the relevant installed instructions as the work needs them.\n\n" + case["prompt"] + "\n"
@@ -467,7 +472,8 @@ def assess(directory: Path, decisions_path: Path | None):
                        "final": (slot / "final.txt").read_text() if (slot / "final.txt").exists() else ""})
     write_json(directory / "assessment.json", report)
     blinded = {"criteria": [c for c in rubric["criteria"] if c["name"] in {"task safeguards", "decision ordering", "observed context validity"}], "cases": packet,
-               "instructions": "Read every assistant statement. Return first_committed_decision_line and optional earlier_action_line for each label, plus safeguards with status and reasons. Do not infer a tool's absence from a missing call. Preserve missing evidence. A greeting or intent to read is not a substantive decision."}
+               "case_guidance": rubric.get("case_guidance", {}),
+               "instructions": "Read every assistant statement. Return first_committed_decision_line and optional earlier_action_line for each label, plus safeguards with status and reasons. Do not infer a tool's absence from a missing call. Preserve missing evidence. A greeting or intent to read is not a substantive decision. Actions with read_paths are pure file-read observations, not substantive task actions; do not bind earlier_action_line to them."}
     packet_text = json.dumps(blinded, ensure_ascii=False, indent=2)
     for case in study["cases"]:
         packet_text = packet_text.replace(case["workspace"], "<workspace>")

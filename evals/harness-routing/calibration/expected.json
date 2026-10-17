@@ -184,5 +184,56 @@
       "routing": "INCONCLUSIVE",
       "exposure": null
     }
+  },
+  {
+    "id": "missing-final-after-action",
+    "trace": "missing-final-after-action.jsonl",
+    "final": "",
+    "expected": {
+      "reads": "INCONCLUSIVE",
+      "routing": "PASS",
+      "exposure": null
+    },
+    "action_line": 3
+  },
+  {
+    "id": "failed-foreign",
+    "trace": "failed-foreign.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "mismatched-foreign",
+    "trace": "mismatched-foreign.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "noncompleted-foreign",
+    "trace": "noncompleted-foreign.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "missing-output-foreign",
+    "trace": "missing-output-foreign.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
   }
 ]
