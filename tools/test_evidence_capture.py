@@ -94,6 +94,25 @@ class EvidenceCapture(unittest.TestCase):
         record = self.verified(self.store / "signal" / "manifest.json")
         self.assertEqual(record["captured"]["execution"]["raw_returncode"], -signal.SIGTERM)
 
+    def test_command_verification_accepts_reverse_wall_clock_times(self):
+        result = self.cli("command", "--store", self.store, "--id", "clock", "--cwd", self.source,
+                          "--", sys.executable, "-c", "print('clock fixture')")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = self.store / "clock" / "manifest.json"
+        record = self.record(manifest)
+        execution = record["captured"]["execution"]
+        execution["started_at"] = "2026-10-17T12:00:01+00:00"
+        execution["ended_at"] = "2026-10-17T12:00:00+00:00"
+        self.rewrite_record(manifest, record)
+        self.assertEqual(self.verified(manifest)["captured"]["execution"], execution)
+        for field in ("started_at", "ended_at"):
+            for invalid in ("yesterday", "2026-10-17T12:00:00"):
+                with self.subTest(field=field, invalid=invalid):
+                    malformed = json.loads(json.dumps(record))
+                    malformed["captured"]["execution"][field] = invalid
+                    self.rewrite_record(manifest, malformed)
+                    self.refused(self.cli("verify", manifest))
+
     def test_import_survives_deleted_source_and_has_no_execution(self):
         manifest = self.capture_file()
         shutil.rmtree(self.source)
@@ -252,6 +271,35 @@ class EvidenceCapture(unittest.TestCase):
                 self.refused(result)
                 self.assertFalse((self.store / f"selector-{index}" / "manifest.json").exists())
 
+    def test_runtime_fixture_jsonl_counts_lf_records_and_preserves_cr_whitespace(self):
+        first = b'{"model":"fixture-first-model","effort":"fixture-first-effort"}'
+        second = b'{"model":"fixture-second-model","effort":"fixture-second-effort"}'
+        cases = {
+            "leading-cr": b"\r" + first + b"\n" + second + b"\n",
+            "second-leading-cr": first + b"\n\r" + second + b"\n",
+            "embedded-cr": first + b'\n{\r"model":\r"fixture-second-model",\r'
+                                  b'"effort":\r"fixture-second-effort"}\n',
+            "lf": first + b"\n" + second + b"\n",
+            "crlf": first + b"\r\n" + second + b"\r\n",
+        }
+        for name, data in cases.items():
+            with self.subTest(case=name):
+                basis = self.source / "runtime-fixture.jsonl"
+                basis.write_bytes(data)
+                request, _ = self.identity_request(runtimeRecords=[{
+                    "source": str(basis), "line": 2,
+                    "modelPointer": "/model", "effortPointer": "/effort"}])
+                manifest = self.capture_file(name, "--identity", request)
+                basis.unlink()
+                request.unlink()
+                self.assertEqual((manifest.parent / "basis-0000.bin").read_bytes(), data)
+                identity = self.verified(manifest)["identity"]
+                for field in ("model", "effort"):
+                    self.assertEqual(identity[field], {
+                        "kind": "runtime-reported", "value": f"fixture-second-{field}",
+                        "basis": {"payload": "basis-0000.bin", "line": 2, "pointer": f"/{field}"}})
+                self.assertEqual(identity["provider_execution"], "unknown")
+
     def test_multiple_nonnull_claims_for_one_runtime_field_refuse(self):
         basis = self.source / "fixture.json"
         basis.write_text('{"model":"same-fixture-value"}')
@@ -281,6 +329,28 @@ class EvidenceCapture(unittest.TestCase):
         basis.write_bytes(saved_record)
         record.symlink_to(basis)
         self.refused(self.cli("verify", manifest))
+
+    def test_file_and_verify_refuse_relative_and_raw_parent_paths(self):
+        directory = self.root / "ordinary-directory"
+        directory.mkdir()
+        link = self.root / "linked-directory"
+        link.symlink_to(self.source, target_is_directory=True)
+        manifest = self.capture_file()
+        before = {path.name: path.read_bytes() for path in manifest.parent.iterdir()}
+        for index, prefix in enumerate(("", "ordinary-directory/../", "linked-directory/../")):
+            with self.subTest(prefix=prefix):
+                source = str(self.file.relative_to(self.root))
+                pointer = str(manifest.relative_to(self.root))
+                if prefix:
+                    source = str(self.root) + "/" + prefix + source
+                    pointer = str(self.root) + "/" + prefix + pointer
+                capture_id = f"unsafe-path-{index}"
+                self.refused(self.cli("file", "--store", self.store, "--id", capture_id,
+                                      "--source", source))
+                self.assertFalse((self.store / capture_id / "manifest.json").exists())
+                self.refused(self.cli("verify", pointer))
+        self.assertEqual({path.name: path.read_bytes() for path in manifest.parent.iterdir()}, before)
+        self.assertEqual(self.verified(manifest)["captured"]["source"]["original_path"], str(self.file))
 
     def test_runtime_model_and_effort_pointers_bind_to_hashed_saved_bytes(self):
         basis = self.source / "fixture.json"

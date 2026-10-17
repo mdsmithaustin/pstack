@@ -2,7 +2,7 @@
 
 Choose an absolute store that you will retain after the source checkout disappears. Use the primary checkout's `.audit/<task>/evidence` or another persistent directory. Carry its absolute path in handoffs. The helper cannot infer retention from a directory name.
 
-Run the helper on POSIX with Python 3.10 or later. It uses only the standard library. Capture a command with an explicit cwd and a direct argv vector:
+Run the helper on POSIX with Python 3.10 or later. It uses only the standard library. Every path input must be absolute and contain no `..` components, including file sources and verification manifests. The helper rejects these inputs before path normalization. Capture a command with an explicit cwd and a direct argv vector:
 
 ```sh
 python3 skills/show-me-your-work/scripts/evidence.py command \
@@ -56,6 +56,6 @@ Both capture operations accept `--identity /absolute/path/request.json`. Supply 
 
 `requested` and `resolutionContext` retain supplied settings and raw resolver data. They do not establish execution identity. Omitting a section preserves null. A supplied context with `workModel: null` stays distinct from no context.
 
-Each runtime selector names an absolute regular file, an optional one-based physical JSONL line, and at least one JSON Pointer. Omit `line` for a JSON document. The helper snapshots each basis file and extracts the selected strings. Invalid pointers, absent lines, and nonstring values fail capture. Missing or null fields remain unknown. A second non-null claim for the same field fails, including matching values. No implicit precedence selects one record.
+Each runtime selector names an absolute regular file, an optional one-based physical JSONL line, and at least one JSON Pointer. LF separates JSONL records; CR remains JSON whitespace, including in CRLF files. Omit `line` for a JSON document. The helper snapshots each basis file and extracts the selected strings. Invalid pointers, absent lines, and nonstring values fail capture. Missing or null fields remain unknown. A second non-null claim for the same field fails, including matching values. No implicit precedence selects one record.
 
 Saved claims say `runtime-reported` and include the saved basis path, line, and pointer. Verification resolves those pointers against the same saved bytes it hashes. Configured values never fill missing observations. `provider_execution` always remains `unknown`. A runtime report is a declaration, not authenticated proof of which provider served it. Fixture identity records test this storage behavior. A native or live conclusion needs its own saved native or live record.

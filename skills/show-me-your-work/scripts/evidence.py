@@ -57,7 +57,6 @@ def valid_time(value):
     parsed = datetime.fromisoformat(value)
     require(parsed.tzinfo is not None and parsed.utcoffset() is not None,
             "timestamp must include a timezone")
-    return parsed
 
 
 def absolute(value):
@@ -144,7 +143,7 @@ def read_payload(directory, description):
 def selected_field(data, line, pointer):
     require(line is None or type(line) is int and line > 0, "line must be a positive integer or null")
     if line is not None:
-        lines = data.splitlines()
+        lines = data.split(b"\n")
         require(line <= len(lines), "runtime record line is absent")
         data = lines[line - 1]
     value = parse_json(data)
@@ -252,8 +251,8 @@ def validate_record(record, capture_id, payloads):
         require(isinstance(argv, list) and len(argv) > 0 and
                 all(isinstance(arg, str) and "\x00" not in arg for arg in argv), "invalid argv")
         absolute(execution["cwd"])
-        require(valid_time(execution["started_at"]) <= valid_time(execution["ended_at"]),
-                "execution ended before it started")
+        valid_time(execution["started_at"])
+        valid_time(execution["ended_at"])
         require(type(execution["raw_returncode"]) is int, "invalid raw return code")
         expected = {"stdout.bin", "stderr.bin", *basis}
     else:
@@ -320,7 +319,7 @@ def capture(args):
                         "started_at": started, "ended_at": timestamp(), "raw_returncode": child.returncode},
                         "stdout": "stdout.bin", "stderr": "stderr.bin"}
         else:
-            source = absolute(os.path.abspath(args.source))
+            source = absolute(args.source)
             write_bytes(directory, "source.bin", read_source(source))
             captured = {"kind": "imported-file", "source": {"original_path": str(source),
                         "captured_at": timestamp()}, "saved_file": "source.bin"}
@@ -331,7 +330,7 @@ def capture(args):
 
 
 def verify(path):
-    path = absolute(os.path.abspath(path))
+    path = absolute(path)
     require(path.name == "manifest.json", "expected manifest.json")
     directory = open_directory(path.parent)
     try:
