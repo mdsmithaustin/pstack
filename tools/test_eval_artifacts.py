@@ -130,8 +130,6 @@ class MiseTasksReadTheEvalsTree(unittest.TestCase):
 
 
 class ManifestsNameRealSkillFiles(unittest.TestCase):
-    """Every skill_paths entry resolves, which no runner command checks."""
-
     def test_every_skill_path_is_a_file(self) -> None:
         for manifest in sorted(EVALS.rglob("shared-benchmark.json")):
             name = manifest.relative_to(ROOT).as_posix()
