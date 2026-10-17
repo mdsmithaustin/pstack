@@ -1,0 +1,134 @@
+[
+  {
+    "id": "positive",
+    "trace": "positive.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "PASS",
+      "exposure": null
+    }
+  },
+  {
+    "id": "partial",
+    "trace": "partial.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "INCONCLUSIVE",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "failed",
+    "trace": "failed.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "FAIL",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "missing-result",
+    "trace": "missing-result.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "INCONCLUSIVE",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "wrong-runtime",
+    "trace": "wrong-runtime.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "FAIL",
+      "exposure": null
+    }
+  },
+  {
+    "id": "after-decision",
+    "trace": "after-decision.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "FAIL",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "early-decision",
+    "trace": "early-decision.jsonl",
+    "final": "Prepared.",
+    "decision_line": 1,
+    "expected": {
+      "reads": "FAIL",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "intro-only",
+    "trace": "intro-only.jsonl",
+    "final": "Prepared.",
+    "decision_line": 4,
+    "expected": {
+      "reads": "PASS",
+      "routing": "PASS",
+      "exposure": null
+    }
+  },
+  {
+    "id": "contamination",
+    "trace": "contamination.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "PASS",
+      "exposure": 4
+    }
+  },
+  {
+    "id": "chunked",
+    "trace": "chunked.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "PASS",
+      "exposure": null
+    }
+  },
+  {
+    "id": "duplicate",
+    "trace": "duplicate.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "INCONCLUSIVE",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "reordered",
+    "trace": "reordered.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "INCONCLUSIVE",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  },
+  {
+    "id": "truncated",
+    "trace": "truncated.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "INCONCLUSIVE",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
+  }
+]

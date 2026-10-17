@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "label": "A",
+      "name": "maple",
+      "prompt": "Plan these three maintenance steps and keep their progress current while you explain the next step: inspect the current settings, prepare a small cleanup, then verify the result. Mark the inspection as underway. Do not change files or create a recurring job.",
+      "required": [
+        "SKILL.md",
+        "references/worklist.md"
+      ],
+      "support": [],
+      "fixtures": {},
+      "safeguards": [
+        "Use an exposed ordered task tracker when available, otherwise preserve the same states in chat.",
+        "Do not create a goal without an explicit request."
+      ]
+    },
+    {
+      "label": "B",
+      "name": "cedar",
+      "prompt": "Before we begin the cleanup, help me choose its scope. We can preserve the current public names or rename them for clarity. I have not chosen between these options. Ask me to choose before any work begins. Do not change files or start another agent.",
+      "required": [
+        "SKILL.md",
+        "references/questions.md"
+      ],
+      "support": [],
+      "fixtures": {},
+      "safeguards": [
+        "Ask using an exposed structured capability when available, otherwise plain chat.",
+        "Do not invent a tool or perform either cleanup before the answer."
+      ]
+    },
+    {
+      "label": "C",
+      "name": "willow",
+      "prompt": "Explain how I could find the local record of this conversation later. This session was started with ephemeral storage enabled. Do not open any conversation records. Keep any suggested lookup limited to this workspace, and do not claim a record exists unless the session establishes it.",
+      "required": [
+        "SKILL.md",
+        "references/transcripts.md",
+        "references/transcripts-codex.md"
+      ],
+      "support": [],
+      "fixtures": {},
+      "safeguards": [
+        "Limit any proposed record lookup to this workspace.",
+        "Account for ephemeral storage and do not assert that a saved record exists.",
+        "Do not inspect session stores."
+      ]
+    },
+    {
+      "label": "D",
+      "name": "birch",
+      "prompt": "Prepare a recovery recommendation from the saved panel handoff in handoff.json. Keep the original assignment and the saved retry allowance. We have no native child identity in this handoff. Explain the next step, but do not restart or dispatch a child and do not change files.",
+      "required": [
+        "SKILL.md",
+        "references/roles.md"
+      ],
+      "support": [],
+      "fixtures": {
+        "handoff.json": {
+          "role": "trail reviewer",
+          "arm": 1,
+          "brief": "Review the release notes for unsupported claims and report exact paragraphs.",
+          "standingOrders": "Read only. Preserve the author's changes. Return a thin report.",
+          "checkout": ".",
+          "retryAllowance": {
+            "remaining": 1,
+            "limit": 1
+          },
+          "resolutionContext": {
+            "workModel": "gpt-6.1-sol@high",
+            "resolvedArm": {
+              "role": "trail reviewer",
+              "arm": 1,
+              "model": "gpt-6-astra",
+              "effort": "high",
+              "source": "project ## codex",
+              "notes": [
+                "Saved resolution; do not replace it with a fresh guess."
+              ]
+            }
+          },
+          "observedExecution": {
+            "model": null,
+            "effort": null,
+            "nativeTaskId": null
+          }
+        }
+      },
+      "safeguards": [
+        "Preserve the exact role, one-based arm, brief, standing orders, checkout, raw workModel, and full resolved arm.",
+        "Missing native identity leaves liveness unknown.",
+        "Keep one remaining retry and do not dispatch a replacement."
+      ]
+    },
+    {
+      "label": "E",
+      "name": "aspen",
+      "prompt": "Prepare a Comment Sicko review brief for later use on src/format.py. Use the installed instructions in this workspace and the project model choices. Include everything the reviewer would need to receive. Do not start the reviewer, install anything, fetch a repository, or change files.",
+      "required": [
+        "SKILL.md",
+        "references/roles.md",
+        "references/delegation.md",
+        "references/portable-paths.md",
+        "references/codex.md",
+        "references/named-roles.md"
+      ],
+      "support": [
+        "setup-pstack",
+        "how",
+        "why"
+      ],
+      "fixtures": {
+        ".agents/pstack-models.md": "# Project model choices\n\n## codex\n\ndefault: gpt-6.1-sol@high\nfeature: gpt-6.1-sol@high\nhardest tasks: gpt-6.1-sol@xhigh\ntrail reviewer: gpt-6-astra@high\n",
+        "src/format.py": "def format_name(value):\n    return value.strip()\n"
+      },
+      "safeguards": [
+        "Resolve the reviewer role without changing its arm count.",
+        "Preserve the complete emitted Comment Sicko persona and the scoped file.",
+        "Do not infer native persona activation from a file on disk.",
+        "Do not dispatch a child, install skills, or fetch source."
+      ]
+    },
+    {
+      "label": "F",
+      "name": "elm",
+      "prompt": "Continue our periodic release-note review. The next review is due at 2026-10-18T16:00:00Z and the cadence is every 24 hours. Its checklist is to inspect new entries, check their evidence links, and record unresolved claims. This session has no wake-up facility. Prepare the next step only. Do not create a recurring job or launch a wrapper process.",
+      "required": [
+        "SKILL.md",
+        "references/loops.md"
+      ],
+      "support": [],
+      "fixtures": {},
+      "safeguards": [
+        "State that the cadence is manual.",
+        "Preserve the next due time and checklist.",
+        "Do not claim that a job exists or create a job, schedule, or wrapper."
+      ]
+    }
+  ]
+}

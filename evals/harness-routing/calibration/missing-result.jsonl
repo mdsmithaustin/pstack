@@ -1,0 +1,2 @@
+{"type": "item.started", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "answer", "type": "agent_message", "text": "Prepared."}}
