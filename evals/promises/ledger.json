@@ -1586,7 +1586,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's **Loops and wake-ups** section to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
+     "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's [loop procedure](../../pstack-harness/references/loops.md) to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
      "file": "skills/pstack-harness/references/loops.md",
