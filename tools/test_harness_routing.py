@@ -121,15 +121,27 @@ class ReadProofTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pure file read"):
             oracle.inspect_trace(wrapped, *args[1:], action_line=1)
 
-    def test_unverified_foreign_reads_preserve_read_grades_and_context_gaps(self):
-        for name in ("failed-foreign", "mismatched-foreign", "noncompleted-foreign", "missing-output-foreign", "pending-foreign"):
+    def test_unverified_foreign_reads_keep_routing_and_context_independent(self):
+        cases = (
+            ("failed-foreign", "all paired saved returned fields", [], "Permission denied\n"),
+            ("mismatched-foreign", "all paired saved returned fields", [], "remot"),
+            ("noncompleted-foreign", "all paired saved returned fields", [], "remote\n"),
+            ("missing-output-foreign", "unverified", [4], None),
+            ("pending-foreign", "unverified", [3], None),
+        )
+        for name, coverage, gaps, returned in cases:
             with self.subTest(name=name):
                 result = oracle.inspect_trace((MODULE / "calibration" / (name + ".jsonl")).read_bytes(), b"Prepared.", Path("/grove/maple"),
                                               {"entry.md": b"first\nsecond\n", "foreign.md": b"remote\n"}, ["entry.md"], ["foreign.md"], [])
                 self.assertEqual(result["reads"]["status"], "PASS")
                 self.assertEqual(result["routing"]["status"], "INCONCLUSIVE")
                 self.assertEqual(result["unverified_foreign_read_lines"], [3])
-                self.assertEqual(result["context"]["coverage"], "unverified")
+                self.assertEqual(result["context"]["coverage"], coverage)
+                self.assertEqual(result["context"]["unpaired_context_lines"], gaps)
+                expected_context = [{"line": 2, "scope": {"aggregated_output": "first\nsecond\n"}}]
+                if returned is not None:
+                    expected_context.append({"line": 4, "scope": {"aggregated_output": returned}})
+                self.assertEqual(result["returned_context"], expected_context)
                 self.assertEqual(result["observations"][0]["result_line"], 2)
 
     def test_context_gaps_preserve_prior_observations(self):
