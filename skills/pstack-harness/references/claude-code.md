@@ -17,4 +17,3 @@ Only the live catalog proves an agent is loaded. A file on disk does not. A dele
 `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases
 
 no per-call field; a `pstack-effort-<level>` agent type carries it (see the [effort table above](#claude-code-adapter)). An `inherit-parent` effort, or a session whose catalog lacks the agent, runs at the session effort (`--effort`, `effortLevel`)
-

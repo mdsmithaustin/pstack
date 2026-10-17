@@ -9,4 +9,3 @@ Pass the values through the delegation toolset's fields when it has them, or as 
 a delegation toolset when enabled; `hermes -z` for one-shot subprocess runs
 
 `--reasoning <value>` on `hermes -z`; config `agent.reasoning_effort` and per-model `agent.reasoning_overrides`. Whether the delegation toolset takes an effort field is unverified: check its schema in session
-
