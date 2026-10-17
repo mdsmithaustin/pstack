@@ -1,0 +1,740 @@
+{
+  "version": 1,
+  "source_revision": "958064feabca694463910ad950887f7c48e588b5",
+  "frozen_contract_sha256": "adaa3a0b4115795c0117f264e29cc13e7e3ea88d8b2021fc9adf0a88796ff048",
+  "implementation": {
+    "study.py": "44336fccbcffb8fdab2622ff0b61b21e2d1ae575a503a424dce10c7527613e77",
+    "oracle.py": "b64e5548cb1e8ea14712d5db2424f93db66e1712b21a3a7c24f1d71a49ebf7c9"
+  },
+  "packages": [
+    {
+      "label": "A",
+      "archive": "A.tar.gz",
+      "archive_sha256": "a3465e1433550014cea3f97d62dc1c7bdcf98460761dcb9ab15330ce1b887579",
+      "stdin_sha256": "9643c4a63d0f5a2d6118f37998a3a8ceea70972e3f5752e37edd6b8853b1a72b",
+      "inventory": {
+        "skills/pstack-harness/SKILL.md": {
+          "bytes": 5506,
+          "sha256": "5ef0992019241bebfaaccc55084101c24f6d8a6a333aebbce94ab2810fcee9e1"
+        },
+        "skills/pstack-harness/references/claude-code.md": {
+          "bytes": 1364,
+          "sha256": "e45d93a87d9e5e7d1b459f6f668668e54be0db37fd861c3f1a63434dfe38b2ed"
+        },
+        "skills/pstack-harness/references/codex.md": {
+          "bytes": 3122,
+          "sha256": "7c11002bb9dd8af0cdeb57f4e72d5134be6b229d71decaa3f8f33f7cd0984b1c"
+        },
+        "skills/pstack-harness/references/delegation.md": {
+          "bytes": 3790,
+          "sha256": "78fae109734cae29b7625ca82801052d44e782d6813b3d101036e43237abd23a"
+        },
+        "skills/pstack-harness/references/grok.md": {
+          "bytes": 2608,
+          "sha256": "568c964f1b9ff55abc46f138a64596e8a6c511163d94ecea4fd2942b3274e083"
+        },
+        "skills/pstack-harness/references/hermes.md": {
+          "bytes": 547,
+          "sha256": "765fc88af55473a035d9ad4b6fbdfa5ffff446c4d8b20d80fc98232896441079"
+        },
+        "skills/pstack-harness/references/loops.md": {
+          "bytes": 333,
+          "sha256": "de2aa52e3aefc734821b700ffbab35e7bfab1a01228cb7212ce3c244ee179932"
+        },
+        "skills/pstack-harness/references/named-roles.md": {
+          "bytes": 2871,
+          "sha256": "8b218bfb7848f8f42542e1827360b930394b3b6804eb9cec99a7e5e08a697370"
+        },
+        "skills/pstack-harness/references/other-runtime.md": {
+          "bytes": 416,
+          "sha256": "eb680597d89057c6d6b0d2198442396d84fa1d982f74cac46a03159b09affd8e"
+        },
+        "skills/pstack-harness/references/portable-paths.md": {
+          "bytes": 7252,
+          "sha256": "9c2df1ee2132a97ba76fb82ad3a752dde6336e6a6e1f20243e59e2a9351bccc6"
+        },
+        "skills/pstack-harness/references/questions.md": {
+          "bytes": 155,
+          "sha256": "d55a625327d283328ad7ac0318981fd02bac1f1f6f4c1a6176ab017b506c7fc3"
+        },
+        "skills/pstack-harness/references/registration.md": {
+          "bytes": 7354,
+          "sha256": "ff5f428043a1d35a82245b4fdc7e741a758970a9afae7ff207838f07b7918a7b"
+        },
+        "skills/pstack-harness/references/roles.md": {
+          "bytes": 7280,
+          "sha256": "d8fe61724d04262637c302822550ba87c8124bdac5d54b87366f34cc7aed381f"
+        },
+        "skills/pstack-harness/references/subagents/effort-delegate.md": {
+          "bytes": 581,
+          "sha256": "14ab720ed0010d286bb1ad24f72a576aaf7447dcba72c7306a97f171245a745c"
+        },
+        "skills/pstack-harness/references/subagents/roles.json": {
+          "bytes": 4003,
+          "sha256": "c3b6a8be0ef3ee2fbe036745ec91714b17caa7cc6cf5e941cf28cdca3ed20051"
+        },
+        "skills/pstack-harness/references/transcripts-claude-code.md": {
+          "bytes": 266,
+          "sha256": "8dc0b033a46404658d21435102789b6fc3753a08afec14ee1727dced8ef60f5e"
+        },
+        "skills/pstack-harness/references/transcripts-codex.md": {
+          "bytes": 154,
+          "sha256": "c8489d6c6004a9856ab600d56dec9708b173aa0d7fa9900f2ef42837e0c6d6c3"
+        },
+        "skills/pstack-harness/references/transcripts-grok.md": {
+          "bytes": 243,
+          "sha256": "227a3d01bb34c71c9b037caf9b1fec78b21d6e002147583681068173a96dab46"
+        },
+        "skills/pstack-harness/references/transcripts-hermes.md": {
+          "bytes": 174,
+          "sha256": "ed96c9bb287888f3129f7a5dd7e6386b2358ed7136ed7b10bc8ee591c6d7757a"
+        },
+        "skills/pstack-harness/references/transcripts-other.md": {
+          "bytes": 133,
+          "sha256": "3e7a0c919acb9d507d755f4a5e3dbeca201620f28d376118fdd585d2369c6b4d"
+        },
+        "skills/pstack-harness/references/transcripts.md": {
+          "bytes": 422,
+          "sha256": "44ffd75f64997119eafb261dc984797c9726237fc3791a967542fac257dcf3c2"
+        },
+        "skills/pstack-harness/references/worklist.md": {
+          "bytes": 1824,
+          "sha256": "ecb63ccc244acaa2628587e72a00fcc2547f0d453880b10843f3dfb551ff8722"
+        },
+        "skills/pstack-harness/scripts/loading-path.py": {
+          "bytes": 2989,
+          "sha256": "753d13eb528a5c5fe29dc52a94b392f64e478b3da4ba56d6b357d4d76e431806"
+        },
+        "skills/pstack-harness/scripts/subagents.py": {
+          "bytes": 16781,
+          "sha256": "7dee9f92956465eae4d5c555fe17267f334b89b1db2e7d5f6396769a72a50a7d"
+        }
+      }
+    },
+    {
+      "label": "B",
+      "archive": "B.tar.gz",
+      "archive_sha256": "a3465e1433550014cea3f97d62dc1c7bdcf98460761dcb9ab15330ce1b887579",
+      "stdin_sha256": "cd96289651fa8552010ab007f71c69361e7a8a6f785d3d48036fe0883d2649b2",
+      "inventory": {
+        "skills/pstack-harness/SKILL.md": {
+          "bytes": 5506,
+          "sha256": "5ef0992019241bebfaaccc55084101c24f6d8a6a333aebbce94ab2810fcee9e1"
+        },
+        "skills/pstack-harness/references/claude-code.md": {
+          "bytes": 1364,
+          "sha256": "e45d93a87d9e5e7d1b459f6f668668e54be0db37fd861c3f1a63434dfe38b2ed"
+        },
+        "skills/pstack-harness/references/codex.md": {
+          "bytes": 3122,
+          "sha256": "7c11002bb9dd8af0cdeb57f4e72d5134be6b229d71decaa3f8f33f7cd0984b1c"
+        },
+        "skills/pstack-harness/references/delegation.md": {
+          "bytes": 3790,
+          "sha256": "78fae109734cae29b7625ca82801052d44e782d6813b3d101036e43237abd23a"
+        },
+        "skills/pstack-harness/references/grok.md": {
+          "bytes": 2608,
+          "sha256": "568c964f1b9ff55abc46f138a64596e8a6c511163d94ecea4fd2942b3274e083"
+        },
+        "skills/pstack-harness/references/hermes.md": {
+          "bytes": 547,
+          "sha256": "765fc88af55473a035d9ad4b6fbdfa5ffff446c4d8b20d80fc98232896441079"
+        },
+        "skills/pstack-harness/references/loops.md": {
+          "bytes": 333,
+          "sha256": "de2aa52e3aefc734821b700ffbab35e7bfab1a01228cb7212ce3c244ee179932"
+        },
+        "skills/pstack-harness/references/named-roles.md": {
+          "bytes": 2871,
+          "sha256": "8b218bfb7848f8f42542e1827360b930394b3b6804eb9cec99a7e5e08a697370"
+        },
+        "skills/pstack-harness/references/other-runtime.md": {
+          "bytes": 416,
+          "sha256": "eb680597d89057c6d6b0d2198442396d84fa1d982f74cac46a03159b09affd8e"
+        },
+        "skills/pstack-harness/references/portable-paths.md": {
+          "bytes": 7252,
+          "sha256": "9c2df1ee2132a97ba76fb82ad3a752dde6336e6a6e1f20243e59e2a9351bccc6"
+        },
+        "skills/pstack-harness/references/questions.md": {
+          "bytes": 155,
+          "sha256": "d55a625327d283328ad7ac0318981fd02bac1f1f6f4c1a6176ab017b506c7fc3"
+        },
+        "skills/pstack-harness/references/registration.md": {
+          "bytes": 7354,
+          "sha256": "ff5f428043a1d35a82245b4fdc7e741a758970a9afae7ff207838f07b7918a7b"
+        },
+        "skills/pstack-harness/references/roles.md": {
+          "bytes": 7280,
+          "sha256": "d8fe61724d04262637c302822550ba87c8124bdac5d54b87366f34cc7aed381f"
+        },
+        "skills/pstack-harness/references/subagents/effort-delegate.md": {
+          "bytes": 581,
+          "sha256": "14ab720ed0010d286bb1ad24f72a576aaf7447dcba72c7306a97f171245a745c"
+        },
+        "skills/pstack-harness/references/subagents/roles.json": {
+          "bytes": 4003,
+          "sha256": "c3b6a8be0ef3ee2fbe036745ec91714b17caa7cc6cf5e941cf28cdca3ed20051"
+        },
+        "skills/pstack-harness/references/transcripts-claude-code.md": {
+          "bytes": 266,
+          "sha256": "8dc0b033a46404658d21435102789b6fc3753a08afec14ee1727dced8ef60f5e"
+        },
+        "skills/pstack-harness/references/transcripts-codex.md": {
+          "bytes": 154,
+          "sha256": "c8489d6c6004a9856ab600d56dec9708b173aa0d7fa9900f2ef42837e0c6d6c3"
+        },
+        "skills/pstack-harness/references/transcripts-grok.md": {
+          "bytes": 243,
+          "sha256": "227a3d01bb34c71c9b037caf9b1fec78b21d6e002147583681068173a96dab46"
+        },
+        "skills/pstack-harness/references/transcripts-hermes.md": {
+          "bytes": 174,
+          "sha256": "ed96c9bb287888f3129f7a5dd7e6386b2358ed7136ed7b10bc8ee591c6d7757a"
+        },
+        "skills/pstack-harness/references/transcripts-other.md": {
+          "bytes": 133,
+          "sha256": "3e7a0c919acb9d507d755f4a5e3dbeca201620f28d376118fdd585d2369c6b4d"
+        },
+        "skills/pstack-harness/references/transcripts.md": {
+          "bytes": 422,
+          "sha256": "44ffd75f64997119eafb261dc984797c9726237fc3791a967542fac257dcf3c2"
+        },
+        "skills/pstack-harness/references/worklist.md": {
+          "bytes": 1824,
+          "sha256": "ecb63ccc244acaa2628587e72a00fcc2547f0d453880b10843f3dfb551ff8722"
+        },
+        "skills/pstack-harness/scripts/loading-path.py": {
+          "bytes": 2989,
+          "sha256": "753d13eb528a5c5fe29dc52a94b392f64e478b3da4ba56d6b357d4d76e431806"
+        },
+        "skills/pstack-harness/scripts/subagents.py": {
+          "bytes": 16781,
+          "sha256": "7dee9f92956465eae4d5c555fe17267f334b89b1db2e7d5f6396769a72a50a7d"
+        }
+      }
+    },
+    {
+      "label": "C",
+      "archive": "C.tar.gz",
+      "archive_sha256": "a3465e1433550014cea3f97d62dc1c7bdcf98460761dcb9ab15330ce1b887579",
+      "stdin_sha256": "7491b544201a0b6d05dd2f152a8caabe77c89e72ec73ad6430edff11d4471937",
+      "inventory": {
+        "skills/pstack-harness/SKILL.md": {
+          "bytes": 5506,
+          "sha256": "5ef0992019241bebfaaccc55084101c24f6d8a6a333aebbce94ab2810fcee9e1"
+        },
+        "skills/pstack-harness/references/claude-code.md": {
+          "bytes": 1364,
+          "sha256": "e45d93a87d9e5e7d1b459f6f668668e54be0db37fd861c3f1a63434dfe38b2ed"
+        },
+        "skills/pstack-harness/references/codex.md": {
+          "bytes": 3122,
+          "sha256": "7c11002bb9dd8af0cdeb57f4e72d5134be6b229d71decaa3f8f33f7cd0984b1c"
+        },
+        "skills/pstack-harness/references/delegation.md": {
+          "bytes": 3790,
+          "sha256": "78fae109734cae29b7625ca82801052d44e782d6813b3d101036e43237abd23a"
+        },
+        "skills/pstack-harness/references/grok.md": {
+          "bytes": 2608,
+          "sha256": "568c964f1b9ff55abc46f138a64596e8a6c511163d94ecea4fd2942b3274e083"
+        },
+        "skills/pstack-harness/references/hermes.md": {
+          "bytes": 547,
+          "sha256": "765fc88af55473a035d9ad4b6fbdfa5ffff446c4d8b20d80fc98232896441079"
+        },
+        "skills/pstack-harness/references/loops.md": {
+          "bytes": 333,
+          "sha256": "de2aa52e3aefc734821b700ffbab35e7bfab1a01228cb7212ce3c244ee179932"
+        },
+        "skills/pstack-harness/references/named-roles.md": {
+          "bytes": 2871,
+          "sha256": "8b218bfb7848f8f42542e1827360b930394b3b6804eb9cec99a7e5e08a697370"
+        },
+        "skills/pstack-harness/references/other-runtime.md": {
+          "bytes": 416,
+          "sha256": "eb680597d89057c6d6b0d2198442396d84fa1d982f74cac46a03159b09affd8e"
+        },
+        "skills/pstack-harness/references/portable-paths.md": {
+          "bytes": 7252,
+          "sha256": "9c2df1ee2132a97ba76fb82ad3a752dde6336e6a6e1f20243e59e2a9351bccc6"
+        },
+        "skills/pstack-harness/references/questions.md": {
+          "bytes": 155,
+          "sha256": "d55a625327d283328ad7ac0318981fd02bac1f1f6f4c1a6176ab017b506c7fc3"
+        },
+        "skills/pstack-harness/references/registration.md": {
+          "bytes": 7354,
+          "sha256": "ff5f428043a1d35a82245b4fdc7e741a758970a9afae7ff207838f07b7918a7b"
+        },
+        "skills/pstack-harness/references/roles.md": {
+          "bytes": 7280,
+          "sha256": "d8fe61724d04262637c302822550ba87c8124bdac5d54b87366f34cc7aed381f"
+        },
+        "skills/pstack-harness/references/subagents/effort-delegate.md": {
+          "bytes": 581,
+          "sha256": "14ab720ed0010d286bb1ad24f72a576aaf7447dcba72c7306a97f171245a745c"
+        },
+        "skills/pstack-harness/references/subagents/roles.json": {
+          "bytes": 4003,
+          "sha256": "c3b6a8be0ef3ee2fbe036745ec91714b17caa7cc6cf5e941cf28cdca3ed20051"
+        },
+        "skills/pstack-harness/references/transcripts-claude-code.md": {
+          "bytes": 266,
+          "sha256": "8dc0b033a46404658d21435102789b6fc3753a08afec14ee1727dced8ef60f5e"
+        },
+        "skills/pstack-harness/references/transcripts-codex.md": {
+          "bytes": 154,
+          "sha256": "c8489d6c6004a9856ab600d56dec9708b173aa0d7fa9900f2ef42837e0c6d6c3"
+        },
+        "skills/pstack-harness/references/transcripts-grok.md": {
+          "bytes": 243,
+          "sha256": "227a3d01bb34c71c9b037caf9b1fec78b21d6e002147583681068173a96dab46"
+        },
+        "skills/pstack-harness/references/transcripts-hermes.md": {
+          "bytes": 174,
+          "sha256": "ed96c9bb287888f3129f7a5dd7e6386b2358ed7136ed7b10bc8ee591c6d7757a"
+        },
+        "skills/pstack-harness/references/transcripts-other.md": {
+          "bytes": 133,
+          "sha256": "3e7a0c919acb9d507d755f4a5e3dbeca201620f28d376118fdd585d2369c6b4d"
+        },
+        "skills/pstack-harness/references/transcripts.md": {
+          "bytes": 422,
+          "sha256": "44ffd75f64997119eafb261dc984797c9726237fc3791a967542fac257dcf3c2"
+        },
+        "skills/pstack-harness/references/worklist.md": {
+          "bytes": 1824,
+          "sha256": "ecb63ccc244acaa2628587e72a00fcc2547f0d453880b10843f3dfb551ff8722"
+        },
+        "skills/pstack-harness/scripts/loading-path.py": {
+          "bytes": 2989,
+          "sha256": "753d13eb528a5c5fe29dc52a94b392f64e478b3da4ba56d6b357d4d76e431806"
+        },
+        "skills/pstack-harness/scripts/subagents.py": {
+          "bytes": 16781,
+          "sha256": "7dee9f92956465eae4d5c555fe17267f334b89b1db2e7d5f6396769a72a50a7d"
+        }
+      }
+    },
+    {
+      "label": "D",
+      "archive": "D.tar.gz",
+      "archive_sha256": "c92ba8944546334d04cdf1e02c38b79dbd368861355b8a8b67adfbf73b04501e",
+      "stdin_sha256": "f58ada3a7f761396e28d16a818a5c333e4391b565ea73381f6efa94e3f1855b3",
+      "inventory": {
+        "handoff.json": {
+          "bytes": 719,
+          "sha256": "49be81b9ac957d671b52478c6bf6f2044749a804984cfef078c6369aefb93178"
+        },
+        "skills/pstack-harness/SKILL.md": {
+          "bytes": 5506,
+          "sha256": "5ef0992019241bebfaaccc55084101c24f6d8a6a333aebbce94ab2810fcee9e1"
+        },
+        "skills/pstack-harness/references/claude-code.md": {
+          "bytes": 1364,
+          "sha256": "e45d93a87d9e5e7d1b459f6f668668e54be0db37fd861c3f1a63434dfe38b2ed"
+        },
+        "skills/pstack-harness/references/codex.md": {
+          "bytes": 3122,
+          "sha256": "7c11002bb9dd8af0cdeb57f4e72d5134be6b229d71decaa3f8f33f7cd0984b1c"
+        },
+        "skills/pstack-harness/references/delegation.md": {
+          "bytes": 3790,
+          "sha256": "78fae109734cae29b7625ca82801052d44e782d6813b3d101036e43237abd23a"
+        },
+        "skills/pstack-harness/references/grok.md": {
+          "bytes": 2608,
+          "sha256": "568c964f1b9ff55abc46f138a64596e8a6c511163d94ecea4fd2942b3274e083"
+        },
+        "skills/pstack-harness/references/hermes.md": {
+          "bytes": 547,
+          "sha256": "765fc88af55473a035d9ad4b6fbdfa5ffff446c4d8b20d80fc98232896441079"
+        },
+        "skills/pstack-harness/references/loops.md": {
+          "bytes": 333,
+          "sha256": "de2aa52e3aefc734821b700ffbab35e7bfab1a01228cb7212ce3c244ee179932"
+        },
+        "skills/pstack-harness/references/named-roles.md": {
+          "bytes": 2871,
+          "sha256": "8b218bfb7848f8f42542e1827360b930394b3b6804eb9cec99a7e5e08a697370"
+        },
+        "skills/pstack-harness/references/other-runtime.md": {
+          "bytes": 416,
+          "sha256": "eb680597d89057c6d6b0d2198442396d84fa1d982f74cac46a03159b09affd8e"
+        },
+        "skills/pstack-harness/references/portable-paths.md": {
+          "bytes": 7252,
+          "sha256": "9c2df1ee2132a97ba76fb82ad3a752dde6336e6a6e1f20243e59e2a9351bccc6"
+        },
+        "skills/pstack-harness/references/questions.md": {
+          "bytes": 155,
+          "sha256": "d55a625327d283328ad7ac0318981fd02bac1f1f6f4c1a6176ab017b506c7fc3"
+        },
+        "skills/pstack-harness/references/registration.md": {
+          "bytes": 7354,
+          "sha256": "ff5f428043a1d35a82245b4fdc7e741a758970a9afae7ff207838f07b7918a7b"
+        },
+        "skills/pstack-harness/references/roles.md": {
+          "bytes": 7280,
+          "sha256": "d8fe61724d04262637c302822550ba87c8124bdac5d54b87366f34cc7aed381f"
+        },
+        "skills/pstack-harness/references/subagents/effort-delegate.md": {
+          "bytes": 581,
+          "sha256": "14ab720ed0010d286bb1ad24f72a576aaf7447dcba72c7306a97f171245a745c"
+        },
+        "skills/pstack-harness/references/subagents/roles.json": {
+          "bytes": 4003,
+          "sha256": "c3b6a8be0ef3ee2fbe036745ec91714b17caa7cc6cf5e941cf28cdca3ed20051"
+        },
+        "skills/pstack-harness/references/transcripts-claude-code.md": {
+          "bytes": 266,
+          "sha256": "8dc0b033a46404658d21435102789b6fc3753a08afec14ee1727dced8ef60f5e"
+        },
+        "skills/pstack-harness/references/transcripts-codex.md": {
+          "bytes": 154,
+          "sha256": "c8489d6c6004a9856ab600d56dec9708b173aa0d7fa9900f2ef42837e0c6d6c3"
+        },
+        "skills/pstack-harness/references/transcripts-grok.md": {
+          "bytes": 243,
+          "sha256": "227a3d01bb34c71c9b037caf9b1fec78b21d6e002147583681068173a96dab46"
+        },
+        "skills/pstack-harness/references/transcripts-hermes.md": {
+          "bytes": 174,
+          "sha256": "ed96c9bb287888f3129f7a5dd7e6386b2358ed7136ed7b10bc8ee591c6d7757a"
+        },
+        "skills/pstack-harness/references/transcripts-other.md": {
+          "bytes": 133,
+          "sha256": "3e7a0c919acb9d507d755f4a5e3dbeca201620f28d376118fdd585d2369c6b4d"
+        },
+        "skills/pstack-harness/references/transcripts.md": {
+          "bytes": 422,
+          "sha256": "44ffd75f64997119eafb261dc984797c9726237fc3791a967542fac257dcf3c2"
+        },
+        "skills/pstack-harness/references/worklist.md": {
+          "bytes": 1824,
+          "sha256": "ecb63ccc244acaa2628587e72a00fcc2547f0d453880b10843f3dfb551ff8722"
+        },
+        "skills/pstack-harness/scripts/loading-path.py": {
+          "bytes": 2989,
+          "sha256": "753d13eb528a5c5fe29dc52a94b392f64e478b3da4ba56d6b357d4d76e431806"
+        },
+        "skills/pstack-harness/scripts/subagents.py": {
+          "bytes": 16781,
+          "sha256": "7dee9f92956465eae4d5c555fe17267f334b89b1db2e7d5f6396769a72a50a7d"
+        }
+      }
+    },
+    {
+      "label": "E",
+      "archive": "E.tar.gz",
+      "archive_sha256": "cd39b3c598a0031e7a2605c37ffded95e52ad94d5009dee9de2bd99696970c6e",
+      "stdin_sha256": "37ac7054fb36fa850aca5c6687cc0b9245d865c6b5649377f825018db82b82ef",
+      "inventory": {
+        ".agents/pstack-models.md": {
+          "bytes": 153,
+          "sha256": "eead5a0c7080a4f30228277758fbb7cc19ed1b93b41ca367d078be987e5e81d4"
+        },
+        "skills/how/SKILL.md": {
+          "bytes": 3223,
+          "sha256": "dfc2b932f6cf0d310b47e8fb84c4e9aaa4b2614bd4980fc0430f88cbbe084a24"
+        },
+        "skills/how/references/explainer-prompt.md": {
+          "bytes": 3061,
+          "sha256": "b990227d24b18467e5108edd8009c888e3c5d6e84066a66a06f2e2ddd96b49c2"
+        },
+        "skills/how/references/explorer-prompt.md": {
+          "bytes": 3297,
+          "sha256": "7b38a2fad1210de2bfe6f6c323b1e1d280b4b02263e55203230f4a3670276338"
+        },
+        "skills/pstack-harness/SKILL.md": {
+          "bytes": 5506,
+          "sha256": "5ef0992019241bebfaaccc55084101c24f6d8a6a333aebbce94ab2810fcee9e1"
+        },
+        "skills/pstack-harness/references/claude-code.md": {
+          "bytes": 1364,
+          "sha256": "e45d93a87d9e5e7d1b459f6f668668e54be0db37fd861c3f1a63434dfe38b2ed"
+        },
+        "skills/pstack-harness/references/codex.md": {
+          "bytes": 3122,
+          "sha256": "7c11002bb9dd8af0cdeb57f4e72d5134be6b229d71decaa3f8f33f7cd0984b1c"
+        },
+        "skills/pstack-harness/references/delegation.md": {
+          "bytes": 3790,
+          "sha256": "78fae109734cae29b7625ca82801052d44e782d6813b3d101036e43237abd23a"
+        },
+        "skills/pstack-harness/references/grok.md": {
+          "bytes": 2608,
+          "sha256": "568c964f1b9ff55abc46f138a64596e8a6c511163d94ecea4fd2942b3274e083"
+        },
+        "skills/pstack-harness/references/hermes.md": {
+          "bytes": 547,
+          "sha256": "765fc88af55473a035d9ad4b6fbdfa5ffff446c4d8b20d80fc98232896441079"
+        },
+        "skills/pstack-harness/references/loops.md": {
+          "bytes": 333,
+          "sha256": "de2aa52e3aefc734821b700ffbab35e7bfab1a01228cb7212ce3c244ee179932"
+        },
+        "skills/pstack-harness/references/named-roles.md": {
+          "bytes": 2871,
+          "sha256": "8b218bfb7848f8f42542e1827360b930394b3b6804eb9cec99a7e5e08a697370"
+        },
+        "skills/pstack-harness/references/other-runtime.md": {
+          "bytes": 416,
+          "sha256": "eb680597d89057c6d6b0d2198442396d84fa1d982f74cac46a03159b09affd8e"
+        },
+        "skills/pstack-harness/references/portable-paths.md": {
+          "bytes": 7252,
+          "sha256": "9c2df1ee2132a97ba76fb82ad3a752dde6336e6a6e1f20243e59e2a9351bccc6"
+        },
+        "skills/pstack-harness/references/questions.md": {
+          "bytes": 155,
+          "sha256": "d55a625327d283328ad7ac0318981fd02bac1f1f6f4c1a6176ab017b506c7fc3"
+        },
+        "skills/pstack-harness/references/registration.md": {
+          "bytes": 7354,
+          "sha256": "ff5f428043a1d35a82245b4fdc7e741a758970a9afae7ff207838f07b7918a7b"
+        },
+        "skills/pstack-harness/references/roles.md": {
+          "bytes": 7280,
+          "sha256": "d8fe61724d04262637c302822550ba87c8124bdac5d54b87366f34cc7aed381f"
+        },
+        "skills/pstack-harness/references/subagents/effort-delegate.md": {
+          "bytes": 581,
+          "sha256": "14ab720ed0010d286bb1ad24f72a576aaf7447dcba72c7306a97f171245a745c"
+        },
+        "skills/pstack-harness/references/subagents/roles.json": {
+          "bytes": 4003,
+          "sha256": "c3b6a8be0ef3ee2fbe036745ec91714b17caa7cc6cf5e941cf28cdca3ed20051"
+        },
+        "skills/pstack-harness/references/transcripts-claude-code.md": {
+          "bytes": 266,
+          "sha256": "8dc0b033a46404658d21435102789b6fc3753a08afec14ee1727dced8ef60f5e"
+        },
+        "skills/pstack-harness/references/transcripts-codex.md": {
+          "bytes": 154,
+          "sha256": "c8489d6c6004a9856ab600d56dec9708b173aa0d7fa9900f2ef42837e0c6d6c3"
+        },
+        "skills/pstack-harness/references/transcripts-grok.md": {
+          "bytes": 243,
+          "sha256": "227a3d01bb34c71c9b037caf9b1fec78b21d6e002147583681068173a96dab46"
+        },
+        "skills/pstack-harness/references/transcripts-hermes.md": {
+          "bytes": 174,
+          "sha256": "ed96c9bb287888f3129f7a5dd7e6386b2358ed7136ed7b10bc8ee591c6d7757a"
+        },
+        "skills/pstack-harness/references/transcripts-other.md": {
+          "bytes": 133,
+          "sha256": "3e7a0c919acb9d507d755f4a5e3dbeca201620f28d376118fdd585d2369c6b4d"
+        },
+        "skills/pstack-harness/references/transcripts.md": {
+          "bytes": 422,
+          "sha256": "44ffd75f64997119eafb261dc984797c9726237fc3791a967542fac257dcf3c2"
+        },
+        "skills/pstack-harness/references/worklist.md": {
+          "bytes": 1824,
+          "sha256": "ecb63ccc244acaa2628587e72a00fcc2547f0d453880b10843f3dfb551ff8722"
+        },
+        "skills/pstack-harness/scripts/loading-path.py": {
+          "bytes": 2989,
+          "sha256": "753d13eb528a5c5fe29dc52a94b392f64e478b3da4ba56d6b357d4d76e431806"
+        },
+        "skills/pstack-harness/scripts/subagents.py": {
+          "bytes": 16781,
+          "sha256": "7dee9f92956465eae4d5c555fe17267f334b89b1db2e7d5f6396769a72a50a7d"
+        },
+        "skills/setup-pstack/SKILL.md": {
+          "bytes": 21672,
+          "sha256": "870d5d574f1d3278dfd0f5e9a9a6c6642e60b7d1a129caf000e675a98f72ef8f"
+        },
+        "skills/setup-pstack/assets/pull_request_template.md": {
+          "bytes": 573,
+          "sha256": "7df8b937b3f5692cbe2727215df5486bdede20953a55051a1afb685980918969"
+        },
+        "skills/setup-pstack/examples/pstack-models.md": {
+          "bytes": 2093,
+          "sha256": "cb3fc98f90c735eb72a79a3aad1f2bdaec30f7a27f391e016ef5db8d8b142da2"
+        },
+        "skills/setup-pstack/references/models-config.md": {
+          "bytes": 9491,
+          "sha256": "1848f22475342dbb4803917ca87ac6f2bfdbda827f62a61dcb69d6aaa94ed4fe"
+        },
+        "skills/setup-pstack/references/pr-template.md": {
+          "bytes": 4086,
+          "sha256": "aa8b77499e540dc12a760e16239d0e74fe3bd802df63916bf7192598ffb017d6"
+        },
+        "skills/setup-pstack/scripts/check-models-config.py": {
+          "bytes": 23465,
+          "sha256": "d94b312977b8a02f818e615dbb613248de9feeba864482f48a2d4a50ca5bf4b2"
+        },
+        "skills/setup-pstack/scripts/skill-listing.py": {
+          "bytes": 7476,
+          "sha256": "95ab0aa01ed192848a74053fac8fa0331287862ce7c1acc564d00082006f427c"
+        },
+        "skills/why/SKILL.md": {
+          "bytes": 8846,
+          "sha256": "63d1cc06fbdbf6f25ce4aa9d61e774cf63802027c0fd307cdd7ba1c4c247450e"
+        },
+        "skills/why/references/epistemics.md": {
+          "bytes": 6736,
+          "sha256": "d54a2361b2d5973bc3fe2edf62f446d87935974d4b40d47f23b9529f956ca758"
+        },
+        "skills/why/references/investigator-prompt.md": {
+          "bytes": 5554,
+          "sha256": "c44afba186f899094f3694e6c9d6de5d14ff7c4ce28b787a9f50fc789c9a7fc3"
+        },
+        "skills/why/references/source-playbook.md": {
+          "bytes": 1363,
+          "sha256": "9ae9dcb9d09111c9facc68510331c5aba4aed9b1b057314ff1fc0e166ad3993a"
+        },
+        "skills/why/references/sources/code-archaeology.md": {
+          "bytes": 3411,
+          "sha256": "58256edeef96db7c92ccb84b3906c3820ef2f570c831995683f3376673379f49"
+        },
+        "skills/why/references/sources/databricks.md": {
+          "bytes": 6994,
+          "sha256": "236ede7aab6454662a992db088a5393537a5233a4c26719c93188f9e174488f6"
+        },
+        "skills/why/references/sources/datadog.md": {
+          "bytes": 4971,
+          "sha256": "b139faac5dc11b8f26c8255dce6033c1a6ac143b038d3dd103f2034c5dbec9cd"
+        },
+        "skills/why/references/sources/incident-postmortem.md": {
+          "bytes": 1973,
+          "sha256": "a899470f05f86029630a13a2696491cc708ca7b56a6e822a69ff6e954d6ff8cf"
+        },
+        "skills/why/references/sources/linear.md": {
+          "bytes": 2996,
+          "sha256": "01304e7f1badfcfb78babbb0edcadeb3cc8dd3f713793420cdff24ba190f907c"
+        },
+        "skills/why/references/sources/notion.md": {
+          "bytes": 2853,
+          "sha256": "3bcfa695c49dfad4ac036d5d7181c12585f55ac04f1936198d16ab75a2788997"
+        },
+        "skills/why/references/sources/sentry.md": {
+          "bytes": 4730,
+          "sha256": "e0ed11e474c3d248bc5ac16d37ca1439b2db0253a3413252194556643cf8328a"
+        },
+        "skills/why/references/sources/slack.md": {
+          "bytes": 3105,
+          "sha256": "58fee61d024b3700b407e7acbed367944720ff05adfddb6954d36c88368f3ba7"
+        },
+        "skills/why/references/synthesizer-prompt.md": {
+          "bytes": 7157,
+          "sha256": "d6139b9e2fc7e6349332b65c63fcfe127743057a7aa6d2af81a64ec83cccf8fe"
+        },
+        "src/format.py": {
+          "bytes": 49,
+          "sha256": "410f9a64ad5e41cd16bf55890a6ab99918d2fb4dc02c6c555cdaa356b2bd3051"
+        }
+      }
+    },
+    {
+      "label": "F",
+      "archive": "F.tar.gz",
+      "archive_sha256": "a3465e1433550014cea3f97d62dc1c7bdcf98460761dcb9ab15330ce1b887579",
+      "stdin_sha256": "20fcb223abb5b070c5a01570cf2f203fae77629fc66756a4b9910951b83fd359",
+      "inventory": {
+        "skills/pstack-harness/SKILL.md": {
+          "bytes": 5506,
+          "sha256": "5ef0992019241bebfaaccc55084101c24f6d8a6a333aebbce94ab2810fcee9e1"
+        },
+        "skills/pstack-harness/references/claude-code.md": {
+          "bytes": 1364,
+          "sha256": "e45d93a87d9e5e7d1b459f6f668668e54be0db37fd861c3f1a63434dfe38b2ed"
+        },
+        "skills/pstack-harness/references/codex.md": {
+          "bytes": 3122,
+          "sha256": "7c11002bb9dd8af0cdeb57f4e72d5134be6b229d71decaa3f8f33f7cd0984b1c"
+        },
+        "skills/pstack-harness/references/delegation.md": {
+          "bytes": 3790,
+          "sha256": "78fae109734cae29b7625ca82801052d44e782d6813b3d101036e43237abd23a"
+        },
+        "skills/pstack-harness/references/grok.md": {
+          "bytes": 2608,
+          "sha256": "568c964f1b9ff55abc46f138a64596e8a6c511163d94ecea4fd2942b3274e083"
+        },
+        "skills/pstack-harness/references/hermes.md": {
+          "bytes": 547,
+          "sha256": "765fc88af55473a035d9ad4b6fbdfa5ffff446c4d8b20d80fc98232896441079"
+        },
+        "skills/pstack-harness/references/loops.md": {
+          "bytes": 333,
+          "sha256": "de2aa52e3aefc734821b700ffbab35e7bfab1a01228cb7212ce3c244ee179932"
+        },
+        "skills/pstack-harness/references/named-roles.md": {
+          "bytes": 2871,
+          "sha256": "8b218bfb7848f8f42542e1827360b930394b3b6804eb9cec99a7e5e08a697370"
+        },
+        "skills/pstack-harness/references/other-runtime.md": {
+          "bytes": 416,
+          "sha256": "eb680597d89057c6d6b0d2198442396d84fa1d982f74cac46a03159b09affd8e"
+        },
+        "skills/pstack-harness/references/portable-paths.md": {
+          "bytes": 7252,
+          "sha256": "9c2df1ee2132a97ba76fb82ad3a752dde6336e6a6e1f20243e59e2a9351bccc6"
+        },
+        "skills/pstack-harness/references/questions.md": {
+          "bytes": 155,
+          "sha256": "d55a625327d283328ad7ac0318981fd02bac1f1f6f4c1a6176ab017b506c7fc3"
+        },
+        "skills/pstack-harness/references/registration.md": {
+          "bytes": 7354,
+          "sha256": "ff5f428043a1d35a82245b4fdc7e741a758970a9afae7ff207838f07b7918a7b"
+        },
+        "skills/pstack-harness/references/roles.md": {
+          "bytes": 7280,
+          "sha256": "d8fe61724d04262637c302822550ba87c8124bdac5d54b87366f34cc7aed381f"
+        },
+        "skills/pstack-harness/references/subagents/effort-delegate.md": {
+          "bytes": 581,
+          "sha256": "14ab720ed0010d286bb1ad24f72a576aaf7447dcba72c7306a97f171245a745c"
+        },
+        "skills/pstack-harness/references/subagents/roles.json": {
+          "bytes": 4003,
+          "sha256": "c3b6a8be0ef3ee2fbe036745ec91714b17caa7cc6cf5e941cf28cdca3ed20051"
+        },
+        "skills/pstack-harness/references/transcripts-claude-code.md": {
+          "bytes": 266,
+          "sha256": "8dc0b033a46404658d21435102789b6fc3753a08afec14ee1727dced8ef60f5e"
+        },
+        "skills/pstack-harness/references/transcripts-codex.md": {
+          "bytes": 154,
+          "sha256": "c8489d6c6004a9856ab600d56dec9708b173aa0d7fa9900f2ef42837e0c6d6c3"
+        },
+        "skills/pstack-harness/references/transcripts-grok.md": {
+          "bytes": 243,
+          "sha256": "227a3d01bb34c71c9b037caf9b1fec78b21d6e002147583681068173a96dab46"
+        },
+        "skills/pstack-harness/references/transcripts-hermes.md": {
+          "bytes": 174,
+          "sha256": "ed96c9bb287888f3129f7a5dd7e6386b2358ed7136ed7b10bc8ee591c6d7757a"
+        },
+        "skills/pstack-harness/references/transcripts-other.md": {
+          "bytes": 133,
+          "sha256": "3e7a0c919acb9d507d755f4a5e3dbeca201620f28d376118fdd585d2369c6b4d"
+        },
+        "skills/pstack-harness/references/transcripts.md": {
+          "bytes": 422,
+          "sha256": "44ffd75f64997119eafb261dc984797c9726237fc3791a967542fac257dcf3c2"
+        },
+        "skills/pstack-harness/references/worklist.md": {
+          "bytes": 1824,
+          "sha256": "ecb63ccc244acaa2628587e72a00fcc2547f0d453880b10843f3dfb551ff8722"
+        },
+        "skills/pstack-harness/scripts/loading-path.py": {
+          "bytes": 2989,
+          "sha256": "753d13eb528a5c5fe29dc52a94b392f64e478b3da4ba56d6b357d4d76e431806"
+        },
+        "skills/pstack-harness/scripts/subagents.py": {
+          "bytes": 16781,
+          "sha256": "7dee9f92956465eae4d5c555fe17267f334b89b1db2e7d5f6396769a72a50a7d"
+        }
+      }
+    }
+  ],
+  "subjects_launched": 0
+}

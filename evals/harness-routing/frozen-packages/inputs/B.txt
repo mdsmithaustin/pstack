@@ -1,0 +1,3 @@
+Read skills/pstack-harness/SKILL.md in full before handling this request. Use only the relevant installed instructions as the work needs them.
+
+Before we begin the cleanup, help me choose its scope. We can preserve the current public names or rename them for clarity. I have not chosen between these options. Ask me to choose before any work begins. Do not change files or start another agent.

@@ -1,0 +1,3 @@
+Read skills/pstack-harness/SKILL.md in full before handling this request. Use only the relevant installed instructions as the work needs them.
+
+Plan these three maintenance steps and keep their progress current while you explain the next step: inspect the current settings, prepare a small cleanup, then verify the result. Mark the inspection as underway. Do not change files or create a recurring job.

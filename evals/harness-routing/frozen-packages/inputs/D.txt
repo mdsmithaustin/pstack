@@ -1,0 +1,3 @@
+Read skills/pstack-harness/SKILL.md in full before handling this request. Use only the relevant installed instructions as the work needs them.
+
+Prepare a recovery recommendation from the saved panel handoff in handoff.json. Keep the original assignment and the saved retry allowance. We have no native child identity in this handoff. Explain the next step, but do not restart or dispatch a child and do not change files.
