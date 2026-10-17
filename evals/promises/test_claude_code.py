@@ -661,25 +661,66 @@ class NativeFilesystem(unittest.TestCase):
 
 
 class RuntimeAdmission(unittest.TestCase):
+    def setUp(self):
+        self.fingerprints = {path: digests[0] for path, digests in claude_code.PINNED_TOOLS}
+        self.fingerprints[claude_code.CLAUDE_BINARY] = claude_code.CLAUDE_SHA256
+        claude_code._host_runtime.cache_clear()
+        self.addCleanup(claude_code._host_runtime.cache_clear)
+        for name, value in (("system", "Darwin"), ("release", "25.6.0"), ("machine", "arm64")):
+            self.enterContext(patch.object(claude_code.platform, name, return_value=value))
+        self.symlink = self.enterContext(patch.object(Path, "is_symlink", autospec=True, return_value=False))
+        self.enterContext(patch.object(Path, "is_file", return_value=True))
+        self.enterContext(patch.object(Path, "exists", return_value=True))
+        self.enterContext(patch.object(claude_code, "_digest", side_effect=self.fingerprints.__getitem__))
+
     def test_both_supported_git_digests_become_the_selected_fingerprint(self):
         git = Path("/Library/Developer/CommandLineTools/usr/bin/git")
-        fingerprints = {path: digests[0] for path, digests in claude_code.PINNED_TOOLS}
-        fingerprints[claude_code.CLAUDE_BINARY] = claude_code.CLAUDE_SHA256
-        self.addCleanup(claude_code._host_runtime.cache_clear)
         for digest in ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
                        "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae"):
             with self.subTest(digest=digest):
                 claude_code._host_runtime.cache_clear()
-                fingerprints[git] = digest
-                with patch.object(claude_code.platform, "system", return_value="Darwin"), \
-                        patch.object(claude_code.platform, "release", return_value="25.6.0"), \
-                        patch.object(claude_code.platform, "machine", return_value="arm64"), \
-                        patch.object(Path, "is_symlink", return_value=False), \
-                        patch.object(Path, "is_file", return_value=True), \
-                        patch.object(Path, "exists", return_value=True), \
-                        patch.object(claude_code, "_digest", side_effect=fingerprints.__getitem__):
-                    runtime = claude_code._host_runtime()
+                self.fingerprints[git] = digest
+                runtime = claude_code._host_runtime()
                 self.assertEqual(dict(runtime.fingerprints)[git], digest)
+
+    def test_both_reviewed_ripgrep_digests_become_the_selected_fingerprint(self):
+        rg = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path/rg")
+        for digest in ("268128f0b67b319ce00e659bc9130b28aff1edd7a184660a9930f797b135576c",
+                       "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9"):
+            with self.subTest(digest=digest):
+                claude_code._host_runtime.cache_clear()
+                self.fingerprints[rg] = digest
+                runtime = claude_code._host_runtime()
+                self.assertEqual(dict(runtime.fingerprints)[rg], digest)
+                self.assertIn(rg, runtime.read_files)
+                self.assertIn(str(rg.parent), runtime.path_env.split(":"))
+
+    def test_unknown_ripgrep_digest_is_refused(self):
+        self.fingerprints[claude_code.RG_BINARY] = "0" * 64
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "unsupported executable: .*codex-path/rg"):
+            claude_code._host_runtime()
+
+    def test_symlink_at_reviewed_ripgrep_path_is_refused(self):
+        self.symlink.side_effect = lambda path: path == claude_code.RG_BINARY
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "unsupported executable: .*codex-path/rg"):
+            claude_code._host_runtime()
+
+    def test_prepared_runtime_rejects_a_different_reviewed_ripgrep_digest(self):
+        rg = claude_code.RG_BINARY
+        old = "268128f0b67b319ce00e659bc9130b28aff1edd7a184660a9930f797b135576c"
+        new = "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9"
+        for selected, changed in ((old, new), (new, old)):
+            with self.subTest(selected=selected), tempfile.TemporaryDirectory() as tmp:
+                claude_code._host_runtime.cache_clear()
+                self.fingerprints[rg] = selected
+                runtime = claude_code._host_runtime()
+                run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": "tally"}, "0" * 40, 60)
+                run.project.mkdir(parents=True)
+                state = claude_code._bind_paths(run, replace(runtime, read_trees=()))
+                self.assertEqual(dict(state.runtime.fingerprints)[rg], selected)
+                self.fingerprints[rg] = changed
+                with self.assertRaisesRegex(claude_code.IsolationUnavailable, "supported executable changed: .*codex-path/rg"):
+                    claude_code.child_env(run)
 
 
 @unittest.skipUnless((platform.system(), platform.release(), platform.machine()) ==
