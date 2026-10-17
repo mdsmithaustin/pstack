@@ -27,7 +27,7 @@ python3 evals/harness-routing/study.py run \
   --approved-contract INSPECTED_SHA256
 ```
 
-Failure means a nonzero exit or any invocation state other than completed with raw return code zero. The report always accounts for six labels. A process failure is separate from an interpretation failure.
+Failure means a nonzero collector exit, a launched slot that did not complete with raw return code zero, or a collection hold. The report always accounts for six labels, including `planned` slots awaiting a later explicit run and `consumed` slots from earlier runs. Inspect the saved receipt for each consumed slot's original outcome. A process failure is separate from an interpretation failure.
 
 Each explicit `run` launches at most one planned slot. Each slot has one exclusive reservation and a 180-second deadline. Timeout, interruption, spawn failure, and a controller crash consume that slot. Repeating `run` never retries a consumed slot. Interruption ends the current invocation. A separate controller cannot run the same wave concurrently.
 
@@ -82,7 +82,9 @@ The oracle supports paired `item.started` and `item.completed` Codex command rec
 
 These line numbers illustrate the input format. They are not expected answers. Run `assess` again with `--decisions /absolute/path/to/decisions.json`. Failure means a nonzero exit, a missing label, or a position that does not identify a saved statement or action. The assessor rechecks complete reads before the reviewed positions. Without semantic review its ordering claim stops at the final answer. A known decision or action before a verified required result fails ordering even without a final answer; missing or ambiguous finals still cannot pass read coverage. Keep the review's safeguard verdict beside the deterministic report. It cannot repair missing read evidence.
 
-Read all six final outputs and their complete returned context yourself. Private content in returned context invalidates affected later observations as blinded evidence. Preserve raw grades and earlier observations with their coverage limits. An exposure does not establish behavioral influence. Missing results, missing returned fields, unknown forms, malformed streams, and explicit truncation leave context coverage unverified. Marker searches and comparisons against retained private artifacts detect positive exposure; a negative search does not establish blinding. Any byte-verified nonempty read of a foreign adapter fails routing, including a partial read. A pending foreign read leaves routing inconclusive even when required reads are complete.
+Read all six final outputs and their complete returned context yourself. Private content in returned context invalidates affected later observations as blinded evidence. Preserve raw grades and earlier observations with their coverage limits. An exposure does not establish behavioral influence. Missing results, missing returned fields, unknown forms, malformed streams, and explicit truncation leave context coverage unverified. Marker searches and comparisons against retained private artifacts detect positive exposure; a negative search does not establish blinding.
+
+Any paired successful byte-verified nonempty read of a foreign adapter fails routing, including a partial read. A pending or failed foreign read, a noncompleted result, or returned bytes that do not match the frozen file leave routing inconclusive even when required reads are complete. Routing uncertainty alone does not make returned-context coverage unverified. A paired result with its full saved output remains covered despite a failed read, noncompleted status, or mismatched bytes; pending results and missing output remain context gaps. See `test_unverified_foreign_reads_keep_routing_and_context_independent` in `tools/test_harness_routing.py` for these separate contracts.
 
 ## Run the model-free checks
 
