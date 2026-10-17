@@ -346,7 +346,7 @@ mise run skill-audit
 
 Local runs and CI read the same pin, and each run prints `skill-ci <version> (<commit>)` first, so the two logs show the commit they ran. `skill-ci update` moves the pin to the newest release tag.
 
-The pinned skill-ci v1.4.0 runner validates declared `skill_paths`. Both `skill-ci validate` and `skill-ci audit` reject a manifest if an entry is not an existing file inside the manifest's skill root. `tools/test_eval_artifacts.py` also fails when any manifest under `evals/` names a path that is not a file.
+The pinned skill-ci v1.4.0 runner validates declared `skill_paths`. Both `skill-ci validate` and `skill-ci audit` reject a manifest if an entry does not exist inside the manifest's skill root. `tools/test_eval_artifacts.py` also fails when any manifest under `evals/` names a path that is not a file.
 
 `skill-audit` is stricter than CI on one point. CI skips `audit-manifest` for a manifest with no cases, and the task audits every manifest it finds, so an empty manifest fails locally and passes in CI. Nothing in this repository has one today.
 
