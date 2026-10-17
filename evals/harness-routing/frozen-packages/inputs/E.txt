@@ -1,0 +1,3 @@
+Read skills/pstack-harness/SKILL.md in full before handling this request. Use only the relevant installed instructions as the work needs them.
+
+Prepare a Comment Sicko review brief for later use on src/format.py. Use the installed instructions in this workspace and the project model choices. Include everything the reviewer would need to receive. Do not start the reviewer, install anything, fetch a repository, or change files.
