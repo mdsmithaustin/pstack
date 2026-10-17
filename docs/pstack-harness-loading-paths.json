@@ -1,0 +1,355 @@
+[
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "worklist",
+    "runtime": null,
+    "persona": false,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        }
+      ],
+      "bytes": 25150
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/worklist.md",
+          "bytes": 1824
+        }
+      ],
+      "bytes": 7330
+    }
+  },
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "question",
+    "runtime": null,
+    "persona": false,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        }
+      ],
+      "bytes": 25150
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/questions.md",
+          "bytes": 155
+        }
+      ],
+      "bytes": 5661
+    }
+  },
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "loop",
+    "runtime": null,
+    "persona": false,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        }
+      ],
+      "bytes": 25150
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/loops.md",
+          "bytes": 333
+        }
+      ],
+      "bytes": 5839
+    }
+  },
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "spawn",
+    "runtime": "codex",
+    "persona": false,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        }
+      ],
+      "bytes": 32402
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/roles.md",
+          "bytes": 7280
+        },
+        {
+          "path": "skills/pstack-harness/references/delegation.md",
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        },
+        {
+          "path": "skills/pstack-harness/references/codex.md",
+          "bytes": 3122
+        }
+      ],
+      "bytes": 26950
+    }
+  },
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "spawn",
+    "runtime": "claude-code",
+    "persona": false,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        }
+      ],
+      "bytes": 32402
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/roles.md",
+          "bytes": 7280
+        },
+        {
+          "path": "skills/pstack-harness/references/delegation.md",
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        },
+        {
+          "path": "skills/pstack-harness/references/claude-code.md",
+          "bytes": 1365
+        }
+      ],
+      "bytes": 25193
+    }
+  },
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "spawn",
+    "runtime": "hermes",
+    "persona": false,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        }
+      ],
+      "bytes": 32402
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/roles.md",
+          "bytes": 7280
+        },
+        {
+          "path": "skills/pstack-harness/references/delegation.md",
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        },
+        {
+          "path": "skills/pstack-harness/references/hermes.md",
+          "bytes": 548
+        }
+      ],
+      "bytes": 24376
+    }
+  },
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "spawn",
+    "runtime": "grok",
+    "persona": false,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        }
+      ],
+      "bytes": 32402
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/roles.md",
+          "bytes": 7280
+        },
+        {
+          "path": "skills/pstack-harness/references/delegation.md",
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        },
+        {
+          "path": "skills/pstack-harness/references/grok.md",
+          "bytes": 2608
+        }
+      ],
+      "bytes": 26436
+    }
+  },
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "spawn",
+    "runtime": "codex",
+    "persona": true,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/named-roles.md",
+          "bytes": 2876
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        }
+      ],
+      "bytes": 35278
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/roles.md",
+          "bytes": 7280
+        },
+        {
+          "path": "skills/pstack-harness/references/delegation.md",
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
+        },
+        {
+          "path": "skills/pstack-harness/references/codex.md",
+          "bytes": 3122
+        },
+        {
+          "path": "skills/pstack-harness/references/named-roles.md",
+          "bytes": 2871
+        }
+      ],
+      "bytes": 29821
+    }
+  },
+  {
+    "measurement": "declared harness source loading contract, not observed agent reads or provider tokens",
+    "action": "transcript",
+    "runtime": "hermes",
+    "persona": false,
+    "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "before": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 25150
+        }
+      ],
+      "bytes": 25150
+    },
+    "after": {
+      "files": [
+        {
+          "path": "skills/pstack-harness/SKILL.md",
+          "bytes": 5506
+        },
+        {
+          "path": "skills/pstack-harness/references/transcripts.md",
+          "bytes": 422
+        },
+        {
+          "path": "skills/pstack-harness/references/transcripts-hermes.md",
+          "bytes": 174
+        }
+      ],
+      "bytes": 6102
+    }
+  }
+]
