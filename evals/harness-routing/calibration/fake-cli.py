@@ -13,7 +13,7 @@ if args == ["--version"]:
 elif args[:2] == ["exec", "--help"]:
     print("--ignore-user-config --ignore-rules --ephemeral --json --sandbox --output-last-message")
 elif "features" in args:
-    for name in ("apps", "plugins", "multi_agent", "goals", "hooks", "skill_search", "in_app_local_automation"):
+    for name in ("apps", "plugins", "multi_agent", "goals", "hooks", "skill_search", "in_app_local_automation", "multi_agent_v2", "multi_agent_v2_dynamic_tools", "skill_mcp_dependency_install", "unbounded_connection_retries"):
         print(name + " stable false")
     print("skip_host_skill_discovery under-development true")
 else:
@@ -24,6 +24,9 @@ else:
     if mode == "failure":
         print("invocation failed", file=sys.stderr)
         raise SystemExit(17)
+    if mode == "interrupt":
+        os.kill(os.getppid(), 2)
+        time.sleep(120)
     if mode == "timeout":
         child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
         (base / "descendant.pid").write_text(str(child.pid))
@@ -32,7 +35,9 @@ else:
         time.sleep(120)
     command = "cat skills/pstack-harness/SKILL.md"
     output = Path("skills/pstack-harness/SKILL.md").read_text()
-    if mode == "dispatch":
+    if mode == "possible":
+        command, output = 'grep -n "codex exec" skills/pstack-harness/SKILL.md', ""
+    elif mode == "dispatch":
         command, output = "codex exec resume child", ""
     elif mode == "contamination":
         output += "parent-routing-criteria-6f82d1b9"
