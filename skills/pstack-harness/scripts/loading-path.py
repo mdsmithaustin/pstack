@@ -31,7 +31,7 @@ if args.action in {'spawn', 'transcript'}:
 if args.action == 'persona':
     selected.append(actions['portable-paths'])
 if args.persona:
-    selected.extend([actions['persona'], actions['portable-paths']])
+    selected.append(actions['persona'])
 paths = [Path('SKILL.md')]
 for row in selected:
     for target in re.findall(r'\]\(([^)#]+)(?:#[^)]*)?\)', row):
@@ -47,7 +47,7 @@ for path in paths:
 before_paths = [Path('SKILL.md')]
 if args.persona or args.action == 'persona':
     before_paths.append(Path('references/named-roles.md'))
-if args.persona or args.action in {'persona', 'portable-paths'}:
+if args.persona or args.action in {'spawn', 'persona', 'portable-paths'}:
     before_paths.append(Path('references/portable-paths.md'))
 before = []
 for path in before_paths:

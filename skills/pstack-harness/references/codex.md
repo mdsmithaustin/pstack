@@ -8,13 +8,9 @@ Pass `model` and `reasoning_effort` on `spawn_agent`, and whenever you pass eith
 
 ## Invocation and effort hints
 
-`spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn, with the `fork_turns` rule in **Spawn a role**; custom agents use TOML in `~/.codex/agents/` or `.codex/agents/` with `name`, `description`, and `developer_instructions`; generated pstack personas leave model and effort unset; `codex exec` is the subprocess route
+`spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn, with the [`fork_turns` rule above](#codex-adapter); custom agents use TOML in `~/.codex/agents/` or `.codex/agents/` with `name`, `description`, and `developer_instructions`; generated pstack personas leave model and effort unset; `codex exec` is the subprocess route
 
 the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (low on `gpt-6.1-sol`, medium on the other gpt-6 models), not the parent's, so always pass one
-
-## Worklist hints
-
-Prefer any exposed structured plan-tracking capability; otherwise use normal progress updates in the commentary channel. Goal lifecycle tools are not work tracking unless the user explicitly asked to create a goal. When the plan tool is off, setup-pstack step 0b names the switch
 
 ## Writer isolation
 

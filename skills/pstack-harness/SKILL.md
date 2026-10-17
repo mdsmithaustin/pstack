@@ -17,7 +17,7 @@ Read each selected reference in full before its action. Select only the actions 
 |---|---|
 | `worklist` | [Worklist procedure](references/worklist.md) |
 | `question` | [Structured questions](references/questions.md) |
-| `spawn` | [Role resolution and handoffs](references/roles.md), [Delegation and isolation](references/delegation.md), and the current runtime adapter below |
+| `spawn` | [Role resolution and handoffs](references/roles.md), [Delegation and isolation](references/delegation.md), [Portable resource path contract](references/portable-paths.md), and the current runtime adapter below |
 | `role-handoff` | [Role resolution and handoffs](references/roles.md) |
 | `persona` | [Persona contract](references/named-roles.md) when the spawn names a persona |
 | `loop` | [Loops and wake-ups](references/loops.md) |
@@ -26,7 +26,7 @@ Read each selected reference in full before its action. Select only the actions 
 
 ## Runtime adapters
 
-Read only the current runtime column for the selected action. For another action, use a spawn adapter only when that action needs a runtime-specific hint.
+For spawn or transcript, read only the current runtime column for that action. Other actions need no runtime adapter.
 
 | Runtime | Spawn adapter | Transcript location |
 |---|---|---|

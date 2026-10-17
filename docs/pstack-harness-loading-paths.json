@@ -18,14 +18,14 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/worklist.md",
-          "bytes": 1570
+          "bytes": 1824
         }
       ],
-      "bytes": 7048
+      "bytes": 7330
     }
   },
   {
@@ -47,14 +47,14 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/questions.md",
           "bytes": 155
         }
       ],
-      "bytes": 5633
+      "bytes": 5661
     }
   },
   {
@@ -76,14 +76,14 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/loops.md",
           "bytes": 333
         }
       ],
-      "bytes": 5811
+      "bytes": 5839
     }
   },
   {
@@ -97,15 +97,19 @@
         {
           "path": "skills/pstack-harness/SKILL.md",
           "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
         }
       ],
-      "bytes": 25150
+      "bytes": 32402
     },
     "after": {
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
@@ -113,14 +117,18 @@
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3737
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
         },
         {
           "path": "skills/pstack-harness/references/codex.md",
-          "bytes": 3418
+          "bytes": 3122
         }
       ],
-      "bytes": 19913
+      "bytes": 26950
     }
   },
   {
@@ -134,15 +142,19 @@
         {
           "path": "skills/pstack-harness/SKILL.md",
           "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
         }
       ],
-      "bytes": 25150
+      "bytes": 32402
     },
     "after": {
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
@@ -150,14 +162,18 @@
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3737
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
         },
         {
           "path": "skills/pstack-harness/references/claude-code.md",
-          "bytes": 1627
+          "bytes": 1365
         }
       ],
-      "bytes": 18122
+      "bytes": 25193
     }
   },
   {
@@ -171,15 +187,19 @@
         {
           "path": "skills/pstack-harness/SKILL.md",
           "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
         }
       ],
-      "bytes": 25150
+      "bytes": 32402
     },
     "after": {
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
@@ -187,14 +207,18 @@
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3737
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
         },
         {
           "path": "skills/pstack-harness/references/hermes.md",
-          "bytes": 661
+          "bytes": 548
         }
       ],
-      "bytes": 17156
+      "bytes": 24376
     }
   },
   {
@@ -208,15 +232,19 @@
         {
           "path": "skills/pstack-harness/SKILL.md",
           "bytes": 25150
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
         }
       ],
-      "bytes": 25150
+      "bytes": 32402
     },
     "after": {
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
@@ -224,14 +252,18 @@
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3737
+          "bytes": 3790
+        },
+        {
+          "path": "skills/pstack-harness/references/portable-paths.md",
+          "bytes": 7252
         },
         {
           "path": "skills/pstack-harness/references/grok.md",
-          "bytes": 2664
+          "bytes": 2567
         }
       ],
-      "bytes": 19159
+      "bytes": 26395
     }
   },
   {
@@ -261,7 +293,7 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
@@ -269,22 +301,22 @@
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3737
-        },
-        {
-          "path": "skills/pstack-harness/references/codex.md",
-          "bytes": 3418
-        },
-        {
-          "path": "skills/pstack-harness/references/named-roles.md",
-          "bytes": 2876
+          "bytes": 3790
         },
         {
           "path": "skills/pstack-harness/references/portable-paths.md",
           "bytes": 7252
+        },
+        {
+          "path": "skills/pstack-harness/references/codex.md",
+          "bytes": 3122
+        },
+        {
+          "path": "skills/pstack-harness/references/named-roles.md",
+          "bytes": 2876
         }
       ],
-      "bytes": 30041
+      "bytes": 29826
     }
   },
   {
@@ -306,7 +338,7 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5478
+          "bytes": 5506
         },
         {
           "path": "skills/pstack-harness/references/transcripts.md",
@@ -317,7 +349,7 @@
           "bytes": 174
         }
       ],
-      "bytes": 6074
+      "bytes": 6102
     }
   }
 ]

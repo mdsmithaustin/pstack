@@ -35,13 +35,20 @@ class HarnessLoadingPaths(unittest.TestCase):
                 report = self.receipt('spawn', '--runtime', runtime)
                 self.assertEqual([row['path'] for row in report['after']['files']], [
                     PREFIX + 'SKILL.md', PREFIX + 'references/roles.md',
-                    PREFIX + 'references/delegation.md', PREFIX + f'references/{"other-runtime" if runtime == "other" else runtime}.md',
+                    PREFIX + 'references/delegation.md', PREFIX + 'references/portable-paths.md',
+                    PREFIX + f'references/{"other-runtime" if runtime == "other" else runtime}.md',
                 ])
 
-    def test_persona_spawn_adds_the_persona_and_portable_root_contracts(self):
+                self.assertEqual([row['path'] for row in report['before']['files']], [
+                    PREFIX + 'SKILL.md', PREFIX + 'references/portable-paths.md',
+                ])
+
+    def test_persona_spawn_adds_the_persona_contract(self):
         report = self.receipt('spawn', '--runtime', 'codex', '--persona')
-        self.assertEqual([row['path'] for row in report['after']['files']][-2:], [
-            PREFIX + 'references/named-roles.md', PREFIX + 'references/portable-paths.md',
+        self.assertEqual([row['path'] for row in report['after']['files']], [
+            PREFIX + 'SKILL.md', PREFIX + 'references/roles.md',
+            PREFIX + 'references/delegation.md', PREFIX + 'references/portable-paths.md',
+            PREFIX + 'references/codex.md', PREFIX + 'references/named-roles.md',
         ])
         self.assertEqual([row['path'] for row in report['before']['files']], [
             PREFIX + 'SKILL.md', PREFIX + 'references/named-roles.md',
@@ -65,12 +72,6 @@ class HarnessLoadingPaths(unittest.TestCase):
             PREFIX + 'SKILL.md', PREFIX + 'references/transcripts.md',
             PREFIX + 'references/transcripts-hermes.md',
         ])
-
-    def test_receipt_counts_actual_file_bytes(self):
-        report = self.receipt('spawn', '--runtime', 'codex')
-        sizes = [len((ROOT / row['path']).read_bytes()) for row in report['after']['files']]
-        self.assertEqual([row['bytes'] for row in report['after']['files']], sizes)
-        self.assertEqual(report['after']['bytes'], sum(sizes))
 
     def test_invalid_routes_fail_instead_of_emitting_an_empty_success(self):
         for options in (

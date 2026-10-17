@@ -16,8 +16,5 @@ Only the live catalog proves an agent is loaded. A file on disk does not. A dele
 
 `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases
 
-no per-call field; a `pstack-effort-<level>` agent type carries it (see **Spawn a role**). An `inherit-parent` effort, or a session whose catalog lacks the agent, runs at the session effort (`--effort`, `effortLevel`)
+no per-call field; a `pstack-effort-<level>` agent type carries it (see the [effort table above](#claude-code-adapter)). An `inherit-parent` effort, or a session whose catalog lacks the agent, runs at the session effort (`--effort`, `effortLevel`)
 
-## Worklist hints
-
-Prefer any exposed structured task-tracking capability; otherwise use normal progress updates. When the task tools are off, setup-pstack step 0b names the switch. With tool search on, the default, they arrive deferred, so the discovery step in **Track a worklist** applies

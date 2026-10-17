@@ -19,6 +19,6 @@ If `git worktree add` fails, give each writer whose output the lead collects fro
 **Read-only.** Use an enforcing option if the spawn mechanism has one; otherwise state it plainly in the brief ("read-only: do not edit or write files").
 
 
-- **Panels keep their configured arm count.** Run a three-model panel as three arms even in a one-model harness. Brief each arm the way the panel's skill says, and run the arms in parallel or sequentially. For exact model requests, apply the required-arm rule above.
+- **Panels keep their configured arm count.** Run a three-model panel as three arms even in a one-model harness. Brief each arm the way the panel's skill says, and run the arms in parallel or sequentially. For exact model requests, apply [role resolution step 5](roles.md#spawn-a-role) and its linked required-arm rule.
 
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used. Wherever a rule labels a review same-model or `self-review`, put the label in the verdict and in the reply.
