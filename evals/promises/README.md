@@ -209,7 +209,7 @@ SQLite's authorizer does not contain a parser memory-safety exploit. The interna
 
 ## Native parent grading boundary
 
-The whole oracle worker runs under a dedicated Seatbelt file policy on Darwin `25.6.0`, arm64. The reviewed interpreter is Python `3.14.7` at `.local/share/mise/installs/python/3.14.7` below the current account's home from the operating system account database. Git is `/Library/Developer/CommandLineTools/usr/bin/git`. Both the grader and the Claude adapter accept these exact executable fingerprints:
+The whole oracle worker runs under a dedicated Seatbelt file policy on Darwin `25.6.0`, arm64. The reviewed Python interpreter is pinned by executable digest at `.local/share/mise/installs/python/3.14.7/bin/python3.14` below the current account's home from the operating system account database. The legacy directory name does not establish the interpreter's version. Git is `/Library/Developer/CommandLineTools/usr/bin/git`. Both the grader and the Claude adapter accept these exact executable fingerprints:
 
 | Git version | SHA-256 |
 | --- | --- |
