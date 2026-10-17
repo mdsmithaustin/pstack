@@ -675,7 +675,7 @@
     },
     {
      "file": "skills/pstack-harness/references/grok.md",
-     "quote": "The spawn takes no effort, so a resolved level runs at the session effort and step 5 reports it."
+     "quote": "The spawn takes no effort, so a resolved level runs at the session effort and [role resolution step 5](roles.md#spawn-a-role) reports it."
     }
    ],
    "harness_sensitive": false,

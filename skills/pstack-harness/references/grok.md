@@ -2,7 +2,7 @@
 
 Observed circa 2026-09. Verify these hints against the live session and prefer its tools and help.
 
-Resolve with `--harness grok`. Pass `model` only when `spawn_subagent` lists the argument. With subagent model inheritance on and an all-xAI catalog, Grok hides it and rejects a spawn that names one, so the arm runs on the parent model. The spawn takes no effort, so a resolved level runs at the session effort and step 5 reports it.
+Resolve with `--harness grok`. Pass `model` only when `spawn_subagent` lists the argument. With subagent model inheritance on and an all-xAI catalog, Grok hides it and rejects a spawn that names one, so the arm runs on the parent model. The spawn takes no effort, so a resolved level runs at the session effort and [role resolution step 5](roles.md#spawn-a-role) reports it.
 
 ## Invocation and effort hints
 
