@@ -24,7 +24,7 @@ USER_FACING = {
     "skills/deslop/SKILL.md": ["and on `/deslop`,"],
     "skills/ketchup/SKILL.md": ["the last message they wrote before `/ketchup`"],
     "skills/maintain-verification-skill/SKILL.md": ["point at `/create-verification-skill`"],
-    "skills/pstack-harness/SKILL.md": ["Run `/setup-pstack` to register it.\""],
+    "skills/pstack-harness/references/roles.md": ["Run `/setup-pstack` to register it.\""],
     "skills/reflect/SKILL.md": ['the user says "reflect" or "/reflect"'],
     "skills/setup-pstack/SKILL.md": ["4 of 4 `/poteto-mode` runs",
                                      "I can generate one with /create-verification-skill.\""],

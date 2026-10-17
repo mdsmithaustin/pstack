@@ -8,7 +8,7 @@ SKILLS = Path(__file__).resolve().parents[1] / "skills"
 
 class WorklistContract(unittest.TestCase):
     def test_callers_use_declared_states(self):
-        harness = (SKILLS / "pstack-harness/SKILL.md").read_text(encoding="utf-8")
+        harness = (SKILLS / "pstack-harness/references/worklist.md").read_text(encoding="utf-8")
         contract = next(
             line for line in harness.splitlines()
             if line.startswith("**Track a worklist.**")

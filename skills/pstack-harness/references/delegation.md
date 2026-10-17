@@ -1,0 +1,24 @@
+# Spawn, isolate, and report subagents
+
+**Spawn a subagent.** In order of preference:
+
+1. Your harness's native subagent or delegation tool, whatever it is called.
+2. No such tool → invoke your own CLI non-interactively as a subprocess (its help names the command and flags), one invocation per arm, run concurrently in background shells, each arm's report collected from stdout or a file path named in its brief.
+3. No subprocesses either → run the arms sequentially inline, one at a time, each writing its report to a file before the next starts, then synthesize. Keep the configured arm count. A verdict or review that runs inline is not independent. Label it `self-review` in the verdict and in the reply, and never count it as an independent verdict.
+
+Each writer gets its own git worktree, whichever mechanism spawns it. Keep the location a native isolation option picks when the option makes a git worktree, that is, when `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. When you run `git worktree add` yourself, make one worktree at a time, and never place the worktree beside the repository:
+
+- A throwaway checkout (verify, review, replay, eval arm) goes under `mktemp -d "${TMPDIR:-/tmp}/pstack-<slug>.XXXXXX"`. Remove it with `git worktree remove` when its run ends.
+- A worktree that holds unpushed work goes under `.worktrees/<slug>` in the main checkout. If the repository does not ignore `.worktrees/`, append it to `"$(git rev-parse --git-common-dir)/info/exclude"` first.
+
+If `git worktree add` fails, give each writer whose output the lead collects from a directory, such as an arena candidate or a verify arm, its own plain directory for each commit its brief names, or one directory when the brief names none. A verify arm whose brief names a parent and a head gets two. Use the directory its skill names, or a fresh `mktemp -d "${TMPDIR:-/tmp}/pstack-<slug>.XXXXXX"` for each. When the writer needs the project's files, resolve every named commit, or `HEAD` when the brief names none, with `git -C <project> rev-parse --verify -q "<commit>^{commit}"` before you seed any directory. If it prints nothing, run `git -C <project> fetch origin <commit>` and resolve again. If the commit is still missing, report the writer blocked and seed none of its directories. Never seed a different commit in its place. Otherwise seed each directory with `git clone -q --no-checkout --shared <project> <dir> && git -C <dir> checkout -q --detach <sha>`, where `<sha>` is what its own commit resolved to. Its brief names each directory and its SHA, says to work only in those directories, and says to leave the checkout unchanged. These writers can run at the same time. Delete each directory when its run ends, after you take its output. A writer whose work must land on the checkout's branch runs in the current checkout, one at a time. Never take the writer's work back into the lead.
+
+
+**Parallelism.** Real where the mechanism allows it (independent tool calls in one message, concurrent subprocesses); otherwise sequential with the same arm count.
+
+**Read-only.** Use an enforcing option if the spawn mechanism has one; otherwise state it plainly in the brief ("read-only: do not edit or write files").
+
+
+- **Panels keep their configured arm count.** Run a three-model panel as three arms even in a one-model harness. Brief each arm the way the panel's skill says, and run the arms in parallel or sequentially. For exact model requests, apply the required-arm rule above.
+
+- **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used. Wherever a rule labels a review same-model or `self-review`, put the label in the verdict and in the reply.

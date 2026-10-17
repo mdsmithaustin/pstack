@@ -674,7 +674,7 @@
      "quote": "say at the ask that a budget's suffix overrides the session effort in both directions once the effort agents are loaded."
     },
     {
-     "file": "skills/pstack-harness/SKILL.md",
+     "file": "skills/pstack-harness/references/grok.md",
      "quote": "The spawn takes no effort, so a resolved level runs at the session effort and step 5 reports it."
     }
    ],
@@ -683,7 +683,7 @@
     "skills/setup-pstack/SKILL.md",
     "skills/setup-pstack/references/models-config.md",
     "skills/setup-pstack/examples/pstack-models.md",
-    "skills/pstack-harness/SKILL.md"
+    "skills/pstack-harness/references/grok.md"
    ]
   },
   "bug-fix-reproduces-before-fixing": {
@@ -1589,14 +1589,14 @@
      "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's **Loops and wake-ups** section to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
-     "file": "skills/pstack-harness/SKILL.md",
+     "file": "skills/pstack-harness/references/loops.md",
      "quote": "**Loops and wake-ups.** Your harness's loop or scheduling facility; otherwise a re-invoking wrapper (script, cron, CI)."
     }
    ],
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/playbooks/autonomous-run.md",
-    "skills/pstack-harness/SKILL.md"
+    "skills/pstack-harness/references/loops.md"
    ]
   },
   "maintain-verification-never-edits-product-code": {
@@ -3149,14 +3149,14 @@
      "quote": "Before you spawn it, find the model that wrote the work, because **Spawn a role** passes it as `--work-model` and the resolver picks a different model in the work model's family for this role when the config allows one."
     },
     {
-     "file": "skills/pstack-harness/SKILL.md",
+     "file": "skills/pstack-harness/references/roles.md",
      "quote": "pass `--work-model <model>@<effort>` with the model and effort that did the work, and use the printed arm."
     }
    ],
    "harness_sensitive": false,
    "owners": [
     "skills/swarm/SKILL.md",
-    "skills/pstack-harness/SKILL.md"
+    "skills/pstack-harness/references/roles.md"
    ]
   },
   "swarm-race-selection-rule-declared": {
