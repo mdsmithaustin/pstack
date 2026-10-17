@@ -29,9 +29,30 @@ python3 evals/harness-routing/study.py run \
 
 Failure means a nonzero exit or any invocation state other than completed with raw return code zero. The report always accounts for six labels. A process failure is separate from an interpretation failure.
 
-Each slot has one exclusive reservation and one native invocation with a 180-second deadline. Timeout, interruption, spawn failure, and a controller crash consume that slot. Repeating `run` never retries a consumed slot. A separate controller cannot run the same wave concurrently. A possible dispatch, recurring job, workspace change, or observed private disclosure holds the remaining slots for inspection. This hold survives another `run` call.
+Each explicit `run` launches at most one planned slot. Each slot has one exclusive reservation and a 180-second deadline. Timeout, interruption, spawn failure, and a controller crash consume that slot. Repeating `run` never retries a consumed slot. Interruption ends the current invocation. A separate controller cannot run the same wave concurrently.
 
-The collector saves actual argv, cwd, stdin bytes, inventories before and after, raw JSONL, separate stderr, final answer, times, exit status, and hashes. It isolates HOME and CODEX_HOME, copies only the login file, ignores user configuration and rules, disables apps, plugins, child agents, goals, hooks, skill search, and local automations, and enables the CLI's host-skill-discovery disable. The child runs in a read-only sandbox with approval policy `never`. The controller kills and reaps the process group at its deadline. These observations do not prove a network security boundary.
+Before invoking `run` again, the parent must read all saved returned context for the preceding consumed slot and write `slots/<label>/context-review.json`:
+
+```json
+{
+  "label": "A",
+  "contract_sha256": "INSPECTED_SHA256",
+  "trace_sha256": "SHA256_OF_SAVED_STREAM_JSONL",
+  "reviewed_all_saved_returned_context": true,
+  "context_coverage": "complete",
+  "confirmed_exposure_line": null,
+  "confirmed_unsafe_actions": [],
+  "uncertain_unsafe_actions": [],
+  "continuation": "allow",
+  "reasons": ["Reviewed every saved returned field and found no reason to hold."]
+}
+```
+
+Use `context_coverage: "unverified"` when saved evidence has gaps, and `continuation: "hold"` when continuation should stop. Record any confirmed exposure at its physical raw line, and confirmed or uncertain unsafe actions with their positions and reasons. The receipt records the parent's review; it is not authenticated provider evidence. Missing, incomplete, or stale receipts refuse another launch. A crash-reserved slot without a stream binds to the SHA-256 of empty bytes. Parent approval cannot promote unknown runtime coverage to complete coverage. Six explicit invocations still use only the six reserved slots.
+
+Possible command matches hold collection for semantic inspection and remain INCONCLUSIVE. A parent allow receipt may resolve this uncertainty. Confirmed dispatch, workspace changes, and observed private disclosure remain held even with an allow receipt. Interruption alone does not create a permanent hold.
+
+The collector saves actual argv, cwd, stdin bytes, inventories before and after, raw JSONL, separate stderr, final answer, times, exit status, and hashes. It isolates HOME and CODEX_HOME, copies only the login file, ignores user configuration and rules, disables apps, plugins, both multi-agent implementations and dynamic agent tools, goals, hooks, skill search, skill dependency installation, unbounded connection retries, and local automations, and enables the CLI's host-skill-discovery disable. The child runs in a read-only sandbox with approval policy `never`. The controller kills and reaps the process group at its deadline. These observations do not prove a network security boundary.
 
 Requested settings, any runtime-reported session fields and their raw position, and provider execution identity are separate. A missing runtime field remains null. Provider execution remains unknown. A local model catalog establishes only the cached configuration. It does not guarantee successful availability.
 
@@ -46,7 +67,7 @@ Failure means a nonzero exit, an altered saved artifact, or a report with fewer 
 
 The oracle supports paired `item.started` and `item.completed` Codex command records with the same identity and command. It recognizes explicit `cat` targets and finite `sed -n` line ranges, including a single shell wrapper. Returned UTF-8 bytes must match the frozen file and cover its full byte range. A path, search hit, attempted read, completed-only record, zero exit without bytes, normalized excerpt, or self-report cannot establish a full read. Unsupported commands remain inconclusive. Duplicate identities, missing results, truncated bytes, and ambiguous final-answer binding cannot pass.
 
-`semantic-packet.json` retains every assistant statement and command position under anonymous labels. Give it and the semantic controls to a fresh blinded reviewer. The reviewer must identify each first committed decision and any earlier substantive action, assess safeguards, and distinguish an introductory intention from a decision. Record one object per label in a separate file. Each may also include `safeguards` with a `status` and nonempty `reasons` list:
+`semantic-packet.json` retains assistant messages, emitted reasoning summaries, command and native action positions, and saved returned scope under anonymous labels. Unknown actions remain visible and unverified. Requested model metadata and deterministic grades are omitted from the packet. Give it and the semantic controls to a fresh blinded reviewer. The reviewer must identify each first committed decision and any earlier substantive action, assess safeguards, and distinguish an introductory intention from a decision. Record one object per label in a separate file. Each may also include `safeguards` with a `status` and nonempty `reasons` list:
 
 ```json
 {
@@ -59,9 +80,9 @@ The oracle supports paired `item.started` and `item.completed` Codex command rec
 }
 ```
 
-These line numbers illustrate the input format. They are not expected answers. Run `assess` again with `--decisions /absolute/path/to/decisions.json`. Failure means a nonzero exit, a missing label, or a position that does not identify a saved statement or command. The assessor rechecks complete reads before the reviewed positions. Without semantic review its ordering claim stops at the final answer. Keep the review's safeguard verdict beside the deterministic report. It cannot repair missing read evidence.
+These line numbers illustrate the input format. They are not expected answers. Run `assess` again with `--decisions /absolute/path/to/decisions.json`. Failure means a nonzero exit, a missing label, or a position that does not identify a saved statement or action. The assessor rechecks complete reads before the reviewed positions. Without semantic review its ordering claim stops at the final answer. A known decision or action before a verified required result fails ordering even without a final answer; missing or ambiguous finals still cannot pass read coverage. Keep the review's safeguard verdict beside the deterministic report. It cannot repair missing read evidence.
 
-Read all six final outputs and their complete returned context yourself. Private content in returned context invalidates affected later observations as blinded evidence. Preserve raw grades and earlier observations with their coverage limits. An exposure does not establish behavioral influence. Missing or unreadable context leaves coverage unverified.
+Read all six final outputs and their complete returned context yourself. Private content in returned context invalidates affected later observations as blinded evidence. Preserve raw grades and earlier observations with their coverage limits. An exposure does not establish behavioral influence. Missing results, missing returned fields, unknown forms, malformed streams, and explicit truncation leave context coverage unverified. Marker searches and comparisons against retained private artifacts detect positive exposure; a negative search does not establish blinding. Any byte-verified nonempty read of a foreign adapter fails routing, including a partial read. A pending foreign read leaves routing inconclusive even when required reads are complete.
 
 ## Run the model-free checks
 

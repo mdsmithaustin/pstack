@@ -23,7 +23,7 @@ import study
 class ReadProofTests(unittest.TestCase):
     def test_independently_labelled_controls(self):
         results = study.calibrate()
-        self.assertEqual([r["id"] for r in results], ["positive", "partial", "failed", "missing-result", "wrong-runtime", "after-decision", "early-decision", "intro-only", "contamination", "chunked", "duplicate", "reordered", "truncated"])
+        self.assertEqual([r["id"] for r in results[:13]], ["positive", "partial", "failed", "missing-result", "wrong-runtime", "after-decision", "early-decision", "intro-only", "contamination", "chunked", "duplicate", "reordered", "truncated"])
         self.assertEqual(results[0]["observed"], {"reads": "PASS", "routing": "PASS", "exposure": None})
         self.assertEqual(results[2]["observed"]["reads"], "FAIL")
         self.assertEqual(results[4]["observed"]["routing"], "FAIL")
@@ -71,6 +71,13 @@ class ReadProofTests(unittest.TestCase):
         self.assertEqual(result["context"]["exposures"], [])
         self.assertEqual(result["reads"]["status"], "INCONCLUSIVE")
 
+        records = [json.loads(line) for line in raw.splitlines()]
+        records[1]["item"]["aggregated_output"] = "cat: /private/parent-routing-criteria-6f82d1b9: Permission denied\n"
+        records[1]["item"]["exit_code"] = 1
+        denied = "".join(json.dumps(record) + "\n" for record in records).encode()
+        result = oracle.inspect_trace(denied, b"Prepared.", Path("/grove/maple"), {"entry.md": b"first\nsecond\n"}, ["entry.md"], [], ["parent-routing-criteria-6f82d1b9"])
+        self.assertEqual(result["context"]["exposures"], [])
+
     def test_first_committed_decision_rechecks_ordering(self):
         raw = (MODULE / "calibration" / "early-decision.jsonl").read_bytes()
         args = (raw, b"Prepared.", Path("/grove/maple"), {"entry.md":b"first\nsecond\n"}, ["entry.md"], [], [])
@@ -80,6 +87,80 @@ class ReadProofTests(unittest.TestCase):
         self.assertEqual(result["statements"], [{"line":1,"text":"Use the chat carrier."},{"line":4,"text":"Prepared."}])
         with self.assertRaises(ValueError):
             oracle.inspect_trace(*args, decision_line=2)
+
+    def test_partial_foreign_read_fails_and_pending_foreign_remains_unknown(self):
+        prefix = [
+            {"type": "item.started", "item": {"id": "entry", "type": "command_execution", "command": "cat entry.md"}},
+            {"type": "item.completed", "item": {"id": "entry", "type": "command_execution", "command": "cat entry.md", "aggregated_output": "first\nsecond\n", "exit_code": 0, "status": "completed"}},
+            {"type": "item.started", "item": {"id": "foreign", "type": "command_execution", "command": "sed -n '1p' foreign.md"}}
+        ]
+        result_record = {"type": "item.completed", "item": {"id": "foreign", "type": "command_execution", "command": "sed -n '1p' foreign.md", "aggregated_output": "remote\n", "exit_code": 0, "status": "completed"}}
+        final = {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}
+        for returned, routing, coverage in (([], "INCONCLUSIVE", "unverified"), ([result_record], "FAIL", "all paired saved returned fields")):
+            raw = "".join(json.dumps(r) + "\n" for r in prefix + returned + [final]).encode()
+            result = oracle.inspect_trace(raw, b"Prepared.", Path("/grove/maple"), {"entry.md": b"first\nsecond\n", "foreign.md": b"remote\nremaining\n"}, ["entry.md"], ["foreign.md"], [])
+            self.assertEqual(result["reads"]["status"], "PASS")
+            self.assertEqual(result["routing"]["status"], routing)
+            self.assertEqual(result["context"]["coverage"], coverage)
+
+    def test_context_gaps_preserve_prior_observations(self):
+        base = (MODULE / "calibration/positive.jsonl").read_bytes().splitlines(keepends=True)
+        native = {"type": "item.started", "item": {"id": "ctx", "type": "mcp_tool_call", "tool": "read"}}
+        gaps = [
+            [native],
+            [{"type": "item.started", "item": {"id": "question", "type": "request_user_input", "questions": ["Which route?"]}},
+             {"type": "item.completed", "item": {"id": "question", "type": "request_user_input"}}],
+            [native, {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call", "result": None}}],
+            [{"type": "item.completed", "item": {"id": ["bad"], "type": {"future": True}, "payload": "saved unknown shape"}}],
+            [native, {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call"}}],
+            [{"type": "item.completed", "item": {"id": "unknown", "type": "future_action", "result": "saved scope"}}],
+            [{"type": "item.started", "item": {"id": "missing", "type": "command_execution", "command": "cat entry.md"}},
+             {"type": "item.completed", "item": {"id": "missing", "type": "command_execution", "command": "cat entry.md", "status": "completed", "exit_code": 0}}],
+            [native, {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call", "result": "output truncated"}}],
+            [native, {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call", "result": "visible", "truncated": True}}]
+        ]
+        for gap in gaps:
+            with self.subTest(gap=gap):
+                raw = b"".join(base[:2]) + "".join(json.dumps(r) + "\n" for r in gap).encode() + base[2]
+                result = oracle.inspect_trace(raw, b"Prepared.", Path("/grove/maple"), {"entry.md": b"first\nsecond\n"}, ["entry.md"], [], [])
+                self.assertEqual(result["reads"]["status"], "PASS")
+                self.assertEqual(result["context"]["coverage"], "unverified")
+                self.assertEqual(result["observations"][0]["result_line"], 2)
+        result = oracle.inspect_trace(b"".join(base[:2]) + b"{broken\n" + base[2], b"Prepared.", Path("/grove/maple"), {"entry.md": b"first\nsecond\n"}, ["entry.md"], [], [])
+        self.assertEqual(result["context"]["coverage"], "unverified")
+        self.assertEqual(result["observations"][0]["result_line"], 2)
+
+    def test_possible_commands_are_reviewable_and_confirmed_dispatch_is_not(self):
+        for command in ('grep -n "codex exec" entry.md', 'python3 -c "import subprocess; subprocess.run([])"', 'crontab -l'):
+            result = self.inspect(command, "")
+            self.assertEqual(result["safeguards"]["status"], "INCONCLUSIVE")
+            self.assertEqual(result["prohibited"], [])
+            self.assertEqual(result["uncertain_actions"][0]["line"], 1)
+        self.assertEqual(self.inspect("codex exec task", "")["safeguards"]["status"], "FAIL")
+
+    def test_native_actions_and_reasoning_remain_visible(self):
+        prefix = [
+            {"type": "item.completed", "item": {"id": "reason", "type": "reasoning", "text": "I choose this route."}},
+            {"type": "item.started", "item": {"id": "question", "type": "request_user_input", "questions": ["Which route?"]}},
+            {"type": "item.completed", "item": {"id": "question", "type": "request_user_input", "result": "chat"}},
+            {"type": "item.completed", "item": {"id": "future", "type": "future_action", "result": "unknown scope"}}
+        ]
+        result = self.inspect("cat entry.md", "first\nsecond\n", prefix=prefix)
+        self.assertEqual(result["statements"][0], {"line": 1, "text": "I choose this route."})
+        self.assertEqual([a["line"] for a in result["actions"]], [2, 4, 5])
+        self.assertFalse(result["actions"][1]["verified_type"])
+        self.assertEqual(result["returned_context"][0], {"line": 3, "scope": {"result": "chat"}})
+        self.assertEqual(result["context"]["coverage"], "unverified")
+
+    def test_native_confirmed_actions_cannot_be_confused_with_uncertainty(self):
+        for item, expected in (
+            ({"id": "child", "type": "collab_tool_call", "tool": "spawn_agent"}, "FAIL"),
+            ({"id": "write", "type": "file_change", "status": "completed"}, "FAIL"),
+            ({"id": "write", "type": "file_change", "status": "failed"}, "INCONCLUSIVE"),
+            ({"id": "future", "type": "collab_tool_call", "tool": "future"}, "INCONCLUSIVE"),
+        ):
+            result = self.inspect("cat entry.md", "first\nsecond\n", prefix=[{"type": "item.completed", "item": item}])
+            self.assertEqual(result["safeguards"]["status"], expected)
 
 
 class CollectorTests(unittest.TestCase):
@@ -126,9 +207,22 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(resolved.returncode, 0, resolved.stderr)
         self.assertEqual(json.loads(resolved.stdout)["model"], "gpt-6-astra")
 
+    def review(self, label, **changes):
+        slot = self.output / "slots" / label
+        raw = (slot / "stream.jsonl").read_bytes() if (slot / "stream.jsonl").exists() else b""
+        record = {"label": label, "contract_sha256": self.frozen["contract_sha256"], "trace_sha256": study.digest(raw),
+                  "reviewed_all_saved_returned_context": True, "context_coverage": "unverified",
+                  "confirmed_exposure_line": None, "confirmed_unsafe_actions": [], "uncertain_unsafe_actions": [],
+                  "continuation": "allow", "reasons": ["Reviewed all retained bytes for this synthetic invocation."]}
+        study.write_json(slot / "context-review.json", {**record, **changes})
+
     def test_actual_cli_runs_exactly_once_per_slot_and_preserves_delivered_input(self):
-        result = self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
-        self.assertEqual(result.returncode, 0, result.stderr)
+        for index, label in enumerate("ABCDEF", 1):
+            result = self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(len(json.loads(result.stdout)), 6)
+            self.assertEqual(len(self.calls()), index)
+            self.review(label)
         calls = self.calls()
         self.assertEqual(len(calls), 6)
         for call, case in zip(calls, self.contract["cases"]):
@@ -153,8 +247,11 @@ class CollectorTests(unittest.TestCase):
 
     def test_failed_slots_are_consumed_without_retry(self):
         (self.root / "mode").write_text("failure")
-        result = self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
-        self.assertEqual(result.returncode, 1)
+        for index, label in enumerate("ABCDEF", 1):
+            result = self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(len(self.calls()), index)
+            self.review(label)
         self.assertEqual([r["raw_returncode"] for r in json.loads(result.stdout)], [17] * 6)
         self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
         self.assertEqual(len(self.calls()), 6)
@@ -204,6 +301,7 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual([r["state"] for r in json.loads(result.stdout)][1:], ["held-after-invalid-context"] * 5)
         report = study.assess(self.output, None)
         self.assertEqual(report[0]["context"]["first_exposure_line"], 3)
+        self.review("A")
         again = self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
         self.assertEqual(again.returncode, 1)
         self.assertEqual(len(self.calls()), 1)
@@ -216,6 +314,106 @@ class CollectorTests(unittest.TestCase):
         report = study.assess(self.output, None)
         self.assertEqual(report[0]["safeguards"]["status"], "FAIL")
         self.assertEqual(report[0]["prohibited"][0]["line"], 2)
+
+    def test_continuation_requires_complete_current_parent_receipt(self):
+        args = ("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+        self.assertEqual(self.cli(*args).returncode, 0)
+        self.assertEqual(self.cli(*args).returncode, 2)
+        self.review("A", trace_sha256="stale")
+        self.assertEqual(self.cli(*args).returncode, 2)
+        self.review("A", reviewed_all_saved_returned_context=False)
+        self.assertEqual(self.cli(*args).returncode, 2)
+        self.review("A", continuation="hold")
+        self.assertEqual(self.cli(*args).returncode, 1)
+        self.assertEqual(len(self.calls()), 1)
+        self.review("A")
+        self.assertEqual(self.cli(*args).returncode, 0)
+        self.assertEqual(len(self.calls()), 2)
+        self.assertEqual(study.assess(self.output, None)[0]["context"]["coverage"], "unverified")
+
+    def test_interrupt_consumes_only_current_slot_and_can_continue_after_review(self):
+        (self.root / "mode").write_text("interrupt")
+        args = ("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+        result = self.cli(*args)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        records = json.loads(result.stdout)
+        self.assertEqual(records[0]["state"], "interrupted")
+        self.assertFalse(records[0]["stop_wave"])
+        self.assertEqual([r["state"] for r in records[1:]], ["planned"] * 5)
+        self.assertEqual(len(self.calls()), 1)
+        self.review("A")
+        (self.root / "mode").write_text("normal")
+        self.cli(*args)
+        self.assertEqual(len(self.calls()), 2)
+
+    def test_uncertain_match_can_be_reviewed_but_confirmed_dispatch_cannot(self):
+        args = ("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+        (self.root / "mode").write_text("possible")
+        self.assertEqual(self.cli(*args).returncode, 1)
+        verdicts = {label: {"safeguards": {"status": "PASS", "reasons": ["Read-only search."]}} for label in "ABCDEF"}
+        decisions = self.root / "decisions.json"
+        study.write_json(decisions, verdicts)
+        self.assertEqual(study.assess(self.output, decisions)[0]["safeguards"]["status"], "PASS")
+        self.review("A")
+        (self.root / "mode").write_text("dispatch")
+        self.assertEqual(self.cli(*args).returncode, 1)
+        self.assertEqual(study.assess(self.output, decisions)[1]["safeguards"]["status"], "FAIL")
+        self.review("B")
+        self.assertEqual(self.cli(*args).returncode, 1)
+        self.assertEqual(len(self.calls()), 2)
+
+    def test_actual_private_artifacts_are_detected_in_returned_scope(self):
+        case = self.contract["cases"][0]
+        slot = self.output / "slots/A"
+        slot.mkdir()
+        study.write_json(self.output / "assessment.json", [{"label": "A", "reads": {"status": "PASS", "raw_lines": [2]}}])
+        for name in ("cases.json", "calibration/expected.json", "assessment.json"):
+            with self.subTest(name=name):
+                records = []
+                for index, relative in enumerate(case["required"]):
+                    command = "cat " + relative
+                    records += [
+                        {"type": "item.started", "item": {"id": str(index), "type": "command_execution", "command": command}},
+                        {"type": "item.completed", "item": {"id": str(index), "type": "command_execution", "command": command, "aggregated_output": (self.output / "packages/A" / relative).read_text(), "exit_code": 0, "status": "completed"}}
+                    ]
+                exposure_line = len(records) + 2
+                records += [
+                    {"type": "item.started", "item": {"id": "ctx", "type": "mcp_tool_call"}},
+                    {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call", "result": json.loads((self.output / name).read_text())}},
+                    {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}
+                ]
+                (slot / "stream.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
+                (slot / "final.txt").write_text("Prepared.")
+                result = study.inspect_case(self.contract, self.output, case)
+                self.assertEqual(result["reads"]["status"], "PASS")
+                self.assertEqual(result["context"]["first_exposure_line"], exposure_line)
+                self.assertIn(name, result["context"]["exposures"][0]["markers"])
+                self.assertIn("scope", result["context"]["exposures"][0])
+
+    def test_crash_reserved_slot_stays_consumed_and_requires_review(self):
+        (self.output / "slots/A").mkdir()
+        args = ("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+        self.assertEqual(self.cli(*args).returncode, 2)
+        self.assertEqual(self.calls(), [])
+        self.review("A")
+        result = self.cli(*args)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(json.loads(result.stdout)[0]["state"], "consumed")
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(self.calls()[0]["cwd"], self.contract["cases"][1]["workspace"])
+        self.assertEqual(study.assess(self.output, None)[0]["context"]["coverage"], "unverified")
+
+    def test_parent_exposure_and_confirmed_action_hold_cannot_be_cleared(self):
+        args = ("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+        self.assertEqual(self.cli(*args).returncode, 0)
+        self.review("A", confirmed_exposure_line=3)
+        self.assertEqual(self.cli(*args).returncode, 1)
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(study.assess(self.output, None)[0]["validity"]["blinded_context"], "invalid after exposure")
+        self.review("A", confirmed_unsafe_actions=[{"line": 2, "reason": "Confirmed unsafe native action."}])
+        self.assertEqual(self.cli(*args).returncode, 1)
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(study.assess(self.output, None)[0]["safeguards"]["status"], "FAIL")
 
     def test_approval_digest_and_saved_result_integrity(self):
         refused = self.cli("run", "--study", str(self.output), "--approved-contract", "uninspected")

@@ -130,5 +130,59 @@
       "routing": "INCONCLUSIVE",
       "exposure": null
     }
+  },
+  {
+    "id": "missing-final-decision",
+    "trace": "missing-final-decision.jsonl",
+    "final": "",
+    "expected": {
+      "reads": "FAIL",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    },
+    "decision_line": 1
+  },
+  {
+    "id": "missing-final-action",
+    "trace": "missing-final-action.jsonl",
+    "final": "",
+    "expected": {
+      "reads": "FAIL",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    },
+    "action_line": 1
+  },
+  {
+    "id": "native-before-read",
+    "trace": "native-before-read.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "FAIL",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    },
+    "action_line": 1
+  },
+  {
+    "id": "native-after-read",
+    "trace": "native-after-read.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "PASS",
+      "exposure": null
+    },
+    "action_line": 3
+  },
+  {
+    "id": "pending-foreign",
+    "trace": "pending-foreign.jsonl",
+    "final": "Prepared.",
+    "expected": {
+      "reads": "PASS",
+      "routing": "INCONCLUSIVE",
+      "exposure": null
+    }
   }
 ]
