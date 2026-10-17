@@ -1,0 +1,5 @@
+{"type": "item.started", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "aggregated_output": "first\nsecond\n", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "context", "type": "mcp_tool_call", "tool": "read"}}
+{"type": "item.completed", "item": {"id": "context", "type": "mcp_tool_call", "tool": "read", "result": "parent-routing-criteria-6f82d1b9"}}
+{"type": "item.completed", "item": {"id": "answer", "type": "agent_message", "text": "Prepared."}}
