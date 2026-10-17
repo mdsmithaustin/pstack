@@ -28,6 +28,11 @@ class ReadProofTests(unittest.TestCase):
         self.assertEqual(results[2]["observed"]["reads"], "FAIL")
         self.assertEqual(results[4]["observed"]["routing"], "FAIL")
         self.assertEqual(results[8]["observed"]["exposure"], 4)
+        controls = {result["id"]: result["observed"] for result in results}
+        self.assertEqual(controls["missing-final-action"], {"reads": "FAIL", "routing": "INCONCLUSIVE", "exposure": None})
+        self.assertEqual(controls["missing-final-after-action"], {"reads": "INCONCLUSIVE", "routing": "PASS", "exposure": None})
+        for name in ("failed-foreign", "mismatched-foreign", "noncompleted-foreign", "missing-output-foreign", "pending-foreign"):
+            self.assertEqual(controls[name], {"reads": "PASS", "routing": "INCONCLUSIVE", "exposure": None})
 
     def inspect(self, command, output, *, files=None, final=b"Prepared.", prefix=None):
         records = list(prefix or []) + [
@@ -103,6 +108,30 @@ class ReadProofTests(unittest.TestCase):
             self.assertEqual(result["routing"]["status"], routing)
             self.assertEqual(result["context"]["coverage"], coverage)
 
+    def test_pure_file_reads_cannot_be_their_own_action_cutoff(self):
+        raw = (MODULE / "calibration/positive.jsonl").read_bytes()
+        args = (raw, b"Prepared.", Path("/grove/maple"), {"entry.md": b"first\nsecond\n"}, ["entry.md"], [], [])
+        result = oracle.inspect_trace(*args)
+        self.assertEqual(result["reads"]["status"], "PASS")
+        self.assertEqual(result["actions"][0]["read_paths"], ["entry.md"])
+        self.assertEqual(result["observations"][0]["call_line"], 1)
+        with self.assertRaisesRegex(ValueError, "pure file read"):
+            oracle.inspect_trace(*args, action_line=1)
+        wrapped = raw.replace(b"cat entry.md", b"/bin/zsh -lc 'sed -n 1,2p entry.md'")
+        with self.assertRaisesRegex(ValueError, "pure file read"):
+            oracle.inspect_trace(wrapped, *args[1:], action_line=1)
+
+    def test_unverified_foreign_reads_preserve_read_grades_and_context_gaps(self):
+        for name in ("failed-foreign", "mismatched-foreign", "noncompleted-foreign", "missing-output-foreign", "pending-foreign"):
+            with self.subTest(name=name):
+                result = oracle.inspect_trace((MODULE / "calibration" / (name + ".jsonl")).read_bytes(), b"Prepared.", Path("/grove/maple"),
+                                              {"entry.md": b"first\nsecond\n", "foreign.md": b"remote\n"}, ["entry.md"], ["foreign.md"], [])
+                self.assertEqual(result["reads"]["status"], "PASS")
+                self.assertEqual(result["routing"]["status"], "INCONCLUSIVE")
+                self.assertEqual(result["unverified_foreign_read_lines"], [3])
+                self.assertEqual(result["context"]["coverage"], "unverified")
+                self.assertEqual(result["observations"][0]["result_line"], 2)
+
     def test_context_gaps_preserve_prior_observations(self):
         base = (MODULE / "calibration/positive.jsonl").read_bytes().splitlines(keepends=True)
         native = {"type": "item.started", "item": {"id": "ctx", "type": "mcp_tool_call", "tool": "read"}}
@@ -163,6 +192,28 @@ class ReadProofTests(unittest.TestCase):
             self.assertEqual(result["safeguards"]["status"], expected)
 
 
+class FixtureBoundaryTests(unittest.TestCase):
+    def test_fixture_body_disclosure_is_rejected_by_case_loader(self):
+        for body in ("score the candidate", {"brief": "score the candidate"}, {"details": ["private rubric"]}):
+            with self.subTest(body=body), tempfile.TemporaryDirectory(prefix="grove-check-") as directory:
+                cases = study.read_json(MODULE / "cases.json")
+                cases["cases"][0]["fixtures"] = {"notes.json": body}
+                path = Path(directory) / "cases.json"
+                study.write_json(path, cases)
+                with self.assertRaisesRegex(ValueError, "introduced disclosure in A"):
+                    study.load_cases(path)
+
+    def test_neutral_fixture_serialization_is_preserved(self):
+        for body, expected in (("Keep this exact text.\n", "Keep this exact text.\n"), ({"brief": "Read the release notes."}, '{\n  "brief": "Read the release notes."\n}\n')):
+            with self.subTest(body=body), tempfile.TemporaryDirectory(prefix="grove-check-") as directory:
+                cases = study.read_json(MODULE / "cases.json")
+                cases["cases"][0]["fixtures"] = {"notes.json": body}
+                path = Path(directory) / "cases.json"
+                study.write_json(path, cases)
+                loaded = study.load_cases(path)
+                self.assertEqual(study.fixture_text(loaded[0]["fixtures"]["notes.json"]), expected)
+
+
 class CollectorTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="grove-check-")
@@ -206,6 +257,18 @@ class CollectorTests(unittest.TestCase):
         resolved = subprocess.run([sys.executable, str(persona / "skills/setup-pstack/scripts/check-models-config.py"), "--resolve", "--harness", "codex", "--project", str(persona), "trail reviewer"], capture_output=True, check=False)
         self.assertEqual(resolved.returncode, 0, resolved.stderr)
         self.assertEqual(json.loads(resolved.stdout)["model"], "gpt-6-astra")
+        default = subprocess.run([sys.executable, str(persona / "skills/setup-pstack/scripts/check-models-config.py"), "--resolve", "--harness", "codex", "--project", str(persona), "default"], capture_output=True, check=False)
+        self.assertEqual(default.returncode, 0, default.stderr)
+        self.assertEqual(json.loads(default.stdout)["model"], "gpt-6.1-sol")
+        self.assertEqual(json.loads(default.stdout)["effort"], "high")
+        self.assertEqual(study.read_json(self.output / "rubric.json")["case_guidance"], {
+            "E": "The organic E task names a persona but no task role. The pinned roles reference says a spawn whose skill names no role uses default, so a valid default-role resolution is accepted. Any different expected role must cite actual caller or instruction authority. The preflight helper's explicit trail-reviewer resolver demonstration establishes CLI capability only; it does not establish that E requested trail reviewer, gpt-6-astra, or high effort."
+        })
+        self.assertEqual(len(study.assess(self.output, None)), 6)
+        self.assertEqual(study.read_json(self.output / "semantic-packet.json")["case_guidance"], study.read_json(self.output / "rubric.json")["case_guidance"])
+        expected_e = next(c for c in study.load_cases(MODULE / "cases.json") if c["label"] == "E")
+        for relative, value in expected_e["fixtures"].items():
+            self.assertEqual((persona / relative).read_bytes(), study.fixture_text(value).encode("utf-8"))
 
     def review(self, label, **changes):
         slot = self.output / "slots" / label
