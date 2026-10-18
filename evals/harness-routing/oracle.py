@@ -60,8 +60,8 @@ def decode(raw: bytes, cwd: str) -> Trace:
         if kind in ("item.started", "item.updated", "item.completed") and item.get("type") in ("agent_message", "reasoning"):
             if isinstance(item.get("text"), str):
                 statements.append({"line": line, "text": item["text"]})
-            elif "text" not in item and kind == "item.completed":
-                issues.append(f"line {line}: assistant text is absent")
+            elif kind == "item.completed":
+                issues.append(f"line {line}: assistant text is {'unsupported' if 'text' in item else 'absent'}")
         if item.get("type") != "command_execution" or kind not in ("item.started", "item.completed"):
             continue
         identity = item.get("id")

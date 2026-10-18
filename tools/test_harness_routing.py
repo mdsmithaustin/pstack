@@ -110,7 +110,10 @@ class ReadProofTests(unittest.TestCase):
                         result = oracle.inspect_trace(*args)
                         unsupported = present and not isinstance(value, str)
                         absent_completed = not present and lifecycle == "item.completed"
-                        self.assertEqual(result["reads"]["status"], "INCONCLUSIVE" if absent_completed else "PASS")
+                        completed_issue = lifecycle == "item.completed" and (unsupported or absent_completed)
+                        for axis in ("reads", "routing"):
+                            self.assertEqual(result[axis]["status"], "INCONCLUSIVE" if completed_issue else "PASS")
+                        self.assertEqual(result["context"]["issues"], ["line 1: assistant text is " + ("unsupported" if present else "absent")] if completed_issue else [])
                         self.assertEqual(result["observations"], [{"path": "entry.md", "start": 0, "end": 13, "call_line": 2, "result_line": 3}])
                         expected = [{"line": 3, "scope": {"aggregated_output": "first\nsecond\n"}}]
                         if unsupported:
@@ -603,7 +606,12 @@ class CollectorTests(unittest.TestCase):
                         self.assertEqual(row["context"]["coverage"], "unverified")
                         self.assertEqual(row["context"]["unpaired_context_lines"], [1])
                         self.assertIn({"line": 1, "scope": {"assistant_text": value}}, row["returned_context"])
-                        self.assertEqual(row["reads"]["status"], "PASS")
+                        for axis in ("reads", "routing"):
+                            self.assertEqual(row[axis]["status"], "INCONCLUSIVE" if stage == "item.completed" else "PASS")
+                        self.assertEqual(len(row["observations"]), len(case["required"]))
+                        for index, observation in enumerate(row["observations"]):
+                            self.assertEqual(observation["call_line"], 2 + 2 * index)
+                            self.assertEqual(observation["result_line"], 3 + 2 * index)
                         self.assertEqual(row["cutoff_line"], len(records))
                         self.assertTrue(row["handoff"]["withheld"])
                         self.assertFalse(any(s["line"] == 1 for s in row["statements"]))
