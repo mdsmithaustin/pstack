@@ -1,0 +1,5 @@
+{"type": "item.started", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "aggregated_output": "first\nsecond\n", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "foreign", "type": "command_execution", "command": "cat foreign.md"}}
+{"type": "item.completed", "item": {"id": "foreign", "type": "command_execution", "command": "cat foreign.md", "aggregated_output": "remote\n", "exit_code": 0, "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "answer", "type": "agent_message", "text": "Prepared."}}

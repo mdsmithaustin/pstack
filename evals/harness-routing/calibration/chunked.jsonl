@@ -1,0 +1,5 @@
+{"type": "item.started", "item": {"id": "one", "type": "command_execution", "command": "sed -n '1p' entry.md", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "one", "type": "command_execution", "command": "sed -n '1p' entry.md", "aggregated_output": "first\n", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "two", "type": "command_execution", "command": "sed -n '2p' entry.md", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "two", "type": "command_execution", "command": "sed -n '2p' entry.md", "aggregated_output": "second\n", "exit_code": 0, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "answer", "type": "agent_message", "text": "Prepared."}}
