@@ -48,6 +48,41 @@ class ReadProofTests(unittest.TestCase):
         self.assertEqual(result["reads"]["status"], "PASS")
         self.assertEqual(result["observations"][0], {"path": "entry.md", "start": 0, "end": 13, "call_line": 1, "result_line": 2})
 
+    def test_command_output_presence_and_type_at_every_lifecycle(self):
+        marker = "parent-routing-criteria-6f82d1b9"
+        values = ({"private": marker}, {}, [marker], [], 7, 1.5, None, True, False, "", "visible")
+        for lifecycle in ("item.started", "item.updated", "item.completed"):
+            for present, value in [(False, None)] + [(True, value) for value in values]:
+                with self.subTest(lifecycle=lifecycle, present=present, value=value):
+                    records = [
+                        {"type": "item.started", "item": {"id": "probe", "type": "command_execution", "command": "true"}},
+                        {"type": "item.updated", "item": {"id": "probe", "type": "command_execution", "command": "true"}},
+                        {"type": "item.completed", "item": {"id": "probe", "type": "command_execution", "command": "true", "exit_code": 0, "status": "completed", "aggregated_output": ""}},
+                        {"type": "item.started", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md"}},
+                        {"type": "item.completed", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "exit_code": 0, "status": "completed", "aggregated_output": "first\nsecond\n"}},
+                        {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}
+                    ]
+                    index = ("item.started", "item.updated", "item.completed").index(lifecycle)
+                    item = records[index]["item"]
+                    item.pop("aggregated_output", None)
+                    if present:
+                        item["aggregated_output"] = value
+                    raw = "".join(json.dumps(r) + "\n" for r in records).encode()
+                    result = oracle.inspect_trace(raw, b"Prepared.", Path("/grove/maple"),
+                                                  {"entry.md": b"first\nsecond\n"}, ["entry.md"], [], [marker])
+                    self.assertEqual(result["reads"]["status"], "PASS")
+                    self.assertEqual(result["observations"], [{"path": "entry.md", "start": 0, "end": 13, "call_line": 4, "result_line": 5}])
+                    expected = [{"line": 5, "scope": {"aggregated_output": "first\nsecond\n"}}]
+                    if lifecycle != "item.completed":
+                        expected.insert(0, {"line": 3, "scope": {"aggregated_output": ""}})
+                    if present:
+                        expected.insert(0, {"line": index + 1, "scope": {"aggregated_output": value}})
+                    self.assertEqual(result["returned_context"], expected)
+                    gap = present and not isinstance(value, str) or not present and lifecycle == "item.completed"
+                    self.assertEqual(result["context"]["coverage"], "unverified" if gap else "all paired saved returned fields")
+                    self.assertEqual(result["context"]["unpaired_context_lines"], [index + 1] if gap else [])
+                    self.assertEqual([e["line"] for e in result["context"]["exposures"]], [index + 1] if present and value in ({"private": marker}, [marker]) else [])
+
     def test_same_basename_elsewhere_and_search_are_not_read_proof(self):
         for command in ("cat /other/entry.md", "head entry.md", "rg first entry.md", "cat entry.md | head", "cat entry.md; true"):
             with self.subTest(command=command):
@@ -619,40 +654,55 @@ class CollectorTests(unittest.TestCase):
         slot = self.output / "slots/B"
         slot.mkdir()
         final = {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}
-        for carrier in ("statements", "actions", "returned_context", "final"):
-            with self.subTest(carrier=carrier):
-                (self.output / "assessment.json").write_text(prior)
-                if carrier == "statements":
-                    records = [{"type": "item.completed", "item": {"id": "private", "type": "agent_message", "text": prior}}, final]
-                elif carrier == "actions":
-                    records = [{"type": "item.updated", "item": {"id": "private", "type": "todo_list", "items": payload}}, final]
-                elif carrier == "returned_context":
-                    records = [{"type": "item.started", "item": {"id": "private", "type": "mcp_tool_call"}},
-                               {"type": "item.completed", "item": {"id": "private", "type": "mcp_tool_call", "result": payload}}, final]
-                else:
-                    records = [{"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": prior}}]
-                raw = "".join(json.dumps(r) + "\n" for r in records)
-                (slot / "stream.jsonl").write_text(raw)
-                (slot / "final.txt").write_text(prior if carrier == "final" else "Prepared.")
-                for _ in range(2):
-                    assessed = self.cli("assess", "--study", str(self.output))
-                    self.assertEqual(assessed.returncode, 0, assessed.stderr)
-                    report = json.loads(assessed.stdout)
-                    packet = study.read_json(self.output / "semantic-packet.json")
-                    self.assertNotIn("B", [c["label"] for c in packet["cases"]])
-                    self.assertIn("B", [c["label"] for c in packet["withheld_cases"]])
-                    self.assertTrue(report[1]["handoff"]["withheld"])
-                    self.assertIn({"carrier": carrier, "markers": ["assessment.json"]}, report[1]["handoff"]["private_contamination"])
-                    self.assertEqual((slot / "stream.jsonl").read_text(), raw)
-                    self.assertNotIn("configured-id", json.dumps(packet))
-                    self.assertEqual(report[1]["context"]["coverage"], "all paired saved returned fields")
-                    if carrier != "returned_context":
-                        self.assertEqual(report[1]["context"]["exposures"], [])
-                (slot / "stream.jsonl").write_text(json.dumps(final) + "\n")
-                (slot / "final.txt").write_text("Prepared.")
-                self.assertEqual(self.cli("assess", "--study", str(self.output)).returncode, 0)
-                self.assertIn("B", [c["label"] for c in study.read_json(self.output / "semantic-packet.json")["cases"]])
+        for form, embedded in (("raw", prior), ("canonical", json.dumps(payload)), ("prose", "note: " + prior + " end")):
+            for carrier in ("statements", "actions", "returned_context", "final"):
+                with self.subTest(form=form, carrier=carrier):
+                    (self.output / "assessment.json").write_text(prior)
+                    if carrier == "statements":
+                        records = [{"type": "item.completed", "item": {"id": "private", "type": "agent_message", "text": embedded}}, final]
+                    elif carrier == "actions":
+                        records = [{"type": "item.updated", "item": {"id": "private", "type": "todo_list", "items": payload if form == "raw" else embedded}}, final]
+                    elif carrier == "returned_context":
+                        records = [{"type": "item.started", "item": {"id": "private", "type": "mcp_tool_call"}},
+                                   {"type": "item.completed", "item": {"id": "private", "type": "mcp_tool_call", "result": payload if form == "raw" else embedded}}, final]
+                    else:
+                        records = [{"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": embedded}}]
+                    raw = "".join(json.dumps(r) + "\n" for r in records)
+                    (slot / "stream.jsonl").write_text(raw)
+                    (slot / "final.txt").write_text(embedded if carrier == "final" else "Prepared.")
+                    for _ in range(2):
+                        assessed = self.cli("assess", "--study", str(self.output))
+                        self.assertEqual(assessed.returncode, 0, assessed.stderr)
+                        report = json.loads(assessed.stdout)
+                        packet = study.read_json(self.output / "semantic-packet.json")
+                        self.assertNotIn("B", [c["label"] for c in packet["cases"]])
+                        self.assertIn("B", [c["label"] for c in packet["withheld_cases"]])
+                        self.assertTrue(report[1]["handoff"]["withheld"])
+                        self.assertIn({"carrier": carrier, "markers": ["assessment.json"]}, report[1]["handoff"]["private_contamination"])
+                        self.assertEqual((slot / "stream.jsonl").read_text(), raw)
+                        self.assertNotIn("configured-id", json.dumps(packet))
+                        self.assertEqual(report[1]["context"]["coverage"], "all paired saved returned fields")
+                        if carrier != "returned_context":
+                            self.assertEqual(report[1]["context"]["exposures"], [])
+                    (slot / "stream.jsonl").write_text(json.dumps(final) + "\n")
+                    (slot / "final.txt").write_text("Prepared.")
+                    self.assertEqual(self.cli("assess", "--study", str(self.output)).returncode, 0)
+                    self.assertIn("B", [c["label"] for c in study.read_json(self.output / "semantic-packet.json")["cases"]])
         self.assertEqual(len(self.calls()), 1)
+
+    def test_saved_private_artifacts_match_exact_embedded_and_canonical_content(self):
+        launched = self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+        self.assertEqual(launched.returncode, 0, launched.stderr)
+        generated = self.cli("assess", "--study", str(self.output))
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        artifacts = study.private_artifacts(self.output)
+        self.assertEqual(set(artifacts), {"cases.json", "rubric.json", "calibration/expected.json", "calibration-result.json", "assessment.json", "execution.json"})
+        for name, content in artifacts.items():
+            for value in (content, "note: " + content + " end", {"nested": ["note: " + content + " end"]},
+                          json.loads(content), json.dumps(json.loads(content), sort_keys=True)):
+                with self.subTest(name=name, value_type=type(value).__name__):
+                    self.assertIn(name, oracle.private_hits(value, [], artifacts))
+            self.assertNotIn(name, oracle.private_hits("note: " + name + " end", [], artifacts))
 
     def test_withheld_marker_allows_five_evidenced_decisions_and_cannot_bypass_eligibility(self):
         for case in self.contract["cases"]:

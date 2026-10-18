@@ -182,7 +182,7 @@ def private_hits(value, private_markers, private_artifacts):
         marker in text if " " in marker else marker in [line.strip() for line in text.splitlines()]
         for text in texts)]
     return hits + [name for name, content in private_artifacts.items()
-                   if content and any(normalized(content) in normalized(text) for text in texts)]
+                   if content and any(content in text or normalized(content) in normalized(text) for text in texts)]
 
 
 def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, bytes],
@@ -309,8 +309,10 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
         record, line = entry["record"], entry["line"]
         item = record.get("item", {})
         if isinstance(item, dict) and item.get("type") == "command_execution" and record.get("type") in ("item.started", "item.updated", "item.completed"):
-            if isinstance(item.get("aggregated_output"), str):
+            if "aggregated_output" in item:
                 returned.append({"line": line, "scope": {"aggregated_output": item["aggregated_output"]}})
+                if not isinstance(item["aggregated_output"], str):
+                    unknown_context.append(line)
             elif record.get("type") == "item.completed":
                 unknown_context.append(line)
     context_calls = {}
