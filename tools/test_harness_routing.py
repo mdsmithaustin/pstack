@@ -584,16 +584,16 @@ class CollectorTests(unittest.TestCase):
             self.assertEqual(case["returned_context"], result["returned_context"])
 
     def test_blinded_packet_withholds_all_carriers_and_replaces_stale_content(self):
-        secret = "synthetic-subject-model"
+        synthetic_model = "synthetic-subject-model"
         for case in self.contract["cases"]:
             slot = self.output / "slots" / case["label"]
             slot.mkdir(parents=True)
             records = [
-                {"type": "item.started", "item": {"id": "ctx", "type": "mcp_tool_call", "arguments": secret}},
-                {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call", "result": secret}},
-                {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": secret}}]
+                {"type": "item.started", "item": {"id": "ctx", "type": "mcp_tool_call", "arguments": synthetic_model}},
+                {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call", "result": synthetic_model}},
+                {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": synthetic_model}}]
             (slot / "stream.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
-            (slot / "final.txt").write_text(secret)
+            (slot / "final.txt").write_text(synthetic_model)
         study.assess(self.output, None)
         self.assertEqual(len(study.read_json(self.output / "semantic-packet.json")["cases"]), 6)
         for label in "ABCDEF":
@@ -602,10 +602,10 @@ class CollectorTests(unittest.TestCase):
         packet = study.read_json(self.output / "semantic-packet.json")
         self.assertEqual(packet["cases"], [])
         self.assertEqual([c["label"] for c in packet["withheld_cases"]], list("ABCDEF"))
-        self.assertNotIn(secret, json.dumps(packet))
-        self.assertEqual(report[0]["statements"][0]["text"], secret)
-        self.assertEqual(report[0]["actions"][0]["item"]["arguments"], secret)
-        self.assertEqual(report[0]["returned_context"][0]["scope"]["result"], secret)
+        self.assertNotIn(synthetic_model, json.dumps(packet))
+        self.assertEqual(report[0]["statements"][0]["text"], synthetic_model)
+        self.assertEqual(report[0]["actions"][0]["item"]["arguments"], synthetic_model)
+        self.assertEqual(report[0]["returned_context"][0]["scope"]["result"], synthetic_model)
 
     def test_actual_generated_assessment_is_withheld_in_each_carrier_on_reassessment(self):
         launched = self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
