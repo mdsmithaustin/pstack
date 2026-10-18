@@ -21,6 +21,12 @@ import study
 
 
 class ReadProofTests(unittest.TestCase):
+    def test_empty_private_artifacts_do_not_match_content(self):
+        artifacts = {"empty.json": "", "whitespace.json": " \t\r\n"}
+        for value in ("", "ordinary text", " \t\r\n", {"result": "ordinary text"}):
+            with self.subTest(value=value):
+                self.assertEqual(oracle.private_hits(value, [], artifacts), [])
+
     def test_independently_labelled_controls(self):
         results = study.calibrate()
         self.assertEqual([r["id"] for r in results[:13]], ["positive", "partial", "failed", "missing-result", "wrong-runtime", "after-decision", "early-decision", "intro-only", "contamination", "chunked", "duplicate", "reordered", "truncated"])
@@ -654,7 +660,10 @@ class CollectorTests(unittest.TestCase):
         slot = self.output / "slots/B"
         slot.mkdir()
         final = {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}
-        for form, embedded in (("raw", prior), ("canonical", json.dumps(payload)), ("prose", "note: " + prior + " end")):
+        trimmed = prior.rstrip("\n")
+        for form, embedded in (("raw", prior), ("canonical", json.dumps(payload)), ("prose", "note: " + prior + " end"),
+                               ("trimmed", trimmed), ("trimmed-prefix", "note: " + trimmed),
+                               ("trimmed-suffix", trimmed + " end"), ("trimmed-both", "note: " + trimmed + " end")):
             for carrier in ("statements", "actions", "returned_context", "final"):
                 with self.subTest(form=form, carrier=carrier):
                     (self.output / "assessment.json").write_text(prior)
@@ -670,7 +679,7 @@ class CollectorTests(unittest.TestCase):
                     raw = "".join(json.dumps(r) + "\n" for r in records)
                     (slot / "stream.jsonl").write_text(raw)
                     (slot / "final.txt").write_text(embedded if carrier == "final" else "Prepared.")
-                    for _ in range(2):
+                    for assessment in range(2):
                         assessed = self.cli("assess", "--study", str(self.output))
                         self.assertEqual(assessed.returncode, 0, assessed.stderr)
                         report = json.loads(assessed.stdout)
@@ -684,6 +693,9 @@ class CollectorTests(unittest.TestCase):
                         self.assertEqual(report[1]["context"]["coverage"], "all paired saved returned fields")
                         if carrier != "returned_context":
                             self.assertEqual(report[1]["context"]["exposures"], [])
+                        elif assessment == 0:
+                            self.assertEqual(report[1]["context"]["first_exposure_line"], 2)
+                            self.assertIn("assessment.json", report[1]["context"]["exposures"][0]["markers"])
                     (slot / "stream.jsonl").write_text(json.dumps(final) + "\n")
                     (slot / "final.txt").write_text("Prepared.")
                     self.assertEqual(self.cli("assess", "--study", str(self.output)).returncode, 0)
@@ -699,7 +711,10 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(set(artifacts), {"cases.json", "rubric.json", "calibration/expected.json", "calibration-result.json", "assessment.json", "execution.json"})
         for name, content in artifacts.items():
             for value in (content, "note: " + content + " end", {"nested": ["note: " + content + " end"]},
-                          json.loads(content), json.dumps(json.loads(content), sort_keys=True)):
+                          json.loads(content), json.dumps(json.loads(content), sort_keys=True),
+                          content.rstrip("\n"), "note: " + content.rstrip("\n"),
+                          content.rstrip("\n") + " end", "note: " + content.rstrip("\n") + " end",
+                          "note: " + content.strip() + " end"):
                 with self.subTest(name=name, value_type=type(value).__name__):
                     self.assertIn(name, oracle.private_hits(value, [], artifacts))
             self.assertNotIn(name, oracle.private_hits("note: " + name + " end", [], artifacts))

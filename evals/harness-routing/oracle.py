@@ -182,7 +182,8 @@ def private_hits(value, private_markers, private_artifacts):
         marker in text if " " in marker else marker in [line.strip() for line in text.splitlines()]
         for text in texts)]
     return hits + [name for name, content in private_artifacts.items()
-                   if content and any(content in text or normalized(content) in normalized(text) for text in texts)]
+                   if content.strip() and any(content in text or content.strip() in text
+                                              or normalized(content) in normalized(text) for text in texts)]
 
 
 def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, bytes],
