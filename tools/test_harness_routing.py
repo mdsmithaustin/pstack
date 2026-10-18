@@ -56,6 +56,8 @@ class ReadProofTests(unittest.TestCase):
     def test_returned_bytes_and_unique_final_binding_are_required(self):
         self.assertEqual(self.inspect("cat entry.md", "first\nsec")["reads"]["status"], "INCONCLUSIVE")
         self.assertEqual(self.inspect("cat entry.md", "first\nsecond\n", final=b"Other")["reads"]["status"], "INCONCLUSIVE")
+        self.assertEqual(self.inspect("cat entry.md", "first\nsecond\n", final=b"\n",
+                                      prefix=[{"type": "item.completed", "item": {"id": "empty", "type": "agent_message", "text": ""}}])["reads"]["status"], "INCONCLUSIVE")
         self.assertEqual(self.inspect("cat entry.md", "first\nsecond\n", prefix=[{"type":"item.completed","item":{"id":"old","type":"agent_message","text":"Prepared."}}])["reads"]["status"], "INCONCLUSIVE")
 
     def test_invalid_utf8_and_unpaired_completed_record(self):
@@ -700,6 +702,55 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(record["reads"]["status"], "INCONCLUSIVE")
         self.assertIsNone(record["cutoff_line"])
         self.assertEqual(record["ordering_basis"], "final answer only")
+
+    def test_malformed_final_bytes_withhold_one_case_without_blocking_five_rechecks(self):
+        for case in self.contract["cases"]:
+            slot = self.output / "slots" / case["label"]
+            slot.mkdir()
+            records = [{"type": "item.completed", "item": {"id": "decision", "type": "agent_message", "text": "Use the chat route."}}]
+            for index, relative in enumerate(case["required"]):
+                command = "cat " + relative
+                records += [{"type": "item.started", "item": {"id": str(index), "type": "command_execution", "command": command}},
+                            {"type": "item.completed", "item": {"id": str(index), "type": "command_execution", "command": command,
+                                                                 "aggregated_output": (self.output / "packages" / case["label"] / relative).read_text(),
+                                                                 "exit_code": 0, "status": "completed"}}]
+            records.append({"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared.\ufffd"}})
+            (slot / "stream.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
+            (slot / "final.txt").write_text("Prepared.\ufffd")
+        initial = self.cli("assess", "--study", str(self.output))
+        self.assertEqual(initial.returncode, 0, initial.stderr)
+        packet_path = self.output / "semantic-packet.json"
+        self.assertEqual([c["label"] for c in study.read_json(packet_path)["cases"]], list("ABCDEF"))
+        self.assertEqual([r["reads"]["status"] for r in json.loads(initial.stdout)], ["PASS"] * 6)
+        final_path = self.output / "slots/C/final.txt"
+        malformed = b"Prepared.\xff"
+        final_path.write_bytes(malformed)
+        assessed = self.cli("assess", "--study", str(self.output))
+        self.assertEqual(assessed.returncode, 0, assessed.stderr)
+        report = json.loads(assessed.stdout)
+        self.assertEqual([r["label"] for r in report], list("ABCDEF"))
+        self.assertEqual(report[2]["final_output"], {"text": None, "coverage": "unverified"})
+        self.assertIsNone(report[2]["final_line"])
+        self.assertIsNone(report[2]["cutoff_line"])
+        self.assertEqual(report[2]["reads"]["status"], "INCONCLUSIVE")
+        self.assertEqual(report[2]["context"]["coverage"], "all paired saved returned fields")
+        packet = study.read_json(packet_path)
+        self.assertEqual([c["label"] for c in packet["cases"]], list("ABDEF"))
+        self.assertEqual([c["label"] for c in packet["withheld_cases"]], ["C"])
+        self.assertIn("final output is not valid UTF-8", packet["withheld_cases"][0]["reasons"])
+        reviews = {label: {"first_committed_decision_line": 1} for label in "ABDEF"}
+        reviews["C"] = {"withheld": True}
+        decisions = self.root / "decisions.json"
+        study.write_json(decisions, reviews)
+        checked = self.cli("assess", "--study", str(self.output), "--decisions", str(decisions))
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        rechecked = json.loads(checked.stdout)
+        self.assertEqual([r["reads"]["status"] for r in rechecked], ["FAIL", "FAIL", "INCONCLUSIVE", "FAIL", "FAIL", "FAIL"])
+        self.assertEqual(rechecked[2]["ordering_basis"], "final answer only")
+        self.assertIsNone(rechecked[2]["final_line"])
+        self.assertEqual(final_path.read_bytes(), malformed)
+        self.assertEqual([c["label"] for c in study.read_json(packet_path)["cases"]], list("ABDEF"))
+        self.assertEqual(self.calls(), [])
 
     def test_failed_assess_removes_old_packet_before_each_refusal_boundary(self):
         study.collect_slot(self.contract, self.output, self.contract["cases"][0])
