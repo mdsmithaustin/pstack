@@ -13,6 +13,8 @@ python3 skills/show-me-your-work/scripts/evidence.py command \
 
 Capture success means helper exit 0 and one absolute `manifest.json` pointer on stdout. The child's raw return code is 7 in this example. Separate binary stdout and stderr survive a nonzero child exit. A negative raw return code means signal termination on POSIX. Helper failure means a nonzero helper exit and no completed pointer. There is no timeout, retry, or shell evaluation. To impose a deadline, supply your own wrapper and describe its outcome as that wrapper's outcome.
 
+The child receives only `.stdout-staging` and `.stderr-staging` descriptors. After the direct child exits, the helper freezes both staging byte lengths before copying either bounded prefix into fresh final payload files. Published final bytes stay stable after descendants write to their inherited descriptors. This does not promise an atomic historical point-in-time view of staging bytes that descendants may seek or overwrite during copying. The helper never waits for, signals, or kills descendants. Staging files remain for inspection, including on failed or short copies, which leave the ID incomplete with no completed pointer. Staging names are not valid manifest payload names.
+
 Import an explicitly selected regular file without executing it:
 
 ```sh

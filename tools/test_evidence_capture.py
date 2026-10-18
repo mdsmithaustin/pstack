@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -29,7 +30,13 @@ class EvidenceCapture(unittest.TestCase):
 
     def cli(self, *args):
         return subprocess.run([sys.executable, str(CLI), *map(str, args)],
-                              capture_output=True, cwd=self.root, check=False)
+                              capture_output=True, cwd=self.root, check=False, timeout=15)
+
+    def wait_for(self, path):
+        deadline = time.monotonic() + 10
+        while not path.exists():
+            self.assertLess(time.monotonic(), deadline, f"fixture did not create {path}")
+            time.sleep(0.01)
 
     def capture_file(self, capture_id="saved", *extra):
         result = self.cli("file", "--store", self.store, "--id", capture_id,
@@ -93,6 +100,115 @@ class EvidenceCapture(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         record = self.verified(self.store / "signal" / "manifest.json")
         self.assertEqual(record["captured"]["execution"]["raw_returncode"], -signal.SIGTERM)
+
+    def test_descendant_late_writes_leave_both_published_streams_unchanged(self):
+        release, done = self.root / "release", self.root / "done"
+        program = f"""
+import os, time
+from pathlib import Path
+os.write(1, b'initial-out\\x00')
+os.write(2, b'initial-err\\xff')
+if os.fork() == 0:
+    deadline = time.monotonic() + 10
+    while not Path({str(release)!r}).exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    os.write(1, b'late-out')
+    os.write(2, b'late-err')
+    Path({str(done)!r}).touch()
+    os._exit(0)
+os._exit(7)
+"""
+        try:
+            result = self.cli("command", "--store", self.store, "--id", "late",
+                              "--cwd", self.source, "--", sys.executable, "-c", program)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = self.store / "late" / "manifest.json"
+            self.assertEqual(result.stdout, (str(manifest) + "\n").encode())
+            self.assertEqual(self.verified(manifest)["captured"]["execution"]["raw_returncode"], 7)
+            release.touch()
+            self.wait_for(done)
+            for stream, initial, late in (("stdout", b"initial-out\x00", b"late-out"),
+                                          ("stderr", b"initial-err\xff", b"late-err")):
+                self.assertEqual((manifest.parent / f"{stream}.bin").read_bytes(), initial)
+                self.assertEqual((manifest.parent / f".{stream}-staging").read_bytes(), initial + late)
+            self.verified(manifest)
+        finally:
+            release.touch()
+            self.wait_for(done)
+
+    def test_continuous_descendant_appender_does_not_delay_capture(self):
+        stop, ready, done = (self.root / name for name in ("stop", "ready", "done"))
+        program = f"""
+import os, time
+from pathlib import Path
+if os.fork() == 0:
+    deadline = time.monotonic() + 10
+    while not Path({str(stop)!r}).exists() and time.monotonic() < deadline:
+        os.write(1, b'out' * 1024)
+        os.write(2, b'err' * 1024)
+        Path({str(ready)!r}).touch()
+        time.sleep(0.002)
+    Path({str(done)!r}).touch()
+    os._exit(0)
+while not Path({str(ready)!r}).exists():
+    time.sleep(0.002)
+os._exit(0)
+"""
+        try:
+            result = self.cli("command", "--store", self.store, "--id", "continuous",
+                              "--cwd", self.source, "--", sys.executable, "-c", program)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(done.exists(), "appender must still be active when capture returns")
+            manifest = self.store / "continuous" / "manifest.json"
+            self.assertEqual(result.stdout, (str(manifest) + "\n").encode())
+            self.verified(manifest)
+            saved = {name: (manifest.parent / f"{name}.bin").read_bytes()
+                     for name in ("stdout", "stderr")}
+            for name, unit in (("stdout", b"out"), ("stderr", b"err")):
+                self.assertTrue(saved[name])
+                self.assertEqual(saved[name], unit * (len(saved[name]) // len(unit)))
+            lengths = [(manifest.parent / f".{name}-staging").stat().st_size
+                       for name in ("stdout", "stderr")]
+            deadline = time.monotonic() + 5
+            while any((manifest.parent / f".{name}-staging").stat().st_size <= length
+                      for name, length in zip(("stdout", "stderr"), lengths)):
+                self.assertLess(time.monotonic(), deadline, "both fixture streams must keep growing")
+                time.sleep(0.01)
+        finally:
+            stop.touch()
+            self.wait_for(done)
+        for name in ("stdout", "stderr"):
+            self.assertEqual((manifest.parent / f"{name}.bin").read_bytes(), saved[name])
+        self.verified(manifest)
+
+    def test_failed_finalization_preserves_staging_and_occupied_id(self):
+        for stream in ("stdout", "stderr"):
+            with self.subTest(stream=stream):
+                directory = self.store / stream
+                program = ("import os; from pathlib import Path; "
+                           "os.write(1,b'partial-out'); os.write(2,b'partial-err'); "
+                           f"Path({str(directory / (stream + '.bin'))!r}).write_bytes(b'occupied')")
+                result = self.cli("command", "--store", self.store, "--id", stream,
+                                  "--cwd", self.source, "--", sys.executable, "-c", program)
+                self.refused(result)
+                self.assertFalse((directory / "manifest.json").exists())
+                self.assertFalse((directory / "record.json").exists())
+                self.assertEqual((directory / ".stdout-staging").read_bytes(), b"partial-out")
+                self.assertEqual((directory / ".stderr-staging").read_bytes(), b"partial-err")
+                self.assertEqual((directory / (stream + ".bin")).read_bytes(), b"occupied")
+                before = {path.name: path.read_bytes() for path in directory.iterdir()}
+                self.refused(self.cli("file", "--store", self.store, "--id", stream, "--source", self.file))
+                self.assertEqual({path.name: path.read_bytes() for path in directory.iterdir()}, before)
+                self.refused(self.cli("verify", directory / "manifest.json"))
+
+    def test_staging_names_are_rejected_as_manifest_payloads(self):
+        for index, name in enumerate((".stdout-staging", ".stderr-staging")):
+            manifest = self.capture_file(f"stage-name-{index}")
+            data = json.loads(manifest.read_bytes())
+            (manifest.parent / "source.bin").rename(manifest.parent / name)
+            data["payloads"][0]["path"] = name
+            manifest.write_text(json.dumps(data))
+            self.refused(self.cli("verify", manifest))
 
     def test_command_verification_accepts_reverse_wall_clock_times(self):
         result = self.cli("command", "--store", self.store, "--id", "clock", "--cwd", self.source,

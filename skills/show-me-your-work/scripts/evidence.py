@@ -120,6 +120,19 @@ def descriptor_for(name, data):
     return {"path": name, "byte_length": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
+def snapshot_stream(directory, staging, final, length):
+    with open_regular(staging, directory) as source, \
+            open_regular(final, directory, write=True) as destination:
+        remaining = length
+        while remaining:
+            data = source.read(min(remaining, 1024 * 1024))
+            require(data, "staging stream ended before its frozen length")
+            destination.write(data)
+            remaining -= len(data)
+        destination.flush()
+        os.fsync(destination.fileno())
+
+
 def payload_name(name):
     require(isinstance(name, str) and re.fullmatch(
         r"(?:record\.json|stdout\.bin|stderr\.bin|source\.bin|basis-[0-9]{4,}\.bin)", name),
@@ -309,14 +322,15 @@ def capture(args):
             cwd_fd = open_directory(cwd)
             os.close(cwd_fd)
             started = timestamp()
-            with open_regular("stdout.bin", directory, write=True) as stdout, \
-                    open_regular("stderr.bin", directory, write=True) as stderr:
+            with open_regular(".stdout-staging", directory, write=True) as stdout, \
+                    open_regular(".stderr-staging", directory, write=True) as stderr:
                 child = subprocess.run(argv, cwd=str(cwd), stdout=stdout, stderr=stderr, check=False)
-                for stream in (stdout, stderr):
-                    stream.flush()
-                    os.fsync(stream.fileno())
+                lengths = (os.fstat(stdout.fileno()).st_size, os.fstat(stderr.fileno()).st_size)
+                ended = timestamp()
+                snapshot_stream(directory, ".stdout-staging", "stdout.bin", lengths[0])
+                snapshot_stream(directory, ".stderr-staging", "stderr.bin", lengths[1])
             captured = {"kind": "command", "execution": {"argv": argv, "cwd": str(cwd),
-                        "started_at": started, "ended_at": timestamp(), "raw_returncode": child.returncode},
+                        "started_at": started, "ended_at": ended, "raw_returncode": child.returncode},
                         "stdout": "stdout.bin", "stderr": "stderr.bin"}
         else:
             source = absolute(args.source)
