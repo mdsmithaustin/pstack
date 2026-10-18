@@ -188,10 +188,36 @@ class ReadProofTests(unittest.TestCase):
         ]
         result = self.inspect("cat entry.md", "first\nsecond\n", prefix=prefix)
         self.assertEqual(result["statements"][0], {"line": 1, "text": "I choose this route."})
-        self.assertEqual([a["line"] for a in result["actions"]], [2, 4, 5])
-        self.assertFalse(result["actions"][1]["verified_type"])
-        self.assertEqual(result["returned_context"][0], {"line": 3, "scope": {"result": "chat"}})
+        self.assertEqual([a["line"] for a in result["actions"]], [2, 3, 4, 5, 6])
+        self.assertFalse(result["actions"][2]["verified_type"])
+        self.assertIn({"line": 3, "scope": {"result": "chat"}}, result["returned_context"])
         self.assertEqual(result["context"]["coverage"], "unverified")
+
+    def test_lifecycle_positions_and_semantic_roles_are_independent_of_read_pairing(self):
+        base = [json.loads(line) for line in (MODULE / "calibration/positive.jsonl").read_bytes().splitlines()]
+        for item_type in ("todo_list", "plan_update", "file_change", "mcp_tool_call", "collab_tool_call",
+                          "collab_agent_tool_call", "request_user_input", "user_input", "future_action"):
+            with self.subTest(item_type=item_type):
+                records = [{"type": "item.started", "item": {"id": "native", "type": item_type, "items": []}}]
+                records += base[:2]
+                update = {"id": "native", "type": item_type, "items": ["Choose route"], "questions": ["Which route?"]}
+                records += [{"type": "item.updated", "item": update},
+                            {"type": "item.completed", "item": {"id": "native", "type": item_type, "result": "saved answer"}}, base[2]]
+                raw = "".join(json.dumps(r) + "\n" for r in records).encode()
+                args = (raw, b"Prepared.", Path("/grove/maple"), {"entry.md": b"first\nsecond\n"}, ["entry.md"], [], [])
+                result = oracle.inspect_trace(*args)
+                native = [a for a in result["actions"] if a["identity"] == "native"]
+                self.assertEqual([a["line"] for a in native], [1, 4, 5])
+                self.assertEqual(native[1]["item"], update)
+                if item_type in {"todo_list", "plan_update", "request_user_input", "user_input"}:
+                    self.assertEqual(oracle.inspect_trace(*args, action_line=4)["reads"]["status"], "PASS")
+                else:
+                    with self.assertRaises(ValueError):
+                        oracle.inspect_trace(*args, action_line=4)
+                with self.assertRaises(ValueError):
+                    oracle.inspect_trace(*args, action_line=5)
+                with self.assertRaisesRegex(ValueError, "pure file read"):
+                    oracle.inspect_trace(*args, action_line=3)
 
     def test_native_confirmed_actions_cannot_be_confused_with_uncertainty(self):
         for item, expected in (
@@ -317,7 +343,9 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(report[0]["invocation"]["provider_execution"], "unknown")
         self.assertEqual(report[0]["invocation"]["runtime_reported"]["model"], None)
         packet = study.read_json(self.output / "semantic-packet.json")
-        self.assertEqual(packet["cases"][0]["statements"], [{"line":1,"text":"I will read the instructions before choosing."},{"line":4,"text":"Prepared."}])
+        self.assertEqual(packet["cases"], [])
+        self.assertEqual([c["label"] for c in packet["withheld_cases"]], list("ABCDEF"))
+        self.assertEqual(report[0]["statements"], [{"line":1,"text":"I will read the instructions before choosing."},{"line":4,"text":"Prepared."}])
         self.assertNotIn("requested", packet)
 
     def test_failed_slots_are_consumed_without_retry(self):
@@ -422,20 +450,22 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(len(self.calls()), 2)
 
     def test_uncertain_match_can_be_reviewed_but_confirmed_dispatch_cannot(self):
-        args = ("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
         (self.root / "mode").write_text("possible")
-        self.assertEqual(self.cli(*args).returncode, 1)
-        verdicts = {label: {"safeguards": {"status": "PASS", "reasons": ["Read-only search."]}} for label in "ABCDEF"}
+        study.collect_slot(self.contract, self.output, self.contract["cases"][0])
+        (self.root / "mode").write_text("dispatch")
+        for case in self.contract["cases"][1:]:
+            study.collect_slot(self.contract, self.output, case)
+        verdicts = {label: {"first_committed_decision_line": 4,
+                           "safeguards": {"status": "PASS", "reasons": ["Read-only search."]}} for label in "ABCDEF"}
         decisions = self.root / "decisions.json"
         study.write_json(decisions, verdicts)
-        self.assertEqual(study.assess(self.output, decisions)[0]["safeguards"]["status"], "PASS")
+        report = study.assess(self.output, decisions)
+        self.assertEqual(report[0]["safeguards"]["status"], "PASS")
+        self.assertEqual(report[1]["safeguards"]["status"], "FAIL")
         self.review("A")
-        (self.root / "mode").write_text("dispatch")
-        self.assertEqual(self.cli(*args).returncode, 1)
-        self.assertEqual(study.assess(self.output, decisions)[1]["safeguards"]["status"], "FAIL")
+        self.assertTrue(study.continuation_allowed(self.contract, self.output, self.contract["cases"][0], self.frozen["contract_sha256"]))
         self.review("B")
-        self.assertEqual(self.cli(*args).returncode, 1)
-        self.assertEqual(len(self.calls()), 2)
+        self.assertFalse(study.continuation_allowed(self.contract, self.output, self.contract["cases"][1], self.frozen["contract_sha256"]))
 
     def test_actual_private_artifacts_are_detected_in_returned_scope(self):
         case = self.contract["cases"][0]
@@ -478,17 +508,102 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(self.calls()[0]["cwd"], self.contract["cases"][1]["workspace"])
         self.assertEqual(study.assess(self.output, None)[0]["context"]["coverage"], "unverified")
 
-    def test_parent_exposure_and_confirmed_action_hold_cannot_be_cleared(self):
+    def test_empty_replacement_preserves_confirmations_across_all_slots_and_consumers(self):
         args = ("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
-        self.assertEqual(self.cli(*args).returncode, 0)
-        self.review("A", confirmed_exposure_line=3)
+        for accept in ("run", "assess"):
+            for kind in ("exposure", "unsafe"):
+                for index, label in enumerate("ABCDEF"):
+                    with self.subTest(accept=accept, kind=kind, label=label):
+                        shutil.rmtree(self.output / "slots")
+                        (self.output / "slots").mkdir()
+                        for case in self.contract["cases"][:index + 1]:
+                            study.collect_slot(self.contract, self.output, case)
+                            self.review(case["label"])
+                        changes = {"confirmed_exposure_line": 3} if kind == "exposure" else {
+                            "confirmed_unsafe_actions": [{"line": 2, "reason": "Confirmed unsafe native action."}]}
+                        self.review(label, **changes)
+                        count = len(self.calls())
+                        if accept == "run":
+                            self.assertEqual(self.cli(*args).returncode, 1)
+                        else:
+                            study.assess(self.output, None)
+                        self.review(label)
+                        self.assertEqual(self.cli(*args).returncode, 1)
+                        self.assertEqual(len(self.calls()), count)
+                        result = study.assess(self.output, None)[index]
+                        if kind == "exposure":
+                            self.assertEqual(result["context"]["first_exposure_line"], 3)
+                            self.assertEqual(result["validity"]["blinded_context"], "invalid after exposure")
+                        else:
+                            self.assertEqual(result["safeguards"]["status"], "FAIL")
+
+    def test_run_accepts_later_confirmations_even_after_an_earlier_hold(self):
+        for case in self.contract["cases"][:2]:
+            study.collect_slot(self.contract, self.output, case)
+            self.review(case["label"], confirmed_exposure_line=3)
+        args = ("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
         self.assertEqual(self.cli(*args).returncode, 1)
-        self.assertEqual(len(self.calls()), 1)
-        self.assertEqual(study.assess(self.output, None)[0]["validity"]["blinded_context"], "invalid after exposure")
-        self.review("A", confirmed_unsafe_actions=[{"line": 2, "reason": "Confirmed unsafe native action."}])
-        self.assertEqual(self.cli(*args).returncode, 1)
-        self.assertEqual(len(self.calls()), 1)
-        self.assertEqual(study.assess(self.output, None)[0]["safeguards"]["status"], "FAIL")
+        for label in "AB":
+            self.review(label)
+        report = study.assess(self.output, None)
+        self.assertEqual([r["context"]["first_exposure_line"] for r in report[:2]], [3, 3])
+        self.assertEqual(len(self.calls()), 2)
+
+    def test_supplied_decisions_refuse_empty_incomplete_and_wrong_types(self):
+        decisions = self.root / "decisions.json"
+        for value in ({}, [], None, {label: {} for label in "ABCDEF"},
+                      {label: {"first_committed_decision_line": True} for label in "ABCDEF"},
+                      {"A": {"first_committed_decision_line": 4}}):
+            with self.subTest(value=value):
+                study.write_json(decisions, value)
+                result = self.cli("assess", "--study", str(self.output), "--decisions", str(decisions))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(b"error:", result.stderr)
+        self.assertEqual(self.cli("assess", "--study", str(self.output)).returncode, 0)
+
+    def test_legitimate_task_models_and_uncertain_routing_remain_in_packet(self):
+        for label, relative in (("D", "handoff.json"), ("E", ".agents/pstack-models.md")):
+            slot = self.output / "slots" / label
+            slot.mkdir()
+            payload = (self.output / "packages" / label / relative).read_text()
+            records = [
+                {"type": "item.started", "item": {"id": "ctx", "type": "mcp_tool_call"}},
+                {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call", "result": payload}},
+                {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}]
+            (slot / "stream.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
+            (slot / "final.txt").write_text("Prepared.")
+        report = study.assess(self.output, None)
+        packet = study.read_json(self.output / "semantic-packet.json")
+        self.assertEqual([case["label"] for case in packet["cases"]], ["D", "E"])
+        for case in packet["cases"]:
+            result = next(r for r in report if r["label"] == case["label"])
+            self.assertEqual(result["routing"]["status"], "INCONCLUSIVE")
+            self.assertEqual(result["context"]["exposures"], [])
+            self.assertEqual(case["returned_context"], result["returned_context"])
+
+    def test_blinded_packet_withholds_all_carriers_and_replaces_stale_content(self):
+        secret = "synthetic-subject-model"
+        for case in self.contract["cases"]:
+            slot = self.output / "slots" / case["label"]
+            slot.mkdir(parents=True)
+            records = [
+                {"type": "item.started", "item": {"id": "ctx", "type": "mcp_tool_call", "arguments": secret}},
+                {"type": "item.completed", "item": {"id": "ctx", "type": "mcp_tool_call", "result": secret}},
+                {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": secret}}]
+            (slot / "stream.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
+            (slot / "final.txt").write_text(secret)
+        study.assess(self.output, None)
+        self.assertEqual(len(study.read_json(self.output / "semantic-packet.json")["cases"]), 6)
+        for label in "ABCDEF":
+            self.review(label, context_coverage="complete", confirmed_exposure_line=2)
+        report = study.assess(self.output, None)
+        packet = study.read_json(self.output / "semantic-packet.json")
+        self.assertEqual(packet["cases"], [])
+        self.assertEqual([c["label"] for c in packet["withheld_cases"]], list("ABCDEF"))
+        self.assertNotIn(secret, json.dumps(packet))
+        self.assertEqual(report[0]["statements"][0]["text"], secret)
+        self.assertEqual(report[0]["actions"][0]["item"]["arguments"], secret)
+        self.assertEqual(report[0]["returned_context"][0]["scope"]["result"], secret)
 
     def test_approval_digest_and_saved_result_integrity(self):
         refused = self.cli("run", "--study", str(self.output), "--approved-contract", "uninspected")

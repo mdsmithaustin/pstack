@@ -173,37 +173,47 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
     matches = [s["line"] for s in trace.statements if s["text"].rstrip("\n") == final_text and final_text]
     final_line = matches[0] if len(matches) == 1 else None
     actions = []
-    seen_actions = set()
+    local_types = {"todo_list", "plan_update", "file_change"}
+    call_types = {"command_execution", "mcp_tool_call", "collab_tool_call", "collab_agent_tool_call"}
+    question_types = {"user_input", "request_user_input"}
+    read_commands = {command.call_line: read_parts(command, workspace, files) for command in trace.commands}
+    command_reads = {command.identity: read_commands[command.call_line] for command in trace.commands}
     for entry in trace.records:
         record, line = entry["record"], entry["line"]
         item = record.get("item", {})
-        if not isinstance(item, dict) or record.get("type") not in ("item.started", "item.completed", "item.updated"):
+        kind = record.get("type")
+        if not isinstance(item, dict) or kind not in ("item.started", "item.completed", "item.updated"):
             continue
-        if not isinstance(item.get("type"), str):
-            actions.append({"line": line, "item": item, "verified_type": False})
+        item_type = item.get("type")
+        if item_type in ("agent_message", "reasoning"):
             continue
-        if item.get("type") in {"agent_message", "reasoning"}:
-            continue
+        known = isinstance(item_type, str) and item_type in local_types | call_types | question_types
+        role = "unverified"
+        if known:
+            role = "returned_context"
+            if (item_type in {"todo_list", "plan_update"} and any(key in item for key in ("items", "plan", "explanation"))
+                    or item_type in question_types and kind != "item.completed" and "questions" in item):
+                role = "assistant_state"
+            elif item_type in call_types | {"file_change"} and kind == "item.started":
+                role = "operation_initiation"
+        action = {"line": line, "kind": kind, "identity": item.get("id"), "item_type": item_type,
+                  "item": item, "verified_type": known, "semantic_role": role}
         identity = item.get("id")
-        key = (identity, item.get("type")) if isinstance(identity, str) else (line, None)
-        if key in seen_actions:
-            continue
-        seen_actions.add(key)
-        actions.append({"line": line, "item": item, "verified_type": item.get("type") in {
-            "command_execution", "mcp_tool_call", "collab_tool_call", "collab_agent_tool_call",
-            "file_change", "todo_list", "plan_update", "user_input", "request_user_input"}})
-    read_commands = {command.call_line: read_parts(command, workspace, files) for command in trace.commands}
-    for action in actions:
-        parts = read_commands.get(action["line"])
+        parts = command_reads.get(identity) if isinstance(identity, str) and item_type == "command_execution" else None
         if parts is not None:
             action["read_paths"] = [part[0] for part in parts]
+        actions.append(action)
     positions = {s["line"] for s in trace.statements}
     if decision_line is not None and (type(decision_line) is not int or decision_line not in positions):
         raise ValueError("first decision must identify a saved assistant statement")
     if action_line is not None and (type(action_line) is not int or action_line not in {a["line"] for a in actions}):
         raise ValueError("first action must identify a saved action")
-    if action_line is not None and read_commands.get(action_line) is not None:
-        raise ValueError("first substantive action cannot identify a pure file read")
+    if action_line is not None:
+        action = next(a for a in actions if a["line"] == action_line)
+        if "read_paths" in action:
+            raise ValueError("first substantive action cannot identify a pure file read")
+        if action["semantic_role"] not in {"assistant_state", "operation_initiation"}:
+            raise ValueError("first substantive action must identify assistant state or operation initiation")
     cutoffs = [p for p in (final_line, decision_line, action_line) if p is not None]
     cutoff = min(cutoffs) if cutoffs else None
     coverage = {name: [] for name in files}
