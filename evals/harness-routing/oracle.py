@@ -161,6 +161,30 @@ def axis(status: str, reasons: list[str], basis: list[int] | None = None):
     return {"status": status, "reasons": reasons, "raw_lines": sorted(set(basis or []))}
 
 
+def content_texts(value):
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (dict, list)):
+        children = value.values() if isinstance(value, dict) else value
+        return [json.dumps(value, ensure_ascii=False, sort_keys=True)] + [
+            text for child in children for text in content_texts(child)]
+    return []
+
+
+def private_hits(value, private_markers, private_artifacts):
+    texts = content_texts(value)
+    def normalized(text):
+        try:
+            return json.dumps(json.loads(text), ensure_ascii=False, sort_keys=True)
+        except (ValueError, TypeError):
+            return text
+    hits = [marker for marker in private_markers if marker and any(
+        marker in text if " " in marker else marker in [line.strip() for line in text.splitlines()]
+        for text in texts)]
+    return hits + [name for name, content in private_artifacts.items()
+                   if content and any(normalized(content) in normalized(text) for text in texts)]
+
+
 def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, bytes],
                   required: list[str], forbidden: list[str], private_markers: list[str],
                   decision_line: int | None = None, action_line: int | None = None,
@@ -332,30 +356,9 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
             returned.append({"line": line, "scope": {"unverified_record": record}})
     unknown_context.extend(line for line, _ in context_calls.values())
     unknown_context.extend(a["line"] for a in actions if not a["verified_type"])
-    def normalized(text):
-        try:
-            return json.dumps(json.loads(text), ensure_ascii=False, sort_keys=True)
-        except (ValueError, TypeError):
-            return text
     for scope in sorted(returned, key=lambda r: r["line"]):
-        texts = []
-        def collect(value):
-            if isinstance(value, str):
-                texts.append(value)
-            elif isinstance(value, dict):
-                texts.append(json.dumps(value, ensure_ascii=False, sort_keys=True))
-                for child in value.values():
-                    collect(child)
-            elif isinstance(value, list):
-                texts.append(json.dumps(value, ensure_ascii=False, sort_keys=True))
-                for child in value:
-                    collect(child)
-        collect(scope["scope"])
-        hits = [marker for marker in private_markers if marker and any(
-            marker in text if " " in marker else marker in [line.strip() for line in text.splitlines()]
-            for text in texts)]
-        hits += [name for name, content in (private_artifacts or {}).items()
-                 if content and any(normalized(content) in normalized(text) for text in texts)]
+        texts = content_texts(scope["scope"])
+        hits = private_hits(scope["scope"], private_markers, private_artifacts or {})
         if hits:
             exposures.append({**scope, "markers": hits})
         if any(re.search(r"truncat(?:ed|ion)|output (?:limit|omitted)", text, re.I) for text in texts):
