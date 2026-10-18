@@ -89,6 +89,44 @@ class ReadProofTests(unittest.TestCase):
                     self.assertEqual(result["context"]["unpaired_context_lines"], [index + 1] if gap else [])
                     self.assertEqual([e["line"] for e in result["context"]["exposures"]], [index + 1] if present and value in ({"private": marker}, [marker]) else [])
 
+    def test_assistant_text_presence_and_type_at_every_lifecycle(self):
+        values = ({"private": "private-marker"}, {}, ["private-marker"], [], None, True, False, 3, 1.5, "", "Visible.")
+        for item_type in ("agent_message", "reasoning"):
+            for lifecycle in ("item.started", "item.updated", "item.completed"):
+                for present, value in [(False, None)] + [(True, value) for value in values]:
+                    with self.subTest(item_type=item_type, lifecycle=lifecycle, present=present, value=value):
+                        item = {"id": "probe", "type": item_type}
+                        if present:
+                            item["text"] = value
+                        records = [
+                            {"type": lifecycle, "item": item},
+                            {"type": "item.started", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md"}},
+                            {"type": "item.completed", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "aggregated_output": "first\nsecond\n", "exit_code": 0, "status": "completed"}},
+                            {"type": "item.completed", "item": {"id": "probe", "type": item_type, "text": "Later statement."}},
+                            {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}
+                        ]
+                        raw = "".join(json.dumps(r) + "\n" for r in records).encode()
+                        args = (raw, b"Prepared.", Path("/grove/maple"), {"entry.md": b"first\nsecond\n"}, ["entry.md"], [], ["private-marker"])
+                        result = oracle.inspect_trace(*args)
+                        unsupported = present and not isinstance(value, str)
+                        absent_completed = not present and lifecycle == "item.completed"
+                        self.assertEqual(result["reads"]["status"], "INCONCLUSIVE" if absent_completed else "PASS")
+                        self.assertEqual(result["observations"], [{"path": "entry.md", "start": 0, "end": 13, "call_line": 2, "result_line": 3}])
+                        expected = [{"line": 3, "scope": {"aggregated_output": "first\nsecond\n"}}]
+                        if unsupported:
+                            expected.insert(0, {"line": 1, "scope": {"assistant_text": value}})
+                        self.assertEqual(result["returned_context"], expected)
+                        self.assertEqual(result["context"]["coverage"], "unverified" if unsupported or absent_completed else "all paired saved returned fields")
+                        self.assertEqual(result["context"]["unpaired_context_lines"], [1] if unsupported else [])
+                        self.assertEqual([s for s in result["statements"] if s["line"] == 1], [{"line": 1, "text": value}] if present and isinstance(value, str) else [])
+                        self.assertFalse(any(a["line"] == 1 for a in result["actions"]))
+                        self.assertEqual(result["cutoff_line"], 5)
+                        if unsupported:
+                            for reference in ("decision_line", "action_line"):
+                                with self.assertRaises(ValueError):
+                                    oracle.inspect_trace(*args, **{reference: 1})
+                        self.assertEqual([e["line"] for e in result["context"]["exposures"]], [1] if value in ({"private": "private-marker"}, ["private-marker"]) else [])
+
     def test_same_basename_elsewhere_and_search_are_not_read_proof(self):
         for command in ("cat /other/entry.md", "head entry.md", "rg first entry.md", "cat entry.md | head", "cat entry.md; true"):
             with self.subTest(command=command):
@@ -537,6 +575,72 @@ class CollectorTests(unittest.TestCase):
                 self.assertEqual(result["context"]["first_exposure_line"], exposure_line)
                 self.assertIn(name, result["context"]["exposures"][0]["markers"])
                 self.assertIn("scope", result["context"]["exposures"][0])
+
+    def test_unsupported_assistant_text_is_withheld_by_public_assess(self):
+        initial = self.cli("assess", "--study", str(self.output))
+        self.assertEqual(initial.returncode, 0, initial.stderr)
+        prior = json.loads(initial.stdout)
+        case = self.contract["cases"][0]
+        slot = self.output / "slots/A"
+        slot.mkdir()
+        values = ({"prior": prior}, {}, [1], [], None, True, False, 3, 1.5)
+        for item_type in ("agent_message", "reasoning"):
+            for stage in ("item.started", "item.updated", "item.completed"):
+                for value in values:
+                    with self.subTest(item_type=item_type, stage=stage, value=value):
+                        records = [{"type": stage, "item": {"id": "probe", "type": item_type, "text": value}}]
+                        for i, relative in enumerate(case["required"]):
+                            item = {"id": str(i), "type": "command_execution", "command": "cat " + relative}
+                            records += [{"type": "item.started", "item": item}, {"type": "item.completed", "item": {**item, "aggregated_output": (self.output / "packages/A" / relative).read_text(), "exit_code": 0, "status": "completed"}}]
+                        records += [{"type": "item.completed", "item": {"id": "probe", "type": item_type, "text": "Later statement."}}, {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}]
+                        (slot / "stream.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
+                        (slot / "final.txt").write_text("Prepared.")
+                        assessed = self.cli("assess", "--study", str(self.output))
+                        self.assertEqual(assessed.returncode, 0, assessed.stderr)
+                        report = json.loads(assessed.stdout)
+                        self.assertEqual(len(report), 6)
+                        row = report[0]
+                        self.assertEqual(row["context"]["coverage"], "unverified")
+                        self.assertEqual(row["context"]["unpaired_context_lines"], [1])
+                        self.assertIn({"line": 1, "scope": {"assistant_text": value}}, row["returned_context"])
+                        self.assertEqual(row["reads"]["status"], "PASS")
+                        self.assertEqual(row["cutoff_line"], len(records))
+                        self.assertTrue(row["handoff"]["withheld"])
+                        self.assertFalse(any(s["line"] == 1 for s in row["statements"]))
+                        self.assertFalse(any(a["line"] == 1 for a in row["actions"]))
+                        packet = study.read_json(self.output / "semantic-packet.json")
+                        self.assertNotIn("A", [c["label"] for c in packet["cases"]])
+                        self.assertIn("A", [c["label"] for c in packet["withheld_cases"]])
+
+    def test_unsupported_assistant_text_collection_and_continuation(self):
+        fake = self.root / "assistant-codex"
+        fake.write_text(self.fake.read_text().replace("for record in records:", "records.insert(0, json.loads((base / 'assistant.json').read_text()))\n    for record in records:"))
+        fake.chmod(0o755)
+        output = self.root / "assistant-private"
+        frozen = study.freeze(ROOT, output, fake, "configured-id", "high")
+        contract = study.verify_study(output)
+        try:
+            prior = study.assess(output, None)
+            for case, (item_type, stage) in zip(contract["cases"], ((t, s) for t in ("agent_message", "reasoning") for s in ("item.started", "item.updated", "item.completed"))):
+                with self.subTest(item_type=item_type, stage=stage):
+                    value = {"prior": prior}
+                    study.write_json(output / "assessment.json", prior)
+                    study.write_json(self.root / "assistant.json", {"type": stage, "item": {"id": "probe", "type": item_type, "text": value}})
+                    result = study.collect_slot(contract, output, case)
+                    self.assertTrue(result["stop_wave"])
+                    slot = output / "slots" / case["label"]
+                    receipt = study.read_json(slot / "receipt.json")
+                    self.assertEqual(receipt["observed_context"]["coverage"], "unverified")
+                    self.assertEqual(receipt["observed_context"]["first_exposure_line"], 1)
+                    row = study.inspect_case(contract, output, case)
+                    self.assertIn({"line": 1, "scope": {"assistant_text": value}}, row["returned_context"])
+                    study.write_json(slot / "context-review.json", {"label": case["label"], "contract_sha256": frozen["contract_sha256"], "trace_sha256": study.digest((slot / "stream.jsonl").read_bytes()), "reviewed_all_saved_returned_context": True, "context_coverage": "complete", "confirmed_exposure_line": None, "confirmed_unsafe_actions": [], "uncertain_unsafe_actions": [], "continuation": "allow", "reasons": ["Synthetic complete context review."]})
+                    self.assertFalse(study.continuation_allowed(contract, output, case, frozen["contract_sha256"]))
+                    assessed = self.cli("assess", "--study", str(output))
+                    self.assertEqual(assessed.returncode, 0, assessed.stderr)
+                    self.assertTrue(next(r for r in json.loads(assessed.stdout) if r["label"] == case["label"])["handoff"]["withheld"])
+        finally:
+            shutil.rmtree(Path(contract["cases"][0]["workspace"]).parent)
 
     def test_crash_reserved_slot_stays_consumed_and_requires_review(self):
         (self.output / "slots/A").mkdir()

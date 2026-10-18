@@ -60,7 +60,7 @@ def decode(raw: bytes, cwd: str) -> Trace:
         if kind in ("item.started", "item.updated", "item.completed") and item.get("type") in ("agent_message", "reasoning"):
             if isinstance(item.get("text"), str):
                 statements.append({"line": line, "text": item["text"]})
-            elif kind == "item.completed":
+            elif "text" not in item and kind == "item.completed":
                 issues.append(f"line {line}: assistant text is absent")
         if item.get("type") != "command_execution" or kind not in ("item.started", "item.completed"):
             continue
@@ -309,6 +309,10 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
     for entry in trace.records:
         record, line = entry["record"], entry["line"]
         item = record.get("item", {})
+        if isinstance(item, dict) and item.get("type") in ("agent_message", "reasoning") and record.get("type") in ("item.started", "item.updated", "item.completed"):
+            if "text" in item and not isinstance(item["text"], str):
+                returned.append({"line": line, "scope": {"assistant_text": item["text"]}})
+                unknown_context.append(line)
         if isinstance(item, dict) and item.get("type") == "command_execution" and record.get("type") in ("item.started", "item.updated", "item.completed"):
             if "aggregated_output" in item:
                 returned.append({"line": line, "scope": {"aggregated_output": item["aggregated_output"]}})
