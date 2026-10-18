@@ -101,6 +101,99 @@ class EvidenceCapture(unittest.TestCase):
         record = self.verified(self.store / "signal" / "manifest.json")
         self.assertEqual(record["captured"]["execution"]["raw_returncode"], -signal.SIGTERM)
 
+    def replaced_cwd_capture(self, ancestor):
+        parent = self.root / "requested-parent"
+        cwd = parent / "work"
+        cwd.mkdir(parents=True)
+        (cwd / "marker").write_bytes(b"original\x00\xff")
+        original_fd = os.open(cwd, os.O_RDONLY | os.O_DIRECTORY)
+        self.addCleanup(os.close, original_fd)
+        original = os.fstat(original_fd)
+        entry = parent if ancestor else cwd
+        moved = self.root / "validated-original"
+        replacement = self.root / "replacement"
+        replacement_cwd = replacement / "work" if ancestor else replacement
+        replacement_cwd.mkdir(parents=True)
+        (replacement_cwd / "marker").write_bytes(b"replacement")
+        parent_report = self.root / "parent-cwd.json"
+        driver = self.root / "replace-at-launch.py"
+        driver.write_text(f"""
+import json, os, runpy, subprocess, sys
+from pathlib import Path
+before = os.getcwd()
+real_run = subprocess.run
+def launch(*args, **kwargs):
+    Path({str(entry)!r}).rename({str(moved)!r})
+    Path({str(entry)!r}).symlink_to({str(replacement)!r}, target_is_directory=True)
+    return real_run(*args, **kwargs)
+subprocess.run = launch
+sys.argv = [{str(CLI)!r}, *sys.argv[1:]]
+try:
+    runpy.run_path({str(CLI)!r}, run_name='__main__')
+finally:
+    Path({str(parent_report)!r}).write_text(json.dumps([before, os.getcwd()]))
+""")
+        program = r"""
+import json, os, sys
+from pathlib import Path
+identity = os.stat('.')
+os.write(1, json.dumps([identity.st_dev, identity.st_ino, sys.argv[1:]]).encode() + b'\n')
+os.write(1, Path('marker').read_bytes())
+os.write(2, b'bound-err\x00\xff')
+sys.exit(7)
+"""
+        argv = [sys.executable, "-c", program, "literal;$(not-a-shell)"]
+        raw_cwd = str(cwd) + "/"
+        result = subprocess.run(
+            [sys.executable, str(driver), "command", "--store", str(self.store), "--id", "bound",
+             "--cwd", raw_cwd, "--", *argv],
+            capture_output=True, cwd=self.root, check=False, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = self.store / "bound" / "manifest.json"
+        self.assertEqual(result.stdout, (str(manifest) + "\n").encode())
+        execution = self.verified(manifest)["captured"]["execution"]
+        self.assertEqual(execution["cwd"], raw_cwd)
+        self.assertEqual(execution["argv"], argv)
+        self.assertEqual(execution["raw_returncode"], 7)
+        report, marker = (manifest.parent / "stdout.bin").read_bytes().split(b"\n", 1)
+        self.assertEqual(json.loads(report), [original.st_dev, original.st_ino, argv[3:]])
+        self.assertEqual(marker, b"original\x00\xff")
+        self.assertEqual((manifest.parent / "stderr.bin").read_bytes(), b"bound-err\x00\xff")
+        self.assertNotEqual((cwd.stat().st_dev, cwd.stat().st_ino),
+                            (original.st_dev, original.st_ino))
+        self.assertEqual(json.loads(parent_report.read_bytes()), [str(self.root), str(self.root)])
+
+    def test_command_binds_validated_cwd_after_entry_replacement(self):
+        self.replaced_cwd_capture(ancestor=False)
+
+    def test_command_binds_validated_cwd_after_ancestor_replacement(self):
+        self.replaced_cwd_capture(ancestor=True)
+
+    def test_command_refuses_unavailable_directory_binding_without_child_start(self):
+        driver = self.root / "unsupported-binding.py"
+        driver.write_text(f"""
+import os, runpy, sys
+os.fchdir = None
+sys.argv = [{str(CLI)!r}, *sys.argv[1:]]
+runpy.run_path({str(CLI)!r}, run_name='__main__')
+""")
+        marker = self.root / "child-started"
+        result = subprocess.run(
+            [sys.executable, str(driver), "command", "--store", str(self.store), "--id", "unsupported",
+             "--cwd", str(self.source), "--", sys.executable, "-c",
+             f"from pathlib import Path; Path({str(marker)!r}).touch()"],
+            capture_output=True, cwd=self.root, check=False, timeout=15)
+        self.refused(result)
+        self.assertIn(b"descriptor-bound fchdir", result.stderr)
+        directory = self.store / "unsupported"
+        self.assertTrue(directory.is_dir())
+        self.assertFalse((directory / "manifest.json").exists())
+        self.assertFalse((directory / "record.json").exists())
+        self.assertFalse(marker.exists())
+        before = {path.name: path.read_bytes() for path in directory.iterdir()}
+        self.refused(self.cli("file", "--store", self.store, "--id", "unsupported", "--source", self.file))
+        self.assertEqual({path.name: path.read_bytes() for path in directory.iterdir()}, before)
+
     def test_descendant_late_writes_leave_both_published_streams_unchanged(self):
         release, done = self.root / "release", self.root / "done"
         program = f"""
