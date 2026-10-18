@@ -1,0 +1,4 @@
+{"type": "item.started", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "read", "type": "command_execution", "command": "cat entry.md", "aggregated_output": "first\nsecond\n", "exit_code": 0, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "plan", "type": "todo_list", "items": [{"text": "Proceed", "completed": false}]}}
+{"type": "item.completed", "item": {"id": "answer", "type": "agent_message", "text": "Prepared."}}

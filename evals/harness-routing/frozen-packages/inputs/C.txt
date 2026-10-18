@@ -1,0 +1,3 @@
+Read skills/pstack-harness/SKILL.md in full before handling this request. Use only the relevant installed instructions as the work needs them.
+
+Explain how I could find the local record of this conversation later. This session was started with ephemeral storage enabled. Do not open any conversation records. Keep any suggested lookup limited to this workspace, and do not claim a record exists unless the session establishes it.
