@@ -605,6 +605,137 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(report[0]["actions"][0]["item"]["arguments"], secret)
         self.assertEqual(report[0]["returned_context"][0]["scope"]["result"], secret)
 
+    def test_actual_generated_assessment_is_withheld_in_each_carrier_on_reassessment(self):
+        launched = self.cli("run", "--study", str(self.output), "--approved-contract", self.frozen["contract_sha256"])
+        self.assertEqual(launched.returncode, 0, launched.stderr)
+        generated = self.cli("assess", "--study", str(self.output))
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        prior = (self.output / "assessment.json").read_text()
+        payload = json.loads(prior)
+        self.assertEqual(payload[0]["invocation"]["requested"]["model"], "configured-id")
+        self.assertEqual(payload[0]["reads"]["status"], "INCONCLUSIVE")
+        slot = self.output / "slots/B"
+        slot.mkdir()
+        final = {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}}
+        for carrier in ("statements", "actions", "returned_context", "final"):
+            with self.subTest(carrier=carrier):
+                (self.output / "assessment.json").write_text(prior)
+                if carrier == "statements":
+                    records = [{"type": "item.completed", "item": {"id": "private", "type": "agent_message", "text": prior}}, final]
+                elif carrier == "actions":
+                    records = [{"type": "item.updated", "item": {"id": "private", "type": "todo_list", "items": payload}}, final]
+                elif carrier == "returned_context":
+                    records = [{"type": "item.started", "item": {"id": "private", "type": "mcp_tool_call"}},
+                               {"type": "item.completed", "item": {"id": "private", "type": "mcp_tool_call", "result": payload}}, final]
+                else:
+                    records = [{"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": prior}}]
+                raw = "".join(json.dumps(r) + "\n" for r in records)
+                (slot / "stream.jsonl").write_text(raw)
+                (slot / "final.txt").write_text(prior if carrier == "final" else "Prepared.")
+                for _ in range(2):
+                    assessed = self.cli("assess", "--study", str(self.output))
+                    self.assertEqual(assessed.returncode, 0, assessed.stderr)
+                    report = json.loads(assessed.stdout)
+                    packet = study.read_json(self.output / "semantic-packet.json")
+                    self.assertNotIn("B", [c["label"] for c in packet["cases"]])
+                    self.assertIn("B", [c["label"] for c in packet["withheld_cases"]])
+                    self.assertTrue(report[1]["handoff"]["withheld"])
+                    self.assertIn({"carrier": carrier, "markers": ["assessment.json"]}, report[1]["handoff"]["private_contamination"])
+                    self.assertEqual((slot / "stream.jsonl").read_text(), raw)
+                    self.assertNotIn("configured-id", json.dumps(packet))
+                    self.assertEqual(report[1]["context"]["coverage"], "all paired saved returned fields")
+                    if carrier != "returned_context":
+                        self.assertEqual(report[1]["context"]["exposures"], [])
+                (slot / "stream.jsonl").write_text(json.dumps(final) + "\n")
+                (slot / "final.txt").write_text("Prepared.")
+                self.assertEqual(self.cli("assess", "--study", str(self.output)).returncode, 0)
+                self.assertIn("B", [c["label"] for c in study.read_json(self.output / "semantic-packet.json")["cases"]])
+        self.assertEqual(len(self.calls()), 1)
+
+    def test_withheld_marker_allows_five_evidenced_decisions_and_cannot_bypass_eligibility(self):
+        for case in self.contract["cases"]:
+            slot = self.output / "slots" / case["label"]
+            slot.mkdir()
+            records = [{"type": "item.completed", "item": {"id": "decision", "type": "agent_message", "text": "Use the chat route."}}]
+            for index, relative in enumerate(case["required"]):
+                command = "cat " + relative
+                records += [{"type": "item.started", "item": {"id": str(index), "type": "command_execution", "command": command}},
+                            {"type": "item.completed", "item": {"id": str(index), "type": "command_execution", "command": command,
+                                                                 "aggregated_output": (self.output / "packages" / case["label"] / relative).read_text(),
+                                                                 "exit_code": 0, "status": "completed"}}]
+            records.append({"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}})
+            (slot / "stream.jsonl").write_text("".join(json.dumps(r) + "\n" for r in records))
+            (slot / "final.txt").write_text("Prepared.")
+        self.review("C", context_coverage="unverified")
+        baseline = self.cli("assess", "--study", str(self.output))
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        self.assertEqual([r["reads"]["status"] for r in json.loads(baseline.stdout)], ["PASS"] * 6)
+        packet = study.read_json(self.output / "semantic-packet.json")
+        self.assertEqual([c["label"] for c in packet["cases"]], list("ABDEF"))
+        self.assertEqual([c["label"] for c in packet["withheld_cases"]], ["C"])
+        reviews = {label: {"first_committed_decision_line": 1} for label in "ABDEF"}
+        reviews["C"] = {"withheld": True}
+        decisions = self.root / "decisions.json"
+        study.write_json(decisions, reviews)
+        checked = self.cli("assess", "--study", str(self.output), "--decisions", str(decisions))
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+        report = json.loads(checked.stdout)
+        self.assertEqual([r["reads"]["status"] for r in report], ["FAIL", "FAIL", "PASS", "FAIL", "FAIL", "FAIL"])
+        self.assertEqual(report[2]["ordering_basis"], "final answer only")
+        self.assertTrue(report[2]["handoff"]["withheld"])
+        self.assertEqual(report[2]["context"]["coverage"], "unverified")
+        for label, invalid in (("A", {"withheld": True}), ("A", {"withheld": True, "first_committed_decision_line": 1}),
+                               ("A", {"first_committed_decision_line": 2}), ("C", {"first_committed_decision_line": 1}),
+                               ("C", {"withheld": True, "earlier_action_line": 1}), ("C", {"withheld": 1})):
+            with self.subTest(label=label, invalid=invalid):
+                study.write_json(decisions, {**reviews, label: invalid})
+                refused = self.cli("assess", "--study", str(self.output), "--decisions", str(decisions))
+                self.assertEqual(refused.returncode, 2, refused.stderr)
+                self.assertFalse((self.output / "semantic-packet.json").exists())
+        (self.output / "slots/C/final.txt").write_bytes(b"")
+        study.write_json(decisions, reviews)
+        missing_final = self.cli("assess", "--study", str(self.output), "--decisions", str(decisions))
+        self.assertEqual(missing_final.returncode, 0, missing_final.stderr)
+        record = json.loads(missing_final.stdout)[2]
+        self.assertEqual(record["reads"]["status"], "INCONCLUSIVE")
+        self.assertIsNone(record["cutoff_line"])
+        self.assertEqual(record["ordering_basis"], "final answer only")
+
+    def test_failed_assess_removes_old_packet_before_each_refusal_boundary(self):
+        study.collect_slot(self.contract, self.output, self.contract["cases"][0])
+        packet = self.output / "semantic-packet.json"
+        for failure in ("contract", "decisions", "parent", "confirmations", "artifact"):
+            with self.subTest(failure=failure):
+                initial = self.cli("assess", "--study", str(self.output))
+                self.assertEqual(initial.returncode, 0, initial.stderr)
+                self.assertIn("A", [c["label"] for c in study.read_json(packet)["cases"]])
+                args = ["assess", "--study", str(self.output)]
+                path = {"contract": self.output / "frozen.sha256", "decisions": self.root / "decisions.json",
+                        "parent": self.output / "slots/A/context-review.json", "confirmations": self.output / "slots/A/confirmations.json",
+                        "artifact": self.output / "slots/A/stream.jsonl"}[failure]
+                before = path.read_bytes() if path.exists() else None
+                try:
+                    if failure == "contract":
+                        path.write_text("invalid")
+                    elif failure == "decisions":
+                        study.write_json(path, {})
+                        args += ["--decisions", str(path)]
+                    elif failure == "parent":
+                        self.review("A", confirmed_exposure_line=3, reasons=[])
+                    elif failure == "confirmations":
+                        study.write_json(path, {"label": "A", "trace_sha256": "stale", "contract_sha256": self.frozen["contract_sha256"],
+                                                "exposure_lines": [], "unsafe_actions": []})
+                    else:
+                        path.write_text("changed")
+                    refused = self.cli(*args)
+                    self.assertEqual(refused.returncode, 2, refused.stderr)
+                    self.assertFalse(packet.exists())
+                finally:
+                    if before is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        path.write_bytes(before)
+
     def test_approval_digest_and_saved_result_integrity(self):
         refused = self.cli("run", "--study", str(self.output), "--approved-contract", "uninspected")
         self.assertEqual(refused.returncode, 2)
