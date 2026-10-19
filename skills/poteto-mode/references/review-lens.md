@@ -24,7 +24,7 @@ The Code review playbook opens this file at its design checks. Each question nam
 
 ## Tests (**principle-test-behavior-not-implementation**)
 
-- **Would each new or changed test still pass if every imported function returned `undefined`?** Read each assertion against the five shapes in the leaf. Flag a weak assertion, a mock-only check, a self-referential expected value, a constant pin, or a fixture that asserts itself. Leave it for a relation across table rows and a compile-time type test.
+- **Would each new or changed test still pass if the behavior broke, or fail if only the internals changed?** Run the leaf's two imagined edits against each assertion. Flag a weak assertion, a mock-only check, a self-referential expected value, a constant pin, or a fixture that asserts itself. Leave it for a relation across table rows and a compile-time type test.
 - **Does a test cover each behavior the PR changes?** Map each behavior change to a test that fails on the base. Flag a behavior change with no such test. Leave it when the change is structure only and existing tests already pin the behavior.
 - **Does the setup establish state that production never establishes?** Read the test setup against the real initialization path. Flag a test that passes only because of that setup. Leave it when real callers can supply the same inputs.
 

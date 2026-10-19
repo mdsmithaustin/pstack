@@ -3089,6 +3089,14 @@
     {
      "file": "skills/setup-pstack/SKILL.md",
      "quote": "Check whether the project already has a formal verification skill"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "If not, offer once"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "On no, move on without pushing."
     }
    ],
    "harness_sensitive": false,
