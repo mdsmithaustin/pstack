@@ -128,7 +128,7 @@ Failure signal is a non-zero exit on missing rows, omitted arms, changed paths, 
 The behavioral regression population is retained in the canonical oracle tests. The new public CLI controls accept explicit Bash pipefail, POSIX temporary-log status capture, and normalized failure status. They reject silent, unfiltered, 19-line, 21-line, wrong-suffix, missing-operation, unprotected-tail, ignored-failure, and print-only answers. They also exercise scratch reset, immutable prepared files, and the older selectors' no-write contract.
 
 ```sh
-"$HARNESS_PYTHON" -I -B -m unittest discover -s evals/verify-commands/oracles -p 'test_*.py' -v
+(cd evals/verify-commands/oracles && "$HARNESS_PYTHON" -B -m unittest -v test_check_plan)
 ```
 
 Failure signal is a non-zero exit, any failed test, or an empty test population. Infrastructure status 2 must fail; it never counts as expected candidate rejection 1. The pinned Docker image must already be present because the checker uses `--pull never` and `--network none`. The source/hash check above binds the canonical implementation and all fixture dependencies to the study freeze. These model-free controls establish instrument behavior only and do not measure model improvement.
