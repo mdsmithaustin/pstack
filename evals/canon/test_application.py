@@ -106,6 +106,19 @@ elif sys.argv[1:] == ['features', 'list']:
     print('multi_agent stable true')
 else:
     mode = MODE
+    if mode == 'mcp_config_validation':
+        servers = {}
+        for index, argument in enumerate(sys.argv[:-1]):
+            if argument == '-c':
+                key, _, value = sys.argv[index + 1].partition('=')
+                if key == 'mcp_servers':
+                    servers = json.loads(value)
+                elif key.startswith('mcp_servers.'):
+                    name, field = key[len('mcp_servers.'):].rsplit('.', 1)
+                    servers.setdefault(name, {})[field] = json.loads(value)
+        if any(not any(key in server for key in ('url', 'command')) for server in servers.values()):
+            print('invalid transport', file=sys.stderr)
+            sys.exit(1)
     root = pathlib.Path.cwd()
     (root.parent / 'native-record.json').write_text(json.dumps({'argv': sys.argv[1:], 'home': os.environ['HOME'], 'codex_home': os.environ['CODEX_HOME'], 'gh': os.environ.get('GH_TOKEN'), 'prompt': sys.stdin.read()}))
     (root / 'app.py').write_text('implemented')
@@ -158,6 +171,12 @@ else:
         self.assertEqual((result.state, result.native_valid), ("completed", True))
         self.assertFalse((self.root / "attempt/staging/.agents").exists())
         self.assertEqual(application.replay(result.capture, self.root / "native-replay").joinpath("app.py").read_text(), "implemented")
+
+    def test_mcp_configuration_allows_native_application(self):
+        result, _ = self.run_attempt("mcp_config_validation")
+        self.assertEqual((result.state, result.native_valid), ("completed", True))
+        replay = application.replay(result.capture, self.root / "mcp-replay")
+        self.assertEqual((replay / "app.py").read_text(), "implemented")
 
     def test_native_failures_keep_a_valid_capture_for_maintenance(self):
         for mode in ("nonzero", "malformed", "missing_terminal", "timeout", "outer_timeout"):
