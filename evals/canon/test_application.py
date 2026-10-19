@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -32,6 +33,12 @@ class RecordingTransport:
             claim = json.loads((Path(args[-1]).parent / "claim.json").read_text())
             self.test.assertEqual(claim["sandbox"], self.name)
             self.test.assertEqual(sorted(p.name for p in Path(args[-1]).iterdir()), ([".agents"] if claim["spec"]["skills"] else []) + [".git", "project"])
+            staging = Path(args[-1])
+            cloned = staging.with_name("transport-clone")
+            self.original(["git", "clone", "--no-local", staging, cloned],
+                          env={**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"})
+            shutil.rmtree(staging)
+            cloned.rename(staging)
             for tree in (Path(args[-1]) / "project", Path(args[-1]) / ".agents/skills"):
                 if tree.exists():
                     for path in tree.rglob("*"):
@@ -133,6 +140,9 @@ else:
         if any(not any(key in server for key in ('url', 'command')) for server in servers.values()):
             print('invalid transport', file=sys.stderr)
             sys.exit(1)
+    if mode == 'preserve_inputs':
+        print(json.dumps({'type': 'turn.completed'}))
+        sys.exit(0)
     root = pathlib.Path.cwd()
     (root.parent / 'native-record.json').write_text(json.dumps({'argv': sys.argv[1:], 'home': os.environ['HOME'], 'codex_home': os.environ['CODEX_HOME'], 'gh': os.environ.get('GH_TOKEN'), 'prompt': sys.stdin.read()}))
     (root / 'app.py').write_text('implemented')
@@ -204,11 +214,10 @@ else:
             else:
                 self.skills = replacement
         self.request = application.Request(self.request.runtime, self.project, self.skills, self.request.prompt)
-        result, _ = self.run_attempt()
+        result, _ = self.run_attempt("preserve_inputs")
         self.assertEqual((result.state, result.native_valid), ("completed", True))
         self.assertEqual(application._scan(self.root / "attempt/staging/.agents/skills"), application._inventory(self.skills))
-        clone = json.loads(result.receipt.read_text())["setup"]["clone_inventories"]
-        self.assertEqual({e["mode"] for e in clone["project"]}, {0o660})
+        self.assertEqual(application._scan(self.root / "attempt/staging/project"), application._inventory(self.project))
 
     def test_clone_rejects_path_and_content_changes_in_both_inputs(self):
         for tree in ("project", "skills"):
@@ -219,6 +228,56 @@ else:
                 self.assertEqual((result.state, result.native_valid, result.capture), ("setup_failed", False, None))
                 self.assertIn("paths or content changed", json.loads(result.receipt.read_text())["error"])
                 self.assertFalse(any(c[0][-2] == "run" for c in transport.commands if len(c[0]) > 2))
+
+    def test_initial_and_maintenance_preserve_ignored_files_and_empty_directories(self):
+        expected = {".gitignore": "build/\n", "build/output": "build result\n",
+                    ".pytest_cache/.gitignore": "*\n", ".pytest_cache/result": "cache result\n",
+                    "host-ignored.dat": "host ignored\n", "xdg-ignored.dat": "xdg ignored\n"}
+        for tree, snapshot in (("project", self.project), ("skills", self.skills)):
+            source = application.replay(snapshot, self.root / (tree + "-with-cache"))
+            for name, content in expected.items():
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content)
+            (source / "empty/nested").mkdir(parents=True)
+            (source / "empty").chmod(0o750)
+            (source / "empty/nested").chmod(0o770)
+            frozen = application.Snapshot.freeze(source, self.root / (tree + "-with-cache-snapshot"))
+            if tree == "project":
+                self.project = frozen
+            else:
+                self.skills = frozen
+        host = self.root / "host"
+        (host / ".config/git").mkdir(parents=True)
+        (host / ".config/git/ignore").write_text("xdg-ignored.dat\n")
+        excludes = host / "excludes"
+        excludes.write_text("host-ignored.dat\n")
+        config = host / ".gitconfig"
+        config.write_text('[core]\nexcludesFile = ' + json.dumps(str(excludes)) + '\n[commit]\ngpgsign = true\n[gpg]\nprogram = /nonexistent-canon-signing-program\n')
+        self.request = application.Request(self.request.runtime, self.project, self.skills, self.request.prompt)
+        with mock.patch.dict(os.environ, {"HOME": str(host), "XDG_CONFIG_HOME": str(host / ".config"),
+                                         "GIT_CONFIG_GLOBAL": str(config), "GIT_CONFIG_NOSYSTEM": "1"}):
+            for phase in ("initial", "maintenance"):
+                with self.subTest(phase=phase), mock.patch.object(application, "REMOTE", str(self.root / phase)):
+                    result, _ = self.run_attempt("preserve_inputs", phase)
+                self.assertEqual((result.state, result.native_valid), ("completed", True))
+                replayed = application.replay(result.capture, self.root / (phase + "-replay"))
+                for tree in (replayed, self.root / phase / "staging/.agents/skills"):
+                    for name, content in expected.items():
+                        self.assertEqual((tree / name).read_text(), content)
+                    self.assertEqual(list((tree / "empty/nested").iterdir()), [])
+                    self.assertEqual(stat.S_IMODE((tree / "empty").stat().st_mode), 0o750)
+                    self.assertEqual(stat.S_IMODE((tree / "empty/nested").stat().st_mode), 0o770)
+                self.request = application.Request(self.request.runtime, result.capture, self.skills, self.request.prompt)
+
+    def test_entirely_empty_project_and_guidance_trees_survive_clone(self):
+        source = self.root / "empty-source"
+        source.mkdir()
+        empty = application.Snapshot.freeze(source, self.root / "empty-snapshot")
+        self.request = application.Request(self.request.runtime, empty, empty, self.request.prompt)
+        result, _ = self.run_attempt("preserve_inputs")
+        self.assertEqual((result.state, result.native_valid), ("completed", True))
+        self.assertEqual(list(application.replay(result.capture, self.root / "empty-replay").iterdir()), [])
 
     def test_template_short_alias_is_rejected_but_exact_id_is_accepted(self):
         for template, expected in (("prepared:test", "setup_failed"), ("abc", "completed")):

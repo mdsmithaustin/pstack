@@ -80,6 +80,13 @@ class NativeDeliveryTests(unittest.TestCase):
             source = root / (tree + "-source")
             source.mkdir(parents=True)
             (source / "nested").mkdir()
+            (source / "empty/nested").mkdir(parents=True)
+            (source / "empty/nested").chmod(0o770)
+            (source / ".gitignore").write_text("ignored.dat\n")
+            (source / "ignored.dat").write_text("snapshot file despite ignore rules\n")
+            (source / ".pytest_cache").mkdir()
+            (source / ".pytest_cache/.gitignore").write_text("*\n")
+            (source / ".pytest_cache/result").write_text("cached result\n")
             for name, mode in (("plain", 0o644), ("execute", 0o755), ("writable", 0o664), ("nested/restricted", 0o600)):
                 (source / name).write_text(tree + ":" + name)
                 (source / name).chmod(mode)
@@ -87,11 +94,7 @@ class NativeDeliveryTests(unittest.TestCase):
             snapshots[tree] = application.Snapshot.freeze(source, root / (tree + "-snapshot"))
             inventories[tree] = application._inventory(snapshots[tree])
             application.replay(snapshots[tree], staging / location)
-        for args in (["git", "init", "-q", "--template=", staging],
-                     ["git", "-C", staging, "config", "core.hooksPath", "/dev/null"],
-                     ["git", "-C", staging, "add", "--all"],
-                     ["git", "-C", staging, "-c", "user.name=canon", "-c", "user.email=canon", "commit", "-qm", "clone regression"]):
-            application._command(args)
+        application._stage(staging)
         name = "canon-delivery-check-" + uuid.uuid4().hex[:12]
         payload = {"root": str(staging), "runtime": {"model": "unused", "effort": "high", "timeout_s": 1},
                    "prompt": "NOT RUN", "project": snapshots["project"].sha256,

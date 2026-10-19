@@ -224,8 +224,8 @@ def _write_json(path, value):
         os.close(fd)
 
 
-def _command(argv, *, timeout=PHASE_TIMEOUT_S, cwd=None, input=None, check=True):
-    proc = subprocess.Popen(list(map(str, argv)), cwd=cwd, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+def _command(argv, *, timeout=PHASE_TIMEOUT_S, cwd=None, input=None, check=True, env=None):
+    proc = subprocess.Popen(list(map(str, argv)), cwd=cwd, env=env, stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
         stdout, stderr = proc.communicate(input, timeout=timeout)
@@ -276,6 +276,15 @@ def _unpack(archive, destination):
                 (destination / member.name).chmod(member.mode & 0o777)
 
 
+def _stage(staging):
+    env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
+    for argv in (["git", "init", "-q", "--template=", staging],
+                 ["git", "-C", staging, "config", "core.hooksPath", "/dev/null"],
+                 ["git", "-C", staging, "add", "--all", "--force"],
+                 ["git", "-C", staging, "-c", "user.name=canon", "-c", "user.email=canon", "commit", "--allow-empty", "-qm", "public application inputs"]):
+        _command(argv, env=env)
+
+
 def run_application(request: Request, slot: Path) -> Result:
     slot = Path(slot).absolute()
     try:
@@ -306,10 +315,7 @@ def run_application(request: Request, slot: Path) -> Result:
         staging = project.parent
         if request.skills:
             replay(request.skills, staging / ".agents" / "skills")
-        _command(["git", "init", "-q", "--template=", staging])
-        _command(["git", "-C", staging, "config", "core.hooksPath", "/dev/null"])
-        _command(["git", "-C", staging, "add", "--all"])
-        _command(["git", "-C", staging, "-c", "user.name=canon", "-c", "user.email=canon", "commit", "--allow-empty", "-qm", "public application inputs"])
+        _stage(staging)
         templates = json.loads(_command(["sbx", "template", "ls", "--json"]).stdout)
         rows = templates if isinstance(templates, list) else templates.get("images", [])
         matches = [row for row in rows if runtime.template in (row.get("id"),
@@ -403,6 +409,12 @@ def _native_command(runtime, root):
 def _restore_clone(source, entries, digest):
     if _sha(_json(entries)) != digest:
         raise ApplicationError("declared clone inventory digest mismatch")
+    source.mkdir(parents=True, exist_ok=True)
+    actual = _scan(source)
+    paths = {entry["path"] for entry in actual}
+    for entry in entries:
+        if entry["kind"] == "dir" and entry["path"] not in paths:
+            (source / entry["path"]).mkdir()
     actual = _scan(source)
     without_modes = lambda rows: [{k: v for k, v in row.items() if k != "mode"} for row in rows]
     if without_modes(actual) != without_modes(entries):

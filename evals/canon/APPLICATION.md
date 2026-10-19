@@ -45,7 +45,7 @@ A snapshot rejects symbolic links, special files, `.git` entries, permissions ou
 
 ## Isolation and execution
 
-The module creates a small staging Git repository containing `project/` and the assigned `.agents/skills/` directory. Setup checks cloned paths and content against the validated input inventories, restores their exact declared modes, and verifies both digests before installing personas. The receipt retains the pre-restoration inventories. Each attempt creates its own `sbx create --clone --skills off` sandbox from that repository. The candidate cannot see the parent repository, another arm, or private grading files through the cloned workspace. The module adds no Docker socket mount.
+The module creates a small staging Git repository containing `project/` and the assigned `.agents/skills/` directory. Staging ignores host Git configuration and force-adds all snapshot files, including ignored build outputs and caches. Setup recreates declared directories that Git cannot store, including nested empty directories and empty input roots. It checks cloned paths and content against the validated input inventories, restores their exact declared modes, and verifies both digests before installing personas. The receipt retains the inventories before mode restoration. Each attempt creates its own `sbx create --clone --skills off` sandbox from that repository. The candidate cannot see the parent repository, another arm, or private grading files through the cloned workspace. The module adds no Docker socket mount.
 
 Codex runs in `project/`. Its parent directory supplies project skills. When the assigned tree contains the pstack native agent installer, setup registers those project personas through that installer. Delegation remains enabled for every arm. Setup rejects a CLI that lacks the required delegation feature or execution flags.
 
@@ -75,10 +75,10 @@ python3 -m unittest discover -s evals/canon -p test_application.py -v
 
 A nonzero exit, an `ERROR` or `FAIL` test result, or a summary with zero tests means verification failed. These tests execute a recording native CLI through a recording sandbox transport. A real prepared-template smoke must also run before launching a study.
 
-The optional setup-only integration check uses a real prepared template and calls `config/read`, never a model turn. It checks mixed project and guidance modes across an actual `sbx --clone`, setup and harvest, and project configuration loading on a path with dots and spaces. The old dotted trust override is a negative control. The app server uses an empty isolated home; the execution command retains `--ignore-user-config`.
+The optional setup-only integration check uses a real prepared template and calls `config/read`, never a model turn. It checks ignored files, nested empty directories, and mixed project and guidance modes across an actual `sbx --clone`, setup and harvest, and project configuration loading on a path with dots and spaces. The old dotted trust override is a negative control. The app server uses an empty isolated home; the execution command retains `--ignore-user-config`.
 
 ```sh
 CANON_APPLICATION_TEMPLATE=docker.io/library/pstack-port-value-codex:0.162.0 CANON_APPLICATION_EVIDENCE="$PWD/eval-runs/application-review" python3 -m unittest discover -s evals/canon -p 'test_application*.py' -v
 ```
 
-A nonzero exit, an `ERROR` or `FAIL`, or a skipped native delivery test means the integration check did not pass. Evidence includes pre-restoration inventories, native configuration responses, harvested snapshots, and the final sandbox listing. Only the check's named sandbox is removed.
+A nonzero exit, an `ERROR` or `FAIL`, or a skipped native delivery test means the integration check did not pass. Evidence includes inventories before mode restoration, native configuration responses, harvested snapshots, and the final sandbox listing. Only the check's named sandbox is removed.
