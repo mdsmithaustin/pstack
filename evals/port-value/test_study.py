@@ -1,15 +1,18 @@
 import importlib.util
 import fcntl
+import json
 from dataclasses import asdict
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 import tempfile
 import threading
 import tomllib
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location("port_value_study", Path(__file__).with_name("study.py"))
 study = importlib.util.module_from_spec(SPEC)
@@ -60,10 +63,11 @@ def recording_templates():
 
 
 class RecordingApplication:
-    def __init__(self, *, fail_initial=False, omit_capture=False):
+    def __init__(self, *, fail_initial=False, omit_capture=False, native_elapsed_s=0.125):
         self.fail_initial = fail_initial
         self.omit_capture = omit_capture
         self.calls = []
+        self.native_elapsed_s = native_elapsed_s
 
     def __call__(self, request, slot):
         slot.mkdir(parents=True)
@@ -78,15 +82,17 @@ class RecordingApplication:
         (project / "app.py").write_text(program(2 if maintenance else 1))
         (project / "record.json").write_text('{"created":true}\n')
         native_valid = not (self.fail_initial and not maintenance)
-        capture = None if self.omit_capture else study.Snapshot.freeze(project, slot / "capture")
+        (slot / "harvest").mkdir()
+        capture = None if self.omit_capture else study.Snapshot.freeze(project, slot / "harvest/capture")
         receipt = slot / "receipt.json"
         state = "completed" if native_valid else "native_failed"
         study.write_json(receipt, {"state": state, "native_valid": native_valid,
+                                 "elapsed_s": 0.25, "native_elapsed_s": self.native_elapsed_s,
                                  "capture": {"directory": str(capture.directory), "sha256": capture.sha256} if capture else None,
                                  "spec": {"runtime": asdict(request.runtime), "project": request.project.sha256, "skills": request.skills.sha256 if request.skills else None,
                                           "prompt_sha256": study.digest(request.prompt.encode())}})
         return SimpleNamespace(state=state, native_valid=native_valid,
-                               capture=capture, receipt=receipt, elapsed_s=0.25,
+                               capture=capture, receipt=receipt, elapsed_s=0.25, native_elapsed_s=self.native_elapsed_s,
                                usage=None if maintenance else {"input_tokens": 7, "output_tokens": 3})
 
 
@@ -144,6 +150,10 @@ class Study(unittest.TestCase):
             self.assertEqual(report["totals"][arm]["states"], {"never_started": 12})
             self.assertEqual(report["totals"][arm]["unknown_usage_opportunities"], 12)
             self.assertEqual(report["totals"][arm]["accepted_both"], 0)
+            for field in study.DURATIONS:
+                self.assertIsNone(report["totals"][arm][field])
+                self.assertEqual(report["totals"][arm][f"known_{field}_opportunities"], 0)
+                self.assertEqual(report["totals"][arm][f"unknown_{field}_opportunities"], 12)
 
     def test_schedule_is_seeded_and_arm_order_is_blocked(self):
         first = self.prepare(seed=872)
@@ -198,6 +208,129 @@ class Study(unittest.TestCase):
         self.assertEqual(total["unknown_usage_opportunities"], 11)
         self.assertEqual(total["accepted_both"], 1)
         self.assertEqual(report["planned_opportunities"], 36)
+
+    def test_report_separates_native_and_total_durations_with_known_counts(self):
+        cell = self.prepare()["cells"][0]
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(), grader=recording_grader,
+                  template_catalog=recording_templates)
+        report = study.report(self.directory)
+        row = next(row for row in report["rows"] if row["id"] == cell["id"])
+        self.assertEqual(row["initial"]["elapsed_s"], 0.25)
+        self.assertEqual(row["initial"]["native_elapsed_s"], 0.125)
+        total = report["totals"][cell["arm"]]
+        self.assertEqual(total["elapsed_s"], 0.5)
+        self.assertEqual(total["native_elapsed_s"], 0.25)
+        for field in study.DURATIONS:
+            self.assertEqual(total[f"known_{field}_opportunities"], 2)
+            self.assertEqual(total[f"unknown_{field}_opportunities"], 10)
+        markdown = (self.directory / "report.md").read_text()
+        self.assertIn("Native process seconds", markdown)
+        self.assertIn("Total seconds", markdown)
+        self.assertIn("Remote inference capacity", markdown)
+
+    def test_unknown_native_duration_remains_null_and_zero_is_known(self):
+        plan = self.prepare()
+        cell = plan["cells"][0]
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(native_elapsed_s=None),
+                  grader=recording_grader, template_catalog=recording_templates)
+        report = study.report(self.directory)
+        total = report["totals"][cell["arm"]]
+        self.assertIsNone(total["native_elapsed_s"])
+        self.assertEqual(total["known_native_elapsed_s_opportunities"], 0)
+        self.assertEqual(total["unknown_native_elapsed_s_opportunities"], 12)
+        self.assertEqual(total["elapsed_s"], 0.5)
+        for arm in study.ARMS:
+            if arm != cell["arm"]:
+                self.assertIsNone(report["totals"][arm]["elapsed_s"])
+        other = next(item for item in plan["cells"] if item["arm"] == cell["arm"] and item != cell)
+        study.run(self.directory, cell_id=other["id"], execute=RecordingApplication(native_elapsed_s=0),
+                  grader=recording_grader, template_catalog=recording_templates)
+        total = study.report(self.directory)["totals"][cell["arm"]]
+        self.assertEqual(total["native_elapsed_s"], 0)
+        self.assertEqual(total["known_native_elapsed_s_opportunities"], 2)
+        self.assertEqual(total["unknown_native_elapsed_s_opportunities"], 10)
+
+    def test_report_binds_durations_to_retained_receipts_even_without_a_capture(self):
+        cell = self.prepare()["cells"][0]
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(omit_capture=True, fail_initial=True),
+                  grader=recording_grader, template_catalog=recording_templates)
+        baseline = study.report(self.directory)["totals"][cell["arm"]]
+        self.assertEqual(baseline["elapsed_s"], 0.25)
+        self.assertEqual(baseline["native_elapsed_s"], 0.125)
+        self.assertEqual(baseline["known_native_elapsed_s_opportunities"], 1)
+        directory = self.directory / "lineages" / cell["id"] / "initial"
+        path = directory / "outcome.json"
+        original = study.read_json(path)
+        for field in study.DURATIONS:
+            with self.subTest(field=field):
+                study.write_json(path, {**original, field: 99})
+                report = study.report(self.directory)
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertIn(f"{field} disagrees with application receipt", row["initial"]["evidence_error"])
+                self.assertIsNone(report["totals"][cell["arm"]][field])
+                self.assertEqual(report["planned_opportunities"], 36)
+        study.write_json(path, {**original, "application_receipt": None})
+        row = next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])
+        self.assertIn("duration lacks a retained application receipt", row["initial"]["evidence_error"])
+
+    def test_report_rejects_malformed_native_duration_in_retained_receipt(self):
+        cell = self.prepare()["cells"][0]
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(), grader=recording_grader,
+                  template_catalog=recording_templates)
+        directory = self.directory / "lineages" / cell["id"] / "initial"
+        path = directory / "application/receipt.json"
+        original = study.read_json(path)
+        for invalid in ("unknown", {}, True, -1, float("nan"), float("inf"), 10 ** 400):
+            with self.subTest(invalid=invalid):
+                study.write_json(path, {**original, "native_elapsed_s": invalid})
+                report = study.report(self.directory)
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertFalse(row["initial"]["accepted"])
+                self.assertIn("invalid application receipt native_elapsed_s", row["initial"]["evidence_error"])
+                self.assertIsNone(row["initial"]["native_elapsed_s"])
+                self.assertEqual(report["planned_opportunities"], 36)
+
+    def test_real_application_result_uses_harvest_capture_and_retained_durations(self):
+        owner = sys.modules[study.run_application.__module__]
+        plan = self.prepare()
+        cell = plan["cells"][0]
+
+        def command(argv, **kwargs):
+            args = list(map(str, argv))
+            stdout = b""
+            if args[:3] == ["sbx", "template", "ls"]:
+                stdout = json.dumps([{"id": "recording-identity", "repository": "local-recording", "tag": "1"}]).encode()
+            elif args[:4] == ["sbx", "policy", "check", "network"]:
+                stdout = b'{"allowed":false}'
+            elif args[0:2] == ["sbx", "exec"] and args[5] == "setup":
+                stdout = b'{}'
+            elif args[:2] == ["sbx", "cp"] and args[2].endswith(":/tmp/canon-application.tar"):
+                slot = Path(args[3]).parent
+                project = slot / "staging/project"
+                (project / "app.py").write_text(program(1))
+                (slot / "fake-harvest").mkdir()
+                capture = study.Snapshot.freeze(project, slot / "fake-harvest/capture")
+                study.write_json(slot / "fake-harvest/status.json", {"state": "completed", "native_valid": True,
+                                 "usage": None, "native_elapsed_s": 0.125, "capture_sha256": capture.sha256,
+                                 "guidance_valid": True})
+                with tarfile.open(args[3], "w") as archive:
+                    for item in sorted((slot / "fake-harvest").rglob("*")):
+                        archive.add(item, arcname=item.relative_to(slot / "fake-harvest"), recursive=False)
+            elif args[:3] == ["sbx", "ls", "--json"]:
+                stdout = b'{"sandboxes":[]}'
+            return subprocess.CompletedProcess(args, 0, stdout, b"")
+
+        with patch.object(owner, "_command", side_effect=command):
+            outcome = study.run_stage(self.directory, plan, cell, "initial", execute=study.run_application,
+                                      grader=recording_grader, template_catalog=recording_templates)
+        self.assertEqual(outcome["native_state"], "completed", outcome)
+        self.assertEqual(outcome["native_elapsed_s"], 0.125)
+        self.assertEqual(outcome["capture"]["directory"], f"lineages/{cell['id']}/initial/application/harvest/capture")
+        receipt = study.read_json(self.directory / outcome["application_receipt"])
+        self.assertEqual(outcome["elapsed_s"], receipt["elapsed_s"])
+        row = next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])
+        self.assertTrue(row["initial"]["accepted"], row["initial"])
+        self.assertEqual(row["initial"]["native_elapsed_s"], 0.125)
 
     def test_frozen_input_tamper_prevents_every_call(self):
         cell = self.prepare()["cells"][0]
@@ -531,7 +664,14 @@ class Study(unittest.TestCase):
                                             ("elapsed_s", -1, None),
                                             ("elapsed_s", float("nan"), None),
                                             ("elapsed_s", float("inf"), None),
-                                            ("elapsed_s", 10 ** 400, None)):
+                                            ("elapsed_s", 10 ** 400, None),
+                                            ("native_elapsed_s", "unknown", None),
+                                            ("native_elapsed_s", {}, None),
+                                            ("native_elapsed_s", True, None),
+                                            ("native_elapsed_s", -1, None),
+                                            ("native_elapsed_s", float("nan"), None),
+                                            ("native_elapsed_s", float("inf"), None),
+                                            ("native_elapsed_s", 10 ** 400, None)):
             with self.subTest(field=field, invalid=invalid):
                 study.write_json(path, {**original, field: invalid})
                 report = study.report(self.directory)

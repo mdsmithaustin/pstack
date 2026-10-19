@@ -34,6 +34,7 @@ CURRENT = "701c9a6f09ae3b0bd56a4962ff299c21accf8690"
 IMAGE = "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
 ARMS = ("native", "upstream", "current")
 STAGES = ("initial", "maintenance")
+DURATIONS = ("elapsed_s", "native_elapsed_s")
 FORBIDDEN = re.compile(r"\b(eval|test|judge|experiment|rubric|score|compare|benchmark|candidate|arena)\b", re.I)
 
 
@@ -404,7 +405,7 @@ def run_stage(root: Path, plan: dict, cell: dict, stage: str, *, execute=run_app
     case = next(case for case in plan["cases"] if case["id"] == cell["case"])
     private = relative(root / "inputs", case["directory"])
     outcome = {"state": "incomplete", "native_state": "unknown", "native_valid": False,
-               "capture": None, "grade": None, "usage": None, "elapsed_s": None}
+               "capture": None, "grade": None, "usage": None, "elapsed_s": None, "native_elapsed_s": None}
     write_json(directory / "claim.json", {"cell": cell["id"], "stage": stage})
     try:
         verified = verify_inputs(root)
@@ -432,7 +433,7 @@ def run_stage(root: Path, plan: dict, cell: dict, stage: str, *, execute=run_app
         verify_inputs(root)
         result = execute(Request(Runtime(**plan["runtime"]), project, skills, prompt), directory / "application")
         outcome.update(state="attempted", native_state=result.state, native_valid=result.native_valid,
-                       elapsed_s=result.elapsed_s, usage=result.usage,
+                       elapsed_s=result.elapsed_s, native_elapsed_s=result.native_elapsed_s, usage=result.usage,
                        application_receipt=Path(result.receipt).relative_to(root).as_posix())
         if result.capture is not None:
             with tempfile.TemporaryDirectory(prefix="parcel-") as temporary:
@@ -491,22 +492,48 @@ def run(root: Path, *, cell_id: str | None = None, limit: int | None = None, con
             return list(pool.map(lineage, groups))
 
 
+def duration(value):
+    if value is None:
+        return None
+    try:
+        if type(value) in (int, float) and math.isfinite(value) and value >= 0:
+            return value
+    except OverflowError:
+        pass
+    raise ValueError("duration must be null or a nonnegative finite number")
+
+
 def validate_evidence(root: Path, plan: dict, cell: dict, stage: str, outcome: dict):
     capture, grade = outcome.get("capture"), outcome.get("grade")
+    directory = root / "lineages" / cell["id"] / stage
+    receipt = outcome.get("application_receipt")
+    if receipt is None:
+        if capture is not None or any(outcome.get(field) is not None for field in DURATIONS):
+            raise ValueError("capture or duration lacks a retained application receipt")
+        application = None
+    else:
+        receipt_path = relative(root, receipt)
+        if receipt_path != directory / "application/receipt.json":
+            raise ValueError("application receipt is outside the planned stage")
+        application = read_json(receipt_path)
+        if not isinstance(application, dict):
+            raise ValueError("application receipt must be an object")
+        for field in DURATIONS:
+            try:
+                observed = duration(application.get(field))
+            except ValueError as exc:
+                raise ValueError(f"invalid application receipt {field}: {exc}") from exc
+            if observed != outcome.get(field):
+                raise ValueError(f"{field} disagrees with application receipt")
     if capture is None:
         if grade is not None or outcome.get("native_valid") is True:
             raise ValueError("native completion or grade lacks a retained capture")
         return
-    directory = root / "lineages" / cell["id"] / stage
     snapshot = snapshot_at(root, capture)
-    if snapshot.directory.resolve() != (directory / "application/capture").resolve():
+    if snapshot.directory.resolve() != (directory / "application/harvest/capture").resolve():
         raise ValueError("capture is outside the planned stage")
     with tempfile.TemporaryDirectory(prefix="port-evidence-") as temporary:
         replay(snapshot, Path(temporary) / "app")
-    receipt_path = relative(root, outcome["application_receipt"])
-    if receipt_path != directory / "application/receipt.json":
-        raise ValueError("application receipt is outside the planned stage")
-    application = read_json(receipt_path)
     bound = application["capture"]
     if bound["sha256"] != snapshot.sha256 or Path(bound["directory"]).resolve() != snapshot.directory.resolve():
         raise ValueError("application receipt capture binding mismatch")
@@ -585,20 +612,21 @@ def report(root: Path):
             if outcome.get("usage") is not None and not isinstance(outcome["usage"], dict):
                 invalid.append("usage")
                 outcome["usage"] = None
-            elapsed = outcome.get("elapsed_s")
-            try:
-                valid_elapsed = elapsed is None or (type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0)
-            except OverflowError:
-                valid_elapsed = False
-            if not valid_elapsed:
-                invalid.append("elapsed_s")
-                outcome["elapsed_s"] = None
+            for field in DURATIONS:
+                try:
+                    outcome[field] = duration(outcome.get(field))
+                except ValueError:
+                    invalid.append(field)
+                    outcome[field] = None
             if invalid:
                 outcome["evidence_error"] = f"invalid outcome fields: {', '.join(invalid)}"
             try:
                 validate_evidence(root, plan, cell, stage, outcome)
             except (ApplicationError, OSError, ValueError, KeyError, TypeError) as exc:
                 outcome.setdefault("evidence_error", f"{type(exc).__name__}: {exc}")
+            if "evidence_error" in outcome:
+                for field in DURATIONS:
+                    outcome[field] = None
             grade = outcome.get("grade") if isinstance(outcome.get("grade"), dict) else {}
             outcome["accepted"] = (integrity is None and "evidence_error" not in outcome
                                    and outcome.get("native_valid") is True
@@ -616,8 +644,12 @@ def report(root: Path):
                        "states": {state: sum(item["state"] == state for item in opportunities) for state in sorted({item["state"] for item in opportunities})},
                        "native_states": {state: sum(item.get("native_state", "unobserved") == state for item in opportunities) for state in sorted({item.get("native_state", "unobserved") for item in opportunities})},
                        "known_usage_opportunities": sum(item.get("usage") is not None for item in opportunities),
-                       "unknown_usage_opportunities": sum(item.get("usage") is None for item in opportunities),
-                       "elapsed_s": sum(item.get("elapsed_s") or 0 for item in opportunities)}
+                       "unknown_usage_opportunities": sum(item.get("usage") is None for item in opportunities)}
+        for field in DURATIONS:
+            known = [item[field] for item in opportunities if item.get(field) is not None]
+            totals[arm][field] = sum(known) if known else None
+            totals[arm][f"known_{field}_opportunities"] = len(known)
+            totals[arm][f"unknown_{field}_opportunities"] = len(opportunities) - len(known)
     pairs = [{"case": case["id"], "repetition": repetition,
               "arms": {row["arm"]: {stage: row[stage]["accepted"] for stage in STAGES} for row in rows if row["case"] == case["id"] and row["repetition"] == repetition}}
              for case in plan["cases"] for repetition in (1, 2)]
@@ -630,6 +662,11 @@ def report(root: Path):
              "| Arm | Initial accepted / 6 | Maintenance accepted / 6 | Both accepted / 6 | Known usage / 12 |", "| --- | ---: | ---: | ---: | ---: |"]
     for arm, total in totals.items():
         lines.append(f"| {arm} | {total['accepted_initial']} | {total['accepted_maintenance']} | {total['accepted_both']} | {total['known_usage_opportunities']} |")
+    lines += ["", "Durations sum only validated known measurements. A null sum means no measurement is known.", "",
+              "| Arm | Native process seconds | Native known / 12 | Native unknown / 12 | Total seconds | Total known / 12 | Total unknown / 12 |",
+              "| --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
+    for arm, total in totals.items():
+        lines.append(f"| {arm} | {total['native_elapsed_s']} | {total['known_native_elapsed_s_opportunities']} | {total['unknown_native_elapsed_s_opportunities']} | {total['elapsed_s']} | {total['known_elapsed_s_opportunities']} | {total['unknown_elapsed_s_opportunities']} |")
     lines += ["", "| Cell | Case | Rep | Arm | Initial | Maintenance | Both |", "| --- | --- | ---: | --- | --- | --- | --- |"]
     for row in rows:
         initial, maintenance = row["initial"], row["maintenance"]
@@ -641,9 +678,11 @@ def report(root: Path):
     if evidence_errors:
         lines += ["", "Retained evidence errors invalidate acceptance for these stages.", ""]
         lines.extend(f"- {cell_id} {stage}: {error}" for cell_id, stage, error in evidence_errors)
-    lines += ["", "Native validity, executable application grades, raw usage, elapsed time, and paired repetitions are separate fields in report.json.",
+    lines += ["", "Native validity, executable application grades, raw usage, native process duration, total elapsed time, and paired repetitions are separate fields in report.json.",
               "Requested README updates and broader task quality are unmeasured.",
-              "No general causal claim follows from these three tasks. Never-started and unknown measurements are not passes."]
+              "Native duration covers the native process. Total elapsed time covers the application claim through sandbox cleanup and excludes acceptance grading.",
+              "This paired sample has three tasks and two repetitions per arm. Remote inference capacity and its effect on concurrency are unmeasured.",
+              "No winner or general performance or causal claim follows from this sample. Never-started and unknown measurements are not passes."]
     (root / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return result
 
