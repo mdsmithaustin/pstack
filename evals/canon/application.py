@@ -276,13 +276,24 @@ def _unpack(archive, destination):
                 (destination / member.name).chmod(member.mode & 0o777)
 
 
+def _git_env():
+    return {**{key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+            "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1", "GIT_ATTR_NOSYSTEM": "1"}
+
+
+def _disable_git_attributes(root):
+    info = root / ".git/info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "attributes").write_text("* -text -eol -ident -filter -working-tree-encoding\n")
+
+
 def _stage(staging):
-    env = {**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
-    for argv in (["git", "init", "-q", "--template=", staging],
-                 ["git", "-C", staging, "config", "core.hooksPath", "/dev/null"],
-                 ["git", "-C", staging, "add", "--all", "--force"],
-                 ["git", "-C", staging, "-c", "user.name=canon", "-c", "user.email=canon", "commit", "--allow-empty", "-qm", "public application inputs"]):
-        _command(argv, env=env)
+    env = _git_env()
+    _command(["git", "init", "-q", "--template=", staging], env=env)
+    _command(["git", "-C", staging, "config", "core.hooksPath", "/dev/null"], env=env)
+    _disable_git_attributes(staging)
+    _command(["git", "-C", staging, "add", "--all", "--force"], env=env)
+    _command(["git", "-C", staging, "-c", "user.name=canon", "-c", "user.email=canon", "commit", "--allow-empty", "-qm", "public application inputs"], env=env)
 
 
 def run_application(request: Request, slot: Path) -> Result:
@@ -428,6 +439,8 @@ def _restore_clone(source, entries, digest):
 
 def _inside_setup(payload):
     root = Path(payload["root"])
+    _disable_git_attributes(root)
+    _command(["git", "-C", root, "checkout-index", "--force", "--all"], env=_git_env())
     inventories = {"project": _restore_clone(root / "project", payload["project_entries"], payload["project"])}
     if payload["skills"] is not None:
         inventories["skills"] = _restore_clone(root / ".agents/skills", payload["skill_entries"], payload["skills"])

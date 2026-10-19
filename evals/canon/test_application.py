@@ -18,13 +18,29 @@ class RecordingTransport:
     def __init__(self, test, mode="success"):
         self.test, self.mode, self.commands = test, mode, []
         self.name, self.payload = None, None
+        self.before_restore_modes, self.cloned_files = {}, {}
         self.original = application._command
 
     def __call__(self, argv, **kwargs):
         argv = list(map(str, argv))
         self.commands.append((argv, kwargs.get("timeout", application.PHASE_TIMEOUT_S)))
         if argv[0] != "sbx":
-            return self.original(argv, **kwargs)
+            result = self.original(argv, **kwargs)
+            if argv[0] == "git" and "checkout-index" in argv:
+                root = Path(argv[argv.index("-C") + 1])
+                for key, tree in (("project", root / "project"), ("skills", root / ".agents/skills")):
+                    if tree.exists():
+                        for path in tree.rglob("*"):
+                            path.chmod(stat.S_IMODE(path.stat().st_mode) | 0o020)
+                        self.before_restore_modes[key] = {p.relative_to(tree).as_posix(): stat.S_IMODE(p.stat().st_mode) for p in tree.rglob("*")}
+                if self.mode.startswith("clone_"):
+                    tree = root / ("project" if self.mode.endswith("project") else ".agents/skills")
+                    target = next(p for p in tree.rglob("*") if p.is_file())
+                    if "content" in self.mode:
+                        target.write_text("tampered")
+                    else:
+                        target.rename(target.with_name("unexpected"))
+            return result
         args = argv[1:]
         if args[:2] == ["template", "ls"]:
             return self.reply({"images": [{"repository": "namespace/prepared", "tag": "test", "id": "abc"}]})
@@ -36,20 +52,12 @@ class RecordingTransport:
             staging = Path(args[-1])
             cloned = staging.with_name("transport-clone")
             self.original(["git", "clone", "--no-local", staging, cloned],
-                          env={**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"})
+                          env=application._git_env())
             shutil.rmtree(staging)
             cloned.rename(staging)
-            for tree in (Path(args[-1]) / "project", Path(args[-1]) / ".agents/skills"):
+            for key, tree in (("project", staging / "project"), ("skills", staging / ".agents/skills")):
                 if tree.exists():
-                    for path in tree.rglob("*"):
-                        path.chmod(stat.S_IMODE(path.stat().st_mode) | 0o020)
-            if self.mode.startswith("clone_"):
-                tree = Path(args[-1]) / ("project" if self.mode.endswith("project") else ".agents/skills")
-                target = next(p for p in tree.rglob("*") if p.is_file())
-                if "content" in self.mode:
-                    target.write_text("tampered")
-                else:
-                    target.rename(target.with_name("unexpected"))
+                    self.cloned_files[key] = {p.relative_to(tree).as_posix(): p.read_bytes() for p in tree.rglob("*") if p.is_file()}
             return self.reply()
         if args[0] == "policy":
             return subprocess.CompletedProcess(argv, 2 if self.mode == "policy_error" else 1, b'{"allowed":false}', b"")
@@ -214,10 +222,15 @@ else:
             else:
                 self.skills = replacement
         self.request = application.Request(self.request.runtime, self.project, self.skills, self.request.prompt)
-        result, _ = self.run_attempt("preserve_inputs")
+        result, transport = self.run_attempt("preserve_inputs")
         self.assertEqual((result.state, result.native_valid), ("completed", True))
         self.assertEqual(application._scan(self.root / "attempt/staging/.agents/skills"), application._inventory(self.skills))
         self.assertEqual(application._scan(self.root / "attempt/staging/project"), application._inventory(self.project))
+        observed = json.loads(result.receipt.read_text())["setup"]["clone_inventories"]
+        for key in ("project", "skills"):
+            self.assertEqual({e["path"]: e["mode"] for e in observed[key]}, transport.before_restore_modes[key])
+            self.assertTrue(all(e["mode"] & 0o020 for e in observed[key]))
+        self.assertNotEqual({e["path"]: e["mode"] for e in observed["project"]}["app.py"], 0o640)
 
     def test_clone_rejects_path_and_content_changes_in_both_inputs(self):
         for tree in ("project", "skills"):
@@ -269,6 +282,55 @@ else:
                     self.assertEqual(stat.S_IMODE((tree / "empty").stat().st_mode), 0o750)
                     self.assertEqual(stat.S_IMODE((tree / "empty/nested").stat().st_mode), 0o770)
                 self.request = application.Request(self.request.runtime, result.capture, self.skills, self.request.prompt)
+
+    def test_initial_and_maintenance_preserve_bytes_despite_nested_and_host_attributes(self):
+        expected = {".gitattributes": b"*.txt text eol=crlf\n*.id ident\n",
+                    "lf.txt": b"alpha\nbeta\n", "crlf.txt": b"one\r\ntwo\r\n",
+                    "marker.id": b"$Id$\n", "global.host": b"host line\n",
+                    "nested/.gitattributes": b"* text=auto eol=lf\n",
+                    "nested/lf.txt": b"nested line\n", "nested/crlf.txt": b"nested line\r\n"}
+        for tree, snapshot in (("project", self.project), ("skills", self.skills)):
+            source = application.replay(snapshot, self.root / (tree + "-attributes"))
+            for name, content in expected.items():
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            frozen = application.Snapshot.freeze(source, self.root / (tree + "-attributes-snapshot"))
+            if tree == "project":
+                self.project = frozen
+            else:
+                self.skills = frozen
+        host = self.root / "attribute-host"
+        (host / "git").mkdir(parents=True)
+        (host / "git/attributes").write_text("*.host text eol=crlf\n")
+        self.request = application.Request(self.request.runtime, self.project, self.skills, self.request.prompt)
+        with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(host)}):
+            for phase in ("initial", "maintenance"):
+                with self.subTest(phase=phase), mock.patch.object(application, "REMOTE", str(self.root / phase)):
+                    result, transport = self.run_attempt("preserve_inputs", phase)
+                self.assertEqual((result.state, result.native_valid), ("completed", True))
+                replayed = application.replay(result.capture, self.root / (phase + "-attributes-replay"))
+                for key, tree in (("project", replayed), ("skills", self.root / phase / "staging/.agents/skills")):
+                    self.assertEqual(transport.cloned_files[key]["lf.txt"], b"alpha\r\nbeta\r\n")
+                    self.assertEqual(transport.cloned_files[key]["global.host"], b"host line\r\n")
+                    for name, content in expected.items():
+                        self.assertEqual((tree / name).read_bytes(), content)
+                self.request = application.Request(self.request.runtime, result.capture, self.skills, self.request.prompt)
+
+    def test_staging_ignores_inherited_git_repository_and_config_redirection(self):
+        redirected = self.root / "redirected"
+        redirected.mkdir()
+        (redirected / "sentinel").write_bytes(b"unrelated repository data")
+        env = {"GIT_DIR": str(redirected / "metadata"), "GIT_WORK_TREE": str(redirected),
+               "GIT_INDEX_FILE": str(redirected / "index"), "GIT_COMMON_DIR": str(redirected / "common"),
+               "GIT_OBJECT_DIRECTORY": str(redirected / "objects"), "GIT_CONFIG": str(redirected / "config"),
+               "GIT_CONFIG_GLOBAL": str(redirected / "global-config"), "GIT_CONFIG_SYSTEM": str(redirected / "system-config"),
+               "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "commit.gpgsign", "GIT_CONFIG_VALUE_0": "true",
+               "GIT_CONFIG_PARAMETERS": "'gpg.program'='/nonexistent-canon-signing-program'"}
+        with mock.patch.dict(os.environ, env):
+            result, _ = self.run_attempt("preserve_inputs")
+        self.assertEqual((result.state, result.native_valid), ("completed", True))
+        self.assertEqual({p.name: p.read_bytes() for p in redirected.iterdir()}, {"sentinel": b"unrelated repository data"})
 
     def test_entirely_empty_project_and_guidance_trees_survive_clone(self):
         source = self.root / "empty-source"
