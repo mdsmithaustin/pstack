@@ -102,7 +102,7 @@ Failure signal is a non-zero exit on missing rows, omitted arms, changed paths, 
 
 ## Recheck oracle controls
 
-[model-free-checks.json](model-free-checks.json) records the setup checks. The frozen oracle accepted the existing valid npm and healthy samples. It rejected the existing ignored-operation-status sample. Nested Bash with pipefail passed; the same pipeline without pipefail failed the broken and forced-failure controls.
+[model-free-checks.json](model-free-checks.json) retains historical setup results, including the private-confirmation preflight record. Packaging this study does not repeat those checks or establish current private-case readiness. In those recorded checks, the frozen oracle accepted the existing valid npm and healthy samples. It rejected the existing ignored-operation-status sample. Nested Bash with pipefail passed; the same pipeline without pipefail failed the broken and forced-failure controls.
 
 ```sh
 "$HARNESS_PYTHON" -I -B - <<'PYCODE'
