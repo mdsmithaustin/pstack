@@ -109,6 +109,40 @@ Docker image, rejected valid plan, or accepted false-green plan is a failure.
 Validation must print an `OK` result for all three manifests. Audit must exit
 without blockers. These checks validate the instrument, not skill quality.
 
+## Set up the reminders runtime
+
+The reminders case requires Python 3.12 or newer, Git, Docker, and its pinned
+Docker image. Its frozen runtime differs from the current repository bootstrap.
+Install that runtime in a separate environment. Run these commands from the
+repository root. They do not run subject models or select comparison treatments.
+
+```sh
+(
+set -eu
+reminders_runtime=$(mktemp -d /tmp/reminders-runtime.XXXXXX)
+python3 -m venv "$reminders_runtime"
+"$reminders_runtime/bin/python" -m pip install \
+	'skill-eval-harness-ext @ git+https://github.com/mdsmithaustin/skill-eval-harness.git@c23ed79554995c60cbd63cc9da9f47837cfa6f9a'
+reminders_receipts=$(mktemp -d /tmp/reminders-preflight.XXXXXX)
+mkdir "$reminders_runtime/codex-home" "$reminders_runtime/claude-config" "$reminders_runtime/tmp"
+env CODEX_HOME="$reminders_runtime/codex-home" \
+	CLAUDE_CONFIG_DIR="$reminders_runtime/claude-config" \
+	TMPDIR="$reminders_runtime/tmp" GIT_CEILING_DIRECTORIES="$reminders_runtime" \
+	"$reminders_runtime/bin/python" -I evals/reminders-maintenance/preflight.py \
+	--output "$reminders_receipts/receipt"
+printf 'Private receipts: %s\n' "$reminders_receipts/receipt"
+)
+```
+
+A nonzero `mktemp` or `mkdir` exit means directory setup failed. A nonzero venv
+exit or an absent environment interpreter means environment setup failed. A
+nonzero pip exit means installation failed. A nonzero preflight exit or an absent
+`receipt.json` means verification failed. The preflight checks the installed
+revision and all three locked runtime module hashes before it runs the eight
+synthetic controls. Keep the receipts outside Git. The
+[case guide](reminders-maintenance/README.md) describes the expected outcomes
+and the required Docker image. Paid comparisons remain deferred.
+
 ## Paid screen
 
 Start with one paired repetition. Replace the skill name for each corpus.
