@@ -20,14 +20,17 @@ ROOT = Path(__file__).resolve().parents[1]
 USER_FACING_SKILLS = frozenset({"poteto-help"})
 USER_FACING = {
     "skills/architect/SKILL.md": ['"/architect with checkpoint,"'],
+    "skills/create-formal-verification-skill/SKILL.md": ["Point the user at `/maintain-formal-verification-skill`"],
     "skills/create-verification-skill/SKILL.md": ["Point the user at `/maintain-verification-skill`"],
     "skills/deslop/SKILL.md": ["and on `/deslop`,"],
     "skills/ketchup/SKILL.md": ["the last message they wrote before `/ketchup`"],
+    "skills/maintain-formal-verification-skill/SKILL.md": ["point at `/create-formal-verification-skill`"],
     "skills/maintain-verification-skill/SKILL.md": ["point at `/create-verification-skill`"],
     "skills/pstack-harness/references/roles.md": ["Run `/setup-pstack` to register it.\""],
     "skills/reflect/SKILL.md": ['the user says "reflect" or "/reflect"'],
     "skills/setup-pstack/SKILL.md": ["4 of 4 `/poteto-mode` runs",
-                                     "I can generate one with /create-verification-skill.\""],
+                                     "I can generate one with /create-verification-skill.\"",
+                                     "I can generate one with /create-formal-verification-skill.\""],
 }
 MODE_REMINDERS = {
     "skills/poteto-mode/SKILL.md": ["apply /poteto-mode."],

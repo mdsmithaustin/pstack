@@ -55,7 +55,9 @@ origin/*) git fetch origin "+refs/heads/${base#origin/}:refs/remotes/$base" --qu
 esac
 git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 || { echo "error: base ref not found: $base" >&2; exit 1; }
 
-# PR state by branch, fetched once. Empty if gh is unavailable.
+# PR state by branch, fetched once as [{number, state, head}] with a lowercase
+# state. Origin when its CLI can read this repo's PRs, otherwise gh against the
+# audited origin repository. Empty when neither can.
 prs=$(mktemp)
 kept_paths=$(mktemp)
 status_out=$(mktemp)
@@ -84,11 +86,15 @@ if not re.fullmatch(r"[a-z\d](?:[a-z\d.-]*[a-z\d])?", host, re.I) or any(part in
 print(f"{host}/{'/'.join(parts)}")
 PY
 ) || pr_repo=""
-echo "[]" > "$prs"
-if [ -n "$pr_repo" ]; then
-	gh pr list --repo "$pr_repo" --author "@me" --state all --limit 1000 \
-		--json number,state,headRefName 2>/dev/null > "$prs" || echo "[]" > "$prs"
+if command -v origin >/dev/null 2>&1 \
+	&& raw=$(origin pr list --author "@me" --state all --limit 1000 \
+		--json number,status,headRef 2>/dev/null); then
+	printf '%s' "$raw" | jq '[.[] | {number, state: .status, head: .headRef}]' > "$prs" 2>/dev/null
+elif [ -n "$pr_repo" ] && raw=$(gh pr list --repo "$pr_repo" --author "@me" --state all --limit 1000 \
+	--json number,state,headRefName 2>/dev/null); then
+	printf '%s' "$raw" | jq '[.[] | {number, state: (.state | ascii_downcase), head: .headRefName}]' > "$prs" 2>/dev/null
 fi
+[ -s "$prs" ] || echo "[]" > "$prs"
 
 # Transcript stores, per CLI. Claude Code slugs the workspace path by turning
 # every character that isn't a letter or digit into "-"; Codex keeps a flat
@@ -166,7 +172,7 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 	else remote=no-remote; fi
 
 	pr=$([ -n "$branch" ] && jq -r --arg b "$branch" \
-		'.[] | select(.headRefName==$b) | "#\(.number)/\(.state)"' "$prs" 2>/dev/null | head -1)
+		'.[] | select(.head==$b) | "#\(.number)/\(.state)"' "$prs" 2>/dev/null | head -1)
 	[ -z "$pr" ] && pr="-"
 
 	# Most recent chat whose transcript operated in this worktree. Match path
@@ -198,7 +204,7 @@ print(last, "yes" if recent else "no", sep="\t")
 	fi
 
 	case "$dirty" in wip:*) bucket=hold-wip ;; kept:*|unreadable) bucket=hold-kept ;; *)
-		case "$pr" in *OPEN*) bucket=hold-open-pr ;; *)
+		case "$pr" in */open|*/draft) bucket=hold-open-pr ;; *)
 			if [ "$recent" = yes ]; then bucket=verify-recent-chat
 			elif [ "$merged" = YES ] || [ "$pr" != "-" ]; then bucket=safe
 			else bucket=review; fi ;;

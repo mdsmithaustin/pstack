@@ -193,10 +193,12 @@ export interface ResolveGateParams {
 }
 
 export type FrontierDiscovery = "github" | "graphite";
+export type Forge = "gh" | "origin";
 
 export interface SetFrontierParams {
   readonly repo: string;
   readonly discovery?: FrontierDiscovery;
+  readonly forge?: Forge;
   readonly prs?: readonly number[];
 }
 
@@ -1355,8 +1357,10 @@ interface GithubPullRequest {
   readonly isCrossRepository: boolean;
 }
 
+type FrontierSource = "gt" | "GitHub" | "Origin";
+
 interface FrontierResolution {
-  readonly source: "gt" | "GitHub";
+  readonly source: FrontierSource;
   readonly prs: readonly FrontierPr[];
 }
 
@@ -1569,7 +1573,7 @@ function currentBranch(repo: string): string {
   const branch = raw.trim();
   if (branch.length === 0) {
     throw new UserError(
-      "GitHub frontier discovery requires a checked out branch"
+      "frontier discovery requires a checked out branch"
     );
   }
   return branch;
@@ -1804,13 +1808,204 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
   );
 }
 
+const ORIGIN_PR_STATES: ReadonlyMap<string, FrontierPrState> = new Map([
+  ["open", "OPEN"],
+  ["draft", "OPEN"],
+  ["merged", "MERGED"],
+  ["closed", "CLOSED"],
+]);
+
+interface OriginPullRequest {
+  readonly pr: number;
+  readonly state: FrontierPrState;
+  readonly branch: string;
+  readonly base: string;
+}
+
+function originPullRequests({
+  filter,
+  branch,
+  repo,
+}: {
+  filter: "--head" | "--base";
+  branch: string;
+  repo: string;
+}): readonly OriginPullRequest[] {
+  const args = [
+    "pr",
+    "list",
+    filter,
+    branch,
+    "--state",
+    "all",
+    "--json",
+    "number,status,headRef,baseRef",
+  ];
+  const command = `origin pr list ${filter} ${branch}`;
+  // Every state is fetched because a merged or closed PR still anchors the
+  // chain, and a draft counts as OPEN.
+  let raw: string;
+  try {
+    raw = execFileSync("origin", args, {
+      cwd: repo,
+      encoding: "utf8",
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") {
+      throw new UsageError(
+        "--forge origin requires the origin CLI; install it or omit --forge to discover the frontier through GitHub"
+      );
+    }
+    throw new UserError(`origin ${args.join(" ")} failed: ${errorMessage(error)}`);
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new UserError(`${command} output is not valid JSON`);
+  }
+  if (!isUnknownArray(value)) {
+    throw new UserError(`${command} output is not a JSON array`);
+  }
+  return value.map((row) => {
+    const status = isRecord(row) ? row.status : undefined;
+    const state =
+      typeof status === "string" ? (ORIGIN_PR_STATES.get(status) ?? null) : null;
+    const head = isRecord(row) ? row.headRef : undefined;
+    const base = isRecord(row) ? row.baseRef : undefined;
+    if (
+      !isRecord(row) ||
+      typeof row.number !== "number" ||
+      !Number.isSafeInteger(row.number) ||
+      row.number < 1 ||
+      state === null ||
+      typeof head !== "string" ||
+      head.length === 0 ||
+      typeof base !== "string" ||
+      base.length === 0
+    ) {
+      throw new UserError(`${command} output has an invalid PR row`);
+    }
+    return { pr: row.number, state, branch: head, base };
+  });
+}
+
+function originBranchPullRequest({
+  branch,
+  repo,
+}: {
+  branch: string;
+  repo: string;
+}): OriginPullRequest {
+  const rows = originPullRequests({ filter: "--head", branch, repo });
+  const row = rows[0];
+  if (row === undefined) {
+    throw new UserError(
+      `branch ${branch} has no pull request; open one with origin pr create, or resolve the frontier from a branch whose chain is fully submitted`
+    );
+  }
+  if (rows.length > 1) {
+    throw new UserError(
+      `branch ${branch} has multiple pull requests (${rows.map((item) => `#${item.pr}`).join(", ")}); close the stale ones first`
+    );
+  }
+  return row;
+}
+
+function originTrunk(repo: string): string {
+  try {
+    return execFileSync(
+      "git",
+      ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+      {
+        cwd: repo,
+        encoding: "utf8",
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    )
+      .trim()
+      .replace(/^origin\//, "");
+  } catch {
+    // Init-plus-fetch checkouts and local fixtures lack origin/HEAD.
+    return "main";
+  }
+}
+
+// Origin has no bulk listing with head SHAs, so the chain is walked one branch
+// at a time: down through each base to trunk, then up through open children.
+function originFrontier(repo: string): readonly FrontierPr[] {
+  const trunk = originTrunk(repo);
+  const current = currentBranch(repo);
+  if (current === trunk) {
+    return [];
+  }
+  const seen = new Set([current]);
+  let bottom = originBranchPullRequest({ branch: current, repo });
+  const chain = [bottom];
+  while (bottom.base !== trunk) {
+    if (seen.has(bottom.base)) {
+      throw new UserError(
+        `pull request base chain loops at branch ${bottom.base}`
+      );
+    }
+    seen.add(bottom.base);
+    bottom = originBranchPullRequest({ branch: bottom.base, repo });
+    chain.unshift(bottom);
+  }
+  let tip = current;
+  for (;;) {
+    const children = originPullRequests({
+      filter: "--base",
+      branch: tip,
+      repo,
+    }).filter((row) => row.state === "OPEN");
+    const child = children[0];
+    if (child === undefined) {
+      break;
+    }
+    if (children.length > 1) {
+      throw new UserError(
+        `stack is not linear: branches ${children.map((row) => row.branch).join(", ")} all target ${tip}`
+      );
+    }
+    if (seen.has(child.branch)) {
+      throw new UserError(
+        `pull request base chain loops at branch ${child.branch}`
+      );
+    }
+    seen.add(child.branch);
+    chain.push(child);
+    tip = child.branch;
+  }
+  if (new Set(chain.map((row) => row.pr)).size !== chain.length) {
+    throw new UserError(
+      "pull request base chain contains duplicate pull requests"
+    );
+  }
+  return chain.map((row) => ({
+    pr: row.pr,
+    branches: row.branch,
+    sha: branchSha({ branch: row.branch, repo }),
+    state: row.state,
+  }));
+}
+
 function resolveFrontier(
   repo: string,
-  discovery: FrontierDiscovery
+  discovery: FrontierDiscovery,
+  forge: Forge
 ): FrontierResolution {
+  if (discovery === "graphite" && forge !== "gh") {
+    throw new UsageError("--graphite cannot be combined with --forge origin");
+  }
   requireGitRepository(repo);
   if (discovery === "github") {
-    return { source: "GitHub", prs: githubFrontier(repo) };
+    return forge === "origin"
+      ? { source: "Origin", prs: originFrontier(repo) }
+      : { source: "GitHub", prs: githubFrontier(repo) };
   }
   if (!graphiteIsAvailable(repo)) {
     throw new UsageError(
@@ -1833,7 +2028,7 @@ function validateFrontierPin({
 }: {
   actual: readonly number[];
   expected: readonly number[];
-  source: "gt" | "GitHub";
+  source: FrontierSource;
 }): void {
   if (
     actual.length === expected.length &&
@@ -2328,7 +2523,11 @@ export function openStore(
           throw new UserError("--prs must not contain duplicates");
         }
         const old = await readFrontier(store);
-        const frontier = resolveFrontier(repo, params.discovery ?? "github");
+        const frontier = resolveFrontier(
+          repo,
+          params.discovery ?? "github",
+          params.forge ?? "gh"
+        );
         if (pin !== undefined) {
           validateFrontierPin({
             actual: frontier.prs.map((row) => row.pr),

@@ -51,7 +51,7 @@ PRINCIPLE_RULES = {
     "principle-explain-the-number": "Find what limits it, and rule out that it measured something other than the work you think.",
     "principle-foundational-thinking": "choosing core types and data structures",
     "principle-redesign-from-first-principles": "foundational assumption from the start",
-    "principle-attack-the-premise": "question the premise",
+    "principle-attack-the-premise": "test it directly",
     "principle-subtract-before-you-add": "then build on the simpler base",
     "principle-minimize-reader-load": "collapse one-caller wrappers",
     "principle-outcome-oriented-execution": "Converge on the target architecture",
@@ -65,9 +65,9 @@ PRINCIPLE_RULES = {
     "principle-migrate-callers-then-delete-legacy-apis": "delete the old API in the same wave",
     "principle-separate-before-serializing-shared-state": "Eliminate the sharing first",
     "principle-prove-it-works": "Verify against the real artifact",
-    "principle-fix-root-causes": "reproduce first",
+    "principle-fix-root-causes": "Trace each symptom back to the first place the system went wrong",
     "principle-sequence-verifiable-units": "check each before the next",
-    "principle-test-behavior-not-implementation": "would still pass if every imported function returned `undefined`",
+    "principle-test-behavior-not-implementation": "Assert what the code's users can observe",
     "principle-guard-the-context-window": "Route bulk to subagents",
     "principle-never-block-on-the-human": "Proceed, then present.",
     "principle-encode-lessons-in-structure": "Encode the rule as a lint, metadata flag, runtime check, or script",
@@ -79,6 +79,8 @@ GUIDE_SLASH_SKILLS = {
     "maintain-verification-skill", "documentation-impact", "show-me-your-work", "figure-it-out",
     "automate-me", "reflect", "technical-writing", "bro", "setup-pstack", "poteto-mode",
     "poteto-help", "typescript-best-practices", "benchmark-checklist", "correct", "make-bot-ui",
+    "ketchup", "in-your-own-words", "sharpen", "create-formal-verification-skill",
+    "maintain-formal-verification-skill",
 }
 GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | set(PRINCIPLE_RULES) | {"pstack-harness"}
 GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack"}

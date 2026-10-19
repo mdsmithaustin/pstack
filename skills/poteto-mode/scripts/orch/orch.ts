@@ -13,6 +13,7 @@ import {
   openStore,
   parseVerdict,
   type Counts,
+  type Forge,
   type Frontier,
   type InboxPointer,
   type OpenGate,
@@ -95,6 +96,7 @@ interface GateResolveOptions {
 interface FrontierSetOptions {
   readonly repo?: string;
   readonly prs?: readonly number[];
+  readonly forge: Forge;
   readonly graphite?: boolean;
 }
 
@@ -574,7 +576,9 @@ function createProgram(io: Io): Command {
 
   const frontier = program
     .command("frontier")
-    .description("manage the stack frontier (GitHub by default, Graphite on request)")
+    .description(
+      "manage the stack frontier (GitHub by default, Origin or Graphite on request)"
+    )
     .action(() => requireSubcommand(program));
   leaf(frontier, "set", "discover the stack frontier and set it")
     .addOption(
@@ -588,9 +592,16 @@ function createProgram(io: Io): Command {
       "optional expected pull request order pin",
       prList
     )
-    .option(
-      "--graphite",
-      "discover the frontier through gt instead of GitHub"
+    .addOption(
+      new Option("--forge <forge>", "pull request forge for base-chain discovery")
+        .choices(["gh", "origin"])
+        .default("gh")
+    )
+    .addOption(
+      new Option(
+        "--graphite",
+        "discover the frontier through gt instead of the pull request forge"
+      ).conflicts("forge")
     )
     .action((options: FrontierSetOptions) =>
       runStore(
@@ -601,6 +612,7 @@ function createProgram(io: Io): Command {
             repo: frontierRepo(options),
             prs: options.prs,
             discovery: options.graphite === true ? "graphite" : "github",
+            forge: options.forge,
           }),
         frontierLine
       )
