@@ -1940,7 +1940,10 @@ function originFrontier(repo: string): readonly FrontierPr[] {
   const trunk = originTrunk(repo);
   const current = currentBranch(repo);
   if (current === trunk) {
-    return [];
+    originPullRequests({ filter: "--head", branch: current, repo });
+    throw new UserError(
+      `Origin frontier discovery found no PR for checked out branch ${current}; ${current} is the trunk, so checkout a branch in the stack`
+    );
   }
   const seen = new Set([current]);
   let bottom = originBranchPullRequest({ branch: current, repo });

@@ -188,6 +188,9 @@ case "$*" in
   "${list("--base", "stack/draft")}")
     printf '[]\\n'
     ;;
+  "${list("--head", "main")}")
+    printf '[]\\n'
+    ;;
   *)
     printf 'unexpected origin arguments: %s\\n' "$*" >&2
     exit 2
@@ -1403,6 +1406,46 @@ esac
   it("fails an Origin frontier request with a usage error when origin is missing", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
+
+    await withoutGtOrGh({
+      directory,
+      operation: async () => {
+        const failure = await store.frontier
+          .set({ repo: stack.repo, forge: "origin" })
+          .then(
+            () => undefined,
+            (error: unknown) => error
+          );
+        expect(failure).toBeInstanceOf(UsageError);
+        expect((failure as Error).message).toContain(
+          "--forge origin requires the origin CLI"
+        );
+      },
+    });
+  });
+
+  it("refuses an Origin frontier from the trunk branch instead of recording an empty one", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["checkout", "main"] });
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        await expect(
+          store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).rejects.toThrow(
+          "found no PR for checked out branch main"
+        );
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+      },
+    });
+  });
+
+  it("reports a missing origin CLI before the trunk branch can short-circuit", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["checkout", "main"] });
 
     await withoutGtOrGh({
       directory,
