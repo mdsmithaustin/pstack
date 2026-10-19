@@ -10,6 +10,13 @@ The completed [2026-10-19 comparison](results/2026-10-19.md) reports acceptance,
 
 Use Python 3.12 or later. The application owner also needs `sbx`, Docker, the prepared native template, and working model credentials. Discover those tools through `PATH`. This repository has no `mise` task for this controller.
 
+Before preparation, fetch the exact pinned upstream commit from `cursor/plugins` into this checkout and confirm it is available. Run these commands from the repository root. A nonzero exit from either command means the prerequisite failed; do not continue to preparation.
+
+```sh
+git fetch https://github.com/cursor/plugins.git 1b6d44ff26d4e242f4e8f68c391e6d2f7ca16def
+git cat-file -e '1b6d44ff26d4e242f4e8f68c391e6d2f7ca16def^{commit}'
+```
+
 Create a runtime receipt after probing the actual template. The required JSON fields are `template`, `observed_template_id`, `cli_version`, and a `capabilities` object containing `skills: true` and `multi_agent: true`. Retain the bootstrap observations with the receipt. The observed template ID may be a short local identifier. It is not a full OCI digest. Record an archive hash separately if one exists.
 
 Run the following command from the repository root. Replace the directory and runtime receipt with new paths outside the checkout. Preparation creates the directory and refuses an existing one. A nonzero exit, missing `seal.json`, or a calibration receipt whose `passed` field is false means preparation failed.
@@ -128,6 +135,13 @@ Preserve the raw native streams, captures, and private checker files outside Git
 ## Verify the controller without model calls
 
 The controller tests use actual application snapshots and replay. A recording application callable writes native outcome receipts, and local subprocess oracles check their output. A real Git clone checks guidance identity after the same Git mode normalization that the native sandbox uses. The tests run the upstream installer, inspect its native TOML files, and exercise report rejection of tampered captures, false grades, and broken evidence bindings. A test also calls the real application API with recorded sandbox command responses, then validates its actual harvest capture layout and retained durations through the report. These tests validate the controller, not named persona activation, model behavior, or Docker isolation. The application owner's tests cover native process handling and capture integrity separately.
+
+Use Python 3.12 or later. Before running the controller tests, fetch the exact pinned upstream commit from `cursor/plugins` into this checkout and confirm it is available. The tests export its skills and read its persona files, so a fresh clone needs this prerequisite even without model calls. Run these commands from the repository root. A nonzero exit from either command means the prerequisite failed; do not continue to the tests.
+
+```sh
+git fetch https://github.com/cursor/plugins.git 1b6d44ff26d4e242f4e8f68c391e6d2f7ca16def
+git cat-file -e '1b6d44ff26d4e242f4e8f68c391e6d2f7ca16def^{commit}'
+```
 
 Run this command at the repository root. A nonzero exit, a failure summary, or a zero-test summary means verification failed.
 
