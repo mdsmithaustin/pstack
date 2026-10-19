@@ -210,26 +210,50 @@ class UpstreamSync(unittest.TestCase):
 
     def test_pending_attempt_blocks_another_paid_run(self) -> None:
         self.assertNotEqual(self.run_sync().returncode, 0)
+        retained = Path((self.root / "agent-cwd").read_text())
+        attempts = set(self.state.glob("attempt-*"))
         result = self.run_sync(PSTACK_TEST_MODE="published")
         self.assertEqual(result.returncode, 1)
         self.assertEqual((self.root / "agent-calls").read_text(), "called\n")
         self.assertIn("resolve it before another Claude run", (self.state / "sync.log").read_text())
 
+        fresh, = set(self.state.glob("attempt-*")) - attempts
+        self.assertFalse((fresh / "repo").exists())
+        self.assertEqual((retained / "local-work.txt").read_text(), "Keep this sync work.\n")
+        self.assertTrue((retained.parent / "prompt.txt").is_file())
+        self.assertFalse((fresh / "complete").exists())
+
     def test_open_pr_skips_even_with_pending_attempt(self) -> None:
         self.assertNotEqual(self.run_sync().returncode, 0)
+        retained = Path((self.root / "agent-cwd").read_text())
+        attempts = set(self.state.glob("attempt-*"))
         result = self.run_sync(PSTACK_TEST_OPEN_PR="1")
         self.assertEqual(result.returncode, 0)
         self.assertEqual((self.root / "agent-calls").read_text(), "called\n")
         self.assertIn("skipping until it lands", (self.state / "sync.log").read_text())
 
+        fresh, = set(self.state.glob("attempt-*")) - attempts
+        self.assertFalse((fresh / "repo").exists())
+        self.assertEqual((retained / "local-work.txt").read_text(), "Keep this sync work.\n")
+        self.assertTrue((retained.parent / "prompt.txt").is_file())
+        self.assertEqual((fresh / "complete").read_text(), "sync PR already open\n")
+
     def test_unchanged_upstream_skips_even_with_pending_attempt(self) -> None:
         self.assertNotEqual(self.run_sync().returncode, 0)
+        retained = Path((self.root / "agent-cwd").read_text())
+        attempts = set(self.state.glob("attempt-*"))
         (self.origin / ".github/upstream-sha").write_text(self.latest + "\n")
         self.git("commit", "-qam", "Record completed sync", cwd=self.origin)
         result = self.run_sync()
         self.assertEqual(result.returncode, 0)
         self.assertEqual((self.root / "agent-calls").read_text(), "called\n")
         self.assertIn("upstream unchanged", (self.state / "sync.log").read_text())
+
+        fresh, = set(self.state.glob("attempt-*")) - attempts
+        self.assertFalse((fresh / "repo").exists())
+        self.assertEqual((retained / "local-work.txt").read_text(), "Keep this sync work.\n")
+        self.assertTrue((retained.parent / "prompt.txt").is_file())
+        self.assertEqual((fresh / "complete").read_text(), "upstream unchanged\n")
 
     def test_prompt_limits_authorization_to_draft_publication(self) -> None:
         result = self.run_sync(PSTACK_TEST_MODE="published")

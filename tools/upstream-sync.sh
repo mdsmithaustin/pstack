@@ -25,6 +25,7 @@ recorded=$(cat .github/upstream-sha)
 if [ "$latest" = "$recorded" ]; then
   echo "upstream unchanged at $latest; done"
   printf 'upstream unchanged\n' >"$attempt/complete"
+  rm -rf -- "$repo"
   exit 0
 fi
 
@@ -32,6 +33,7 @@ open=$(gh pr list -R "$REPO" --state open --limit 1000 --json headRefName --jq '
 if [ "$open" != "0" ]; then
   echo "a sync/upstream PR is already open; skipping until it lands"
   printf 'sync PR already open\n' >"$attempt/complete"
+  rm -rf -- "$repo"
   exit 0
 fi
 
@@ -40,6 +42,7 @@ for prompt in "$STATE_DIR"/attempt-*/prompt.txt; do
   pending=${prompt%/*}
   if [ ! -f "$pending/complete" ]; then
     echo "unfinished sync at $pending; resolve it before another Claude run"
+    rm -rf -- "$repo"
     exit 1
   fi
 done
