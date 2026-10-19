@@ -938,8 +938,8 @@ def run_case(root, plan, definition, bootstrap):
         file_limit = 0
         if definition.get("scratch", False):
             scratch = run_root / "tmp"
-            scratch.mkdir(mode=0o700)
-            os.chown(scratch, 65534, 65534)
+            scratch.mkdir()
+            scratch.chmod(0o1777)
             environment["TMPDIR"] = str(scratch)
             file_limit = 1048576
         candidate_cwd = project / plan["workdir"]
