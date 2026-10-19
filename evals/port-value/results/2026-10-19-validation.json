@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "gate_run_id": "01M5A55HYA9B86NW7Z5TQDDVB9",
-  "validation_head": "247d9871f0613fe14be080dd170b7bf12a993177",
+  "gate_run_id": "01M5A84DM51F31XH1YTGENDRF2",
+  "validation_head": "4244e8d387bc60e5e34197829429dedc32a55fb8",
   "source_sha256": {
     "evals/canon/application.py": "0c9cb5ecbfc61e5e12dbc752459cbac048c056952bc7aae65ba7256fa2e95e44",
     "evals/canon/chain.py": "4fc02e94526e3094b075cb80ae7954353f3a6f4c67028b2e5d4c5aa747a3275d",
@@ -29,7 +29,7 @@
     "evals/port-value/study.py": "daf6460a88425e8bca0cc1f58a86baf07f06b16709e240d7cb7823fbc1e5a7f3",
     "evals/port-value/upstream_personas.py": "db0a52573954c3faecda7d65b5054d56924cccfe8f8f346d7a901ec4611be93c"
   },
-  "scope": "Retained execution evidence verified model-free; this receipt does not assert validation of later source changes.",
+  "scope": "Current-run synthetic capability calls and model-free checks; historical study evidence reconciled separately. Source hashes identify executed bytes before this receipt update.",
   "completed_study": {
     "lineages": 18,
     "opportunities": 36,
@@ -60,14 +60,15 @@
       "captures_valid": true,
       "cleanup_confirmed": true,
       "proof_artifact": "fresh-persona-canaries/proof.json",
-      "source_revision": "247d9871f0613fe14be080dd170b7bf12a993177",
-      "owner_sha256": "0c9cb5ecbfc61e5e12dbc752459cbac048c056952bc7aae65ba7256fa2e95e44"
+      "source_revision": "4244e8d387bc60e5e34197829429dedc32a55fb8",
+      "owner_sha256": "0c9cb5ecbfc61e5e12dbc752459cbac048c056952bc7aae65ba7256fa2e95e44",
+      "bindings_artifact": "fresh-persona-canaries/bindings.json"
     },
     "additional_model_calls_during_receipt_verification": 0
   },
   "historical": {
-    "analysis_artifact": "historical-recheck/analysis.json",
-    "persona_proof_artifact": "historical-recheck/proof.json",
+    "analysis_artifact": "analysis/analysis.json",
+    "persona_proof_artifact": "historical-personas-proof.json",
     "reconciled_stages": 36,
     "completed_preflight_children": 4
   },
@@ -76,28 +77,32 @@
       "name": "Current-run preparation and native persona activation",
       "result": "pass",
       "evidence": [
-        "live-prepare-verification.json",
-        "fresh-persona-canaries/proof.json"
+        "preparation-summary.json",
+        "fresh-persona-canaries/proof.json",
+        "fresh-persona-canaries/bindings.json"
       ],
-      "method": "Actual prepare CLI and two public application API calls; retained raw parent/child records reverified."
+      "method": "Actual current-run prepare CLI and two fresh synthetic public application API calls; raw spawn arguments, completed named children, guidance/capture bindings and cleanup verified.",
+      "gate_run_id": "01M5A84DM51F31XH1YTGENDRF2"
     },
     {
       "name": "Historical raw-record reconciliation",
       "result": "pass",
       "evidence": [
-        "historical-recheck/analysis.json",
-        "historical-recheck/proof.json",
-        "historical-recheck/exposure-evidence.json"
+        "analysis/analysis.json",
+        "historical-personas-proof.json",
+        "analysis/exposure-evidence.json"
       ],
-      "method": "Independent complete analysis and historical persona verifier reproduced unchanged without native calls."
+      "method": "Independent complete analysis and historical persona verifier reproduced unchanged without native calls.",
+      "gate_run_id": "01M5A84DM51F31XH1YTGENDRF2"
     },
     {
       "name": "Executable grading",
       "result": "pass",
       "evidence": [
-        "docker-regrades.json"
+        "final-docker-regrades.json"
       ],
-      "method": "Retained pinned-container regrades cover 36 captures with positive assertions."
+      "method": "Retained pinned-container regrades cover 36 captures with positive assertions.",
+      "gate_run_id": "01M5A84DM51F31XH1YTGENDRF2"
     },
     {
       "name": "Archived report replay",
@@ -105,45 +110,57 @@
       "evidence": [
         "reproduction.json"
       ],
-      "method": "Actual frozen report CLI in pinned Python container produced identical JSON and Markdown."
+      "method": "Actual frozen report CLI in pinned Python container produced identical JSON and Markdown.",
+      "gate_run_id": "01M5A84DM51F31XH1YTGENDRF2"
     },
     {
       "name": "Spent dispatch and locking",
       "result": "pass",
       "evidence": [
-        "spent-dispatch.json",
-        "dispatch-lock.json",
-        "adversarial-results.json"
+        "adversarial.log"
       ],
-      "method": "Actual CLI preserves spent stages and rejects competing dispatch."
+      "method": "Actual CLI preserves spent stages and rejects competing dispatch.",
+      "gate_run_id": "01M5A84DM51F31XH1YTGENDRF2"
     },
     {
       "name": "Tamper rejection",
       "result": "pass",
       "evidence": [
-        "adversarial-results.json"
+        "adversarial.log"
       ],
-      "method": "Actual report CLI revokes acceptance for corrupt capture, dependent maintenance, and changed frozen inputs."
+      "method": "Actual report CLI revokes acceptance for corrupt capture, dependent maintenance, and changed frozen inputs.",
+      "gate_run_id": "01M5A84DM51F31XH1YTGENDRF2"
     }
   ],
   "artifact_sha256": {
-    "live-validation-phase-result.json": "4a5bde73c98b23b40a2eb6285b46ab0f23f7775e9ad63e135731bd01eb7aa660",
-    "live-prepare-verification.json": "eb493a3e6138141accf9a6586074da2f5915ef23b744e85100b70abe4a3084ad",
-    "fresh-persona-canaries/proof.json": "0341c7bdd5d4ea91bf48874e2ad12b29db192cfcdfb5ec0ab79cd9ff7f42660f",
-    "fresh-persona-canaries/source.json": "11184123e3e5d954fa8d18fe4e79843106ad7740f8f4ea21e68ce49f3dbc7a5a",
-    "historical-recheck/proof.json": "07ceec0e7a7c3373d0801d14ed02c0c7b7449741c24b01224a414451ec4a2bac",
-    "historical-recheck/analysis.json": "7951fa50094b78212a9aaa66209b7c8c50b0ad82a915b2e08d4832ae70daac0f",
-    "historical-recheck/exposure-evidence.json": "12153ef73c225f93b2194b60d5e202c07e4104099efc7a7ec324913e57f8f8cd",
-    "docker-regrades.json": "de527234af6cec0e4da6708107548d04fcd771398f11eeed78ceb1140a3391ff",
-    "reproduction.json": "195f1556a2cf1b708c317158a0e125608638089b904fc68210529d7239243d89",
-    "adversarial-results.json": "1eb58ae73471eb7c40b8dd3e9086dca57191403043992e75fcd6e19fe651d9bf",
-    "spent-dispatch.json": "0d913c79a3ed367c1f5b3d14cc8503bf7850d268a685821b0b5f85fac814f6fd",
-    "dispatch-lock.json": "3227e6c4ae8179363f4adecc59bceefc16a568394daaa253d711073930528f05"
+    "preparation-summary.json": "5de05321bc032fafe9c4f9a46d1be9582c0e069cf533a44acbe737a9bf558070",
+    "fresh-persona-canaries/proof.json": "1e8c80e9b33e7e905b962a1d304b5e6acc9614a22d0096aead79dbc3861a7916",
+    "fresh-persona-canaries/bindings.json": "00b934d9dd0042659bedd69d0257e22be6bc6dc350abdfcb60b79956c724e47e",
+    "analysis/analysis.json": "7951fa50094b78212a9aaa66209b7c8c50b0ad82a915b2e08d4832ae70daac0f",
+    "historical-personas-proof.json": "07ceec0e7a7c3373d0801d14ed02c0c7b7449741c24b01224a414451ec4a2bac",
+    "analysis/exposure-evidence.json": "12153ef73c225f93b2194b60d5e202c07e4104099efc7a7ec324913e57f8f8cd",
+    "final-docker-regrades.json": "de527234af6cec0e4da6708107548d04fcd771398f11eeed78ceb1140a3391ff",
+    "reproduction.json": "55a643c8501b8293e70a0f9d443c264cfcca5f99631572461b051081fed30428",
+    "adversarial.log": "1eb58ae73471eb7c40b8dd3e9086dca57191403043992e75fcd6e19fe651d9bf",
+    "validation-summary.json": "db115c7a9e89cd5ece85a307e9c6e0370f41452f8ec0b9562aa0e9a63952f2a2",
+    "fresh-persona-canaries/source.json": "c782c9d62ab98550460eb47f682755bee782329998f4274c0c2a3efb2ba91d3d",
+    "fresh-persona-canaries/verify.py": "0d29056e0e83fed848d8f297da1ab95b6305f891f9ba3e1e44f161c43ef8a4e3",
+    "fresh-persona-canaries/run.py": "bbcedc9536aacafceda247eae644707cdea4798ff68f2c075865809c5749ba79",
+    "prior-validation-receipt.json": "dba183cd23ec1e9e02986f0bfd9787100280867f9682d9b974b31c32a31ecc43",
+    "live-validation-phase-result.json": "18db6ad4c5824b665cd2c5e6d29ca3fdd04803478edf4fb76eb9f08d6f690133"
   },
   "limitations": [
     "Synthetic capability checks are separate from the 36 spent study opportunities and do not prove persona use in study tasks or workflow efficacy.",
     "Historical reconciliation verifies retained execution, not fresh historical calls.",
     "Requested and transcript-observed model settings do not prove served identity or dollar cost.",
     "The hash verification command checks retained artifact identity; it does not repeat native execution or establish new model behavior."
-  ]
+  ],
+  "prior_validation": {
+    "gate_run_id": "01M5A55HYA9B86NW7Z5TQDDVB9",
+    "validation_head": "247d9871f0613fe14be080dd170b7bf12a993177",
+    "receipt_artifact": "prior-validation-receipt.json",
+    "receipt_sha256": "dba183cd23ec1e9e02986f0bfd9787100280867f9682d9b974b31c32a31ecc43",
+    "canary_proof_sha256": "0341c7bdd5d4ea91bf48874e2ad12b29db192cfcdfb5ec0ab79cd9ff7f42660f"
+  },
+  "verdict": "GO"
 }
