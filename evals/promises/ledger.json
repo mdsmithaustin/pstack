@@ -1297,6 +1297,162 @@
     "skills/poteto-mode/playbooks/trace-forensics.md"
    ]
   },
+  "formal-verification-checks-one-property-in-scope": {
+   "check": "static",
+   "claim": "A formal verification skill checks one property of the code in every case within a stated scope.",
+   "evidence": [
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Formal verification checks every case in a stated scope"
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "verifies one property of it"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/create-formal-verification-skill/SKILL.md"
+   ]
+  },
+  "formal-verification-handoff-states-scope": {
+   "check": "static",
+   "claim": "The generated skill tells the next agent whether a change touches the verified code, how to run the check, and how to tell a bug from a modeling error, and the handoff states what was verified, the tool, bounds, findings, and what a pass does not cover.",
+   "evidence": [
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "From the skill alone, the next agent must be able to tell whether a change touches the verified code, run the check, tell a real bug from a modeling error"
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Tell the user what you verified, which tool you used and why, the bounds, what the check found in plain words, how to run it, and what it does not cover."
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "A pass covers the model or the bound, not the whole system."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/create-formal-verification-skill/SKILL.md"
+   ]
+  },
+  "formal-verification-picks-target-from-code": {
+   "check": "static",
+   "claim": "/create-formal-verification-skill picks the strongest target from the code, a promise whose break harms users and that tests rarely reach, unless the user names an area or bug.",
+   "evidence": [
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "A good target is a promise the code makes, where a break harms users and tests rarely reach the case that breaks it."
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Choose the strongest such target in the repo, not the one that is easiest to verify."
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "If the user named an area or a bug, start there."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/create-formal-verification-skill/SKILL.md"
+   ]
+  },
+  "formal-verification-question-picks-tool": {
+   "check": "static",
+   "claim": "The question picks the verification tool, with TLA+ the default for event-order questions, generated-input tests on the real code when no verifier runs on the language, and the choice explained to the user.",
+   "evidence": [
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "TLA+ is the default for that in any language"
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "usually suits a verifier that runs on the code"
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "If no verifier runs on this language, say so, and test the real code with generated inputs, not a hand model of the function."
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "tell the user why you chose it"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/create-formal-verification-skill/SKILL.md"
+   ]
+  },
+  "formal-verification-records-sync-commit": {
+   "check": "static",
+   "claim": "The generated skill records which code each check covers and the commit where the verification last matched it.",
+   "evidence": [
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Record which files and functions each check covers, and the commit at which you last confirmed that the verification describes them."
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Put the coverage record and the sync commit in the skill"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/create-formal-verification-skill/SKILL.md"
+   ]
+  },
+  "formal-verification-reports-findings-unchanged": {
+   "check": "static",
+   "claim": "When the code breaks the property, the finding is reported as a counterexample in the code's terms, the property is not weakened, and product code changes only on request.",
+   "evidence": [
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "When the current code breaks the property, report it with the counterexample in the code's terms."
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Do not weaken the property or the model until it passes, and do not change product code unless the user asks."
+    },
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Tell a counterexample as a short sequence of steps in the code's words."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/create-formal-verification-skill/SKILL.md"
+   ]
+  },
+  "formal-verification-shows-property-can-fail": {
+   "check": "static",
+   "claim": "Each verified property is shown failing on a broken variant of the code it guards.",
+   "evidence": [
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Show each property failing on a broken variant of the code it guards"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/create-formal-verification-skill/SKILL.md"
+   ]
+  },
+  "formal-verification-skill-proven-on-scratch-break": {
+   "check": "static",
+   "claim": "Before handoff the generator follows the generated skill once on a scratch change that breaks the property, and the check must catch it.",
+   "evidence": [
+    {
+     "file": "skills/create-formal-verification-skill/SKILL.md",
+     "quote": "Follow the generated skill once, as the next agent would, on a scratch change that breaks the property in the real code. It must catch the break."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/create-formal-verification-skill/SKILL.md"
+   ]
+  },
   "guide-named-skills-exist": {
    "check": "static",
    "claim": "Every skill the guide names with a slash resolves to skills/<name>/SKILL.md in the port (how, why, poteto-teach, recall, architect, arena, swarm, interrogate, poteto-tdd, unslop, no-comments, blast-radius, create-verification-skill, maintain-verification-skill, documentation-impact, show-me-your-work, figure-it-out, automate-me, reflect, technical-writing, bro, setup-pstack, typescript-best-practices).",
@@ -1450,6 +1606,20 @@
    ],
    "scenario": "route-autonomous-run"
   },
+  "in-your-own-words-restates-goal": {
+   "check": "static",
+   "claim": "/in-your-own-words restates the user's goals and the problem they are solving, with no playbook.",
+   "evidence": [
+    {
+     "file": "skills/in-your-own-words/SKILL.md",
+     "quote": "Restate in your own words what you think the user's goals are and what problem they're trying to solve."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/in-your-own-words/SKILL.md"
+   ]
+  },
   "inherit-parent-omits-model-field": {
    "check": "script",
    "claim": "`inherit-parent` and `auto` resolve identically to inherit-parent, and Spawn a role omits the model field for that value so the subagent inherits the parent chat model.",
@@ -1569,6 +1739,42 @@
     "skills/poteto-mode/playbooks/investigation.md"
    ]
   },
+  "ketchup-lists-every-waiting-call": {
+   "check": "static",
+   "claim": "/ketchup lists every call waiting on the user with its pick, evidence, and risk, so the user can decide from the reply alone.",
+   "evidence": [
+    {
+     "file": "skills/ketchup/SKILL.md",
+     "quote": "Then lay out every call waiting on them so they can make it from your reply alone."
+    },
+    {
+     "file": "skills/ketchup/SKILL.md",
+     "quote": "For each item, collect its link, what it changes for users, the evidence behind your pick, its risk, and your pick."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/ketchup/SKILL.md"
+   ]
+  },
+  "ketchup-read-only-catch-up": {
+   "check": "static",
+   "claim": "/ketchup reads only and catches the user up in plain words on what changed in this chat since their last message.",
+   "evidence": [
+    {
+     "file": "skills/ketchup/SKILL.md",
+     "quote": "Keep this turn read-only."
+    },
+    {
+     "file": "skills/ketchup/SKILL.md",
+     "quote": "Catch the user up on what changed in this chat since the last message they wrote before `/ketchup`"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/ketchup/SKILL.md"
+   ]
+  },
   "land-prompt-routes-to-shipping": {
    "check": "live",
    "claim": "`land the stack.` runs the Shipping playbook.",
@@ -1597,6 +1803,28 @@
    "owners": [
     "skills/poteto-mode/playbooks/autonomous-run.md",
     "skills/pstack-harness/references/loops.md"
+   ]
+  },
+  "maintain-formal-verification-separates-drift-from-bugs": {
+   "check": "static",
+   "claim": "/maintain-formal-verification-skill updates the verification from the code, reruns it, shows each updated check can still fail, and says which failures are drift and which are bugs.",
+   "evidence": [
+    {
+     "file": "skills/maintain-formal-verification-skill/SKILL.md",
+     "quote": "Update from the code, not from the result."
+    },
+    {
+     "file": "skills/maintain-formal-verification-skill/SKILL.md",
+     "quote": "Break the new code the way the property guards against"
+    },
+    {
+     "file": "skills/maintain-formal-verification-skill/SKILL.md",
+     "quote": "Say outright which failures were drift in the verification and which were bugs in the code."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/maintain-formal-verification-skill/SKILL.md"
    ]
   },
   "maintain-verification-never-edits-product-code": {
@@ -2850,6 +3078,32 @@
     "skills/setup-pstack/SKILL.md"
    ]
   },
+  "setup-offers-formal-verification-skill-once": {
+   "check": "static",
+   "claim": "After the verification-skill offer, setup offers once to generate a formal verification skill unless the project already has one.",
+   "evidence": [
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "### 8. Offer a formal verification skill (optional)"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "Check whether the project already has a formal verification skill"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "If not, offer once"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "On no, move on without pushing."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/SKILL.md"
+   ]
+  },
   "setup-offers-verification-skill-once": {
    "check": "live",
    "claim": "At the end of setup, when no verify-* skill or harness exists, setup offers once to generate one and moves on when declined.",
@@ -2913,6 +3167,36 @@
     "skills/setup-pstack/examples/pstack-models.md"
    ],
    "scenario": "setup-run"
+  },
+  "sharpen-frames-task-before-work": {
+   "check": "static",
+   "claim": "/sharpen asks how a top expert would approach the task, what the user is after, and whether it is over- or underspecified, loosens constraints as readily as it adds them, leaves the user's choices open, keeps one outside check, then does the work.",
+   "evidence": [
+    {
+     "file": "skills/sharpen/SKILL.md",
+     "quote": "Before starting, ask how a top expert would approach this task"
+    },
+    {
+     "file": "skills/sharpen/SKILL.md",
+     "quote": "whether the task is over- or underspecified"
+    },
+    {
+     "file": "skills/sharpen/SKILL.md",
+     "quote": "Loosen constraints that don't serve the goal as readily as you add ones that do, and leave choices that are the user's to make open instead of deciding them."
+    },
+    {
+     "file": "skills/sharpen/SKILL.md",
+     "quote": "always keep one outside check that the result is right"
+    },
+    {
+     "file": "skills/sharpen/SKILL.md",
+     "quote": "then do the work."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/sharpen/SKILL.md"
+   ]
   },
   "shipping-fresh-verifier-per-pr-never-author": {
    "check": "live",
@@ -3554,6 +3838,15 @@
    ],
    "text": "Run this at least once a day, ideally from a scheduled automation so nobody has to remember:"
   },
+  "031b9791798f": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Otherwise say no, and run it later if that changes."
+  },
   "033fedba0d0c": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -3614,15 +3907,6 @@
     "upstream"
    ],
    "text": "Before the skill hands back its summary, it spawns a reviewer on a different model family to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
-  },
-  "052816b5d336": {
-   "class": "context",
-   "file": "09-make-it-yours.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "The machinery underneath, playbooks, routing, model roles, works just as well wearing yours."
   },
   "05588149d41f": {
    "class": "promise",
@@ -3766,6 +4050,16 @@
    ],
    "text": "Name it in the prompt when you want the proof in a specific form:"
   },
+  "081f4213df63": {
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "why-then-how-composition",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "`do why first then how` is a good prompt when you suspect the history explains the mess."
+  },
   "0846d33018be": {
    "class": "substituted",
    "file": "01-setup.md",
@@ -3796,6 +4090,16 @@
    ],
    "text": "A reviewer who must catch the same mistake on every PR is the problem this fixes."
   },
+  "0a5c1dcfa9ba": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "formal-verification-checks-one-property-in-scope",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You get one property checked in every case within a stated scope, a counterexample in your code's terms if the code already breaks it, and a project skill the next agent runs on any change to that code."
+  },
   "0aac1fb6a006": {
    "class": "promise",
    "file": "03-understand.md",
@@ -3804,16 +4108,6 @@
     "port"
    ],
    "text": "It distinguishes missing documentation from evidence that a capability is absent."
-  },
-  "0b20a5f2aa1d": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "verification-skill-proven-once",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Before handing it over, the generator proves the skill once end to end: launch, doctor check, drive one feature, capture evidence, clean up."
   },
   "0b485a6fb145": {
    "class": "promise",
@@ -3862,6 +4156,25 @@
    ],
    "text": "In this page you learn what a good prompt looks like, and how little of one you actually need."
   },
+  "0e6dabc4bee8": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Tests check the cases someone thought to write."
+  },
+  "0f77d985e3fc": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-frames-task-before-work",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Before it starts, the agent asks how a top expert would do the task, what you're really after, and whether the ask is over- or underspecified."
+  },
   "0f9cc893bd89": {
    "class": "context",
    "file": "03-understand.md",
@@ -3888,6 +4201,15 @@
     "port"
    ],
    "text": "When the conversation already carries the context, the prompt shrinks to almost nothing."
+  },
+  "0fc99b350ef4": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Name an area or a bug to start there instead:"
   },
   "1041c1b909bb": {
    "class": "context",
@@ -4134,6 +4456,16 @@
    ],
    "text": "The parent waits for every slice and returns one `PASS`, `ISSUES`, or `BLOCKED` report instead of raw worker dumps."
   },
+  "162fb720723b": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "in-your-own-words-restates-goal",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "`/in-your-own-words` asks for the restatement alone, with no playbook."
+  },
   "164654857a9a": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -4247,6 +4579,16 @@
     "port"
    ],
    "text": "```text\n/benchmark-checklist vet the export speedup before it goes in the pr\n```"
+  },
+  "188a71efa6dd": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "ketchup-read-only-catch-up",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It reads only, and tells you in plain words what changed since your last message, with the screenshots and small diagrams the work produced."
   },
   "189f1e5a75fc": {
    "class": "context",
@@ -4448,6 +4790,16 @@
    ],
    "text": "Codex honors this as installed, and Claude Code does once `/setup-pstack` sets its skill listing."
   },
+  "1d7e92d5286e": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "ketchup-read-only-catch-up",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It changes nothing while it reports."
+  },
   "1d7ff8429412": {
    "class": "promise",
    "file": "01-setup.md",
@@ -4503,6 +4855,15 @@
    ],
    "text": "After publication, the opening playbook restores the selected format and preserves generated evidence."
   },
+  "1f99e0c87175": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For the restatement alone, with no playbook, run [`/in-your-own-words`](../../skills/in-your-own-words/SKILL.md)."
+  },
   "1fdd824ec19e": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -4520,15 +4881,6 @@
     "port"
    ],
    "text": "```text\n/poteto-mode prototype a few options for the settings layout. put them behind a switcher and send me screenshots of each.\n```"
-  },
-  "20c9ddaeffba": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "babysit-blocker-order",
-   "sources": [
-    "port"
-   ],
-   "text": "Babysit watches the PR with a bundled watcher and takes blockers in order: conflicts, then review threads and bot findings that live only in a review body, then CI."
   },
   "20eb1af99061": {
    "class": "promise",
@@ -4577,6 +4929,18 @@
    ],
    "text": "Ask for the proof as an artifact you can inspect yourself: the failing test and then the passing one, a before-and-after video, the trace, the screenshot."
   },
+  "22061bd1d586": {
+   "class": "substituted",
+   "file": "07-overnight.md",
+   "ported_as": [
+    "7e501870682f"
+   ],
+   "promise": "autopilot-full-verifier-round-per-push",
+   "sources": [
+    "upstream"
+   ],
+   "text": "A swarm of fresh verifiers checks the owner's code-ready head."
+  },
   "2257ab18c614": {
    "class": "context",
    "file": "07-overnight.md",
@@ -4604,6 +4968,15 @@
     "port"
    ],
    "text": "Saying \"keep going\" never triggers a pause."
+  },
+  "2319e45a8214": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The question picks the tool."
   },
   "231c19c90890": {
    "class": "context",
@@ -4650,14 +5023,14 @@
    ],
    "text": "Make the agent able to do it, and you stop being the bottleneck."
   },
-  "2428206ed804": {
+  "2427878966a1": {
    "class": "context",
-   "file": "05-build-and-clean.md",
+   "file": "10-recipes-and-pitfalls.md",
    "sources": [
     "upstream",
     "port"
    ],
-   "text": "Say what you observed, let the playbook demand the evidence."
+   "text": "```text\n/ketchup\n```"
   },
   "248f1618630f": {
    "class": "promise",
@@ -4679,6 +5052,16 @@
    ],
    "text": "[Type System Discipline](../../skills/principle-type-system-discipline/SKILL.md) makes illegal states unrepresentable."
   },
+  "24bbfd39402f": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-handoff-states-scope",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The handoff says what was verified, with which tool and bounds, what the check found, and what it doesn't cover."
+  },
   "250faf3809dc": {
    "class": "context",
    "file": "04-design.md",
@@ -4697,6 +5080,16 @@
     "port"
    ],
    "text": "A server on your machine holds the webhook's sender key, so the key never reaches the browser or the chat."
+  },
+  "25321c29d8ee": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "sharpen-frames-task-before-work",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It keeps one outside check that the result is right, then does the work."
   },
   "26331839fa40": {
    "class": "context",
@@ -4725,6 +5118,16 @@
    ],
    "text": "The skill reads intent fine from terse prompts like `unslop that, tighten it`."
   },
+  "26ff95d26a68": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-reports-findings-unchanged",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The property stays as stated, so the finding stays a finding."
+  },
   "272739ec2e86": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -4742,16 +5145,6 @@
     "port"
    ],
    "text": "**Taking the first design.** One attempt locks in the first shape the model thought of. Ask for prototypes or `/architect` and pick from evidence."
-  },
-  "283bd80154d8": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "maintain-verification-never-edits-product-code",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "If the live pass catches a product regression, it reports the regression instead of papering over it in docs."
   },
   "287873fa68f4": {
    "class": "context",
@@ -4816,15 +5209,6 @@
    ],
    "text": "It doesn't need to be long:"
   },
-  "2a820347172a": {
-   "class": "context",
-   "file": "03-understand.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "The \"convince me\" framing is worth stealing."
-  },
   "2aa878590359": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -4851,6 +5235,16 @@
     "port"
    ],
    "text": "Each role maps to a model and, when you want to pin it, a reasoning effort (`sonnet@high`)."
+  },
+  "2b97b5ad55e5": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "maintain-verification-never-edits-product-code",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "If the live pass catches a product regression, it reports the regression instead of hiding it with a doc edit."
   },
   "2bbac29c0df6": {
    "also": [
@@ -5031,15 +5425,6 @@
    ],
    "text": "The qualifiers do real work."
   },
-  "30aa844403bd": {
-   "class": "context",
-   "file": "06-verify-and-ship.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "This page covers stating a finish condition, vetting a measured number, generating a verification skill for your app, opening the PR, and driving it to merged."
-  },
   "30ef830976b1": {
    "class": "promise",
    "file": "08-principles.md",
@@ -5050,6 +5435,16 @@
    ],
    "text": "pstack ships 24 principles as individual skills."
   },
+  "317dfe8ba6bf": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-handoff-states-scope",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It writes a project-local skill that tells the next agent whether a change touches the verified code, how to run the check with one command, and how to tell a real bug from a modeling error."
+  },
   "31ba7ca1d7f0": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -5059,6 +5454,15 @@
     "port"
    ],
    "text": "Update mode mines only the history since the skill last changed."
+  },
+  "31be68bf0a73": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Cursor's Claude Code plugin install and its adapter page; the port installs natively through `npx skills`, and the pstack-harness skill maps harness names (see PORTING.md substitution map)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Claude Code prefixes plugin commands, so each command in this guide takes a `pstack:` prefix there, such as `/pstack:setup-pstack`, which writes its model rule to `~/.claude/rules/pstack-models.md`."
   },
   "3204ded4a2f8": {
    "class": "context",
@@ -5107,6 +5511,16 @@
     "port"
    ],
    "text": "[Build the Lever](../../skills/principle-build-the-lever/SKILL.md) builds the script that does or proves the work, so a reviewer can rerun it. When an agent keeps doing the same thing by hand, have it write the tool or skill it wishes it had. If a script can do a step the same way every time, use the script, and save agents for the judgment calls."
+  },
+  "32c88f758abc": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "formal-verification-checks-one-property-in-scope",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A formal verification skill checks one key property of your code, such as \"a job never runs twice at once\", in every case within a stated scope."
   },
   "32e02494b197": {
    "class": "promise",
@@ -5169,6 +5583,15 @@
     "port"
    ],
    "text": "[Design the change](./04-design.md). `/architect`, `/arena`, `/swarm`, `/interrogate`, prototypes, and plans before code locks in a shape."
+  },
+  "33bf284d15ac": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Verify and ship](./06-verify-and-ship.md#prove-a-property-with-a-formal-verification-skill) covers it."
   },
   "33f46a7e7f8c": {
    "class": "context",
@@ -5303,24 +5726,15 @@
    ],
    "text": "Hermes requires trust for project skills, and its project link can be skipped when `.hermes` does not exist."
   },
-  "377e0e6d6ea8": {
-   "class": "context",
-   "file": "09-make-it-yours.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Verify and ship](./06-verify-and-ship.md#create-a-project-verification-skill) covers both."
-  },
-  "37d5e66a3d0c": {
+  "370107715792": {
    "class": "promise",
-   "file": "03-understand.md",
-   "promise": "why-queries-evidence-categories-in-parallel",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "sharpen-frames-task-before-work",
    "sources": [
     "upstream",
     "port"
    ],
-   "text": "It starts from source control, then queries whatever evidence categories your MCPs expose, such as the issue tracker, long-form docs, team chat, observability, error tracking, and analytics, all in parallel."
+   "text": "The agent asks how an expert would do the task, what you're really after, and whether the ask says too much or too little."
   },
   "3835af2d4290": {
    "class": "promise",
@@ -5396,6 +5810,25 @@
     "port"
    ],
    "text": "You're auditing decisions, not re-reading the whole night."
+  },
+  "3a95635bdfca": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "technical-writing-picks-mode-then-sentences",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`/technical-writing`](../../skills/technical-writing/SKILL.md) applies a layered standard."
+  },
+  "3af041b54812": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The \"convince me\" framing is worth reusing."
   },
   "3b0e5227593a": {
    "class": "context",
@@ -5494,6 +5927,24 @@
    ],
    "text": "**Accepting every review comment.** Bots and humans both file real catches and noise in one list. `/interrogate` sorts findings into act-on and dismissed buckets with reasons, and you can override either way."
   },
+  "3c65e7242410": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For a quick status instead of an audit, run [`/ketchup`](../../skills/ketchup/SKILL.md) in the chat that ran the work."
+  },
+  "3c6ae157f273": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "For code where such a bug is costly, run:"
+  },
   "3c968d8dbae5": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -5531,18 +5982,6 @@
     "port"
    ],
    "text": "A UI change walks the changed flow in the running app. When it must match a reference pixel for pixel, the [Visual parity playbook](../../skills/poteto-mode/playbooks/visual-parity.md) diffs screenshots against a frozen baseline instead of judging by eye."
-  },
-  "3df53e6ef1db": {
-   "also": [
-    "verification-skill-written-to-agents-skills"
-   ],
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "verification-skill-has-five-sections",
-   "sources": [
-    "port"
-   ],
-   "text": "It writes `.agents/skills/verify-<app>/`, agent-facing instructions with exact Launch, Doctor, Drive, Evidence, and Cleanup sections, plus a feature map under `features/` that indexes what the app does and what result proves each feature works."
   },
   "3e15e32b25a3": {
    "class": "promise",
@@ -5610,6 +6049,16 @@
    ],
    "text": "A replacement resolves the saved role and exact panel arm like any other spawn."
   },
+  "402577e3e677": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-handoff-states-scope",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A pass covers the model or the bound, not the whole system."
+  },
   "407bad5d424f": {
    "class": "promise",
    "file": "03-understand.md",
@@ -5620,6 +6069,16 @@
    ],
    "text": "```text\n/recall my work on the virtualized list from yesterday, then read this bug report.\n```"
   },
+  "410f72dd5ea7": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "reply-says-inconclusive-when-check-cannot-run",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "If a check couldn't run, a good reply says \"inconclusive\"."
+  },
   "413c27bde05b": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -5628,6 +6087,16 @@
     "port"
    ],
    "text": "Worktrees cost disk and machine resources, so a laptop runs only a handful at once."
+  },
+  "41499c62c0ea": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "maintain-formal-verification-separates-drift-from-bugs",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It updates the verification from the code, reruns it, shows that each updated check can still fail, and tells you whether each failure is drift in the verification or a bug in the code."
   },
   "4201dba7448d": {
    "class": "substituted",
@@ -5824,6 +6293,15 @@
    ],
    "text": "When you step away, say what done means and go:"
   },
+  "46b57e232284": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "You plan through code."
+  },
   "475ad2115fdd": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -5841,15 +6319,6 @@
     "port"
    ],
    "text": "**Enumerating skills in the prompt.** \"use /how then /architect then /arena\" reorders steps the playbook already sequences. State the goal and constraints. Name a skill only to override a default."
-  },
-  "477cfecf10e4": {
-   "class": "context",
-   "file": "09-make-it-yours.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "One special case has its own generator."
   },
   "4787376eac89": {
    "class": "promise",
@@ -5872,6 +6341,27 @@
     "upstream"
    ],
    "text": "It writes `~/.cursor/rules/pstack-models.mdc`, a small rule every pstack skill reads."
+  },
+  "48408402a693": {
+   "class": "substituted",
+   "file": "02-poteto-mode.md",
+   "ported_as": [
+    "4c6ed58008f7"
+   ],
+   "promise": "playbook-directory-complete",
+   "sources": [
+    "upstream"
+   ],
+   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
+  },
+  "48c3cc0d3e26": {
+   "class": "context",
+   "file": "03-understand.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It turns the explanation into an argument you can test instead of a tour."
   },
   "4956bb79609d": {
    "class": "promise",
@@ -6000,6 +6490,15 @@
     "port"
    ],
    "text": "In the 2026-10-03 run of the guide-promise evals, Hermes and Grok Build loaded such a skill without being asked."
+  },
+  "4c6ed58008f7": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "playbook-directory-complete",
+   "sources": [
+    "port"
+   ],
+   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
   },
   "4d1f50b5fd58": {
    "class": "context",
@@ -6148,6 +6647,15 @@
    ],
    "text": "Short works because the playbook holds the structure, and a Custom Mode keeps `/poteto-mode` in context on every turn."
   },
+  "54835873f9fc": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A verification skill proves the paths you drive."
+  },
   "54955dc0e6fb": {
    "class": "substituted",
    "file": "04-design.md",
@@ -6265,6 +6773,15 @@
    ],
    "text": "The verification principles define what counts as proof:"
   },
+  "5789b541fe5c": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Merges and refactors that skip the skill can leave the check passing on a description of code that's gone."
+  },
   "57b99aecd4cc": {
    "class": "context",
    "file": "03-understand.md",
@@ -6334,6 +6851,15 @@
    ],
    "text": "A plateau means pivot, not stop, and the finish condition never quietly relaxes to declare victory."
   },
+  "5aa3474c0fa3": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A skill that checks a property of your code with a model checker, a proof, or another verifier is a formal verification skill, so use [`/create-formal-verification-skill`](../../skills/create-formal-verification-skill/SKILL.md) and [`/maintain-formal-verification-skill`](../../skills/maintain-formal-verification-skill/SKILL.md)."
+  },
   "5b1ba247b639": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -6366,18 +6892,6 @@
     "port"
    ],
    "text": "```text\n/poteto-mode do it\n```"
-  },
-  "5c7416e2a55b": {
-   "class": "substituted",
-   "file": "10-recipes-and-pitfalls.md",
-   "ported_as": [
-    "c7ffc28fd05e"
-   ],
-   "promise": "worktree-request-honored",
-   "sources": [
-    "upstream"
-   ],
-   "text": "**Parallel agents in one worktree.** They overwrite each other and the diff becomes archaeology. Run them as cloud agents, or say \"own worktree per attempt\"."
   },
   "5c8e0e166789": {
    "class": "substituted",
@@ -6454,6 +6968,16 @@
     "port"
    ],
    "text": "Each task in its own branch and worktree means no agent stomps another's files."
+  },
+  "5ee63b2ade56": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-picks-target-from-code",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It picks the strongest target, not the easiest to verify."
   },
   "5f2032eaa98c": {
    "class": "promise",
@@ -6614,6 +7138,16 @@
    ],
    "text": "Setup also checks whether Claude Code's task tools and Codex's plan tool are on, because `/poteto-mode` keeps its worklist in them."
   },
+  "62579aaa8e37": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-question-picks-tool",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Whether events can happen in a bad order suits a model checker over a small model of the design, and TLA+ is the default for that in any language."
+  },
   "6267b9c3cbea": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -6641,6 +7175,15 @@
     "port"
    ],
    "text": "The reply lists each class with its evidence, the level chosen, and why a higher level didn't work."
+  },
+  "62d6c74b247f": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Apps change, and feature maps go out of date."
   },
   "62fb460ef013": {
    "class": "promise",
@@ -6736,6 +7279,15 @@
    ],
    "text": "Everything else goes."
   },
+  "65c9f8a98f22": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A confident reply without evidence is a warning sign."
+  },
   "65dbc8899604": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -6762,6 +7314,16 @@
     "port"
    ],
    "text": "You describe the API to a hypothetical user and work back to the implementation."
+  },
+  "664cd8b5d48f": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-records-sync-commit",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The skill also records which code each check covers and the commit where the check last matched it."
   },
   "668f09989d76": {
    "class": "promise",
@@ -6923,16 +7485,6 @@
    ],
    "text": "If it finds neither, it offers once to generate one with [`/create-verification-skill`](../../skills/create-verification-skill/SKILL.md)."
   },
-  "6a065cfac703": {
-   "class": "promise",
-   "file": "README.md",
-   "promise": "guide-named-skills-exist",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Verify and ship](./06-verify-and-ship.md). Prove behavior on the real app, vet numbers with `/benchmark-checklist`, then open a focused PR and drive it to merged."
-  },
   "6a187e8ca8e4": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -6942,15 +7494,14 @@
    ],
    "text": "Commit it, so every person and every agent on the team drives the app the same way."
   },
-  "6a5d1b446bb7": {
-   "class": "promise",
-   "file": "08-principles.md",
-   "promise": "principle-leaf-summaries-match",
+  "6a1cc79ebee6": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
    "sources": [
     "upstream",
     "port"
    ],
-   "text": "[Test Behavior, Not Implementation](../../skills/principle-test-behavior-not-implementation/SKILL.md) calls the code the way its users do and asserts a literal expected value, and deletes a test that would still pass if every imported function returned `undefined`."
+   "text": "It costs little next to a design that is expensive to reverse."
   },
   "6a76a533a79f": {
    "class": "context",
@@ -6960,6 +7511,16 @@
     "port"
    ],
    "text": "Before you report or act on a number, type:"
+  },
+  "6ae1e6114f67": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-reports-findings-unchanged",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Product code doesn't change unless you ask."
   },
   "6b1fbea19d37": {
    "class": "substituted",
@@ -6982,6 +7543,25 @@
     "port"
    ],
    "text": "[`/swarm`](../../skills/swarm/SKILL.md) fans N workers across independent slices, coverage matrices, gauntlet lanes, exploration partitions, or declared race arms."
+  },
+  "6becdca4aa3d": {
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-leaf-summaries-match",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Attack the Premise](../../skills/principle-attack-the-premise/SKILL.md) writes down the premise that two or more failed fixes shared and tests it directly before the next fix."
+  },
+  "6c303f8ac2d4": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Then it does the work."
   },
   "6c41f8249bef": {
    "class": "promise",
@@ -7022,15 +7602,6 @@
     "port"
    ],
    "text": "```text\n/poteto-mode take over this branch. read the decision log, figure out what's done, and continue from there. don't redo finished work.\n```"
-  },
-  "6d6a01ec8b45": {
-   "class": "context",
-   "file": "08-principles.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "A principle citation with no decision behind it is the tell that it name-dropped instead of applying."
   },
   "6d7fdb4a0edf": {
    "class": "context",
@@ -7314,18 +7885,6 @@
    ],
    "text": "So before review, hand them to fresh eyes:"
   },
-  "73b16a02377c": {
-   "class": "substituted",
-   "file": "06-verify-and-ship.md",
-   "ported_as": [
-    "20c9ddaeffba"
-   ],
-   "promise": "babysit-blocker-order",
-   "sources": [
-    "upstream"
-   ],
-   "text": "Babysit watches the PR with a bundled watcher and takes blockers in order: conflicts, then review threads, then CI."
-  },
   "7464a664deff": {
    "class": "context",
    "file": "07-overnight.md",
@@ -7423,25 +7982,6 @@
     "port"
    ],
    "text": "`/deslop` cleans slop out of the code, `/unslop` cleans it out of prose, and `/no-comments` hands the comments to a reviewer who didn't write them."
-  },
-  "77a3cc02293e": {
-   "class": "cursor-only",
-   "file": "01-setup.md",
-   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
-   "sources": [
-    "upstream"
-   ],
-   "text": "That makes it a [Custom Mode](https://cursor.com/docs/skills), which stays in context on every turn until you exit it."
-  },
-  "77b5baffabb8": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "blast-radius-proves-one-fact-by-running-code",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It picks the one fact the change is safe because of and proves it by running code instead of writing an essay about it."
   },
   "77f61819ef39": {
    "also": [
@@ -7647,15 +8187,6 @@
    ],
    "text": "This page covers generating a personal mode, capturing lessons from a session, fixing the repo so agents stop repeating mistakes, authoring a focused skill, and testing a skill change before you trust it."
   },
-  "7d9c71e0c978": {
-   "class": "context",
-   "file": "03-understand.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[`/why`](../../skills/why/SKILL.md) works like a detective on a cold case."
-  },
   "7de17dd615f6": {
    "class": "substituted",
    "file": "10-recipes-and-pitfalls.md",
@@ -7691,7 +8222,6 @@
    "file": "07-overnight.md",
    "promise": "autopilot-full-verifier-round-per-push",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "A swarm of fresh verifiers starts a round at the owner's code-ready head and again at every later push that changes the patch."
@@ -7872,6 +8402,25 @@
    ],
    "text": "[Minimize Reader Load](../../skills/principle-minimize-reader-load/SKILL.md) collapses layers and hidden state a reader must hold in their head."
   },
+  "845818c61be6": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Two special cases have their own generators."
+  },
+  "8458de4defc0": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-shows-property-can-fail",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It verifies one property and shows that property failing on a broken variant of the code, because a check you've never seen fail proves nothing."
+  },
   "84c07c7af55d": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -7914,6 +8463,15 @@
    ],
    "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs `/deslop` on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
   },
+  "8616da1694e0": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When you're unsure whether a task is aimed right, put [`/sharpen`](../../skills/sharpen/SKILL.md) in front of it:"
+  },
   "8626c5a5c0eb": {
    "class": "promise",
    "file": "04-design.md",
@@ -7943,6 +8501,24 @@
     "port"
    ],
    "text": "[Migrate Callers Then Delete Legacy APIs](../../skills/principle-migrate-callers-then-delete-legacy-apis/SKILL.md) migrates and deletes in one wave."
+  },
+  "87366e50bab8": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/create-formal-verification-skill the job lease and retry logic. a job must never run twice at once.\n```"
+  },
+  "8758480a2794": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The playbooks, routing, and model roles underneath it work just as well with yours."
   },
   "87bfddd41221": {
    "class": "promise",
@@ -8004,15 +8580,15 @@
    ],
    "text": "Watch the todo list fill with the Bug fix steps."
   },
-  "895f102b3049": {
+  "8985e1b3902e": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
-   "promise": "reply-says-inconclusive-when-check-cannot-run",
+   "promise": "formal-verification-question-picks-tool",
    "sources": [
     "upstream",
     "port"
    ],
-   "text": "If a check couldn't run, a good reply says \"inconclusive\", and you should treat a confident reply without evidence as a red flag."
+   "text": "Whether the code behaves for every input suits a verifier that runs on the code."
   },
   "89917fcc6c68": {
    "class": "promise",
@@ -8042,6 +8618,15 @@
    ],
    "text": "After that, each page stands alone."
   },
+  "8a3f095746ea": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "This page covers stating a finish condition, vetting a measured number, generating a verification skill for your app, formally verifying a property tests rarely reach, opening the PR, and driving it to merged."
+  },
   "8a52a937d01b": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -8050,6 +8635,15 @@
     "port"
    ],
    "text": "A useful prompt carries up to five things, and each one fits in a sentence:"
+  },
+  "8a6bce0af996": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/create-formal-verification-skill\n```"
   },
   "8a8b5f7a268a": {
    "class": "promise",
@@ -8069,6 +8663,16 @@
     "port"
    ],
    "text": "[What goes in a prompt](./02-poteto-mode.md#what-goes-in-a-prompt) handles the first."
+  },
+  "8b4a44ace80c": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "in-your-own-words-restates-goal",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It restates what the agent thinks your goals are and what problem you're trying to solve."
   },
   "8b7306579a2e": {
    "class": "context",
@@ -8106,18 +8710,6 @@
     "port"
    ],
    "text": "Prototypes are planning with code."
-  },
-  "8cbebd3d2bdc": {
-   "class": "substituted",
-   "file": "06-verify-and-ship.md",
-   "ported_as": [
-    "3df53e6ef1db"
-   ],
-   "promise": "verification-skill-has-five-sections",
-   "sources": [
-    "upstream"
-   ],
-   "text": "It writes `.cursor/skills/verify-<app>/`, agent-facing instructions with exact Launch, Doctor, Drive, Evidence, and Cleanup sections, plus a feature map under `features/` that indexes what the app does and what result proves each feature works."
   },
   "8d21cb86a7e2": {
    "class": "promise",
@@ -8217,16 +8809,6 @@
    ],
    "text": "```text\n/poteto-mode turn this design into a plan. small verifiable PRs, each with its own proof.\n```"
   },
-  "9013078fc52d": {
-   "class": "promise",
-   "file": "09-make-it-yours.md",
-   "promise": "automate-me-update-mode-mines-since-last-edit",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It keeps rules you haven't contradicted, revises the ones with new evidence, and adds sections only for genuinely new patterns."
-  },
   "905348f2b9c3": {
    "class": "promise",
    "file": "08-principles.md",
@@ -8255,16 +8837,6 @@
     "port"
    ],
    "text": "A read-only judge, on a different model family when your configuration allows one, scores every candidate against a rubric."
-  },
-  "908dc95be9a4": {
-   "class": "promise",
-   "file": "03-understand.md",
-   "promise": "why-then-how-composition",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "`do why first then how` is a perfectly good prompt when you suspect the history explains the mess."
   },
   "908e3fe3345b": {
    "class": "context",
@@ -8324,6 +8896,16 @@
    ],
    "text": "If you want to see the design first, say so:"
   },
+  "91f84887ce71": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "ketchup-lists-every-waiting-call",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`/ketchup`](../../skills/ketchup/SKILL.md) tells you in plain words what changed since your last message, then lists each call waiting on you with its pick, evidence, and risk."
+  },
   "920de43523c7": {
    "class": "context",
    "file": "03-understand.md",
@@ -8350,6 +8932,16 @@
     "port"
    ],
    "text": "Error messages that say what to do instead."
+  },
+  "924614a9e8a9": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-frames-task-before-work",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It drops constraints that don't serve the goal as readily as it adds ones that do, leaves your choices open, and keeps one outside check that the result is right."
   },
   "925332aad252": {
    "class": "promise",
@@ -8379,14 +8971,15 @@
    ],
    "text": "Either way, the comment comes out."
   },
-  "94d97f7f91ff": {
-   "class": "context",
-   "file": "10-recipes-and-pitfalls.md",
+  "951f7a84026f": {
+   "class": "promise",
+   "file": "03-understand.md",
+   "promise": "why-queries-evidence-categories-in-parallel",
    "sources": [
     "upstream",
     "port"
    ],
-   "text": "Cheap insurance before a costly commitment."
+   "text": "[`/why`](../../skills/why/SKILL.md) starts from source control, then queries whatever evidence categories your MCPs expose, such as the issue tracker, long-form docs, team chat, observability, error tracking, and analytics, all in parallel."
   },
   "95b16a88e71c": {
    "class": "context",
@@ -8523,6 +9116,15 @@
    ],
    "text": "\"don't change any code yet\" pins this one to Investigation."
   },
+  "9acd67f502da": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A property that must hold at every size can need a proof."
+  },
   "9ae06e8742f5": {
    "class": "context",
    "file": "08-principles.md",
@@ -8654,6 +9256,15 @@
    ],
    "text": "If you disagree with the judge, suspect the rubric before you suspect your judgment."
   },
+  "a06d5e8a2b3f": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Tests rarely reach those cases."
+  },
   "a0d423d76423": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -8778,6 +9389,15 @@
    ],
    "text": "By default it proceeds straight from the synthesized design into implementation."
   },
+  "a44ee2d9a414": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/sharpen write a migration guide for the v2 config format.\n```"
+  },
   "a476417196ed": {
    "class": "context",
    "file": "04-design.md",
@@ -8863,6 +9483,15 @@
    ],
    "text": "Writing the tutorial first forces the caller's view."
   },
+  "a6de0dc6de93": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A perf prompt states the measurement, not an impression:"
+  },
   "a710322dd179": {
    "class": "promise",
    "file": "README.md",
@@ -8938,6 +9567,15 @@
    ],
    "text": "The author result decides whether independent review is required."
   },
+  "a88923919b5c": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Verify and ship](./06-verify-and-ship.md#prove-a-property-with-a-formal-verification-skill) covers both kinds."
+  },
   "a8b6ef1aca13": {
    "class": "promise",
    "file": "03-understand.md",
@@ -8986,6 +9624,15 @@
     "port"
    ],
    "text": "Prompt plainly, watch where agents fail, and add a skill or a check when the same failure shows up twice."
+  },
+  "a9e537532361": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Cursor's Claude Code plugin install and its adapter page; the port installs natively through `npx skills`, and the pstack-harness skill maps harness names (see PORTING.md substitution map)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The [Claude Code adapter](../harness/claude-code.md) covers the other differences."
   },
   "a9fa7a273e4d": {
    "class": "context",
@@ -9042,6 +9689,15 @@
     "port"
    ],
    "text": "It writes `~/.agents/pstack-models.md`, a small file that every pstack spawn reads through `check-models-config.py --resolve`."
+  },
+  "aabe071fae02": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Prototypes answer the open questions, a README or tutorial sets the target, and the written plan comes last."
   },
   "aafdc404d460": {
    "class": "substituted",
@@ -9122,6 +9778,18 @@
     "port"
    ],
    "text": "**Pitfall:** a duration is not a finish condition."
+  },
+  "ac91aa531cc3": {
+   "class": "substituted",
+   "file": "06-verify-and-ship.md",
+   "ported_as": [
+    "aec8ee53664c"
+   ],
+   "promise": "babysit-blocker-order",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Babysit watches the PR, with a bundled watcher on GitHub or the Origin CLI when it's available, and takes blockers in order: conflicts, then review threads, then CI."
   },
   "aca668307934": {
    "class": "promise",
@@ -9223,6 +9891,15 @@
    ],
    "text": "The other reproduces confirmed bugs and may prepare a small draft fix."
   },
+  "aec8ee53664c": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "babysit-blocker-order",
+   "sources": [
+    "port"
+   ],
+   "text": "Babysit watches the PR, with a bundled watcher on GitHub or the Origin CLI when it's available, and takes blockers in order: conflicts, then review threads and bot findings that live only in a review body, then CI."
+  },
   "aee91387e5dc": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -9303,6 +9980,16 @@
     "port"
    ],
    "text": "```text\n/documentation-impact update the docs affected by this change.\n/documentation-impact review this change's documentation coverage without editing files.\n```"
+  },
+  "b0b374dd07b1": {
+   "class": "promise",
+   "file": "09-make-it-yours.md",
+   "promise": "automate-me-update-mode-mines-since-last-edit",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It keeps rules you haven't contradicted, revises the ones with new evidence, and adds sections only for new patterns."
   },
   "b0dea656b515": {
    "also": [
@@ -9517,16 +10204,6 @@
    ],
    "text": "You say what's wrong or what you want, plus anything you already know that saves the agent time:"
   },
-  "b728f7b96187": {
-   "class": "promise",
-   "file": "09-make-it-yours.md",
-   "promise": "technical-writing-picks-mode-then-sentences",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[`/technical-writing`](../../skills/technical-writing/SKILL.md) applies a layered standard with one goal, prose a tired engineer understands on the first read."
-  },
   "b7618cfbba23": {
    "class": "promise",
    "file": "01-setup.md",
@@ -9554,6 +10231,15 @@
     "port"
    ],
    "text": "Two rules keep such a line trustworthy:"
+  },
+  "b7f9f1de1bf1": {
+   "class": "context",
+   "file": "09-make-it-yours.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Its goal is prose that a tired engineer understands on the first read."
   },
   "b8135d3e2e47": {
    "class": "context",
@@ -9602,6 +10288,15 @@
     "port"
    ],
    "text": "A refactoring prompt pins behavior before structure moves:"
+  },
+  "b98aee70b8a2": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/create-formal-verification-skill the retry queue. a message must never be delivered twice.\n```"
   },
   "b9b5f702ea91": {
    "class": "promise",
@@ -9673,6 +10368,15 @@
    ],
    "text": "[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex."
   },
+  "bb913c1e188e": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/sharpen write the onboarding doc for the new billing service.\n```"
+  },
   "bb9e1cde10b8": {
    "class": "context",
    "file": "07-overnight.md",
@@ -9699,6 +10403,15 @@
     "port"
    ],
    "text": "[`typescript-best-practices`](../../skills/typescript-best-practices/SKILL.md) turns the type-system principles into concrete rules: discriminated unions, `unknown` at boundaries, exhaustive variants, schema-derived types."
+  },
+  "bc40a60fcfe4": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Say yes when your code has concurrency, retries, a state machine, or a parser, where a bug is costly and tests rarely reach the case that breaks."
   },
   "bc73600a7cf3": {
    "class": "promise",
@@ -9729,6 +10442,35 @@
    ],
    "text": "`/poteto-teach` blends both into one explanation."
   },
+  "be09c72d0285": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "verification-skill-proven-once",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Before handing it over, the generator proves the skill once end to end: launch, doctor check, drive one feature, capture evidence, clean up, then confirm the evidence survived the cleanup."
+  },
+  "be633b5a4c58": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Say what you observed, and let the playbook demand the evidence."
+  },
+  "be6aff1b9e95": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-picks-target-from-code",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`/create-formal-verification-skill`](../../skills/create-formal-verification-skill/SKILL.md) picks the target from the code: a promise the code makes, where a break harms users and tests rarely reach the case that breaks it."
+  },
   "be7859cebd16": {
    "class": "promise",
    "file": "02-poteto-mode.md",
@@ -9757,6 +10499,15 @@
    ],
    "text": "Short works because the mode is sticky and the playbook holds the structure."
   },
+  "bee1c6ad4572": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Cursor's Claude Code plugin install and its adapter page; the port installs natively through `npx skills`, and the pstack-harness skill maps harness names (see PORTING.md substitution map)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "In Claude Code, run `/plugin marketplace add cursor/plugins`, then `/plugin install pstack@cursor-plugins`."
+  },
   "beedbc7a45a7": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -9764,15 +10515,6 @@
     "port"
    ],
    "text": "You can request either mode directly:"
-  },
-  "bf190783a3b5": {
-   "class": "context",
-   "file": "03-understand.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It turns the explanation into an argument you can poke at instead of a tour."
   },
   "c0288e8d1b96": {
    "class": "context",
@@ -9802,15 +10544,14 @@
    ],
    "text": "[Prove It Works](../../skills/principle-prove-it-works/SKILL.md) verifies the real artifact, not a proxy."
   },
-  "c1b9221febf1": {
-   "class": "promise",
-   "file": "08-principles.md",
-   "promise": "principle-leaf-summaries-match",
+  "c1d7e8311638": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Custom Modes, the slash-menu Option+Enter gesture, and the Agents Window are Cursor features; the port's harnesses keep an invoked skill in the conversation, so the port keeps `/poteto-mode` is sticky (promise poteto-mode-sticky)",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
-   "text": "[Attack the Premise](../../skills/principle-attack-the-premise/SKILL.md) questions the premise that two or more failed fixes shared, after a census of which actors hold the imbalance."
+   "text": "That makes it a [Custom Mode](https://cursor.com/docs/skills#using-a-skill-as-a-custom-mode), which stays in context on every turn until you exit it."
   },
   "c1fab5803dd8": {
    "class": "context",
@@ -9975,6 +10716,15 @@
    ],
    "text": "So candidate agents get an organic-looking task in sanitized directories, never the words \"eval\" or \"candidate\", and never each other's existence."
   },
+  "c52d250f1580": {
+   "class": "context",
+   "file": "08-principles.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A principle citation with no decision behind it means the agent named the rule without applying it."
+  },
   "c54f818d0cc4": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -10025,15 +10775,6 @@
     "port"
    ],
    "text": "```text\n/poteto-mode the export writes duplicate rows when a retry lands mid-run. repro first, then fix and verify.\n```"
-  },
-  "c6b67403e946": {
-   "class": "context",
-   "file": "06-verify-and-ship.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Apps change and feature maps rot."
   },
   "c6b78b524590": {
    "class": "context",
@@ -10091,15 +10832,6 @@
    ],
    "text": "From your project root, run:"
   },
-  "c7ffc28fd05e": {
-   "class": "promise",
-   "file": "10-recipes-and-pitfalls.md",
-   "promise": "worktree-request-honored",
-   "sources": [
-    "port"
-   ],
-   "text": "**Parallel agents in one worktree.** They overwrite each other and the diff becomes archaeology. Say \"own worktree per attempt\" and the isolation is free."
-  },
   "c8066657f094": {
    "class": "context",
    "file": "07-overnight.md",
@@ -10127,15 +10859,6 @@
     "port"
    ],
    "text": "For a big subsystem it fans out two to four read-only explorers first."
-  },
-  "c88df1cdc0bf": {
-   "class": "context",
-   "file": "04-design.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "You plan through code: prototypes answer the open questions, a README or tutorial sets the target, and the written plan comes last."
   },
   "c8ba07384c51": {
    "class": "promise",
@@ -10499,18 +11222,6 @@
    ],
    "text": "Next: [Route work through `/poteto-mode`](./02-poteto-mode.md)."
   },
-  "d2429f112fa0": {
-   "class": "substituted",
-   "file": "02-poteto-mode.md",
-   "ported_as": [
-    "fc5a5e4edfd3"
-   ],
-   "promise": "playbook-directory-complete",
-   "sources": [
-    "upstream"
-   ],
-   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, visual parity, authoring and evaluating skills, autonomous runs, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
-  },
   "d2eca2837ba1": {
    "class": "context",
    "file": "04-design.md",
@@ -10636,6 +11347,16 @@
     "port"
    ],
    "text": "If you run several agents against one repository, they will fight over the working tree."
+  },
+  "d7bf918439fb": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-reports-findings-unchanged",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When the current code already breaks the property, you get the counterexample as a short sequence of steps in your code's terms."
   },
   "d7c87d8e96e2": {
    "class": "promise",
@@ -10876,6 +11597,15 @@
    ],
    "text": "One weird session is an anecdote, not a rule."
   },
+  "decaadc93e36": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "After them, run [`/maintain-formal-verification-skill`](../../skills/maintain-formal-verification-skill/SKILL.md)."
+  },
   "dee8960c60b1": {
    "class": "promise",
    "file": "02-poteto-mode.md",
@@ -10925,6 +11655,16 @@
    ],
    "text": "It drafts `.cursor/skills/<your-name>-mode/SKILL.md` through Cursor's built-in `create-skill` flow, runs the draft through [`/unslop`](../../skills/unslop/SKILL.md), and opens a PR from a worktree so you review it like any other change."
   },
+  "dfbb2898f676": {
+   "class": "promise",
+   "file": "README.md",
+   "promise": "guide-named-skills-exist",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[Verify and ship](./06-verify-and-ship.md). Prove behavior on the real app, formally verify what tests rarely reach, vet numbers with `/benchmark-checklist`, then open a focused PR and drive it to merged."
+  },
   "e006725fda01": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -10944,14 +11684,15 @@
    ],
    "text": "[`/correct`](../../skills/correct/SKILL.md) does the work:"
   },
-  "e0527e4478a0": {
-   "class": "context",
-   "file": "05-build-and-clean.md",
+  "e0a138206f07": {
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-leaf-summaries-match",
    "sources": [
     "upstream",
     "port"
    ],
-   "text": "A perf prompt states the measurement, not a vibe:"
+   "text": "[Test Behavior, Not Implementation](../../skills/principle-test-behavior-not-implementation/SKILL.md) asserts what the code's users can observe, so a test fails when that behavior breaks and survives a change to the internals."
   },
   "e0acb193f9ba": {
    "class": "promise",
@@ -10971,6 +11712,16 @@
     "port"
    ],
    "text": "**A vague finish condition.** \"make it better\" gives `/loop` nothing to check. Give a command or artifact that can pass or fail."
+  },
+  "e11083330ac3": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "ketchup-lists-every-waiting-call",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Then it lists each call waiting on you, such as a merge, an approval, or a choice between options, with its pick, the evidence, and the risk, so you can decide from the reply alone."
   },
   "e17f23323789": {
    "class": "promise",
@@ -11103,6 +11854,15 @@
    ],
    "text": "\"fresh worktree off `<base>`\" keeps the run from colliding with anything else you have open."
   },
+  "e4b19282e1f8": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "worktree-request-honored",
+   "sources": [
+    "port"
+   ],
+   "text": "**Parallel agents in one worktree.** They overwrite each other, and nobody can tell which agent changed what. Say \"own worktree per attempt\" and the isolation is free."
+  },
   "e4bd3921144b": {
    "class": "promise",
    "file": "04-design.md",
@@ -11121,6 +11881,16 @@
     "port"
    ],
    "text": "Asking \"what data you used\" makes the agent separate its evidence from its guesses."
+  },
+  "e4d6e3e89a26": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-offers-formal-verification-skill-once",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Then setup offers once to generate a formal verification skill with [`/create-formal-verification-skill`](../../skills/create-formal-verification-skill/SKILL.md), unless the project already has one."
   },
   "e4f2a183b2d5": {
    "class": "context",
@@ -11210,6 +11980,16 @@
    ],
    "text": "It reconstructs the branch state and decisions, names the resume point, and verifies inherited claims against the original goal instead of re-deriving everything from scratch."
   },
+  "e7dfa803dbe1": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-question-picks-tool",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The agent tells you which tool it chose and why."
+  },
   "e84503b68db7": {
    "class": "context",
    "file": "03-understand.md",
@@ -11271,6 +12051,18 @@
    ],
    "text": "That's the guide."
   },
+  "e97938698cf8": {
+   "also": [
+    "verification-skill-written-to-agents-skills"
+   ],
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "verification-skill-has-five-sections",
+   "sources": [
+    "port"
+   ],
+   "text": "It writes `.agents/skills/verify-<app>/`, agent-facing instructions with exact Launch, Doctor, Drive, Evidence, and Cleanup sections, a Helpers section for any script it ships, plus a feature map under `features/` that indexes what the app does and what result proves each feature works."
+  },
   "e9b9a90fb70c": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -11325,6 +12117,16 @@
    ],
    "text": "Match the check to the change:"
   },
+  "ea8c91375715": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-skill-proven-on-scratch-break",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Before handing it over, the generator follows that skill once on a scratch change that breaks the property, and the check must catch it."
+  },
   "eaa8e814e68e": {
    "class": "promise",
    "file": "08-principles.md",
@@ -11371,6 +12173,16 @@
     "port"
    ],
    "text": "Let prototypes settle the questions, then review what got built."
+  },
+  "ec7ee7c3cbff": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "blast-radius-proves-one-fact-by-running-code",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It finds the one fact that makes the change safe and proves that fact by running code, not by arguing for it."
   },
   "ec95fa153bb0": {
    "class": "context",
@@ -11444,6 +12256,18 @@
    ],
    "text": "```text\nask /arena for a second opinion on this thread and our approach\n```"
   },
+  "ee172734355c": {
+   "class": "substituted",
+   "file": "07-overnight.md",
+   "ported_as": [
+    "7e501870682f"
+   ],
+   "promise": "autopilot-full-verifier-round-per-push",
+   "sources": [
+    "upstream"
+   ],
+   "text": "A later rebase or minor fix gets one fresh verifier, and only new behavior or a large new diff calls the full swarm again."
+  },
   "ee377c3a6df0": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -11510,6 +12334,16 @@
     "port"
    ],
    "text": "The plan is the deliverable, and it names the playbook that will execute it."
+  },
+  "f0cf963fd579": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "formal-verification-question-picks-tool",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "If no verifier runs on your language, the agent says so and tests the real code with generated inputs, not a hand-written model of the function."
   },
   "f0ff35a8de8b": {
    "class": "context",
@@ -11629,6 +12463,18 @@
    ],
    "text": "```text\n/poteto-mode full autopilot on this queue. each item is independent. i want them merged by morning.\n```"
   },
+  "f3aca1946d23": {
+   "class": "substituted",
+   "file": "06-verify-and-ship.md",
+   "ported_as": [
+    "e97938698cf8"
+   ],
+   "promise": "verification-skill-has-five-sections",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It writes `.cursor/skills/verify-<app>/`, agent-facing instructions with exact Launch, Doctor, Drive, Evidence, and Cleanup sections, a Helpers section for any script it ships, plus a feature map under `features/` that indexes what the app does and what result proves each feature works."
+  },
   "f3af0d34d7cb": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -11679,6 +12525,15 @@
    ],
    "text": "[Set up pstack](./01-setup.md#run-your-first-task) shows how to start one."
   },
+  "f54e531ee376": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Some bugs live on paths nobody drives: two retries that overlap, a lock that expires mid-write, a state change that arrives out of order."
+  },
   "f6c7ea9e9a43": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -11688,6 +12543,18 @@
     "port"
    ],
    "text": "The skill ships a [worked feature-map example](../../skills/create-verification-skill/references/feature-map-example/) with a README index and one file per feature using the four required H2s."
+  },
+  "f70288780712": {
+   "class": "substituted",
+   "file": "10-recipes-and-pitfalls.md",
+   "ported_as": [
+    "e4b19282e1f8"
+   ],
+   "promise": "worktree-request-honored",
+   "sources": [
+    "upstream"
+   ],
+   "text": "**Parallel agents in one worktree.** They overwrite each other, and nobody can tell which agent changed what. Run them as cloud agents, or say \"own worktree per attempt\"."
   },
   "f712b0e65103": {
    "also": [
@@ -11838,15 +12705,6 @@
     "port"
    ],
    "text": "```text\n/poteto-mode repro this with /verify-<app>. if it repros on main, fix it and show me a video as proof.\n```"
-  },
-  "fc5a5e4edfd3": {
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "playbook-directory-complete",
-   "sources": [
-    "port"
-   ],
-   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
   },
   "fc5e03a7e132": {
    "class": "context",

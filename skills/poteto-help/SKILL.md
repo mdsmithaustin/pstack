@@ -25,6 +25,7 @@ Check the state that changes the answer, and mention it only when it does:
 
 - No `~/.agents/pstack-models.md` and no workspace `.agents/pstack-models.md` means `/setup-pstack` hasn't run for this user, so every role uses its default model.
 - No `verify-*` skill or other app harness in the project means agents have no scripted way to drive the app. Mention `/create-verification-skill` when the question is about proving a change works.
+- No formal verification skill in the project means no property is checked past what tests reach. Mention `/create-formal-verification-skill` when the question is about a race, an invariant, or another case tests rarely hit. When one exists and the code it covers changed after the commit it records as last in sync, mention `/maintain-formal-verification-skill` if the question touches that code.
 
 When the models config is missing and it matters, ask whether the user wants to pick a model for each role and a reasoning budget now. It matters when the user is new, the question is about setup or cost, or the answer depends on which models run. Ask at most once per chat. If the need is also unclear, ask both questions together. Offer two choices:
 
@@ -34,7 +35,7 @@ When the models config is missing and it matters, ask whether the user wants to 
 ## Get set up
 
 1. Install from the project root with `npx skills add mdsmithaustin/pstack`, and pick the targets the user runs. `-g` installs user-level instead of per-project.
-2. Run [`/setup-pstack`](../setup-pstack/SKILL.md). It checks the bundled personas, asks for a reasoning budget, maps a model to each role, and writes `~/.agents/pstack-models.md`. Skills read that file the next time they run. On Claude Code it also sets the skill listing, so the skills that load only by name stop showing their descriptions.
+2. Run [`/setup-pstack`](../setup-pstack/SKILL.md). It checks the bundled personas, asks for a reasoning budget, maps a model to each role, and writes `~/.agents/pstack-models.md`. Skills read that file the next time they run. On Claude Code it also sets the skill listing, so the skills that load only by name stop showing their descriptions. Then it offers once each to generate a verification skill and a formal verification skill for the project, unless the project already has one.
 3. Start a real task with `/poteto-mode`, a goal, and a check that can pass or fail.
 
 The skills that load from the user's words are listed under Fix a run that went wrong. For invocation behavior and the Claude Code setup requirement, see the [README](https://github.com/mdsmithaustin/pstack/blob/main/README.md#get-started). [Guide page 1](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/01-setup.md) covers setup in detail. Offer to word their first prompt with them, per [`references/prompting.md`](references/prompting.md).
@@ -56,11 +57,13 @@ The default answer is `/poteto-mode`, which runs most of the others when its ste
 | The user wants to | Skill |
 |---|---|
 | Do any non-trivial task with rigor | [`/poteto-mode`](../poteto-mode/SKILL.md) |
+| Check that the agent understood their goal and the problem before it starts | [`/in-your-own-words`](../in-your-own-words/SKILL.md) |
+| Aim a task higher before starting: more expert, more outcome-focused, not overspecified | [`/sharpen`](../sharpen/SKILL.md) |
 | Know how code works now, or where new code should live | [`/how`](../how/SKILL.md) |
 | Know why code is shaped this way, or where a number came from | [`/why`](../why/SKILL.md) |
 | Understand a change or subsystem, explained plainly | [`/poteto-teach`](../poteto-teach/SKILL.md) |
 | Catch up on their own recent work on a topic | [`/recall`](../recall/SKILL.md) |
-| Catch up on everything in this chat since their last message, with enough context to decide each action item | [`/ketchup`](../ketchup/SKILL.md) |
+| Catch up on what changed in this chat since their last message, in plain words and small visuals, with every item waiting on them listed and decidable from the reply alone | [`/ketchup`](../ketchup/SKILL.md) |
 | Know what a small diff could break outside itself | [`/blast-radius`](../blast-radius/SKILL.md) |
 | Settle types and module shape before code that crosses a function boundary | [`/architect`](../architect/SKILL.md) |
 | Get several attempts at one brief, merged into the best one | [`/arena`](../arena/SKILL.md) |
@@ -76,6 +79,8 @@ The default answer is `/poteto-mode`, which runs most of the others when its ste
 | Hear the last reply again in plain words | [`/bro`](../bro/SKILL.md) |
 | Give agents a scripted way to drive the app and prove behavior | [`/create-verification-skill`](../create-verification-skill/SKILL.md) |
 | Bring a verification skill and its feature map back in line with the app | [`/maintain-verification-skill`](../maintain-verification-skill/SKILL.md) |
+| Formally verify a race, invariant, or other property that tests rarely reach | [`/create-formal-verification-skill`](../create-formal-verification-skill/SKILL.md) |
+| Bring a formal verification back in line after the code it covers changed, and learn whether a failure is drift or a bug | [`/maintain-formal-verification-skill`](../maintain-formal-verification-skill/SKILL.md) |
 | Write a test invocation, CI gate, or shell assertion that can't pass while measuring nothing | [`/verify-commands`](../verify-commands/SKILL.md) |
 | Find the edge cases and must-nevers in a spec before any code exists | [`/spec-probes`](../spec-probes/SKILL.md) |
 | Probe a running product, feature, or PR for unreported bugs | [`/runtime-probes`](../runtime-probes/SKILL.md) |
