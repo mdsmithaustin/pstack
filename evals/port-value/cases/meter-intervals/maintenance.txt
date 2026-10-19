@@ -1,0 +1,5 @@
+We now replace meters between readings. A reading may have an optional `replacement` object with nonnegative integer `old_final` and `new_initial` fields. Booleans are invalid. The object records the outgoing meter's final register and the incoming meter's starting register during the interval ending at that reading. Extra object fields are ignored.
+
+For an interval ending in a replacement reading, usage is `(old_final - previous.value) + (current.value - new_initial)`. Both parts must be nonnegative. Otherwise return exactly `{"error":"replacement_out_of_range"}` for the whole request. Do not apply the ordinary decrease error to this interval. The current value becomes the baseline for the next interval. Consecutive replacement intervals are allowed.
+
+A replacement on the chronologically first reading is invalid. A present replacement that is null, lacks either field, or has the wrong types is invalid. Return the existing invalid_request error for all malformed data before calculating any interval. Existing requests without replacements keep their exact behavior and output. Empty input still works. Update README.md with the replacement rules.

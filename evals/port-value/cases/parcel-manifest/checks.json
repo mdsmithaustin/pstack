@@ -1,0 +1,579 @@
+{
+  "initial": [
+    {
+      "name": "group by destination and service",
+      "input": {
+        "parcels": [
+          {
+            "id": "z",
+            "destination": "B",
+            "service": "air",
+            "grams": 2
+          },
+          {
+            "id": "b",
+            "destination": "A",
+            "service": "road",
+            "grams": 3
+          },
+          {
+            "id": "a",
+            "destination": "A",
+            "service": "air",
+            "grams": 4
+          },
+          {
+            "id": "c",
+            "destination": "A",
+            "service": "road",
+            "grams": 5
+          }
+        ]
+      },
+      "output": {
+        "consignments": [
+          {
+            "destination": "A",
+            "service": "air",
+            "parcels": [
+              "a"
+            ],
+            "grams": 4
+          },
+          {
+            "destination": "A",
+            "service": "road",
+            "parcels": [
+              "b",
+              "c"
+            ],
+            "grams": 8
+          },
+          {
+            "destination": "B",
+            "service": "air",
+            "parcels": [
+              "z"
+            ],
+            "grams": 2
+          }
+        ],
+        "total_grams": 14
+      }
+    },
+    {
+      "name": "empty manifest",
+      "input": {
+        "parcels": []
+      },
+      "output": {
+        "consignments": [],
+        "total_grams": 0
+      }
+    },
+    {
+      "name": "case sensitive literal groups",
+      "input": {
+        "parcels": [
+          {
+            "id": "a",
+            "destination": "a",
+            "service": "road",
+            "grams": 1
+          },
+          {
+            "id": "b",
+            "destination": "A",
+            "service": "road",
+            "grams": 2
+          },
+          {
+            "id": "c",
+            "destination": " A",
+            "service": "road",
+            "grams": 3
+          }
+        ]
+      },
+      "output": {
+        "consignments": [
+          {
+            "destination": " A",
+            "service": "road",
+            "parcels": [
+              "c"
+            ],
+            "grams": 3
+          },
+          {
+            "destination": "A",
+            "service": "road",
+            "parcels": [
+              "b"
+            ],
+            "grams": 2
+          },
+          {
+            "destination": "a",
+            "service": "road",
+            "parcels": [
+              "a"
+            ],
+            "grams": 1
+          }
+        ],
+        "total_grams": 6
+      }
+    },
+    {
+      "name": "integer precision and ignored fields",
+      "input": {
+        "extra": null,
+        "parcels": [
+          {
+            "id": "big",
+            "destination": "N",
+            "service": "sea",
+            "grams": 9007199254740993,
+            "extra": 4
+          }
+        ]
+      },
+      "output": {
+        "consignments": [
+          {
+            "destination": "N",
+            "service": "sea",
+            "parcels": [
+              "big"
+            ],
+            "grams": 9007199254740993
+          }
+        ],
+        "total_grams": 9007199254740993
+      }
+    },
+    {
+      "name": "duplicate IDs across groups",
+      "input": {
+        "parcels": [
+          {
+            "id": "x",
+            "destination": "A",
+            "service": "air",
+            "grams": 1
+          },
+          {
+            "id": "x",
+            "destination": "B",
+            "service": "road",
+            "grams": 2
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "boolean weight rejected",
+      "input": {
+        "parcels": [
+          {
+            "id": "x",
+            "destination": "A",
+            "service": "air",
+            "grams": true
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "zero weight rejected",
+      "input": {
+        "parcels": [
+          {
+            "id": "x",
+            "destination": "A",
+            "service": "air",
+            "grams": 0
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "negative weight rejected",
+      "input": {
+        "parcels": [
+          {
+            "id": "x",
+            "destination": "A",
+            "service": "air",
+            "grams": -1
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "fractional weight rejected",
+      "input": {
+        "parcels": [
+          {
+            "id": "x",
+            "destination": "A",
+            "service": "air",
+            "grams": 1.5
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "empty destination rejected",
+      "input": {
+        "parcels": [
+          {
+            "id": "x",
+            "destination": "",
+            "service": "air",
+            "grams": 1
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "missing service rejected",
+      "input": {
+        "parcels": [
+          {
+            "id": "x",
+            "destination": "A",
+            "grams": 1
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "wrong parcel container rejected",
+      "input": {
+        "parcels": {}
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "nonobject parcel rejected",
+      "input": {
+        "parcels": [
+          null
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "missing parcels rejected",
+      "input": {},
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "nonobject request rejected",
+      "input": [],
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "malformed JSON rejected",
+      "raw": "{",
+      "output": {
+        "error": "invalid_request"
+      }
+    }
+  ],
+  "maintenance": [
+    {
+      "name": "capacity equality stays together",
+      "input": {
+        "capacity_grams": 10,
+        "parcels": [
+          {
+            "id": "a",
+            "destination": "N",
+            "service": "road",
+            "grams": 4
+          },
+          {
+            "id": "b",
+            "destination": "N",
+            "service": "road",
+            "grams": 6
+          },
+          {
+            "id": "c",
+            "destination": "N",
+            "service": "road",
+            "grams": 1
+          }
+        ]
+      },
+      "output": {
+        "consignments": [
+          {
+            "destination": "N",
+            "service": "road",
+            "parcels": [
+              "a",
+              "b"
+            ],
+            "grams": 10
+          },
+          {
+            "destination": "N",
+            "service": "road",
+            "parcels": [
+              "c"
+            ],
+            "grams": 1
+          }
+        ],
+        "total_grams": 11
+      }
+    },
+    {
+      "name": "split preserves greedy input order",
+      "input": {
+        "capacity_grams": 10,
+        "parcels": [
+          {
+            "id": "a",
+            "destination": "N",
+            "service": "road",
+            "grams": 6
+          },
+          {
+            "id": "b",
+            "destination": "N",
+            "service": "road",
+            "grams": 6
+          },
+          {
+            "id": "c",
+            "destination": "N",
+            "service": "road",
+            "grams": 4
+          }
+        ]
+      },
+      "output": {
+        "consignments": [
+          {
+            "destination": "N",
+            "service": "road",
+            "parcels": [
+              "a"
+            ],
+            "grams": 6
+          },
+          {
+            "destination": "N",
+            "service": "road",
+            "parcels": [
+              "b",
+              "c"
+            ],
+            "grams": 10
+          }
+        ],
+        "total_grams": 16
+      }
+    },
+    {
+      "name": "split each sorted group separately",
+      "input": {
+        "capacity_grams": 5,
+        "parcels": [
+          {
+            "id": "c",
+            "destination": "Z",
+            "service": "air",
+            "grams": 3
+          },
+          {
+            "id": "b",
+            "destination": "A",
+            "service": "road",
+            "grams": 5
+          },
+          {
+            "id": "d",
+            "destination": "Z",
+            "service": "air",
+            "grams": 3
+          },
+          {
+            "id": "a",
+            "destination": "A",
+            "service": "air",
+            "grams": 1
+          }
+        ]
+      },
+      "output": {
+        "consignments": [
+          {
+            "destination": "A",
+            "service": "air",
+            "parcels": [
+              "a"
+            ],
+            "grams": 1
+          },
+          {
+            "destination": "A",
+            "service": "road",
+            "parcels": [
+              "b"
+            ],
+            "grams": 5
+          },
+          {
+            "destination": "Z",
+            "service": "air",
+            "parcels": [
+              "c"
+            ],
+            "grams": 3
+          },
+          {
+            "destination": "Z",
+            "service": "air",
+            "parcels": [
+              "d"
+            ],
+            "grams": 3
+          }
+        ],
+        "total_grams": 12
+      }
+    },
+    {
+      "name": "single overweight parcel fails atomically",
+      "input": {
+        "capacity_grams": 5,
+        "parcels": [
+          {
+            "id": "a",
+            "destination": "A",
+            "service": "road",
+            "grams": 1
+          },
+          {
+            "id": "b",
+            "destination": "Z",
+            "service": "road",
+            "grams": 6
+          }
+        ]
+      },
+      "output": {
+        "error": "parcel_too_heavy"
+      }
+    },
+    {
+      "name": "malformed data precedes overweight",
+      "input": {
+        "capacity_grams": 5,
+        "parcels": [
+          {
+            "id": "a",
+            "destination": "A",
+            "service": "road",
+            "grams": 6
+          },
+          {
+            "id": "b",
+            "destination": "Z",
+            "service": "road",
+            "grams": false
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "empty manifest with capacity",
+      "input": {
+        "capacity_grams": 1,
+        "parcels": []
+      },
+      "output": {
+        "consignments": [],
+        "total_grams": 0
+      }
+    },
+    {
+      "name": "null capacity invalid",
+      "input": {
+        "capacity_grams": null,
+        "parcels": []
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "boolean capacity invalid",
+      "input": {
+        "capacity_grams": true,
+        "parcels": []
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "zero capacity invalid",
+      "input": {
+        "capacity_grams": 0,
+        "parcels": []
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "fractional capacity invalid",
+      "input": {
+        "capacity_grams": 1.5,
+        "parcels": []
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    }
+  ]
+}

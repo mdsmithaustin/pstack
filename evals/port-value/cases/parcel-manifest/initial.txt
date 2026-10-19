@@ -1,0 +1,1 @@
+Our dispatch desk needs a parcel manifest command. Implement the behavior in README.md in app.py. Keep the JSON input and output usable with python app.py. The current file is a placeholder.

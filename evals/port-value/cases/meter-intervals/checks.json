@@ -1,0 +1,544 @@
+{
+  "initial": [
+    {
+      "name": "sort readings before intervals",
+      "input": {
+        "readings": [
+          {
+            "date": "2024-03-01",
+            "value": 21
+          },
+          {
+            "date": "2024-02-28",
+            "value": 10
+          },
+          {
+            "date": "2024-02-29",
+            "value": 14
+          }
+        ]
+      },
+      "output": {
+        "intervals": [
+          {
+            "start": "2024-02-28",
+            "end": "2024-02-29",
+            "usage": 4
+          },
+          {
+            "start": "2024-02-29",
+            "end": "2024-03-01",
+            "usage": 7
+          }
+        ],
+        "total_usage": 11
+      }
+    },
+    {
+      "name": "empty readings",
+      "input": {
+        "readings": []
+      },
+      "output": {
+        "intervals": [],
+        "total_usage": 0
+      }
+    },
+    {
+      "name": "single reading",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 50
+          }
+        ]
+      },
+      "output": {
+        "intervals": [],
+        "total_usage": 0
+      }
+    },
+    {
+      "name": "equal readings preserve zero interval",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 3
+          },
+          {
+            "date": "2025-01-02",
+            "value": 3
+          }
+        ]
+      },
+      "output": {
+        "intervals": [
+          {
+            "start": "2025-01-01",
+            "end": "2025-01-02",
+            "usage": 0
+          }
+        ],
+        "total_usage": 0
+      }
+    },
+    {
+      "name": "decrease fails atomically",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 10
+          },
+          {
+            "date": "2025-01-02",
+            "value": 12
+          },
+          {
+            "date": "2025-01-03",
+            "value": 11
+          }
+        ]
+      },
+      "output": {
+        "error": "reading_decreased"
+      }
+    },
+    {
+      "name": "integer precision and extra fields",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 9007199254740993,
+            "note": "x"
+          },
+          {
+            "date": "2025-01-02",
+            "value": 9007199254741000
+          }
+        ]
+      },
+      "output": {
+        "intervals": [
+          {
+            "start": "2025-01-01",
+            "end": "2025-01-02",
+            "usage": 7
+          }
+        ],
+        "total_usage": 7
+      }
+    },
+    {
+      "name": "duplicate dates invalid",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 1
+          },
+          {
+            "date": "2025-01-01",
+            "value": 2
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "invalid leap day",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-02-29",
+            "value": 1
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "noncanonical date invalid",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-1-01",
+            "value": 1
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "boolean value invalid",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": true
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "negative value invalid",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": -1
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "missing date invalid",
+      "input": {
+        "readings": [
+          {
+            "value": 1
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "invalid data precedes decrease",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 10
+          },
+          {
+            "date": "2025-01-02",
+            "value": 9
+          },
+          {
+            "date": "bad",
+            "value": 1
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "wrong readings container invalid",
+      "input": {
+        "readings": {}
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "nonobject reading invalid",
+      "input": {
+        "readings": [
+          null
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "missing readings invalid",
+      "input": {},
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "nonobject request invalid",
+      "input": null,
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "malformed JSON rejected",
+      "raw": "{",
+      "output": {
+        "error": "invalid_request"
+      }
+    }
+  ],
+  "maintenance": [
+    {
+      "name": "replacement adds both register segments",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 90
+          },
+          {
+            "date": "2025-01-10",
+            "value": 8,
+            "replacement": {
+              "old_final": 100,
+              "new_initial": 3
+            }
+          },
+          {
+            "date": "2025-01-20",
+            "value": 11
+          }
+        ]
+      },
+      "output": {
+        "intervals": [
+          {
+            "start": "2025-01-01",
+            "end": "2025-01-10",
+            "usage": 15
+          },
+          {
+            "start": "2025-01-10",
+            "end": "2025-01-20",
+            "usage": 3
+          }
+        ],
+        "total_usage": 18
+      }
+    },
+    {
+      "name": "replacement sorted before first-reading rule",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-03",
+            "value": 2,
+            "replacement": {
+              "old_final": 9,
+              "new_initial": 0
+            }
+          },
+          {
+            "date": "2025-01-01",
+            "value": 7
+          }
+        ]
+      },
+      "output": {
+        "intervals": [
+          {
+            "start": "2025-01-01",
+            "end": "2025-01-03",
+            "usage": 4
+          }
+        ],
+        "total_usage": 4
+      }
+    },
+    {
+      "name": "consecutive replacements and zero segments",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 9
+          },
+          {
+            "date": "2025-01-02",
+            "value": 2,
+            "replacement": {
+              "old_final": 9,
+              "new_initial": 2
+            }
+          },
+          {
+            "date": "2025-01-03",
+            "value": 4,
+            "replacement": {
+              "old_final": 5,
+              "new_initial": 1
+            }
+          }
+        ]
+      },
+      "output": {
+        "intervals": [
+          {
+            "start": "2025-01-01",
+            "end": "2025-01-02",
+            "usage": 0
+          },
+          {
+            "start": "2025-01-02",
+            "end": "2025-01-03",
+            "usage": 6
+          }
+        ],
+        "total_usage": 6
+      }
+    },
+    {
+      "name": "old register below prior value",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 9
+          },
+          {
+            "date": "2025-01-02",
+            "value": 2,
+            "replacement": {
+              "old_final": 8,
+              "new_initial": 0
+            }
+          }
+        ]
+      },
+      "output": {
+        "error": "replacement_out_of_range"
+      }
+    },
+    {
+      "name": "new register below baseline",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 9
+          },
+          {
+            "date": "2025-01-02",
+            "value": 2,
+            "replacement": {
+              "old_final": 10,
+              "new_initial": 3
+            }
+          }
+        ]
+      },
+      "output": {
+        "error": "replacement_out_of_range"
+      }
+    },
+    {
+      "name": "first chronological replacement invalid",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 9,
+            "replacement": {
+              "old_final": 9,
+              "new_initial": 0
+            }
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "null replacement invalid",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 1
+          },
+          {
+            "date": "2025-01-02",
+            "value": 2,
+            "replacement": null
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "missing replacement field invalid",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 1
+          },
+          {
+            "date": "2025-01-02",
+            "value": 2,
+            "replacement": {
+              "old_final": 2
+            }
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "boolean replacement register invalid",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 1
+          },
+          {
+            "date": "2025-01-02",
+            "value": 2,
+            "replacement": {
+              "old_final": true,
+              "new_initial": 0
+            }
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "malformed replacement precedes ordinary decrease",
+      "input": {
+        "readings": [
+          {
+            "date": "2025-01-01",
+            "value": 9
+          },
+          {
+            "date": "2025-01-02",
+            "value": 8
+          },
+          {
+            "date": "2025-01-03",
+            "value": 2,
+            "replacement": {}
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    }
+  ]
+}
