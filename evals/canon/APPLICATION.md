@@ -82,3 +82,13 @@ CANON_APPLICATION_TEMPLATE=docker.io/library/pstack-port-value-codex:0.162.0 CAN
 ```
 
 A nonzero exit, an `ERROR` or `FAIL`, or a skipped native delivery test means the integration check did not pass. Evidence includes inventories before mode restoration, native configuration responses, harvested snapshots, and the final sandbox listing. Only the check's named sandbox is removed.
+
+The separate development smoke below makes bounded native model calls on disposable synthetic files. It requires explicit authorization for model calls and a fresh evidence directory. It never uses held-out study cases. It tests completion, maintenance of the exact returned capture, bytes and deletions, raw usage, unknown served identity, separate native and total timing, native failure, timeout, and interruption.
+
+Guidance mutation and removal failure are injected after successful native completion in real sandbox attempts. The cleanup-failure check removes its owned sandbox after asserting that the public result withholds the capture.
+
+```sh
+CANON_APPLICATION_TEMPLATE=docker.io/library/pstack-port-value-codex:0.162.0 CANON_APPLICATION_EVIDENCE="$PWD/eval-runs/application-lifecycle-smoke" python3 evals/canon/smoke_application.py
+```
+
+A nonzero exit, an `ERROR` or `FAIL`, or a summary other than five executed tests means the smoke did not pass. Receipts and native stdout and stderr remain in the evidence directory. This checks execution behavior and supplies no evidence of skill efficacy or a held-out comparison result.
