@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import io
 import json
+import math
 from pathlib import Path, PurePosixPath
 import random
 import re
@@ -496,10 +497,12 @@ def validate_evidence(root: Path, plan: dict, cell: dict, stage: str, outcome: d
         if grade is not None or outcome.get("native_valid") is True:
             raise ValueError("native completion or grade lacks a retained capture")
         return
+    directory = root / "lineages" / cell["id"] / stage
     snapshot = snapshot_at(root, capture)
+    if snapshot.directory.resolve() != (directory / "application/capture").resolve():
+        raise ValueError("capture is outside the planned stage")
     with tempfile.TemporaryDirectory(prefix="port-evidence-") as temporary:
         replay(snapshot, Path(temporary) / "app")
-    directory = root / "lineages" / cell["id"] / stage
     receipt_path = relative(root, outcome["application_receipt"])
     if receipt_path != directory / "application/receipt.json":
         raise ValueError("application receipt is outside the planned stage")
@@ -514,14 +517,29 @@ def validate_evidence(root: Path, plan: dict, cell: dict, stage: str, outcome: d
     claim = read_json(directory / "claim.json")
     if claim["cell"] != cell["id"] or claim["stage"] != stage:
         raise ValueError("claim does not bind the planned cell and stage")
-    for key, value in (("project", claim["parent_sha256"]), ("skills", claim["guidance_sha256"]),
-                       ("prompt_sha256", claim["prompt_sha256"])):
-        if application["spec"][key] != value:
-            raise ValueError(f"application receipt {key} disagrees with claim")
+    case = next(case for case in plan["cases"] if case["id"] == cell["case"])
+    private = relative(root / "inputs", case["directory"])
+    parent_sha256 = case["project_snapshot"]["sha256"]
+    if stage == "maintenance":
+        initial = read_json(directory.parent / "initial/outcome.json")
+        if not isinstance(initial, dict) or not initial.get("capture"):
+            raise ValueError("maintenance parent lacks a retained initial capture")
+        validate_evidence(root, plan, cell, "initial", initial)
+        parent_sha256 = initial["capture"]["sha256"]
+    guidance_sha256 = None if cell["arm"] == "native" else plan["guidance_snapshots"][cell["arm"]]["sha256"]
+    prompt = relative(private, case[f"{stage}_request"]).read_text(encoding="utf-8")
+    for claim_key, spec_key, expected in (("parent_sha256", "project", parent_sha256),
+                                          ("guidance_sha256", "skills", guidance_sha256),
+                                          ("prompt_sha256", "prompt_sha256", digest(prompt.encode()))):
+        if claim[claim_key] != expected:
+            raise ValueError(f"claim {claim_key} disagrees with frozen stage inputs")
+        if application["spec"][spec_key] != expected:
+            raise ValueError(f"application receipt {spec_key} disagrees with frozen stage inputs")
+    if application["spec"]["runtime"] != plan["runtime"]:
+        raise ValueError("application receipt runtime disagrees with frozen plan")
     if grade is None:
         return
-    case = next(case for case in plan["cases"] if case["id"] == cell["case"])
-    oracle = relative(relative(root / "inputs", case["directory"]), case["oracle"])
+    oracle = relative(private, case["oracle"])
     if (grade["stage"] != stage or grade["capture_sha256"] != snapshot.sha256
             or grade["oracle_sha256"] != digest(oracle.read_bytes())):
         raise ValueError("grade stage, capture, or oracle binding mismatch")
@@ -552,14 +570,35 @@ def report(root: Path):
             path = directory / "outcome.json"
             try:
                 outcome = read_json(path) if path.exists() else {"state": "incomplete" if directory.exists() else "never_started"}
-                if not isinstance(outcome, dict) or not isinstance(outcome.get("state"), str):
-                    raise ValueError("outcome must be an object with a state")
+                if not isinstance(outcome, dict):
+                    raise ValueError("outcome must be an object")
             except (OSError, ValueError) as exc:
                 outcome = {"state": "incomplete", "evidence_error": f"unreadable outcome: {exc}"}
+            invalid = []
+            for field, fallback in (("state", "incomplete"), ("native_state", "unknown")):
+                if (field == "state" or field in outcome) and (not isinstance(outcome.get(field), str) or not outcome[field]):
+                    invalid.append(field)
+                    outcome[field] = fallback
+            if "native_valid" in outcome and type(outcome["native_valid"]) is not bool:
+                invalid.append("native_valid")
+                outcome["native_valid"] = False
+            if outcome.get("usage") is not None and not isinstance(outcome["usage"], dict):
+                invalid.append("usage")
+                outcome["usage"] = None
+            elapsed = outcome.get("elapsed_s")
+            try:
+                valid_elapsed = elapsed is None or (type(elapsed) in (int, float) and math.isfinite(elapsed) and elapsed >= 0)
+            except OverflowError:
+                valid_elapsed = False
+            if not valid_elapsed:
+                invalid.append("elapsed_s")
+                outcome["elapsed_s"] = None
+            if invalid:
+                outcome["evidence_error"] = f"invalid outcome fields: {', '.join(invalid)}"
             try:
                 validate_evidence(root, plan, cell, stage, outcome)
             except (ApplicationError, OSError, ValueError, KeyError, TypeError) as exc:
-                outcome["evidence_error"] = f"{type(exc).__name__}: {exc}"
+                outcome.setdefault("evidence_error", f"{type(exc).__name__}: {exc}")
             grade = outcome.get("grade") if isinstance(outcome.get("grade"), dict) else {}
             outcome["accepted"] = (integrity is None and "evidence_error" not in outcome
                                    and outcome.get("native_valid") is True

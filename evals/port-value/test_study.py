@@ -1,5 +1,6 @@
 import importlib.util
 import fcntl
+from dataclasses import asdict
 import os
 from pathlib import Path
 import subprocess
@@ -82,7 +83,7 @@ class RecordingApplication:
         state = "completed" if native_valid else "native_failed"
         study.write_json(receipt, {"state": state, "native_valid": native_valid,
                                  "capture": {"directory": str(capture.directory), "sha256": capture.sha256} if capture else None,
-                                 "spec": {"project": request.project.sha256, "skills": request.skills.sha256 if request.skills else None,
+                                 "spec": {"runtime": asdict(request.runtime), "project": request.project.sha256, "skills": request.skills.sha256 if request.skills else None,
                                           "prompt_sha256": study.digest(request.prompt.encode())}})
         return SimpleNamespace(state=state, native_valid=native_valid,
                                capture=capture, receipt=receipt, elapsed_s=0.25,
@@ -419,6 +420,128 @@ class Study(unittest.TestCase):
                 self.assertIsInstance(row["initial"]["evidence_error"], str)
                 self.assertFalse(row["both_accepted"])
                 self.assertEqual(report["planned_opportunities"], 36)
+        study.write_json(path, original)
+        self.assertTrue(next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])["both_accepted"])
+
+    def test_report_binds_initial_claim_and_application_to_frozen_inputs(self):
+        plan = self.prepare()
+        cell = next(cell for cell in plan["cells"] if cell["arm"] == "current")
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(), grader=recording_grader,
+                  template_catalog=recording_templates)
+        directory = self.directory / "lineages" / cell["id"] / "initial"
+        claim_path, receipt_path = directory / "claim.json", directory / "application/receipt.json"
+        claim, application = study.read_json(claim_path), study.read_json(receipt_path)
+        for claim_key, spec_key, changed in (("prompt_sha256", "prompt_sha256", "incorrect-request"),
+                                             ("guidance_sha256", "skills", "incorrect-guidance"),
+                                             ("parent_sha256", "project", "incorrect-parent")):
+            with self.subTest(binding=claim_key):
+                study.write_json(claim_path, {**claim, claim_key: changed})
+                study.write_json(receipt_path, {**application, "spec": {**application["spec"], spec_key: changed}})
+                report = study.report(self.directory)
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertFalse(row["initial"]["accepted"])
+                self.assertIn(claim_key, row["initial"]["evidence_error"])
+                self.assertFalse(row["both_accepted"])
+                self.assertEqual(report["planned_opportunities"], 36)
+                study.write_json(claim_path, claim)
+                study.write_json(receipt_path, application)
+        study.write_json(claim_path, claim)
+        study.write_json(receipt_path, {**application, "spec": {**application["spec"], "runtime": {**plan["runtime"], "model": "different-model"}}})
+        row = next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])
+        self.assertFalse(row["initial"]["accepted"])
+        self.assertIn("runtime", row["initial"]["evidence_error"])
+        study.write_json(receipt_path, application)
+        self.assertTrue(next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])["both_accepted"])
+
+    def test_report_binds_maintenance_to_frozen_request_guidance_and_retained_initial(self):
+        plan = self.prepare()
+        cell = next(cell for cell in plan["cells"] if cell["arm"] == "current")
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(), grader=recording_grader,
+                  template_catalog=recording_templates)
+        directory = self.directory / "lineages" / cell["id"] / "maintenance"
+        claim_path, receipt_path = directory / "claim.json", directory / "application/receipt.json"
+        claim, application = study.read_json(claim_path), study.read_json(receipt_path)
+        case = next(case for case in plan["cases"] if case["id"] == cell["case"])
+        for claim_key, spec_key, changed in (("prompt_sha256", "prompt_sha256", "incorrect-request"),
+                                             ("guidance_sha256", "skills", "incorrect-guidance"),
+                                             ("parent_sha256", "project", case["project_snapshot"]["sha256"])):
+            with self.subTest(binding=claim_key):
+                study.write_json(claim_path, {**claim, claim_key: changed})
+                study.write_json(receipt_path, {**application, "spec": {**application["spec"], spec_key: changed}})
+                report = study.report(self.directory)
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertTrue(row["initial"]["accepted"])
+                self.assertFalse(row["maintenance"]["accepted"])
+                self.assertIn(claim_key, row["maintenance"]["evidence_error"])
+                self.assertEqual(report["planned_opportunities"], 36)
+                study.write_json(claim_path, claim)
+                study.write_json(receipt_path, application)
+        study.write_json(claim_path, claim)
+        study.write_json(receipt_path, application)
+        initial_claim_path = directory.parent / "initial/claim.json"
+        initial_claim = study.read_json(initial_claim_path)
+        study.write_json(initial_claim_path, {**initial_claim, "cell": "another-cell"})
+        row = next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])
+        self.assertFalse(row["maintenance"]["accepted"])
+        self.assertIn("planned cell and stage", row["maintenance"]["evidence_error"])
+        study.write_json(initial_claim_path, initial_claim)
+        self.assertTrue(next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])["both_accepted"])
+
+    def test_report_rejects_another_lineages_initial_capture_even_with_matching_content(self):
+        plan = self.prepare()
+        cell = plan["cells"][0]
+        other = next(other for other in plan["cells"] if other["id"] != cell["id"] and other["case"] == cell["case"])
+        executor = RecordingApplication()
+        for selected in (cell, other):
+            study.run(self.directory, cell_id=selected["id"], execute=executor, grader=recording_grader,
+                      template_catalog=recording_templates)
+        directory = self.directory / "lineages" / cell["id"] / "initial"
+        path = directory / "outcome.json"
+        outcome = study.read_json(path)
+        other_outcome = study.read_json(self.directory / "lineages" / other["id"] / "initial/outcome.json")
+        self.assertEqual(outcome["capture"]["sha256"], other_outcome["capture"]["sha256"])
+        study.write_json(path, {**outcome, "capture": other_outcome["capture"]})
+        receipt_path = directory / "application/receipt.json"
+        application = study.read_json(receipt_path)
+        study.write_json(receipt_path, {**application, "capture": {"directory": str(self.directory / other_outcome["capture"]["directory"]),
+                                                                 "sha256": other_outcome["capture"]["sha256"]}})
+        report = study.report(self.directory)
+        row = next(row for row in report["rows"] if row["id"] == cell["id"])
+        self.assertFalse(row["initial"]["accepted"])
+        self.assertIn("capture is outside the planned stage", row["initial"]["evidence_error"])
+        self.assertFalse(row["maintenance"]["accepted"])
+        self.assertIn("capture is outside the planned stage", row["maintenance"]["evidence_error"])
+        self.assertEqual(report["planned_opportunities"], 36)
+        self.assertTrue(next(row for row in report["rows"] if row["id"] == other["id"])["both_accepted"])
+
+    def test_report_retains_all_opportunities_with_malformed_aggregate_fields(self):
+        cell = self.prepare()["cells"][0]
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(), grader=recording_grader,
+                  template_catalog=recording_templates)
+        path = self.directory / "lineages" / cell["id"] / "initial/outcome.json"
+        original = study.read_json(path)
+        for field, invalid, normalized in (("native_state", [], "unknown"),
+                                            ("native_state", None, "unknown"),
+                                            ("state", {}, "incomplete"),
+                                            ("native_valid", 1, False),
+                                            ("usage", [], None),
+                                            ("elapsed_s", "unknown", None),
+                                            ("elapsed_s", {}, None),
+                                            ("elapsed_s", True, None),
+                                            ("elapsed_s", -1, None),
+                                            ("elapsed_s", float("nan"), None),
+                                            ("elapsed_s", float("inf"), None),
+                                            ("elapsed_s", 10 ** 400, None)):
+            with self.subTest(field=field, invalid=invalid):
+                study.write_json(path, {**original, field: invalid})
+                report = study.report(self.directory)
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertFalse(row["initial"]["accepted"])
+                self.assertIn(field, row["initial"]["evidence_error"])
+                self.assertEqual(row["initial"][field], normalized)
+                self.assertEqual(report["planned_opportunities"], 36)
+                self.assertEqual(len(report["rows"]), 18)
+                self.assertEqual(sum(sum(total["states"].values()) for total in report["totals"].values()), 36)
         study.write_json(path, original)
         self.assertTrue(next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])["both_accepted"])
 

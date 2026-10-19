@@ -64,7 +64,11 @@ Generate `report.json` and `report.md` with this command. A nonzero exit means t
 python3 evals/port-value/study.py report ../port-value-run
 ```
 
-The report keeps all 36 opportunities, including attempted, incomplete, blocked, and never-started stages. It separates native validity from executable application acceptance. Both-stage acceptance requires valid native completion, a replayable retained capture, and a passing strict private grade for each stage. Report generation validates the capture's blobs and manifest, checks its application receipt and request claim, and binds the grade to the stage, oracle, and capture. It compares the retained acceptance receipt and parses the oracle output again. Invalid records receive an explicit `evidence_error` and cannot pass. Reporting never repeats spent calls.
+The report keeps all 36 opportunities, including attempted, incomplete, blocked, and never-started stages. It separates native validity from executable application acceptance. Both-stage acceptance requires valid native completion, a replayable retained capture, and a passing strict private grade for each stage.
+
+Report generation validates the capture's blobs and manifest and requires its directory to belong to the planned stage. It binds the application receipt and request claim to the frozen request, arm guidance, and runtime. The initial parent must match the frozen project. The maintenance parent must match the same lineage's validated retained initial capture. It also binds the grade to the stage, oracle, and capture. It compares the retained acceptance receipt and parses the oracle output again.
+
+Invalid records receive an explicit `evidence_error` and cannot pass. Malformed state, native validity, usage, and elapsed fields receive safe report values before aggregation. These errors preserve all planned opportunities. Reporting never repeats spent calls.
 
 The report retains elapsed time, raw observed usage, unknown usage counts, and paired task outcomes per repetition. Requested model settings do not prove served model identity. Acceptance does not measure requested README updates, human judgment of task quality, or the efficacy of an explicitly activated poteto workflow.
 
