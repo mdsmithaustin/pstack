@@ -137,6 +137,22 @@ function originRows(
   );
 }
 
+async function overrideOriginRoute({
+  directory,
+  filter,
+  branch,
+  rows,
+}: {
+  directory: string;
+  filter: "--head" | "--base";
+  branch: string;
+  rows: string;
+}): Promise<void> {
+  const routes = join(directory, "origin-routes");
+  await mkdir(routes, { recursive: true });
+  await writeFile(join(routes, `${filter}-${branch}`.replaceAll("/", "_")), `${rows}\n`);
+}
+
 async function withFakeOrigin<T>({
   directory,
   operation,
@@ -168,6 +184,12 @@ set -euo pipefail
 if [ "$(pwd -P)" != "${realpathSync(join(directory, "repo"))}" ]; then
   printf 'origin ran outside the fixture repo: %s\\n' "$(pwd -P)" >&2
   exit 2
+fi
+route="$3-$4"
+override="${join(directory, "origin-routes")}/\${route//\\//_}"
+if [ -f "$override" ]; then
+  cat "$override"
+  exit 0
 fi
 case "$*" in
   "${list("--head", "stack/open")}")
@@ -1481,6 +1503,153 @@ esac
           store.frontier.set({ repo: stack.repo, forge: "origin" })
         ).rejects.toThrow("branch stack/draft has no local ref refs/heads/stack/draft");
         expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+      },
+    });
+  });
+
+  it("rejects Origin chains that loop, branch, repeat a head, or repeat a pull request", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const draft = { number: 14, state: "draft", head: "stack/draft", base: "stack/open" } as const;
+    const cases = [
+      {
+        route: { filter: "--head", branch: "stack/merged" },
+        rows: [{ number: 10, state: "merged", head: "stack/merged", base: "stack/open" }],
+        error: "pull request base chain loops at branch stack/open",
+      },
+      {
+        route: { filter: "--base", branch: "stack/open" },
+        rows: [{ number: 10, state: "open", head: "stack/merged", base: "stack/open" }],
+        error: "pull request base chain loops at branch stack/merged",
+      },
+      {
+        route: { filter: "--base", branch: "stack/open" },
+        rows: [draft, { number: 16, state: "open", head: "stack/sibling", base: "stack/open" }],
+        error: "stack is not linear: branches stack/draft, stack/sibling all target stack/open",
+      },
+      {
+        route: { filter: "--head", branch: "stack/open" },
+        rows: [
+          { number: 11, state: "open", head: "stack/open", base: "stack/closed" },
+          { number: 12, state: "closed", head: "stack/open", base: "stack/closed" },
+        ],
+        error: "branch stack/open has multiple pull requests (#11, #12); close the stale ones first",
+      },
+      {
+        route: { filter: "--head", branch: "stack/closed" },
+        rows: [
+          { number: 13, state: "closed", head: "stack/closed", base: "stack/merged" },
+          { number: 17, state: "open", head: "stack/closed", base: "stack/merged" },
+        ],
+        error: "branch stack/closed has multiple pull requests (#13, #17)",
+      },
+      {
+        route: { filter: "--base", branch: "stack/open" },
+        rows: [{ ...draft, number: 11 }],
+        error: "pull request base chain contains duplicate pull requests",
+      },
+    ] as const;
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        for (const { route, rows, error } of cases) {
+          await overrideOriginRoute({ directory, ...route, rows: originRows(rows) });
+          await expect(
+            store.frontier.set({ repo: stack.repo, forge: "origin" })
+          ).rejects.toThrow(error);
+          expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+          await rm(join(directory, "origin-routes"), { recursive: true, force: true });
+        }
+      },
+    });
+  });
+
+  it("reaches the Origin forge only through --forge origin on the CLI", async () => {
+    const { directory } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const storeDirectory = await makeDirectory();
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
+        const result = runCli([
+          "--store",
+          storeDirectory,
+          "--json",
+          "frontier",
+          "set",
+          "--repo",
+          stack.repo,
+          "--forge",
+          "origin",
+        ]);
+        expect(result.stderr).toBe("");
+        expect(result.code).toBe(0);
+        expect(JSON.parse(result.stdout)).toEqual({
+          generation: 1,
+          prs: [
+            { pr: 10, branches: "stack/merged", sha: stack.mergedSha, state: "MERGED" },
+            { pr: 13, branches: "stack/closed", sha: stack.closedSha, state: "CLOSED" },
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+            { pr: 14, branches: "stack/draft", sha: stack.draftSha, state: "OPEN" },
+          ],
+          lowestUnmerged: 11,
+        });
+      },
+    });
+  });
+
+  it("keeps gh as the default forge on the CLI even when an origin binary is on PATH", async () => {
+    const { directory } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const storeDirectory = await makeDirectory();
+    const decoy = join(directory, "decoy-bin");
+    await mkdir(decoy);
+    await writeFile(
+      join(decoy, "origin"),
+      `#!/usr/bin/env bash
+printf 'origin must not run without --forge origin\\n' >&2
+exit 2
+`
+    );
+    await chmod(join(decoy, "origin"), 0o755);
+
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([
+        {
+          number: 11,
+          state: "OPEN",
+          headRefName: "stack/open",
+          headRefOid: stack.openSha,
+          baseRefName: "main",
+          isCrossRepository: false,
+        },
+      ]),
+      operation: async () => {
+        const originalPath = process.env.PATH;
+        process.env.PATH = `${decoy}:${originalPath ?? ""}`;
+        try {
+          expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
+          const result = runCli([
+            "--store",
+            storeDirectory,
+            "--json",
+            "frontier",
+            "set",
+            "--repo",
+            stack.repo,
+          ]);
+          expect(result.stderr).toBe("");
+          expect(result.code).toBe(0);
+          expect(JSON.parse(result.stdout).prs).toEqual([
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+          ]);
+        } finally {
+          process.env.PATH = originalPath;
+        }
       },
     });
   });
