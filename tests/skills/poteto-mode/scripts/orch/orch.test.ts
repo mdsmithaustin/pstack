@@ -1424,6 +1424,67 @@ esac
     });
   });
 
+  it("records each Origin branch tip even when a same-named tag points elsewhere", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    for (const branch of ["stack/merged", "stack/closed", "stack/open", "stack/draft"]) {
+      git({ repo: stack.repo, args: ["tag", branch, "main"] });
+    }
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        const frontier = await store.frontier.set({ repo: stack.repo, forge: "origin" });
+        expect(frontier.prs.map((row) => row.sha)).toEqual([
+          stack.mergedSha,
+          stack.closedSha,
+          stack.openSha,
+          stack.draftSha,
+        ]);
+      },
+    });
+  });
+
+  it("does not need a local branch for a merged or closed Origin ancestor", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["branch", "-D", "stack/merged", "stack/closed"] });
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        expect(
+          await store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).toEqual({
+          generation: 1,
+          prs: [
+            { pr: 10, branches: "stack/merged", sha: "", state: "MERGED" },
+            { pr: 13, branches: "stack/closed", sha: "", state: "CLOSED" },
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+            { pr: 14, branches: "stack/draft", sha: stack.draftSha, state: "OPEN" },
+          ],
+          lowestUnmerged: 11,
+        });
+      },
+    });
+  });
+
+  it("names the missing local branch when an open Origin pull request has none", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["branch", "-D", "stack/draft"] });
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        await expect(
+          store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).rejects.toThrow("branch stack/draft has no local ref refs/heads/stack/draft");
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+      },
+    });
+  });
+
   it("refuses an Origin frontier from the trunk branch instead of recording an empty one", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);

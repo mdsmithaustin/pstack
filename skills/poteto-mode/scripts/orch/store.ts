@@ -1496,26 +1496,43 @@ function graphiteFrontier(repo: string): readonly GtFrontierEntry[] {
 function branchSha({
   branch,
   repo,
+  optional = false,
 }: {
   branch: string;
   repo: string;
+  optional?: boolean;
 }): string {
+  const ref = `refs/heads/${branch}`;
   let raw: string;
   try {
-    raw = execFileSync("git", ["rev-parse", branch], {
-      cwd: repo,
-      encoding: "utf8",
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    raw = execFileSync(
+      "git",
+      ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+      {
+        cwd: repo,
+        encoding: "utf8",
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
   } catch (error) {
+    const missing =
+      error !== null &&
+      typeof error === "object" &&
+      "status" in error &&
+      error.status === 1;
+    if (missing && optional) {
+      return "";
+    }
     throw new UserError(
-      `git rev-parse ${branch} failed: ${errorMessage(error)}`
+      missing
+        ? `branch ${branch} has no local ref ${ref}; fetch or check it out before resolving the frontier`
+        : `git rev-parse ${ref} failed: ${errorMessage(error)}`
     );
   }
   const sha = raw.trim();
   if (!/^[0-9a-f]{40,64}$/i.test(sha)) {
-    throw new UserError(`git rev-parse ${branch} returned an invalid SHA`);
+    throw new UserError(`git rev-parse ${ref} returned an invalid SHA`);
   }
   return sha;
 }
@@ -1991,7 +2008,13 @@ function originFrontier(repo: string): readonly FrontierPr[] {
   return chain.map((row) => ({
     pr: row.pr,
     branches: row.branch,
-    sha: branchSha({ branch: row.branch, repo }),
+    // Origin's PR JSON carries no head SHA, so a merged or closed ancestor
+    // whose local branch is gone records an empty SHA instead of failing.
+    sha: branchSha({
+      branch: row.branch,
+      repo,
+      optional: row.state !== "OPEN",
+    }),
     state: row.state,
   }));
 }
