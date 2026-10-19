@@ -1,9 +1,11 @@
 # One-rule amendment screen
 
-This directory screens candidate rules for skills that already exist. Each
+`screen.py` screens candidate rules for skills that already exist. Each
 comparison is the current skill text against the same text plus one rule. It
 does not compare a skill against no skill. A stub arm (see Stub arm) compares
 the skills against the same skill names with no guidance.
+
+For application execution in future studies, see [Native application attempts](APPLICATION.md).
 
 ## What runs
 

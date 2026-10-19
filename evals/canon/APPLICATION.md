@@ -2,9 +2,11 @@
 
 `application.py` owns one Codex application attempt, its immutable capture, and fresh replay. A study supplies public project files, assigned skills, a prompt, and a prepared sandbox template. The module accepts no grader or private oracle path.
 
+The example imports the module from the repository root.
+
 ```python
 from pathlib import Path
-from application import Request, Runtime, Snapshot, replay, run_application
+from evals.canon.application import Request, Runtime, Snapshot, replay, run_application
 
 project = Snapshot.freeze(Path("public/starter"), Path("run/inputs/project"))
 skills = Snapshot.freeze(Path("public/skills"), Path("run/inputs/skills"))
