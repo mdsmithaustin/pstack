@@ -1,0 +1,154 @@
+{
+  "source_revision": "5e5eaa861a5df50c0cedc601db7e9f17e70e2ef9",
+  "oracle_revision": "22f7c0096ae349a2af53a5be38beb5714e684553",
+  "oracle_image": "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+  "oracle_files": [
+    {
+      "source": "evals/verify-commands/oracles/check_plan.py",
+      "frozen": "oracle/check_plan.py",
+      "sha256": "a2bd731c26cb14a7d7cbca3cea580b1535ba43906b7da0590f0267cd593b387c"
+    },
+    {
+      "source": "evals/verify-commands/oracles/cases.json",
+      "frozen": "oracle/cases.json",
+      "sha256": "257cefdefdfd69aced3776b79affbe26f0ef2ab3fd6130b3425b10e369f490ea"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/bytecode_controls.py",
+      "frozen": "oracle/projects/bytecode_controls.py",
+      "sha256": "45b84dc46d671231cc2a84afa749e3f0f29f67f521f44c28b9f8c8e1d311084c"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/defaulted_parity.py",
+      "frozen": "oracle/projects/defaulted_parity.py",
+      "sha256": "31f66c69599126c0d8ed6dbf6488a5242ec00d833f842e59fc400ac2a029f825"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/empty_selection.py",
+      "frozen": "oracle/projects/empty_selection.py",
+      "sha256": "432ece45ebd6c7cc24c7fe49f7ba4f9e0a10da3df4948a9d69603f4823b076f7"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/healthy_control.py",
+      "frozen": "oracle/projects/healthy_control.py",
+      "sha256": "3c01ef8d99ff93cb88af3e20604869e92cd84fb6a3ef0541225857b7bc891589"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/lifecycle_observation.py",
+      "frozen": "oracle/projects/lifecycle_observation.py",
+      "sha256": "08209e8631e801109c79cbab04f51de8a35b9ba1fa03f0487a4701eec8cad5be"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/package_path.py",
+      "frozen": "oracle/projects/package_path.py",
+      "sha256": "6c020825979f0cc0d4c1fe12db84705446fa144593af0c4e1f94c0b7936820fc"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/pipeline_tail.py",
+      "frozen": "oracle/projects/pipeline_tail.py",
+      "sha256": "272f02833af2bb07b9fa1a3b76f044ef0a8570f104cde29fb9d727a3aa34504b"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/scoped_source.py",
+      "frozen": "oracle/projects/scoped_source.py",
+      "sha256": "af0747021b8ab7b8ff5f79d896747cb40bc03a1bcf4dcffbb71959cbc2841984"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/stale_summary.py",
+      "frozen": "oracle/projects/stale_summary.py",
+      "sha256": "e90e03d206699e4cc5be9287054ca4a860c882ee19b41d7bae86b6faf2c5d4e6"
+    }
+  ],
+  "treatments": [
+    {
+      "variant": "with_skill",
+      "source_revision": "5e5eaa861a5df50c0cedc601db7e9f17e70e2ef9",
+      "source_path": "skills/verify-commands/SKILL.md",
+      "frozen": "packages/current/verify-commands/SKILL.md",
+      "sha256": "e636242b63a2409e1f0b52f4cc0125bf72de527d1abbdf5c6958105965a76c2e"
+    },
+    {
+      "variant": "old_skill",
+      "source_revision": "af9e84907233e3f7be49d74427458690f7ef436f",
+      "source_path": "skills/verify-commands/SKILL.md",
+      "frozen": "packages/previous/verify-commands/SKILL.md",
+      "sha256": "a781a937661a1d5d005145f28db464d866c46c36cfd70b9eebd0ebc1c463b6a2"
+    }
+  ],
+  "corpus_manifest": {
+    "source": "evals/verify-commands/shared-benchmark.json",
+    "sha256": "fcc9543cadbb1c8846a842887b04882dc9bcb4cb3e7fee520547971b69a304d6",
+    "declared_harness_revision": "c2a1735983fd7827491ad4d89f9bebe9e8e229a0"
+  },
+  "chosen_harness_revision": "c23ed79554995c60cbd63cc9da9f47837cfa6f9a",
+  "harness_pin_difference": "This study uses the installed c23ed795 revision. The shared corpus retains its c2a173598 ancestor pin unchanged.",
+  "installed_harness_module": {
+    "distribution": "skill-eval-harness-ext",
+    "module": "skill_benchmark.py",
+    "sha256": "d75b514b59ea0d1384bea66140da9fbf7b86906bb318f467089fe089277e77eb",
+    "pin_evidence": "Installed distribution direct_url.json vcs_info.commit_id equals chosen_harness_revision."
+  },
+  "control_sources": [
+    {
+      "source": "evals/verify-commands/oracles/samples/ignored-pipeline.md",
+      "sha256": "8924a47793007e81a679d2a89d44deaff5317637b8dd5bc0b881078cf1d56e78"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/nineteen-pipeline.md",
+      "sha256": "9f1d7b56b6946494d72796da30e8784f8ad7c0940bc73e12616b7fa274cc58a6"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/no-operation-pipeline.md",
+      "sha256": "90da4acd089877f55830691bde8ae4bb27017a104c6ba4a3757e15a429cde2ff"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/print-only-pipeline.md",
+      "sha256": "48a8b2f7c9e746e0af116afe0b8d0a567a7b7be860f504d9bad464a69c63e26a"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/silent-pipeline.md",
+      "sha256": "0fb3df2b0a86bdc22da77a9347b0367a7441020cac1396e8315b9a9a5af1af36"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/twentyone-pipeline.md",
+      "sha256": "33e3a0bfc69a872c5ca05155bd28b0564ced56759a234895f6053851fc60c58e"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/unfiltered-pipeline.md",
+      "sha256": "dbbe07492f90cd7636265b72abb130688cdd163bbc9cea109c5145d494624794"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/unprotected-pipeline.md",
+      "sha256": "ef58448ded5e7e87432bd1de9ab0b3f66d7a62fc6853c94a8a7ff28f6fa16029"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/valid-pipeline-bash.md",
+      "sha256": "e52847ef95555d8f8a0543d7d345b750dd6a00d2bc361b8a0ee81937bb630c65"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/valid-pipeline-log.md",
+      "sha256": "20f516ca34fe2bb4fbddf1ecdc6b7e56d2826474c0ac6494894ebe53bd98c4c2"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/valid-pipeline-normalized.md",
+      "sha256": "5ff4a2027452731a1735f11f115364cf0a7e0c878776becec7a260e8b95b5411"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/wrong-suffix-pipeline.md",
+      "sha256": "b992e76ddd1944993aa5c86492251e34dabb9d7e908b4a42c3df3262030dfb4e"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/valid-stale-npm.md",
+      "sha256": "013ed39cc4b70bdbde11abdf67166b9b1a0ce4c87112823f9530b1054c7b980b"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/ignored-operation-status.md",
+      "sha256": "f5f8502c22bca5abcbe9e0f2839bfa26c805591f561960633606cdbde597ca8a"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/valid-healthy-control.md",
+      "sha256": "770e74558f197f7195b9be0fb1ae3d04ed152eb4666065f8081d196a94445463"
+    }
+  ],
+  "historical_source_lock": "source-lock.historical.json"
+}

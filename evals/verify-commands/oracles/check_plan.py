@@ -894,6 +894,8 @@ def run_case(root, plan, definition, bootstrap):
         ],
         "force_exit": 97,
     }
+    if "expected_output" in base_state:
+        forced_state["expected_output"] = ""
     states = [*definition["states"], forced_state]
     expected_order = {state["name"]: index for index, state in enumerate(states)}
     secrets.SystemRandom().shuffle(states)
@@ -933,6 +935,13 @@ def run_case(root, plan, definition, bootstrap):
             "PSTACK_EVIDENCE_SOCKET": str(evidence_path),
             "PYTHONDONTWRITEBYTECODE": "1",
         }
+        file_limit = 0
+        if definition.get("scratch", False):
+            scratch = run_root / "tmp"
+            scratch.mkdir()
+            scratch.chmod(0o1777)
+            environment["TMPDIR"] = str(scratch)
+            file_limit = 1048576
         candidate_cwd = project / plan["workdir"]
         if not candidate_cwd.is_dir():
             results.append({
@@ -953,14 +962,13 @@ def run_case(root, plan, definition, bootstrap):
             ["/bin/sh", str(root / "input" / "plan.sh")],
             cwd=candidate_cwd,
             env=environment,
-            text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             user=65534,
             group=65534,
             extra_groups=[],
             start_new_session=True,
-            preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0)),
+            preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_FSIZE, (file_limit, file_limit)),
         )
         timed_out = False
         try:
@@ -1011,8 +1019,11 @@ def run_case(root, plan, definition, bootstrap):
             "behavior_checks": behavior_checks,
             "lifecycle_checks": lifecycle_checks,
             "fixture_receipt": json.loads(setup.stdout) if behavior_checks or lifecycle_checks else None,
-            "stdout": stdout[-1000:],
-            "stderr": stderr[-1000:],
+            "output_matches": "expected_output" not in state or (
+                stdout == state["expected_output"].encode("utf-8") and stderr == b""
+            ),
+            "stdout": stdout[-1000:].decode("utf-8", "replace"),
+            "stderr": stderr[-1000:].decode("utf-8", "replace"),
         })
         shutil.rmtree(run_root)
     return sorted(results, key=lambda result: expected_order[result["state"]])
@@ -1179,7 +1190,7 @@ def replay(plan: dict, definition: dict, bootstrap: Path) -> tuple[int, dict]:
         return 2, {"status": "infrastructure", "reason": f"invalid replay output: {error.msg}"}
     failed = [
         state for state in measured["states"]
-        if not state["exit_matches"] or state["missing_operations"]
+        if not state["exit_matches"] or state["missing_operations"] or not state.get("output_matches", True)
         or any(not check["matches"] for check in state.get("behavior_checks", []))
         or any(not check["matches"] for check in state.get("lifecycle_checks", []))
     ]
@@ -1198,6 +1209,8 @@ def replay(plan: dict, definition: dict, bootstrap: Path) -> tuple[int, dict]:
             "states": [state["state"] for state in measured["states"]],
             "operation_evidence": "authenticated by the container evidence server",
         }
+    if any("expected_output" in state for state in definition["states"]):
+        result["output_evidence"] = measured["states"]
     if control_evidence:
         result["control_evidence"] = control_evidence
     return (2 if infrastructure else 1 if failed else 0), result

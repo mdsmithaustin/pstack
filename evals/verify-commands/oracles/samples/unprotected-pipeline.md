@@ -1,0 +1,3 @@
+```sh
+python3 tools/verify-release.py 2>&1 | tail -n 20
+```

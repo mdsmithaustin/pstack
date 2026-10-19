@@ -5,6 +5,10 @@ This directory holds public development corpora for `verify-commands`,
 `with_skill` and `without_skill` arms. They do not represent upstream Cursor
 pstack and do not prove that a skill improves production work.
 
+For the separate pipeline exit study, follow its
+[study protocol](verify-commands/studies/pipeline-exit/README.md) instead of the
+generic screen and confirmation examples below.
+
 `promises/` holds a separate suite that checks the user guide's promises on
 each harness. See `promises/README.md`.
 

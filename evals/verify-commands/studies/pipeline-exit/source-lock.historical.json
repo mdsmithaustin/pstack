@@ -1,0 +1,75 @@
+{
+  "source_revision": "5e5eaa861a5df50c0cedc601db7e9f17e70e2ef9",
+  "oracle_revision": "5e5eaa861a5df50c0cedc601db7e9f17e70e2ef9",
+  "oracle_image": "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
+  "oracle_files": [
+    {
+      "source": "evals/verify-commands/oracles/check_plan.py",
+      "frozen": "oracle/check_plan.py",
+      "sha256": "144547fcb94b3a3b48be3d201eea85066fc14465d3ec35b05e8e3bdac91fe9e2"
+    },
+    {
+      "source": "evals/verify-commands/oracles/cases.json",
+      "frozen": "oracle/cases.json",
+      "sha256": "93ed9e14689d2c1a8f679d8943276be75250d73457c14837f7bde6dc344e9b4c"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/stale_summary.py",
+      "frozen": "oracle/projects/stale_summary.py",
+      "sha256": "e90e03d206699e4cc5be9287054ca4a860c882ee19b41d7bae86b6faf2c5d4e6"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/healthy_control.py",
+      "frozen": "oracle/projects/healthy_control.py",
+      "sha256": "3c01ef8d99ff93cb88af3e20604869e92cd84fb6a3ef0541225857b7bc891589"
+    },
+    {
+      "source": "evals/verify-commands/oracles/projects/package_path.py",
+      "frozen": "oracle/projects/package_path.py",
+      "sha256": "6c020825979f0cc0d4c1fe12db84705446fa144593af0c4e1f94c0b7936820fc"
+    }
+  ],
+  "treatments": [
+    {
+      "variant": "with_skill",
+      "source_revision": "5e5eaa861a5df50c0cedc601db7e9f17e70e2ef9",
+      "source_path": "skills/verify-commands/SKILL.md",
+      "frozen": "packages/current/verify-commands/SKILL.md",
+      "sha256": "e636242b63a2409e1f0b52f4cc0125bf72de527d1abbdf5c6958105965a76c2e"
+    },
+    {
+      "variant": "old_skill",
+      "source_revision": "af9e84907233e3f7be49d74427458690f7ef436f",
+      "source_path": "skills/verify-commands/SKILL.md",
+      "frozen": "packages/previous/verify-commands/SKILL.md",
+      "sha256": "a781a937661a1d5d005145f28db464d866c46c36cfd70b9eebd0ebc1c463b6a2"
+    }
+  ],
+  "corpus_manifest": {
+    "source": "evals/verify-commands/shared-benchmark.json",
+    "sha256": "fcc9543cadbb1c8846a842887b04882dc9bcb4cb3e7fee520547971b69a304d6",
+    "declared_harness_revision": "c2a1735983fd7827491ad4d89f9bebe9e8e229a0"
+  },
+  "chosen_harness_revision": "c23ed79554995c60cbd63cc9da9f47837cfa6f9a",
+  "harness_pin_difference": "This study uses the installed c23ed795 revision. The shared corpus retains its c2a173598 ancestor pin unchanged.",
+  "installed_harness_module": {
+    "distribution": "skill-eval-harness-ext",
+    "module": "skill_benchmark.py",
+    "sha256": "d75b514b59ea0d1384bea66140da9fbf7b86906bb318f467089fe089277e77eb",
+    "pin_evidence": "Installed distribution direct_url.json vcs_info.commit_id equals chosen_harness_revision."
+  },
+  "control_sources": [
+    {
+      "source": "evals/verify-commands/oracles/samples/valid-stale-npm.md",
+      "sha256": "013ed39cc4b70bdbde11abdf67166b9b1a0ce4c87112823f9530b1054c7b980b"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/ignored-operation-status.md",
+      "sha256": "f5f8502c22bca5abcbe9e0f2839bfa26c805591f561960633606cdbde597ca8a"
+    },
+    {
+      "source": "evals/verify-commands/oracles/samples/valid-healthy-control.md",
+      "sha256": "770e74558f197f7195b9be0fb1ae3d04ed152eb4666065f8081d196a94445463"
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "study_id": "verify-commands-pipeline-exit-20261014",
+  "status": "model-free-revision-awaiting-native-validation",
+  "shape": "Three public cases, three frozen treatment identities, output-aware authenticated oracle, and deferred confirmation interface.",
+  "treatments": {
+    "with_skill": "packages/current/verify-commands/SKILL.md",
+    "old_skill": "packages/previous/verify-commands/SKILL.md",
+    "without_skill": null
+  },
+  "source_lock": "source-lock.json",
+  "changed_rule_commit": "7b662326",
+  "subject_model": "gpt-6.1-sol",
+  "judge": {
+    "status": "finalize-cross-family-at-paid-run-review",
+    "maximum_verdicts_per_answer": 1,
+    "panel": false
+  },
+  "splits": {
+    "screen": {
+      "manifest": "screen.json",
+      "split": "tune",
+      "cases": 3,
+      "repetitions": 1,
+      "answers": 9
+    },
+    "confirmation": {
+      "manifest_template": "confirmation.template.json",
+      "split": "holdout",
+      "cases": 4,
+      "repetitions": 3,
+      "answers": 0,
+      "private_case_file": "$PRIVATE_ROOT/cases.json",
+      "authorship": "Independent heldout author. Setup author must not read private case contents.",
+      "readiness": "Deferred, zero authorized answers. Placeholders are not reviewed heldout cases. Every future case must name its promise, oracle violation control, and decision consequence before budget.",
+      "planned_answers": 36
+    }
+  },
+  "budget": {
+    "maximum_answers": 9,
+    "maximum_judge_verdicts": 9,
+    "confirmation_answers_authorized": 0,
+    "model_calls_authorized": false,
+    "screen_execution_owner": "Root after native validation and independent review; native phases make zero subject or judge calls."
+  },
+  "evidence_roles": {
+    "primary": "Per-answer authenticated executable oracle result. Pipeline-tail requires exact literal final 20 combined-output lines and zero versus non-zero status. Report false greens and healthy regressions separately.",
+    "secondary": "One soft explanation judge assertion per answer. No judge panel.",
+    "diagnostic": "soft skill_invoked assertions for all three arms. Loading earns no behavior credit.",
+    "validity": "Reject wrong snapshot, wrong fixture or prompt, missing output, task-count mismatch, treatment contamination, or exposure failures separately; do not score as behavior improvement. Skill invocation receipt alone does not prove mounted bytes were read."
+  },
+  "decision_policy": {
+    "reject": [
+      "Any current-arm false green.",
+      "Any current-arm healthy regression.",
+      "Invalid exposure or treatment isolation."
+    ],
+    "inconclusive": [
+      "No separation across arms.",
+      "Ceiling or floor.",
+      "Incomplete population.",
+      "Only secondary or exposure scores separate."
+    ],
+    "candidate_signal": "Valid primary behavioral separation informs human review only; no automatic confirmation.",
+    "limits": [
+      "Tiny targeted set is not broad efficacy proof.",
+      "No saved verify-commands model runs establish a measured weakness or lift.",
+      "Existing unslop evidence does not establish separation for this study.",
+      "The oracle tests the returned shell artifact under /bin/sh and cannot attest shell state in earlier tool invocations.",
+      "The outer /bin/sh can launch nested Bash. The study requires model-free controls to verify Bash availability and nested-Bash exit preservation.",
+      "Synthetic positive and negative controls establish instrument behavior only, never model improvement."
+    ],
+    "whole_skill": "Compare current versus absent primary outcomes separately from added-rule value.",
+    "added_rule": "Compare current versus previous primary outcomes separately from whole-skill value.",
+    "stop": "If no valid behavioral separation informs a decision, end this study without an added-value claim. Retain useful regression checks. A default-model tie does not remove those checks.",
+    "future_confirmation": "Each future real case must name the promise, show an oracle control that catches its violation, and explain which decision its result can change before receiving budget. All 36 confirmation answers remain deferred."
+  },
+  "historical_evidence": [
+    "model-free-checks.json",
+    "source-lock.historical.json"
+  ]
+}

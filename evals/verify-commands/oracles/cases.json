@@ -63,5 +63,37 @@
       {"name": "cleanup-present", "exit": "zero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "reaped", "writer": "closed"}}]},
       {"name": "cleanup-omitted", "exit": "nonzero", "required_operations": [{"program": "python", "args": ["tools/check-lifecycle.py"], "expected_lifecycle": {"child": "zombie", "writer": "open"}}]}
     ]
+  },
+  "pipeline-tail": {
+    "bootstrap": "pipeline_tail.py",
+    "scratch": true,
+    "states": [
+      {
+        "name": "healthy",
+        "exit": "zero",
+        "required_operations": [
+          {
+            "program": "python",
+            "args": [
+              "tools/verify-release.py"
+            ]
+          }
+        ],
+        "expected_output": "check 11\ncheck 12\ncheck 13\ncheck 14\ncheck 15\ncheck 16\ncheck 17\ncheck 18\ncheck 19\ncheck 20\ncheck 21\ncheck 22\ncheck 23\ncheck 24\ncheck 25\ncheck 26\ncheck 27\ncheck 28\ncheck 29\nOK release ready\n"
+      },
+      {
+        "name": "broken",
+        "exit": "nonzero",
+        "required_operations": [
+          {
+            "program": "python",
+            "args": [
+              "tools/verify-release.py"
+            ]
+          }
+        ],
+        "expected_output": "check 11\ncheck 12\ncheck 13\ncheck 14\ncheck 15\ncheck 16\ncheck 17\ncheck 18\ncheck 19\ncheck 20\ncheck 21\ncheck 22\ncheck 23\ncheck 24\ncheck 25\ncheck 26\ncheck 27\ncheck 28\ncheck 29\nERROR release blocked\n"
+      }
+    ]
   }
 }
