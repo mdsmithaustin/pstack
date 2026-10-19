@@ -2,7 +2,7 @@
 
 This controller compares native Codex, the recorded upstream pstack, and the committed port on three application tasks. Each arm has two repetitions per task. The frozen plan contains 18 application lineages and 36 stage opportunities.
 
-The comparison measures cold-start, relevance-driven skill discovery and application outcomes. It does not explicitly activate poteto-mode. Skill availability does not establish skill use. The retained native transcripts need a separate exposure review before anyone claims that a particular workflow caused an outcome.
+The comparison makes skills available for cold-start, relevance-driven discovery and measures executable application acceptance. It does not explicitly activate poteto-mode. Skill availability does not establish skill use. The retained native transcripts need a separate exposure review before anyone claims that a particular workflow caused an outcome. The private oracles do not grade requested README updates or broader task quality.
 
 ## Prepare a frozen comparison
 
@@ -18,9 +18,13 @@ python3 evals/port-value/study.py prepare ../port-value-run \
 	--model gpt-6.1-sol --effort high --timeout 240 --seed 73129
 ```
 
-Preparation freezes both requests, complete project files, private checks, controls, runtime settings, controller sources, and complete guidance trees. It exports upstream `1b6d44ff26d4e242f4e8f68c391e6d2f7ca16def` from `pstack/skills` and current port `701c9a6f09ae3b0bd56a4962ff299c21accf8690` from `skills`. The exported trees do not depend on uncommitted working-tree skills.
+Preparation freezes both requests, complete project files, private checks, controls, runtime settings, controller sources, and complete guidance trees. It exports upstream `1b6d44ff26d4e242f4e8f68c391e6d2f7ca16def` from `pstack/skills` and `pstack/agents`, and current port `701c9a6f09ae3b0bd56a4962ff299c21accf8690` from `skills`. The exported trees do not depend on uncommitted working-tree skills. Separate project and guidance snapshots preserve runtime file modes before preparation seals the input copies read-only. Runtime requests use those prepared manifests so Git cloning preserves the same guidance identity.
 
-The upstream compatibility ledger translates `disable-model-invocation: true` into native `agents/openai.yaml` policy with `allow_implicit_invocation: false`. It records exact before and after bytes and hashes for each edit. All remaining upstream bytes stay unchanged. Tool and model fallback instructions remain part of the upstream workflow. Runtime delegation must be available. An absent capability blocks preparation rather than changing that workflow.
+The upstream compatibility ledger records 102 invocation-policy edits. It translates `disable-model-invocation: true` into native `agents/openai.yaml` policy with `allow_implicit_invocation: false`. It also records five persona setup entries. Two retain the exact pinned root persona files and their source hashes. The other three contain the registration adapter and the generated `poteto-agent` and `comment-sicko` native TOML files. Each entry retains before and after bytes and hashes.
+
+The upstream registration adapter occupies the existing application owner's `pstack-harness/scripts/subagents.py` installer path. It adds no `pstack-harness/SKILL.md`. The native persona instructions contain the upstream body plus a local skill-loading prefix. All upstream skill workflow bodies and tool and model fallback instructions stay unchanged. This arm is the minimally adapted upstream package, including its required personas. The current arm uses its pinned native port and installer.
+
+The runtime receipt establishes generic delegation capability. Successful file registration does not prove that Codex loaded or invoked the named personas. A separate native preflight must establish that capability before task calls. Registration tests alone cannot establish workflow efficacy.
 
 The native arm receives no custom skill tree. Every arm receives the same project and organic request, requested model, effort, execution template, tools, network policy, and deadline. Arm names and private acceptance feedback do not enter requests. The initial arm order is randomized within task and repetition blocks using the recorded seed.
 
@@ -60,13 +64,15 @@ Generate `report.json` and `report.md` with this command. A nonzero exit means t
 python3 evals/port-value/study.py report ../port-value-run
 ```
 
-The report keeps all 36 opportunities, including attempted, incomplete, blocked, and never-started stages. It separates native validity from behavioral acceptance. Both-stage acceptance requires each stage to have valid native completion and a passing private grade. The report retains elapsed time, raw observed usage, unknown usage counts, and paired task outcomes per repetition. Requested model settings do not prove served model identity.
+The report keeps all 36 opportunities, including attempted, incomplete, blocked, and never-started stages. It separates native validity from executable application acceptance. Both-stage acceptance requires valid native completion, a replayable retained capture, and a passing strict private grade for each stage. Report generation validates the capture's blobs and manifest, checks its application receipt and request claim, and binds the grade to the stage, oracle, and capture. It compares the retained acceptance receipt and parses the oracle output again. Invalid records receive an explicit `evidence_error` and cannot pass. Reporting never repeats spent calls.
+
+The report retains elapsed time, raw observed usage, unknown usage counts, and paired task outcomes per repetition. Requested model settings do not prove served model identity. Acceptance does not measure requested README updates, human judgment of task quality, or the efficacy of an explicitly activated poteto workflow.
 
 Raw native streams, captures, checker logs, and execution receipts stay in the external run directory. Keep them outside Git. Preserve failed preparations as diagnostic receipts. Do not promote findings from this three-task comparison into a general causal claim or count repetitions as independent task diversity.
 
 ## Verify the controller without model calls
 
-The controller tests use actual application snapshots and replay. A recording application callable writes native outcome receipts, and local subprocess oracles check their output. These tests validate the controller, not model behavior or Docker isolation. The application owner's tests cover native process handling and capture integrity separately.
+The controller tests use actual application snapshots and replay. A recording application callable writes native outcome receipts, and local subprocess oracles check their output. A real Git clone checks guidance identity after the same Git mode normalization that the native sandbox uses. The tests run the upstream installer, inspect its native TOML files, and exercise report rejection of tampered captures, false grades, and broken evidence bindings. These tests validate the controller, not named persona activation, model behavior, or Docker isolation. The application owner's tests cover native process handling and capture integrity separately.
 
 Run this command at the repository root. A nonzero exit, a failure summary, or a zero-test summary means verification failed.
 

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import tomllib
 from types import SimpleNamespace
 import unittest
 
@@ -46,7 +47,9 @@ def recording_grader(oracle, snapshot, stage, receipt):
         result = subprocess.run([sys.executable, "-I", "-B", str(oracle), "--project", str(project), "--stage", stage], capture_output=True)
     (receipt / "oracle.stdout").write_bytes(result.stdout)
     (receipt / "oracle.stderr").write_bytes(result.stderr)
-    grade = {"state": "graded", **study.parse_grade(result.stdout, result.returncode)}
+    grade = {"state": "graded", **study.parse_grade(result.stdout, result.returncode),
+             "returncode": result.returncode, "stage": stage, "capture_sha256": snapshot.sha256,
+             "oracle_sha256": study.digest(oracle.read_bytes())}
     study.write_json(receipt / "receipt.json", grade)
     return grade
 
@@ -76,8 +79,12 @@ class RecordingApplication:
         native_valid = not (self.fail_initial and not maintenance)
         capture = None if self.omit_capture else study.Snapshot.freeze(project, slot / "capture")
         receipt = slot / "receipt.json"
-        study.write_json(receipt, {"native_valid": native_valid, "capture_sha256": capture.sha256 if capture else None})
-        return SimpleNamespace(state="completed" if native_valid else "native_failed", native_valid=native_valid,
+        state = "completed" if native_valid else "native_failed"
+        study.write_json(receipt, {"state": state, "native_valid": native_valid,
+                                 "capture": {"directory": str(capture.directory), "sha256": capture.sha256} if capture else None,
+                                 "spec": {"project": request.project.sha256, "skills": request.skills.sha256 if request.skills else None,
+                                          "prompt_sha256": study.digest(request.prompt.encode())}})
+        return SimpleNamespace(state=state, native_valid=native_valid,
                                capture=capture, receipt=receipt, elapsed_s=0.25,
                                usage=None if maintenance else {"input_tokens": 7, "output_tokens": 3})
 
@@ -301,6 +308,147 @@ class Study(unittest.TestCase):
         self.assertEqual((entry.parent / "agents/openai.yaml").read_text(), "policy:\n  allow_implicit_invocation: false\n")
         self.assertEqual(len(ledger["edits"]), 2)
         self.assertEqual(ledger["edits"][0]["before_sha256"], study.digest(original))
+
+    def test_prepared_guidance_survives_real_git_clone_with_original_modes(self):
+        plan = self.prepare()
+        for arm in ("upstream", "current"):
+            cell = next(cell for cell in plan["cells"] if cell["arm"] == arm)
+
+            def clone_application(request, slot):
+                slot.mkdir(parents=True)
+                staging = slot / "staging"
+                skills = study.replay(request.skills, staging / ".agents/skills")
+                subprocess.run(["git", "init", "-q", "--template=", str(staging)], check=True)
+                subprocess.run(["git", "-C", str(staging), "add", "--all"], check=True)
+                subprocess.run(["git", "-C", str(staging), "-c", "user.name=control", "-c", "user.email=control",
+                                "commit", "-qm", "guidance"], check=True)
+                clone = slot / "clone"
+                subprocess.run(["git", "clone", "-q", "--no-hardlinks", str(staging), str(clone)], check=True)
+                after = study.Snapshot.freeze(clone / ".agents/skills", slot / "cloned-guidance")
+                self.assertEqual(after.sha256, request.skills.sha256)
+                self.assertEqual((skills / "poteto-mode/SKILL.md").stat().st_mode & 0o777, 0o644)
+                return RecordingApplication()(request, slot / "result")
+
+            with self.subTest(arm=arm):
+                outcome = study.run_stage(self.directory, plan, cell, "initial", execute=clone_application,
+                                          grader=recording_grader, template_catalog=recording_templates)
+                self.assertEqual(outcome["state"], "attempted", outcome)
+
+    def test_upstream_native_registration_preserves_pinned_persona_bodies_and_ledgers_all_bytes(self):
+        self.prepare()
+        skills = self.directory / "inputs/guidance/upstream"
+        installer = skills / "pstack-harness/scripts/subagents.py"
+        self.assertTrue(installer.is_file())
+        self.assertFalse((skills / "pstack-harness/SKILL.md").exists())
+        project = self.root / "native-project"
+        project.mkdir()
+        before_install = study.inventory(skills)
+        subprocess.run([sys.executable, str(installer), "install", "--harness", "codex", "--project", str(project)],
+                       capture_output=True, check=True)
+        self.assertEqual(study.inventory(skills), before_install)
+        ledger = study.read_json(self.directory / "inputs/compatibility.json")
+        self.assertEqual(sum(edit["kind"] == "invocation_policy" for edit in ledger["edits"]), 102)
+        original_skills = self.root / "upstream-original"
+        study.export_tree(study.REPO, study.UPSTREAM, "pstack/skills", original_skills)
+        expected = {path.relative_to(original_skills).as_posix(): path.read_bytes()
+                    for path in original_skills.rglob("*") if path.is_file()}
+        for edit in ledger["edits"]:
+            if edit["kind"] == "native_registration":
+                continue
+            if edit["kind"] == "invocation_policy":
+                self.assertEqual(expected.get(edit["path"]), edit["before"].encode() if edit["before"] is not None else None)
+            expected[edit["path"]] = edit["after"].encode()
+        self.assertEqual({path.relative_to(skills).as_posix(): path.read_bytes()
+                          for path in skills.rglob("*") if path.is_file()}, expected)
+        for name in ("poteto-agent", "comment-sicko"):
+            original = subprocess.run(["git", "-C", str(study.REPO), "show",
+                                       f"{study.UPSTREAM}:pstack/agents/{name}.md"], capture_output=True, check=True).stdout
+            self.assertEqual((skills / f"pstack-harness/upstream-agents/{name}.md").read_bytes(), original)
+            generated = project / f".codex/agents/{name}.toml"
+            native = tomllib.loads(generated.read_text())
+            body = original.decode().split("---\n", 2)[2]
+            self.assertEqual(native["name"], name)
+            self.assertEqual(native["developer_instructions"], ledger["delivery_prefix"] + body)
+            entry = next(edit for edit in ledger["edits"] if edit["path"] == f".codex/agents/{name}.toml")
+            self.assertEqual(entry["after"].encode(), generated.read_bytes())
+            self.assertEqual(entry["after_sha256"], study.digest(generated.read_bytes()))
+        self.assertEqual(len(ledger["edits"]), 107)
+
+    def test_report_rejects_tampered_retained_capture_without_repeating_spent_calls(self):
+        cell = self.prepare()["cells"][0]
+        executor = RecordingApplication()
+        study.run(self.directory, cell_id=cell["id"], execute=executor, grader=recording_grader, template_catalog=recording_templates)
+        row = next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])
+        self.assertTrue(row["both_accepted"])
+        capture = self.directory / row["initial"]["capture"]["directory"]
+        blob = next((capture / "blobs").iterdir())
+        blob.chmod(0o644)
+        blob.write_bytes(b"tampered capture")
+        blob.chmod(0o444)
+        report = study.report(self.directory)
+        row = next(row for row in report["rows"] if row["id"] == cell["id"])
+        self.assertFalse(row["initial"]["accepted"])
+        self.assertIn("snapshot blob digest mismatch", row["initial"]["evidence_error"])
+        self.assertFalse(row["both_accepted"])
+        self.assertEqual(report["planned_opportunities"], 36)
+        study.run(self.directory, cell_id=cell["id"], execute=executor, grader=recording_grader, template_catalog=recording_templates)
+        self.assertEqual(len(executor.calls), 2)
+
+    def test_report_rejects_false_green_outcome_and_broken_capture_bindings(self):
+        cell = self.prepare()["cells"][0]
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(), grader=recording_grader,
+                  template_catalog=recording_templates)
+        path = self.directory / "lineages" / cell["id"] / "initial/outcome.json"
+        original = study.read_json(path)
+        changes = [
+            {"capture": None, "grade": {"state": "graded", "passed": True, "assertions": 0, "failures": ["bad"]}},
+            {"grade": {**original["grade"], "assertions": 0}},
+            {"grade": {**original["grade"], "failures": ["bad"]}},
+            {"grade": {**original["grade"], "capture_sha256": "0" * 64}},
+            {"grade": {**original["grade"], "stage": "maintenance"}},
+            {"grade": {**original["grade"], "oracle_sha256": "0" * 64}},
+            {"capture": {**original["capture"], "sha256": "0" * 64}},
+            {"application_receipt": "inputs/runtime.json"},
+        ]
+        for changed in changes:
+            with self.subTest(changed=changed):
+                study.write_json(path, {**original, **changed})
+                report = study.report(self.directory)
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertFalse(row["initial"]["accepted"])
+                self.assertIsInstance(row["initial"]["evidence_error"], str)
+                self.assertFalse(row["both_accepted"])
+                self.assertEqual(report["planned_opportunities"], 36)
+        study.write_json(path, original)
+        self.assertTrue(next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])["both_accepted"])
+
+    def test_report_reparses_retained_grades_and_checks_application_receipts(self):
+        cell = self.prepare()["cells"][0]
+        study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(), grader=recording_grader,
+                  template_catalog=recording_templates)
+        directory = self.directory / "lineages" / cell["id"] / "initial"
+        outcome = study.read_json(directory / "outcome.json")
+        for grade in ({**outcome["grade"], "assertions": 0},
+                      {**outcome["grade"], "failures": ["bad"]},
+                      {**outcome["grade"], "returncode": False}):
+            with self.subTest(grade=grade):
+                study.write_json(directory / "outcome.json", {**outcome, "grade": grade})
+                study.write_json(directory / "acceptance/receipt.json", grade)
+                report = study.report(self.directory)
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertFalse(row["initial"]["accepted"])
+                self.assertIn("oracle", row["initial"]["evidence_error"])
+                self.assertEqual(report["planned_opportunities"], 36)
+        study.write_json(directory / "outcome.json", outcome)
+        study.write_json(directory / "acceptance/receipt.json", outcome["grade"])
+        receipt_path = directory / "application/receipt.json"
+        application = study.read_json(receipt_path)
+        study.write_json(receipt_path, {**application, "native_valid": False})
+        row = next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])
+        self.assertFalse(row["initial"]["accepted"])
+        self.assertIn("native outcome disagrees", row["initial"]["evidence_error"])
+        study.write_json(receipt_path, application)
+        self.assertTrue(next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])["both_accepted"])
 
 
 if __name__ == "__main__":

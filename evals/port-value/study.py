@@ -21,9 +21,12 @@ import uuid
 
 EVALS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(EVALS))
-from canon.application import Request, Runtime, Snapshot, replay, run_application
+from canon.application import ApplicationError, Request, Runtime, Snapshot, replay, run_application
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+import upstream_personas
+
 REPO = EVALS.parent
 UPSTREAM = "1b6d44ff26d4e242f4e8f68c391e6d2f7ca16def"
 CURRENT = "701c9a6f09ae3b0bd56a4962ff299c21accf8690"
@@ -106,7 +109,7 @@ def export_tree(repo: Path, revision: str, prefix: str, destination: Path):
             target.chmod(0o755 if member.mode & 0o111 else 0o644)
 
 
-def adapt_upstream(skills: Path):
+def adapt_upstream(skills: Path, agents: Path | None = None):
     edits = []
     for entry in sorted(skills.glob("*/SKILL.md")):
         original = entry.read_bytes()
@@ -126,16 +129,43 @@ def adapt_upstream(skills: Path):
         for path, before in ((entry, original), (policy, None)):
             after = path.read_bytes()
             edits.append({"path": path.relative_to(skills).as_posix(),
+                          "kind": "invocation_policy",
                           "before_sha256": digest(before) if before is not None else None,
                           "after_sha256": digest(after),
                           "before": before.decode() if before is not None else None,
                           "after": after.decode(),
                           "reason": "Translate user-only invocation to native Codex policy."})
-    return {"edits": edits, "preserved": "All other bytes, complete trees, workflow text, tool and model fallback instructions.",
+    if agents is not None:
+        copied = skills / "pstack-harness/upstream-agents"
+        copied.mkdir(parents=True)
+        for name in ("poteto-agent", "comment-sicko"):
+            source = agents / f"{name}.md"
+            target = copied / source.name
+            original = source.read_bytes()
+            target.write_bytes(original)
+            edits.append({"kind": "persona_source", "path": target.relative_to(skills).as_posix(),
+                          "source": f"{UPSTREAM}:pstack/agents/{name}.md",
+                          "before": original.decode(), "after": original.decode(),
+                          "before_sha256": digest(original), "after_sha256": digest(original),
+                          "reason": "Deliver the exact pinned upstream root persona."})
+        adapter = skills / "pstack-harness/scripts/subagents.py"
+        adapter.parent.mkdir()
+        adapter.write_bytes(Path(upstream_personas.__file__).read_bytes())
+        additions = [(adapter.relative_to(skills).as_posix(), adapter.read_bytes(), "registration_adapter")]
+        additions.extend((f".codex/agents/{name}", content, "native_registration")
+                         for name, content in upstream_personas.render(copied).items())
+        for path, content, kind in additions:
+            edits.append({"kind": kind, "path": path, "before": None, "after": content.decode(),
+                          "before_sha256": None, "after_sha256": digest(content),
+                          "reason": "Register upstream personas in native Codex format without adding skill workflow instructions."})
+    return {"edits": edits, "delivery_prefix": upstream_personas.DELIVERY_PREFIX,
+            "preserved": "All other upstream skill bytes, workflow text, tool and model fallback instructions, and exact root persona bodies.",
             "scope": "Cold-start relevance-driven skill discovery; no forced entry skill invocation."}
 
 
 def parse_grade(stdout: bytes, returncode: int):
+    if type(returncode) is not int:
+        raise ValueError("oracle exit must be an integer")
     try:
         grade = json.loads(stdout, object_pairs_hook=unique_object)
     except (ValueError, UnicodeDecodeError) as exc:
@@ -180,8 +210,9 @@ def grade_capture(oracle: Path, snapshot: Snapshot, stage: str, receipt: Path):
             logs = subprocess.run(["docker", "logs", name], capture_output=True, timeout=10, check=True)
             (receipt / "oracle.stdout").write_bytes(logs.stdout)
             (receipt / "oracle.stderr").write_bytes(logs.stderr)
-            grade = parse_grade(logs.stdout, int(waited.stdout.strip()))
-            outcome = {"state": "graded", **grade}
+            returncode = int(waited.stdout.strip())
+            grade = parse_grade(logs.stdout, returncode)
+            outcome = {"state": "graded", **grade, "returncode": returncode}
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         outcome = {"state": "oracle_error", "passed": None, "error": str(exc)}
     finally:
@@ -288,7 +319,12 @@ def prepare(root: Path, cases: Path, runtime_receipt: Path, *, model: str, effor
         raise ValueError("case ids must be unique")
     for arm, revision, prefix in (("upstream", UPSTREAM, "pstack/skills"), ("current", CURRENT, "skills")):
         export_tree(repo, revision, prefix, inputs / "guidance" / arm)
-    write_json(inputs / "compatibility.json", adapt_upstream(inputs / "guidance" / "upstream"))
+    export_tree(repo, UPSTREAM, "pstack/agents", inputs / "upstream-agents")
+    write_json(inputs / "compatibility.json", adapt_upstream(inputs / "guidance/upstream", inputs / "upstream-agents"))
+    guidance_snapshots = {}
+    for arm in ("upstream", "current"):
+        snapshot = Snapshot.freeze(inputs / "guidance" / arm, inputs / "guidance-snapshots" / arm)
+        guidance_snapshots[arm] = {"directory": f"guidance-snapshots/{arm}", "sha256": snapshot.sha256}
     committed = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", CURRENT, "evals"],
                                check=True, capture_output=True, text=True).stdout
     corpus_objects = {}
@@ -308,7 +344,8 @@ def prepare(root: Path, cases: Path, runtime_receipt: Path, *, model: str, effor
             if matches:
                 raise ValueError("held-out request already exists in committed public corpus")
     write_json(inputs / "heldout.json", {"revision": CURRENT, "scope": "Exact request bytes in committed evals files; conceptual task independence requires author review.", "requests": heldout})
-    source_files = [Path(__file__).resolve(), *sorted((EVALS / "canon").glob("*.py")), EVALS / "canon/sbx.json"]
+    source_files = [Path(__file__).resolve(), Path(upstream_personas.__file__).resolve(),
+                    *sorted((EVALS / "canon").glob("*.py")), EVALS / "canon/sbx.json"]
     sources = {}
     for path in source_files:
         sources[str(path)] = digest(path.read_bytes())
@@ -328,9 +365,9 @@ def prepare(root: Path, cases: Path, runtime_receipt: Path, *, model: str, effor
     plan = {"version": 1, "seed": seed, "runtime": {"template": runtime["template"],
             "model": model, "effort": effort, "timeout_s": timeout_s},
             "sources": sources, "pins": {"upstream": UPSTREAM, "current": CURRENT},
-            "oracle_image": IMAGE, "cases": frozen_cases, "cells": cells,
+            "oracle_image": IMAGE, "cases": frozen_cases, "cells": cells, "guidance_snapshots": guidance_snapshots,
             "opportunities": 36,
-            "limits": "Three held-out tasks, two repetitions per arm. Cold-start relevance-driven discovery without explicit workflow activation. No general causal claim."}
+            "limits": "Three held-out tasks, two repetitions per arm. Executable application acceptance only; requested README updates and broader task quality are unmeasured. Cold-start relevance-driven discovery without explicit workflow activation. No general causal claim."}
     write_json(inputs / "plan.json", plan)
     calibration(root, plan, grader)
     write_json(root / "seal.json", {"plan": plan, "inventory": inventory(inputs), "calibration_sha256": digest((root / "calibration.json").read_bytes())})
@@ -384,7 +421,7 @@ def run_stage(root: Path, plan: dict, cell: dict, stage: str, *, execute=run_app
             project = snapshot_at(root / "inputs", case["project_snapshot"])
         skills = None
         if cell["arm"] != "native":
-            skills = Snapshot.freeze(root / "inputs/guidance" / cell["arm"], directory / "guidance")
+            skills = snapshot_at(root / "inputs", plan["guidance_snapshots"][cell["arm"]])
         prompt = relative(private, case[f"{stage}_request"]).read_text(encoding="utf-8")
         write_json(directory / "claim.json", {"cell": cell["id"], "stage": stage,
                    "parent_sha256": project.sha256, "prompt_sha256": digest(prompt.encode()),
@@ -453,6 +490,52 @@ def run(root: Path, *, cell_id: str | None = None, limit: int | None = None, con
             return list(pool.map(lineage, groups))
 
 
+def validate_evidence(root: Path, plan: dict, cell: dict, stage: str, outcome: dict):
+    capture, grade = outcome.get("capture"), outcome.get("grade")
+    if capture is None:
+        if grade is not None or outcome.get("native_valid") is True:
+            raise ValueError("native completion or grade lacks a retained capture")
+        return
+    snapshot = snapshot_at(root, capture)
+    with tempfile.TemporaryDirectory(prefix="port-evidence-") as temporary:
+        replay(snapshot, Path(temporary) / "app")
+    directory = root / "lineages" / cell["id"] / stage
+    receipt_path = relative(root, outcome["application_receipt"])
+    if receipt_path != directory / "application/receipt.json":
+        raise ValueError("application receipt is outside the planned stage")
+    application = read_json(receipt_path)
+    bound = application["capture"]
+    if bound["sha256"] != snapshot.sha256 or Path(bound["directory"]).resolve() != snapshot.directory.resolve():
+        raise ValueError("application receipt capture binding mismatch")
+    if application["native_valid"] is not outcome["native_valid"] or application["state"] != outcome["native_state"]:
+        raise ValueError("native outcome disagrees with application receipt")
+    if outcome["native_valid"] is True and outcome["native_state"] != "completed":
+        raise ValueError("native validity lacks completed state")
+    claim = read_json(directory / "claim.json")
+    if claim["cell"] != cell["id"] or claim["stage"] != stage:
+        raise ValueError("claim does not bind the planned cell and stage")
+    for key, value in (("project", claim["parent_sha256"]), ("skills", claim["guidance_sha256"]),
+                       ("prompt_sha256", claim["prompt_sha256"])):
+        if application["spec"][key] != value:
+            raise ValueError(f"application receipt {key} disagrees with claim")
+    if grade is None:
+        return
+    case = next(case for case in plan["cases"] if case["id"] == cell["case"])
+    oracle = relative(relative(root / "inputs", case["directory"]), case["oracle"])
+    if (grade["stage"] != stage or grade["capture_sha256"] != snapshot.sha256
+            or grade["oracle_sha256"] != digest(oracle.read_bytes())):
+        raise ValueError("grade stage, capture, or oracle binding mismatch")
+    if read_json(directory / "acceptance/receipt.json") != grade:
+        raise ValueError("grade disagrees with retained acceptance receipt")
+    if grade["state"] == "graded":
+        fields = {key: grade[key] for key in ("passed", "assertions", "failures")}
+        parsed = parse_grade((directory / "acceptance/oracle.stdout").read_bytes(), grade["returncode"])
+        if parse_grade(json.dumps(fields).encode(), grade["returncode"]) != parsed:
+            raise ValueError("grade disagrees with retained oracle output")
+    elif grade["state"] != "oracle_error" or grade["passed"] is not None:
+        raise ValueError("invalid grade state")
+
+
 def report(root: Path):
     root = root.resolve()
     plan = read_json(root / "seal.json")["plan"]
@@ -469,10 +552,18 @@ def report(root: Path):
             path = directory / "outcome.json"
             try:
                 outcome = read_json(path) if path.exists() else {"state": "incomplete" if directory.exists() else "never_started"}
+                if not isinstance(outcome, dict) or not isinstance(outcome.get("state"), str):
+                    raise ValueError("outcome must be an object with a state")
             except (OSError, ValueError) as exc:
-                outcome = {"state": "incomplete", "reason": f"unreadable outcome: {exc}"}
-            grade = outcome.get("grade") or {}
-            outcome["accepted"] = integrity is None and outcome.get("native_valid") is True and grade.get("state") == "graded" and grade.get("passed") is True
+                outcome = {"state": "incomplete", "evidence_error": f"unreadable outcome: {exc}"}
+            try:
+                validate_evidence(root, plan, cell, stage, outcome)
+            except (ApplicationError, OSError, ValueError, KeyError, TypeError) as exc:
+                outcome["evidence_error"] = f"{type(exc).__name__}: {exc}"
+            grade = outcome.get("grade") if isinstance(outcome.get("grade"), dict) else {}
+            outcome["accepted"] = (integrity is None and "evidence_error" not in outcome
+                                   and outcome.get("native_valid") is True
+                                   and grade.get("state") == "graded" and grade.get("passed") is True)
             stages[stage] = outcome
         rows.append({**cell, **stages, "both_accepted": all(stages[stage]["accepted"] for stage in STAGES)})
     totals = {}
@@ -506,7 +597,13 @@ def report(root: Path):
         lines.append(f"| {row['id']} | {row['case']} | {row['repetition']} | {row['arm']} | {initial['state']}, accepted={initial['accepted']} | {maintenance['state']}, accepted={maintenance['accepted']} | {row['both_accepted']} |")
     if integrity:
         lines += ["", f"Input integrity failure: {integrity}"]
-    lines += ["", "Native validity, behavioral grades, raw usage, elapsed time, and paired repetitions are separate fields in report.json.",
+    evidence_errors = [(row["id"], stage, row[stage]["evidence_error"])
+                       for row in rows for stage in STAGES if "evidence_error" in row[stage]]
+    if evidence_errors:
+        lines += ["", "Retained evidence errors invalidate acceptance for these stages.", ""]
+        lines.extend(f"- {cell_id} {stage}: {error}" for cell_id, stage, error in evidence_errors)
+    lines += ["", "Native validity, executable application grades, raw usage, elapsed time, and paired repetitions are separate fields in report.json.",
+              "Requested README updates and broader task quality are unmeasured.",
               "No general causal claim follows from these three tasks. Never-started and unknown measurements are not passes."]
     (root / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return result
