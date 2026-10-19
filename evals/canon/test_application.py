@@ -208,8 +208,11 @@ else:
 
     def test_cleanup_failure_cannot_be_native_success(self):
         result, _ = self.run_attempt("cleanup_failure")
-        self.assertEqual((result.state, result.native_valid), ("cleanup_failed", False))
-        self.assertEqual(application.replay(result.capture, self.root / "replayed").joinpath("new.txt").read_text(), "new data")
+        self.assertEqual((result.state, result.native_valid, result.capture), ("cleanup_failed", False, None))
+        receipt = json.loads(result.receipt.read_text())
+        self.assertEqual(receipt["cleanup_confirmed"], False)
+        private_capture = application.Snapshot(Path(receipt["capture"]["directory"]), receipt["capture"]["sha256"])
+        self.assertEqual(application.replay(private_capture, self.root / "replayed").joinpath("new.txt").read_text(), "new data")
 
     def test_changed_assigned_guidance_invalidates_attempt(self):
         result, _ = self.run_attempt("guidance_changed")
