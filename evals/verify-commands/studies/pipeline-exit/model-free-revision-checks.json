@@ -1,0 +1,417 @@
+{
+  "scope": "Review fix round, public model-free checks only",
+  "cwd": ".",
+  "initial_round": {
+    "status": "failed",
+    "reason": "Scratch ownership change required deliberately dropped CAP_CHOWN; 51 existing tests passed, 13 new-selector subtests failed as infrastructure.",
+    "calls": [
+      {
+        "argv": [
+          "python3",
+          "-B",
+          "./.pipeline-review-9qkb9ix0/baseline/check_plan.py",
+          "pipeline-tail",
+          "./.pipeline-review-9qkb9ix0/answer"
+        ],
+        "cwd": ".",
+        "exit": 0,
+        "seconds": 1.029,
+        "stdout": "{\"operation_evidence\": \"authenticated by the container evidence server\", \"states\": [\"healthy\", \"broken\", \"forced-operation-failure\"], \"status\": \"pass\"}\n",
+        "stderr": "",
+        "expected_exit": 0,
+        "input_file": "evals/verify-commands/oracles/samples/silent-pipeline.md",
+        "input_sha256": "0fb3df2b0a86bdc22da77a9347b0367a7441020cac1396e8315b9a9a5af1af36"
+      },
+      {
+        "argv": [
+          "python3",
+          "-B",
+          "./.pipeline-review-9qkb9ix0/baseline/check_plan.py",
+          "pipeline-tail",
+          "./.pipeline-review-9qkb9ix0/answer"
+        ],
+        "cwd": ".",
+        "exit": 1,
+        "seconds": 0.796,
+        "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 1, \"exit_matches\": false, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"state\": \"healthy\", \"stderr\": \"mktemp: failed to create file via template \\u2018/release.XXXXXX\\u2019: Read-only file system\\n\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 1, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"state\": \"broken\", \"stderr\": \"mktemp: failed to create file via template \\u2018/release.XXXXXX\\u2019: Read-only file system\\n\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 1, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"state\": \"forced-operation-failure\", \"stderr\": \"mktemp: failed to create file via template \\u2018/release.XXXXXX\\u2019: Read-only file system\\n\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+        "stderr": "",
+        "expected_exit": 1,
+        "input_file": "evals/verify-commands/oracles/samples/valid-pipeline-log.md",
+        "input_sha256": "20f516ca34fe2bb4fbddf1ecdc6b7e56d2826474c0ac6494894ebe53bd98c4c2"
+      },
+      {
+        "argv": [
+          "python3",
+          "-B",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "evals/verify-commands/oracles",
+          "-p",
+          "test_*.py",
+          "-v"
+        ],
+        "cwd": ".",
+        "exit": 1,
+        "seconds": 113.645,
+        "stdout": "",
+        "stderr": "test_bytecode_controls_observe_literal_imported_values_with_fresh_namespaces (test_check_plan.PlanReplayTests.test_bytecode_controls_observe_literal_imported_values_with_fresh_namespaces) ... ok\ntest_candidate_bytes_are_only_tar_payload (test_check_plan.PlanReplayTests.test_candidate_bytes_are_only_tar_payload) ... ok\ntest_candidate_cannot_mutate_root_owned_fixture (test_check_plan.PlanReplayTests.test_candidate_cannot_mutate_root_owned_fixture) ... ok\ntest_candidate_failure_and_timeout_preserve_completed_lifecycle_observation (test_check_plan.PlanReplayTests.test_candidate_failure_and_timeout_preserve_completed_lifecycle_observation) ... ok\ntest_case_definition_is_not_candidate_readable (test_check_plan.PlanReplayTests.test_case_definition_is_not_candidate_readable) ... ok\ntest_changed_trailing_argument_is_not_accepted (test_check_plan.PlanReplayTests.test_changed_trailing_argument_is_not_accepted) ... ok\ntest_consistent_path_rename_and_paraphrase_preserve_replay_verdict (test_check_plan.PlanReplayTests.test_consistent_path_rename_and_paraphrase_preserve_replay_verdict) ... ok\ntest_container_invocation_has_no_mount_or_socket (test_check_plan.PlanReplayTests.test_container_invocation_has_no_mount_or_socket) ... ok\ntest_controller_receives_observer_output_and_propagates_its_exit (test_check_plan.PlanReplayTests.test_controller_receives_observer_output_and_propagates_its_exit) ... ok\ntest_eight_lifecycle_attempts_run_and_ninth_latches_failure_without_a_worker (test_check_plan.PlanReplayTests.test_eight_lifecycle_attempts_run_and_ninth_latches_failure_without_a_worker) ... ok\ntest_empty_selection_is_not_accepted (test_check_plan.PlanReplayTests.test_empty_selection_is_not_accepted) ... ok\ntest_equivalent_python_script_paths_pass_real_replays (test_check_plan.PlanReplayTests.test_equivalent_python_script_paths_pass_real_replays) ... ok\ntest_every_public_state_matrix_accepts_its_valid_plan (test_check_plan.PlanReplayTests.test_every_public_state_matrix_accepts_its_valid_plan) ... ok\ntest_executed_operation_status_must_control_the_plan (test_check_plan.PlanReplayTests.test_executed_operation_status_must_control_the_plan) ... ok\ntest_expected_stdout_cannot_replace_wrong_authenticated_imports (test_check_plan.PlanReplayTests.test_expected_stdout_cannot_replace_wrong_authenticated_imports) ... ok\ntest_fresh_cache_print_only_gate_rejects_expected_mismatch (test_check_plan.PlanReplayTests.test_fresh_cache_print_only_gate_rejects_expected_mismatch) ... ok\ntest_ignored_forced_status_fails_even_with_correct_imported_values (test_check_plan.PlanReplayTests.test_ignored_forced_status_fails_even_with_correct_imported_values) ... ok\ntest_import_observation_survives_a_later_checker_output_failure (test_check_plan.PlanReplayTests.test_import_observation_survives_a_later_checker_output_failure) ... ok\ntest_lifecycle_broker_preserves_an_unrelated_baseline_child (test_check_plan.PlanReplayTests.test_lifecycle_broker_preserves_an_unrelated_baseline_child) ... ok\ntest_lifecycle_crash_and_wrong_status_fail_despite_expected_outer_nonzero (test_check_plan.PlanReplayTests.test_lifecycle_crash_and_wrong_status_fail_despite_expected_outer_nonzero) ... ok\ntest_lifecycle_invalid_attempt_stays_invalid_in_either_order (test_check_plan.PlanReplayTests.test_lifecycle_invalid_attempt_stays_invalid_in_either_order) ... ok\ntest_lifecycle_measured_pipe_has_eof_while_worker_and_child_are_alive (test_check_plan.PlanReplayTests.test_lifecycle_measured_pipe_has_eof_while_worker_and_child_are_alive) ... ok\ntest_lifecycle_public_cli_retains_clean_and_dirty_facts_and_actual_exits (test_check_plan.PlanReplayTests.test_lifecycle_public_cli_retains_clean_and_dirty_facts_and_actual_exits) ... ok\ntest_lifecycle_repair_first_is_authenticated_and_rejected_with_an_outer_zero_control (test_check_plan.PlanReplayTests.test_lifecycle_repair_first_is_authenticated_and_rejected_with_an_outer_zero_control) ... ok\ntest_lifecycle_worker_output_bound_fails_without_erasing_facts (test_check_plan.PlanReplayTests.test_lifecycle_worker_output_bound_fails_without_erasing_facts) ... ok\ntest_lookalike_operation_cannot_be_created_outside_the_project (test_check_plan.PlanReplayTests.test_lookalike_operation_cannot_be_created_outside_the_project) ... ok\ntest_malicious_command_cannot_write_outside_tmpfs (test_check_plan.PlanReplayTests.test_malicious_command_cannot_write_outside_tmpfs) ... ok\ntest_matching_exit_directions_cannot_forge_execution_evidence (test_check_plan.PlanReplayTests.test_matching_exit_directions_cannot_forge_execution_evidence) ... ok\ntest_native_cache_prefix_options_and_equivalent_script_paths_pass (test_check_plan.PlanReplayTests.test_native_cache_prefix_options_and_equivalent_script_paths_pass) ... ok\ntest_native_no_write_flag_alone_still_reads_stale_cache (test_check_plan.PlanReplayTests.test_native_no_write_flag_alone_still_reads_stale_cache) ... ok\ntest_natural_shell_responses_allow_different_prose_and_shell_spelling (test_check_plan.PlanReplayTests.test_natural_shell_responses_allow_different_prose_and_shell_spelling) ... ok\ntest_non_executing_and_forged_plans_fail (test_check_plan.PlanReplayTests.test_non_executing_and_forged_plans_fail) ... ok\ntest_prepopulated_timestamp_cache_is_read_despite_no_write_setting_and_rejected (test_check_plan.PlanReplayTests.test_prepopulated_timestamp_cache_is_read_despite_no_write_setting_and_rejected) ... ok\ntest_quoted_shell_vocabulary_is_data (test_check_plan.PlanReplayTests.test_quoted_shell_vocabulary_is_data) ... ok\ntest_reads_from_the_standard_unresolved_temporary_root (test_check_plan.PlanReplayTests.test_reads_from_the_standard_unresolved_temporary_root) ... ok\ntest_real_lifecycle_worker_failures_recover_only_owned_children (test_check_plan.PlanReplayTests.test_real_lifecycle_worker_failures_recover_only_owned_children) ... ok\ntest_rejects_a_hard_linked_output_file (test_check_plan.PlanReplayTests.test_rejects_a_hard_linked_output_file) ... ok\ntest_rejects_a_non_regular_output_file (test_check_plan.PlanReplayTests.test_rejects_a_non_regular_output_file) ... ok\ntest_rejects_a_symlinked_output_file (test_check_plan.PlanReplayTests.test_rejects_a_symlinked_output_file) ... ok\ntest_rejects_ambiguous_artifacts (test_check_plan.PlanReplayTests.test_rejects_ambiguous_artifacts) ... ok\ntest_rejects_output_below_a_symlinked_ancestor (test_check_plan.PlanReplayTests.test_rejects_output_below_a_symlinked_ancestor) ... ok\ntest_rejects_output_swapped_to_a_symlink_at_open (test_check_plan.PlanReplayTests.test_rejects_output_swapped_to_a_symlink_at_open) ... ok\ntest_repeated_correct_imports_with_different_cache_paths_pass (test_check_plan.PlanReplayTests.test_repeated_correct_imports_with_different_cache_paths_pass) ... ok\ntest_source_hash_receipts_do_not_establish_executed_bytecode_behavior (test_check_plan.PlanReplayTests.test_source_hash_receipts_do_not_establish_executed_bytecode_behavior) ... ok\ntest_stdin_runpy_wrapper_is_outside_the_script_entrypoint_contract (test_check_plan.PlanReplayTests.test_stdin_runpy_wrapper_is_outside_the_script_entrypoint_contract) ... ok\ntest_two_different_valid_commands_pass_real_replays (test_check_plan.PlanReplayTests.test_two_different_valid_commands_pass_real_replays) ... ok\ntest_unavailable_docker_is_unmeasured (test_check_plan.PlanReplayTests.test_unavailable_docker_is_unmeasured) ... ok\ntest_unrelated_socket_sender_cannot_forge_imported_behavior (test_check_plan.PlanReplayTests.test_unrelated_socket_sender_cannot_forge_imported_behavior) ... ok\ntest_unsupported_startup_settings_do_not_enter_the_observer_worker (test_check_plan.PlanReplayTests.test_unsupported_startup_settings_do_not_enter_the_observer_worker) ... ok\ntest_unused_closed_stderr_preserves_valid_observer_execution (test_check_plan.PlanReplayTests.test_unused_closed_stderr_preserves_valid_observer_execution) ... ok\ntest_wrong_then_correct_and_correct_then_wrong_imports_both_fail (test_check_plan.PlanReplayTests.test_wrong_then_correct_and_correct_then_wrong_imports_both_fail) ... ok\ntest_old_selector_has_no_scratch_or_file_write_allowance (test_pipeline_tail.PipelineTailTests.test_old_selector_has_no_scratch_or_file_write_allowance) ... ok\ntest_public_cli_accepts_multiple_correct_repairs (test_pipeline_tail.PipelineTailTests.test_public_cli_accepts_multiple_correct_repairs) ... \n  test_public_cli_accepts_multiple_correct_repairs (test_pipeline_tail.PipelineTailTests.test_public_cli_accepts_multiple_correct_repairs) (name='valid-pipeline-bash') ... FAIL\n  test_public_cli_accepts_multiple_correct_repairs (test_pipeline_tail.PipelineTailTests.test_public_cli_accepts_multiple_correct_repairs) (name='valid-pipeline-log') ... FAIL\n  test_public_cli_accepts_multiple_correct_repairs (test_pipeline_tail.PipelineTailTests.test_public_cli_accepts_multiple_correct_repairs) (name='valid-pipeline-normalized') ... FAIL\ntest_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) ... \n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='silent') ... FAIL\n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='unfiltered') ... FAIL\n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='unprotected') ... FAIL\n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='ignored') ... FAIL\n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='nineteen') ... FAIL\n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='twentyone') ... FAIL\n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='wrong-suffix') ... FAIL\n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='no-operation') ... FAIL\n  test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='print-only') ... FAIL\ntest_scratch_resets_and_prepared_project_is_immutable (test_pipeline_tail.PipelineTailTests.test_scratch_resets_and_prepared_project_is_immutable) ... FAIL\n\n======================================================================\nFAIL: test_public_cli_accepts_multiple_correct_repairs (test_pipeline_tail.PipelineTailTests.test_public_cli_accepts_multiple_correct_repairs) (name='valid-pipeline-bash')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 28, in test_public_cli_accepts_multiple_correct_repairs\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_accepts_multiple_correct_repairs (test_pipeline_tail.PipelineTailTests.test_public_cli_accepts_multiple_correct_repairs) (name='valid-pipeline-log')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 28, in test_public_cli_accepts_multiple_correct_repairs\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_accepts_multiple_correct_repairs (test_pipeline_tail.PipelineTailTests.test_public_cli_accepts_multiple_correct_repairs) (name='valid-pipeline-normalized')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 28, in test_public_cli_accepts_multiple_correct_repairs\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='silent')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='unfiltered')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='unprotected')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='ignored')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='nineteen')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='twentyone')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='wrong-suffix')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='no-operation')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) (name='print-only')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 41, in test_public_cli_rejects_output_and_verdict_violations\n    code, result = self.run_script(answer.split(\"```sh\\n\")[1].split(\"\\n```\")[0])\n                   ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n======================================================================\nFAIL: test_scratch_resets_and_prepared_project_is_immutable (test_pipeline_tail.PipelineTailTests.test_scratch_resets_and_prepared_project_is_immutable)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 50, in test_scratch_resets_and_prepared_project_is_immutable\n    code, result = self.run_script(script)\n                   ~~~~~~~~~~~~~~~^^^^^^^^\n  File \"./evals/verify-commands/oracles/test_pipeline_tail.py\", line 21, in run_script\n    self.assertNotEqual(result.returncode, 2, result.stderr + result.stdout)\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 2 == 2 : {\"reason\": \"container replay failed\", \"status\": \"infrastructure\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"<string>\\\", line 1035, in <module>\\n  File \\\"<string>\\\", line 928, in run_case\\nPermissionError: [Errno 1] Operation not permitted: '/work/run/tmp'\\n\"}\n\n\n----------------------------------------------------------------------\nRan 55 tests in 113.552s\n\nFAILED (failures=13)\n",
+        "expected_exit": 0
+      }
+    ],
+    "baseline_regression": "Historical primary predicate accepted suppressed output and rejected the correct temporary-log solution when replayed with the new long fixture and case definition."
+  },
+  "calls": [
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "evals/verify-commands/oracles",
+        "-p",
+        "test_pipeline_tail.py",
+        "-v"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "seconds": 14.286,
+      "stdout": "",
+      "stderr": "test_old_selector_has_no_scratch_or_file_write_allowance (test_pipeline_tail.PipelineTailTests.test_old_selector_has_no_scratch_or_file_write_allowance) ... ok\ntest_public_cli_accepts_multiple_correct_repairs (test_pipeline_tail.PipelineTailTests.test_public_cli_accepts_multiple_correct_repairs) ... ok\ntest_public_cli_rejects_output_and_verdict_violations (test_pipeline_tail.PipelineTailTests.test_public_cli_rejects_output_and_verdict_violations) ... ok\ntest_scratch_resets_and_prepared_project_is_immutable (test_pipeline_tail.PipelineTailTests.test_scratch_resets_and_prepared_project_is_immutable) ... ok\n\n----------------------------------------------------------------------\nRan 4 tests in 14.244s\n\nOK\n",
+      "expected_exit": 0
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "stale-summary",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "seconds": 1.775,
+      "stdout": "{\"operation_evidence\": \"authenticated by the container evidence server\", \"states\": [\"current\", \"count-changed\", \"broken\", \"forced-operation-failure\"], \"status\": \"pass\"}\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "input_file": "evals/verify-commands/oracles/samples/valid-stale-npm.md",
+      "input_sha256": "013ed39cc4b70bdbde11abdf67166b9b1a0ce4c87112823f9530b1054c7b980b"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "stale-summary",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 1.811,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/run-checks.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/ignored-operation-status.md",
+      "input_sha256": "f5f8502c22bca5abcbe9e0f2839bfa26c805591f561960633606cdbde597ca8a"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "healthy-control",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "seconds": 1.079,
+      "stdout": "{\"operation_evidence\": \"authenticated by the container evidence server\", \"states\": [\"healthy\", \"broken\", \"forced-operation-failure\"], \"status\": \"pass\"}\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "input_file": "evals/verify-commands/oracles/samples/valid-healthy-control.md",
+      "input_sha256": "770e74558f197f7195b9be0fb1ae3d04ed152eb4666065f8081d196a94445463"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 1.024,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/ignored-pipeline.md",
+      "input_sha256": "8924a47793007e81a679d2a89d44deaff5317637b8dd5bc0b881078cf1d56e78"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 1.082,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 97, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/nineteen-pipeline.md",
+      "input_sha256": "9f1d7b56b6946494d72796da30e8784f8ad7c0940bc73e12616b7fa274cc58a6"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 0.775,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/no-operation-pipeline.md",
+      "input_sha256": "90da4acd089877f55830691bde8ae4bb27017a104c6ba4a3757e15a429cde2ff"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 0.789,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": true, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": false, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": true, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [{\"args\": [\"tools/verify-release.py\"], \"program\": \"python\"}], \"observed_commands\": [], \"output_matches\": false, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/print-only-pipeline.md",
+      "input_sha256": "48a8b2f7c9e746e0af116afe0b8d0a567a7b7be860f504d9bad464a69c63e26a"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 1.019,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 97, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/silent-pipeline.md",
+      "input_sha256": "0fb3df2b0a86bdc22da77a9347b0367a7441020cac1396e8315b9a9a5af1af36"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 1.049,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 10\\ncheck 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 10\\ncheck 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 10\\ncheck 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 10\\ncheck 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 97, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/twentyone-pipeline.md",
+      "input_sha256": "33e3a0bfc69a872c5ca05155bd28b0564ced56759a234895f6053851fc60c58e"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 1.033,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"check 15\\n\", \"stdout\": \"check 01\\ncheck 02\\ncheck 03\\ncheck 04\\ncheck 05\\ncheck 06\\ncheck 07\\ncheck 08\\ncheck 09\\ncheck 10\\ncheck 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"check 15\\nERROR release blocked\\n\", \"stdout\": \"check 01\\ncheck 02\\ncheck 03\\ncheck 04\\ncheck 05\\ncheck 06\\ncheck 07\\ncheck 08\\ncheck 09\\ncheck 10\\ncheck 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\n\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"check 15\\n\", \"stdout\": \"check 01\\ncheck 02\\ncheck 03\\ncheck 04\\ncheck 05\\ncheck 06\\ncheck 07\\ncheck 08\\ncheck 09\\ncheck 10\\ncheck 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"check 15\\nERROR release blocked\\n\", \"stdout\": \"check 01\\ncheck 02\\ncheck 03\\ncheck 04\\ncheck 05\\ncheck 06\\ncheck 07\\ncheck 08\\ncheck 09\\ncheck 10\\ncheck 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 97, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/unfiltered-pipeline.md",
+      "input_sha256": "dbbe07492f90cd7636265b72abb130688cdd163bbc9cea109c5145d494624794"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 0.958,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/unprotected-pipeline.md",
+      "input_sha256": "ef58448ded5e7e87432bd1de9ab0b3f66d7a62fc6853c94a8a7ff28f6fa16029"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "seconds": 1.056,
+      "stdout": "{\"operation_evidence\": \"authenticated by the container evidence server\", \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 97, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"states\": [\"healthy\", \"broken\", \"forced-operation-failure\"], \"status\": \"pass\"}\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "input_file": "evals/verify-commands/oracles/samples/valid-pipeline-bash.md",
+      "input_sha256": "e52847ef95555d8f8a0543d7d345b750dd6a00d2bc361b8a0ee81937bb630c65"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "seconds": 1.011,
+      "stdout": "{\"operation_evidence\": \"authenticated by the container evidence server\", \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 97, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"states\": [\"healthy\", \"broken\", \"forced-operation-failure\"], \"status\": \"pass\"}\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "input_file": "evals/verify-commands/oracles/samples/valid-pipeline-log.md",
+      "input_sha256": "20f516ca34fe2bb4fbddf1ecdc6b7e56d2826474c0ac6494894ebe53bd98c4c2"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "seconds": 1.058,
+      "stdout": "{\"operation_evidence\": \"authenticated by the container evidence server\", \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 1, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"check 11\\ncheck 12\\ncheck 13\\ncheck 14\\ncheck 15\\ncheck 16\\ncheck 17\\ncheck 18\\ncheck 19\\ncheck 20\\ncheck 21\\ncheck 22\\ncheck 23\\ncheck 24\\ncheck 25\\ncheck 26\\ncheck 27\\ncheck 28\\ncheck 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 1, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"states\": [\"healthy\", \"broken\", \"forced-operation-failure\"], \"status\": \"pass\"}\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "input_file": "evals/verify-commands/oracles/samples/valid-pipeline-normalized.md",
+      "input_sha256": "5ff4a2027452731a1735f11f115364cf0a7e0c878776becec7a260e8b95b5411"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "pipeline-tail",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 1.051,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"wrong 11\\nwrong 12\\nwrong 13\\nwrong 14\\nwrong 15\\nwrong 16\\nwrong 17\\nwrong 18\\nwrong 19\\nwrong 20\\nwrong 21\\nwrong 22\\nwrong 23\\nwrong 24\\nwrong 25\\nwrong 26\\nwrong 27\\nwrong 28\\nwrong 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"wrong 11\\nwrong 12\\nwrong 13\\nwrong 14\\nwrong 15\\nwrong 16\\nwrong 17\\nwrong 18\\nwrong 19\\nwrong 20\\nwrong 21\\nwrong 22\\nwrong 23\\nwrong 24\\nwrong 25\\nwrong 26\\nwrong 27\\nwrong 28\\nwrong 29\\nERROR release blocked\\n\", \"timed_out\": false}], \"output_evidence\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": true, \"expected\": \"zero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"healthy\", \"stderr\": \"\", \"stdout\": \"wrong 11\\nwrong 12\\nwrong 13\\nwrong 14\\nwrong 15\\nwrong 16\\nwrong 17\\nwrong 18\\nwrong 19\\nwrong 20\\nwrong 21\\nwrong 22\\nwrong 23\\nwrong 24\\nwrong 25\\nwrong 26\\nwrong 27\\nwrong 28\\nwrong 29\\nOK release ready\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 7, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": false, \"state\": \"broken\", \"stderr\": \"\", \"stdout\": \"wrong 11\\nwrong 12\\nwrong 13\\nwrong 14\\nwrong 15\\nwrong 16\\nwrong 17\\nwrong 18\\nwrong 19\\nwrong 20\\nwrong 21\\nwrong 22\\nwrong 23\\nwrong 24\\nwrong 25\\nwrong 26\\nwrong 27\\nwrong 28\\nwrong 29\\nERROR release blocked\\n\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 97, \"exit_matches\": true, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"python3\", \"tools/verify-release.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_file": "evals/verify-commands/oracles/samples/wrong-suffix-pipeline.md",
+      "input_sha256": "b992e76ddd1944993aa5c86492251e34dabb9d7e908b4a42c3df3262030dfb4e"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "stale-summary",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 0,
+      "seconds": 1.828,
+      "stdout": "{\"operation_evidence\": \"authenticated by the container evidence server\", \"states\": [\"current\", \"count-changed\", \"broken\", \"forced-operation-failure\"], \"status\": \"pass\"}\n",
+      "stderr": "",
+      "expected_exit": 0,
+      "input_shell": "bash -o pipefail -c 'npm run verify | tail -n 20'"
+    },
+    {
+      "argv": [
+        "python3",
+        "-B",
+        "evals/verify-commands/studies/pipeline-exit/oracle/check_plan.py",
+        "stale-summary",
+        "./.pipeline-review-fk741yxn"
+      ],
+      "cwd": ".",
+      "exit": 1,
+      "seconds": 1.842,
+      "stdout": "{\"failed_states\": [{\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"/usr/local/bin/python3\", \"tools/run-checks.py\"]], \"output_matches\": true, \"state\": \"broken\", \"stderr\": \"release check failed\\n\", \"stdout\": \"\", \"timed_out\": false}, {\"behavior_checks\": [], \"exit\": 0, \"exit_matches\": false, \"expected\": \"nonzero\", \"fixture_receipt\": null, \"lifecycle_checks\": [], \"missing_operations\": [], \"observed_commands\": [[\"/usr/local/bin/python3\", \"tools/run-checks.py\"]], \"output_matches\": true, \"state\": \"forced-operation-failure\", \"stderr\": \"\", \"stdout\": \"\", \"timed_out\": false}], \"status\": \"candidate_failure\"}\n",
+      "stderr": "",
+      "expected_exit": 1,
+      "input_shell": "bash -c 'npm run verify | tail -n 20'"
+    }
+  ],
+  "limitations": [
+    "No subject or judge calls; no private prompts read.",
+    "Historical setup records are unchanged.",
+    "Historical runtime installation and planning interfaces remain for the dedicated native Test phase.",
+    "Baseline reproduction runs after edits because this fix round requires batching all fixes before verification."
+  ],
+  "status": "pass",
+  "path_normalization": "Worktree prefix replaced with dot for public evidence. Raw outputs remain in native tool transcript.",
+  "oracle_revision": "335c99053c9ad8b86b0f9d2bcbd6991b492c8301",
+  "oracle_hashes": {
+    "oracle/check_plan.py": "a2bd731c26cb14a7d7cbca3cea580b1535ba43906b7da0590f0267cd593b387c",
+    "oracle/cases.json": "257cefdefdfd69aced3776b79affbe26f0ef2ab3fd6130b3425b10e369f490ea",
+    "oracle/projects/bytecode_controls.py": "45b84dc46d671231cc2a84afa749e3f0f29f67f521f44c28b9f8c8e1d311084c",
+    "oracle/projects/defaulted_parity.py": "31f66c69599126c0d8ed6dbf6488a5242ec00d833f842e59fc400ac2a029f825",
+    "oracle/projects/empty_selection.py": "432ece45ebd6c7cc24c7fe49f7ba4f9e0a10da3df4948a9d69603f4823b076f7",
+    "oracle/projects/healthy_control.py": "3c01ef8d99ff93cb88af3e20604869e92cd84fb6a3ef0541225857b7bc891589",
+    "oracle/projects/lifecycle_observation.py": "08209e8631e801109c79cbab04f51de8a35b9ba1fa03f0487a4701eec8cad5be",
+    "oracle/projects/package_path.py": "6c020825979f0cc0d4c1fe12db84705446fa144593af0c4e1f94c0b7936820fc",
+    "oracle/projects/pipeline_tail.py": "272f02833af2bb07b9fa1a3b76f044ef0a8570f104cde29fb9d727a3aa34504b",
+    "oracle/projects/scoped_source.py": "af0747021b8ab7b8ff5f79d896747cb40bc03a1bcf4dcffbb71959cbc2841984",
+    "oracle/projects/stale_summary.py": "e90e03d206699e4cc5be9287054ca4a860c882ee19b41d7bae86b6faf2c5d4e6"
+  },
+  "populations": {
+    "screen_cases": 3,
+    "planned_screen_answers": 9,
+    "confirmation_placeholders": 4,
+    "authorized_confirmation_answers": 0,
+    "frozen_cli_controls": 17
+  },
+  "documentation_review": {
+    "mode": "author with independent read-only review",
+    "result": "pass",
+    "reviewed_paths": [
+      "README.md",
+      "screen.json",
+      "confirmation.template.json",
+      "study.json",
+      "source-lock.json"
+    ],
+    "snapshot": "Current working tree; SHA-256 lock identifies oracle and treatment bytes.",
+    "comments_review": "No added code comments; no findings.",
+    "oracle_revision": "335c99053c9ad8b86b0f9d2bcbd6991b492c8301"
+  }
+}

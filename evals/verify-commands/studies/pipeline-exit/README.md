@@ -4,19 +4,30 @@ This study compares the current verify-commands skill, its previous revision, an
 
 The organizing record is [study.json](study.json). [source-lock.json](source-lock.json) pins treatment and oracle bytes. Both packages retain the skill identity `verify-commands`. Mount only the selected package in each isolated task.
 
-[screen.json](screen.json) has exactly four public tuning prompts. It reuses `pos-stale-summary` and `healthy-control`, then adds tail-filtering and separate-shell prompts. One repetition across three arms produces 12 answers. The existing pipeline trigger case is excluded because activation is not behavioral evidence.
+[screen.json](screen.json) has three public exploratory cases: stale-count handling, preservation of an already-correct command, and pipeline failure propagation. The pipeline case includes the earlier independent-shell scenario and requires exactly the last 20 lines of combined verifier stdout and stderr. One repetition across current, previous, and absent skill arms produces exactly nine answers.
 
-[confirmation.template.json](confirmation.template.json) is a public interface with four hidden prompt references. It is not a sealed dataset or an executable confirmation run. An independent author supplies four new private cases. Three repetitions across three arms produce 36 answers. Total answer budget is 48, with at most one judge verdict per answer and no panel.
+[confirmation.template.json](confirmation.template.json) retains four public hidden-prompt placeholders for a possible 36-answer plan. All 36 confirmation answers remain deferred, with zero authorized confirmation answers. Placeholders are not reviewed heldout cases. Before receiving budget, each future real case must name its promise, demonstrate an oracle control that catches its violation, and explain which decision the result could change.
 
-## Check the runtime and frozen sources
+## Install and attest the historical runtime
 
-Run from the pstack repository root. Set `HARNESS_PYTHON` to the installed skill-ci virtual environment's absolute Python executable. Set `RUN_ROOT` to a private output directory. Set `PRIVATE_ROOT` to the full private study directory that contains `cases.json`. Do not store outputs or private prompts in this public study directory.
+Run from the repository root with Git and Python 3.12 on PATH. Create a fresh, separate virtual environment outside the repository. This recipe installs distribution `skill-eval-harness-ext` version `0.6.0` at the exact historical Git revision. It does not use the repository's default skill-ci environment or change its bootstrap, pins, or installed skills.
+
+```sh
+export EXTERNAL_VENV="$HOME/.venvs/pipeline-exit-c23ed795"
+test ! -e "$EXTERNAL_VENV" || { echo 'Choose a fresh EXTERNAL_VENV path' >&2; exit 1; }
+python3.12 -m venv "$EXTERNAL_VENV" || exit 1
+"$EXTERNAL_VENV/bin/python" -m pip install 'skill-eval-harness-ext @ git+https://github.com/mdsmithaustin/skill-eval-harness.git@c23ed79554995c60cbd63cc9da9f47837cfa6f9a' || exit 1
+export HARNESS_PYTHON="$EXTERNAL_VENV/bin/python"
+```
+
+The existing-directory check, environment creation, and installation each fail with a non-zero exit. Choose a different external path if the default already exists. No sister PR is required.
+
+Set `RUN_ROOT` to a separate output directory. The public preparation commands below do not read private cases. `PRIVATE_ROOT` is needed only by a future independently approved confirmation owner.
 
 ```sh
 export STUDY="$(pwd)/evals/verify-commands/studies/pipeline-exit"
 export RUN_ROOT="${RUN_ROOT:?Set RUN_ROOT to a private output directory}"
-export PRIVATE_ROOT="${PRIVATE_ROOT:?Set PRIVATE_ROOT to the private study directory containing cases.json}"
-export HARNESS_PYTHON="${HARNESS_PYTHON:?Set HARNESS_PYTHON to the installed harness Python}"
+export HARNESS_PYTHON="${HARNESS_PYTHON:?Run the historical environment setup first}"
 mkdir -p "$RUN_ROOT"
 ```
 
@@ -24,15 +35,24 @@ Failure signal for each required variable is a non-zero shell exit when it is ab
 
 ```sh
 "$HARNESS_PYTHON" -I - <<'PYCODE'
+import hashlib
 import importlib.metadata as metadata
+import importlib.util
 import json
-record = json.loads(metadata.distribution("skill-eval-harness-ext").read_text("direct_url.json"))
-assert record["vcs_info"]["commit_id"] == "c23ed79554995c60cbd63cc9da9f47837cfa6f9a", record
-print("Installed harness pin matches.")
+import os
+from pathlib import Path
+lock = json.loads((Path(os.environ["STUDY"]) / "source-lock.json").read_text())
+distribution = metadata.distribution("skill-eval-harness-ext")
+record = json.loads(distribution.read_text("direct_url.json"))
+assert distribution.version == "0.6.0", distribution.version
+assert record["vcs_info"]["commit_id"] == lock["chosen_harness_revision"], record
+module = Path(importlib.util.find_spec("skill_benchmark").origin)
+assert hashlib.sha256(module.read_bytes()).hexdigest() == lock["installed_harness_module"]["sha256"], module
+print("Installed harness version, Git revision, and locked module hash match.")
 PYCODE
 ```
 
-Failure signal is a non-zero exit from a missing distribution or pin mismatch. The shared corpus still declares ancestor `c2a1735983fd7827491ad4d89f9bebe9e8e229a0`. This study deliberately chooses installed `c23ed79554995c60cbd63cc9da9f47837cfa6f9a`; it does not change the shared pin.
+Failure signal is a non-zero exit from a missing distribution, wrong version, revision mismatch, missing module, or module hash mismatch. The shared corpus still declares ancestor `c2a1735983fd7827491ad4d89f9bebe9e8e229a0`. This study deliberately installs `c23ed79554995c60cbd63cc9da9f47837cfa6f9a`; it does not change the shared pin.
 
 ```sh
 "$HARNESS_PYTHON" -I - <<'PYCODE'
@@ -55,9 +75,9 @@ PYCODE
 
 Failure signal is a non-zero exit from a missing source or mismatched bytes. The source skill remains unchanged. Current source is commit `5e5eaa861a5df50c0cedc601db7e9f17e70e2ef9`, SHA-256 `e636242b63a2409e1f0b52f4cc0125bf72de527d1abbdf5c6958105965a76c2e`. Previous source is commit `af9e84907233e3f7be49d74427458690f7ef436f`, SHA-256 `a781a937661a1d5d005145f28db464d866c46c36cfd70b9eebd0ebc1c463b6a2`. The rule was added in commit `7b662326`.
 
-The installed harness requires script assertions and their dependencies to remain inside the manifest directory. `oracle/` therefore freezes the unchanged checker, full case definitions, and only the three required fixture bootstraps. It is not a fork of the implementation. Each file must match its recorded source before a run.
+The installed harness requires script assertions and their dependencies to remain inside the manifest directory. `oracle/` therefore freezes the revised canonical checker, full case definitions, and every bootstrap referenced by that manifest, including fixtures not selected for paid answers. Those dependencies add no paid cases. The canonical source revision is recorded in `source-lock.json`. The original source lock is retained in `source-lock.historical.json`; its bytes describe the historical package at commit `5277f7cd44a0f340ca89bf3efd6ce48382a11df0`, not the revised freeze. Each file must match its recorded source before a run.
 
-The oracle uses `python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36`, network disabled, with a read-only prepared project. It authenticates the required operation and checks healthy, broken, and forced-operation-failure states. A forced operation exit of 97 must make the outer verdict non-zero. The outer interpreter is `/bin/sh`; Bash is available for an explicit invocation. Use nested-Bash controls to test the added rule without changing the oracle. The oracle cannot prove which options existed in a past tool invocation.
+The oracle uses `python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36`, network disabled, with a read-only prepared project. It authenticates the required operation and checks healthy, broken, and forced-operation-failure states. A forced operation exit of 97 must make the outer verdict non-zero. The outer interpreter is `/bin/sh`; Bash is available for an explicit invocation. The new `pipeline-tail` selector checks complete captured stdout against literal expected suffixes and requires empty stderr. Its fixture emits 30 distinct ordered lines in both healthy and broken states, including visible stderr; the task asks candidates to merge streams. Forced exit 97 occurs before the fixture body, so its expected output is empty. Any non-zero outer status preserves failure, including normalized exit 1. Only this selector provides a state-isolated `$TMPDIR` and a 1 MiB per-file limit. All selectors share the existing 64 MiB container tmpfs limit. Scratch is removed after candidate process-group teardown between states. Prepared projects remain immutable, with network disabled and no host mounts. Older selectors retain no scratch and a zero file-size allowance. The oracle cannot prove which options existed in a past tool invocation.
 
 ## Validate and prepare the public splits
 
@@ -72,7 +92,7 @@ These commands make no model calls. Each command fails with a non-zero exit on i
 "$HARNESS_PYTHON" -I -m skill_benchmark prepare "$STUDY/confirmation.template.json" --split holdout --include-old-skill --runs-per-variant 3 --models gpt-6.1-sol --allow-missing-prompts --out "$RUN_ROOT/confirmation.plan.jsonl"
 ```
 
-Validation must report four cases per manifest. Readiness must report no blockers. Confirmation planning uses hidden placeholders and must never reach `run-agent`. A passing template audit does not establish private-case readiness.
+Validation must report three screen cases and four confirmation placeholders. Readiness must report no blockers. Confirmation planning uses hidden placeholders and must never reach `run-agent`. A passing template audit does not establish private-case readiness.
 
 ```sh
 "$HARNESS_PYTHON" -I - <<'PYCODE'
@@ -82,10 +102,11 @@ import json
 import os
 study = Path(os.environ["STUDY"]).resolve()
 run_root = Path(os.environ["RUN_ROOT"])
-for name, count, repetitions in [("screen.tasks.jsonl", 12, 1), ("confirmation.plan.jsonl", 36, 3)]:
+for name, count, repetitions in [("screen.tasks.jsonl", 9, 1), ("confirmation.plan.jsonl", 36, 3)]:
     rows = [json.loads(line) for line in (run_root / name).read_text().splitlines()]
     assert len(rows) == count, (name, len(rows))
-    assert Counter(row["variant"] for row in rows) == {arm: 4 * repetitions for arm in ["with_skill", "without_skill", "old_skill"]}
+    cases = 3 if name == "screen.tasks.jsonl" else 4
+    assert Counter(row["variant"] for row in rows) == {arm: cases * repetitions for arm in ["with_skill", "without_skill", "old_skill"]}
     for row in rows:
         assert not set(row) & {"answer_key", "expected_behavior", "review_rubric", "assertions"}
         arm = row["variant"]
@@ -104,52 +125,32 @@ Failure signal is a non-zero exit on missing rows, omitted arms, changed paths, 
 
 [model-free-checks.json](model-free-checks.json) retains historical setup results, including the private-confirmation preflight record. Packaging this study does not repeat those checks or establish current private-case readiness. In those recorded checks, the frozen oracle accepted the existing valid npm and healthy samples. It rejected the existing ignored-operation-status sample. Nested Bash with pipefail passed; the same pipeline without pipefail failed the broken and forced-failure controls.
 
+The behavioral regression population is retained in the canonical oracle tests. The new public CLI controls accept explicit Bash pipefail, POSIX temporary-log status capture, and normalized failure status. They reject silent, unfiltered, 19-line, 21-line, wrong-suffix, missing-operation, unprotected-tail, ignored-failure, and print-only answers. They also exercise scratch reset, immutable prepared files, and the older selectors' no-write contract.
+
 ```sh
-"$HARNESS_PYTHON" -I -B - <<'PYCODE'
-import importlib.util
-import os
-from pathlib import Path
-import tempfile
-study = Path(os.environ["STUDY"])
-spec = importlib.util.spec_from_file_location("oracle", study / "oracle/check_plan.py")
-oracle = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(oracle)
-samples = Path("evals/verify-commands/oracles/samples")
-controls = [
-    ("stale-summary", (samples / "valid-stale-npm.md").read_text(), 0),
-    ("stale-summary", (samples / "ignored-operation-status.md").read_text(), 1),
-    ("healthy-control", (samples / "valid-healthy-control.md").read_text(), 0),
-    ("stale-summary", "```sh\nbash -o pipefail -c 'npm run verify | tail -n 20'\n```\n", 0),
-    ("stale-summary", "```sh\nbash -c 'npm run verify | tail -n 20'\n```\n", 1),
-]
-for selector, answer, expected in controls:
-    with tempfile.TemporaryDirectory() as directory:
-        output = Path(directory).resolve()
-        (output / "output.md").write_text(answer)
-        code, result = oracle.evaluate(selector, output)
-        assert code == expected, (selector, code, result)
-        print(selector, code, result["status"])
-PYCODE
+"$HARNESS_PYTHON" -I -B -m unittest discover -s evals/verify-commands/oracles -p 'test_*.py' -v
 ```
 
-Failure signal is a non-zero Python exit. Infrastructure status 2, rejected valid controls, or accepted false-green controls all fail this check. The pinned Docker image must already be present because the oracle uses `--pull never`. These synthetic controls verify the instrument and its Bash environment; they do not measure model behavior.
+Failure signal is a non-zero exit, any failed test, or an empty test population. Infrastructure status 2 must fail; it never counts as expected candidate rejection 1. The pinned Docker image must already be present because the checker uses `--pull never` and `--network none`. The source/hash check above binds the canonical implementation and all fixture dependencies to the study freeze. These model-free controls establish instrument behavior only and do not measure model improvement.
 
-## Assemble private confirmation
+For a public frozen-checker replay, each control uses the unchanged CLI `"$HARNESS_PYTHON" -I -B "$STUDY/oracle/check_plan.py" SELECTOR OUTPUT_DIR`, where `OUTPUT_DIR/output.md` contains the complete sample. Expected controls are `valid-stale-npm.md` with `stale-summary` exit 0, `ignored-operation-status.md` with `stale-summary` exit 1, and `valid-healthy-control.md` with `healthy-control` exit 0. The three `valid-pipeline-*.md` samples use `pipeline-tail` and must exit 0; the nine remaining pipeline samples must exit 1. The prior nested-Bash stale-summary controls remain historical and the original regression tests remain intact. Native Test retains its own actual commands, cwd, exits, timings, and streams rather than relabeling historical results as fresh evidence.
 
-The independent author writes `$PRIVATE_ROOT/cases.json`. Do not copy those cases into this repository. The study setup author must not read that file.
+## Deferred private confirmation
 
-The private run owner copies this study directory into `$PRIVATE_ROOT/runtime`. Replace the template's `cases` list with the independently authored four cases and save `confirmation.json` alongside the copied `oracle/` and `packages/`. Normalize only interface fields: split is `holdout`, files resolve below `oracle/projects/`, and executable assertions call `oracle/check_plan.py` with the author's selector. Preserve authored prompts and their case identities. Every case needs one strong gate script assertion, one soft explanation judge assertion, and the three soft exposure assertions from the template. Public template expectations are examples for assembly, not private answer keys. The three supported private selectors are `stale-summary`, `package-path`, and `healthy-control`.
+No private confirmation preparation or prompt access is authorized in the current revision. The following interface is retained for future review only. After explicit authorization, an independent author writes `$PRIVATE_ROOT/cases.json`. Do not copy those cases into this repository. The study setup author must not read that file.
 
-The private run owner validates `confirmation.json` with `--strict-holdback`, audits it with `--split holdout --fail-on-blockers --strict-judge`, and prepares it with `--split holdout --include-old-skill --runs-per-variant 3 --models gpt-6.1-sol`. Omit `--allow-missing-prompts`. Each command's failure signal is a non-zero exit. Inspect the 36 real rows for balanced arms, matching prompts and fixture bytes within each case, correct package paths, and no answer keys. Freeze the private case file and assembled manifest hashes before screen answers are visible. Any prompt edit after that point invalidates the sealed confirmation.
+The private run owner copies this study directory into `$PRIVATE_ROOT/runtime`. Replace the template's `cases` list with the independently authored four cases and save `confirmation.json` alongside the copied `oracle/` and `packages/`. Normalize only interface fields: split is `holdout`, files resolve below `oracle/projects/`, and executable assertions call `oracle/check_plan.py` with the author's selector. Preserve authored prompts and their case identities. Every case needs one strong gate script assertion, one soft explanation judge assertion, and the three soft exposure assertions from the template. Public template expectations are examples for assembly, not private answer keys. The retained template examples use `stale-summary` and `healthy-control`. Each future case still requires its own promise, demonstrated violation control, and decision consequence before any budget is authorized.
+
+The private run owner validates `confirmation.json` with `--strict-holdback`, audits it with `--split holdout --fail-on-blockers --strict-judge`, and prepares it with `--split holdout --include-old-skill --runs-per-variant 3 --models gpt-6.1-sol`. Omit `--allow-missing-prompts`. Each command's failure signal is a non-zero exit. Inspect the 36 real rows for balanced arms, matching prompts and fixture bytes within each case, correct package paths, and no answer keys. In a future independently approved confirmation study, freeze the private case file and assembled manifest hashes before any confirmation answers are visible. Any prompt edit after that point invalidates that sealed confirmation.
 
 ## Review before paid execution
 
-All paid execution remains blocked until human review. The single answer subject is `gpt-6.1-sol`. The cross-family judge model and backend must be finalized at that review; `claude-review-required` is an explicit unresolved marker, not a runnable model choice. Review all 12 screen answers and their oracle evidence before authorizing 36 confirmation answers. Do not repair the skill or rewrite heldout cases between those stages without starting a new study.
+All paid execution remains blocked until human review. The single answer subject is `gpt-6.1-sol`. The cross-family judge model and backend must be finalized at that review; `claude-review-required` is an explicit unresolved marker, not a runnable model choice. The root owns exactly nine subject invocations after native validation and independent review. Native Review/Test/fix phases make zero subject or judge calls. Review all nine screen answers and their oracle evidence before any further decision. All 36 confirmation answers remain deferred; the screen cannot authorize them automatically. Do not repair the skill or rewrite heldout cases between those stages without starting a new study.
 
 Use the existing [evaluation runbook](../../../README.md) for isolated native execution. Fixture bootstraps require the Codex adapter's `workspace-write` sandbox. Resolve the project-only adapter to an absolute path before entering isolated workspaces. Do not expose the source checkout, host skill installation, private answer keys, or the alternate treatment package to an answer task.
 
-Preparation requires `old_skill_paths` and `--include-old-skill`. Each later `grade`, `judge`, and `benchmark` invocation must repeat all three flags: `--variant with_skill --variant without_skill --variant old_skill`. Otherwise the old arm can be silently omitted. Use `--allow-scripts` on grade and benchmark. Set `--judge-runs 1`, select the reviewed cross-family judge, and do not configure a panel. Keep the 12-answer screen and 36-answer confirmation in separate output trees. No executable paid batch is provided here.
+Preparation requires `old_skill_paths` and `--include-old-skill`. Each later `grade`, `judge`, and `benchmark` invocation must repeat all three flags: `--variant with_skill --variant without_skill --variant old_skill`. Otherwise the old arm can be silently omitted. Use `--allow-scripts` on grade and benchmark. Set `--judge-runs 1`, select the reviewed cross-family judge, and do not configure a panel. Keep the nine-answer exploratory screen separate from the deferred confirmation planning output. No executable paid batch is provided here.
 
 The primary score is each answer's existing strong executable oracle result. Judge explanations are secondary and soft. Skill-loading receipts are diagnostic and soft; loading earns no lift. Reject invalid treatment paths, contamination, incomplete or mismatched exposure, and missing output separately before comparing behavioral outcomes. A `skill_invoked` receipt alone cannot prove which mounted file supplied a read.
 
-Reject any current-arm false green or healthy regression. Treat no separation, ceiling, floor, incomplete populations, or separation confined to explanation or exposure scores as inconclusive. A current-arm advantage against both previous and absent arms, with no rejection, is a candidate signal for human review. Four targeted cases do not establish broad skill efficacy. No saved verify-commands runs or weak results from another skill establish a measured weakness here.
+Reject any current-arm false green or healthy regression. Report current versus absent results as whole-skill value, and current versus previous results as added-rule value. Keep those decisions separate. Treat ceiling, floor, incomplete populations, invalid exposure, or separation confined to explanation scores as inconclusive. If there is no valid behavioral separation that informs a decision, end this study without claiming added value or automatically starting confirmation. Keep the useful regression checks even if the default model ties across arms. Three targeted cases do not establish broad skill efficacy. No synthetic control, saved verify-commands run, or result from another skill establishes model improvement here. Judge finalization and human paid-run review remain pending.

@@ -25,8 +25,8 @@
     "old_skill"
   ],
   "split_policy": {
-    "tune": "Four public tuning cases, one repetition.",
-    "holdout": "Four independently authored private cases, three repetitions. Public template contains no heldout prompt."
+    "tune": "Three public exploratory cases, one repetition across three arms: nine answers.",
+    "holdout": "Deferred, zero authorized answers. Four placeholders are not reviewed heldout cases. Each future case requires a promise, an oracle violation control, and a decision consequence before any budget."
   },
   "cases": [
     {

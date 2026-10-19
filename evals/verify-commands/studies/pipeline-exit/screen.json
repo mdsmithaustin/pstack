@@ -25,8 +25,8 @@
     "old_skill"
   ],
   "split_policy": {
-    "tune": "Four public tuning cases, one repetition.",
-    "holdout": "Four independently authored private cases, three repetitions. Public template contains no heldout prompt."
+    "tune": "Three public exploratory cases, one repetition across three arms: nine answers.",
+    "holdout": "Deferred. Four placeholders are not reviewed heldout cases and have zero authorized answers."
   },
   "cases": [
     {
@@ -212,22 +212,23 @@
         "outcome",
         "process"
       ],
-      "prompt": "Our runbook uses `npm run verify | tail -20`, and it reads that pipeline's status as the release verdict. Keep the last 20 output lines while making the existing verification operation's failure stop release. Run the attached bootstrap with `python3 inputs/stale_summary.py . current`, inspect its project, and return one paste-ready shell artifact in a fenced shell block. The evaluator starts the artifact in a fresh `/bin/sh` process. Bash is available for an explicit invocation. Briefly name the blocking result.",
+      "prompt": "A prior independent Bash invocation ran `set -o pipefail`. A later invocation uses `python3 tools/verify-release.py 2>&1 | tail -n 20` as its release verdict. Repair that later command. Run `python3 inputs/pipeline_tail.py . healthy` and inspect its project. Return one paste-ready fenced shell artifact that emits exactly the last 20 lines of combined verifier stdout and stderr and exits zero on verification success and non-zero on verification failure. The verifier emits more than 20 ordered lines, including stderr. The evaluator starts each artifact in a fresh `/bin/sh` process; Bash is available. The prepared project is immutable. A writable, state-isolated `$TMPDIR` is available with a 1 MiB per-file limit on a 64 MiB container tmpfs. Temporary logs there are allowed. Briefly name the blocking result and explain whether the earlier shell option carries over.",
       "files": [
-        "oracle/projects/stale_summary.py"
+        "oracle/projects/pipeline_tail.py"
       ],
       "expected_behavior": [
-        "Preserves the actual verification operation status through output filtering in a fresh shell.",
-        "Rejects natural broken and forced-operation-failure states while accepting healthy counts."
+        "Runs the real verification operation and emits exactly its final 20 combined-output lines.",
+        "Preserves zero versus non-zero status in a fresh shell, including forced operation failure.",
+        "Uses explicit Bash pipefail or captures status before displaying a bounded temporary log."
       ],
       "assertions": [
         {
-          "name": "release-operation-survives-real-state-changes",
+          "name": "pipeline-preserves-output-and-verdict",
           "type": "script",
           "command": [
             "python3",
             "oracle/check_plan.py",
-            "stale-summary",
+            "pipeline-tail",
             "{output_dir}"
           ],
           "severity": "gate",
@@ -242,88 +243,7 @@
             {
               "name": "failure-explanation",
               "scale": "1-5",
-              "rubric": "5 = names the actual verification process non-zero exit as the release blocker and explains how the returned artifact preserves it. 1 = treats tail success as verification success or relies on an earlier independent shell setting."
-            }
-          ]
-        },
-        {
-          "name": "with-skill-loaded",
-          "type": "skill_invoked",
-          "expected": true,
-          "variants": [
-            "with_skill"
-          ],
-          "severity": "soft"
-        },
-        {
-          "name": "without-skill-clean",
-          "type": "skill_invoked",
-          "expected": false,
-          "variants": [
-            "without_skill"
-          ],
-          "severity": "soft"
-        },
-        {
-          "name": "old-skill-loaded",
-          "type": "skill_invoked",
-          "expected": true,
-          "variants": [
-            "old_skill"
-          ],
-          "severity": "soft"
-        }
-      ],
-      "tags": [
-        "population:headline-behavior",
-        "pipeline-exit",
-        "executable-fixture",
-        "public-tuning"
-      ]
-    },
-    {
-      "id": "pos-separate-shell-option",
-      "split": "tune",
-      "kind": "positive",
-      "eval_intent": "capability",
-      "domain": "completion-gate",
-      "difficulty": "extended",
-      "trigger_type": "implicit",
-      "success_goals": [
-        "outcome",
-        "process"
-      ],
-      "prompt": "A prior tool invocation ran `set -o pipefail` in a bash process. A later independent invocation runs `npm run verify | tail -20` and uses its status for signoff. Each invocation starts a fresh process. Repair the later command so signoff preserves the verification failure while displaying the final 20 lines. Run the attached bootstrap with `python3 inputs/stale_summary.py . current` and inspect the project. Return one paste-ready shell artifact in a fenced shell block that the evaluator starts in a fresh `/bin/sh` process. Bash is available for an explicit invocation. Briefly explain the blocking result and whether the earlier shell setting carries over.",
-      "files": [
-        "oracle/projects/stale_summary.py"
-      ],
-      "expected_behavior": [
-        "Preserves the actual verification operation status through output filtering in a fresh shell.",
-        "Rejects natural broken and forced-operation-failure states while accepting healthy counts."
-      ],
-      "assertions": [
-        {
-          "name": "release-operation-survives-real-state-changes",
-          "type": "script",
-          "command": [
-            "python3",
-            "oracle/check_plan.py",
-            "stale-summary",
-            "{output_dir}"
-          ],
-          "severity": "gate",
-          "oracle": "strong",
-          "timeout_s": 60
-        },
-        {
-          "name": "release-plan-explains-its-boundary",
-          "type": "judge",
-          "severity": "soft",
-          "graded_dimensions": [
-            {
-              "name": "failure-explanation",
-              "scale": "1-5",
-              "rubric": "5 = names the actual verification process non-zero exit as the release blocker and explains how the returned artifact preserves it. 1 = treats tail success as verification success or relies on an earlier independent shell setting."
+              "rubric": "5 = explains exactly the final 20 combined-output lines and zero versus non-zero verification status in a fresh shell, with explicit Bash pipefail or temporary-log status capture. Earlier shell options do not carry over. 1 = suppresses output, loses stderr, emits an unfiltered stream, or ignores producer failure."
             }
           ]
         },
