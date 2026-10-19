@@ -1,0 +1,2030 @@
+[
+  {
+    "name": "empty_and_rejected_requests",
+    "phase": "baseline",
+    "steps": [
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-01"
+        },
+        "expected": {
+          "occurrences": []
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-01",
+          "series_id": "absent"
+        },
+        "expected": {
+          "error": "missing_series"
+        }
+      },
+      {
+        "raw": "{",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "null",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "[]",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "0",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "{}",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "{\"action\":\"list\",\"occurrence_date\":\"2026-02-30\"}",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "{\"action\":\"list\",\"occurrence_date\":\"20260101\"}",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "{\"action\":\"list\",\"occurrence_date\":\"2026-01-01\",\"series_id\":\"tea\"}",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "{\"action\":\"create\",\"series_id\":\"\",\"occurrence_date\":\"2026-01-01\",\"cadence_days\":7}",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "{\"action\":\"create\",\"series_id\":\"tea\",\"occurrence_date\":\"2026-01-01\",\"cadence_days\":true}",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "{\"action\":\"create\",\"series_id\":\"tea\",\"occurrence_date\":\"2026-01-01\",\"cadence_days\":0}",
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "raw": "{\"action\":\"unknown\",\"series_id\":\"tea\",\"occurrence_date\":\"2026-01-01\"}",
+        "expected": {
+          "error": "invalid_request"
+        }
+      }
+    ]
+  },
+  {
+    "name": "closure_restart_and_sorting",
+    "phase": "baseline",
+    "steps": [
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-02",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "error": "already_exists"
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 3
+        },
+        "expected": {
+          "error": "already_exists"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08",
+          "status": "delivered"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08",
+          "status": "delivered"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-15",
+          "status": "cancelled"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-15",
+          "status": "cancelled"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2025-12-25",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "invalid_occurrence"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-02",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "invalid_occurrence"
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-08",
+          "series_id": "apple",
+          "cadence_days": 14
+        },
+        "expected": {
+          "series_id": "apple",
+          "status": "active",
+          "cadence_days": 14
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-22"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-22",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-08"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "delivered"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-22"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-22",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "pending"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "calendar_crossing",
+    "phase": "baseline",
+    "steps": [
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2024-02-28",
+          "series_id": "leap",
+          "cadence_days": 1
+        },
+        "expected": {
+          "series_id": "leap",
+          "status": "active",
+          "cadence_days": 1
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2024-03-01"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "leap",
+              "occurrence_date": "2024-02-28",
+              "status": "pending"
+            },
+            {
+              "series_id": "leap",
+              "occurrence_date": "2024-02-29",
+              "status": "pending"
+            },
+            {
+              "series_id": "leap",
+              "occurrence_date": "2024-03-01",
+              "status": "pending"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "skip_and_end_mixed_history",
+    "phase": "requested",
+    "steps": [
+      {
+        "request": {
+          "action": "skip",
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08",
+          "cadence_days": 7
+        },
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "series_id": "tea",
+          "occurrence_date": "2026-01-12",
+          "cadence_days": 7
+        },
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "series_id": "tea",
+          "occurrence_date": 8
+        },
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "series_id": "tea",
+          "occurrence_date": 12
+        },
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08",
+          "status": "skipped"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08",
+          "status": "skipped"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-15",
+          "status": "delivered"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-22",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-22",
+          "status": "cancelled"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-22",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-02",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "invalid_occurrence"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-08",
+          "series_id": "absent"
+        },
+        "expected": {
+          "error": "missing_series"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-29"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "skipped"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-29",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "occurrence_date": "2026-01-12",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "ended",
+          "ended_on": "2026-01-12"
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "occurrence_date": "2026-01-12",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "ended",
+          "ended_on": "2026-01-12"
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "occurrence_date": "2026-01-19",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "series_ended"
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "error": "series_ended"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-29",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-29",
+          "status": "cancelled"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-29",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-15",
+          "status": "delivered"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-02-05",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "series_ended"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-01",
+          "status": "delivered"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-02-12"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "skipped"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-29",
+              "status": "cancelled"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "end_without_prior_listing",
+    "phase": "requested",
+    "steps": [
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "occurrence_date": "2025-12-31",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "invalid_occurrence"
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "occurrence_date": "2026-01-12",
+          "series_id": "absent"
+        },
+        "expected": {
+          "error": "missing_series"
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "ended",
+          "ended_on": "2026-01-15"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "series_ended"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08",
+          "status": "skipped"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-02-01"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "skipped"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "end_at_first_date",
+    "phase": "requested",
+    "steps": [
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "ended",
+          "ended_on": "2026-01-01"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-03-01"
+        },
+        "expected": {
+          "occurrences": []
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "series_ended"
+        }
+      }
+    ]
+  },
+  {
+    "name": "cadence_preserves_future_closed_records",
+    "phase": "maintenance",
+    "steps": [
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-29"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-29",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-01",
+          "status": "delivered"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-15",
+          "status": "cancelled"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-22",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-22",
+          "status": "skipped"
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-10",
+          "series_id": "tea",
+          "cadence_days": 3
+        },
+        "expected": {
+          "series_id": "tea",
+          "cadence_days": 3,
+          "effective_after": "2026-01-10"
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-10",
+          "series_id": "tea",
+          "cadence_days": 3
+        },
+        "expected": {
+          "series_id": "tea",
+          "cadence_days": 3,
+          "effective_after": "2026-01-10"
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-22"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-13",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-16",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-19",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "skipped"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "series_id": "tea",
+          "occurrence_date": "2026-01-10",
+          "cadence_days": 3
+        },
+        "expected": {
+          "series_id": "tea",
+          "cadence_days": 3,
+          "effective_after": "2026-01-10"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-22",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-22",
+          "status": "skipped"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-29",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "invalid_occurrence"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-13",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-13",
+          "status": "delivered"
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-17",
+          "series_id": "tea",
+          "cadence_days": 5
+        },
+        "expected": {
+          "series_id": "tea",
+          "cadence_days": 5,
+          "effective_after": "2026-01-17"
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-16",
+          "series_id": "tea",
+          "cadence_days": 2
+        },
+        "expected": {
+          "error": "invalid_occurrence"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-27"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-13",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-16",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "skipped"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-27",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-17",
+          "series_id": "tea",
+          "cadence_days": 2
+        },
+        "expected": {
+          "series_id": "tea",
+          "cadence_days": 2,
+          "effective_after": "2026-01-17"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-23"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-13",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-16",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-19",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-21",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "skipped"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-23",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "occurrence_date": "2026-01-21",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "ended",
+          "ended_on": "2026-01-21"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-29"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-13",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-16",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-19",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-21",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-22",
+              "status": "skipped"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-23",
+              "status": "cancelled"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-29",
+          "series_id": "tea",
+          "cadence_days": 4
+        },
+        "expected": {
+          "error": "series_ended"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-21",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "occurrence_closed"
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "occurrence_date": "2026-01-22",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-22",
+          "status": "skipped"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-29",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "series_ended"
+        }
+      }
+    ]
+  },
+  {
+    "name": "cadence_without_prior_listing",
+    "phase": "maintenance",
+    "steps": [
+      {
+        "request": {
+          "action": "create",
+          "occurrence_date": "2026-01-01",
+          "series_id": "tea",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2025-12-31",
+          "series_id": "tea",
+          "cadence_days": 3
+        },
+        "expected": {
+          "error": "invalid_occurrence"
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-10",
+          "series_id": "absent",
+          "cadence_days": 3
+        },
+        "expected": {
+          "error": "missing_series"
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-10",
+          "series_id": "tea",
+          "cadence_days": 3
+        },
+        "expected": {
+          "series_id": "tea",
+          "cadence_days": 3,
+          "effective_after": "2026-01-10"
+        }
+      },
+      {
+        "request": {
+          "action": "cancel",
+          "occurrence_date": "2026-01-08",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08",
+          "status": "cancelled"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-15",
+          "series_id": "tea"
+        },
+        "expected": {
+          "error": "invalid_occurrence"
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "occurrence_date": "2026-01-13",
+          "series_id": "tea"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-13",
+          "status": "delivered"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-16"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-13",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-16",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-16",
+          "series_id": "tea",
+          "cadence_days": 4
+        },
+        "expected": {
+          "series_id": "tea",
+          "cadence_days": 4,
+          "effective_after": "2026-01-16"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-24"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-13",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-16",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-20",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-24",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-08"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "cancelled"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-24",
+          "series_id": "tea",
+          "cadence_days": true
+        },
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-24",
+          "series_id": "tea",
+          "cadence_days": -1
+        },
+        "expected": {
+          "error": "invalid_request"
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "occurrence_date": "2026-01-24",
+          "series_id": "tea",
+          "cadence_days": 2.5
+        },
+        "expected": {
+          "error": "invalid_request"
+        }
+      }
+    ]
+  },
+  {
+    "name": "end_affects_only_one_series",
+    "phase": "requested",
+    "steps": [
+      {
+        "request": {
+          "action": "create",
+          "series_id": "tea",
+          "occurrence_date": "2026-01-01",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "series_id": "apple",
+          "occurrence_date": "2026-01-01",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "apple",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "end_series",
+          "series_id": "tea",
+          "occurrence_date": "2026-01-01"
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "ended",
+          "ended_on": "2026-01-01"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-08"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "skip",
+          "series_id": "apple",
+          "occurrence_date": "2026-01-08"
+        },
+        "expected": {
+          "series_id": "apple",
+          "occurrence_date": "2026-01-08",
+          "status": "skipped"
+        }
+      }
+    ]
+  },
+  {
+    "name": "cadence_affects_only_one_series",
+    "phase": "maintenance",
+    "steps": [
+      {
+        "request": {
+          "action": "create",
+          "series_id": "tea",
+          "occurrence_date": "2026-01-01",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "tea",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "series_id": "apple",
+          "occurrence_date": "2026-01-01",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "apple",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "series_id": "tea",
+          "occurrence_date": "2026-01-01",
+          "cadence_days": 3
+        },
+        "expected": {
+          "series_id": "tea",
+          "cadence_days": 3,
+          "effective_after": "2026-01-01"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-08"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-04",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-07",
+              "status": "pending"
+            },
+            {
+              "series_id": "apple",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "legacy_existing_history",
+    "phase": "baseline",
+    "initial_state": {
+      "series": {
+        "tea": {
+          "start_date": "2026-01-01",
+          "cadence_days": 7,
+          "occurrences": {
+            "2026-01-01": "pending",
+            "2026-01-08": "delivered",
+            "2026-01-15": "pending"
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-15"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-08",
+              "status": "delivered"
+            },
+            {
+              "series_id": "tea",
+              "occurrence_date": "2026-01-15",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "deliver",
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08"
+        },
+        "expected": {
+          "series_id": "tea",
+          "occurrence_date": "2026-01-08",
+          "status": "delivered"
+        }
+      }
+    ]
+  },
+  {
+    "name": "accepted_build_history_survives_upgrade",
+    "phase": "maintenance",
+    "requires_prior": true,
+    "steps": [
+      {
+        "producer": true,
+        "request": {
+          "action": "create",
+          "series_id": "carried",
+          "occurrence_date": "2026-01-01",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "carried",
+          "status": "active",
+          "cadence_days": 7
+        }
+      },
+      {
+        "producer": true,
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-29"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-08",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-15",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-22",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-29",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "producer": true,
+        "request": {
+          "action": "deliver",
+          "series_id": "carried",
+          "occurrence_date": "2026-01-08"
+        },
+        "expected": {
+          "series_id": "carried",
+          "occurrence_date": "2026-01-08",
+          "status": "delivered"
+        }
+      },
+      {
+        "producer": true,
+        "request": {
+          "action": "skip",
+          "series_id": "carried",
+          "occurrence_date": "2026-01-15"
+        },
+        "expected": {
+          "series_id": "carried",
+          "occurrence_date": "2026-01-15",
+          "status": "skipped"
+        }
+      },
+      {
+        "producer": true,
+        "request": {
+          "action": "cancel",
+          "series_id": "carried",
+          "occurrence_date": "2026-01-22"
+        },
+        "expected": {
+          "series_id": "carried",
+          "occurrence_date": "2026-01-22",
+          "status": "cancelled"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-29"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-08",
+              "status": "delivered"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-15",
+              "status": "skipped"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-22",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-29",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "action": "change_cadence",
+          "series_id": "carried",
+          "occurrence_date": "2026-01-10",
+          "cadence_days": 3
+        },
+        "expected": {
+          "series_id": "carried",
+          "cadence_days": 3,
+          "effective_after": "2026-01-10"
+        }
+      },
+      {
+        "request": {
+          "action": "list",
+          "occurrence_date": "2026-01-31"
+        },
+        "expected": {
+          "occurrences": [
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-01",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-08",
+              "status": "delivered"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-13",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-15",
+              "status": "skipped"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-16",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-19",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-22",
+              "status": "cancelled"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-25",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-28",
+              "status": "pending"
+            },
+            {
+              "series_id": "carried",
+              "occurrence_date": "2026-01-31",
+              "status": "pending"
+            }
+          ]
+        }
+      },
+      {
+        "producer": false,
+        "request": {
+          "action": "skip",
+          "series_id": "carried",
+          "occurrence_date": "2026-01-15"
+        },
+        "expected": {
+          "series_id": "carried",
+          "occurrence_date": "2026-01-15",
+          "status": "skipped"
+        }
+      },
+      {
+        "request": {
+          "action": "create",
+          "series_id": "carried",
+          "occurrence_date": "2026-01-01",
+          "cadence_days": 7
+        },
+        "expected": {
+          "series_id": "carried",
+          "status": "active",
+          "cadence_days": 7
+        }
+      }
+    ]
+  }
+]

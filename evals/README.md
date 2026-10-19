@@ -8,6 +8,11 @@ pstack and do not prove that a skill improves production work.
 `promises/` holds a separate suite that checks the user guide's promises on
 each harness. See `promises/README.md`.
 
+[`reminders-maintenance/`](reminders-maintenance/README.md) packages a saved
+maintenance regression with executable acceptance checks and model-free
+passing and failing controls. Comparison treatments and paid runs remain
+deferred pending review.
+
 Model answers, traces, judge transcripts, reports, and private cases stay
 outside Git. A committed case is tuning material, not sealed evidence.
 Oracle and login regression fixtures under `promises/testdata/` are an exception.

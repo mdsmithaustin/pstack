@@ -1,0 +1,8 @@
+--- historical/expand_dates.py
++++ positive/expand_dates.py
+@@ -52,4 +52,4 @@
+         first_inclusive = False
+ 
+     distance = (target - anchor).days
+-    return distance > 0 and distance % cadence == 0
++    return distance >= 0 and (first_inclusive or distance > 0) and distance % cadence == 0

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "harness_revision": "c23ed79554995c60cbd63cc9da9f47837cfa6f9a",
+  "files": {
+    "README.md": {
+      "sha256": "e313d1cc83d9874eac4e504c3dd5bb1c5fdc7eb1c4f0ab15fce147a125e53ddf",
+      "origin": "reminders-maintenance case packaging authored 2026-10-15"
+    },
+    "case.json": {
+      "sha256": "804a451505ec78b2f8a6671134f1fcd28dc0b15f236e80f1478a5d4435ee6728",
+      "origin": "reminders-maintenance case packaging authored 2026-10-15"
+    },
+    "controls/constant/app.py": {
+      "sha256": "6cbcd7d095c5710341f1638230a8ca0d2f30c8f2f6d1dea28ce55bb7003efb4a",
+      "origin": "reminders-maintenance case packaging authored 2026-10-15"
+    },
+    "controls/historical/README.md": {
+      "sha256": "dd6a888940a37c37169e4860d5ed53b4e7f5bc9f9459c516829dc2800d7299be",
+      "origin": "module-choice-20261014 artifact-0019 historical gpt-6-luna maintenance/README.md"
+    },
+    "controls/historical/app.py": {
+      "sha256": "e3eb8e5cda08447507d956204077040e90566e0ced1acfc4b1b791766b79c738",
+      "origin": "module-choice-20261014 artifact-0019 historical gpt-6-luna maintenance/app.py"
+    },
+    "controls/historical/apply_action.py": {
+      "sha256": "1c645e7fe5462f6af6856ee621969980ea231e8636745c6d4e8c4c22a827e8a8",
+      "origin": "module-choice-20261014 artifact-0019 historical gpt-6-luna maintenance/apply_action.py"
+    },
+    "controls/historical/checks.py": {
+      "sha256": "0270ad5f45436c49b05c85e2dfcf5d12ebd4aff129189c37a7b8b7eab14ce375",
+      "origin": "module-choice-20261014 artifact-0019 historical gpt-6-luna maintenance/checks.py"
+    },
+    "controls/historical/expand_dates.py": {
+      "sha256": "3e25e83898a60aa74802134dbe4b39d2d4d59d451585cc46af1651d422d00bfd",
+      "origin": "module-choice-20261014 artifact-0019 historical gpt-6-luna maintenance/expand_dates.py"
+    },
+    "controls/historical/read_request.py": {
+      "sha256": "027e696171d7baddc077139a58201cfa000bf12e7d018c2388745643e306064c",
+      "origin": "module-choice-20261014 artifact-0019 historical gpt-6-luna maintenance/read_request.py"
+    },
+    "controls/historical/write_state.py": {
+      "sha256": "c106f7262420bafd1908be4d22a804395c551114fefe6a7ce26b79c121ee57ea",
+      "origin": "module-choice-20261014 artifact-0019 historical gpt-6-luna maintenance/write_state.py"
+    },
+    "controls/noop/app.py": {
+      "sha256": "383f178c7d3c2a9c56d1a3c8d435d0cb77096990403d588a9fa82f7e28fe4b41",
+      "origin": "reminders-maintenance case packaging authored 2026-10-15"
+    },
+    "controls/positive/README.md": {
+      "sha256": "dd6a888940a37c37169e4860d5ed53b4e7f5bc9f9459c516829dc2800d7299be",
+      "origin": "synthetic witness cloned from controls/historical/README.md"
+    },
+    "controls/positive/app.py": {
+      "sha256": "e3eb8e5cda08447507d956204077040e90566e0ced1acfc4b1b791766b79c738",
+      "origin": "synthetic witness cloned from controls/historical/app.py"
+    },
+    "controls/positive/apply_action.py": {
+      "sha256": "1c645e7fe5462f6af6856ee621969980ea231e8636745c6d4e8c4c22a827e8a8",
+      "origin": "synthetic witness cloned from controls/historical/apply_action.py"
+    },
+    "controls/positive/checks.py": {
+      "sha256": "0270ad5f45436c49b05c85e2dfcf5d12ebd4aff129189c37a7b8b7eab14ce375",
+      "origin": "synthetic witness cloned from controls/historical/checks.py"
+    },
+    "controls/positive/expand_dates.py": {
+      "sha256": "bddc5b23efadc41b103dcb2dfa5596978993e12f67646a8473c5dc433d887750",
+      "origin": "synthetic witness cloned from controls/historical/expand_dates.py"
+    },
+    "controls/positive/read_request.py": {
+      "sha256": "027e696171d7baddc077139a58201cfa000bf12e7d018c2388745643e306064c",
+      "origin": "synthetic witness cloned from controls/historical/read_request.py"
+    },
+    "controls/positive/write_state.py": {
+      "sha256": "c106f7262420bafd1908be4d22a804395c551114fefe6a7ce26b79c121ee57ea",
+      "origin": "synthetic witness cloned from controls/historical/write_state.py"
+    },
+    "controls/positive.patch": {
+      "sha256": "3f0ccacd592b4dea834e8756bcea33a11476984b4f3b63fbe040c43892b87fb9",
+      "origin": "reminders-maintenance case packaging authored 2026-10-15"
+    },
+    "instrument/codex_project.py": {
+      "sha256": "0caae4bac5ca03c398857e3f0aa4b78f1c3790e8705762495ebfafdc1f069b4e",
+      "origin": "module-choice/scripts/codex_project.py frozen working-tree source"
+    },
+    "instrument/experiment.py": {
+      "sha256": "97b11f5622b3cd4b994cd213568f8d274ea3d96c0f932c1417846960072851d7",
+      "origin": "module-choice/scripts/experiment.py frozen working-tree source"
+    },
+    "oracle/acceptance.py": {
+      "sha256": "f6621aa340a9e29a5812b3a98f8aa716cce06900a1694393e452caed32ab7f09",
+      "origin": "module-choice-20261014 frozen reminders oracle/acceptance.py"
+    },
+    "oracle/acceptance_cases.json": {
+      "sha256": "370879917188da50c6855daa54e6b61b58dcbbfc1b7273e989d30527db17ef1e",
+      "origin": "module-choice-20261014 frozen reminders oracle/acceptance_cases.json"
+    },
+    "original-request.md": {
+      "sha256": "8573a59971c7bc98e4df4abdca5c5d3a0d4a859bf3c5e845cd20f046f2dae90e",
+      "origin": "module-choice-20261014 frozen reminders design request"
+    },
+    "preflight.py": {
+      "sha256": "3a88b627696d24a9a328a611a92ff2c5028987ebc7803e1a1c98319d80ed2c86",
+      "origin": "reminders-maintenance case packaging authored 2026-10-15"
+    },
+    "prompt.md": {
+      "sha256": "b8cf8daf25ee3d4830d0377e86a153e6861fe6349f2e6d6042bd8da5a29b6b5d",
+      "origin": "module-choice-20261014 frozen reminders maintenance request"
+    },
+    "starting-project/README.md": {
+      "sha256": "4f925155bf2f0ca91ac11ee22008646a5b6d6d4cf56d7209d2b367e64bcba377",
+      "origin": "module-choice-20261014 artifact-0019 accepted design/README.md"
+    },
+    "starting-project/app.py": {
+      "sha256": "e3eb8e5cda08447507d956204077040e90566e0ced1acfc4b1b791766b79c738",
+      "origin": "module-choice-20261014 artifact-0019 accepted design/app.py"
+    },
+    "starting-project/apply_action.py": {
+      "sha256": "b2ba3c16ea5bf20fbe8440679b2db9071a0b733d745c4d20e238351085765091",
+      "origin": "module-choice-20261014 artifact-0019 accepted design/apply_action.py"
+    },
+    "starting-project/checks.py": {
+      "sha256": "a719dc3c4bc12321f3f53ae14706652c67bdcf5dc41f17393a8412aaf53bbead",
+      "origin": "module-choice-20261014 artifact-0019 accepted design/checks.py"
+    },
+    "starting-project/expand_dates.py": {
+      "sha256": "9911128f393f2c4ccb13be41d29a9379109141a2466111e1731c4ac8a6bd6196",
+      "origin": "module-choice-20261014 artifact-0019 accepted design/expand_dates.py"
+    },
+    "starting-project/read_request.py": {
+      "sha256": "cf04fea7403118d7ed274aa2367a55899f90b3cda6c2ce4af6eca2ee91382cc8",
+      "origin": "module-choice-20261014 artifact-0019 accepted design/read_request.py"
+    },
+    "starting-project/write_state.py": {
+      "sha256": "c106f7262420bafd1908be4d22a804395c551114fefe6a7ce26b79c121ee57ea",
+      "origin": "module-choice-20261014 artifact-0019 accepted design/write_state.py"
+    },
+    "starting-project.zip": {
+      "sha256": "e0d9cc77f1dcdf60bc36a0127186a6a6013d3809edd26b04fe283bb26eeb052d",
+      "origin": "reminders-maintenance case packaging authored 2026-10-15"
+    }
+  },
+  "runtime_modules": {
+    "artifact_contracts": "54791ec70d4be0d500b57a49f09f23f5b3281276beba2c53e27f01a9043f7c57",
+    "skill_benchmark": "d75b514b59ea0d1384bea66140da9fbf7b86906bb318f467089fe089277e77eb",
+    "workspace_contracts": "5a0e0cc45fed52cf38ffd799c32b2b5079c0953c8d08bddcdf055735f58274f6"
+  }
+}

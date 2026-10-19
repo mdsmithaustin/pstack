@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "id": "reminders-maintenance",
+  "kind": "development_case_spec",
+  "status": "public_tuning_material",
+  "native_comparison_manifest": false,
+  "subject_model": null,
+  "comparison": null,
+  "treatments": null,
+  "model_inputs": {
+    "project_archive": "starting-project.zip",
+    "original_request": "original-request.md",
+    "maintenance_request": "prompt.md"
+  },
+  "runtime": {
+    "harness_revision": "c23ed79554995c60cbd63cc9da9f47837cfa6f9a",
+    "oracle_image": "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36"
+  },
+  "controls": [
+    {
+      "name": "starting-design",
+      "project": "starting-project",
+      "stage": "design",
+      "prior": null,
+      "expected_result": "pass",
+      "expected_count": 76,
+      "failure_marker": null
+    },
+    {
+      "name": "starting-maintenance",
+      "project": "starting-project",
+      "stage": "maintenance",
+      "prior": "starting-project",
+      "expected_result": "candidate_fail",
+      "expected_count": null,
+      "failure_marker": "cadence_preserves_future_closed_records request 6",
+      "completed_before_failure": 74,
+      "expected_response": {
+        "series_id": "tea",
+        "cadence_days": 3,
+        "effective_after": "2026-01-10"
+      },
+      "actual_failure_exit": 2,
+      "actual_failure_response": "{'error': 'invalid_request'}"
+    },
+    {
+      "name": "historical-maintenance",
+      "project": "controls/historical",
+      "stage": "maintenance",
+      "prior": "starting-project",
+      "expected_result": "candidate_fail",
+      "expected_count": null,
+      "failure_marker": "end_at_first_date request 4",
+      "completed_before_failure": 68,
+      "expected_response": {
+        "error": "series_ended"
+      },
+      "actual_failure_exit": 2,
+      "actual_failure_response": "{'error': 'invalid_occurrence'}"
+    },
+    {
+      "name": "positive-maintenance",
+      "project": "controls/positive",
+      "stage": "maintenance",
+      "prior": "starting-project",
+      "expected_result": "pass",
+      "expected_count": 129,
+      "failure_marker": null
+    },
+    {
+      "name": "constant",
+      "project": "controls/constant",
+      "stage": "maintenance",
+      "prior": "starting-project",
+      "expected_result": "candidate_fail",
+      "expected_count": null,
+      "failure_marker": "empty_and_rejected_requests request 1",
+      "completed_before_failure": 0,
+      "expected_response": {
+        "occurrences": []
+      },
+      "actual_failure_exit": 0,
+      "actual_failure_response": "0"
+    },
+    {
+      "name": "noop",
+      "project": "controls/noop",
+      "stage": "maintenance",
+      "prior": "starting-project",
+      "expected_result": "candidate_fail",
+      "expected_count": null,
+      "failure_marker": "empty_and_rejected_requests request 1",
+      "completed_before_failure": 0,
+      "expected_response": {
+        "occurrences": []
+      },
+      "actual_failure_exit": 0,
+      "actual_failure_response": "{}"
+    },
+    {
+      "name": "missing-capture",
+      "project": "controls/positive",
+      "stage": "maintenance",
+      "prior": "starting-project",
+      "expected_result": "capture_rejected",
+      "expected_count": 0,
+      "failure_marker": "complete committed artifact required"
+    },
+    {
+      "name": "tampered-capture",
+      "project": "controls/positive",
+      "stage": "maintenance",
+      "prior": "starting-project",
+      "expected_result": "capture_rejected",
+      "expected_count": 0,
+      "failure_marker": "complete committed artifact required"
+    }
+  ]
+}
