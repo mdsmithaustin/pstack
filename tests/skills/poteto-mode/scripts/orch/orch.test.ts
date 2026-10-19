@@ -1425,6 +1425,30 @@ esac
     });
   });
 
+  it("rejects malformed Origin protocol rows without overwriting the saved frontier", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const valid = { number: 11, status: "open", headRef: "stack/open", baseRef: "stack/closed" };
+    const invalid = [
+      null, {}, [null], [{}],
+      ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "11", null].map((number) => [{ ...valid, number }]),
+      ...["unknown", "OPEN", null, 1].map((status) => [{ ...valid, status }]),
+      ...["", null, 1].map((headRef) => [{ ...valid, headRef }]),
+      ...["", null, 1].map((baseRef) => [{ ...valid, baseRef }]),
+    ];
+    await withFakeOrigin({ directory, operation: async () => {
+      await store.frontier.set({ repo: stack.repo, forge: "origin" });
+      const saved = await readFile(join(directory, "frontier.json"), "utf8");
+      for (const value of invalid) {
+        await overrideOriginRoute({ directory, filter: "--head", branch: "stack/open", rows: JSON.stringify(value) });
+        await expect(store.frontier.set({ repo: stack.repo, forge: "origin" })).rejects.toThrow(
+          Array.isArray(value) ? "output has an invalid PR row" : "output is not a JSON array"
+        );
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe(saved);
+      }
+    } });
+  });
+
   it("fails an Origin frontier request with a usage error when origin is missing", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
@@ -1444,6 +1468,20 @@ esac
         );
       },
     });
+  });
+
+  it("reports an Origin command failure without falling back or overwriting the frontier", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    await withFakeOrigin({ directory, operation: async () => {
+      await store.frontier.set({ repo: stack.repo, forge: "origin" });
+      const saved = await readFile(join(directory, "frontier.json"), "utf8");
+      await writeFile(join(directory, "origin-bin", "origin"), "#!/bin/sh\nexit 7\n");
+      await expect(store.frontier.set({ repo: stack.repo, forge: "origin" })).rejects.toThrow(
+        "origin pr list --head stack/open --state all --json number,status,headRef,baseRef failed"
+      );
+      expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe(saved);
+    } });
   });
 
   it("records each Origin branch tip even when a same-named tag points elsewhere", async () => {
