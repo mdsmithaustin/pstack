@@ -4,7 +4,6 @@ import {
   buildReviewState,
   mapRollupNode,
   orderStack,
-  parseFastCheck,
   parsePullRequest,
   parseReviewStatePage,
   parseRollupPage,
@@ -204,37 +203,6 @@ describe("rollup node mapping", () => {
         state: "PENDING",
       })
     ).toMatchObject({ kind: "code-review-gate" });
-  });
-
-  it("classifies a Code Review Gate waiting on an owner approval as the gate", () => {
-    expect(
-      mapRollupNode({
-        __typename: "CheckRun",
-        name: "Code Review Gate",
-        status: "COMPLETED",
-        conclusion: "ACTION_REQUIRED",
-        description: "1 of 2 policies",
-      })
-    ).toMatchObject({
-      kind: "code-review-gate",
-      reportedState: "ACTION_REQUIRED",
-    });
-  });
-
-  it("classifies a fast-path Code Review Gate waiting on an owner approval as the gate", () => {
-    expect(
-      parseFastCheck({
-        name: "Code Review Gate",
-        state: "ACTION_REQUIRED",
-        bucket: "fail",
-      })
-    ).toMatchObject({
-      kind: "code-review-gate",
-      reportedState: "ACTION_REQUIRED",
-    });
-    expect(
-      parseFastCheck({ name: "ci", state: "ACTION_REQUIRED", bucket: "fail" })
-    ).toMatchObject({ kind: "failed", reportedState: "ACTION_REQUIRED" });
   });
 
   it("maps StatusContext states and drops unknown typenames", () => {

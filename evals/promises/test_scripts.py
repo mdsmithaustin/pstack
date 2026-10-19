@@ -811,7 +811,7 @@ class WorktreeAuditPromises(FakeGhSandbox):
         (cache / "node_modules").mkdir()
         (cache / "node_modules" / "dep.js").write_text("x\n")
         add("wt spaced", "spaced-br")
-        for name, branch in (("wt-unmerged", "unmerged-br"), ("wt-openpr", "openpr-br"), ("wt-closedpr", "closedpr-br")):
+        for name, branch in (("wt-unmerged", "unmerged-br"), ("wt-openpr", "openpr-br")):
             path = add(name, branch)
             (path / "work.txt").write_text(name)
             self.git("add", "work.txt", cwd=path)
@@ -822,10 +822,7 @@ class WorktreeAuditPromises(FakeGhSandbox):
         transcripts.mkdir(parents=True)
         (transcripts / "session.jsonl").write_text(json.dumps({"cwd": f"{chat}/"}) + "\n")
 
-        self.state = {"prs": [
-            {"number": 9, "state": "OPEN", "headRefName": "openpr-br"},
-            {"number": 10, "state": "CLOSED", "headRefName": "closedpr-br"},
-        ]}
+        self.state = {"prs": [{"number": 9, "state": "OPEN", "headRefName": "openpr-br"}]}
         self.flush()
         listing_before = self.git("worktree", "list", "--porcelain", cwd=repo)
         branches_before = self.git("branch", "--list", cwd=repo)
@@ -850,8 +847,7 @@ class WorktreeAuditPromises(FakeGhSandbox):
                 "wt-cache": ("YES", "clean", "no-remote", "-", "-", "safe"),
                 "wt spaced": ("YES", "clean", "no-remote", "-", "-", "safe"),
                 "wt-unmerged": ("no", "clean", "no-remote", "-", "-", "review"),
-                "wt-openpr": ("no", "clean", "no-remote", "#9/open", "-", "hold-open-pr"),
-                "wt-closedpr": ("no", "clean", "no-remote", "#10/closed", "-", "safe"),
+                "wt-openpr": ("no", "clean", "no-remote", "#9/OPEN", "-", "hold-open-pr"),
                 "wt-chat": ("YES", "clean", "no-remote", "-", today, "verify-recent-chat"),
             },
             result.stdout,

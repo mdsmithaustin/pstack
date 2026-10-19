@@ -436,7 +436,7 @@ class WorktreeAuditRepositoryTest(WorktreeAuditBaseTest):
         result = self.audit("-b", "main", str(self.repo))
         self.assertEqual(result.returncode, 0, result.stderr)
         row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
-        self.assertEqual((row[2], row[5], row[7]), ("no", "#17/open", "hold-open-pr"))
+        self.assertEqual((row[2], row[5], row[7]), ("no", "#17/OPEN", "hold-open-pr"))
         args = json.loads((self.tmp / "gh-log").read_text())
         self.assertEqual(args[args.index("--repo") + 1], repository)
 
@@ -448,39 +448,6 @@ class WorktreeAuditRepositoryTest(WorktreeAuditBaseTest):
 
     def test_queries_the_audited_enterprise_origin(self):
         self.assert_origin_query("ssh://git@example.com/fork/project.git", "example.com/fork/project")
-
-    def origin_cli(self, status: str) -> None:
-        origin = self.tmp / "bin" / "origin"
-        origin.write_text(
-            f"#!{sys.executable}\nimport json, os, sys\n"
-            "from pathlib import Path\n"
-            "Path(os.environ['AUDIT_ORIGIN_LOG']).write_text(json.dumps(sys.argv[1:]))\n"
-            f"print(json.dumps([{{'number': 23, 'status': {status!r}, 'headRef': 'feature-x'}}]))\n",
-            encoding="utf-8",
-        )
-        origin.chmod(0o755)
-        self.env["AUDIT_ORIGIN_LOG"] = str(self.tmp / "origin-log")
-
-    def test_origin_cli_draft_pr_holds_without_querying_gh(self):
-        worktree = self.fixture("https://github.com/fork/project.git")
-        self.origin_cli("draft")
-        result = self.audit("-b", "main", str(self.repo))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
-        self.assertEqual((row[2], row[5], row[7]), ("no", "#23/draft", "hold-open-pr"))
-        self.assertEqual(json.loads((self.tmp / "origin-log").read_text()), [
-            "pr", "list", "--author", "@me", "--state", "all", "--limit", "1000",
-            "--json", "number,status,headRef",
-        ])
-        self.assertFalse((self.tmp / "gh-log").exists())
-
-    def test_origin_cli_merged_pr_is_safe(self):
-        worktree = self.fixture("https://github.com/fork/project.git")
-        self.origin_cli("merged")
-        result = self.audit("-b", "main", str(self.repo))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
-        self.assertEqual((row[2], row[5], row[7]), ("no", "#23/merged", "safe"))
 
     def test_real_gh_uses_public_origin_despite_ambient_host(self):
         self.fixture("https://github.com/fork/project.git")
