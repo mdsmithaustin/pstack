@@ -88,6 +88,7 @@ class RecordingApplication:
         state = "completed" if native_valid else "native_failed"
         study.write_json(receipt, {"state": state, "native_valid": native_valid,
                                  "elapsed_s": 0.25, "native_elapsed_s": self.native_elapsed_s,
+                                 "usage": None if maintenance else {"input_tokens": 7, "output_tokens": 3},
                                  "capture": {"directory": str(capture.directory), "sha256": capture.sha256} if capture else None,
                                  "spec": {"runtime": asdict(request.runtime), "project": request.project.sha256, "skills": request.skills.sha256 if request.skills else None,
                                           "prompt_sha256": study.digest(request.prompt.encode())}})
@@ -273,6 +274,90 @@ class Study(unittest.TestCase):
         row = next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])
         self.assertIn("duration lacks a retained application receipt", row["initial"]["evidence_error"])
 
+    def test_captureless_report_validates_claim_receipt_and_frozen_bindings(self):
+        plan = self.prepare()
+        cell = next(cell for cell in plan["cells"] if cell["arm"] == "current")
+        executor = RecordingApplication(omit_capture=True, fail_initial=True)
+        study.run(self.directory, cell_id=cell["id"], execute=executor, grader=recording_grader,
+                  template_catalog=recording_templates)
+        directory = self.directory / "lineages" / cell["id"] / "initial"
+        claim_path, receipt_path = directory / "claim.json", directory / "application/receipt.json"
+        claim, application = study.read_json(claim_path), study.read_json(receipt_path)
+        changes = [
+            ("missing claim", None, application),
+            ("wrong cell", {**claim, "cell": "another-cell"}, application),
+            ("wrong stage", {**claim, "stage": "maintenance"}, application),
+            ("native state", claim, {**application, "state": "completed"}),
+            ("native validity", claim, {**application, "native_valid": True}),
+            ("usage", claim, {**application, "usage": {"input_tokens": 99}}),
+            ("runtime", claim, {**application, "spec": {**application["spec"], "runtime": {**plan["runtime"], "model": "wrong-model"}}}),
+        ]
+        for claim_key, spec_key in (("prompt_sha256", "prompt_sha256"),
+                                    ("guidance_sha256", "skills"), ("parent_sha256", "project")):
+            changes.extend((
+                (f"claim {claim_key}", {**claim, claim_key: "wrong-binding"}, application),
+                (f"receipt {spec_key}", claim, {**application, "spec": {**application["spec"], spec_key: "wrong-binding"}}),
+                (f"both {claim_key}", {**claim, claim_key: "wrong-binding"},
+                 {**application, "spec": {**application["spec"], spec_key: "wrong-binding"}}),
+            ))
+        for label, changed_claim, changed_application in changes:
+            with self.subTest(changed=label):
+                if changed_claim is None:
+                    claim_path.unlink()
+                else:
+                    study.write_json(claim_path, changed_claim)
+                study.write_json(receipt_path, changed_application)
+                command = subprocess.run([sys.executable, str(Path(study.__file__)), "report", str(self.directory)],
+                                         capture_output=True, text=True)
+                self.assertEqual(command.returncode, 0, command.stderr)
+                report = study.read_json(self.directory / "report.json")
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertIn("evidence_error", row["initial"])
+                self.assertFalse(row["initial"]["accepted"])
+                self.assertEqual(row["initial"]["native_state"], "unknown")
+                total = json.loads(command.stdout)[cell["arm"]]
+                for field in study.DURATIONS:
+                    self.assertIsNone(total[field])
+                    self.assertEqual(total[f"known_{field}_opportunities"], 0)
+                    self.assertEqual(total[f"unknown_{field}_opportunities"], 12)
+                self.assertEqual(total["known_usage_opportunities"], 0)
+                self.assertEqual(report["planned_opportunities"], 36)
+        study.write_json(claim_path, claim)
+        study.write_json(receipt_path, application)
+        report = study.report(self.directory)
+        row = next(row for row in report["rows"] if row["id"] == cell["id"])
+        self.assertNotIn("evidence_error", row["initial"])
+        self.assertEqual(row["initial"]["native_state"], "native_failed")
+        self.assertFalse(row["initial"]["accepted"])
+        self.assertEqual(report["totals"][cell["arm"]]["native_elapsed_s"], 0.125)
+        self.assertEqual(report["totals"][cell["arm"]]["elapsed_s"], 0.25)
+        self.assertEqual(len(executor.calls), 1)
+
+    def test_report_rejects_orphaned_native_observations_without_a_receipt(self):
+        cell = self.prepare()["cells"][0]
+        directory = self.directory / "lineages" / cell["id"] / "initial"
+        directory.mkdir(parents=True)
+        for changed in ({"native_state": "native_failed"}, {"native_valid": True},
+                        {"usage": {"input_tokens": 7}}, {"native_elapsed_s": 0.125}, {"elapsed_s": 0.25}):
+            with self.subTest(changed=changed):
+                study.write_json(directory / "outcome.json", {"state": "attempted", **changed})
+                command = subprocess.run([sys.executable, str(Path(study.__file__)), "report", str(self.directory)],
+                                         capture_output=True, text=True)
+                self.assertEqual(command.returncode, 0, command.stderr)
+                report = study.read_json(self.directory / "report.json")
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertIn("evidence_error", row["initial"])
+                self.assertEqual(row["initial"]["native_state"], "unknown")
+                self.assertFalse(row["initial"]["native_valid"])
+                self.assertFalse(row["initial"]["accepted"])
+                total = json.loads(command.stdout)[cell["arm"]]
+                self.assertEqual(total["known_usage_opportunities"], 0)
+                self.assertNotIn("native_failed", total["native_states"])
+                for field in study.DURATIONS:
+                    self.assertIsNone(total[field])
+                    self.assertEqual(total[f"known_{field}_opportunities"], 0)
+                self.assertEqual(report["planned_opportunities"], 36)
+
     def test_report_rejects_malformed_native_duration_in_retained_receipt(self):
         cell = self.prepare()["cells"][0]
         study.run(self.directory, cell_id=cell["id"], execute=RecordingApplication(), grader=recording_grader,
@@ -293,7 +378,6 @@ class Study(unittest.TestCase):
     def test_real_application_result_uses_harvest_capture_and_retained_durations(self):
         owner = sys.modules[study.run_application.__module__]
         plan = self.prepare()
-        cell = plan["cells"][0]
 
         def command(argv, **kwargs):
             args = list(map(str, argv))
@@ -316,21 +400,33 @@ class Study(unittest.TestCase):
                 with tarfile.open(args[3], "w") as archive:
                     for item in sorted((slot / "fake-harvest").rglob("*")):
                         archive.add(item, arcname=item.relative_to(slot / "fake-harvest"), recursive=False)
+            elif args[:3] == ["sbx", "rm", "--force"] and cleanup_failure:
+                raise owner.ApplicationError("recorded cleanup failure")
             elif args[:3] == ["sbx", "ls", "--json"]:
                 stdout = b'{"sandboxes":[]}'
             return subprocess.CompletedProcess(args, 0, stdout, b"")
 
-        with patch.object(owner, "_command", side_effect=command):
-            outcome = study.run_stage(self.directory, plan, cell, "initial", execute=study.run_application,
-                                      grader=recording_grader, template_catalog=recording_templates)
-        self.assertEqual(outcome["native_state"], "completed", outcome)
-        self.assertEqual(outcome["native_elapsed_s"], 0.125)
-        self.assertEqual(outcome["capture"]["directory"], f"lineages/{cell['id']}/initial/application/harvest/capture")
-        receipt = study.read_json(self.directory / outcome["application_receipt"])
-        self.assertEqual(outcome["elapsed_s"], receipt["elapsed_s"])
-        row = next(row for row in study.report(self.directory)["rows"] if row["id"] == cell["id"])
-        self.assertTrue(row["initial"]["accepted"], row["initial"])
-        self.assertEqual(row["initial"]["native_elapsed_s"], 0.125)
+        for cleanup_failure, cell in zip((False, True), plan["cells"]):
+            with self.subTest(cleanup_failure=cleanup_failure):
+                with patch.object(owner, "_command", side_effect=command):
+                    outcome = study.run_stage(self.directory, plan, cell, "initial", execute=study.run_application,
+                                              grader=recording_grader, template_catalog=recording_templates)
+                self.assertEqual(outcome["native_state"], "cleanup_failed" if cleanup_failure else "completed", outcome)
+                self.assertEqual(outcome["native_elapsed_s"], 0.125)
+                receipt = study.read_json(self.directory / outcome["application_receipt"])
+                self.assertEqual(outcome["elapsed_s"], receipt["elapsed_s"])
+                if cleanup_failure:
+                    self.assertIsNone(outcome["capture"])
+                    self.assertIsNotNone(receipt["capture"])
+                else:
+                    self.assertEqual(outcome["capture"]["directory"], f"lineages/{cell['id']}/initial/application/harvest/capture")
+                report = study.report(self.directory)
+                row = next(row for row in report["rows"] if row["id"] == cell["id"])
+                self.assertNotIn("evidence_error", row["initial"])
+                self.assertEqual(row["initial"]["accepted"], not cleanup_failure, row["initial"])
+                self.assertEqual(row["initial"]["native_elapsed_s"], 0.125)
+                self.assertEqual(row["initial"]["elapsed_s"], receipt["elapsed_s"])
+                self.assertEqual(report["planned_opportunities"], 36)
 
     def test_frozen_input_tamper_prevents_every_call(self):
         cell = self.prepare()["cells"][0]

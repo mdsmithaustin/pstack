@@ -510,33 +510,26 @@ def validate_evidence(root: Path, plan: dict, cell: dict, stage: str, outcome: d
     if receipt is None:
         if capture is not None or any(outcome.get(field) is not None for field in DURATIONS):
             raise ValueError("capture or duration lacks a retained application receipt")
-        application = None
-    else:
-        receipt_path = relative(root, receipt)
-        if receipt_path != directory / "application/receipt.json":
-            raise ValueError("application receipt is outside the planned stage")
-        application = read_json(receipt_path)
-        if not isinstance(application, dict):
-            raise ValueError("application receipt must be an object")
-        for field in DURATIONS:
-            try:
-                observed = duration(application.get(field))
-            except ValueError as exc:
-                raise ValueError(f"invalid application receipt {field}: {exc}") from exc
-            if observed != outcome.get(field):
-                raise ValueError(f"{field} disagrees with application receipt")
-    if capture is None:
-        if grade is not None or outcome.get("native_valid") is True:
-            raise ValueError("native completion or grade lacks a retained capture")
+        if (grade is not None or outcome.get("native_valid") is True
+                or outcome.get("native_state") not in (None, "unknown", "unobserved")
+                or outcome.get("usage") is not None):
+            raise ValueError("native outcome, usage, or grade lacks a retained application receipt")
         return
-    snapshot = snapshot_at(root, capture)
-    if snapshot.directory.resolve() != (directory / "application/harvest/capture").resolve():
-        raise ValueError("capture is outside the planned stage")
-    with tempfile.TemporaryDirectory(prefix="port-evidence-") as temporary:
-        replay(snapshot, Path(temporary) / "app")
-    bound = application["capture"]
-    if bound["sha256"] != snapshot.sha256 or Path(bound["directory"]).resolve() != snapshot.directory.resolve():
-        raise ValueError("application receipt capture binding mismatch")
+    receipt_path = relative(root, receipt)
+    if receipt_path != directory / "application/receipt.json":
+        raise ValueError("application receipt is outside the planned stage")
+    application = read_json(receipt_path)
+    if not isinstance(application, dict):
+        raise ValueError("application receipt must be an object")
+    for field in DURATIONS:
+        try:
+            observed = duration(application.get(field))
+        except ValueError as exc:
+            raise ValueError(f"invalid application receipt {field}: {exc}") from exc
+        if observed != outcome.get(field):
+            raise ValueError(f"{field} disagrees with application receipt")
+    if application.get("usage") != outcome.get("usage"):
+        raise ValueError("usage disagrees with application receipt")
     if application["native_valid"] is not outcome["native_valid"] or application["state"] != outcome["native_state"]:
         raise ValueError("native outcome disagrees with application receipt")
     if outcome["native_valid"] is True and outcome["native_state"] != "completed":
@@ -564,6 +557,18 @@ def validate_evidence(root: Path, plan: dict, cell: dict, stage: str, outcome: d
             raise ValueError(f"application receipt {spec_key} disagrees with frozen stage inputs")
     if application["spec"]["runtime"] != plan["runtime"]:
         raise ValueError("application receipt runtime disagrees with frozen plan")
+    if capture is None:
+        if grade is not None or outcome.get("native_valid") is True:
+            raise ValueError("native completion or grade lacks a retained capture")
+        return
+    snapshot = snapshot_at(root, capture)
+    if snapshot.directory.resolve() != (directory / "application/harvest/capture").resolve():
+        raise ValueError("capture is outside the planned stage")
+    with tempfile.TemporaryDirectory(prefix="port-evidence-") as temporary:
+        replay(snapshot, Path(temporary) / "app")
+    bound = application["capture"]
+    if bound["sha256"] != snapshot.sha256 or Path(bound["directory"]).resolve() != snapshot.directory.resolve():
+        raise ValueError("application receipt capture binding mismatch")
     if grade is None:
         return
     oracle = relative(private, case["oracle"])
@@ -625,6 +630,7 @@ def report(root: Path):
             except (ApplicationError, OSError, ValueError, KeyError, TypeError) as exc:
                 outcome.setdefault("evidence_error", f"{type(exc).__name__}: {exc}")
             if "evidence_error" in outcome:
+                outcome.update(native_state="unknown", native_valid=False, usage=None)
                 for field in DURATIONS:
                     outcome[field] = None
             grade = outcome.get("grade") if isinstance(outcome.get("grade"), dict) else {}
