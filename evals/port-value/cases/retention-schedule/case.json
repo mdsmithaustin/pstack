@@ -20,6 +20,11 @@
       "path": "controls/release-equality",
       "stage": "maintenance",
       "failure": "release date ends hold"
+    },
+    {
+      "path": "controls/overdue-deadline",
+      "stage": "maintenance",
+      "failure": "overdue held record keeps original deadline"
     }
   ]
 }

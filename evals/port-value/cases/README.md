@@ -14,11 +14,11 @@ Each `case.json` names these paths relative to its directory:
 - `controls.initial` and `controls.maintenance` are complete application directories that pass their corresponding stages.
 - `controls.noop` is an application directory that fails both stages.
 - `controls.targeted` is an application directory that passes initial behavior and fails a named maintenance check.
-- `defects` lists an initial defect and a maintenance defect, with each directory, stage, and expected failure name.
+- `defects` lists initial and maintenance defects, with each directory, stage, and expected failure name.
 
 The oracle and controls remain outside the copied application. Each oracle runs the application as a subprocess. Expected JSON results are literal values in `checks.json` and do not come from any control implementation. The maintenance stage runs the complete initial set again before its additional checks.
 
-Run an oracle with `python3 oracle.py --project DIR --stage initial` or `--stage maintenance` from its case directory. It emits one JSON object with `passed`, `assertions`, and `failures`. A passing result exits zero. A behavior failure exits one and contains at least one named failure. The assertion count is 16 initial and 26 maintenance for parcels, 18 and 28 for meters, and 17 and 29 for retention. A protocol error, missing application, nonzero application exit, or application timeout is a failure. Each application call has a three-second timeout.
+Run an oracle with `python3 oracle.py --project DIR --stage initial` or `--stage maintenance` from its case directory. It emits one JSON object with `passed`, `assertions`, and `failures`. A passing result exits zero. A behavior failure exits one and contains at least one named failure. The assertion count is 16 initial and 26 maintenance for parcels, 18 and 28 for meters, and 17 and 30 for retention. A protocol error, missing application, nonzero application exit, or application timeout is a failure. Each application call has a three-second timeout.
 
 Run `python3 -m unittest discover -s evals/port-value -p test_cases.py -v` at the repository root to exercise all controls through the public subprocess interface. A nonzero exit, a failure summary, or a zero-test summary means verification did not succeed. The suite also copies each case to a new temporary location and verifies that its oracle still works there. Initial controls must fail the new maintenance behavior. Targeted maintenance defects must preserve initial behavior and fail their named maintenance checks.
 

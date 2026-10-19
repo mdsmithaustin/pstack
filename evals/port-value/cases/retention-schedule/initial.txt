@@ -1,1 +1,1 @@
-Our archive team needs a daily retention list. Replace the placeholder in app.py with the JSON command specified in README.md. The dates and ordering must be predictable so staff can compare daily lists.
+Our archive team needs a daily retention list. Replace the placeholder in app.py with the JSON command specified in README.md. The dates and ordering must be predictable so staff can use daily lists.

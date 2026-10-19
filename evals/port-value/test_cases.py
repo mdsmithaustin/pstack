@@ -11,7 +11,7 @@ CASES = Path(__file__).resolve().parent / "cases"
 COUNTS = {
     "parcel-manifest": {"initial": 16, "maintenance": 26},
     "meter-intervals": {"initial": 18, "maintenance": 28},
-    "retention-schedule": {"initial": 17, "maintenance": 29},
+    "retention-schedule": {"initial": 17, "maintenance": 30},
 }
 
 
@@ -97,6 +97,40 @@ class CaseControls(unittest.TestCase):
                 self.assertTrue(any(
                     failure.startswith(failure_name + ":") for failure in result["failures"]
                 ), result)
+
+    def test_overdue_hold_deadline_defect(self):
+        directory, _ = self.cases["retention-schedule"]
+        request = {
+            "as_of": "2025-01-03",
+            "rules": {"mail": 1},
+            "records": [{"id": "a", "category": "mail", "closed": "2025-01-01"}],
+            "holds": [{"id": "h", "record_ids": ["a"]}],
+        }
+        outputs = {
+            "maintenance": {
+                "delete": [],
+                "retain": [{"id": "a", "until": "2025-01-02", "holds": ["h"]}],
+            },
+            "overdue-deadline": {
+                "delete": [],
+                "retain": [{"id": "a", "until": "2025-01-03", "holds": ["h"]}],
+            },
+        }
+        for control, expected in outputs.items():
+            with self.subTest(control=control):
+                completed = subprocess.run(
+                    [sys.executable, str(directory / "controls" / control / "app.py")],
+                    input=json.dumps(request), text=True, capture_output=True, timeout=3,
+                )
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                self.assertEqual(json.loads(completed.stdout), expected)
+        project = directory / "controls" / "overdue-deadline"
+        self.run_oracle("retention-schedule", project, "initial", True)
+        result = self.run_oracle("retention-schedule", project, "maintenance", False)
+        self.assertEqual(len(result["failures"]), 1, result)
+        self.assertTrue(result["failures"][0].startswith(
+            "overdue held record keeps original deadline:"
+        ), result)
 
     def test_oracles_run_outside_the_case_and_reject_protocol_errors(self):
         for name, (directory, metadata) in self.cases.items():

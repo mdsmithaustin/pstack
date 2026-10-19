@@ -295,6 +295,42 @@
   ],
   "maintenance": [
     {
+      "name": "overdue held record keeps original deadline",
+      "input": {
+        "as_of": "2025-01-03",
+        "rules": {
+          "mail": 1
+        },
+        "records": [
+          {
+            "id": "a",
+            "category": "mail",
+            "closed": "2025-01-01"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": [
+              "a"
+            ]
+          }
+        ]
+      },
+      "output": {
+        "delete": [],
+        "retain": [
+          {
+            "id": "a",
+            "until": "2025-01-02",
+            "holds": [
+              "h"
+            ]
+          }
+        ]
+      }
+    },
+    {
       "name": "active holds retain due and future records",
       "input": {
         "as_of": "2024-03-01",
