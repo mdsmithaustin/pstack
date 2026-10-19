@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "gate_run_id": "01M5A55HYA9B86NW7Z5TQDDVB9",
+  "validation_head": "247d9871f0613fe14be080dd170b7bf12a993177",
+  "source_sha256": {
+    "evals/canon/application.py": "0c9cb5ecbfc61e5e12dbc752459cbac048c056952bc7aae65ba7256fa2e95e44",
+    "evals/canon/chain.py": "4fc02e94526e3094b075cb80ae7954353f3a6f4c67028b2e5d4c5aa747a3275d",
+    "evals/canon/host.py": "d17d367128c315851529c00f3125b0a4203f7f3e318d3aedffc3ecd433b9a4ee",
+    "evals/canon/review.py": "8f5df957f5f7c782ac2fc8cb18688bb13ce9ecf1ef78284e59b4190d72131f6d",
+    "evals/canon/review_cases.py": "2f17ba4e9fb8d9e86f82deba269e309e8c45b144b5b2e81c875bee5fc079e37a",
+    "evals/canon/sandbox.py": "d0105549cb5e0cbbeda183400051c91b51d28a584cb20f54a38f512e7a6b52e7",
+    "evals/canon/sbx.json": "5bb23c09ea462e4bd126070bdeb12d471dd5c7b9b7901f0f999ccdd9e15ee674",
+    "evals/canon/sbx_inside.py": "fb120a00bb7589f11661bb956ab9fdb78f666bf0811b94a8323aa930fe0bb5d1",
+    "evals/canon/screen.py": "a588d45d39747bd186e0614f2b072ac5b4a7de1a924136a0dd0cd836264f4a12",
+    "evals/canon/smoke_application.py": "4814425b907a025c45ee57922f33f8f98ca36082b58718b21a06c46f6d23a98a",
+    "evals/canon/test_application.py": "4d36d9f7d84a3cd4023ce90c22bf045dee7cfbc0a17de633875f2ccd428f79b1",
+    "evals/canon/test_application_native.py": "1ab0efa7f322d9923c71a8698897203504626de33c7ec6eb75aa2f574e72171a",
+    "evals/canon/test_arms.py": "06ff44dd65f28ad6b1989e36b62c28f4e1e638b6f4fb969a12bc7adeccca5b23",
+    "evals/canon/test_chain.py": "f4d5fee7fb34b3b1dc914bbef3f877a0a686900e844ab637746f9fef2907ebd7",
+    "evals/canon/test_document.py": "c0eb7c9d713b2775ff9846836fa48076cb534f88b29dd87af496999b4167e2ce",
+    "evals/canon/test_host.py": "a9fcbd0664565ce4c622f4d465ef943723f93bc055822020379708a67bb593b6",
+    "evals/canon/test_oracles.py": "161d78b7da28f1aacea1d05b92dcc378d915a64ff1d81b39bf8f9e242ac16f6b",
+    "evals/canon/test_review.py": "70844e409b050dc6e7a62061348fb53c4fd9bf206e330cabc7344583c2045fbe",
+    "evals/canon/test_review_cases.py": "e4103800ad383facf4471d7f29b7658f393ac1923d593fee3f9fe792e2025c92",
+    "evals/canon/test_sandbox.py": "b600d8c8be01587a4949ec31664a5d646563e2df5fca26302c92b41af58d8af8",
+    "evals/canon/test_screen.py": "2a2c96d15699e8149d641a2f21b1f9b8ac9bfac2d552b05792edc8be16129cb7",
+    "evals/canon/test_workspace.py": "424cdb156ab1810459b6a3f9001ab66a4075109e930092e284669a125b74fa8a",
+    "evals/canon/workspace.py": "fd1cb60ec29cf087ded3069409565578847210d8d52a90928a26ec8a940bd5d1",
+    "evals/port-value/study.py": "daf6460a88425e8bca0cc1f58a86baf07f06b16709e240d7cb7823fbc1e5a7f3",
+    "evals/port-value/upstream_personas.py": "db0a52573954c3faecda7d65b5054d56924cccfe8f8f346d7a901ec4611be93c"
+  },
+  "scope": "Retained execution evidence verified model-free; this receipt does not assert validation of later source changes.",
+  "completed_study": {
+    "lineages": 18,
+    "opportunities": 36,
+    "accepted_stages": 36,
+    "retries": 0,
+    "instrument_changed": false,
+    "aggregate_result": "2026-10-19.json"
+  },
+  "current_gate": {
+    "preparation": {
+      "lineages": 18,
+      "opportunities": 36,
+      "calibration_checks": 19,
+      "passed": true
+    },
+    "synthetic_canaries": {
+      "application_calls": 2,
+      "completed_named_children": 4,
+      "arms": [
+        "upstream",
+        "current"
+      ],
+      "personas": [
+        "poteto-agent",
+        "comment-sicko"
+      ],
+      "guidance_valid": true,
+      "captures_valid": true,
+      "cleanup_confirmed": true,
+      "proof_artifact": "fresh-persona-canaries/proof.json",
+      "source_revision": "247d9871f0613fe14be080dd170b7bf12a993177",
+      "owner_sha256": "0c9cb5ecbfc61e5e12dbc752459cbac048c056952bc7aae65ba7256fa2e95e44"
+    },
+    "additional_model_calls_during_receipt_verification": 0
+  },
+  "historical": {
+    "analysis_artifact": "historical-recheck/analysis.json",
+    "persona_proof_artifact": "historical-recheck/proof.json",
+    "reconciled_stages": 36,
+    "completed_preflight_children": 4
+  },
+  "scenarios": [
+    {
+      "name": "Current-run preparation and native persona activation",
+      "result": "pass",
+      "evidence": [
+        "live-prepare-verification.json",
+        "fresh-persona-canaries/proof.json"
+      ],
+      "method": "Actual prepare CLI and two public application API calls; retained raw parent/child records reverified."
+    },
+    {
+      "name": "Historical raw-record reconciliation",
+      "result": "pass",
+      "evidence": [
+        "historical-recheck/analysis.json",
+        "historical-recheck/proof.json",
+        "historical-recheck/exposure-evidence.json"
+      ],
+      "method": "Independent complete analysis and historical persona verifier reproduced unchanged without native calls."
+    },
+    {
+      "name": "Executable grading",
+      "result": "pass",
+      "evidence": [
+        "docker-regrades.json"
+      ],
+      "method": "Retained pinned-container regrades cover 36 captures with positive assertions."
+    },
+    {
+      "name": "Archived report replay",
+      "result": "pass",
+      "evidence": [
+        "reproduction.json"
+      ],
+      "method": "Actual frozen report CLI in pinned Python container produced identical JSON and Markdown."
+    },
+    {
+      "name": "Spent dispatch and locking",
+      "result": "pass",
+      "evidence": [
+        "spent-dispatch.json",
+        "dispatch-lock.json",
+        "adversarial-results.json"
+      ],
+      "method": "Actual CLI preserves spent stages and rejects competing dispatch."
+    },
+    {
+      "name": "Tamper rejection",
+      "result": "pass",
+      "evidence": [
+        "adversarial-results.json"
+      ],
+      "method": "Actual report CLI revokes acceptance for corrupt capture, dependent maintenance, and changed frozen inputs."
+    }
+  ],
+  "artifact_sha256": {
+    "live-validation-phase-result.json": "4a5bde73c98b23b40a2eb6285b46ab0f23f7775e9ad63e135731bd01eb7aa660",
+    "live-prepare-verification.json": "eb493a3e6138141accf9a6586074da2f5915ef23b744e85100b70abe4a3084ad",
+    "fresh-persona-canaries/proof.json": "0341c7bdd5d4ea91bf48874e2ad12b29db192cfcdfb5ec0ab79cd9ff7f42660f",
+    "fresh-persona-canaries/source.json": "11184123e3e5d954fa8d18fe4e79843106ad7740f8f4ea21e68ce49f3dbc7a5a",
+    "historical-recheck/proof.json": "07ceec0e7a7c3373d0801d14ed02c0c7b7449741c24b01224a414451ec4a2bac",
+    "historical-recheck/analysis.json": "7951fa50094b78212a9aaa66209b7c8c50b0ad82a915b2e08d4832ae70daac0f",
+    "historical-recheck/exposure-evidence.json": "12153ef73c225f93b2194b60d5e202c07e4104099efc7a7ec324913e57f8f8cd",
+    "docker-regrades.json": "de527234af6cec0e4da6708107548d04fcd771398f11eeed78ceb1140a3391ff",
+    "reproduction.json": "195f1556a2cf1b708c317158a0e125608638089b904fc68210529d7239243d89",
+    "adversarial-results.json": "1eb58ae73471eb7c40b8dd3e9086dca57191403043992e75fcd6e19fe651d9bf",
+    "spent-dispatch.json": "0d913c79a3ed367c1f5b3d14cc8503bf7850d268a685821b0b5f85fac814f6fd",
+    "dispatch-lock.json": "3227e6c4ae8179363f4adecc59bceefc16a568394daaa253d711073930528f05"
+  },
+  "limitations": [
+    "Synthetic capability checks are separate from the 36 spent study opportunities and do not prove persona use in study tasks or workflow efficacy.",
+    "Historical reconciliation verifies retained execution, not fresh historical calls.",
+    "Requested and transcript-observed model settings do not prove served identity or dollar cost.",
+    "The hash verification command checks retained artifact identity; it does not repeat native execution or establish new model behavior."
+  ]
+}

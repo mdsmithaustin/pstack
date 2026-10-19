@@ -6,6 +6,46 @@ The comparison makes skills available for cold-start, relevance-driven discovery
 
 The completed [2026-10-19 comparison](results/2026-10-19.md) reports acceptance, observed usage, durations, exposure evidence, and limits.
 
+## Verify the current gate evidence
+
+The [current-validation receipt](results/2026-10-19-validation.json) records gate run `01M5A55HYA9B86NW7Z5TQDDVB9` at validation head `247d9871f0613fe14be080dd170b7bf12a993177`. It distinguishes the completed study from the separate current-run preparation and two synthetic canaries with four completed named children. The raw records were rechecked without further model calls. The receipt lists six scenarios, relative evidence names, and full source and evidence hashes. Documentation changes after that head do not change the recorded execution identity.
+
+Use a reader-selected external evidence root containing the listed relative artifacts. Keep raw streams and private evidence outside Git. This model-free command verifies retained artifact identity and source bytes, including the current-run canary proof and historical analysis. It does not execute evidence scripts or repeat model calls. Run it from the repository root. A nonzero exit, missing artifact, hash mismatch, or absence of `retained_evidence_verified: true` means verification failed.
+
+```sh
+EVIDENCE_ROOT=/absolute/external/evidence-directory
+python3 -B - "$EVIDENCE_ROOT" <<'PY'
+from pathlib import Path
+import hashlib
+import json
+import sys
+
+receipt = json.loads(Path("evals/port-value/results/2026-10-19-validation.json").read_text())
+root = Path(sys.argv[1])
+if not root.is_absolute() or not root.is_dir():
+    raise SystemExit("external evidence directory required")
+if not receipt["artifact_sha256"] or len(receipt["scenarios"]) != 6:
+    raise SystemExit("incomplete validation receipt")
+for name, expected in receipt["artifact_sha256"].items():
+    if hashlib.sha256((root / name).read_bytes()).hexdigest() != expected:
+        raise SystemExit(f"evidence hash mismatch: {name}")
+for name, expected in receipt["source_sha256"].items():
+    if hashlib.sha256(Path(name).read_bytes()).hexdigest() != expected:
+        raise SystemExit(f"source hash mismatch: {name}")
+proof = json.loads((root / "fresh-persona-canaries/proof.json").read_text())
+if proof["source"]["revision"] != receipt["validation_head"]:
+    raise SystemExit("canary validation head mismatch")
+if set(proof["arms"]) != {"upstream", "current"}:
+    raise SystemExit("both canary arms required")
+for arm in proof["arms"].values():
+    if not all(arm[key] is True for key in ("native_valid", "guidance_valid", "cleanup_confirmed")):
+        raise SystemExit("invalid canary receipt")
+    if sorted(child["role"] for child in arm["children"]) != ["comment-sicko", "poteto-agent"]:
+        raise SystemExit("both named children required")
+print(json.dumps({"retained_evidence_verified": True, "gate_run_id": receipt["gate_run_id"]}))
+PY
+```
+
 ## Prepare a frozen comparison
 
 Use Python 3.12 or later. The application owner also needs `sbx`, Docker, the prepared native template, and working model credentials. Discover those tools through `PATH`. This repository has no `mise` task for this controller.
