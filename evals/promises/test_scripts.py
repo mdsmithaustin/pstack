@@ -779,6 +779,12 @@ class BabysitWatcherPromises(GitHubSandbox):
 class WorktreeAuditPromises(FakeGhSandbox):
     redirect_fetch = True
 
+    def setUp(self):
+        super().setUp()
+        origin = self.bin / "origin"
+        origin.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        origin.chmod(0o755)
+
     def test_worktree_cleanup_classifies_worktrees(self):
         repo = self.tmp / "audit-repo"
         bare = self.tmp / "audit-origin.git"

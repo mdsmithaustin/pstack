@@ -22,6 +22,14 @@ def _have(cmd: str) -> bool:
     return shutil.which(cmd) is not None
 
 
+def failing_origin_cli(directory: Path) -> str:
+    directory.mkdir(parents=True, exist_ok=True)
+    stub = directory / "origin"
+    stub.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    stub.chmod(0o755)
+    return str(directory)
+
+
 @unittest.skipUnless(_have("rg"), "worktree-audit.sh shells out to rg to read transcripts")
 @unittest.skipUnless(_have("jq"), "worktree-audit.sh shells out to jq to read PR state")
 class WorktreeAuditTranscriptSlugTest(unittest.TestCase):
@@ -39,6 +47,7 @@ class WorktreeAuditTranscriptSlugTest(unittest.TestCase):
             env["GIT_AUTHOR_EMAIL"] = "pstack-test@example.com"
             env["GIT_COMMITTER_NAME"] = "pstack-test"
             env["GIT_COMMITTER_EMAIL"] = "pstack-test@example.com"
+            env["PATH"] = f"{failing_origin_cli(tmp / 'failing-origin')}:{env['PATH']}"
 
             def git(*args: str, cwd: Path = repo) -> None:
                 subprocess.run(
@@ -94,6 +103,7 @@ class WorktreeAuditBaseTest(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.tmp / "home"),
                         GIT_AUTHOR_NAME="pstack-test", GIT_AUTHOR_EMAIL="pstack-test@example.com",
                         GIT_COMMITTER_NAME="pstack-test", GIT_COMMITTER_EMAIL="pstack-test@example.com")
+        self.env["PATH"] = f"{failing_origin_cli(self.tmp / 'failing-origin')}:{self.env['PATH']}"
         (self.tmp / "home").mkdir()
         self.repo = self.tmp / "repo"
         self.repo.mkdir()
@@ -473,6 +483,27 @@ class WorktreeAuditRepositoryTest(WorktreeAuditBaseTest):
             "--json", "number,status,headRef",
         ])
         self.assertFalse((self.tmp / "gh-log").exists())
+
+    def test_failing_origin_cli_falls_back_to_gh_and_fills_the_pr_column(self):
+        worktree = self.fixture("https://github.com/fork/project.git")
+        origin = self.tmp / "bin" / "origin"
+        origin.write_text(
+            f"#!{sys.executable}\nimport os, sys\n"
+            "from pathlib import Path\n"
+            "Path(os.environ['AUDIT_ORIGIN_LOG']).write_text(' '.join(sys.argv[1:]))\n"
+            "sys.stderr.write('origin: not authenticated\\n')\n"
+            "sys.exit(1)\n",
+            encoding="utf-8",
+        )
+        origin.chmod(0o755)
+        self.env["AUDIT_ORIGIN_LOG"] = str(self.tmp / "origin-log")
+        result = self.audit("-b", "main", str(self.repo))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.tmp / "origin-log").exists(), "origin was never tried")
+        args = json.loads((self.tmp / "gh-log").read_text())
+        self.assertEqual(args[args.index("--repo") + 1], "github.com/fork/project")
+        row = next(line.split("\t") for line in result.stdout.splitlines() if line.endswith(str(worktree)))
+        self.assertEqual((row[2], row[5], row[7]), ("no", "#17/open", "hold-open-pr"))
 
     def test_origin_cli_merged_pr_is_safe(self):
         worktree = self.fixture("https://github.com/fork/project.git")
