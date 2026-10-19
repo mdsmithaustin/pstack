@@ -1,0 +1,927 @@
+{
+  "concurrency": 2,
+  "duration_precision": {
+    "decimal_places": 6,
+    "raw_evidence": "Raw values remain at their original precision outside Git.",
+    "rounding": "nearest",
+    "unit": "seconds"
+  },
+  "input_integrity_error": null,
+  "limitations": "Three held-out tasks, two repetitions per arm. Executable application acceptance only; requested README updates and broader task quality are unmeasured. Cold-start relevance-driven discovery without explicit workflow activation. No general causal claim.",
+  "pins": {
+    "current": "701c9a6f09ae3b0bd56a4962ff299c21accf8690",
+    "upstream": "1b6d44ff26d4e242f4e8f68c391e6d2f7ca16def"
+  },
+  "planned_lineages": 18,
+  "planned_opportunities": 36,
+  "provenance_sha256": {
+    "analysis/analysis.json": "7951fa50094b78212a9aaa66209b7c8c50b0ad82a915b2e08d4832ae70daac0f",
+    "analysis/analyze.py": "e81c17f42e129b727c395a3f1957d5044c2f0168c980a300167634d11e7a45ce",
+    "analysis/exposure-evidence.json": "12153ef73c225f93b2194b60d5e202c07e4104099efc7a7ec324913e57f8f8cd",
+    "inputs/plan.json": "accc6b107421b42a647f5cf105efb9f778a1037c47b4eede90c4cfd6739f7f97",
+    "persona-preflight/proof.json": "07ceec0e7a7c3373d0801d14ed02c0c7b7449741c24b01224a414451ec4a2bac",
+    "report.json": "b2158b9179684d2deea558134150546ed4ddcc00127dc0c4d9b19318025ad709",
+    "report.md": "81ac6a8bf5cd805efdc3cc4379d1bffd382a10e29d445f8097beb42f9496ebcd",
+    "seal.json": "8e0a3877576df073a5c8774e9199e31a767f905501c897a6ac23a194c063bc89"
+  },
+  "run_id": "heldout-20261019-9ecb9b85",
+  "runtime": {
+    "effort": "high",
+    "model": "gpt-6.1-sol",
+    "template": "docker.io/library/pstack-port-value-codex:0.162.0",
+    "timeout_s": 240
+  },
+  "seed": 73129,
+  "served_model": "unknown",
+  "summary": {
+    "current": {
+      "all": {
+        "accepted": 12,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 450176,
+          "median": 350592.0,
+          "min": 156544,
+          "sum": 3751424,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 18,
+        "command_count": 145,
+        "command_nonzero_count": 11,
+        "denominator": 12,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 213.894088,
+          "median": 151.693066,
+          "min": 100.069064,
+          "sum": 1798.172143,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {
+          "documentation-impact": 12,
+          "pstack-harness": 11,
+          "technical-writing": 11,
+          "unslop": 12,
+          "verify-commands": 12
+        },
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 1.389945,
+          "median": 1.019618,
+          "min": 0.858727,
+          "sum": 13.003154,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 529612,
+          "median": 390430.5,
+          "min": 191648,
+          "sum": 4294087,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "58": 12
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 202.039587,
+          "median": 139.144114,
+          "min": 84.430085,
+          "sum": 1651.61657,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 12
+        },
+        "native_valid": 12,
+        "observed_model_counts": {
+          "unknown": 12
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 12,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 6898,
+          "median": 5019.5,
+          "min": 3726,
+          "sum": 62922,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 1526,
+          "median": 592.0,
+          "min": 372,
+          "sum": 9401,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 12,
+        "top_level_error_count": 0,
+        "warning_count": 12
+      },
+      "initial": {
+        "accepted": 6,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 378880,
+          "median": 190464.0,
+          "min": 156544,
+          "sum": 1345024,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 4,
+        "command_count": 70,
+        "command_nonzero_count": 8,
+        "denominator": 6,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 158.202431,
+          "median": 116.740489,
+          "min": 100.069064,
+          "sum": 751.257067,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {
+          "documentation-impact": 6,
+          "pstack-harness": 5,
+          "technical-writing": 5,
+          "unslop": 6,
+          "verify-commands": 6
+        },
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0.917454,
+          "median": 0.865176,
+          "min": 0.858727,
+          "sum": 5.280289,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 416169,
+          "median": 234649.0,
+          "min": 191648,
+          "sum": 1580375,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "58": 6
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 147.543155,
+          "median": 104.292612,
+          "min": 84.430085,
+          "sum": 678.52757,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 6
+        },
+        "native_valid": 6,
+        "observed_model_counts": {
+          "unknown": 6
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 6,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 6114,
+          "median": 4675.0,
+          "min": 3726,
+          "sum": 28983,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 1386,
+          "median": 780.5,
+          "min": 542,
+          "sum": 5035,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 6,
+        "top_level_error_count": 0,
+        "warning_count": 6
+      },
+      "maintenance": {
+        "accepted": 6,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 450176,
+          "median": 409280.0,
+          "min": 326656,
+          "sum": 2406400,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 14,
+        "command_count": 75,
+        "command_nonzero_count": 3,
+        "denominator": 6,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 213.894088,
+          "median": 174.920254,
+          "min": 145.587245,
+          "sum": 1046.915076,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {
+          "documentation-impact": 6,
+          "pstack-harness": 6,
+          "technical-writing": 6,
+          "unslop": 6,
+          "verify-commands": 6
+        },
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 1.389945,
+          "median": 1.279124,
+          "min": 1.121783,
+          "sum": 7.722865,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 529612,
+          "median": 457155.0,
+          "min": 364692,
+          "sum": 2713712,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "58": 6
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 202.039587,
+          "median": 163.203771,
+          "min": 133.50787,
+          "sum": 973.089,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 6
+        },
+        "native_valid": 6,
+        "observed_model_counts": {
+          "unknown": 6
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 6,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 6898,
+          "median": 5266.0,
+          "min": 4940,
+          "sum": 33939,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 1526,
+          "median": 508.0,
+          "min": 372,
+          "sum": 4366,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 6,
+        "top_level_error_count": 0,
+        "warning_count": 6
+      }
+    },
+    "native": {
+      "all": {
+        "accepted": 12,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 177152,
+          "median": 106752.0,
+          "min": 67840,
+          "sum": 1413120,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 0,
+        "command_count": 85,
+        "command_nonzero_count": 14,
+        "denominator": 12,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 121.598616,
+          "median": 84.659731,
+          "min": 64.562087,
+          "sum": 1052.812507,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {},
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 1.326292,
+          "median": 1.101292,
+          "min": 0.869266,
+          "sum": 13.196014,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 209962,
+          "median": 125509.5,
+          "min": 80822,
+          "sum": 1635247,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "0": 12
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 109.336434,
+          "median": 72.962524,
+          "min": 53.362324,
+          "sum": 915.657586,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 12
+        },
+        "native_valid": 12,
+        "observed_model_counts": {
+          "unknown": 12
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 12,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 4546,
+          "median": 3769.5,
+          "min": 2354,
+          "sum": 44095,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 465,
+          "median": 290.5,
+          "min": 95,
+          "sum": 3294,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 0,
+        "top_level_error_count": 0,
+        "warning_count": 12
+      },
+      "initial": {
+        "accepted": 6,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 175616,
+          "median": 101952.0,
+          "min": 67840,
+          "sum": 661760,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 0,
+        "command_count": 41,
+        "command_nonzero_count": 7,
+        "denominator": 6,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 93.299201,
+          "median": 84.296835,
+          "min": 64.562087,
+          "sum": 480.232413,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {},
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0.953999,
+          "median": 0.91321,
+          "min": 0.869266,
+          "sum": 5.488453,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 194045,
+          "median": 121384.5,
+          "min": 80822,
+          "sum": 762698,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "0": 6
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 82.027299,
+          "median": 71.655867,
+          "min": 53.362324,
+          "sum": 410.554257,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 6
+        },
+        "native_valid": 6,
+        "observed_model_counts": {
+          "unknown": 6
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 6,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 4079,
+          "median": 3496.0,
+          "min": 2354,
+          "sum": 19701,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 414,
+          "median": 316.0,
+          "min": 169,
+          "sum": 1910,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 0,
+        "top_level_error_count": 0,
+        "warning_count": 6
+      },
+      "maintenance": {
+        "accepted": 6,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 177152,
+          "median": 111360.0,
+          "min": 79360,
+          "sum": 751360,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 0,
+        "command_count": 44,
+        "command_nonzero_count": 7,
+        "denominator": 6,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 121.598616,
+          "median": 93.817293,
+          "min": 76.16832,
+          "sum": 572.580094,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {},
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 1.326292,
+          "median": 1.282692,
+          "min": 1.248584,
+          "sum": 7.707561,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 209962,
+          "median": 128087.0,
+          "min": 94933,
+          "sum": 872549,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "0": 6
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 109.336434,
+          "median": 82.646866,
+          "min": 65.705262,
+          "sum": 505.103329,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 6
+        },
+        "native_valid": 6,
+        "observed_model_counts": {
+          "unknown": 6
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 6,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 4546,
+          "median": 3986.5,
+          "min": 3739,
+          "sum": 24394,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 465,
+          "median": 201.0,
+          "min": 95,
+          "sum": 1384,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 0,
+        "top_level_error_count": 0,
+        "warning_count": 6
+      }
+    },
+    "upstream": {
+      "all": {
+        "accepted": 12,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 174464,
+          "median": 97472.0,
+          "min": 45952,
+          "sum": 1196672,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 0,
+        "command_count": 81,
+        "command_nonzero_count": 11,
+        "denominator": 12,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 97.583381,
+          "median": 81.861119,
+          "min": 61.712685,
+          "sum": 979.265079,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {},
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 1.32244,
+          "median": 1.039402,
+          "min": 0.846916,
+          "sum": 12.806079,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 201672,
+          "median": 129897.5,
+          "min": 78635,
+          "sum": 1541349,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "52": 12
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 12,
+          "max": 84.262491,
+          "median": 69.416412,
+          "min": 49.798959,
+          "sum": 823.484842,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 12
+        },
+        "native_valid": 12,
+        "observed_model_counts": {
+          "unknown": 12
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 12,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 4263,
+          "median": 3437.5,
+          "min": 2175,
+          "sum": 40630,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 12,
+          "max": 485,
+          "median": 238.5,
+          "min": 133,
+          "sum": 3220,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 0,
+        "top_level_error_count": 0,
+        "warning_count": 12
+      },
+      "initial": {
+        "accepted": 6,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 96128,
+          "median": 80000.0,
+          "min": 45952,
+          "sum": 465920,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 0,
+        "command_count": 38,
+        "command_nonzero_count": 5,
+        "denominator": 6,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 88.395891,
+          "median": 78.857693,
+          "min": 61.712685,
+          "sum": 460.929566,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {},
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0.923026,
+          "median": 0.908804,
+          "min": 0.846916,
+          "sum": 5.363734,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 135724,
+          "median": 95943.0,
+          "min": 78635,
+          "sum": 619884,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "52": 6
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 71.768346,
+          "median": 67.756536,
+          "min": 49.798959,
+          "sum": 384.22091,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 6
+        },
+        "native_valid": 6,
+        "observed_model_counts": {
+          "unknown": 6
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 6,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 3586,
+          "median": 3391.0,
+          "min": 2175,
+          "sum": 18634,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 485,
+          "median": 311.5,
+          "min": 192,
+          "sum": 1955,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 0,
+        "top_level_error_count": 0,
+        "warning_count": 6
+      },
+      "maintenance": {
+        "accepted": 6,
+        "cache_write_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 0,
+          "median": 0.0,
+          "min": 0,
+          "sum": 0,
+          "unknown": 0
+        },
+        "cached_input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 174464,
+          "median": 104064.0,
+          "min": 98816,
+          "sum": 730752,
+          "unknown": 0
+        },
+        "collab_spawn_count": 0,
+        "collab_wait_count": 0,
+        "command_count": 43,
+        "command_nonzero_count": 6,
+        "denominator": 6,
+        "elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 97.583381,
+          "median": 84.771034,
+          "min": 76.870979,
+          "sum": 518.335513,
+          "unknown": 0
+        },
+        "full_skill_body_read_opportunities_by_skill": {},
+        "grade_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 1.32244,
+          "median": 1.229152,
+          "min": 1.155777,
+          "sum": 7.442345,
+          "unknown": 0
+        },
+        "input_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 201672,
+          "median": 143826.5,
+          "min": 129386,
+          "sum": 921465,
+          "unknown": 0
+        },
+        "installed_skill_body_counts": {
+          "52": 6
+        },
+        "native_elapsed_s": {
+          "invalid": 0,
+          "known": 6,
+          "max": 84.262491,
+          "median": 70.81504,
+          "min": 65.599458,
+          "sum": 439.263932,
+          "unknown": 0
+        },
+        "native_states": {
+          "completed": 6
+        },
+        "native_valid": 6,
+        "observed_model_counts": {
+          "unknown": 6
+        },
+        "other_item_error_count": 0,
+        "outcomes_present": 6,
+        "output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 4263,
+          "median": 3610.0,
+          "min": 3246,
+          "sum": 21996,
+          "unknown": 0
+        },
+        "reasoning_output_tokens": {
+          "invalid": 0,
+          "known": 6,
+          "max": 295,
+          "median": 212.5,
+          "min": 133,
+          "sum": 1265,
+          "unknown": 0
+        },
+        "skill_body_read_opportunities": 0,
+        "top_level_error_count": 0,
+        "warning_count": 6
+      }
+    }
+  },
+  "usage_child_inclusion": "unknown"
+}

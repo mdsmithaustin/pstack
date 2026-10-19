@@ -1,5 +1,3 @@
-"""Explicit, development-only native model smoke; never uses study cases."""
-
 import json
 import os
 from pathlib import Path
@@ -105,7 +103,6 @@ class NativeLifecycleSmoke(unittest.TestCase):
         self.check_failure_capture(result, "interrupt")
 
     def test_changed_guidance_and_cleanup_failure(self):
-        # Real sandbox lifecycle, with deterministic faults at the transport boundary.
         original = application._command
         for mode in ("guidance", "cleanup"):
             with self.subTest(mode=mode):

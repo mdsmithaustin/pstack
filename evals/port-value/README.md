@@ -4,6 +4,8 @@ This controller compares native Codex, the recorded upstream pstack, and the com
 
 The comparison makes skills available for cold-start, relevance-driven discovery and measures executable application acceptance. It does not explicitly activate poteto-mode. Skill availability does not establish skill use. The retained native transcripts need a separate exposure review before anyone claims that a particular workflow caused an outcome. The private oracles do not grade requested README updates or broader task quality.
 
+The completed [2026-10-19 comparison](results/2026-10-19.md) reports acceptance, observed usage, durations, exposure evidence, and limits.
+
 ## Prepare a frozen comparison
 
 Use Python 3.12 or later. The application owner also needs `sbx`, Docker, the prepared native template, and working model credentials. Discover those tools through `PATH`. This repository has no `mise` task for this controller.
@@ -75,6 +77,53 @@ The report retains two separate durations. `native_elapsed_s` measures the nativ
 The paired sample contains three tasks and two repetitions per arm. Timing results describe this sample and do not establish a winner or general performance. Remote inference capacity and its effect on concurrency are unmeasured. Requested model settings do not prove served model identity. Acceptance does not measure requested README updates, human judgment of task quality, or the efficacy of an explicitly activated poteto workflow.
 
 Raw native streams, captures, checker logs, and execution receipts stay in the external run directory. Keep them outside Git. Preserve failed preparations as diagnostic receipts. Do not promote findings from this three-task comparison into a general causal claim or count repetitions as independent task diversity.
+
+## Reproduce an archived report
+
+Use the retained external run directory and its frozen sources to reproduce a report without model calls or sandbox creation. Keep the run directory at its original recorded absolute path. Integrity checks compare the absolute source paths in `inputs/plan.json` as well as their hashes. Copying the directory elsewhere and changing those paths invalidates the archive.
+
+Set `RUNROOT` to that original absolute directory. This example requires host Python 3 and Docker. It derives the original `EVALS` directory and pinned `oracle_image` from the plan. The two bind mounts expose only the run directory and its frozen controller sources. The source mount is read-only. The run mount permits replacement of the derived reports. No host Docker socket enters the container.
+
+A nonzero exit, a non-null `input_integrity_error`, or changed report hashes means reproduction failed. The script also rejects missing reports and a report with no opportunities. A successful run prints `exact_reproduction: true` and both report hashes.
+
+```sh
+RUNROOT=/absolute/original/run-directory
+python3 - "$RUNROOT" <<'PY'
+from pathlib import Path
+import hashlib
+import json
+import subprocess
+import sys
+
+runroot = Path(sys.argv[1]).resolve()
+plan = json.loads((runroot / "inputs/plan.json").read_text())
+source = next(Path(p) for p in plan["sources"] if p.endswith("/port-value/study.py"))
+evals = source.parent.parent
+reports = [runroot / "report.json", runroot / "report.md"]
+before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in reports}
+command = [
+	"docker", "run", "--rm", "--network", "none", "--read-only",
+	"--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+	"--pids-limit", "128", "--memory", "512m", "--cpus", "1",
+	"--tmpfs", "/tmp:rw,nosuid,size=128m",
+	"--mount", f"type=bind,src={runroot},dst={runroot}",
+	"--mount", f"type=bind,src={runroot / 'inputs/source'},dst={evals},readonly",
+	plan["oracle_image"], "python", "-I", "-B", str(source), "report", str(runroot),
+]
+subprocess.run(command, check=True)
+report = json.loads((runroot / "report.json").read_text())
+after = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in reports}
+if report["input_integrity_error"] is not None:
+	raise SystemExit(report["input_integrity_error"])
+if report["planned_opportunities"] != plan["opportunities"] or not report["rows"]:
+	raise SystemExit("report does not cover the frozen plan")
+if before != after:
+	raise SystemExit("report hashes changed")
+print(json.dumps({"exact_reproduction": True, "report_sha256": after}, indent=2))
+PY
+```
+
+Preserve the raw native streams, captures, and private checker files outside Git. Share only the aggregate results that omit private host paths and task evidence.
 
 ## Verify the controller without model calls
 
