@@ -326,7 +326,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autopilot-full.md",
-     "quote": "One owner runs each PR from build to merge, and nothing merges without your clean swarm verdict."
+     "quote": "One owner runs each PR from build to merge, and nothing merges without your clean verifier verdict."
     },
     {
      "file": "skills/poteto-mode/playbooks/autopilot-full.md",
@@ -4886,6 +4886,15 @@
    ],
    "text": "```text\n/poteto-mode prototype a few options for the settings layout. put them behind a switcher and send me screenshots of each.\n```"
   },
+  "20cfc1721706": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "autopilot-full-verifier-round-per-push",
+   "sources": [
+    "port"
+   ],
+   "text": "Fresh verifiers check the owner's code-ready head and later changes under [Autopilot-full's verification policy](../../skills/poteto-mode/playbooks/autopilot-full.md)."
+  },
   "20eb1af99061": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -4934,12 +4943,14 @@
    "text": "Ask for the proof as an artifact you can inspect yourself: the failing test and then the passing one, a before-and-after video, the trace, the screenshot."
   },
   "22061bd1d586": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "20cfc1721706"
+   ],
    "promise": "autopilot-full-verifier-round-per-push",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "A swarm of fresh verifiers checks the owner's code-ready head."
   },
@@ -12250,12 +12261,14 @@
    "text": "```text\nask /arena for a second opinion on this thread and our approach\n```"
   },
   "ee172734355c": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "20cfc1721706"
+   ],
    "promise": "autopilot-full-verifier-round-per-push",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "A later rebase or minor fix gets one fresh verifier, and only new behavior or a large new diff calls the full swarm again."
   },
