@@ -1,6 +1,6 @@
 {
   "source_revision": "5e5eaa861a5df50c0cedc601db7e9f17e70e2ef9",
-  "oracle_revision": "cb3acc3814b359fe4e58f9db8b63833c19a24989",
+  "oracle_revision": "22f7c0096ae349a2af53a5be38beb5714e684553",
   "oracle_image": "python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36",
   "oracle_files": [
     {
