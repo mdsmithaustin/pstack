@@ -88,6 +88,7 @@ class Result:
     receipt: Path
     elapsed_s: float
     usage: dict | None
+    native_elapsed_s: float | None = None
 
 
 def _json(value):
@@ -290,13 +291,15 @@ def run_application(request: Request, slot: Path) -> Result:
     receipt = slot / "receipt.json"
     facts = {"schema": 1, "spec": spec, "spec_sha256": digest, "sandbox": name,
              "state": "setup_failed", "native_valid": False, "usage": None, "observed_model": None,
-             "capture": None, "cleanup_confirmed": False}
+             "capture": None, "cleanup_confirmed": False, "native_elapsed_s": None}
     _write_json(slot / "claim.json", facts)
     capture, created, setup, run_error = None, False, False, None
     try:
         runtime = request.runtime
         if not runtime.template or not runtime.model or runtime.effort not in ("low", "medium", "high", "xhigh", "max") or type(runtime.timeout_s) is not int or runtime.timeout_s <= 0:
             raise ApplicationError("invalid runtime")
+        project_entries = _inventory(request.project)
+        skill_entries = _inventory(request.skills) if request.skills else None
         project = replay(request.project, slot / "staging" / "project")
         if any((project / p).exists() for p in (".agents", ".codex")):
             raise ApplicationError("application contains reserved native configuration directories")
@@ -310,8 +313,7 @@ def run_application(request: Request, slot: Path) -> Result:
         templates = json.loads(_command(["sbx", "template", "ls", "--json"]).stdout)
         rows = templates if isinstance(templates, list) else templates.get("images", [])
         matches = [row for row in rows if runtime.template in (row.get("id"),
-                   row.get("repository", "") + ":" + row.get("tag", ""),
-                   row.get("repository", "").rsplit("/", 1)[-1] + ":" + row.get("tag", ""))]
+                   row.get("repository", "") + ":" + row.get("tag", ""))]
         if len(matches) != 1:
             raise ApplicationError("runtime template is not uniquely present in local inventory")
         facts["template_identity"] = matches[0]
@@ -323,7 +325,8 @@ def run_application(request: Request, slot: Path) -> Result:
         if checked_policy.returncode not in (0, 1) or (policy.get("allowed") is not False and policy.get("decision") != "deny"):
             raise ApplicationError("sandbox lacks default-deny network policy")
         _command(["sbx", "cp", Path(__file__), f"{name}:{REMOTE}.py"])
-        payload = {"root": str(staging), "runtime": asdict(runtime), "skills": spec["skills"], "prompt": request.prompt}
+        payload = {"root": str(staging), "runtime": asdict(runtime), "skills": spec["skills"], "prompt": request.prompt,
+                   "project": spec["project"], "project_entries": project_entries, "skill_entries": skill_entries}
         _write_json(slot / "input.json", payload)
         _command(["sbx", "cp", slot / "input.json", f"{name}:{REMOTE}.json"])
         configured = _command(["sbx", "exec", name, "python3", f"{REMOTE}.py", "setup", f"{REMOTE}.json"], timeout=120)
@@ -338,6 +341,7 @@ def run_application(request: Request, slot: Path) -> Result:
             run_error = "native_failed"
             facts.update(state="native_failed", error=str(exc))
     except KeyboardInterrupt:
+        run_error = "interrupted"
         facts["state"] = "interrupted"
     except (ApplicationError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
         facts["error"] = str(exc)
@@ -352,6 +356,7 @@ def run_application(request: Request, slot: Path) -> Result:
                     status = json.loads((slot / "harvest" / "status.json").read_text())
                     facts["native"] = status
                     facts["usage"] = status.get("usage")
+                    facts["native_elapsed_s"] = status.get("native_elapsed_s")
                     candidate = Snapshot(slot / "harvest" / "capture", status["capture_sha256"])
                     _inventory(candidate)
                     capture = candidate
@@ -376,7 +381,7 @@ def run_application(request: Request, slot: Path) -> Result:
                 capture = None
         facts["elapsed_s"] = round(time.monotonic() - started, 6)
         _write_json(receipt, facts)
-    return Result(facts["state"], facts["native_valid"], capture, receipt, facts["elapsed_s"], facts["usage"])
+    return Result(facts["state"], facts["native_valid"], capture, receipt, facts["elapsed_s"], facts["usage"], facts["native_elapsed_s"])
 
 
 def _native_command(runtime, root):
@@ -384,7 +389,6 @@ def _native_command(runtime, root):
                "--dangerously-bypass-approvals-and-sandbox", "--model", runtime["model"], "-C", str(root / "project")]
     overrides = {"model_reasoning_effort": runtime["effort"], "model_provider": "sandboxd",
                  "model_providers.sandboxd": PROVIDER, "mcp_servers": {},
-                 "projects." + json.dumps(str(root)) + ".trust_level": "trusted",
                  **{f"features.{key}": value for key, value in FEATURES.items()}}
     for key, value in overrides.items():
         if isinstance(value, dict):
@@ -392,11 +396,31 @@ def _native_command(runtime, root):
         else:
             value = json.dumps(value)
         command += ["-c", key + "=" + value]
+    command += ["-c", "projects={" + json.dumps(str(root)) + '={trust_level="trusted"}}']
     return command + ["-"]
+
+
+def _restore_clone(source, entries, digest):
+    if _sha(_json(entries)) != digest:
+        raise ApplicationError("declared clone inventory digest mismatch")
+    actual = _scan(source)
+    without_modes = lambda rows: [{k: v for k, v in row.items() if k != "mode"} for row in rows]
+    if without_modes(actual) != without_modes(entries):
+        raise ApplicationError("cloned snapshot paths or content changed")
+    for entry in reversed(entries):
+        (source / entry["path"]).chmod(entry["mode"])
+    if _sha(_json(_scan(source))) != digest:
+        raise ApplicationError("restored clone digest mismatch")
+    return actual
 
 
 def _inside_setup(payload):
     root = Path(payload["root"])
+    inventories = {"project": _restore_clone(root / "project", payload["project_entries"], payload["project"])}
+    if payload["skills"] is not None:
+        inventories["skills"] = _restore_clone(root / ".agents/skills", payload["skill_entries"], payload["skills"])
+    elif (root / ".agents/skills").exists():
+        raise ApplicationError("unexpected cloned guidance")
     home = Path(REMOTE + "-home")
     home.mkdir()
     (home / ".codex").mkdir()
@@ -411,7 +435,7 @@ def _inside_setup(payload):
             raise ApplicationError(f"native runtime lacks {flag}")
     if not any(line.startswith("multi_agent ") for line in features.splitlines()):
         raise ApplicationError("native runtime lacks required delegation capability")
-    return {"cli_version": version, "features": FEATURES}
+    return {"cli_version": version, "features": FEATURES, "clone_inventories": inventories}
 
 
 def _kill_native():
@@ -433,6 +457,7 @@ def _inside_run(payload):
     env.update(HOME=str(home), CODEX_HOME=str(home / ".codex"), GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null")
     status = {"state": "native_failed", "native_valid": False, "usage": None, "observed_model": None}
     with open(REMOTE + ".stdout", "wb") as stdout, open(REMOTE + ".stderr", "wb") as stderr:
+        started = time.monotonic()
         proc = subprocess.Popen(_native_command(payload["runtime"], root), cwd=root / "project", env=env,
                                 stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True)
         Path(REMOTE + ".pid").write_text(str(proc.pid))
@@ -444,6 +469,7 @@ def _inside_run(payload):
         finally:
             _kill_native()
             proc.wait(timeout=5)
+            status["native_elapsed_s"] = round(time.monotonic() - started, 6)
     terminal, failed, malformed = False, False, False
     for line in _read_file(Path(REMOTE + ".stdout")).splitlines():
         try:

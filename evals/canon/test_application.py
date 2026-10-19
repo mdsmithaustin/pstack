@@ -26,13 +26,23 @@ class RecordingTransport:
             return self.original(argv, **kwargs)
         args = argv[1:]
         if args[:2] == ["template", "ls"]:
-            return self.reply({"images": [{"repository": "prepared", "tag": "test", "id": "abc"}]})
+            return self.reply({"images": [{"repository": "namespace/prepared", "tag": "test", "id": "abc"}]})
         if args[0] == "create":
             self.name = args[args.index("--name") + 1]
             claim = json.loads((Path(args[-1]).parent / "claim.json").read_text())
             self.test.assertEqual(claim["sandbox"], self.name)
-            self.test.assertEqual(claim["spec"]["runtime"]["template"], "prepared:test")
             self.test.assertEqual(sorted(p.name for p in Path(args[-1]).iterdir()), ([".agents"] if claim["spec"]["skills"] else []) + [".git", "project"])
+            for tree in (Path(args[-1]) / "project", Path(args[-1]) / ".agents/skills"):
+                if tree.exists():
+                    for path in tree.rglob("*"):
+                        path.chmod(stat.S_IMODE(path.stat().st_mode) | 0o020)
+            if self.mode.startswith("clone_"):
+                tree = Path(args[-1]) / ("project" if self.mode.endswith("project") else ".agents/skills")
+                target = next(p for p in tree.rglob("*") if p.is_file())
+                if "content" in self.mode:
+                    target.write_text("tampered")
+                else:
+                    target.rename(target.with_name("unexpected"))
             return self.reply()
         if args[0] == "policy":
             return subprocess.CompletedProcess(argv, 2 if self.mode == "policy_error" else 1, b'{"allowed":false}', b"")
@@ -49,7 +59,11 @@ class RecordingTransport:
             if operation == "run":
                 if self.mode == "outer_timeout":
                     raise subprocess.TimeoutExpired(argv, 1)
+                if self.mode == "interrupt_before_status":
+                    raise KeyboardInterrupt
                 application._inside_run(self.payload)
+                if self.mode == "interrupt_after_status":
+                    raise KeyboardInterrupt
                 return self.reply()
             if operation == "kill":
                 application._kill_native()
@@ -88,7 +102,7 @@ class ApplicationTests(unittest.TestCase):
         skills.mkdir(parents=True)
         (skills / "SKILL.md").write_text("Use the project tests.")
         self.skills = application.Snapshot.freeze(skills.parent, self.root / "skills-snapshot")
-        self.request = application.Request(application.Runtime("prepared:test", "requested-model", "high", 1), self.project, self.skills, "Implement the task.")
+        self.request = application.Request(application.Runtime("namespace/prepared:test", "requested-model", "high", 1), self.project, self.skills, "Implement the task.")
         self.addCleanup(mock.patch.stopall)
         mock.patch.object(application, "REMOTE", str(self.root / "remote")).start()
         self.bin = self.root / "bin"
@@ -162,8 +176,56 @@ else:
         self.assertIn('features.skip_host_skill_discovery=true', record["argv"])
         receipt = json.loads(result.receipt.read_text())
         self.assertEqual((receipt["cleanup_confirmed"], receipt["observed_model"], receipt["setup"]["cli_version"]), (True, None, "codex-cli 0.162.0"))
+        self.assertGreater(result.native_elapsed_s, 0)
+        self.assertLess(result.native_elapsed_s, result.elapsed_s)
+        self.assertEqual(receipt["native_elapsed_s"], result.native_elapsed_s)
         self.assertEqual([c[0][1] for c in transport.commands if c[0][0] == "sbx"][-2:], ["rm", "ls"])
         self.assertTrue(all(timeout > 0 for _, timeout in transport.commands))
+
+    def test_interrupt_preserves_capture_without_accepting_native_success(self):
+        for mode in ("interrupt_before_status", "interrupt_after_status"):
+            with self.subTest(mode=mode), mock.patch.object(application, "REMOTE", str(self.root / mode)):
+                result, _ = self.run_attempt(mode, mode)
+            self.assertEqual((result.state, result.native_valid), ("interrupted", False))
+            self.assertIsNotNone(result.capture)
+            self.assertTrue(json.loads(result.receipt.read_text())["cleanup_confirmed"])
+            if mode == "interrupt_before_status":
+                self.assertIsNone(result.native_elapsed_s)
+
+    def test_clone_restores_exact_modes_for_both_inputs(self):
+        for snapshot in (self.project, self.skills):
+            source = self.root / (snapshot.directory.name + "-writable")
+            application.replay(snapshot, source)
+            for path in source.rglob("*"):
+                path.chmod(0o770 if path.is_dir() else 0o640)
+            replacement = application.Snapshot.freeze(source, self.root / (snapshot.directory.name + "-mixed"))
+            if snapshot == self.project:
+                self.project = replacement
+            else:
+                self.skills = replacement
+        self.request = application.Request(self.request.runtime, self.project, self.skills, self.request.prompt)
+        result, _ = self.run_attempt()
+        self.assertEqual((result.state, result.native_valid), ("completed", True))
+        self.assertEqual(application._scan(self.root / "attempt/staging/.agents/skills"), application._inventory(self.skills))
+        clone = json.loads(result.receipt.read_text())["setup"]["clone_inventories"]
+        self.assertEqual({e["mode"] for e in clone["project"]}, {0o660})
+
+    def test_clone_rejects_path_and_content_changes_in_both_inputs(self):
+        for tree in ("project", "skills"):
+            for change in ("content", "path"):
+                mode = "clone_" + change + "_" + tree
+                with self.subTest(mode=mode), mock.patch.object(application, "REMOTE", str(self.root / mode)):
+                    result, transport = self.run_attempt(mode, mode)
+                self.assertEqual((result.state, result.native_valid, result.capture), ("setup_failed", False, None))
+                self.assertIn("paths or content changed", json.loads(result.receipt.read_text())["error"])
+                self.assertFalse(any(c[0][-2] == "run" for c in transport.commands if len(c[0]) > 2))
+
+    def test_template_short_alias_is_rejected_but_exact_id_is_accepted(self):
+        for template, expected in (("prepared:test", "setup_failed"), ("abc", "completed")):
+            self.request = application.Request(application.Runtime(template, "requested-model", "high", 1), self.project, self.skills, self.request.prompt)
+            with self.subTest(template=template), mock.patch.object(application, "REMOTE", str(self.root / template)):
+                result, _ = self.run_attempt(slot=template)
+            self.assertEqual(result.state, expected)
 
     def test_native_arm_has_no_assigned_skill_tree(self):
         self.request = application.Request(self.request.runtime, self.project, None, self.request.prompt)
