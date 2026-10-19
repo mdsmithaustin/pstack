@@ -26,7 +26,7 @@ if result.capture is not None:
     )
 ```
 
-Set `skills=None` for native execution without assigned guidance. Maintenance can use any valid capture, including a capture from an attempt with `native_valid=False`. The study decides whether to grade or maintain it.
+Set `skills=None` for native execution without assigned guidance. Maintenance can use any returned capture, including a capture from an attempt with `native_valid=False`. The study decides whether to grade or maintain it.
 
 ## Public contract
 
@@ -49,7 +49,7 @@ The module creates a small staging Git repository containing `project/` and the 
 
 Codex runs in `project/`. Its parent directory supplies project skills. When the assigned tree contains the pstack native agent installer, setup registers those project personas through that installer. Delegation remains enabled for every arm. Setup rejects a CLI that lacks the required delegation feature or execution flags.
 
-The native process uses a new session, isolated `HOME` and `CODEX_HOME`, no user config or execpolicy rules, disabled hooks, disabled apps, disabled host skill discovery, and a disabled sandbox MCP gateway. All arms receive the same feature settings. The sandbox's `sandboxd` model provider is an explicit transport setting. It uses the sandbox proxy at `https://chatgpt.com/backend-api/codex`. The module copies no host credential files. It records requested model settings and leaves `observed_model` unknown when native events provide no model identity.
+The native process uses a new session, isolated `HOME` and `CODEX_HOME`, no user config or execpolicy rules, disabled hooks, disabled apps, disabled host skill discovery, and an empty MCP server table. A disabled server entry still requires a valid transport in Codex 0.162.0, so the module sets `mcp_servers={}` instead of creating a gateway entry with only `enabled=false`. All arms receive the same feature settings. The sandbox's `sandboxd` model provider is an explicit transport setting. It uses the sandbox proxy at `https://chatgpt.com/backend-api/codex`. The module copies no host credential files. It records requested model settings and leaves `observed_model` unknown when native events provide no model identity.
 
 The prepared template must already contain Codex, Python, and Git. The module does not install them per attempt. Setup checks the native version and capabilities. The receipt retains the selected local template inventory entry and the CLI version. The sandbox policy must deny an unrelated network destination.
 
@@ -57,7 +57,7 @@ Every transport operation has a timeout. Creation and setup allow 120 seconds ea
 
 ## Result and receipt facts
 
-`native_valid=True` requires exit code zero, a `turn.completed` event, no native failure event, no malformed native JSON event, a valid capture, unchanged assigned guidance, and confirmed sandbox removal. A complete valid capture can survive a nonzero exit, a missing terminal event, or a timeout.
+`native_valid=True` requires exit code zero, a `turn.completed` event, no native failure event, no malformed native JSON event, a valid capture, unchanged assigned guidance, and confirmed sandbox removal. A complete valid capture can survive a nonzero exit, a missing terminal event, or a timeout. Cleanup failure returns `capture=None` so grading cannot begin while the sandbox may still be live. The receipt retains private capture facts for diagnosis.
 
 The `state` is `completed`, `native_failed`, `timeout`, `setup_failed`, `capture_failed`, `cleanup_failed`, or `interrupted`. Setup failures include invalid or changed input snapshots. Capture failures include failed harvest, invalid capture data, or changed assigned guidance. Cleanup failure overrides native success. A receipt records the detailed error and the native facts when available.
 

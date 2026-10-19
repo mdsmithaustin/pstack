@@ -374,6 +374,7 @@ def run_application(request: Request, slot: Path) -> Result:
                     raise ApplicationError("sandbox remains after removal")
             except (ApplicationError, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as exc:
                 facts.update(state="cleanup_failed", native_valid=False, cleanup_error=str(exc))
+                capture = None
         facts["elapsed_s"] = round(time.monotonic() - started, 6)
         _write_json(receipt, facts)
     return Result(facts["state"], facts["native_valid"], capture, receipt, facts["elapsed_s"], facts["usage"])
@@ -383,7 +384,7 @@ def _native_command(runtime, root):
     command = ["codex", "exec", "--json", "--ignore-user-config", "--ignore-rules",
                "--dangerously-bypass-approvals-and-sandbox", "--model", runtime["model"], "-C", str(root / "project")]
     overrides = {"model_reasoning_effort": runtime["effort"], "model_provider": "sandboxd",
-                 "model_providers.sandboxd": PROVIDER, "mcp_servers.mcp-gateway.enabled": False,
+                 "model_providers.sandboxd": PROVIDER, "mcp_servers": {},
                  "projects." + json.dumps(str(root)) + ".trust_level": "trusted",
                  **{f"features.{key}": value for key, value in FEATURES.items()}}
     for key, value in overrides.items():
