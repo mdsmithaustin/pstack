@@ -41,7 +41,7 @@ print(json.dumps({"claude": str(runtime.binary), "python": str(claude_code.PYTHO
                               capture_output=True, text=True, timeout=10)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(json.loads(done.stdout), {
-            "claude": "/fixture/account-home/.local/share/claude/versions/2.1.295",
+            "claude": "/fixture/account-home/.local/share/claude/versions/2.1.304",
             "python": "/fixture/account-home/.local/share/mise/installs/python/3.14.7",
             "node": "/fixture/account-home/.local/share/mise/installs/node/24.20.0",
             "grader": "/fixture/account-home/.local/share/mise/installs/python/3.14.7/bin/python3.14",

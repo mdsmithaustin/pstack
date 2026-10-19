@@ -86,11 +86,11 @@ class ConfinedCommand:
     session: str
 
 
-CLAUDE_VERSION = "2.1.295"
+CLAUDE_VERSION = "2.1.304"
 _HOST_ACCOUNT = pwd.getpwuid(os.getuid())
 _HOST_HOME = Path(_HOST_ACCOUNT.pw_dir)
 CLAUDE_BINARY = _HOST_HOME / ".local/share/claude/versions" / CLAUDE_VERSION
-CLAUDE_SHA256 = "0116ee2e0a513900b633d9951367f18747686478e2b462805b8c31609f047f70"
+CLAUDE_SHA256 = "b9ac5374839f14abf3f1f45610637c332b5daee5ce0d1634726cef87aab78e6a"
 PYTHON_ROOT = _HOST_HOME / ".local/share/mise/installs/python/3.14.7"
 NODE_ROOT = _HOST_HOME / ".local/share/mise/installs/node/24.20.0"
 GIT_ROOT = Path("/Library/Developer/CommandLineTools")
