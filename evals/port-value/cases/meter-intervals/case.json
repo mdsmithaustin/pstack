@@ -1,0 +1,25 @@
+{
+  "id": "meter-intervals",
+  "project": "project",
+  "initial_request": "initial.txt",
+  "maintenance_request": "maintenance.txt",
+  "oracle": "oracle.py",
+  "controls": {
+    "initial": "controls/initial",
+    "maintenance": "controls/maintenance",
+    "noop": "controls/noop",
+    "targeted": "controls/replacement-baseline"
+  },
+  "defects": [
+    {
+      "path": "controls/input-order",
+      "stage": "initial",
+      "failure": "sort readings before intervals"
+    },
+    {
+      "path": "controls/replacement-baseline",
+      "stage": "maintenance",
+      "failure": "replacement adds both register segments"
+    }
+  ]
+}

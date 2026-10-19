@@ -8,13 +8,18 @@ pstack and do not prove that a skill improves production work.
 `promises/` holds a separate suite that checks the user guide's promises on
 each harness. See `promises/README.md`.
 
-Model answers, traces, judge transcripts, reports, and private cases stay
-outside Git. A committed case is tuning material, not sealed evidence.
+Model answers, traces, judge transcripts, raw execution reports, and unpublished
+cases stay outside Git. A committed case is tuning material, not sealed evidence.
 Oracle and login regression fixtures under `promises/testdata/` are an exception.
 They are reduced, sanitized traces, CLI error records, and recorded verdicts used by model-free tests.
 `promises/reduce_trace.py` reduces raw traces for oracle fixtures. `promises/results/`
 is a second exception. It holds aggregated verdict matrices with no model
 answers.
+
+The [port-value comparison](port-value/README.md) documents the separate
+native, upstream, and current-port application study, including its published
+aggregate results and validation receipt. Its committed cases are now exposed.
+Raw execution evidence stays outside Git.
 
 ## What is measured
 

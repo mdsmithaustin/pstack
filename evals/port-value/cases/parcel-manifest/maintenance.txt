@@ -1,0 +1,5 @@
+The dispatch desk now needs to split consignments to meet a carrier weight limit. Add optional `capacity_grams` to the request. When absent, preserve every existing behavior and output. When present, it must be a positive integer, excluding booleans. Null and other invalid values return `{"error":"invalid_request"}` even for an empty manifest.
+
+Keep the existing destination and service grouping and sorted group order. Within each group, process parcels in input order. Add each parcel to the current consignment if its weight plus the current weight is at most capacity. Otherwise close the current consignment and start the next one. Never rearrange parcels to fill gaps. Keep each consignment's existing output fields. Multiple consignments can share a destination and service. Total weight still includes every parcel exactly once.
+
+If any single parcel exceeds capacity, return exactly `{"error":"parcel_too_heavy"}` for the whole request. Validate all existing fields and the capacity first, so malformed data wins over this weight error. Equality with capacity is allowed. Update README.md to describe the addition.

@@ -1,0 +1,856 @@
+{
+  "initial": [
+    {
+      "name": "deadline equality deletes",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ]
+      },
+      "output": {
+        "delete": [
+          "z"
+        ],
+        "retain": [
+          {
+            "id": "a",
+            "until": "2024-03-30"
+          },
+          {
+            "id": "b",
+            "until": "2024-03-02"
+          }
+        ]
+      }
+    },
+    {
+      "name": "zero days and sorted output",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {
+          "x": 0
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "x",
+            "closed": "2024-12-31"
+          },
+          {
+            "id": "a",
+            "category": "x",
+            "closed": "2025-01-01"
+          },
+          {
+            "id": "n",
+            "category": "x",
+            "closed": "2025-01-02"
+          }
+        ]
+      },
+      "output": {
+        "delete": [
+          "a",
+          "z"
+        ],
+        "retain": [
+          {
+            "id": "n",
+            "until": "2025-01-02"
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty records",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {},
+        "records": []
+      },
+      "output": {
+        "delete": [],
+        "retain": []
+      }
+    },
+    {
+      "name": "year rollover and ignored fields",
+      "input": {
+        "as_of": "2024-12-31",
+        "rules": {
+          "x": 2
+        },
+        "records": [
+          {
+            "id": "a",
+            "category": "x",
+            "closed": "2024-12-31",
+            "note": 4
+          }
+        ]
+      },
+      "output": {
+        "delete": [],
+        "retain": [
+          {
+            "id": "a",
+            "until": "2025-01-02"
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown category invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {},
+        "records": [
+          {
+            "id": "a",
+            "category": "x",
+            "closed": "2025-01-01"
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "duplicate record IDs invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {
+          "x": 0
+        },
+        "records": [
+          {
+            "id": "a",
+            "category": "x",
+            "closed": "2025-01-01"
+          },
+          {
+            "id": "a",
+            "category": "x",
+            "closed": "2025-01-02"
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "boolean rule invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {
+          "x": true
+        },
+        "records": []
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "negative rule invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {
+          "x": -1
+        },
+        "records": []
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "empty category invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {
+          "": 1
+        },
+        "records": []
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "invalid as-of date",
+      "input": {
+        "as_of": "2025-02-29",
+        "rules": {},
+        "records": []
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "noncanonical closed date invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {
+          "x": 1
+        },
+        "records": [
+          {
+            "id": "a",
+            "category": "x",
+            "closed": "2025-1-01"
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "deadline overflow invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {
+          "x": 1
+        },
+        "records": [
+          {
+            "id": "a",
+            "category": "x",
+            "closed": "9999-12-31"
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "nonobject record invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {},
+        "records": [
+          null
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "wrong records container invalid",
+      "input": {
+        "as_of": "2025-01-01",
+        "rules": {},
+        "records": {}
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "missing fields invalid",
+      "input": {},
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "nonobject request invalid",
+      "input": [],
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "malformed JSON rejected",
+      "raw": "{",
+      "output": {
+        "error": "invalid_request"
+      }
+    }
+  ],
+  "maintenance": [
+    {
+      "name": "overdue held record keeps original deadline",
+      "input": {
+        "as_of": "2025-01-03",
+        "rules": {
+          "mail": 1
+        },
+        "records": [
+          {
+            "id": "a",
+            "category": "mail",
+            "closed": "2025-01-01"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": [
+              "a"
+            ]
+          }
+        ]
+      },
+      "output": {
+        "delete": [],
+        "retain": [
+          {
+            "id": "a",
+            "until": "2025-01-02",
+            "holds": [
+              "h"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "active holds retain due and future records",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "z-hold",
+            "record_ids": [
+              "z",
+              "b"
+            ]
+          },
+          {
+            "id": "a-hold",
+            "record_ids": [
+              "z"
+            ],
+            "released": "2024-03-02"
+          }
+        ]
+      },
+      "output": {
+        "delete": [],
+        "retain": [
+          {
+            "id": "a",
+            "until": "2024-03-30"
+          },
+          {
+            "id": "b",
+            "until": "2024-03-02",
+            "holds": [
+              "z-hold"
+            ]
+          },
+          {
+            "id": "z",
+            "until": "2024-03-01",
+            "holds": [
+              "a-hold",
+              "z-hold"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "release date ends hold",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": [
+              "z"
+            ],
+            "released": "2024-03-01"
+          }
+        ]
+      },
+      "output": {
+        "delete": [
+          "z"
+        ],
+        "retain": [
+          {
+            "id": "a",
+            "until": "2024-03-30"
+          },
+          {
+            "id": "b",
+            "until": "2024-03-02"
+          }
+        ]
+      }
+    },
+    {
+      "name": "past release and empty holds",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": [
+              "z"
+            ],
+            "released": "2020-01-01"
+          },
+          {
+            "id": "empty",
+            "record_ids": [],
+            "released": null
+          }
+        ]
+      },
+      "output": {
+        "delete": [
+          "z"
+        ],
+        "retain": [
+          {
+            "id": "a",
+            "until": "2024-03-30"
+          },
+          {
+            "id": "b",
+            "until": "2024-03-02"
+          }
+        ]
+      }
+    },
+    {
+      "name": "null release stays active",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": [
+              "z"
+            ],
+            "released": null
+          }
+        ]
+      },
+      "output": {
+        "delete": [],
+        "retain": [
+          {
+            "id": "a",
+            "until": "2024-03-30"
+          },
+          {
+            "id": "b",
+            "until": "2024-03-02"
+          },
+          {
+            "id": "z",
+            "until": "2024-03-01",
+            "holds": [
+              "h"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "inactive hold unknown record invalid",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": [
+              "missing"
+            ],
+            "released": "2020-01-01"
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "duplicate hold IDs invalid",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": []
+          },
+          {
+            "id": "h",
+            "record_ids": []
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "duplicate IDs in hold invalid",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": [
+              "z",
+              "z"
+            ]
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "wrong hold container invalid",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": null
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "empty hold ID invalid",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "",
+            "record_ids": []
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "bad release date invalid",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h",
+            "record_ids": [
+              "z"
+            ],
+            "released": "2024-2-01"
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "nonobject hold invalid",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          null
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    },
+    {
+      "name": "missing record_ids invalid",
+      "input": {
+        "as_of": "2024-03-01",
+        "rules": {
+          "mail": 2,
+          "audit": 30
+        },
+        "records": [
+          {
+            "id": "z",
+            "category": "mail",
+            "closed": "2024-02-28"
+          },
+          {
+            "id": "a",
+            "category": "audit",
+            "closed": "2024-02-29"
+          },
+          {
+            "id": "b",
+            "category": "mail",
+            "closed": "2024-02-29"
+          }
+        ],
+        "holds": [
+          {
+            "id": "h"
+          }
+        ]
+      },
+      "output": {
+        "error": "invalid_request"
+      }
+    }
+  ]
+}

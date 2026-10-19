@@ -1,0 +1,1 @@
+We receive cumulative meter readings out of order. Implement the interval usage command described in README.md in app.py so the operations team can pipe one JSON request into python app.py.

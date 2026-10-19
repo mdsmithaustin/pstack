@@ -1,0 +1,30 @@
+{
+  "id": "retention-schedule",
+  "project": "project",
+  "initial_request": "initial.txt",
+  "maintenance_request": "maintenance.txt",
+  "oracle": "oracle.py",
+  "controls": {
+    "initial": "controls/initial",
+    "maintenance": "controls/maintenance",
+    "noop": "controls/noop",
+    "targeted": "controls/release-equality"
+  },
+  "defects": [
+    {
+      "path": "controls/deadline-equality",
+      "stage": "initial",
+      "failure": "deadline equality deletes"
+    },
+    {
+      "path": "controls/release-equality",
+      "stage": "maintenance",
+      "failure": "release date ends hold"
+    },
+    {
+      "path": "controls/overdue-deadline",
+      "stage": "maintenance",
+      "failure": "overdue held record keeps original deadline"
+    }
+  ]
+}

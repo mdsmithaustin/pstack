@@ -1,0 +1,25 @@
+{
+  "id": "parcel-manifest",
+  "project": "project",
+  "initial_request": "initial.txt",
+  "maintenance_request": "maintenance.txt",
+  "oracle": "oracle.py",
+  "controls": {
+    "initial": "controls/initial",
+    "maintenance": "controls/maintenance",
+    "noop": "controls/noop",
+    "targeted": "controls/capacity-equality"
+  },
+  "defects": [
+    {
+      "path": "controls/wrong-group",
+      "stage": "initial",
+      "failure": "group by destination and service"
+    },
+    {
+      "path": "controls/capacity-equality",
+      "stage": "maintenance",
+      "failure": "capacity equality stays together"
+    }
+  ]
+}
