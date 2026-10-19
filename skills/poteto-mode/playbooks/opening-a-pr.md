@@ -76,7 +76,7 @@ The URL check below is for github.com attachments and uses its token. For Enterp
 
 **Readiness.** Open every PR ready, never as a draft. A built-in PR tool can default to draft, so set `draft: false` on every creation call through it. With Origin, pass `--status open`. With `gh`, omit `--draft`. If a PR still opens as a draft, mark it ready through the PR tool, or run `origin pr ready <number>` or `gh pr ready <number>` according to the resolved forge. Run `origin pr view <number>` or `gh pr view <number>` before you refer to PR status.
 
-The upstream-sync procedure in `PORTING.md` may request a draft only on an ungated publish path. Resolve **Gated publish** first. A configured gate retains publication ownership and readiness rules, including in a GitHub Action checkout.
+For upstream-sync publication routes and draft requirements, follow [Syncing from upstream](../../../PORTING.md#syncing-from-upstream).
 
 **Babysit.** Opening a PR does not start a babysit. Post the URL and keep building. Finish the phase or stack first. Run a separate babysit pass only when the user asks for one after the whole stack exists. A babysit for each new PR stalls the build and spends checks on commits later waves restart. Push back when feedback drifts from intent.
 
