@@ -1,0 +1,366 @@
+{
+  "version": 1,
+  "skill_name": "verify-commands",
+  "skill_description": "Apply whenever you write or review a command that decides whether work is done: a test invocation, an acceptance check, a CI gate, a shell assertion, a grep-based verify step. Names the failure signal, grounds paths, and catches the shapes that pass green while measuring nothing.",
+  "harness": {
+    "name": "skill-eval-harness",
+    "url": "https://github.com/mdsmithaustin/skill-eval-harness",
+    "version": "git+c23ed79554995c60cbd63cc9da9f47837cfa6f9a"
+  },
+  "skill_paths": [
+    "packages/current/verify-commands/SKILL.md"
+  ],
+  "variants": [
+    "with_skill",
+    "without_skill"
+  ],
+  "judge": {
+    "model": "claude-review-required"
+  },
+  "ablations": [],
+  "old_skill_paths": [
+    "packages/previous/verify-commands/SKILL.md"
+  ],
+  "optional_variants": [
+    "old_skill"
+  ],
+  "split_policy": {
+    "tune": "Four public tuning cases, one repetition.",
+    "holdout": "Four independently authored private cases, three repetitions. Public template contains no heldout prompt."
+  },
+  "cases": [
+    {
+      "id": "pos-stale-summary",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "completion-gate",
+      "difficulty": "core",
+      "trigger_type": "implicit",
+      "success_goals": [
+        "outcome",
+        "process"
+      ],
+      "prompt": "Our release note pipes `npm run verify` into a search for `714 checks passed`, but the number changes when checks are added. Run the attached bootstrap with `python3 inputs/stale_summary.py . current`, inspect the project it creates, and return a safer paste-ready check in a fenced shell block. Briefly name the observable result that blocks release.",
+      "files": [
+        "oracle/projects/stale_summary.py"
+      ],
+      "expected_behavior": [
+        "Runs the existing verification operation without treating a recalled count as the contract.",
+        "Propagates the operation's non-zero exit and names that observable release blocker."
+      ],
+      "assertions": [
+        {
+          "name": "release-operation-survives-real-state-changes",
+          "type": "script",
+          "command": [
+            "python3",
+            "oracle/check_plan.py",
+            "stale-summary",
+            "{output_dir}"
+          ],
+          "severity": "gate",
+          "oracle": "strong",
+          "timeout_s": 60
+        },
+        {
+          "name": "release-plan-explains-its-boundary",
+          "type": "judge",
+          "severity": "soft",
+          "graded_dimensions": [
+            {
+              "name": "command-grounding",
+              "scale": "1-5",
+              "rubric": "5 = the script uses the created project's existing verification operation and remains correct when its success count changes. 1 = it relies on the recalled count, invents an unrelated operation, or hides the upstream exit."
+            },
+            {
+              "name": "failure-explanation",
+              "scale": "1-5",
+              "rubric": "5 = failure_signals identifies the verification process's non-zero exit as the release blocker. 1 = it gives a generic error claim, names only missing prose, or omits the blocking direction."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "with_skill"
+          ],
+          "severity": "soft"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": [
+            "without_skill"
+          ],
+          "severity": "soft"
+        },
+        {
+          "name": "old-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "old_skill"
+          ],
+          "severity": "soft"
+        }
+      ],
+      "tags": [
+        "population:headline-behavior",
+        "stale-count",
+        "executable-fixture"
+      ]
+    },
+    {
+      "id": "healthy-control",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "regression",
+      "domain": "completion-gate",
+      "difficulty": "core",
+      "trigger_type": "near-miss",
+      "success_goals": [
+        "outcome",
+        "process"
+      ],
+      "prompt": "Our release runbook already uses `python3 tools/verify-release.py`, and that program exits non-zero when release is unsafe. Run the attached bootstrap with `python3 inputs/healthy_control.py . healthy`, inspect the project it creates, and return the check in a fenced shell block without adding unrelated machinery. Briefly name the blocking result.",
+      "files": [
+        "oracle/projects/healthy_control.py"
+      ],
+      "expected_behavior": [
+        "Preserves the already meaningful command.",
+        "Names its non-zero exit without manufacturing another gate."
+      ],
+      "assertions": [
+        {
+          "name": "healthy-command-remains-meaningful",
+          "type": "script",
+          "command": [
+            "python3",
+            "oracle/check_plan.py",
+            "healthy-control",
+            "{output_dir}"
+          ],
+          "severity": "gate",
+          "oracle": "strong",
+          "timeout_s": 60
+        },
+        {
+          "name": "healthy-plan-shows-restraint",
+          "type": "judge",
+          "severity": "soft",
+          "graded_dimensions": [
+            {
+              "name": "command-preservation",
+              "scale": "1-5",
+              "rubric": "5 = the script preserves the supplied direct command or a semantically identical invocation. 1 = it replaces the meaningful operation with prose matching, a no-op, or unrelated scaffolding."
+            },
+            {
+              "name": "failure-explanation",
+              "scale": "1-5",
+              "rubric": "5 = failure_signals identifies the program's non-zero exit and adds no invented blocker. 1 = it omits the observable direction or adds unsupported criteria."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "with_skill"
+          ],
+          "severity": "soft"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": [
+            "without_skill"
+          ],
+          "severity": "soft"
+        },
+        {
+          "name": "old-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "old_skill"
+          ],
+          "severity": "soft"
+        }
+      ],
+      "tags": [
+        "population:headline-behavior",
+        "healthy-control",
+        "restraint",
+        "executable-fixture"
+      ]
+    },
+    {
+      "id": "pos-tail-upstream-failure",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "completion-gate",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": [
+        "outcome",
+        "process"
+      ],
+      "prompt": "Our runbook uses `npm run verify | tail -20`, and it reads that pipeline's status as the release verdict. Keep the last 20 output lines while making the existing verification operation's failure stop release. Run the attached bootstrap with `python3 inputs/stale_summary.py . current`, inspect its project, and return one paste-ready shell artifact in a fenced shell block. The evaluator starts the artifact in a fresh `/bin/sh` process. Bash is available for an explicit invocation. Briefly name the blocking result.",
+      "files": [
+        "oracle/projects/stale_summary.py"
+      ],
+      "expected_behavior": [
+        "Preserves the actual verification operation status through output filtering in a fresh shell.",
+        "Rejects natural broken and forced-operation-failure states while accepting healthy counts."
+      ],
+      "assertions": [
+        {
+          "name": "release-operation-survives-real-state-changes",
+          "type": "script",
+          "command": [
+            "python3",
+            "oracle/check_plan.py",
+            "stale-summary",
+            "{output_dir}"
+          ],
+          "severity": "gate",
+          "oracle": "strong",
+          "timeout_s": 60
+        },
+        {
+          "name": "release-plan-explains-its-boundary",
+          "type": "judge",
+          "severity": "soft",
+          "graded_dimensions": [
+            {
+              "name": "failure-explanation",
+              "scale": "1-5",
+              "rubric": "5 = names the actual verification process non-zero exit as the release blocker and explains how the returned artifact preserves it. 1 = treats tail success as verification success or relies on an earlier independent shell setting."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "with_skill"
+          ],
+          "severity": "soft"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": [
+            "without_skill"
+          ],
+          "severity": "soft"
+        },
+        {
+          "name": "old-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "old_skill"
+          ],
+          "severity": "soft"
+        }
+      ],
+      "tags": [
+        "population:headline-behavior",
+        "pipeline-exit",
+        "executable-fixture",
+        "public-tuning"
+      ]
+    },
+    {
+      "id": "pos-separate-shell-option",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "completion-gate",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": [
+        "outcome",
+        "process"
+      ],
+      "prompt": "A prior tool invocation ran `set -o pipefail` in a bash process. A later independent invocation runs `npm run verify | tail -20` and uses its status for signoff. Each invocation starts a fresh process. Repair the later command so signoff preserves the verification failure while displaying the final 20 lines. Run the attached bootstrap with `python3 inputs/stale_summary.py . current` and inspect the project. Return one paste-ready shell artifact in a fenced shell block that the evaluator starts in a fresh `/bin/sh` process. Bash is available for an explicit invocation. Briefly explain the blocking result and whether the earlier shell setting carries over.",
+      "files": [
+        "oracle/projects/stale_summary.py"
+      ],
+      "expected_behavior": [
+        "Preserves the actual verification operation status through output filtering in a fresh shell.",
+        "Rejects natural broken and forced-operation-failure states while accepting healthy counts."
+      ],
+      "assertions": [
+        {
+          "name": "release-operation-survives-real-state-changes",
+          "type": "script",
+          "command": [
+            "python3",
+            "oracle/check_plan.py",
+            "stale-summary",
+            "{output_dir}"
+          ],
+          "severity": "gate",
+          "oracle": "strong",
+          "timeout_s": 60
+        },
+        {
+          "name": "release-plan-explains-its-boundary",
+          "type": "judge",
+          "severity": "soft",
+          "graded_dimensions": [
+            {
+              "name": "failure-explanation",
+              "scale": "1-5",
+              "rubric": "5 = names the actual verification process non-zero exit as the release blocker and explains how the returned artifact preserves it. 1 = treats tail success as verification success or relies on an earlier independent shell setting."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "with_skill"
+          ],
+          "severity": "soft"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": [
+            "without_skill"
+          ],
+          "severity": "soft"
+        },
+        {
+          "name": "old-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": [
+            "old_skill"
+          ],
+          "severity": "soft"
+        }
+      ],
+      "tags": [
+        "population:headline-behavior",
+        "pipeline-exit",
+        "executable-fixture",
+        "public-tuning"
+      ]
+    }
+  ]
+}

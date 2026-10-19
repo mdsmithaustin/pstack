@@ -1,0 +1,198 @@
+{
+  "scope": "model-free setup only",
+  "source_revision": "5e5eaa861a5df50c0cedc601db7e9f17e70e2ef9",
+  "harness_revision": "c23ed79554995c60cbd63cc9da9f47837cfa6f9a",
+  "checks": [
+    {
+      "command": "skill_benchmark validate screen.json",
+      "exit": 0,
+      "cases": 4
+    },
+    {
+      "command": "skill_benchmark audit-manifest screen.json --split tune --fail-on-blockers --strict-judge",
+      "exit": 0,
+      "blockers": []
+    },
+    {
+      "command": "skill_benchmark validate confirmation.template.json",
+      "exit": 0,
+      "cases": 4
+    },
+    {
+      "command": "skill_benchmark audit-manifest confirmation.template.json --split holdout --fail-on-blockers --strict-judge",
+      "exit": 0,
+      "blockers": []
+    },
+    {
+      "command": "skill_benchmark prepare screen.json --split tune --include-old-skill --runs-per-variant 1 --models gpt-6.1-sol",
+      "exit": 0,
+      "tasks": 12
+    },
+    {
+      "command": "skill_benchmark prepare confirmation.template.json --split holdout --include-old-skill --runs-per-variant 3 --models gpt-6.1-sol --allow-missing-prompts",
+      "exit": 0,
+      "planning_rows": 36,
+      "private_readiness": false
+    }
+  ],
+  "prepared_row_checks": [
+    "balanced counts for with_skill, without_skill, old_skill",
+    "correct absolute selected snapshot path and empty without_skill paths",
+    "all input fixture files exist",
+    "subject model gpt-6.1-sol",
+    "no answer_key, expected_behavior, review_rubric or assertions fields"
+  ],
+  "oracle_controls": [
+    {
+      "name": "valid-existing",
+      "selector": "stale-summary",
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "result": {
+        "status": "pass",
+        "states": [
+          "current",
+          "count-changed",
+          "broken",
+          "forced-operation-failure"
+        ],
+        "operation_evidence": "authenticated by the container evidence server"
+      }
+    },
+    {
+      "name": "false-green-existing",
+      "selector": "stale-summary",
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "result": {
+        "status": "candidate_failure",
+        "failed_states": [
+          {
+            "behavior_checks": [],
+            "exit": 0,
+            "exit_matches": false,
+            "expected": "nonzero",
+            "fixture_receipt": null,
+            "lifecycle_checks": [],
+            "missing_operations": [],
+            "observed_commands": [
+              [
+                "python3",
+                "tools/run-checks.py"
+              ]
+            ],
+            "state": "forced-operation-failure",
+            "stderr": "",
+            "stdout": "",
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "valid-nested-bash",
+      "selector": "stale-summary",
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "result": {
+        "status": "pass",
+        "states": [
+          "current",
+          "count-changed",
+          "broken",
+          "forced-operation-failure"
+        ],
+        "operation_evidence": "authenticated by the container evidence server"
+      }
+    },
+    {
+      "name": "false-green-tail",
+      "selector": "stale-summary",
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "result": {
+        "status": "candidate_failure",
+        "failed_states": [
+          {
+            "behavior_checks": [],
+            "exit": 0,
+            "exit_matches": false,
+            "expected": "nonzero",
+            "fixture_receipt": null,
+            "lifecycle_checks": [],
+            "missing_operations": [],
+            "observed_commands": [
+              [
+                "/usr/local/bin/python3",
+                "tools/run-checks.py"
+              ]
+            ],
+            "state": "broken",
+            "stderr": "release check failed\n",
+            "stdout": "",
+            "timed_out": false
+          },
+          {
+            "behavior_checks": [],
+            "exit": 0,
+            "exit_matches": false,
+            "expected": "nonzero",
+            "fixture_receipt": null,
+            "lifecycle_checks": [],
+            "missing_operations": [],
+            "observed_commands": [
+              [
+                "/usr/local/bin/python3",
+                "tools/run-checks.py"
+              ]
+            ],
+            "state": "forced-operation-failure",
+            "stderr": "",
+            "stdout": "",
+            "timed_out": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "valid-healthy",
+      "selector": "healthy-control",
+      "expected_exit": 0,
+      "actual_exit": 0,
+      "result": {
+        "status": "pass",
+        "states": [
+          "healthy",
+          "broken",
+          "forced-operation-failure"
+        ],
+        "operation_evidence": "authenticated by the container evidence server"
+      }
+    }
+  ],
+  "limits": [
+    "No eval answer or judge calls executed.",
+    "Actual private confirmation passed strict model-free preflight. Private prompts and raw receipts remain outside Git.",
+    "Independent review is required before claiming the setup complete. Human review remains required before paid execution."
+  ],
+  "actual_private_confirmation": {
+    "status": "pass",
+    "cases": 4,
+    "tasks": 36,
+    "tasks_per_arm": 12,
+    "repetitions_per_case_arm": 3,
+    "strict_holdback": true,
+    "allow_missing_prompts": false,
+    "readiness_blockers": [],
+    "generation_answer_keys": false,
+    "case_prompt_and_fixture_bytes_match_across_arms": true,
+    "treatment_paths_match": true,
+    "taxonomy_normalization": "Classify the authored restraint regression as adversarial in the assembled manifest only. Original cases remain unchanged.",
+    "private_evidence": "Private preflight directory contains command receipts, assembly checks, and frozen input hashes."
+  },
+  "oracle_regression_suite": {
+    "command": "python3 -m unittest -v test_check_plan",
+    "tests": 51,
+    "exit": 0
+  }
+}

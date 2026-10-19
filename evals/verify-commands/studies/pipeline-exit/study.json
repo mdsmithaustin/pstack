@@ -1,0 +1,69 @@
+{
+  "study_id": "verify-commands-pipeline-exit-20261014",
+  "status": "model-free-preflight-only",
+  "shape": "Study metadata, three treatment identities, frozen source hashes, split manifests, evidence-role policy. Existing runner and unchanged oracle execute tasks.",
+  "treatments": {
+    "with_skill": "packages/current/verify-commands/SKILL.md",
+    "old_skill": "packages/previous/verify-commands/SKILL.md",
+    "without_skill": null
+  },
+  "source_lock": "source-lock.json",
+  "changed_rule_commit": "7b662326",
+  "subject_model": "gpt-6.1-sol",
+  "judge": {
+    "status": "finalize-cross-family-at-paid-run-review",
+    "maximum_verdicts_per_answer": 1,
+    "panel": false
+  },
+  "splits": {
+    "screen": {
+      "manifest": "screen.json",
+      "split": "tune",
+      "cases": 4,
+      "repetitions": 1,
+      "answers": 12
+    },
+    "confirmation": {
+      "manifest_template": "confirmation.template.json",
+      "split": "holdout",
+      "cases": 4,
+      "repetitions": 3,
+      "answers": 36,
+      "private_case_file": "$PRIVATE_ROOT/cases.json",
+      "authorship": "Independent heldout author. Setup author must not read private case contents.",
+      "readiness": "Template planning only. Assemble private manifest before strict preparation."
+    }
+  },
+  "budget": {
+    "maximum_answers": 48,
+    "maximum_judge_verdicts": 48,
+    "model_calls_authorized": false
+  },
+  "evidence_roles": {
+    "primary": "Per-answer strong executable script assertion result from unchanged oracle. Report separate false-green and healthy-control failures.",
+    "secondary": "One soft explanation judge assertion per answer. No judge panel.",
+    "diagnostic": "soft skill_invoked assertions for all three arms. Loading earns no behavior credit.",
+    "validity": "Reject wrong snapshot, wrong fixture or prompt, missing output, task-count mismatch, treatment contamination, or exposure failures separately; do not score as behavior improvement. Skill invocation receipt alone does not prove mounted bytes were read."
+  },
+  "decision_policy": {
+    "reject": [
+      "Any current-arm false green.",
+      "Any current-arm healthy regression.",
+      "Invalid exposure or treatment isolation."
+    ],
+    "inconclusive": [
+      "No separation across arms.",
+      "Ceiling or floor.",
+      "Incomplete population.",
+      "Only secondary or exposure scores separate."
+    ],
+    "candidate_signal": "Current arm improves primary oracle outcomes against both previous and absent arms without rejection. Human review required before confirmation or promotion.",
+    "limits": [
+      "Tiny targeted set is not broad efficacy proof.",
+      "No saved verify-commands model runs establish a measured weakness or lift.",
+      "Existing unslop evidence does not establish separation for this study.",
+      "The oracle tests the returned shell artifact under /bin/sh and cannot attest shell state in earlier tool invocations.",
+      "The outer /bin/sh can launch nested Bash. The study requires model-free controls to verify Bash availability and nested-Bash exit preservation."
+    ]
+  }
+}
