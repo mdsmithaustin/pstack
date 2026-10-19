@@ -112,3 +112,7 @@ Inbox publication accepts late and unbound events for inspection. Acknowledgment
 
 Direct ledger writes and acknowledgment share verifier precedence. Tracked authority comes from the attempt, regardless of a supplied `verifier` field. Untracked callers retain the existing trusted `--verifier <name>` attribution. A worker cannot replace a verifier on the same PR/head. A current verifier may revise either direction. Verdict labels have no strength ranking. Untracked legacy unit and ledger usage remains available.
 
+
+## Optional live Origin check
+
+`tests/skills/poteto-mode/scripts/orch/origin-live.test.ts` walks a real Origin stack with `orch frontier set --forge origin`. It runs only when `command -v origin` succeeds and `PSTACK_ORIGIN_LIVE_REPO` names a checkout of a disposable Origin-hosted repository whose current branch heads a stack. Otherwise it skips with a message naming both conditions. Run it as `PSTACK_ORIGIN_LIVE_REPO=/absolute/checkout bun test tests/skills/poteto-mode/scripts/orch/origin-live.test.ts`. It only lists pull requests, writes to a temporary store, and leaves the forge and the checkout unchanged. No CI job runs it.
