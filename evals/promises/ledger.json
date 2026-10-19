@@ -300,7 +300,7 @@
   },
   "autopilot-full-owner-never-merges-own-verdict": {
    "check": "static",
-   "claim": "No Autopilot-full owner merges on its own verdict; only a clean swarm verdict on the patch that merges authorizes the merge.",
+   "claim": "No Autopilot-full owner merges on its own verdict; only a clean verifier verdict on the patch that merges authorizes the merge.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autopilot-full.md",
