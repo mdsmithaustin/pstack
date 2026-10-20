@@ -483,6 +483,16 @@ class PreparedHarvest(unittest.TestCase):
         self.assertEqual(trace["x_child_skill_calls"], {"agent-c1": [{"skill": "no-comments", "ok": False, "output_head": "Unknown skill: no-comments"}]})
         self.assertEqual(trace["x_skill_listing"], {"step": "absent", "name_only": [], "setting_sources": "user,project"})
 
+    def test_the_bound_binary_version_and_digest_reach_prepared_and_replayed_traces(self):
+        self.prepare_run()
+        self.launch([{"type": "text", "text": "done"}], {"type": "result", "subtype": "success", "result": "done"})
+        trace = claude_code.harvest(self.run)
+        self.assertEqual(trace["x_binary"], {"path": str(self.root / "native.bin"), "version": "test",
+                                             "sha256": hashlib.sha256(b"test executable identity").hexdigest()})
+        replay = live.Run(self.root, "claude-code", self.run.case, "0" * 40, 60)
+        replay.turns = list(self.run._claude_state.records)
+        self.assertEqual(claude_code.harvest(replay)["x_binary"], trace["x_binary"])
+
 
 class ListingProvision(unittest.TestCase):
     def state(self, gated):
@@ -549,7 +559,8 @@ class NativeFilesystem(unittest.TestCase):
                     Path("/bin/sh"), "test", root / "home", "test-user",
                     (*tuple(Path(p) for p in ("/", "/bin/sh", "/bin/cat", "/bin/mv", "/dev/null")),
                      python, readable_outside),
-                    (Path("/System/Library"), Path("/usr/lib"), python_tree), (), "/usr/bin:/bin", "/bin/sh")
+                    (Path("/System/Library"), Path("/usr/lib"), python_tree),
+                    ((Path("/bin/sh"), hashlib.sha256(Path("/bin/sh").read_bytes()).hexdigest()),), "/usr/bin:/bin", "/bin/sh")
                 state = claude_code._bind_paths(run, runtime)
                 env = claude_code.child_env(run)
                 prefix = ["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0)] if confined else []

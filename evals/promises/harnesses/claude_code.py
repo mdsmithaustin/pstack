@@ -28,6 +28,7 @@ DEFAULT_EFFORT = "high"
 SETTING_SOURCES = "user,project"
 LISTING_SCRIPT = Path("setup-pstack/scripts/skill-listing.py")
 LISTING_RECORD = "skill-listing.json"
+LAUNCH_RECORD = "launch.json"
 ACCOUNT_SYNC_OFF = {"syncClaudeAiSkills": False, "syncClaudeAiPlugins": False}
 LOCAL_COMMAND_OUTPUT = ("<local-command-stdout>", "<local-command-stderr>")
 SPAWN_TOOLS = ("Task", "Agent")
@@ -194,6 +195,8 @@ def _bind_paths(run, runtime):
     os.close(fd)
     for path in (paths.config, paths.tmp, paths.cache, paths.xdg, paths.transcripts):
         path.mkdir(mode=0o700, exist_ok=True)
+    (root / LAUNCH_RECORD).write_text(json.dumps({"path": str(runtime.binary), "version": runtime.version,
+                                                  "sha256": dict(runtime.fingerprints)[runtime.binary]}) + "\n")
     identities = []
     for path in sorted({*project.parents, project, paths.config, paths.tmp, paths.cache, paths.xdg, paths.transcripts, *runtime.read_trees}):
         fd = _open_dir(path)
@@ -295,10 +298,10 @@ def provision_listing(state):
     return record
 
 
-def listing_record(root):
+def run_record(root, name):
     fd = _open_dir(Path(os.path.abspath(root)))
     try:
-        return json.loads(_read_file(fd, LISTING_RECORD))
+        return json.loads(_read_file(fd, name))
     except FileNotFoundError:
         return None
     finally:
@@ -892,12 +895,13 @@ def harvest(run):
         "x_timed_out": any(t["timed_out"] for t in turns),
         "x_effort_requested": requested,
         "x_todo_tools": "on" if run.case.get("env", {}).get("todo_tools") else "off",
+        "x_binary": run_record(prepared.paths.root if prepared else run.root, LAUNCH_RECORD),
         "x_turn_entries": turn_entries,
         "x_entry_base_dir": injected_base(rows),
         "x_files_read_by": reads_by,
         "x_child_skill_calls": child_skills,
         "x_compactions": compactions(streams),
-        "x_skill_listing": listing_record(prepared.paths.root if prepared else run.root),
+        "x_skill_listing": run_record(prepared.paths.root if prepared else run.root, LISTING_RECORD),
         "x_cost_usd": round(sum(r.get("total_cost_usd") or 0 for r in results), 4),
         "x_deferred_tools": next((e["attachment"].get("addedNames") for e in rows if e.get("type") == "attachment"
                                   and e["attachment"].get("type") == "deferred_tools_delta"), None),
