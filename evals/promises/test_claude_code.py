@@ -675,6 +675,18 @@ class NativeFilesystem(unittest.TestCase):
                                 self.assertEqual(inside.read_bytes(), b"replacement\n")
 
 
+class CodesignInvocation(unittest.TestCase):
+    def test_codesign_runs_from_its_absolute_system_path_and_never_the_search_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "2.1.400"
+            binary.write_bytes(b"installed claude")
+            done = subprocess.CompletedProcess([], 0, "", "")
+            with patch.object(claude_code.subprocess, "run", return_value=done) as spawned:
+                claude_code._signed_digest(binary)
+        self.assertEqual(spawned.call_args.args[0][0], "/usr/bin/codesign")
+        self.assertEqual(spawned.call_args.kwargs["env"], {})
+
+
 class RuntimeAdmission(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -699,7 +711,9 @@ class RuntimeAdmission(unittest.TestCase):
             self.enterContext(patch.object(claude_code.platform, name, return_value=value))
         self.symlink = self.enterContext(patch.object(Path, "is_symlink", autospec=True,
                                                       side_effect=lambda path: path.is_relative_to(self.home) and os.path.islink(path)))
-        self.enterContext(patch.object(Path, "is_file", return_value=True))
+        is_file = Path.is_file
+        self.enterContext(patch.object(Path, "is_file", autospec=True,
+                                      side_effect=lambda path: is_file(path) if path.is_relative_to(self.home) else True))
         self.enterContext(patch.object(Path, "exists", return_value=True))
         self.enterContext(patch.object(claude_code, "_digest", side_effect=lambda path: self.fingerprints.get(path)
                                        or hashlib.sha256(path.read_bytes()).hexdigest()))
@@ -720,6 +734,42 @@ class RuntimeAdmission(unittest.TestCase):
             " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
             ' and certificate leaf[subject.OU] = "Q6L2SF6YDW"',
             str(self.binary)])
+
+    def test_codesign_is_not_influenced_by_the_caller_environment(self):
+        hostile = {"CODESIGN_ALLOCATE": "/usr/bin/false", "DYLD_INSERT_LIBRARIES": "/tmp/evil.dylib",
+                   "DYLD_LIBRARY_PATH": "/tmp/evil", "PATH": f"{self.home}:/usr/bin:/bin", "HOME": str(self.home)}
+        env_log = self.home / "codesign-env"
+        self.fake_codesign(f"env > '{env_log}'\nexit 0")
+        with patch.dict(os.environ, hostile):
+            claude_code._signed_digest(self.binary)
+        seen = {line.split("=", 1)[0] for line in env_log.read_text().splitlines()}
+        self.assertEqual(seen & set(hostile), set())
+
+    def test_a_directory_in_place_of_the_release_is_refused(self):
+        self.binary.unlink()
+        self.binary.mkdir()
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, f"unsupported executable: {re.escape(str(self.binary))}"):
+            claude_code._host_runtime()
+        self.assertFalse(os.path.exists(self.codesign_log))
+
+    def test_live_preflight_refuses_nonregular_or_missing_release_before_login(self):
+        for version, kind in (("2.1.401", "directory"), ("2.1.402", "fifo"), ("2.1.403", "missing")):
+            with self.subTest(kind=kind):
+                target = self.versions / version
+                if kind == "directory":
+                    target.mkdir()
+                elif kind == "fifo":
+                    os.mkfifo(target)
+                self.launcher.unlink()
+                self.launcher.symlink_to(target)
+                with patch.object(claude_code, "check_status") as status, patch.object(live, "run_case") as run_case:
+                    with self.assertRaisesRegex(claude_code.IsolationUnavailable,
+                                                f"unsupported executable: {re.escape(str(target))}"):
+                        live.main(["run", "--harness", "claude-code", "--case", "first",
+                                   "--out", str(self.home / "out")])
+                status.assert_not_called()
+                run_case.assert_not_called()
+                self.assertFalse(os.path.exists(self.codesign_log))
 
     def test_a_binary_that_fails_the_requirement_is_refused(self):
         self.fake_codesign("echo 'test-requirement: code failed to satisfy specified code requirement(s)' >&2\nexit 3")

@@ -142,7 +142,11 @@ def _installed_claude():
     if target.parent != CLAUDE_VERSIONS or not CLAUDE_RELEASE.fullmatch(target.name):
         raise IsolationUnavailable(f"Claude launcher {CLAUDE_LAUNCHER} does not select a release in {CLAUDE_VERSIONS}: {target}")
     os.close(_open_dir(CLAUDE_VERSIONS))
-    if target.is_symlink():
+    try:
+        regular = stat.S_ISREG(os.lstat(target).st_mode)
+    except OSError:
+        regular = False
+    if not regular:
         raise IsolationUnavailable(f"unsupported executable: {target}")
     return target
 
@@ -159,19 +163,25 @@ def _signed_digest(path):
     return digest
 
 
+def admitted_claude():
+    """The installed release and its verified digest. Every launch of the installed Claude goes through here."""
+    claude = _installed_claude()
+    return claude, _signed_digest(claude)
+
+
 @lru_cache(maxsize=1)
 def _host_runtime():
     account = _HOST_ACCOUNT
     if (platform.system(), platform.release(), platform.machine()) != ("Darwin", "25.6.0", "arm64"):
         raise IsolationUnavailable("Claude filesystem isolation supports only the measured Darwin 25.6.0 arm64 runtime")
     home = _HOST_HOME
-    claude = _installed_claude()
+    claude, claude_digest = admitted_claude()
     files = (claude, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
         "/", "/usr/share/icu/icudt78l.dat", "/dev/null", "/dev/random", "/dev/urandom", "/private/etc/hosts",
         "/private/var/run/resolv.conf", "/private/var/db/timezone/zoneinfo/America/Denver")))
     trees = (PYTHON_ROOT, NODE_ROOT, GIT_ROOT / "usr/libexec/git-core", GIT_ROOT / "usr/share/git-core/templates",
              Path("/System/Library"), Path("/usr/lib"), home / "Library/Keychains")
-    pins = [(claude, _signed_digest(claude))]
+    pins = [(claude, claude_digest)]
     for path, expected in PINNED_TOOLS:
         if path.is_symlink():
             raise IsolationUnavailable(f"unsupported executable: {path}")
@@ -244,7 +254,7 @@ def store(run):
 def preflight():
     """Check the host login before a private turn config exists. Keep the turn's host HOME and Keychain namespace,
     but omit exported API keys and config overrides so they cannot mask a missing login."""
-    if not CLAUDE_LAUNCHER.is_file():
+    if not os.path.lexists(CLAUDE_LAUNCHER):
         raise RuntimeError("claude executable missing; install Claude Code before running live cases")
     runtime = _host_runtime()
     _validate_runtime(runtime)

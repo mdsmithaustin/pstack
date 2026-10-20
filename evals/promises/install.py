@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from harnesses import claude_code
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 SOURCE_REPO = "mdsmithaustin/pstack"
@@ -211,9 +213,9 @@ class Context:
 
 
 def claude_list(ctx, box, model="not-a-real-model-xyz"):
-    claude = shutil.which("claude")
-    if not claude:
-        raise Inconclusive("claude is not on PATH")
+    if not os.path.lexists(claude_code.CLAUDE_LAUNCHER):
+        raise Inconclusive("claude is not installed")
+    claude, _ = claude_code.admitted_claude()
     done = run([claude, "-p", "--model", model, "--output-format", "stream-json", "--verbose",
                 "--no-session-persistence", "hi"], box.env, box.project, timeout=120)
     for line in done.out.splitlines():
