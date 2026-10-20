@@ -1,6 +1,7 @@
 commands:
   lint: tools/gate-check.sh lint && skill-ci check
 pr:
+  template: .github/pull_request_template.md
   publish_intent: false
   appendix: minimal
 protected_paths:
