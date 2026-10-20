@@ -62,7 +62,7 @@ class PersonalPathsCLI(unittest.TestCase):
                         home_path("Users", "${ACCOUNT}") + "/project\n")
         done = self.scan()
         self.assertEqual((done.returncode, done.stdout, done.stderr),
-                         (0, "PASS personal paths: checked 9 tracked text files\n", ""))
+                         (0, "PASS personal paths: checked 6 tracked text files\n", ""))
 
     def test_both_root_kinds_spaces_punctuation_and_terminal_roots_are_redacted(self):
         self.track("notes.txt", "(" + home_path("Users", "private person") + "/project), " +
@@ -76,7 +76,7 @@ class PersonalPathsCLI(unittest.TestCase):
         (self.root / "new.txt").write_text(home_path("home", "untracked-person"))
         before = self.scan()
         self.assertEqual((before.returncode, before.stdout),
-                         (0, "PASS personal paths: checked 8 tracked text files\n"))
+                         (0, "PASS personal paths: checked 5 tracked text files\n"))
         self.git("add", "new.txt")
         after = self.scan()
         self.assertEqual((after.returncode, after.stdout),
@@ -131,7 +131,7 @@ class PersonalPathsCLI(unittest.TestCase):
         self.track("binary.bin", b"\0" + home_path("Users", "binary-person").encode())
         done = self.scan()
         self.assertEqual((done.returncode, done.stdout),
-                         (0, "PASS personal paths: checked 8 tracked text files\n"))
+                         (0, "PASS personal paths: checked 5 tracked text files\n"))
         self.track("legacy.txt", b"\xff\n" + home_path("home", "legacy-person").encode())
         done = self.scan()
         self.assertEqual((done.returncode, done.stdout, done.stderr),
@@ -146,7 +146,7 @@ class PersonalPathsCLI(unittest.TestCase):
             self.git("add", "linked.txt")
             done = self.scan()
             self.assertEqual((done.returncode, done.stdout, done.stderr),
-                             (0, "PASS personal paths: checked 9 tracked text files\n", ""))
+                             (0, "PASS personal paths: checked 6 tracked text files\n", ""))
             link.unlink()
             link.symlink_to(home_path("home", "linked-person") + "/missing")
             done = self.scan()

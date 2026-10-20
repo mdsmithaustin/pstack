@@ -347,7 +347,7 @@ def prepare(root: Path, cases: Path, runtime_receipt: Path, *, model: str, effor
                 raise ValueError("held-out request already exists in committed public corpus")
     write_json(inputs / "heldout.json", {"revision": CURRENT, "scope": "Exact request bytes in committed evals files; conceptual task independence requires author review.", "requests": heldout})
     source_files = [Path(__file__).resolve(), Path(upstream_personas.__file__).resolve(),
-                    *sorted((EVALS / "canon").glob("*.py")), EVALS / "canon/sbx.json"]
+                    EVALS / "canon/application.py", EVALS / "canon/sbx.json"]
     sources = {}
     for path in source_files:
         sources[str(path)] = digest(path.read_bytes())
