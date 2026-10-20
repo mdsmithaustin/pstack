@@ -307,15 +307,15 @@ class CompactedHistory(unittest.TestCase):
     PROMPTS = ["/poteto-mode add a --json flag. text output stays byte-identical. verify both forms.", "continue", "/poteto-mode do it",
                "/poteto-mode new task. figure out why the cache entry survives logout. don't change any code yet."]
 
-    def harvest(self, chat):
+    def harvest(self, chat, prompts=PROMPTS):
         tmp = tempfile.TemporaryDirectory(prefix="pstack-grok-compaction-")
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve() / "run"
         lead = root / "grok-home" / "sessions" / "cwd" / "lead"
         lead.mkdir(parents=True)
         (lead / "chat_history.jsonl").write_bytes(chat)
-        run = SimpleNamespace(root=root, project=root / "w" / "relay", case={"turns": self.PROMPTS},
-                              turns=[{"index": i, "session_id": "lead", "argv": ["/bin/grok", "-p", p]} for i, p in enumerate(self.PROMPTS)])
+        run = SimpleNamespace(root=root, project=root / "w" / "relay", case={"turns": prompts},
+                              turns=[{"index": i, "session_id": "lead", "argv": ["/bin/grok", "-p", p]} for i, p in enumerate(prompts)])
         with mock.patch.object(grok, "host_home", return_value=root / "host"):
             return grok.harvest(run)
 
@@ -327,6 +327,16 @@ class CompactedHistory(unittest.TestCase):
     def test_a_rewritten_history_records_one_compaction_in_the_turn_whose_prompt_it_kept(self):
         trace = self.harvest(self.FIXTURE.read_bytes())
         self.assertEqual((trace["x_compactions"], trace["x_turns_without_events"]), ([{"turn": 3, "source": "chat_history"}], [0, 1, 2]))
+
+    def test_a_compact_turn_does_not_shift_the_turns_after_it(self):
+        """Minimized from Grok relay-55ed4sis in the 2026-10-20 wave, whose prompt_index skips the `/compact` turn."""
+        chat = (self.FIXTURE.parent / "relay-55ed4sis-lead-chat_history.jsonl").read_bytes()
+        prompts = ["what does relay do? two sentences is plenty.", "/compact",
+                   "/poteto-mode im stepping away. keep going until the migration check reports zero old callers. log your decisions."]
+        trace = self.harvest(chat, prompts)
+        reads = [e["turn"] for e in trace["events"] if e.get("name") == "read_file" and "figure-it-out" in e["input"]["target_file"]]
+        self.assertEqual((reads, trace["x_turns_without_events"]), ([2], [1]))
+        self.assertEqual(trace["x_compactions"], [{"turn": 0, "source": "chat_history"}])
 
     def test_a_history_without_compaction_records_none(self):
         chat = b"".join(line + b"\n" for line in self.FIXTURE.read_bytes().splitlines() if b"compaction_meta" not in line)
