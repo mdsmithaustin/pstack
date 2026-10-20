@@ -98,7 +98,7 @@ when invoked it:
 
 the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
 
-[`/poteto-mode`](./skills/poteto-mode/SKILL.md) is also a sticky mode: once entered it stays on across turns, applying itself when a playbook matches or the task needs rigor and staying out of the way otherwise. opt out any time by saying so. in a very long chat, the CLI may compress older messages and drop the mode. type `/poteto-mode` again if it stops applying.
+[`/poteto-mode`](./skills/poteto-mode/SKILL.md) is also a sticky mode: once entered it stays on across turns, applying itself when a playbook matches or the task needs rigor and staying out of the way otherwise. opt out any time by saying so. after known compaction or truncation, the agent follows the mode's [recovery rule](./skills/poteto-mode/SKILL.md#recover-after-compaction-or-truncation) to continue the current task. runtime retention varies; see the [dated evidence](./skills/pstack-harness/references/skill-retention.md). if the mode stops applying, type `/poteto-mode` again.
 
 [`/poteto-mode`](./skills/poteto-mode/SKILL.md) works extremely well with a loop mechanism (claude code's `/loop`, or any re-invoking heartbeat). you can make your agent work for many hours without sacrificing rigor.
 

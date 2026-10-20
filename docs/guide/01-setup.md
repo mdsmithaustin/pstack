@@ -63,6 +63,6 @@ Pick something real but small, and describe it the way you'd describe it to a co
 
 Watch the todo list, or the numbered list in chat that `/poteto-mode` requires when the task tools are off. Its first items are the matched playbook's opening prose and steps copied in, the Feature playbook for this prompt. If `/poteto-mode` skips a step, the step stays in the list with `skipped: <reason>`, so you can see what it chose not to do. The [retained runs](../../PORTING.md#guide-promise-fixes) met the full fallback requirement in only 1 of 3 Claude Code runs and did not show reliable compliance on Hermes.
 
-From here you can type normal follow-ups. `/poteto-mode` is sticky. It stays on for the conversation until you opt out by saying so. In a very long chat, the CLI may compress older messages and drop the mode. Type `/poteto-mode` again if it stops applying.
+From here you can type normal follow-ups. `/poteto-mode` is sticky. It stays on for the conversation until you opt out by saying so. See the [README](../../README.md#usage) for continuation after compaction and what to do if the mode stops applying.
 
 Next: [Route work through `/poteto-mode`](./02-poteto-mode.md).
