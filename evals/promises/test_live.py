@@ -298,6 +298,168 @@ class GradeRun(unittest.TestCase):
 DESLOP_STEP_5 = "Comments the rules below do not settle go to `/no-comments`."
 
 
+def synthetic_turns(harness, during_turn=lambda run, index: None):
+    """prepare and turn stand-ins that write empty owned streams, so run_case harvests and grades with no model."""
+    def prepare(run):
+        (run.root / "launch.json").write_text(json.dumps({"path": "synthetic-no-model", "source": "test", "version": "test", "rejected": []}))
+
+    def turn(run, text, index):
+        during_turn(run, index)
+        (run.root / f"turn-{index}.jsonl").write_bytes(b"")
+        return {"index": index, "session_id": "owned-session", "argv": [harness, text], "exit_code": 0, "timed_out": False,
+                "duration_s": 0.25, "stream": str(run.root / f"turn-{index}.jsonl"), "stderr": str(run.root / f"turn-{index}.err"),
+                f"{harness}_bin": "synthetic-no-model", f"{harness}_bin_source": "test",
+                **({"last_message": str(run.root / "last.txt")} if harness == "codex" else {})}
+    return prepare, turn
+
+
+def steer_case():
+    case = live.load_case("principle-steer-run")
+    case["turns"] = ["go"]
+    case["tmp_lock"] = False
+    return case
+
+
+def add_worktree(run, path):
+    live.git_run(run.project, "worktree", "add", "-q", "-b", f"candidate-{path.name}", str(path))
+
+
+class ScratchWorktrees(unittest.TestCase):
+    def test_a_worktree_the_agent_adds_under_the_run_tmpdir_is_graded(self):
+        case = steer_case()
+        with tempfile.TemporaryDirectory(prefix="pstack-live-scratch-") as tmp:
+            out = Path(tmp).resolve()
+            for harness in ("codex", "grok"):
+                with self.subTest(harness=harness):
+                    module = live.adapter(harness)
+                    prepare, turn = synthetic_turns(harness, lambda run, index: add_worktree(
+                        run, run.root / "tmp" / "arena-tally-json.yq6S6F" / "candidate-2"))
+                    output = io.StringIO()
+                    with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(module, "prepare", side_effect=prepare), \
+                            mock.patch.object(module, "turn", side_effect=turn), redirect_stdout(output):
+                        screen = live.run_case(harness, case["id"], "HEAD", out, 0)
+                    self.assertEqual(json.loads(output.getvalue()), screen)
+                    self.assertNotIn("refusal", screen)
+                    self.assertEqual(set(screen["verdicts"]), set(case["promises"]))
+                    self.assertTrue((Path(screen["run"]) / "tmp/arena-tally-json.yq6S6F/candidate-2/.git").is_file())
+
+    def test_a_worktree_hermes_adds_under_its_write_safe_profile_cache_is_graded(self):
+        from test_hermes_evidence import _OwnerFixture
+        from harnesses import hermes
+        from test_hermes import HermesDatabase
+        fixture = _OwnerFixture()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        case = live.load_case("principle-steer-run")
+        case["turns"] = ["go"]
+        case["entry"] = None
+        original_turn = hermes.turn
+        candidates = []
+
+        def turn(run, text, index):
+            record = original_turn(run, text, index)
+            [argv] = [argv for argv, *_ in fixture.calls[-3:] if any(a.startswith("HERMES_WRITE_SAFE_ROOT=") for a in argv)]
+            safe = next(a for a in argv if a.startswith("HERMES_WRITE_SAFE_ROOT=")).split("=", 1)[1].split(":")
+            self.assertEqual(safe[0], str(run.project))
+            candidates.append(Path(safe[1]) / "scratch" / "tally-architect-arena" / "candidate-2")
+            add_worktree(run, candidates[-1])
+            db = HermesDatabase(hermes.profile(run) / "state.db")
+            db.session("root")
+            db.con.execute("update sessions set cwd=?", (str(run.project),))
+            db.message("root", "user", "go")
+            db.message("root", "assistant", "owned CLI reply")
+            db.done()
+            return record
+
+        output = io.StringIO()
+        with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(hermes, "turn", turn), redirect_stdout(output):
+            result = live.main(["run", "--harness", "hermes", "--case", case["id"], "--out", str(fixture.base / "scratch-runs"),
+                                "--hermes-retain-out", str(fixture.base / "scratch-retained")])
+        screen = json.loads(output.getvalue())
+        self.assertEqual((result, "refusal" in screen), (0, False))
+        self.assertEqual(set(screen["verdicts"]), set(case["promises"]))
+        self.assertTrue((candidates[0] / ".git").is_file())
+
+
+class BootstrapDependencies(unittest.TestCase):
+    def plant(self, run, index):
+        modules = run.project / live.adapter(run.harness).SKILLS_DIR / "poteto-mode" / "scripts" / "node_modules"
+        (modules / "typescript" / "bin").mkdir(parents=True)
+        (modules / "typescript" / "bin" / "tsc").write_text("#!/usr/bin/env node\n")
+        (modules / ".bin").mkdir()
+        (modules / ".bin" / "tsc").symlink_to("../typescript/bin/tsc")
+
+    def test_the_watch_pr_bun_install_under_the_installed_skills_is_removed_before_grading(self):
+        case = steer_case()
+        with tempfile.TemporaryDirectory(prefix="pstack-live-bootstrap-") as tmp:
+            out = Path(tmp).resolve()
+            for harness in ("codex", "grok"):
+                with self.subTest(harness=harness):
+                    module = live.adapter(harness)
+                    prepare, turn = synthetic_turns(harness, self.plant)
+                    output = io.StringIO()
+                    with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(module, "prepare", side_effect=prepare), \
+                            mock.patch.object(module, "turn", side_effect=turn), redirect_stdout(output):
+                        screen = live.run_case(harness, case["id"], "HEAD", out, 0)
+                    scripts = Path(screen["run"]) / "w" / case["fixture"] / module.SKILLS_DIR / "poteto-mode" / "scripts"
+                    self.assertEqual(set(screen["verdicts"]), set(case["promises"]))
+                    self.assertFalse((scripts / "node_modules").exists() or (scripts / "node_modules").is_symlink())
+                    self.assertTrue((scripts / "bootstrap.ts").is_file())
+
+
+class GradeRefusalBatch(unittest.TestCase):
+    def wave(self, during_turn, runs=2):
+        case = steer_case()
+        module = live.adapter("codex")
+        prepare, turn = synthetic_turns("codex", during_turn)
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-live-batch-")
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name).resolve() / "runs"
+        output, errors = io.StringIO(), io.StringIO()
+        with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(live, "preflight"), \
+                mock.patch.object(module, "prepare", side_effect=prepare), mock.patch.object(module, "turn", side_effect=turn) as turns, \
+                redirect_stdout(output), redirect_stderr(errors):
+            code = live.main(["run", "--harness", "codex", "--case", case["id"], "--runs", str(runs), "--out", str(out)])
+        return code, turns.call_count, [json.loads(line) for line in output.getvalue().splitlines()], errors.getvalue()
+
+    def test_a_grade_refusal_in_the_first_case_still_runs_the_second_and_exits_2(self):
+        def first_run_strays(run, index):
+            if not list(run.root.parent.glob("*/elsewhere")):
+                add_worktree(run, run.root / "elsewhere" / "candidate-2")
+
+        code, turns, lines, _ = self.wave(first_run_strays)
+        self.assertEqual((code, turns, len(lines)), (2, 2, 2))
+        refused, graded = lines
+        self.assertEqual(refused["refusal"]["reason"], "unapproved_worktree")
+        self.assertEqual(refused["refusal"]["run_id"], refused["authorization_id"])
+        self.assertNotIn("verdicts", refused)
+        self.assertEqual((graded["n"], "refusal" in graded), (1, False))
+        self.assertEqual(set(graded["verdicts"]), set(live.load_case("principle-steer-run")["promises"]))
+
+    def test_a_refused_run_stays_sealed_for_a_later_grade(self):
+        code, _, [refused], _ = self.wave(lambda run, index: add_worktree(run, run.root / "elsewhere" / "candidate-2"), runs=1)
+        self.assertEqual(code, 2)
+        out = Path(refused["run"]).parent
+        with redirect_stderr(io.StringIO()) as again:
+            self.assertEqual(live.main(["grade", refused["authorization_id"], "--out", str(out)]), 2)
+        self.assertEqual(json.loads(again.getvalue())["refusal"]["reason"], "unapproved_worktree")
+
+    def test_a_grader_that_cannot_launch_stops_the_batch_after_the_first_case(self):
+        import grade_boundary
+        popen = subprocess.Popen
+
+        def no_sandbox(argv, *args, **kwargs):
+            if argv[0] == "/usr/bin/sandbox-exec":
+                raise OSError("sandbox-exec is gone")
+            return popen(argv, *args, **kwargs)
+
+        with mock.patch.object(grade_boundary.subprocess, "Popen", side_effect=no_sandbox):
+            code, turns, lines, errors = self.wave(lambda run, index: None)
+        self.assertEqual((code, turns, len(lines)), (2, 1, 1))
+        self.assertEqual(lines[0]["refusal"]["reason"], "boundary_unavailable")
+        self.assertIn("batch stopped", errors)
+
+
 class SkillOverlays(unittest.TestCase):
     def tree(self, text):
         tmp = tempfile.TemporaryDirectory(prefix="pstack-overlay-")
