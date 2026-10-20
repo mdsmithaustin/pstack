@@ -28,6 +28,11 @@ The Code review playbook opens this file at its design checks. Each question nam
 - **Does a test cover each behavior the PR changes?** Map each behavior change to a test that fails on the base. Flag a behavior change with no such test. Leave it when the change is structure only and existing tests already pin the behavior.
 - **Does the setup establish state that production never establishes?** Read the test setup against the real initialization path. Flag a test that passes only because of that setup. Leave it when real callers can supply the same inputs.
 
+## Deslop
+
+- **Does the final diff satisfy deslop's rules?** Apply the full [deslop rule set](../../deslop/SKILL.md#rules) to the aggregate change at the reviewed base and head. Ground each finding in the changed hunks and the rule's scope and exceptions. Leave code that the rule protects. Absence of new comments does not exempt the other rules.
+- **Does cleanup evidence describe this revision?** Check the author's cuts or no-change reasons against the current diff. A skill-load record alone does not prove application. Report missing or stale evidence, and complete your own review-only pass before approving. A final review cannot establish that an earlier commit had a pre-commit pass.
+
 ## Restraint (**principle-laziness-protocol**, **principle-minimize-reader-load**)
 
 - **Does the diff add a layer with one caller or one implementation?** Count callers and implementers. Flag a wrapper, interface, or helper that forwards without adding policy. Leave it when it adds policy, adaptation, or a second real implementation such as a test fake.
