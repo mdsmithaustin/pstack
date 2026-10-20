@@ -386,7 +386,11 @@ class LoginPreflight(unittest.TestCase):
 
     def claude(self, script):
         from harnesses import claude_code
-        return mock.patch.object(claude_code, "CLAUDE_LAUNCHER", fake_cli(self.tmp, "claude", script))
+        binary = fake_cli(self.tmp, "claude", script)
+        self.enterContext(mock.patch.object(claude_code, "CLAUDE_LAUNCHER", binary))
+        runtime = claude_code.HostRuntime(binary, "test", self.tmp, "test-user", (), (),
+                                          ((binary, claude_code._digest(binary)),), "/usr/bin:/bin", "/bin/sh")
+        return mock.patch.object(claude_code, "_host_runtime", return_value=runtime)
 
     def codex(self, script, with_auth=True):
         home = self.tmp / "codex-home"

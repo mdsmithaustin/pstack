@@ -215,7 +215,11 @@ def _validate(state):
         os.close(fd)
         if (identity.st_dev, identity.st_ino) != (device, inode):
             raise IsolationUnavailable(f"owned directory was replaced: {path}")
-    for path, digest in state.runtime.fingerprints:
+    _validate_runtime(state.runtime)
+
+
+def _validate_runtime(runtime):
+    for path, digest in runtime.fingerprints:
         if path.is_symlink() or _digest(path) != digest:
             raise IsolationUnavailable(f"supported executable changed: {path}")
 
@@ -240,12 +244,13 @@ def store(run):
 def preflight():
     """Check the host login before a private turn config exists. Keep the turn's host HOME and Keychain namespace,
     but omit exported API keys and config overrides so they cannot mask a missing login."""
-    binary = CLAUDE_LAUNCHER if CLAUDE_LAUNCHER.is_file() else shutil.which("claude")
-    if not binary:
+    if not CLAUDE_LAUNCHER.is_file():
         raise RuntimeError("claude executable missing; install Claude Code before running live cases")
+    runtime = _host_runtime()
+    _validate_runtime(runtime)
     env = {"HOME": os.environ["HOME"], "USER": os.environ.get("USER", ""), "LOGNAME": os.environ.get("LOGNAME", ""),
            "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8", "TERM": "dumb", "CLAUDE_SECURESTORAGE_CONFIG_DIR": ""}
-    out = check_status(LOGIN, [binary, "auth", "status"], env=env)
+    out = check_status(LOGIN, [str(runtime.binary), "auth", "status"], env=env)
     try:
         logged_in = json.loads(out).get("loggedIn")
     except ValueError:

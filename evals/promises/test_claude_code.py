@@ -23,7 +23,9 @@ class Preflight(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.binary = Path(tmp.name) / "claude"
         self.enterContext(patch.object(claude_code, "CLAUDE_LAUNCHER", self.binary))
-        self.enterContext(patch.object(claude_code.shutil, "which", return_value=None))
+        self.enterContext(patch.object(claude_code, "_host_runtime", side_effect=lambda: claude_code.HostRuntime(
+            self.binary, "test", self.binary.parent, "test-user", (), (),
+            ((self.binary, claude_code._digest(self.binary)),), "/usr/bin:/bin", "/bin/sh")))
 
     def test_missing_executable_reports_installation_before_login(self):
         with patch.object(claude_code, "check_status", side_effect=AssertionError("status called without a CLI")), \
@@ -736,6 +738,41 @@ class RuntimeAdmission(unittest.TestCase):
                 with self.assertRaisesRegex(claude_code.IsolationUnavailable,
                                             rf"{re.escape(str(self.binary))} fails code requirement .*Q6L2SF6YDW"):
                     claude_code._host_runtime()
+
+    @unittest.skipUnless(os.access("/usr/bin/codesign", os.X_OK), "requires macOS codesign")
+    def test_live_preflight_never_executes_an_unsigned_release(self):
+        self.enterContext(patch.object(claude_code, "CODESIGN", Path("/usr/bin/codesign")))
+        marker = self.home / "unsigned-executed"
+        self.binary.write_text(f"#!/bin/sh\ntouch '{marker}'\nprintf '%s\\n' '{{\"loggedIn\": true}}'\n")
+        self.binary.chmod(0o755)
+        with patch.object(live, "run_case") as run_case:
+            with self.assertRaisesRegex(claude_code.IsolationUnavailable, "fails code requirement"):
+                live.main(["run", "--harness", "claude-code", "--case", "first",
+                           "--out", str(self.home / "out")])
+        run_case.assert_not_called()
+        self.assertFalse(os.path.exists(marker))
+
+    def test_preflight_executes_the_cached_release_after_the_launcher_changes(self):
+        marker = self.home / "executed-release"
+        self.binary.write_text(f"#!/bin/sh\necho admitted > '{marker}'\necho '{{\"loggedIn\": true}}'\n")
+        self.binary.chmod(0o755)
+        claude_code._host_runtime()
+        other = self.versions / "2.1.401"
+        other.write_text(f"#!/bin/sh\necho replacement > '{marker}'\necho '{{\"loggedIn\": true}}'\n")
+        other.chmod(0o755)
+        self.launcher.unlink()
+        self.launcher.symlink_to(other)
+        claude_code.preflight()
+        self.assertEqual(marker.read_text(), "admitted\n")
+
+    def test_preflight_refuses_changed_bytes_in_the_cached_release(self):
+        claude_code._host_runtime()
+        marker = self.home / "changed-executed"
+        self.binary.write_text(f"#!/bin/sh\ntouch '{marker}'\necho '{{\"loggedIn\": true}}'\n")
+        self.binary.chmod(0o755)
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "supported executable changed"):
+            claude_code.preflight()
+        self.assertFalse(os.path.exists(marker))
 
     def test_bytes_changed_during_verification_are_refused(self):
         self.fake_codesign('for last; do :; done\nprintf swapped > "$last"\nexit 0')
