@@ -254,7 +254,7 @@ def store(run):
 def preflight():
     """Check the host login before a private turn config exists. Keep the turn's host HOME and Keychain namespace,
     but omit exported API keys and config overrides so they cannot mask a missing login."""
-    if not CLAUDE_LAUNCHER.is_file():
+    if not os.path.lexists(CLAUDE_LAUNCHER):
         raise RuntimeError("claude executable missing; install Claude Code before running live cases")
     runtime = _host_runtime()
     _validate_runtime(runtime)

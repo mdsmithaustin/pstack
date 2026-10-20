@@ -711,7 +711,9 @@ class RuntimeAdmission(unittest.TestCase):
             self.enterContext(patch.object(claude_code.platform, name, return_value=value))
         self.symlink = self.enterContext(patch.object(Path, "is_symlink", autospec=True,
                                                       side_effect=lambda path: path.is_relative_to(self.home) and os.path.islink(path)))
-        self.enterContext(patch.object(Path, "is_file", return_value=True))
+        is_file = Path.is_file
+        self.enterContext(patch.object(Path, "is_file", autospec=True,
+                                      side_effect=lambda path: is_file(path) if path.is_relative_to(self.home) else True))
         self.enterContext(patch.object(Path, "exists", return_value=True))
         self.enterContext(patch.object(claude_code, "_digest", side_effect=lambda path: self.fingerprints.get(path)
                                        or hashlib.sha256(path.read_bytes()).hexdigest()))
@@ -749,6 +751,25 @@ class RuntimeAdmission(unittest.TestCase):
         with self.assertRaisesRegex(claude_code.IsolationUnavailable, f"unsupported executable: {re.escape(str(self.binary))}"):
             claude_code._host_runtime()
         self.assertFalse(os.path.exists(self.codesign_log))
+
+    def test_live_preflight_refuses_nonregular_or_missing_release_before_login(self):
+        for version, kind in (("2.1.401", "directory"), ("2.1.402", "fifo"), ("2.1.403", "missing")):
+            with self.subTest(kind=kind):
+                target = self.versions / version
+                if kind == "directory":
+                    target.mkdir()
+                elif kind == "fifo":
+                    os.mkfifo(target)
+                self.launcher.unlink()
+                self.launcher.symlink_to(target)
+                with patch.object(claude_code, "check_status") as status, patch.object(live, "run_case") as run_case:
+                    with self.assertRaisesRegex(claude_code.IsolationUnavailable,
+                                                f"unsupported executable: {re.escape(str(target))}"):
+                        live.main(["run", "--harness", "claude-code", "--case", "first",
+                                   "--out", str(self.home / "out")])
+                status.assert_not_called()
+                run_case.assert_not_called()
+                self.assertFalse(os.path.exists(self.codesign_log))
 
     def test_a_binary_that_fails_the_requirement_is_refused(self):
         self.fake_codesign("echo 'test-requirement: code failed to satisfy specified code requirement(s)' >&2\nexit 3")
