@@ -19,7 +19,7 @@ ROLES = {
     "reflect judgment", "reflect divergent", "reflect synthesizer",
     "arena runners", "arena cross-judge pool", "swarm workers",
     "architect runners", "interrogate reviewers",
-    "trail reviewer", "default",
+    "trail reviewer", "routine", "default",
 }
 PANEL_ROLES = {
     "arena runners", "arena cross-judge pool",

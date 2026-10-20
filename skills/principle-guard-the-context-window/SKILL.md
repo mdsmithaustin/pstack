@@ -10,7 +10,7 @@ The context window is finite and non-renewable within a session. Every token sho
 **Why:** Context overflow degrades reasoning quality, creates compression artifacts, and halts progress.
 
 **Pattern:**
-- **Isolate large payloads.** Route verbose outputs, screenshots, and large documents to subagents. The main context gets summaries, not raw data.
+- **Isolate large payloads.** Route verbose outputs, screenshots, and large documents to subagents. The main context gets summaries, not raw data. A read-only scan or parse that returns a reduced finding runs on the `routine` role, unless the calling skill names another role. Use the **pstack-harness** skill's **Spawn a role** section to resolve the role.
 - **Keep frequently used content inline.** Templates and references used on every invocation belong in the skill file, not in separate files that cost a read each time.
 - **Size phases and cap scope.** Limit files per phase, set turn budgets, account for mechanism costs.
 - **Return thin.** When a subagent's report feeds your next step, its brief names where the full report goes, a file the subagent writes or the PR, and asks for only the verdict or status line, any blockers, and that path or URL. Read the full report only to act on a blocker. A subagent whose output is the deliverable you relay, such as a `how` explanation, a `why` synthesis, the trail reviewer's flags, or an arena cross-judge's scores, returns it in full.

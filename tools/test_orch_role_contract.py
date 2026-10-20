@@ -19,3 +19,8 @@ class OrchRoleContract(unittest.TestCase):
             'panelRoles': sorted(models.PANEL_ROLES),
             'unresolvedAliases': sorted(models.OTHER_ALIASES),
         })
+
+    def test_routine_is_a_single_role_in_the_artifact(self):
+        artifact = json.loads((ROOT / 'skills/poteto-mode/scripts/orch/role-contract.json').read_text())
+        self.assertIn('routine', artifact['singleRoles'])
+        self.assertNotIn('routine', artifact['panelRoles'])

@@ -24,6 +24,7 @@ swarm workers: sonnet
 architect runners: fable, opus, sonnet
 interrogate reviewers: fable, opus, sonnet
 trail reviewer: opus
+routine: sonnet@medium
 default: inherit-parent
 
 ## codex
@@ -45,3 +46,4 @@ swarm workers: gpt-6-luna@xhigh
 architect runners: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
 interrogate reviewers: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
 trail reviewer: gpt-6-astra@high
+routine: gpt-6-luna@medium

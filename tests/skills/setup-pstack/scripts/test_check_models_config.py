@@ -404,6 +404,30 @@ class Resolve(ResolveRunner, unittest.TestCase):
             ],
         )
 
+    def test_routine_ships_a_medium_effort_scan_model_on_every_harness(self):
+        def routine(harness):
+            [arm] = self.resolve(harness, "routine")
+            return arm
+
+        self.assertEqual(routine("claude-code"), {
+            "role": "routine", "arm": 1, "model": "sonnet", "effort": "medium", "source": "skill default",
+        })
+        self.assertEqual(routine("codex"), {
+            "role": "routine", "arm": 1, "model": "gpt-6-luna", "effort": "medium", "source": "skill default ## codex",
+        })
+        self.assertEqual(routine("grok"), {
+            "role": "routine", "arm": 1, "model": "grok-4.7", "effort": "medium", "source": "skill default",
+            "notes": ["sonnet translated to grok-4.7"],
+        })
+        self.assertEqual(routine("hermes"), {
+            "role": "routine", "arm": 1, "model": "inherit-parent", "effort": "medium", "source": "skill default",
+            "notes": ["sonnet is not usable on hermes"],
+        })
+
+    def test_a_routine_line_overrides_the_shipped_default(self):
+        [arm] = self.resolve("claude-code", "routine", user="routine: haiku@low\n")
+        self.assertEqual((arm["model"], arm["effort"], arm["source"]), ("haiku", "low", "user flat"))
+
     def test_codex_prefers_its_section_and_translates_aliases(self):
         self.assertEqual(
             self.resolve("codex", "feature", "swarm workers", "bug-fix", "default", user=USER_FILE),

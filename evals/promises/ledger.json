@@ -651,7 +651,7 @@
   },
   "budget-labels-set-effort": {
    "check": "static",
-   "claim": "The shipped flat lines write no effort, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
+   "claim": "The shipped flat lines write no effort except `routine`, which writes `medium`, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
    "evidence": [
     {
      "file": "skills/setup-pstack/examples/pstack-models.md",
@@ -1792,7 +1792,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's [loop procedure](../../pstack-harness/references/loops.md) to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent that wakes you on the event, with a long time-based heartbeat as fallback."
+     "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Use the **pstack-harness** skill's [loop procedure](../../pstack-harness/references/loops.md) to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent on the `routine` role that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
      "file": "skills/pstack-harness/references/loops.md",
@@ -3018,6 +3018,34 @@
     "skills/setup-pstack/SKILL.md"
    ],
    "scenario": "setup-run"
+  },
+  "setup-configures-routine-role": {
+   "check": "static",
+   "claim": "The models config carries a `routine` role that every read-only scan, parse, or watch subagent returning a reduced finding uses, shipped as `sonnet@medium` and `gpt-6-luna@medium` under `## codex`.",
+   "evidence": [
+    {
+     "file": "skills/setup-pstack/examples/pstack-models.md",
+     "quote": "routine: sonnet@medium"
+    },
+    {
+     "file": "skills/setup-pstack/examples/pstack-models.md",
+     "quote": "routine: gpt-6-luna@medium"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "`routine` runs every read-only scan, parse, or watch subagent that returns a reduced finding"
+    },
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "A read-only scan, parse, or watcher that returns a reduced finding takes `routine`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/examples/pstack-models.md",
+    "skills/setup-pstack/SKILL.md",
+    "skills/poteto-mode/SKILL.md"
+   ]
   },
   "setup-configures-swarm-workers-role": {
    "check": "static",
@@ -6637,6 +6665,15 @@
    ],
    "text": "It works out what a user touches, how the app launches locally, what can drive it (an existing harness first, otherwise browser and CDP, a PTY, or plain HTTP), what evidence proves behavior, and whether two instances can run side by side."
   },
+  "543719949e7d": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code and Grok Build a role with no written effort runs at your session effort, and on Codex the `## codex` section pins its own."
+  },
   "5453f5abe591": {
    "class": "substituted",
    "file": "02-poteto-mode.md",
@@ -7426,8 +7463,8 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "737222ee00d4",
-    "c8fbb13927bb"
+    "eead1319fd44",
+    "543719949e7d"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -7868,15 +7905,6 @@
     "port"
    ],
    "text": "The [Research playbook](../../skills/poteto-mode/playbooks/research.md) checks primary sources, versions, and conflicting evidence."
-  },
-  "737222ee00d4": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "The shipped defaults write no effort on their flat lines, which is what the `default` budget keeps."
   },
   "7376b1468875": {
    "class": "context",
@@ -10206,6 +10234,15 @@
    ],
    "text": "On Claude Code and Codex a written effort replaces your session effort, whether it is higher or lower."
   },
+  "b7738e58b3ec": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-configures-routine-role",
+   "sources": [
+    "port"
+   ],
+   "text": "Setup also configures `routine`, the model for read-only subagents that scan or parse bulk material, such as a long transcript, and return a short finding."
+  },
   "b79782a127a9": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -10870,15 +10907,6 @@
     "port"
    ],
    "text": "In context, that's enough."
-  },
-  "c8fbb13927bb": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "On Claude Code and Grok Build those roles run at your session effort, and on Codex the `## codex` section pins its own."
   },
   "c9016f92b729": {
    "also": [
@@ -12267,6 +12295,15 @@
     "port"
    ],
    "text": "On Claude Code that holds once you let `/automate-me` add a name-only entry to your `~/.claude/settings.json`, which it asks about first."
+  },
+  "eead1319fd44": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "The shipped defaults write no effort on their flat lines except `routine`, which writes `medium`, and the `default` budget keeps what is written."
   },
   "ef13c835b6c5": {
    "class": "context",
