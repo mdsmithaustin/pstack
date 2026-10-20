@@ -1,6 +1,6 @@
 # Review lens
 
-The Code review playbook opens this file at its design checks. Each question names the evidence to gather and when to leave the code alone. A question with no evidence behind it is not a finding. The governing leaf holds the rule. This file holds the review questions and a smells table.
+The Code review playbook opens this file at its design and deslop checks. Each question names the evidence to gather and when to leave the code alone. A question with no evidence behind it is not a finding. The governing leaf holds the rule. This file holds the review questions and a smells table.
 
 ## Vocabulary and concepts (**principle-model-the-domain**)
 
