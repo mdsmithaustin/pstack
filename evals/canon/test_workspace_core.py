@@ -1,8 +1,3 @@
-"""Local Git regressions for the retained workspace and diff contracts.
-
-Expected file bytes, commit histories and refusal side effects come from the
-fixtures below and workspace's public checkout/overlay/harvest contracts.
-"""
 import os
 from pathlib import Path
 import shutil
@@ -42,7 +37,6 @@ def git(cwd, *args):
 
 
 class ShopRepo(unittest.TestCase):
-    """A tiny upstream repo with a pinned commit in a mirror under a private cache."""
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory(dir=ROOT)
@@ -122,7 +116,6 @@ class MaterializeTests(ShopRepo):
 
 
 class HistoryRepo(ShopRepo):
-    """The pinned commit sits one commit above the root commit."""
 
     def setUp(self):
         super().setUp()
@@ -137,8 +130,6 @@ class HistoryRepo(ShopRepo):
 
 
 class HistoryTests(HistoryRepo):
-    """A history case sees both commits, and every other case sees only the
-    pinned commit."""
 
     def test_reference_checkout_preserves_requested_history_and_overlay(self):
         workspace.fetch('shop', self.head, self.upstream, history=True)
