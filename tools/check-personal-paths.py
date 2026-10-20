@@ -22,9 +22,6 @@ EXCEPTIONS = {
     ("evals/promises/test_reduce_trace.py", "Users", "dev"),
     ("evals/promises/test_reduce_trace.py", "home", "bob"),
     ("evals/promises/test_reduce_trace.py", "home", "dev"),
-    ("evals/canon/rules/premortem-placement/cases/tally-push-hook-rollout/project/ops/incidents.md", "Users", "priya"),
-    ("evals/canon/rules/premortem-placement/cases/tally-push-hook-rollout/samples/answer-found.md", "Users", "priya"),
-    ("evals/canon/rules/review-large-module/cases/sqlite-migration-backup/pr.patch", "home", "me"),
 }
 
 

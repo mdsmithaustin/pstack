@@ -1,1 +1,0 @@
-Added `omnigent/harness_names.py` with a `HarnessNameResolver` protocol and a registry-backed `RegistryHarnessNameResolver`. Callers use `resolver.spellings(...)`, starting with the model override check.

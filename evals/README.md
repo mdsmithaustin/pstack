@@ -7,7 +7,7 @@ pstack and do not prove that a skill improves production work.
 
 For the separate pipeline exit study, follow its
 [study protocol](verify-commands/studies/pipeline-exit/README.md) instead of the
-generic screen and confirmation examples below.
+generic screen and repeated-tuning examples below.
 
 `promises/` holds a separate suite that checks the user guide's promises on
 each harness. See `promises/README.md`.
@@ -24,6 +24,27 @@ The [port-value comparison](port-value/README.md) documents the separate
 native, upstream, and current-port application study, including its published
 aggregate results and validation receipt. Its committed cases are now exposed.
 Raw execution evidence stays outside Git.
+
+## Maintained scope
+
+| Component | Maintained purpose |
+| --- | --- |
+| `promises/` | Documented instruction, script, installation, and native process regressions. Presence and observed compliance do not guarantee model behavior. |
+| `verify-commands/` | Executable false-green controls and public development cases. |
+| `runtime-probes/`, `spec-probes/`, `unslop/` | Small development corpora. Findings, scope restraint, and preservation matter more than requested vocabulary or loading alone. |
+| `canon/` | Native application capture and supported outcome-grader controls. Historical screens and process census are in the [archive index](archive/README.md). |
+| `harness-routing/` | Targeted read/routing instrumentation with separate unresolved validity axes. |
+| `port-value/` and pipeline-exit | Completed comparisons and reproducibility records. Exposed ceiling cases can protect regressions, but repeated results are not fresh efficacy evidence. |
+
+Passing instrument tests validates the evaluator, not the skill. Count tasks,
+trials, stages, assertions, and guide claims separately. Historical positive
+signals remain bounded by their source versions, grading, and sampling limits.
+The recent port-value and pipeline-exit comparisons found no acceptance advantage
+on their recorded cases. Existing result files and hashes remain historical.
+
+Native regression runs should answer a named skill or runtime change. Wider
+manual matrices and paid studies have no new recurring schedule here. Current
+maintenance expense and savings from this smaller catalog are unmeasured.
 
 ## What is measured
 
@@ -139,20 +160,24 @@ reports exist. It cannot support an improvement claim. Stop if either answer
 population is incomplete or if the apparent difference comes only from
 exposure assertions.
 
-## Confirmation run
+## Development repeatability
 
-Use three paired answer repetitions only after the screen works. One grounded
-judge verdict per answer is the default confirmation budget. Repeat judging
-only for threshold-close or disputed answers after inspecting the first
-verdict's prompt and rationale. `skill-ci run` always uses a Claude
-judge, so invoke the pinned harness directly for a cross-family comparison.
+The following example repeats public tuning cases. Its three paired repetitions
+can expose unstable answers or grading, but do not establish confirmation,
+statistical power, or generalization. Run it only for a separately authorized
+research decision after the screen works. It is not a CI or release gate.
+
+Use one grounded judge verdict per answer as an initial development budget.
+Inspect the prompt and rationale before repeating threshold-close or disputed
+judgments. `skill-ci run` always uses a Claude judge, so invoke the pinned
+harness directly when the design requires a cross-family comparison.
 
 Follow the [paid-screen sandbox and adapter guidance](#paid-screen) when
 adapting this example to another corpus.
 
 ```sh
 skill=runtime-probes
-run_root=/private/tmp/runtime-probes-confirmation
+run_root=/private/tmp/runtime-probes-repeatability
 tools="$(git rev-parse --show-toplevel)/tools"
 manifest="evals/$skill/shared-benchmark.json"
 runner() { skill-ci harness "$@"; }
@@ -191,6 +216,26 @@ runner skill-benchmark benchmark "$manifest" --runs "$run_root/claude" --split t
   --allow-scripts --judge-results "$run_root/claude-judge.jsonl" \
   --out "$run_root/claude-benchmark.json"
 ```
+
+## Separate confirmation decision
+
+A confirmation comparison needs a frozen decision contract and new task instances
+that were not used to write or tune the skill. A public split name does not make
+its cases unseen. Name the intended outcome, the smallest useful gain or quality
+floor, acceptable resource use, and the complete assigned population before calls.
+Choose task counts and repetitions for that decision, accounting for paired tasks
+and shared lineages. Three repetitions are not a universal confirmation budget.
+
+Match the native runtime, tools, permissions, and resource limits across default
+and guided conditions. Cold discovery and explicit workflow activation answer
+different questions. Retain non-loading, failures, and incomplete attempts in the
+assigned population; report exposure-only analysis separately. Grade outcomes
+with executable controls where possible and calibrated review for subjective
+quality. Report task-level uncertainty, token use, elapsed time, and available
+cost without substituting them for human productivity.
+
+These instructions authorize no model calls. Closed studies retain their own
+once-only slot and confirmation restrictions.
 
 ## Trigger run
 

@@ -11,7 +11,6 @@ import io
 import json
 import re
 import tokenize
-from pathlib import PurePosixPath
 
 from shared import apply_diff, project_test_results
 
@@ -1161,16 +1160,7 @@ def check_long_prompt(answer, workspace):
         "tests/e2e_ui/messages/test_user_message_long_prompt_collapse.py": 135}, [tests_assert_hidden_text_and_copy])
 
 
-# hermes #124058. The PR's install test pins its warning prefix, summary label,
-# and result key, so C1 and C4 grade the same asks by behavior. zoneinfo (C7)
-# and "two tests are enough" are the reviewer's taste and are not graded.
-# C8's generated-files test is the checkout's own, restored through sources so
-# an agent cannot weaken or delete it.
-# known_issues entries may be strings or structured records, so every fixture
-# takes its known_issues from the agent's own plugin-catalog/hindsight.yaml.
-# C4 is unseeded: the reviewer says the mode "is chosen after install", so an
-# install must show the issue whatever mode a later setup picks.
-KNOWN_ISSUES_PR_TESTS = r'''"""#124058: catalog ``known_issues`` is an informational field."""
+KNOWN_ISSUES_PR_TESTS = r'''
 
 from pathlib import Path
 
@@ -1223,6 +1213,7 @@ import hermes_yaml as yaml
 from hermes_cli import memory_provider_migration as migration
 from hermes_cli.plugin_catalog import load_catalog
 from hermes_cli.plugins_cmd import cmd_install, dashboard_install_plugin
+from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 from tui_gateway.contracts.tools_mcp_plugins import PluginsManageResult
 
 REPO = Path(__file__).resolve().parents[2]
@@ -1259,6 +1250,8 @@ def record_prose(value, words=4):
 
 class Installs(list):
     catalog: Path
+    home: Path
+    confirmations: list[bool]
 
 
 @pytest.fixture
@@ -1279,9 +1272,10 @@ def installs(monkeypatch, tmp_path):
     (target / "plugin.yaml").write_text("name: hindsight\n")
     calls = Installs()
     calls.catalog = catalog
+    calls.confirmations = []
 
     def core(*args, **kwargs):
-        calls.append(args)
+        calls.append((args, working_mode(calls.home), any(calls.confirmations)))
         return target, {}, "hindsight"
 
     monkeypatch.setattr("hermes_cli.plugin_catalog.fetch_live_catalog", lambda **_: None)
@@ -1293,49 +1287,112 @@ def installs(monkeypatch, tmp_path):
     monkeypatch.setattr("hermes_cli.plugins_activation.activate_plugin_now",
                         lambda _n: {"gateway_reloaded": False, "activation": None, "restart_required": False})
     monkeypatch.setattr("pm.workspace.enabled_plugin_dirs", lambda: [])
-    return calls
+    calls.home = tmp_path / "home"
+    calls.home.mkdir()
+    (calls.home / "config.yaml").write_text("memory:\n  provider: hindsight\n  hindsight:\n    mode: local_embedded\n")
+    (calls.home / ".install_method").write_text("nix\n")
+    monkeypatch.setenv("HERMES_HOME", str(calls.home))
+    token = set_hermes_home_override(calls.home)
+    try:
+        yield calls
+    finally:
+        reset_hermes_home_override(token)
 
 
-def test_dashboard_installs_an_entry_that_declares_known_issues(installs):
+def working_mode(home):
+    config = yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8")) or {}
+    return config.get("memory", {}).get("hindsight", {}).get("mode") in ("local_external", "cloud")
+
+
+def assert_install_safety(installs, result=None):
+    if installs:
+        assert len(installs) == 1, installs
+        assert all(confirmed or (mode_ok and working_mode(installs.home))
+                   for _, mode_ok, confirmed in installs), "installed the unsupported mode without confirmation"
+        if result is not None:
+            assert result.get("ok") is True, result
+    elif result is not None:
+        assert result.get("ok") is False and isinstance(result.get("error"), str) and result["error"].strip(), result
+
+
+def update_entry(installs, **fields):
+    path = installs.catalog / "hindsight.yaml"
+    entry = yaml.safe_load(path.read_text(encoding="utf-8"))
+    entry.update(fields)
+    path.write_text(yaml.safe_dump(entry), encoding="utf-8")
+
+
+@pytest.mark.parametrize("name", ["hindsight", "catalog-safety-probe"])
+def test_dashboard_handles_known_issues_safely(installs, name):
+    update_entry(installs, name=name)
+    result = dashboard_install_plugin("", force=False, enable=False, catalog_name=name)
+    assert_install_safety(installs, result)
+
+
+def test_dashboard_still_installs_entries_without_known_issues(installs):
+    update_entry(installs, known_issues=[])
     result = dashboard_install_plugin("", force=False, enable=False, catalog_name="hindsight")
     assert (result.get("ok"), len(installs)) == (True, 1), result
 
 
-def test_memory_provider_migration_still_installs_hindsight(installs, tmp_path, monkeypatch):
-    home = tmp_path / "home"
-    home.mkdir()
-    (home / "config.yaml").write_text("memory:\n  provider: hindsight\n")
+def test_memory_provider_migration_handles_known_issues_safely(installs, monkeypatch):
     monkeypatch.setattr(migration, "provider_present", lambda *_: False)
     said = []
-    assert migration.migrate_home(home, install=migration._install_into(home), say=said.append) == "hindsight", said
+    migrated = migration.migrate_home(installs.home, install=migration._install_into(installs.home), say=said.append)
+    assert_install_safety(installs)
+    assert migrated == ("hindsight" if installs else None), said
+    assert installs or any(text.strip() for text in said), said
 
 
-def test_noninteractive_cli_install_proceeds_without_a_prompt(installs, monkeypatch, capsys):
+@pytest.mark.parametrize("tty, answer", [(False, False), (True, False), (True, True)])
+@pytest.mark.parametrize("name", ["hindsight", "catalog-safety-probe"])
+def test_cli_handles_known_issues_safely(installs, monkeypatch, capsys, tty, answer, name):
+    update_entry(installs, name=name)
+    [entry] = load_catalog(installs.catalog)
+
+    def confirm(*args, **kwargs):
+        assert tty, "prompted without a TTY"
+        output = capsys.readouterr()
+        assert_issues_shown(entry.known_issues, output.out + output.err)
+        installs.confirmations.append(answer)
+        return answer
+
+    monkeypatch.setattr("hermes_cli.plugins_cmd._is_tty", lambda: tty)
+    monkeypatch.setattr("hermes_cli.plugins_cmd._ask_yes", confirm)
+    try:
+        cmd_install(name, enable=False, no_deps=True)
+    except SystemExit as exc:
+        if exc.code not in (None, 0):
+            assert not installs, exc
+    assert_install_safety(installs)
+
+
+def test_cli_still_installs_entries_without_known_issues(installs, monkeypatch):
+    update_entry(installs, known_issues=[])
     monkeypatch.setattr("hermes_cli.plugins_cmd._is_tty", lambda: False)
-    monkeypatch.setattr("hermes_cli.plugins_cmd._ask_yes", lambda *_a, **_k: pytest.fail("prompted"))
-    cmd_install("hindsight", enable=False, no_deps=True)
+    monkeypatch.setattr("hermes_cli.plugins_cmd._ask_yes", lambda *_a, **_k: pytest.fail("prompted for a safe entry"))
+    try:
+        cmd_install("hindsight", enable=False, no_deps=True)
+    except SystemExit as exc:
+        assert exc.code in (None, 0), exc
     assert len(installs) == 1
 
 
-def test_cli_prints_each_known_issue_once(installs, monkeypatch, capsys):
-    """Each issue's most-printed sentence appears exactly once."""
-    monkeypatch.setenv("COLUMNS", "100000")
-    monkeypatch.setattr("hermes_cli.plugins_cmd._is_tty", lambda: True)
-    monkeypatch.setattr("hermes_cli.plugins_cmd._ask_yes", lambda *_a, **_k: True)
-    [entry] = load_catalog(installs.catalog)
-    sentences = [prose(issue) for issue in entry.known_issues]
-    cmd_install("hindsight", enable=False, no_deps=True)
-    out = capsys.readouterr()
-    shown = " ".join((out.out + out.err).replace("│", " ").split())
-    assert sentences and all(sentences), entry.known_issues
-    assert [max(shown.count(text) for text in texts) for texts in sentences] == [1] * len(sentences), shown
+def assert_issues_shown(issues, output):
+    sentences = [prose(issue) for issue in issues]
+    shown = " ".join(output.replace("│", " ").split())
+    assert sentences and all(sentences), issues
+    assert all(any(text in shown for text in texts) for texts in sentences), shown
 
 
 def test_hindsight_known_issue_reaches_the_dashboard_result(installs):
     installs.catalog = REPO / "plugin-catalog"
+    [entry] = [entry for entry in load_catalog(installs.catalog) if entry.name == "hindsight"]
+    assert entry.known_issues, "hindsight must declare its known issue"
+    declared = json.dumps(entry.known_issues).lower().replace("_", " ").replace("-", " ")
+    assert "local embedded" in declared, entry.known_issues
     result = dashboard_install_plugin("", force=False, enable=False, catalog_name="hindsight")
-    assert result.get("ok") is True, result
-    assert "local embedded" in json.dumps(result).lower().replace("_", " ")
+    assert_issues_shown(entry.known_issues, " ".join(record_prose(result, words=1)))
 
 
 def test_validator_accepts_the_hindsight_entry():
@@ -1345,27 +1402,17 @@ def test_validator_accepts_the_hindsight_entry():
     assert (run.returncode, [finding for entry in report["files"] for finding in entry.get("warnings", [])]) == (0, []), report
 
 
-def test_dashboard_result_fits_the_plugins_manage_contract(installs):
-    PluginsManageResult.model_validate(dashboard_install_plugin("", force=False, enable=False, catalog_name="hindsight"))
+@pytest.mark.parametrize("has_issues", [False, True])
+def test_dashboard_result_fits_the_plugins_manage_contract(installs, has_issues):
+    if not has_issues:
+        update_entry(installs, known_issues=[])
+    result = dashboard_install_plugin("", force=False, enable=False, catalog_name="hindsight")
+    assert isinstance(result.get("ok"), bool), result
+    if result.get("ok") is False:
+        assert isinstance(result.get("error"), str) and result["error"].strip(), result
+        result = {key: result[key] for key in ("ok", "error")}
+    PluginsManageResult.model_validate(result)
 '''
-
-
-def own_tests_pin_the_live_entry(workspace):
-    """The reviewer asked to drop a test that pins the live hindsight entry,
-    which the re-pin that fixes the trap will change. So the agent's own test
-    files run again with that entry restored, and a result there that is not
-    passed pinned it. A label the edited run lacks, such as a collection
-    error, counts; one the edited run already had not passed does not."""
-    entry = "plugin-catalog/hindsight.yaml"
-    changed = apply_diff(workspace.checkout, workspace.diff)
-    own = sorted(path for path, data in changed.items() if data is not None and path.startswith("tests/")
-                 and PurePosixPath(path).name.startswith("test_") and path.endswith(".py"))
-    if entry not in changed or not own:
-        return []
-    edited = project_test_results("hermes-8afaab3703e3", workspace.checkout, changed, own)
-    restored = project_test_results("hermes-8afaab3703e3", workspace.checkout, {**changed, entry: (workspace.checkout / entry).read_bytes()}, own)
-    return [f"constraint:C6: {test} {status} with {entry} restored" for test, status in restored.items()
-            if status != "passed" and edited.get(test) in (None, "passed")]
 
 
 def check_known_issues(answer, workspace):
@@ -1376,18 +1423,19 @@ def check_known_issues(answer, workspace):
         generated: "",
     }, {
         "tests/hermes_cli/test_plugin_catalog_known_issues.py::test_known_issues_parse_round_trip": "functional",
-        f"{checks}::test_dashboard_installs_an_entry_that_declares_known_issues": "constraint:C1",
-        f"{checks}::test_memory_provider_migration_still_installs_hindsight": "constraint:C2",
-        f"{checks}::test_noninteractive_cli_install_proceeds_without_a_prompt": "constraint:C3",
+        f"{checks}::test_dashboard_handles_known_issues_safely": "constraint:C1",
+        f"{checks}::test_dashboard_still_installs_entries_without_known_issues": "constraint:C1",
+        f"{checks}::test_memory_provider_migration_handles_known_issues_safely": "constraint:C2",
+        f"{checks}::test_cli_handles_known_issues_safely": "constraint:C3",
+        f"{checks}::test_cli_still_installs_entries_without_known_issues": "constraint:C3",
         f"{checks}::test_hindsight_known_issue_reaches_the_dashboard_result": "constraint:C4",
         f"{checks}::test_validator_accepts_the_hindsight_entry": "constraint:C5",
         f"{checks}::test_dashboard_result_fits_the_plugins_manage_contract": "constraint:C8",
         f"{generated}::test_generated_files_are_current": "constraint:C8",
-        f"{checks}::test_cli_prints_each_known_issue_once": "constraint:C9",
     }, {"hermes_cli/plugin_catalog.py": 8, "hermes_cli/plugins_cmd_install.py": 10, "plugin-catalog/hindsight.yaml": 2,
         "scripts/validate_plugin_catalog.py": 1, "tests/hermes_cli/test_plugin_catalog_known_issues.py": 91,
         "tui_gateway/contracts/tools_mcp_plugins.py": 2, "apps/shared/src/gateway-contract.generated.ts": 1,
-        "apps/shared/src/gateway-contract.openrpc.json": 15}) + own_tests_pin_the_live_entry(workspace)
+        "apps/shared/src/gateway-contract.openrpc.json": 15})
 
 
 

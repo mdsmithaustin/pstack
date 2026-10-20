@@ -1,9 +1,12 @@
+import contextlib
+import io
 import json
 import re
 import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -829,39 +832,266 @@ class KnownIssueProseTests(unittest.TestCase):
                          ["Embedded mode loops."])
 
 
-class LiveEntryPinTests(unittest.TestCase):
-    """C6: the agent's own tests still pass once the edited catalog entry is restored."""
-    ENTRY = "plugin-catalog/hindsight.yaml"
-    DIFF = (f"diff --git a/{ENTRY} b/{ENTRY}\n--- a/{ENTRY}\n+++ b/{ENTRY}\n@@ -1 +1 @@\n-sha: old\n+sha: new\n"
-            "diff --git a/tests/hermes_cli/test_own.py b/tests/hermes_cli/test_own.py\nnew file mode 100644\n"
-            "--- /dev/null\n+++ b/tests/hermes_cli/test_own.py\n@@ -0,0 +1 @@\n+def test_a(): pass\n")
+class KnownIssueSafetyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        namespace = {
+            "yaml": types.SimpleNamespace(safe_load=json.loads, safe_dump=lambda data, **_: json.dumps(data)),
+            "pytest": types.SimpleNamespace(fixture=lambda function: function),
+            "Path": Path,
+            "shipped_issues": lambda: ["Embedded mode loops on this pin."],
+            "set_hermes_home_override": lambda home: None,
+            "reset_hermes_home_override": lambda token: None,
+        }
+        exec(source[source.index("class Installs"):source.index("def update_entry(")], namespace)
+        cls.install_fixture = staticmethod(namespace["installs"])
+        cls.assert_safe = staticmethod(namespace["assert_install_safety"])
 
-    def failures(self, edited, restored):
-        module = oracle()
-        with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.object(module, "project_test_results", side_effect=[edited, restored]):
-            (Path(directory) / "plugin-catalog").mkdir()
-            (Path(directory) / self.ENTRY).write_text("sha: old\n")
-            return module.own_tests_pin_the_live_entry(Workspace(Path(directory), self.DIFF, None))
+    def calls(self, mode, installed=True, confirmed=False):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        patched = {}
+        monkeypatch = types.SimpleNamespace(setattr=lambda key, value: patched.__setitem__(key, value),
+                                           setenv=lambda *args: None)
+        fixture = self.install_fixture(monkeypatch, Path(directory.name))
+        calls = next(fixture)
+        self.addCleanup(fixture.close)
+        calls.core = patched["hermes_cli.plugins_cmd._install_plugin_core"]
+        self.set_mode(calls, mode)
+        if confirmed:
+            calls.confirmations.append(True)
+        if installed:
+            calls.core("hindsight")
+        return calls
 
-    def test_a_test_that_skips_once_the_entry_is_restored_fails(self):
-        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a": "passed"},
-                                       {"tests.hermes_cli.test_own::test_a": "skipped"}),
-                         [f"constraint:C6: tests.hermes_cli.test_own::test_a skipped with {self.ENTRY} restored"])
+    def set_mode(self, calls, mode):
+        (calls.home / "config.yaml").write_text(json.dumps({"memory": {"hindsight": {"mode": mode}}}))
 
-    def test_a_failure_under_a_label_the_edited_run_lacks_fails(self):
-        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a[new]": "passed"},
-                                       {"tests.hermes_cli.test_own::test_a[old]": "failed"}),
-                         [f"constraint:C6: tests.hermes_cli.test_own::test_a[old] failed with {self.ENTRY} restored"])
+    def test_refusal_accepts_the_existing_error_envelope_and_extra_diagnostics(self):
+        self.assert_safe(self.calls("local_embedded", installed=False),
+                         {"ok": False, "error": "Known issue prevents installation.", "issue_details": ["trap"]})
 
-    def test_a_collection_error_once_the_entry_is_restored_fails(self):
-        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a": "passed"},
-                                       {"tests.hermes_cli.test_own": "failed"}),
-                         [f"constraint:C6: tests.hermes_cli.test_own failed with {self.ENTRY} restored"])
+    def test_explicit_confirmation_permits_the_warned_combination(self):
+        self.assert_safe(self.calls("local_embedded", confirmed=True), {"ok": True})
 
-    def test_a_test_that_skips_or_fails_either_way_does_not_pin_the_entry(self):
-        both = {"tests.hermes_cli.test_own::test_windows": "skipped", "tests.hermes_cli.test_own::test_broken": "failed"}
-        self.assertEqual(self.failures(both, both), [])
+    def test_a_persisted_working_mode_permits_installation(self):
+        for mode in ("local_external", "cloud"):
+            with self.subTest(mode):
+                self.assert_safe(self.calls(mode), {"ok": True})
+
+    def test_a_warning_without_confirmation_does_not_permit_the_unsupported_mode(self):
+        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+            self.assert_safe(self.calls("local_embedded"), {"ok": True, "warnings": ["Known issue."]})
+
+    def test_a_success_without_an_install_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            self.assert_safe(self.calls("local_external", installed=False), {"ok": True})
+
+    def test_a_refusal_without_an_explanation_is_rejected(self):
+        for error in (None, "", " ", []):
+            with self.subTest(error), self.assertRaises(AssertionError):
+                self.assert_safe(self.calls("local_embedded", installed=False), {"ok": False, "error": error})
+
+    def test_a_failed_result_after_installation_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            self.assert_safe(self.calls("local_external"), {"ok": False, "error": "Refused too late."})
+
+    def test_a_working_mode_persisted_after_installation_is_rejected(self):
+        for mode in ("local_external", "cloud"):
+            with self.subTest(mode):
+                calls = self.calls("local_embedded")
+                self.set_mode(calls, mode)
+                with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                    self.assert_safe(calls, {"ok": True})
+
+    def test_confirmation_after_installation_is_rejected(self):
+        calls = self.calls("local_embedded")
+        calls.confirmations.append(True)
+        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+            self.assert_safe(calls, {"ok": True})
+
+    def test_restoring_the_unsupported_mode_after_installation_is_rejected(self):
+        for mode in ("cloud", "local_external"):
+            with self.subTest(mode):
+                calls = self.calls(mode)
+                self.set_mode(calls, "local_embedded")
+                calls.confirmations.append(True)
+                with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                    self.assert_safe(calls, {"ok": True})
+
+    def test_preinstall_confirmation_survives_later_state_changes(self):
+        calls = self.calls("local_embedded", confirmed=True)
+        calls.confirmations.clear()
+        self.assert_safe(calls, {"ok": True})
+
+    def test_dashboard_and_migration_reject_unsafe_mode_transitions(self):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        for path in ("dashboard", "migration"):
+            for initial, final in (("local_embedded", "cloud"), ("local_embedded", "local_external"),
+                                   ("cloud", "local_embedded"), ("local_external", "local_embedded")):
+                with self.subTest(path=path, initial=initial, final=final):
+                    calls = self.calls(initial, installed=False)
+
+                    def install(*args, **kwargs):
+                        calls.core("hindsight")
+                        self.set_mode(calls, final)
+                        return {"ok": True}
+
+                    namespace = {"update_entry": mock.Mock(), "dashboard_install_plugin": install,
+                                 "assert_install_safety": self.assert_safe}
+                    if path == "dashboard":
+                        start = source.index("def test_dashboard_handles_known_issues_safely(")
+                        end = source.index("def test_dashboard_still_installs_entries_without_known_issues(")
+                        exec(source[start:end], namespace)
+                        for name in ("hindsight", "catalog-safety-probe"):
+                            with self.subTest(name=name), self.assertRaisesRegex(AssertionError, "without confirmation"):
+                                namespace["test_dashboard_handles_known_issues_safely"](calls, name)
+                            calls.clear()
+                            self.set_mode(calls, initial)
+                    else:
+                        def migrate(home, *, install, say):
+                            return "hindsight" if install("hindsight")["ok"] else None
+
+                        namespace["migration"] = types.SimpleNamespace(
+                            migrate_home=migrate, _install_into=lambda home: install)
+                        start = source.index("def test_memory_provider_migration_handles_known_issues_safely(")
+                        end = source.index('@pytest.mark.parametrize("tty, answer"', start)
+                        exec(source[start:end], namespace)
+                        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                            namespace["test_memory_provider_migration_handles_known_issues_safely"](
+                                calls, types.SimpleNamespace(setattr=lambda *args: None))
+
+    def run_cli_check(self, *, tty, answer, name, exit_code, install=False, mode="local_embedded",
+                      late_mode=None, late_confirmation=False):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        calls = self.calls(mode, installed=False)
+        calls.catalog = calls.home
+        issue = "Embedded mode loops on this pin."
+        output = io.StringIO()
+        patched = {}
+
+        def cmd_install(*args, **kwargs):
+            print(issue)
+            if late_confirmation and install:
+                calls.core(name)
+            if patched["hermes_cli.plugins_cmd._is_tty"]():
+                patched["hermes_cli.plugins_cmd._ask_yes"]()
+            if install and not late_confirmation:
+                calls.core(name)
+            if late_mode:
+                self.set_mode(calls, late_mode)
+            if exit_code != "return":
+                raise SystemExit(exit_code)
+
+        namespace = {
+            "dataclasses": __import__("dataclasses"),
+            "update_entry": mock.Mock(),
+            "load_catalog": lambda _: [types.SimpleNamespace(known_issues=[issue])],
+            "cmd_install": cmd_install,
+            "assert_install_safety": self.assert_safe,
+        }
+        exec(source[source.index("def prose("):source.index("class Installs")], namespace)
+        exec(source[source.index("def assert_issues_shown("):source.index("def test_hindsight_known_issue")], namespace)
+        exec(source[source.index("def test_cli_handles_known_issues_safely("):
+                    source.index("def test_cli_still_installs_entries_without_known_issues(")], namespace)
+        monkeypatch = types.SimpleNamespace(setattr=lambda key, value: patched.__setitem__(key, value))
+        capsys = types.SimpleNamespace(readouterr=lambda: types.SimpleNamespace(out=output.getvalue(), err=""))
+        with contextlib.redirect_stdout(output):
+            namespace["test_cli_handles_known_issues_safely"](calls, monkeypatch, capsys, tty, answer, name)
+
+    def test_cli_rejects_late_safety_for_successful_exit_styles(self):
+        for name in ("hindsight", "catalog-safety-probe"):
+            for exit_code in ("return", 0, None):
+                for late in ({"late_mode": "cloud"}, {"late_mode": "local_external"},
+                             {"late_confirmation": True, "tty": True, "answer": True}):
+                    options = dict(tty=False, answer=False, name=name, exit_code=exit_code, install=True)
+                    options.update(late)
+                    with self.subTest(**options), self.assertRaisesRegex(AssertionError, "without confirmation"):
+                        self.run_cli_check(**options)
+
+    def test_cli_rejects_mode_restoration_for_successful_exit_styles(self):
+        for name in ("hindsight", "catalog-safety-probe"):
+            for exit_code in ("return", 0, None):
+                for mode in ("cloud", "local_external"):
+                    with self.subTest(name=name, exit_code=exit_code, mode=mode):
+                        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                            self.run_cli_check(tty=False, answer=False, name=name, exit_code=exit_code,
+                                               install=True, mode=mode, late_mode="local_embedded")
+
+    def test_cli_accepts_preinstall_confirmation_with_mode_restoration(self):
+        for name in ("hindsight", "catalog-safety-probe"):
+            for exit_code in ("return", 0, None):
+                with self.subTest(name=name, exit_code=exit_code):
+                    self.run_cli_check(tty=True, answer=True, name=name, exit_code=exit_code,
+                                       install=True, mode="cloud", late_mode="local_embedded")
+
+    def run_safe_entry_cli_check(self, exit_code, install_count=1):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        calls = []
+        patched = {}
+
+        def cmd_install(*args, **kwargs):
+            self.assertFalse(patched["hermes_cli.plugins_cmd._is_tty"]())
+            calls.extend(["installed"] * install_count)
+            if exit_code != "return":
+                raise SystemExit(exit_code)
+
+        namespace = {"update_entry": mock.Mock(), "cmd_install": cmd_install,
+                     "pytest": types.SimpleNamespace(fail=self.fail)}
+        exec(source[source.index("def test_cli_still_installs_entries_without_known_issues("):
+                    source.index("def assert_issues_shown(")], namespace)
+        monkeypatch = types.SimpleNamespace(setattr=lambda key, value: patched.__setitem__(key, value))
+        namespace["test_cli_still_installs_entries_without_known_issues"](calls, monkeypatch)
+
+    def test_safe_entry_cli_accepts_successful_exit_styles(self):
+        for exit_code in ("return", 0, None):
+            with self.subTest(exit_code=exit_code):
+                self.run_safe_entry_cli_check(exit_code)
+
+    def test_safe_entry_cli_rejects_nonzero_exit_after_installation(self):
+        with self.assertRaises(AssertionError):
+            self.run_safe_entry_cli_check(1)
+
+    def test_safe_entry_cli_requires_exactly_one_install(self):
+        for exit_code in ("return", 0, None):
+            for install_count in (0, 2):
+                with self.subTest(exit_code=exit_code, install_count=install_count), self.assertRaises(AssertionError):
+                    self.run_safe_entry_cli_check(exit_code, install_count)
+
+    def test_cli_cancellation_accepts_every_exit_style_without_installing(self):
+        for name in ("hindsight", "catalog-safety-probe"):
+            for tty, answer in ((False, False), (True, False), (True, True)):
+                for exit_code in (None, 0, 1, "return"):
+                    with self.subTest(name=name, tty=tty, answer=answer, exit_code=exit_code):
+                        self.run_cli_check(tty=tty, answer=answer, name=name, exit_code=exit_code)
+
+    def test_cli_exit_after_installation_is_rejected(self):
+        for exit_code in (None, 0, 1):
+            with self.subTest(exit_code=exit_code), self.assertRaises(AssertionError):
+                self.run_cli_check(tty=True, answer=False, name="hindsight", exit_code=exit_code, install=True)
+
+    def test_cli_nonzero_exit_after_safe_installation_is_rejected(self):
+        for tty, answer, mode in ((True, True, "local_embedded"),
+                                   (False, False, "local_external"),
+                                   (False, False, "cloud")):
+            with self.subTest(tty=tty, answer=answer, mode=mode), self.assertRaises(AssertionError):
+                self.run_cli_check(tty=tty, answer=answer, name="hindsight", exit_code=1, install=True, mode=mode)
+
+    def test_cli_success_requires_confirmation_or_working_configuration(self):
+        for tty, answer, mode, accepted in ((False, False, "local_embedded", False),
+                                             (True, False, "local_embedded", False),
+                                             (True, True, "local_embedded", True),
+                                             (False, False, "local_external", True),
+                                             (False, False, "cloud", True)):
+            for exit_code in ("return", 0, None):
+                with self.subTest(tty=tty, answer=answer, mode=mode, exit_code=exit_code):
+                    options = dict(tty=tty, answer=answer, name="hindsight", exit_code=exit_code, install=True, mode=mode)
+                    if accepted:
+                        self.run_cli_check(**options)
+                    else:
+                        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                            self.run_cli_check(**options)
 
 
 class WindowsTestTests(unittest.TestCase):
@@ -1058,22 +1288,22 @@ class DesktopSkipTests(ReplayedPullRequest):
 class KnownIssuesTests(ReplayedPullRequest):
     CASE, IMAGE = "hermes-known-issues", "hermes-8afaab3703e3"
 
-    def test_merged_known_issues_inform_and_never_gate(self):
-        self.assertEqual(self.grade_sample("good"), ([], {"outside_footprint": [], "added": 130, "merged_added": 130}))
+    def test_historical_merged_sample_warns_but_installs_without_confirmation(self):
+        checks = "tests/hermes_cli/test_catalog_known_issues_install.py"
+        self.assertEqual(self.grade_sample("good"), ([
+            f"constraint:C1: {checks}::test_dashboard_handles_known_issues_safely failed",
+            f"constraint:C2: {checks}::test_memory_provider_migration_handles_known_issues_safely failed",
+            f"constraint:C3: {checks}::test_cli_handles_known_issues_safely failed",
+        ], {"outside_footprint": [], "added": 130, "merged_added": 130}))
 
-    def test_pre_review_gate_refuses_installs_the_migration_needs(self):
+    def test_historical_pre_review_sample_lacks_catalog_validator_support(self):
         checks = "tests/hermes_cli/test_catalog_known_issues_install.py"
         self.assertEqual(self.grade_sample("bad"), ([
-            f"constraint:C1: {checks}::test_dashboard_installs_an_entry_that_declares_known_issues failed",
-            f"constraint:C2: {checks}::test_memory_provider_migration_still_installs_hindsight failed",
-            f"constraint:C3: {checks}::test_noninteractive_cli_install_proceeds_without_a_prompt failed",
-            f"constraint:C4: {checks}::test_hindsight_known_issue_reaches_the_dashboard_result failed",
             f"constraint:C5: {checks}::test_validator_accepts_the_hindsight_entry failed",
-            f"constraint:C8: {checks}::test_dashboard_result_fits_the_plugins_manage_contract failed",
-            "constraint:C6: tests.hermes_cli.test_124037_catalog_known_issues_gate.TestCatalogParsing"
-            "::test_live_catalog_hindsight_declares_known_issues failed with plugin-catalog/hindsight.yaml restored",
         ], {"outside_footprint": ["tests/hermes_cli/test_124037_catalog_known_issues_gate.py"], "added": 213, "merged_added": 130}))
 
+    def test_fail_closed_sample_includes_catalog_validator_support(self):
+        self.assertEqual(self.grade_sample("fail-closed")[0], [])
 
     def test_weakening_the_generated_files_test_does_not_hide_stale_contracts(self):
         weakened = (
@@ -1091,10 +1321,12 @@ class KnownIssuesTests(ReplayedPullRequest):
             " # The emitter inventory the old gateway-events.json scan used, kept as the completeness oracle:\n")
 
         def edit(diff):
-            sections = re.split(r"(?m)^(?=diff --git )", diff)
-            return "".join(section for section in sections if "gateway-contract" not in section.split("\n", 1)[0]) + weakened
+            historical = (RULES / RULE / "cases" / self.CASE / "samples" / "good.diff").read_text()
+            contract = next(section for section in re.split(r"(?m)^(?=diff --git )", historical)
+                            if section.startswith("diff --git a/tui_gateway/contracts/tools_mcp_plugins.py"))
+            return diff + "\n" + contract + weakened
 
-        self.assertEqual(self.grade_sample("good", edit)[0], [
+        self.assertEqual(self.grade_sample("fail-closed", edit)[0], [
             "constraint:C8: tests/tui_gateway/contracts/test_generated.py::test_generated_files_are_current failed",
         ])
 
