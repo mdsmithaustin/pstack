@@ -910,6 +910,39 @@ class KnownIssueSafetyTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             namespace["test_cli_handles_known_issues_safely"](calls, monkeypatch, capsys, tty, answer, name)
 
+    def run_safe_entry_cli_check(self, exit_code, install_count=1):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        calls = []
+        patched = {}
+
+        def cmd_install(*args, **kwargs):
+            self.assertFalse(patched["hermes_cli.plugins_cmd._is_tty"]())
+            calls.extend(["installed"] * install_count)
+            if exit_code != "return":
+                raise SystemExit(exit_code)
+
+        namespace = {"update_entry": mock.Mock(), "cmd_install": cmd_install,
+                     "pytest": types.SimpleNamespace(fail=self.fail)}
+        exec(source[source.index("def test_cli_still_installs_entries_without_known_issues("):
+                    source.index("def assert_issues_shown(")], namespace)
+        monkeypatch = types.SimpleNamespace(setattr=lambda key, value: patched.__setitem__(key, value))
+        namespace["test_cli_still_installs_entries_without_known_issues"](calls, monkeypatch)
+
+    def test_safe_entry_cli_accepts_successful_exit_styles(self):
+        for exit_code in ("return", 0, None):
+            with self.subTest(exit_code=exit_code):
+                self.run_safe_entry_cli_check(exit_code)
+
+    def test_safe_entry_cli_rejects_nonzero_exit_after_installation(self):
+        with self.assertRaises(AssertionError):
+            self.run_safe_entry_cli_check(1)
+
+    def test_safe_entry_cli_requires_exactly_one_install(self):
+        for exit_code in ("return", 0, None):
+            for install_count in (0, 2):
+                with self.subTest(exit_code=exit_code, install_count=install_count), self.assertRaises(AssertionError):
+                    self.run_safe_entry_cli_check(exit_code, install_count)
+
     def test_cli_cancellation_accepts_every_exit_style_without_installing(self):
         for name in ("hindsight", "catalog-safety-probe"):
             for tty, answer in ((False, False), (True, False), (True, True)):

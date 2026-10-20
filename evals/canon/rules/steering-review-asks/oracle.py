@@ -1369,7 +1369,10 @@ def test_cli_still_installs_entries_without_known_issues(installs, monkeypatch):
     update_entry(installs, known_issues=[])
     monkeypatch.setattr("hermes_cli.plugins_cmd._is_tty", lambda: False)
     monkeypatch.setattr("hermes_cli.plugins_cmd._ask_yes", lambda *_a, **_k: pytest.fail("prompted for a safe entry"))
-    cmd_install("hindsight", enable=False, no_deps=True)
+    try:
+        cmd_install("hindsight", enable=False, no_deps=True)
+    except SystemExit as exc:
+        assert exc.code in (None, 0), exc
     assert len(installs) == 1
 
 
