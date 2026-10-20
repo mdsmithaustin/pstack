@@ -922,19 +922,27 @@ class KnownIssueSafetyTests(unittest.TestCase):
             with self.subTest(exit_code=exit_code), self.assertRaises(AssertionError):
                 self.run_cli_check(tty=True, answer=False, name="hindsight", exit_code=exit_code, install=True)
 
-    def test_cli_return_still_requires_confirmation_or_working_configuration(self):
+    def test_cli_nonzero_exit_after_safe_installation_is_rejected(self):
+        for tty, answer, mode in ((True, True, "local_embedded"),
+                                   (False, False, "local_external"),
+                                   (False, False, "cloud")):
+            with self.subTest(tty=tty, answer=answer, mode=mode), self.assertRaises(AssertionError):
+                self.run_cli_check(tty=tty, answer=answer, name="hindsight", exit_code=1, install=True, mode=mode)
+
+    def test_cli_success_requires_confirmation_or_working_configuration(self):
         for tty, answer, mode, accepted in ((False, False, "local_embedded", False),
                                              (True, False, "local_embedded", False),
                                              (True, True, "local_embedded", True),
                                              (False, False, "local_external", True),
                                              (False, False, "cloud", True)):
-            with self.subTest(tty=tty, answer=answer, mode=mode):
-                options = dict(tty=tty, answer=answer, name="hindsight", exit_code="return", install=True, mode=mode)
-                if accepted:
-                    self.run_cli_check(**options)
-                else:
-                    with self.assertRaisesRegex(AssertionError, "without confirmation"):
+            for exit_code in ("return", 0, None):
+                with self.subTest(tty=tty, answer=answer, mode=mode, exit_code=exit_code):
+                    options = dict(tty=tty, answer=answer, name="hindsight", exit_code=exit_code, install=True, mode=mode)
+                    if accepted:
                         self.run_cli_check(**options)
+                    else:
+                        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                            self.run_cli_check(**options)
 
 
 class WindowsTestTests(unittest.TestCase):
