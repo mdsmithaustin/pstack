@@ -2634,7 +2634,13 @@ def doc_impact_before_completion(view):
     if not read_any:
         return inconclusive("run killed before completion", *evidence) if view.killed else failed("documentation-impact never ran before completion", *evidence)
     if not result:
-        return failed("completion reply carries no author result", *evidence) if reply else inconclusive("no completion reply", *evidence)
+        if not reply:
+            return inconclusive("no completion reply", *evidence)
+        named = next((t for t in [reply, *view.texts(turn)] if "independent review" in t.lower()), None)
+        if named:
+            return inconclusive("the turn names independent review in words the author-result reader does not parse", *evidence,
+                                needs_judge=True, excerpt=excerpt_of(named))
+        return failed("completion reply carries no author result", *evidence)
     return passed(*evidence)
 
 
