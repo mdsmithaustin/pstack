@@ -1157,9 +1157,14 @@ def read_only_pin(view):
         evidence = [f"turn {turn} playbook reads: {[PLAYBOOK.match(r).group(1) for r in reads if PLAYBOOK.match(r)]}"]
         failures, more = no_edits_verdict(view, turn)
         evidence += more
-        if not routed:
+        rewritten = any(c.get("source") == "chat_history" and c.get("turn") == turn for c in view.trace.get("x_compactions") or [])
+        if not routed and not rewritten:
             failures.insert(0, "investigation.md not read in the `new task` turn")
-        return failed(failures, *evidence) if failures else passed(*evidence)
+        if failures:
+            return failed(failures, *evidence)
+        if not routed:
+            return inconclusive(f"a compaction rewrote turn {turn}'s chat history, so its playbook reads may be gone", *evidence)
+        return passed(*evidence)
     result = route_verdict(view)
     failures, evidence = no_edits_verdict(view)
     if result["verdict"] != PASS:
