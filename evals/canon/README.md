@@ -26,8 +26,9 @@ dependency-image preparation and the image registry. Detailed historical setup
 instructions remain in the pinned README, available through
 [archive recovery](../archive/README.md#recover-the-original-source).
 
-The known-issues prompt permits safe refusal, warning with explicit confirmation,
-or switching to a working mode. Its current acceptance must follow those choices.
+The [known-issues case contract](rules/steering-review-asks/cases/hermes-known-issues/case.json)
+owns the before-install safety requirements and the independent visibility and
+result-contract checks.
 Original maintainer-preference constraints and grades remain at the archive pin.
 Other retained historical cases are development and regression material, not
 unseen confirmation cases for amendments derived from them.
