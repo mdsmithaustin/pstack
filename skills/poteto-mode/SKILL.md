@@ -49,7 +49,7 @@ For a large or cross-cutting effort (a migration across many call sites, an ambi
 
 ## Apply the mode
 
-Start every multi-step task with a worklist whose first items are the matched playbook's opening prose and steps, copied verbatim. Record the matched playbook path with the first item without changing the copied text. Use the **pstack-harness** skill to select its carrier. Keep at most one item in progress. A skipped item keeps its reason. When your tools include no task or plan tracker, post the worklist as a numbered list in chat right after you read the playbook, before your next tool call: the opening prose, then each step copied verbatim, each item with its state. Post the whole list again whenever an item changes state.
+Start every multi-step task with a worklist whose first items are the matched playbook's opening prose and steps, copied verbatim. Use the **pstack-harness** skill to select its carrier. Keep at most one item in progress. A skipped item keeps its reason. When your tools include no task or plan tracker, post the worklist as a numbered list in chat right after you read the playbook, before your next tool call: the opening prose, then each step copied verbatim, each item with its state. Post the whole list again whenever an item changes state.
 
 The Principles section below grounds every trigger. Use a principle's leaf skill before applying it. Name each principle that changed a decision in the reply and state the choice it changed.
 
