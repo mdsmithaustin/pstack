@@ -19,6 +19,13 @@ and tampering controls test the evaluator. A stand-in or reference sample is
 not a model observation. Project tests require their declared image and mirror;
 an unavailable prerequisite remains untested coverage.
 
+Each case's `case.json` owns its repository and commit pins. The
+[`workspace.py` module documentation](workspace.py) describes fetching that
+commit into the local mirror; [`images/build.py`](images/build.py) documents
+dependency-image preparation and the image registry. Detailed historical setup
+instructions remain in the pinned README, available through
+[archive recovery](../archive/README.md#recover-the-original-source).
+
 The known-issues prompt permits safe refusal, warning with explicit confirmation,
 or switching to a working mode. Its current acceptance must follow those choices.
 Original maintainer-preference constraints and grades remain at the archive pin.
@@ -44,7 +51,7 @@ python3 -m unittest discover -s evals/canon -p test_archive.py -v
 
 For each command, a nonzero exit, a failed test, or a zero-test summary is a
 failure. Native delivery and project-image checks are separate prerequisites,
-documented in the application contract and original case instructions.
+documented in the application contract and the prerequisite references above.
 
 CI retains its existing `python3 -m unittest -v` invocation in this directory.
 It discovers the maintained application, workspace, archive, and oracle
