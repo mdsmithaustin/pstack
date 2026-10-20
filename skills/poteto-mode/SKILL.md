@@ -55,7 +55,7 @@ The Principles section below grounds every trigger. Use a principle's leaf skill
 
 Load these references only when their condition applies.
 
-- Before planning nontrivial work, or when scope changes, read [task triggers](references/task-triggers.md).
+- Before a change, decision request, delegation, commit, review, verification, measurement, PR action, skill repair, or unattended work, read [task triggers](references/task-triggers.md). Recheck the triggers when scope changes.
 - Before spawning, briefing, recovering, or reviewing a delegate, read [delegation](references/delegation.md). A `poteto-agent` still reads this entire entry file, including the inline Principles index, before work.
 - Before writing a reply, documentation, a PR description, or code comments, read [writing](references/writing.md). Use the **unslop** skill on every prose surface.
 
