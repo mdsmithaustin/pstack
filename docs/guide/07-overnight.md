@@ -48,16 +48,16 @@ flowchart TD
     C --> D{Progress?}
     D -->|Yes| E[Commit]
     D -->|No| F[Discard]
-    E --> G[Log one decision row]
+    E --> G[Log the iteration]
     F --> G
     G --> A
 ```
 
-One change, one check, one log row, every iteration. Changes that didn't help get discarded, not left to ride. A plateau means pivot, not stop, and the finish condition never quietly relaxes to declare victory.
+Each iteration makes a change, checks it, and records the result under the [logging rules](../../skills/show-me-your-work/SKILL.md#logging-a-row). Changes that didn't help get discarded, not left to ride. A plateau means pivot, not stop, and the finish condition never quietly relaxes to declare victory.
 
 ## The morning audit
 
-[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) is what makes the run reviewable. Each row records the time, phase, decision, reason, an evidence pointer, and the result, in a TSV at `decisions.tsv` (or `.audit/<task-slug>.tsv` when several runs share a directory). It stays local by default. Commit it when the work is ambitious enough that a reviewer needs the trail to trust the result.
+[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) makes the run reviewable and owns the log format, storage, and evidence-retention rules.
 
 When you're back, ask for the run in review form:
 
@@ -65,7 +65,7 @@ When you're back, ask for the run in review form:
 /show-me-your-work catch me up on what you did last night
 ```
 
-Before the skill hands back its summary, it spawns a reviewer on the `trail reviewer` role, following [Spawn a role](../../skills/pstack-harness/SKILL.md#spawn-a-role) for model resolution and execution-identity disclosure, to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny. Read that section first, then the log rows it points at. You're auditing decisions, not re-reading the whole night.
+The skill's [trail review](../../skills/show-me-your-work/SKILL.md#cross-model-review-of-the-trail) produces an Attention section. Read that section first, then the log rows it points at. You're auditing decisions, not re-reading the whole night.
 
 For a quick status instead of an audit, run [`/ketchup`](../../skills/ketchup/SKILL.md) in the chat that ran the work. It reads only, and tells you in plain words what changed since your last message, with the screenshots and small diagrams the work produced. Then it lists each call waiting on you, such as a merge, an approval, or a choice between options, with its pick, the evidence, and the risk, so you can decide from the reply alone.
 

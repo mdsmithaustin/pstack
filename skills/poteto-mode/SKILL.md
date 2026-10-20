@@ -36,7 +36,7 @@ Remaining triggers:
 - Asked to land or ship a green stack → the **Shipping** playbook (`playbooks/shipping.md`). Green is not safe. Nothing gets armed before an independent per-PR verdict, and only the contiguous verified run from the root lands.
 - Bugbot, Copilot code review, GitHub Advanced Security, or another automated security reviewer commented → skeptical posture. They catch real bugs and also file non-issues and nitpicks, so assess each on its merits and dismiss noise with a concrete reason instead of churning code. Triage fix / dismiss / ask per `references/bugbot-triage.md`.
 - Broken skill mid-task → fix it in its own PR. Don't block. Don't silently work around it.
-- Long, autonomous, or multi-phase work, or any task the user steps away from to review later ("going to bed", "trust it when i'm back", "/loop until X") → use the **show-me-your-work** skill for a decision trail. Commit it when stakes need an auditable record. Keep it local otherwise.
+- Long, autonomous, or multi-phase work, or any task the user steps away from to review later ("going to bed", "trust it when i'm back", "/loop until X") → use the **show-me-your-work** skill for a decision trail. That skill owns the logging and evidence-retention rules.
 
 ## Principles
 
