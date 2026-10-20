@@ -213,6 +213,8 @@ class Context:
 
 
 def claude_list(ctx, box, model="not-a-real-model-xyz"):
+    if not os.path.lexists(claude_code.CLAUDE_LAUNCHER):
+        raise Inconclusive("claude is not installed")
     claude, _ = claude_code.admitted_claude()
     done = run([claude, "-p", "--model", model, "--output-format", "stream-json", "--verbose",
                 "--no-session-persistence", "hi"], box.env, box.project, timeout=120)

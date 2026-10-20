@@ -109,6 +109,26 @@ class ClaudeList(unittest.TestCase):
         self.assertFalse(self.ran.exists())
         self.assertFalse(self.decoy_ran.exists())
 
+    def test_a_missing_launcher_is_inconclusive_without_a_check_error(self):
+        claude_code.CLAUDE_LAUNCHER.unlink()
+        with self.assertRaisesRegex(install.Inconclusive, "^claude is not installed$"):
+            install.claude_list(None, self.box)
+        result = install.evaluate(SimpleNamespace(skills_version="1"), install.Check(
+            "listing", ("claude-code",), lambda ctx, harness: install.claude_list(ctx, self.box)), "claude-code")
+        self.assertEqual(result["verdict"], "INCONCLUSIVE")
+        self.assertEqual(result["evidence"], {"skills_cli": "1", "reason": "claude is not installed"})
+        self.assertFalse(self.ran.exists())
+        self.assertFalse(self.decoy_ran.exists())
+
+    def test_a_dangling_launcher_is_a_check_error(self):
+        self.binary.unlink()
+        result = install.evaluate(SimpleNamespace(skills_version="1"), install.Check(
+            "listing", ("claude-code",), lambda ctx, harness: install.claude_list(ctx, self.box)), "claude-code")
+        self.assertEqual(result["verdict"], "INCONCLUSIVE")
+        self.assertTrue(result["evidence"]["check_error"])
+        self.assertIn("IsolationUnavailable", result["evidence"]["reason"])
+        self.assertFalse(self.decoy_ran.exists())
+
     def test_an_unadmitted_claude_is_a_check_error_not_a_verdict(self):
         self.fake_codesign("exit 3")
         result = install.evaluate(SimpleNamespace(skills_version="1"), install.Check(
