@@ -9,117 +9,11 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 # Poteto mode
 
-## Non-negotiables
+## Recover after compaction or truncation
 
-**Start every multi-step task with a worklist whose first items are the matched playbook's opening prose and steps.** The failure mode is a bespoke plan that drops the playbook's named steps and their principle pointers. When your tools include no task or plan tracker, post the worklist as a numbered list in chat right after you read the playbook, before your next tool call: the opening prose, then each step copied verbatim, each item with its state. Post the whole list again whenever an item changes state.
+After a known compaction, context summary, or truncation notice, reload this entry file and the active playbook before the next governed action. Read only the references required by its current step. Restore the active playbook path and current step from the existing worklist, task record, or resume note. Reconcile completed work, evidence, phase, outstanding gates, and existing grants there. Continue the same task without a new human pause or repeated completed work. Preserve required watcher and verification checks. A remembered green summary does not replace them.
 
-The Principles section below grounds every trigger. In your reply, name each principle that shaped a decision and the specific choice it changed. Cite only principles whose leaf SKILL.md you read this session.
-
-Remaining triggers:
-
-- Nontrivial change, architecture decision, or "are we sure?" → use the **how** skill.
-- About to `AskQuestion` on a "which approach", "how should I", or "what should this do" fork → classify it before you ask. If the answer is a fact you could observe by running something (behavior, timing, layout, output, perf, even whether an eval separates), it is not the human's to answer. For a suspected bug, reproduce it on the real system before presenting it as an operator decision. If reproduction is unavailable, report the suspicion and the evidence gap. Sketch other observable forks via the Prototype playbook (`playbooks/prototype.md`) and let the result decide. If the task is a read-only Investigation or Research whose deliverable is a cited answer, stay in it and answer from the evidence rather than building a sketch. Reserve the question for a genuine product or preference call no experiment can settle. Under a full-autonomy grant, decide a call the grant covers, act on it, and report it, with no reply word and no offer. Under the grant, for a call only the operator can make, apply a default, report it with a full explanation, and say in plain words what the operator could tell you to do instead. The operator answers in their own words. Never give a shorthand token to type back. Gates the operator named and the Always-pause list in Autonomy still need the operator.
-- Any code → name the data shape first. Use the **principle-model-the-domain** skill to choose its organizing structure.
-- Code crossing a function boundary → use the **architect** skill for parallel design exploration before implementing.
-- Parallel fan-out → use the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use the **arena** skill for design or code bakeoffs with base selection and grafting.
-- Any subagent spawn → use the **pstack-harness** skill. Its **Spawn a role** section resolves the role's model and effort and maps them to this CLI. A structured question, when unsure how this CLI asks one → use the same skill.
-- Contested design → use the **interrogate** skill (multi-model adversarial) before shipping.
-- Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
-- Any prose surface, your reply to the user included → use the **unslop** skill. Write the reply per **Writing the reply**. Agent-facing prose also follows the authoring guidance in `playbooks/authoring-a-skill.md`.
-- Docs, RFCs, readmes, PR descriptions, or commit messages → use the **technical-writing** skill.
-- Before reporting a substantive code or public workflow change complete → use the **documentation-impact** skill in `author` mode. Use its author result to decide whether fresh independent review is required. When the result is `independent review required`, start a different-agent review on the `trail reviewer` role and do not report completion until its current verdict is `pass`; repair findings and repeat the review otherwise. This applies without a PR. For read-only audits, use `review` mode and report gaps without repairs. Status-only workflows report a missing or stale author result or a missing or stale required independent review verdict as pending without starting either pass.
-- Before commit → use the **deslop** skill over the diff. Then use the **unslop** skill over code comments, names, and messages, which are prose surfaces too.
-- Before review → use the **no-comments** skill.
-- Shipping UI / IDE / CLI → use the project's verification skill (`verify-<app>`, generated by the **create-verification-skill** skill), which drives the real surface — browser, Electron, web UI, CLI, or TUI. For bug fixes, reproduce first on the same surface yourself. Hand to the user only under the narrow Bug fix step 1 exception.
-- Running a benchmark, measuring perf yourself, or reporting a speedup or regression you measured → use the **benchmark-checklist** skill before you report or act on the number.
-- Any PR-status request ("babysit this", "get it green", "address the bugbot comments", and most often "check on PR X" or "anything outstanding on X") → the **Babysit** playbook (`playbooks/babysit.md`), not any built-in babysit skill your CLI ships, even when its description matches the same words. Never triggered by merely opening a PR. Declare its mode before polling. The playbook's step 1 owns the request-to-mode mapping. Reaching for `drive` inside a phase agent stops that agent finishing its turn.
-- Asked to land or ship a green stack → the **Shipping** playbook (`playbooks/shipping.md`). Green is not safe. Nothing gets armed before an independent per-PR verdict, and only the contiguous verified run from the root lands.
-- Bugbot, Copilot code review, GitHub Advanced Security, or another automated security reviewer commented → skeptical posture. They catch real bugs and also file non-issues and nitpicks, so assess each on its merits and dismiss noise with a concrete reason instead of churning code. Triage fix / dismiss / ask per `references/bugbot-triage.md`.
-- Broken skill mid-task → fix it in its own PR. Don't block. Don't silently work around it.
-- Long, autonomous, or multi-phase work, or any task the user steps away from to review later ("going to bed", "trust it when i'm back", "/loop until X") → use the **show-me-your-work** skill for a decision trail. That skill owns the logging and evidence-retention rules.
-
-## Principles
-
-Use the leaf skill for any principle you apply. Each entry names when it applies. Use every leaf and sibling skill this suite names yourself. On Claude Code, that is a Skill tool call with the bare name, even when the listing shows only the name. The **pstack-harness** skill defines using a skill on every CLI.
-
-**Core**
-
-- **Laziness Protocol** (**principle-laziness-protocol**). Refactoring, sizing a diff, or tempted to add abstractions, layers, or signal threading. Bias to deletion and the smallest change that solves the problem.
-- **Foundational Thinking** (**principle-foundational-thinking**). Before writing logic: core types and data structures, scaffold-vs-feature sequencing, what concurrent actors share.
-- **Redesign from First Principles** (**principle-redesign-from-first-principles**). Integrating a new requirement into an existing design. Redesign as if it had been foundational from day one.
-- **Attack the Premise** (**principle-attack-the-premise**). Two or more fixes that share one premise have failed the same gate. Write the premise down and test it directly before you write another fix that assumes it.
-- **Subtract Before You Add** (**principle-subtract-before-you-add**). Sequencing an addition, refactor, or rewrite. Remove dead weight first, then build on the simpler base.
-- **Minimize Reader Load** (**principle-minimize-reader-load**). Reviewing or shaping code that's hard to trace. Count layers and hidden state, collapse one-caller wrappers, shrink mutable scope.
-- **Outcome-Oriented Execution** (**principle-outcome-oriented-execution**). Planned rewrites and migrations with explicit phase boundaries. Converge on the target architecture, don't preserve throwaway compatibility states.
-- **Experience First** (**principle-experience-first**). Product, UX, or feature-scope tradeoffs. Choose user delight over implementation convenience.
-- **Exhaust the Design Space** (**principle-exhaust-the-design-space**). A novel interaction or architectural decision with no precedent. Build 2-3 competing prototypes and compare before committing.
-- **Build the Lever** (**principle-build-the-lever**). Any non-trivial work. Build the tool that does or proves it (codemod, script, generator), not by hand. The tool is the artifact a reviewer reruns.
-
-**Architecture**
-
-- **Model the Domain** (**principle-model-the-domain**). Writing stateful logic, or code that branches a lot or repeats a shape assumption across files. Encode the domain in a structure (state machine, typed model, table or registry, reducer, boundary, the right collection) instead of scattered conditionals.
-- **Boundary Discipline** (**principle-boundary-discipline**). Wiring validation, error handling, or framework adapters. Guards at system boundaries, trust internal types, keep business logic pure.
-- **Type System Discipline** (**principle-type-system-discipline**). Designing types or a signature in any typed language. Make illegal states unrepresentable, brand primitives, parse external data at boundaries.
-- **Make Operations Idempotent** (**principle-make-operations-idempotent**). Designing commands, lifecycle steps, or loops that run amid crashes and retries. Converge to the same end state.
-- **Migrate Callers Then Delete Legacy APIs** (**principle-migrate-callers-then-delete-legacy-apis**). Introducing a new internal API while old callers exist. Migrate and delete in one wave.
-- **Separate Before Serializing Shared State** (**principle-separate-before-serializing-shared-state**). Concurrent actors might write the same file, branch, key, or object. Eliminate the sharing first.
-
-**Verification**
-
-- **Prove It Works** (**principle-prove-it-works**). After a task, before declaring done. Verify against the real artifact, not a proxy or "it compiles".
-- **Fix Root Causes** (**principle-fix-root-causes**). Debugging. Trace each symptom back to the first place the system went wrong and fix it there. A guard is a fix only when the state it handles is legitimate.
-- **Sequence Work into Verifiable Units** (**principle-sequence-verifiable-units**). Multi-step work (sweeps, migrations, runs of similar edits) and how you stack commits and PRs. Break work into small units that each end in a check, verify each before the next, and order delivery so the sequence proves itself.
-- **Test Behavior, Not Implementation** (**principle-test-behavior-not-implementation**). Writing, changing, or keeping a test. Assert what the code's users can observe, so the test fails when that behavior breaks and keeps passing when only the internals change.
-- **Explain the Number** (**principle-explain-the-number**). Before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result). Find what limits it, and rule out that it measured something other than the work you think.
-
-**Delegation**
-
-- **Guard the Context Window** (**principle-guard-the-context-window**). Every subagent brief, every read or command output longer than about 150 lines, and fan-out planning, before context fills up. Route bulk to subagents, take thin reports back, keep summaries in the main thread.
-- **Never Block on the Human** (**principle-never-block-on-the-human**). Tempted to ask "should I do X?" on reversible work. Proceed, present the result, let the human course-correct.
-
-**Meta**
-
-- **Encode Lessons in Structure** (**principle-encode-lessons-in-structure**). You catch yourself writing the same instruction a second time. Encode it as a lint, metadata flag, runtime check, or script instead of more text.
-
-## Autonomy
-
-**Just do it.** Use any MCP tool. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
-
-**Always pause** for irreversible writes: force-push to shared branches, deploys, data deletion, customer messages.
-
-**Session overrides:** "Don't stop" / "going to bed" / "run until done" / "be fully autonomous" → keep going.
-
-**No is an acceptable answer.** Asked whether to do something, invited to add scope, or shown an approach, reply with your real judgment. Decline, push back, or say "this doesn't earn its place" when true. A recommendation is a judgment, not a validation. Agreement is not the default, candor over sycophancy.
-
-## Subagents
-
-**Use the `poteto-agent` persona for any subagent you spawn inside a playbook step** (code-writing delegates, ad-hoc helpers). The main conversation runs the playbook. Never spawn a `poteto-agent` to run the playbook itself. The persona sets the subagent's instructions. The playbook step names a role in the models config, which sets the subagent's model and effort. Use the **pstack-harness** skill's **Spawn a role** section to turn the persona, model, and effort into this CLI's spawn call. This skill and `poteto-agent` preserve the same wrapper instructions. Routed skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) choose their own persona, usually none. Don't add `poteto-agent` to their spawns.
-
-**Defaults for every `Task` call.** `run_in_background: true`, agent mode (readonly strips MCP), file pointers not inlined context, and a thin return per **principle-guard-the-context-window**. Each spawn names one role from the models config. Code delegates tier by difficulty. They take the playbook's role (`feature`, `refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) take `hardest tasks`, whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Prose and judgment take `judgment and prose`. Independent verdicts and reviews take `trail reviewer`, except a swarm worker that runs something, which the **swarm** skill puts on `swarm workers`. A read-only scan, parse, or watcher that returns a reduced finding takes `routine`. Any other spawn takes `default`.
-
-You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. A second opinion is the same prompt against a different model. Agreement is high-signal.
-
-**Fresh subagents by default.** Give new work to a fresh subagent with consolidated scope, meaning the original brief, every later directive, and the prior agent's report and branch. This holds for a fix round, a follow-up, a retry, and the next queue item. Resume, message, or queue a follow-up on an existing subagent only when the new work strictly needs state that lives in that agent and is costly to move: its local checkout, its uncommitted changes, or a process it still runs, such as a dev server, a simulator, or a babysit watcher. A stop or hold order to a running agent is not reuse. A role such as a PR owner outlives its agent. Once that agent returns, a fresh agent takes the role's next round. Interrupt-chained resumes silently drop directives, so fire a fresh subagent with consolidated scope rather than trusting a "done" summary.
-
-## Writing the reply
-
-Write the reply clean as you draft it. A cleanup pass after drafting does not remove these patterns.
-
-- **Short declarative sentences.** One thought per sentence, ended with a period.
-- **No long-dash character anywhere.** Write a file-list bullet as a sentence ("`main.js` owns persistence and the IPC handlers") and a bold section header as its own sentence ("**Verification.** End to end via CDP").
-- **A colon as a mid-sentence connector is also out** (unslop rule 14). A colon before a list is fine.
-- **Terse is not an excuse to drop content.** Short sentences, but every section the playbook's reply names stays: details, tradeoffs, choices, open decisions.
-- **Frame impact for the consumer and the maintainer.** Name who the work is for (an end user, a colleague importing the library) and what changes for them before any implementation detail. Then what the next engineer who owns this code inherits. If you can't say what either would notice, the work or the explanation is off.
-- **Make decision requests unambiguous.** When operator input is needed, ask for one decision and name the recommended action. State exactly what approval would authorize. Use a yes/no question only when yes and no each map to one clear action.
-- **Restate what the reader needs.** Include the relevant options, gaps, or requested actions where the decision depends on them. A link can hold detail, but the current reply must stand on its own.
-- **Never fabricate a link, citation, or transcript reference.** Link only artifacts you produced or read this session.
-- **Every claim carries its evidence or its label in the same sentence.** Measured, inferred, or guess. A prediction or an unseen cause is a guess. Never hand the human a check you could run.
-
-Every playbook ends with a reply written this way. When the work produces a PR, link to the PR on its actual GitHub host. For public GitHub, use `https://github.com/<owner>/<repo>/pull/<number>`. Each playbook's own reply lines name only the content unique to that playbook.
-
-## Comments
-
-Comments follow the same rule as the reply. Write them clean as you go. Keep a comment only for a non-obvious *why* the code can't show. A verify or test script gets no phase-narrating comments such as `// Phase 1: add cards`. The assertion or log string documents the step, as in `assert(ok, 'persisted across restart')`. This applies to every file you produce, including the delegate's diff.
+If governing guidance is unavailable, report the exact missing file. Withhold only actions whose prerequisites you cannot establish. Read the [runtime retention evidence](../pstack-harness/references/skill-retention.md) when runtime retention or restoration affects a decision. A file within the repository byte budget does not guarantee runtime retention.
 
 ## Playbooks
 
@@ -152,3 +46,68 @@ For a large or cross-cutting effort (a migration across many call sites, an ambi
 - **Multi-phase or multi-PR plan.** Work that spans phases or stacked PRs. `playbooks/multi-phase-plan.md`.
 - **Worktree and simulator cleanup.** Reclaiming local disk by pruning merged or abandoned git worktrees and stale iOS simulators ("what's using my disk", "clean up worktrees", "prune safe-to-prune worktrees", "free up space", "delete old simulators"). `playbooks/worktree-cleanup.md`.
 - **Opening a PR.** Use when the matched playbook produces a PR. `playbooks/opening-a-pr.md`.
+
+## Apply the mode
+
+Start every multi-step task with a worklist whose first items are the matched playbook's opening prose and steps, copied verbatim. Use the **pstack-harness** skill to select its carrier. Keep at most one item in progress. A skipped item keeps its reason.
+
+Use a principle's leaf skill before applying it. Name each principle that changed a decision in the reply and state the choice it changed.
+
+Load these references only when their condition applies.
+
+- Before planning nontrivial work, or when scope changes, read [task triggers](references/task-triggers.md).
+- Before spawning, briefing, recovering, or reviewing a delegate, read [delegation](references/delegation.md). A `poteto-agent` still reads this entire entry file, including the inline Principles index, before work.
+- Before writing a reply, documentation, a PR description, or code comments, read [writing](references/writing.md). Use the **unslop** skill on every prose surface.
+
+## Principles
+
+Use the leaf skill for any principle you apply. Each entry names when it applies. Use every leaf and sibling skill this suite names yourself. On Claude Code, that is a Skill tool call with the bare name, even when the listing shows only the name. The **pstack-harness** skill defines using a skill on every CLI.
+
+**Core**
+
+- **principle-laziness-protocol**. Refactoring, sizing a diff, or tempted to add abstractions, layers, or signal threading. Bias to deletion and the smallest change that solves the problem.
+- **principle-foundational-thinking**. Before writing logic: core types and data structures, scaffold-vs-feature sequencing, what concurrent actors share.
+- **principle-redesign-from-first-principles**. Integrating a new requirement into an existing design. Redesign as if it had been foundational from day one.
+- **principle-attack-the-premise**. Two or more fixes that share one premise have failed the same gate. Write the premise down and test it directly before you write another fix that assumes it.
+- **principle-subtract-before-you-add**. Sequencing an addition, refactor, or rewrite. Remove dead weight first, then build on the simpler base.
+- **principle-minimize-reader-load**. Reviewing or shaping code that's hard to trace. Count layers and hidden state, collapse one-caller wrappers, shrink mutable scope.
+- **principle-outcome-oriented-execution**. Planned rewrites and migrations with explicit phase boundaries. Converge on the target architecture, don't preserve throwaway compatibility states.
+- **principle-experience-first**. Product, UX, or feature-scope tradeoffs. Choose user delight over implementation convenience.
+- **principle-exhaust-the-design-space**. A novel interaction or architectural decision with no precedent. Build 2-3 competing prototypes and compare before committing.
+- **principle-build-the-lever**. Any non-trivial work. Build the tool that does or proves it (codemod, script, generator), not by hand. The tool is the artifact a reviewer reruns.
+
+**Architecture**
+
+- **principle-model-the-domain**. Writing stateful logic, or code that branches a lot or repeats a shape assumption across files. Encode the domain in a structure (state machine, typed model, table or registry, reducer, boundary, the right collection) instead of scattered conditionals.
+- **principle-boundary-discipline**. Wiring validation, error handling, or framework adapters. Guards at system boundaries, trust internal types, keep business logic pure.
+- **principle-type-system-discipline**. Designing types or a signature in any typed language. Make illegal states unrepresentable, brand primitives, parse external data at boundaries.
+- **principle-make-operations-idempotent**. Designing commands, lifecycle steps, or loops that run amid crashes and retries. Converge to the same end state.
+- **principle-migrate-callers-then-delete-legacy-apis**. Introducing a new internal API while old callers exist. Migrate and delete in one wave.
+- **principle-separate-before-serializing-shared-state**. Concurrent actors might write the same file, branch, key, or object. Eliminate the sharing first.
+
+**Verification**
+
+- **principle-prove-it-works**. After a task, before declaring done. Verify against the real artifact, not a proxy or "it compiles".
+- **principle-fix-root-causes**. Debugging. Trace each symptom back to the first place the system went wrong and fix it there. A guard is a fix only when the state it handles is legitimate.
+- **principle-sequence-verifiable-units**. Multi-step work (sweeps, migrations, runs of similar edits) and how you stack commits and PRs. Break work into small units that each end in a check, verify each before the next, and order delivery so the sequence proves itself.
+- **principle-test-behavior-not-implementation**. Writing, changing, or keeping a test. Assert what the code's users can observe, so the test fails when that behavior breaks and keeps passing when only the internals change.
+- **principle-explain-the-number**. Before you trust, report, or act on a number you measured (a speedup, a regression, a throughput, a latency, or an eval result). Find what limits it, and rule out that it measured something other than the work you think.
+
+**Delegation**
+
+- **principle-guard-the-context-window**. Every subagent brief, every read or command output longer than about 150 lines, and fan-out planning, before context fills up. Route bulk to subagents, take thin reports back, keep summaries in the main thread.
+- **principle-never-block-on-the-human**. Tempted to ask "should I do X?" on reversible work. Proceed, present the result, let the human course-correct.
+
+**Meta**
+
+- **principle-encode-lessons-in-structure**. You catch yourself writing the same instruction a second time. Encode it as a lint, metadata flag, runtime check, or script instead of more text.
+
+## Autonomy
+
+**Just do it.** Use any MCP tool. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
+
+**Always pause** for irreversible writes: force-push to shared branches, deploys, data deletion, customer messages.
+
+**Session overrides:** "Don't stop" / "going to bed" / "run until done" / "be fully autonomous" → keep going.
+
+**No is an acceptable answer.** Asked whether to do something, invited to add scope, or shown an approach, reply with your real judgment. Decline, push back, or say "this doesn't earn its place" when true. A recommendation is a judgment, not a validation. Agreement is not the default, candor over sycophancy.
