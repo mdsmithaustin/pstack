@@ -61,7 +61,7 @@ Boundary kinds are `native_compacted`, `supplied_context_summary`, and `supplied
 
 Each requirement has `file` and `policy`. The mode entry always uses `whole_standalone`. Other guidance can use `whole_standalone` or `explicit_chunks`. `MODE_ENTRY_CHECKPOINT` allows only the entry requirement. `CURRENT_STEP_RECOVERY` requires the reviewer to establish the complete set for that step. A narrow entry result does not certify the whole procedure.
 
-Call dispositions are `governed`, `incidental`, and `unresolved`. Read claims do not replace dispositions. A call can both read guidance and perform governed work. Its action occurs at call start, before its returned guidance can count. An unresolved disposition prevents a conclusive window result.
+Call dispositions are `governed`, `incidental`, and `unresolved`. Read claims do not replace dispositions. A call can both read guidance and perform governed work. Its action occurs at call start, before its returned guidance can count. An unresolved disposition before the first governed call, or in a window without one, prevents a conclusive window result. Later unresolved calls and late or boundary-crossing unverified reads remain visible without changing the verdict frozen at the first governed call. Invalid raw input still invalidates the entire assessment.
 
 Exact source spans must match exact returned body spans. Overlapping output claims are invalid. A complete known governing body left unclaimed anywhere in the recording is invalid. This detects an omitted earlier full read attempt. The reviewer still owns the completeness of file inventory, partial-read claims, supplied boundaries, and action semantics.
 
@@ -79,7 +79,7 @@ Structured truncation flags, transport notices outside matched source spans, com
 
 A requirement is satisfied only by clear, standalone, exact content returned within its recovery window before the first governed call. The entry requires one whole-body claim. Explicit helper chunks can accumulate within one window. Pre-boundary reads, initial injections, replacement history, late returns, and reads crossing a later boundary receive no recovery credit.
 
-Attempts remain in the report after a repair. A later eligible read can repair an earlier violation before the action. An invalid required-file attempt after the final eligible read remains an unrepaired violation. The evaluator does not erase a bad batch to produce an unqualified clean result.
+Attempts remain in the report after a repair. Later eligible reads must cover the entire required file after each violation and before the action to repair it. Earlier chunks cannot supply missing repair coverage. An invalid required-file attempt after the final eligible read remains an unrepaired violation. The evaluator does not erase a bad batch to produce an unqualified clean result.
 
 ## Test reference
 

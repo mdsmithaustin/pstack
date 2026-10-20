@@ -300,6 +300,65 @@ class SkillRecoveryCliTests(unittest.TestCase):
         self.rebind()
         self.assertEqual(self.run_cli(2)["errors"][0]["code"], "unsupported_record")
 
+    def test_non_text_record_tags_are_inconclusive(self):
+        for tag in ([], {}, None, 7, True):
+            with self.subTest(tag=tag):
+                self.basic()
+                self.rows[0]["type"] = tag
+                self.rebind()
+                report = self.run_cli(2)
+                self.assertEqual(report["status"], "INCONCLUSIVE")
+                self.assertEqual(report["errors"], [{"code": "unsupported_record", "row": 1}])
+
+    def test_post_action_unresolved_calls_preserve_frozen_verdict(self):
+        for satisfied in (False, True):
+            with self.subTest(satisfied=satisfied):
+                rows = [boundary()]
+                if satisfied:
+                    rows += [call("entry"), returned("entry", [ENTRY])]
+                rows += [call("action"), returned("action", [b"Done."]),
+                         call("unresolved"), returned("unresolved", [b"Later observation."])]
+                self.prepare(rows, [read("entry")] if satisfied else [])
+                self.manifest["calls"][-1]["disposition"] = "unresolved"
+                self.write_manifest()
+                report = self.run_cli(0 if satisfied else 1)
+                self.assertEqual(report["status"], "SATISFIED" if satisfied else "FAIL")
+                self.assertEqual(report["windows"][0]["unresolved_call_rows"], [len(rows) - 1])
+
+    def test_late_unverified_reads_preserve_frozen_verdict(self):
+        for satisfied in (False, True):
+            for observation in ("truncated", "command_failed", "unsupported", "wrong_bytes"):
+                with self.subTest(satisfied=satisfied, observation=observation):
+                    rows = [boundary()]
+                    reads = []
+                    if satisfied:
+                        rows += [call("entry"), returned("entry", [ENTRY])]
+                        reads.append(read("entry"))
+                    late = returned("late", [ENTRY])
+                    if observation == "truncated":
+                        late["truncated"] = True
+                    elif observation == "command_failed":
+                        late["payload"]["output"][1]["text"] = json.dumps({"exit_code": 7, "output": ENTRY.decode()})
+                    elif observation == "unsupported":
+                        late["payload"]["output"][1] = {"type": "image", "data": "sample"}
+                    else:
+                        late = returned("late", [b"x" * len(ENTRY)])
+                    rows += [call("action"), returned("action", [b"Done."]), call("late"), late]
+                    self.prepare(rows, reads + [read("late")])
+                    report = self.run_cli(0 if satisfied else 1)
+                    self.assertEqual(report["status"], "SATISFIED" if satisfied else "FAIL")
+                    attempt = report["windows"][0]["attempts"][-1]
+                    self.assertEqual(attempt["ordering"], "LATE")
+                    self.assertFalse(attempt["repaired_before_action"])
+
+    def test_flagged_return_crossing_boundary_preserves_failure(self):
+        self.prepare([boundary(), call("read"), call("action"), returned("action", [b"Done."]), boundary(),
+                      returned("read", [ENTRY], truncated=True), call("next-action"), returned("next-action", [b"Done."])],
+                     [read("read")], governed=("action", "next-action"))
+        report = self.run_cli(1)
+        self.assertEqual([window["status"] for window in report["windows"]], ["FAIL", "FAIL"])
+        self.assertEqual(report["windows"][0]["attempts"][0]["ordering"], "CROSSES_BOUNDARY")
+
     def test_unresolved_call_prevents_pass(self):
         self.basic()
         self.manifest["calls"][0]["disposition"] = "unresolved"
@@ -320,6 +379,39 @@ class SkillRecoveryCliTests(unittest.TestCase):
                      requirements=[{"file": "entry", "policy": "whole_standalone"}, {"file": "step", "policy": "explicit_chunks"}],
                      scope="CURRENT_STEP_RECOVERY")
         self.assertTrue(all(r["satisfied_before_action"] for r in self.run_cli(0)["windows"][0]["requirements"]))
+
+    def test_chunk_repair_requires_complete_post_violation_coverage(self):
+        split = 17
+        for repair in ("prefix", "suffix", "complete"):
+            with self.subTest(repair=repair):
+                rows = [boundary(), call("one"), returned("one", [STEP[:split]]),
+                        call("two"), returned("two", [STEP[split:]]),
+                        call("mixed"), returned("mixed", [ENTRY, STEP])]
+                reads = [read("one", "step", source=[0, split]),
+                         read("two", "step", source=[split, len(STEP)]),
+                         read("mixed"), read("mixed", "step", 2)]
+                if repair in ("prefix", "complete"):
+                    rows += [call("prefix"), returned("prefix", [STEP[:split]])]
+                    reads.append(read("prefix", "step", source=[0, split]))
+                if repair in ("suffix", "complete"):
+                    rows += [call("suffix"), returned("suffix", [STEP[split:]])]
+                    reads.append(read("suffix", "step", source=[split, len(STEP)]))
+                rows += [call("entry"), returned("entry", [ENTRY]), call("action"), returned("action", [b"Done."])]
+                reads.append(read("entry"))
+                self.prepare(rows, reads,
+                             requirements=[{"file": "entry", "policy": "whole_standalone"},
+                                           {"file": "step", "policy": "explicit_chunks"}], scope="CURRENT_STEP_RECOVERY")
+                complete = repair == "complete"
+                report = self.run_cli(0 if complete else 1)
+                self.assertEqual(report["status"], "SATISFIED_WITH_REPAIRS" if complete else "FAIL")
+                window = report["windows"][0]
+                step = window["requirements"][1]
+                self.assertTrue(step["satisfied_before_action"])
+                self.assertEqual(step["unrepaired_violation_attempts"], [] if complete else [3])
+                self.assertEqual(window["attempts"][2]["packaging"], "MIXED_FILES")
+                self.assertTrue(window["attempts"][2]["repaired_before_action"])
+                self.assertEqual(window["attempts"][3]["packaging"], "MIXED_FILES")
+                self.assertEqual(window["attempts"][3]["repaired_before_action"], complete)
 
     def test_chunks_do_not_cross_windows(self):
         split = 17

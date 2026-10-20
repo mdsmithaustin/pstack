@@ -213,7 +213,8 @@ def _trace(raw):
     for number, line in enumerate(lines, 1):
         _require(bool(line.strip()), "empty_jsonl_row", number)
         record = _json(line, number)
-        _require(isinstance(record, dict) and record.get("type") in allowed, "unsupported_record", number)
+        _require(isinstance(record, dict) and isinstance(record.get("type"), str) and
+                 record["type"] in allowed, "unsupported_record", number)
         _require(isinstance(record.get("payload"), dict), "unsupported_payload", number)
         records.append(record)
         line_bytes.append(line + (b"\n" if number < len(lines) or raw.endswith(b"\n") else b""))
@@ -498,7 +499,7 @@ def _evaluate(files, windows, calls, dispositions, claims, injections, scope):
         requirement_reports = []
         repaired = False
         failed = False
-        inconclusive = bool(window.unresolved)
+        inconclusive = any(window.first_action is None or row < window.first_action for row in window.unresolved)
         for file_id, policy in window.requirements.items():
             progress = window.coverage.get(file_id, [])
             satisfied = _complete([span for span, _ in progress], len(files[file_id].data))
@@ -506,12 +507,13 @@ def _evaluate(files, windows, calls, dispositions, claims, injections, scope):
             witnesses = sorted({index for _, index in progress}) if satisfied else []
             unrepaired = []
             if satisfied:
-                finish = max(window.attempts[index]["return_row"] for index in witnesses)
                 for index, attempt in attempts:
                     invalid = (attempt["packaging"] != "STANDALONE" or attempt["transport"] != "CLEAR" or
                                attempt["content"] == "UNVERIFIED" or (policy == "whole_standalone" and not attempt["whole_body"]))
                     if invalid and attempt["ordering"] == "BEFORE_ACTION":
-                        if attempt["return_row"] < finish:
+                        if _complete([span for span, witness in progress
+                                      if window.attempts[witness]["return_row"] > attempt["return_row"]],
+                                     len(files[file_id].data)):
                             attempt["repaired_before_action"] = True
                             repaired = True
                         else:
@@ -519,7 +521,9 @@ def _evaluate(files, windows, calls, dispositions, claims, injections, scope):
                             failed = True
             else:
                 failed = True
-                if any(attempt["transport"] != "CLEAR" or attempt["content"] == "UNVERIFIED" for _, attempt in attempts):
+                if any(attempt["ordering"] == "BEFORE_ACTION" and
+                       (attempt["transport"] != "CLEAR" or attempt["content"] == "UNVERIFIED")
+                       for _, attempt in attempts):
                     inconclusive = True
             requirement_reports.append({"file": file_id, "policy": policy, "satisfied_before_action": satisfied,
                                         "witness_attempts": witnesses, "unrepaired_violation_attempts": unrepaired,
