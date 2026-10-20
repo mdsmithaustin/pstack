@@ -2178,6 +2178,37 @@ class AuthorResultInWorkRecord(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
 
+class AuthorResultInOtherWords(unittest.TestCase):
+    """Codex tally-1lw1ob03 in the 2026-10-20 wave states its author result in words the parser does not read."""
+
+    INTERIM = ("The README now documents the JSON shape and shows output verified against `sample.txt`. The documentation "
+               "author pass requires independent review, so a separate reviewer will check those claims before I finish.")
+    REPLY = ("Added `--json` with ordered `word` and `count` records.\n\nEight regression tests and eleven additional CLI checks "
+             "passed. Independent code and documentation review passed.")
+    REPLY_NAMING_IT = REPLY + "\n\nOne worker owned the coupled files, followed by independent review."
+
+    def grade_turn(self, interim, reply):
+        events = in_turn(0, [{"seq": 0, "kind": "user", "text": "add --json"}, read(7, "documentation-impact/SKILL.md"),
+                             text(113, interim), text(151, reply)])
+        events += in_turn(1, [{"seq": 160, "kind": "user", "text": "review the docs"}, text(170, "Pass. No documentation gaps found.")])
+        return grade("poteto-runs-documentation-impact-before-completion", minimal(events=events, harness="codex"), load_case("doc-impact-run"))
+
+    def test_an_interim_report_naming_independent_review_goes_to_the_judge(self):
+        result = self.grade_turn(self.INTERIM, self.REPLY)
+        self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), result)
+        self.assertIn("requires independent review", result["excerpt"])
+
+    def test_a_reply_naming_independent_review_goes_to_the_judge(self):
+        result = self.grade_turn("README updated.", self.REPLY_NAMING_IT)
+        self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), result)
+        self.assertEqual(result["excerpt"], self.REPLY_NAMING_IT)
+
+    def test_a_turn_that_never_names_independent_review_still_fails(self):
+        result = self.grade_turn("README updated.", self.REPLY)
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual(result["failures"], ["completion reply carries no author result"])
+
+
 class ProjectRelativePaths(unittest.TestCase):
     def project(self):
         tmp = tempfile.TemporaryDirectory()
