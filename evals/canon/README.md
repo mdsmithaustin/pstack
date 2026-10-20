@@ -27,13 +27,18 @@ unseen confirmation cases for amendments derived from them.
 
 ## Local checks without a Docker change
 
-Run the application-owner tests and archive recovery check from the repository
-root. The application tests replace the external sandbox transport and perform
-real local capture and replay. They do not run a model or establish native
-sandbox delivery.
+Run the application-owner tests, workspace regressions, and archive recovery
+check from the repository root. The application tests replace the external
+sandbox transport and perform real local capture and replay. They do not run
+a model or establish native sandbox delivery.
+
+The workspace regressions use disposable local Git repositories to check diff
+application, checkout materialization, overlays, history, and spec validation.
+They need Git on `PATH`, without an upstream mirror or project image.
 
 ```sh
 python3 -m unittest discover -s evals/canon -p test_application.py -v
+python3 -m unittest discover -s evals/canon -p test_workspace_core.py -v
 python3 -m unittest discover -s evals/canon -p test_archive.py -v
 ```
 
@@ -42,7 +47,7 @@ failure. Native delivery and project-image checks are separate prerequisites,
 documented in the application contract and original case instructions.
 
 CI retains its existing `python3 -m unittest -v` invocation in this directory.
-It discovers the maintained application, archive, and oracle contracts. Its
-existing Docker setup can exercise supported container controls; image-specific
+It discovers the maintained application, workspace, archive, and oracle
+contracts. Its existing Docker setup can exercise supported container controls; image-specific
 and native tests still report their own unavailable prerequisites. No new paid
 regression cadence or model-quality release gate is introduced here.
