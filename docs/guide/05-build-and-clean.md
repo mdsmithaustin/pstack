@@ -56,7 +56,7 @@ In context, that's enough. [`/poteto-tdd`](../../skills/poteto-tdd/SKILL.md) wri
 
 ## Clean before you commit
 
-The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs [`/deslop`](../../skills/deslop/SKILL.md) on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies. If you'd rather ask for the diff pass in plain words: remove narrating comments, unsupported guards, dead compatibility paths, and unrelated edits.
+The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) requires deslop's [Before each commit check](../../skills/deslop/SKILL.md#before-each-commit) for every commit or amend. That section owns the full-read and evidence requirements. The playbook also applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies. To request code cleanup in plain words, say `deslop it`.
 
 For prose, `/unslop` takes a target and any extra rules you have:
 
