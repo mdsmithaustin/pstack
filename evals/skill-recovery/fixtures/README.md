@@ -1,9 +1,11 @@
 # Sanitized native format controls
 
-These files are hand-built, minimal projections of retained Codex 0.162.0 output shapes described in [issue 287](https://github.com/mdsmithaustin/pstack/issues/287). They are model-free parser inputs, not new native trials or copies of private recordings.
+These files contain minimal Codex 0.162.0 output shapes described in [issue 287](https://github.com/mdsmithaustin/pstack/issues/287). They are model-free parser inputs. No file is a new native trial or a copy of a private recording.
 
-`mixed-full.jsonl` preserves the structural failure from a native compaction trial. Two inner command envelopes share one outer response after a `compacted` record. Their complete bodies remain separate blocks. An automatic completion header is a separate block.
+`mixed-full.jsonl` is a hand-built projection of the recorded native compaction failure. Two inner command envelopes share one outer response after a `compacted` record. Their complete bodies remain separate blocks. An automatic completion header is another block.
 
-`repaired-entry.jsonl` preserves the relevant shape from the separate Session pickup caller. A supplied context-summary condition precedes a mixed response and a later complete standalone entry response. The supplied condition is not a native compaction marker. The checkpoint covers the entry prerequisite before the local task-state inspection. It does not certify the caller's whole recovery procedure.
+`pickup-late-entry.jsonl` projects the separate recorded Session pickup caller. The supplied context-summary condition is not native compaction. One outer call reads two governing files and discovers task files. Its settled-result wrappers contain three command results. A later standalone entry response arrives after that task-discovery action. The recovery window must fail even though the later response passes the isolated packaging check.
 
-The text in `entry.md` and `step.md`, call identifiers, commands, timings, row positions, and task output are replacements. The fixtures contain no original task text, credentials, host paths, or original session identifiers. The evaluator and reviewed manifests are pending in this first fixture unit.
+`repaired-entry.jsonl` is a synthetic contrast to the failed mixed response. It adds a complete standalone entry read before the task action. It tests a repaired-before-action result, with the earlier packaging violation retained. It cannot establish native model behavior.
+
+The guidance in `entry.md` and `step.md`, task text, output, call identifiers, commands, timings, and row positions are replacements. The fixtures contain no original task content, credentials, host paths, or original session identifiers. Each JSONL file has a matching reviewed manifest. The public CLI tests verify their expected outcomes. The projections preserve only the native boundaries and carriers needed for these controls. Independent privacy and provenance review belongs to the exact committed fixture revision.

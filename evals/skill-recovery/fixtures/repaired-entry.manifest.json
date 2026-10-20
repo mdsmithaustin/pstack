@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "raw_sha256": "8916ebf1e3b7998534d07df69137d83222bfbd86f67f0d5807a7ef0f5f00d6fd",
+  "assessment_scope": "MODE_ENTRY_CHECKPOINT",
+  "review": {
+    "reviewer": "sanitized control author; independent fixture review is separate",
+    "complete": true
+  },
+  "files": [
+    {
+      "id": "entry",
+      "path": "entry.md",
+      "sha256": "2ca130d0a38406b788362ad5e4c8fea8e56e012b71f0878af454b89117c1e8d9",
+      "role": "mode_entry"
+    },
+    {
+      "id": "step",
+      "path": "step.md",
+      "sha256": "8f81d54100650a3accbae8a56e5a7d9ab35e4a73803e556c38a0a72f810f4cca",
+      "role": "guidance"
+    }
+  ],
+  "boundaries": [
+    {
+      "row": 1,
+      "row_sha256": "628a8487dd8201e1f8fc41fdfc59039b8a398d2266124021006808fbba7a54ca",
+      "kind": "native_compacted",
+      "requirements": [
+        {
+          "file": "entry",
+          "policy": "whole_standalone"
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "row": 2,
+      "row_sha256": "0854751f2444c8d24a171fbd2dd790f39ab673c3a086ef9bec4011c2f551da4a",
+      "call_id": "read-batch",
+      "disposition": "incidental",
+      "reason": "governing guidance read"
+    },
+    {
+      "row": 4,
+      "row_sha256": "6ae6e786549811f80b605e808024c538f1a1ae6744dea4af0dcb23691dda909b",
+      "call_id": "read-entry",
+      "disposition": "incidental",
+      "reason": "governing guidance read"
+    },
+    {
+      "row": 6,
+      "row_sha256": "7a1628530662437ae4de012473ed9ce087a7b59c96626be7f4624badb0233345",
+      "call_id": "action",
+      "disposition": "governed",
+      "reason": "task action"
+    }
+  ],
+  "reads": [
+    {
+      "call_id": "read-batch",
+      "return_row": 3,
+      "return_sha256": "4dec3a7afac8a565367d6a840929118f338ad4fdc0345ac4e3b66d41924ef072",
+      "file": "step",
+      "block": 1,
+      "output_range": [
+        0,
+        54
+      ],
+      "source_range": [
+        0,
+        54
+      ]
+    },
+    {
+      "call_id": "read-batch",
+      "return_row": 3,
+      "return_sha256": "4dec3a7afac8a565367d6a840929118f338ad4fdc0345ac4e3b66d41924ef072",
+      "file": "entry",
+      "block": 2,
+      "output_range": [
+        0,
+        62
+      ],
+      "source_range": [
+        0,
+        62
+      ]
+    },
+    {
+      "call_id": "read-entry",
+      "return_row": 5,
+      "return_sha256": "7b181d9bbe8b0a7f4cc28bbac6cf1c7b006974253833168f8bc052ea8d3a54f0",
+      "file": "entry",
+      "block": 1,
+      "output_range": [
+        0,
+        62
+      ],
+      "source_range": [
+        0,
+        62
+      ]
+    }
+  ]
+}
