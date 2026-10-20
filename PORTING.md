@@ -37,6 +37,8 @@ Upstream is the source of truth for the workflows themselves. This file records 
 
 ## Port additions beyond substitution
 
+- Deslop owns the per-commit check in `skills/deslop/SKILL.md`. Poteto-mode, its PR and autopilot playbooks, and the poteto persona point to it. Each committing agent reads the full skill, reviews the proposed commit, and records cleanup or a justified no-change result before every commit or amend. The parent checks the evidence against the returned commits. The persona bundle declares deslop as a required sibling, so a missing installation refuses briefing and registration. Keep this contract on upstream sync.
+
 - **sharpen rewrite boundary** (port addition after upstream #729). Keep upstream's four numbered framing asks and the local instructions to return the answers and rewritten prompt, then stop. Preserve the closing restriction that methods and checks deepen the original deliverables. Guide-only requests keep the guide as their only deliverable. Live runs executed the task on Hermes and added converter work on Claude Code; the first boundary still allowed an intermittent extra check script on Grok. The [final validation receipt](evals/promises/results/2026-10-20T1935-sharpen-729-final.md) records the failures and reruns. On sync, merge upstream edits around these boundaries rather than replacing them.
 
 - `worktree-audit.sh` uses inline Python standard-library code for transcript mtimes, local dates, and integer-day recency on Linux and macOS. Preserve it during sync instead of restoring BSD `stat` and `date` calls. The script requires `python3`, `rg`, and `jq`.

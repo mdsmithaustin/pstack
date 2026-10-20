@@ -2105,7 +2105,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Use the **deslop** skill over the diff before commit."
+     "quote": "Before every commit or amend, use the **deslop** skill."
     }
    ],
    "harness_sensitive": false,

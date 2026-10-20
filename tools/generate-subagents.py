@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = Path("skills/pstack-harness/references/subagents/roles.json")
 ROLE_SKILLS = {
     "comment-sicko": ["how", "why"],
-    "poteto-agent": ["poteto-mode"],
+    "poteto-agent": ["poteto-mode", "deslop"],
 }
 ROLE_SIGNATURES = {"comment-sicko": "Yes... Ha ha ha... Yes!"}
 LEGACY_ALIASES = {"comment-sicko": ["Comment Sicko"]}
