@@ -1251,6 +1251,7 @@ def record_prose(value, words=4):
 class Installs(list):
     catalog: Path
     home: Path
+    confirmations: list[bool]
 
 
 @pytest.fixture
@@ -1271,9 +1272,10 @@ def installs(monkeypatch, tmp_path):
     (target / "plugin.yaml").write_text("name: hindsight\n")
     calls = Installs()
     calls.catalog = catalog
+    calls.confirmations = []
 
     def core(*args, **kwargs):
-        calls.append(args)
+        calls.append((args, working_mode(calls.home), any(calls.confirmations)))
         return target, {}, "hindsight"
 
     monkeypatch.setattr("hermes_cli.plugin_catalog.fetch_live_catalog", lambda **_: None)
@@ -1302,10 +1304,10 @@ def working_mode(home):
     return config.get("memory", {}).get("hindsight", {}).get("mode") in ("local_external", "cloud")
 
 
-def assert_install_safety(installs, result=None, confirmed=False):
+def assert_install_safety(installs, result=None):
     if installs:
         assert len(installs) == 1, installs
-        assert confirmed or working_mode(installs.home), "installed the unsupported mode without confirmation"
+        assert all(mode_ok or confirmed for _, mode_ok, confirmed in installs), "installed the unsupported mode without confirmation"
         if result is not None:
             assert result.get("ok") is True, result
     elif result is not None:
@@ -1346,13 +1348,12 @@ def test_memory_provider_migration_handles_known_issues_safely(installs, monkeyp
 def test_cli_handles_known_issues_safely(installs, monkeypatch, capsys, tty, answer, name):
     update_entry(installs, name=name)
     [entry] = load_catalog(installs.catalog)
-    confirmations = []
 
     def confirm(*args, **kwargs):
         assert tty, "prompted without a TTY"
         output = capsys.readouterr()
         assert_issues_shown(entry.known_issues, output.out + output.err)
-        confirmations.append(answer)
+        installs.confirmations.append(answer)
         return answer
 
     monkeypatch.setattr("hermes_cli.plugins_cmd._is_tty", lambda: tty)
@@ -1362,7 +1363,7 @@ def test_cli_handles_known_issues_safely(installs, monkeypatch, capsys, tty, ans
     except SystemExit as exc:
         if exc.code not in (None, 0):
             assert not installs, exc
-    assert_install_safety(installs, confirmed=any(confirmations))
+    assert_install_safety(installs)
 
 
 def test_cli_still_installs_entries_without_known_issues(installs, monkeypatch):

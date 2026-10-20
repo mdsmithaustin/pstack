@@ -836,24 +836,44 @@ class KnownIssueSafetyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         source = oracle().KNOWN_ISSUES_CHECKS
-        namespace = {"yaml": types.SimpleNamespace(safe_load=json.loads)}
-        exec(source[source.index("def working_mode("):source.index("def update_entry(")], namespace)
+        namespace = {
+            "yaml": types.SimpleNamespace(safe_load=json.loads, safe_dump=lambda data, **_: json.dumps(data)),
+            "pytest": types.SimpleNamespace(fixture=lambda function: function),
+            "Path": Path,
+            "shipped_issues": lambda: ["Embedded mode loops on this pin."],
+            "set_hermes_home_override": lambda home: None,
+            "reset_hermes_home_override": lambda token: None,
+        }
+        exec(source[source.index("class Installs"):source.index("def update_entry(")], namespace)
+        cls.install_fixture = staticmethod(namespace["installs"])
         cls.assert_safe = staticmethod(namespace["assert_install_safety"])
 
-    def calls(self, mode, installed=True):
+    def calls(self, mode, installed=True, confirmed=False):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
-        calls = type("Calls", (list,), {})(["installed"] if installed else [])
-        calls.home = Path(directory.name)
-        (calls.home / "config.yaml").write_text(json.dumps({"memory": {"hindsight": {"mode": mode}}}))
+        patched = {}
+        monkeypatch = types.SimpleNamespace(setattr=lambda key, value: patched.__setitem__(key, value),
+                                           setenv=lambda *args: None)
+        fixture = self.install_fixture(monkeypatch, Path(directory.name))
+        calls = next(fixture)
+        self.addCleanup(fixture.close)
+        calls.core = patched["hermes_cli.plugins_cmd._install_plugin_core"]
+        self.set_mode(calls, mode)
+        if confirmed:
+            calls.confirmations.append(True)
+        if installed:
+            calls.core("hindsight")
         return calls
+
+    def set_mode(self, calls, mode):
+        (calls.home / "config.yaml").write_text(json.dumps({"memory": {"hindsight": {"mode": mode}}}))
 
     def test_refusal_accepts_the_existing_error_envelope_and_extra_diagnostics(self):
         self.assert_safe(self.calls("local_embedded", installed=False),
                          {"ok": False, "error": "Known issue prevents installation.", "issue_details": ["trap"]})
 
     def test_explicit_confirmation_permits_the_warned_combination(self):
-        self.assert_safe(self.calls("local_embedded"), {"ok": True}, confirmed=True)
+        self.assert_safe(self.calls("local_embedded", confirmed=True), {"ok": True})
 
     def test_a_persisted_working_mode_permits_installation(self):
         for mode in ("local_external", "cloud"):
@@ -877,7 +897,30 @@ class KnownIssueSafetyTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.assert_safe(self.calls("local_external"), {"ok": False, "error": "Refused too late."})
 
-    def run_cli_check(self, *, tty, answer, name, exit_code, install=False, mode="local_embedded"):
+    def test_a_working_mode_persisted_after_installation_is_rejected(self):
+        for mode in ("local_external", "cloud"):
+            with self.subTest(mode):
+                calls = self.calls("local_embedded")
+                self.set_mode(calls, mode)
+                with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                    self.assert_safe(calls, {"ok": True})
+
+    def test_confirmation_after_installation_is_rejected(self):
+        calls = self.calls("local_embedded")
+        calls.confirmations.append(True)
+        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+            self.assert_safe(calls, {"ok": True})
+
+    def test_preinstall_observations_survive_later_state_changes(self):
+        calls = self.calls("cloud")
+        self.set_mode(calls, "local_embedded")
+        self.assert_safe(calls, {"ok": True})
+        calls = self.calls("local_embedded", confirmed=True)
+        calls.confirmations.clear()
+        self.assert_safe(calls, {"ok": True})
+
+    def run_cli_check(self, *, tty, answer, name, exit_code, install=False, mode="local_embedded",
+                      late_mode=None, late_confirmation=False):
         source = oracle().KNOWN_ISSUES_CHECKS
         calls = self.calls(mode, installed=False)
         calls.catalog = calls.home
@@ -887,10 +930,14 @@ class KnownIssueSafetyTests(unittest.TestCase):
 
         def cmd_install(*args, **kwargs):
             print(issue)
+            if late_confirmation and install:
+                calls.core(name)
             if patched["hermes_cli.plugins_cmd._is_tty"]():
                 patched["hermes_cli.plugins_cmd._ask_yes"]()
-            if install:
-                calls.append("installed")
+            if install and not late_confirmation:
+                calls.core(name)
+            if late_mode:
+                self.set_mode(calls, late_mode)
             if exit_code != "return":
                 raise SystemExit(exit_code)
 
@@ -909,6 +956,16 @@ class KnownIssueSafetyTests(unittest.TestCase):
         capsys = types.SimpleNamespace(readouterr=lambda: types.SimpleNamespace(out=output.getvalue(), err=""))
         with contextlib.redirect_stdout(output):
             namespace["test_cli_handles_known_issues_safely"](calls, monkeypatch, capsys, tty, answer, name)
+
+    def test_cli_rejects_late_safety_for_successful_exit_styles(self):
+        for name in ("hindsight", "catalog-safety-probe"):
+            for exit_code in ("return", 0, None):
+                for late in ({"late_mode": "cloud"}, {"late_mode": "local_external"},
+                             {"late_confirmation": True, "tty": True, "answer": True}):
+                    options = dict(tty=False, answer=False, name=name, exit_code=exit_code, install=True)
+                    options.update(late)
+                    with self.subTest(**options), self.assertRaisesRegex(AssertionError, "without confirmation"):
+                        self.run_cli_check(**options)
 
     def run_safe_entry_cli_check(self, exit_code, install_count=1):
         source = oracle().KNOWN_ISSUES_CHECKS
