@@ -28,6 +28,7 @@ DEFAULT_EFFORT = "high"
 SETTING_SOURCES = "user,project"
 LISTING_SCRIPT = Path("setup-pstack/scripts/skill-listing.py")
 LISTING_RECORD = "skill-listing.json"
+LAUNCH_RECORD = "launch.json"
 ACCOUNT_SYNC_OFF = {"syncClaudeAiSkills": False, "syncClaudeAiPlugins": False}
 LOCAL_COMMAND_OUTPUT = ("<local-command-stdout>", "<local-command-stderr>")
 SPAWN_TOOLS = ("Task", "Agent")
@@ -86,11 +87,17 @@ class ConfinedCommand:
     session: str
 
 
-CLAUDE_VERSION = "2.1.304"
 _HOST_ACCOUNT = pwd.getpwuid(os.getuid())
 _HOST_HOME = Path(_HOST_ACCOUNT.pw_dir)
-CLAUDE_BINARY = _HOST_HOME / ".local/share/claude/versions" / CLAUDE_VERSION
-CLAUDE_SHA256 = "b9ac5374839f14abf3f1f45610637c332b5daee5ce0d1634726cef87aab78e6a"
+CLAUDE_LAUNCHER = _HOST_HOME / ".local/bin/claude"
+CLAUDE_VERSIONS = _HOST_HOME / ".local/share/claude/versions"
+CLAUDE_RELEASE = re.compile(r"\d+\.\d+\.\d+")
+CODESIGN = Path("/usr/bin/codesign")
+# The designated requirement `codesign -d -r-` prints for Anthropic's Developer ID Application signature.
+CLAUDE_REQUIREMENT = ('identifier "com.anthropic.claude-code" and anchor apple generic'
+                      " and certificate 1[field.1.2.840.113635.100.6.2.6] exists"
+                      " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+                      ' and certificate leaf[subject.OU] = "Q6L2SF6YDW"')
 PYTHON_ROOT = _HOST_HOME / ".local/share/mise/installs/python/3.14.7"
 NODE_ROOT = _HOST_HOME / ".local/share/mise/installs/node/24.20.0"
 GIT_ROOT = Path("/Library/Developer/CommandLineTools")
@@ -127,19 +134,45 @@ def _digest(path):
         return hashlib.file_digest(file, "sha256").hexdigest()
 
 
+def _installed_claude():
+    try:
+        target = Path(os.readlink(CLAUDE_LAUNCHER))
+    except OSError as error:
+        raise IsolationUnavailable(f"Claude launcher is missing or not a symlink: {CLAUDE_LAUNCHER}") from error
+    if target.parent != CLAUDE_VERSIONS or not CLAUDE_RELEASE.fullmatch(target.name):
+        raise IsolationUnavailable(f"Claude launcher {CLAUDE_LAUNCHER} does not select a release in {CLAUDE_VERSIONS}: {target}")
+    os.close(_open_dir(CLAUDE_VERSIONS))
+    if target.is_symlink():
+        raise IsolationUnavailable(f"unsupported executable: {target}")
+    return target
+
+
+def _signed_digest(path):
+    """Digest before and after codesign, so the digest names the verified bytes and `_validate` holds each launch to them."""
+    digest = _digest(path)
+    done = subprocess.run([str(CODESIGN), "--verify", "--strict", f"-R={CLAUDE_REQUIREMENT}", str(path)],
+                          env={}, capture_output=True, text=True, timeout=60)
+    if done.returncode:
+        raise IsolationUnavailable(f"{path} fails code requirement {CLAUDE_REQUIREMENT}: {done.stderr.strip()}")
+    if _digest(path) != digest:
+        raise IsolationUnavailable(f"supported executable changed: {path}")
+    return digest
+
+
 @lru_cache(maxsize=1)
 def _host_runtime():
     account = _HOST_ACCOUNT
     if (platform.system(), platform.release(), platform.machine()) != ("Darwin", "25.6.0", "arm64"):
         raise IsolationUnavailable("Claude filesystem isolation supports only the measured Darwin 25.6.0 arm64 runtime")
     home = _HOST_HOME
-    files = (CLAUDE_BINARY, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
+    claude = _installed_claude()
+    files = (claude, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
         "/", "/usr/share/icu/icudt78l.dat", "/dev/null", "/dev/random", "/dev/urandom", "/private/etc/hosts",
         "/private/var/run/resolv.conf", "/private/var/db/timezone/zoneinfo/America/Denver")))
     trees = (PYTHON_ROOT, NODE_ROOT, GIT_ROOT / "usr/libexec/git-core", GIT_ROOT / "usr/share/git-core/templates",
              Path("/System/Library"), Path("/usr/lib"), home / "Library/Keychains")
-    pins = []
-    for path, expected in ((CLAUDE_BINARY, (CLAUDE_SHA256,)), *PINNED_TOOLS):
+    pins = [(claude, _signed_digest(claude))]
+    for path, expected in PINNED_TOOLS:
         if path.is_symlink():
             raise IsolationUnavailable(f"unsupported executable: {path}")
         digest = _digest(path)
@@ -148,7 +181,7 @@ def _host_runtime():
         pins.append((path, digest))
     if not Path("/usr/bin/sandbox-exec").is_file() or any(not path.exists() for path in (*files, *trees)):
         raise IsolationUnavailable("measured Seatbelt runtime dependencies are missing")
-    return HostRuntime(CLAUDE_BINARY, CLAUDE_VERSION, home, account.pw_name, files, trees, tuple(pins),
+    return HostRuntime(claude, claude.name, home, account.pw_name, files, trees, tuple(pins),
                        f"{PYTHON_ROOT}/bin:{NODE_ROOT}/bin:{RG_BINARY.parent}:{GIT_ROOT}/usr/bin:/usr/bin:/bin", "/bin/bash")
 
 
@@ -162,6 +195,8 @@ def _bind_paths(run, runtime):
     os.close(fd)
     for path in (paths.config, paths.tmp, paths.cache, paths.xdg, paths.transcripts):
         path.mkdir(mode=0o700, exist_ok=True)
+    (root / LAUNCH_RECORD).write_text(json.dumps({"path": str(runtime.binary), "version": runtime.version,
+                                                  "sha256": dict(runtime.fingerprints)[runtime.binary]}) + "\n")
     identities = []
     for path in sorted({*project.parents, project, paths.config, paths.tmp, paths.cache, paths.xdg, paths.transcripts, *runtime.read_trees}):
         fd = _open_dir(path)
@@ -180,7 +215,11 @@ def _validate(state):
         os.close(fd)
         if (identity.st_dev, identity.st_ino) != (device, inode):
             raise IsolationUnavailable(f"owned directory was replaced: {path}")
-    for path, digest in state.runtime.fingerprints:
+    _validate_runtime(state.runtime)
+
+
+def _validate_runtime(runtime):
+    for path, digest in runtime.fingerprints:
         if path.is_symlink() or _digest(path) != digest:
             raise IsolationUnavailable(f"supported executable changed: {path}")
 
@@ -205,12 +244,13 @@ def store(run):
 def preflight():
     """Check the host login before a private turn config exists. Keep the turn's host HOME and Keychain namespace,
     but omit exported API keys and config overrides so they cannot mask a missing login."""
-    binary = CLAUDE_BINARY if CLAUDE_BINARY.is_file() else shutil.which("claude")
-    if not binary:
+    if not CLAUDE_LAUNCHER.is_file():
         raise RuntimeError("claude executable missing; install Claude Code before running live cases")
+    runtime = _host_runtime()
+    _validate_runtime(runtime)
     env = {"HOME": os.environ["HOME"], "USER": os.environ.get("USER", ""), "LOGNAME": os.environ.get("LOGNAME", ""),
            "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8", "TERM": "dumb", "CLAUDE_SECURESTORAGE_CONFIG_DIR": ""}
-    out = check_status(LOGIN, [binary, "auth", "status"], env=env)
+    out = check_status(LOGIN, [str(runtime.binary), "auth", "status"], env=env)
     try:
         logged_in = json.loads(out).get("loggedIn")
     except ValueError:
@@ -263,10 +303,10 @@ def provision_listing(state):
     return record
 
 
-def listing_record(root):
+def run_record(root, name):
     fd = _open_dir(Path(os.path.abspath(root)))
     try:
-        return json.loads(_read_file(fd, LISTING_RECORD))
+        return json.loads(_read_file(fd, name))
     except FileNotFoundError:
         return None
     finally:
@@ -860,12 +900,13 @@ def harvest(run):
         "x_timed_out": any(t["timed_out"] for t in turns),
         "x_effort_requested": requested,
         "x_todo_tools": "on" if run.case.get("env", {}).get("todo_tools") else "off",
+        "x_binary": run_record(prepared.paths.root if prepared else run.root, LAUNCH_RECORD),
         "x_turn_entries": turn_entries,
         "x_entry_base_dir": injected_base(rows),
         "x_files_read_by": reads_by,
         "x_child_skill_calls": child_skills,
         "x_compactions": compactions(streams),
-        "x_skill_listing": listing_record(prepared.paths.root if prepared else run.root),
+        "x_skill_listing": run_record(prepared.paths.root if prepared else run.root, LISTING_RECORD),
         "x_cost_usd": round(sum(r.get("total_cost_usd") or 0 for r in results), 4),
         "x_deferred_tools": next((e["attachment"].get("addedNames") for e in rows if e.get("type") == "attachment"
                                   and e["attachment"].get("type") == "deferred_tools_delta"), None),
