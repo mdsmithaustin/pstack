@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -51,6 +52,19 @@ class UpstreamSync(unittest.TestCase):
         (self.origin / ".github").mkdir()
         (self.origin / ".github" / "upstream-sha").write_text(self.recorded + "\n")
         (self.origin / "PORTING.md").write_text("Fixture porting contract.\n")
+        ledger = self.origin / "evals" / "promises" / "ledger.json"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text(json.dumps({"promises": {
+            "architect-checkpoint-opt-in": {
+                "check": "live", "owners": ["skills/architect/SKILL.md"],
+            },
+        }}))
+        owner = self.origin / "skills" / "architect" / "SKILL.md"
+        owner.parent.mkdir(parents=True)
+        owner.write_text("Original live promise owner.\n")
+        report = self.origin / "evals" / "promises" / "results" / "earlier.md"
+        report.parent.mkdir()
+        report.write_text("Earlier live results.\n")
         self.git("add", ".", cwd=self.origin)
         self.git("commit", "-qm", "Initial port", cwd=self.origin)
         self.git("config", "--global", f"url.{self.origin}.insteadOf",
@@ -123,8 +137,19 @@ class UpstreamSync(unittest.TestCase):
             subprocess.run(["git", "checkout", "-qb", branch], check=True)
             if mode != "stale_recorded":
                 Path(".github/upstream-sha").write_text(os.environ["PSTACK_TEST_LATEST"] + "\\n")
+            for name, contents in json.loads(os.environ.get("PSTACK_TEST_FILES", "{}")).items():
+                path = Path(name)
+                if contents is None:
+                    path.unlink()
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(contents)
+            if os.environ.get("PSTACK_TEST_CHMOD_REPORT"):
+                Path("evals/promises/results/earlier.md").chmod(0o755)
             subprocess.run(["git", "add", "-A"], check=True)
             subprocess.run(["git", "commit", "-qm", "Sync fixture"], check=True)
+            if os.environ.get("PSTACK_TEST_MOVE_BASE_REF"):
+                subprocess.run(["git", "branch", "-f", "main", "HEAD"], check=True)
             subprocess.run(["git", "push", "-qu", "origin", branch], check=True)
             head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
             pulls = [{
@@ -183,7 +208,127 @@ class UpstreamSync(unittest.TestCase):
         self.assertEqual((clone.parent / "complete").read_text(),
                          "https://github.com/mdsmithaustin/pstack/pull/123\n")
         self.assertEqual((clone.parent / "upstream-sha").read_text(), self.latest + "\n")
+        self.assertEqual((clone.parent / "base-sha").read_text(),
+                         self.git("rev-parse", "HEAD", cwd=self.origin) + "\n")
+        self.assertEqual((clone / "skills/architect/SKILL.md").read_text(),
+                         "Original live promise owner.\n")
         self.assertEqual((clone.parent / "claude.log").read_text(), "Draft PR published.\n")
+
+    def test_changed_live_owner_requires_committed_results(self) -> None:
+        result = self.run_sync(
+            PSTACK_TEST_MODE="published",
+            PSTACK_TEST_FILES=json.dumps({"skills/architect/SKILL.md": "Changed owner.\n"}),
+            PSTACK_TEST_MOVE_BASE_REF="1",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        clone = Path((self.root / "agent-cwd").read_text())
+        self.assertTrue(clone.is_dir())
+        self.assertEqual((clone / "skills/architect/SKILL.md").read_text(), "Changed owner.\n")
+        self.assertFalse((clone.parent / "complete").exists())
+        self.assertEqual((clone.parent / "base-sha").read_text(),
+                         self.git("rev-parse", "HEAD", cwd=self.origin) + "\n")
+        self.assertEqual(self.git("rev-parse", "main", cwd=clone),
+                         self.git("rev-parse", "HEAD", cwd=clone))
+        log = (self.state / "sync.log").read_text()
+        self.assertIn("architect-checkpoint-opt-in", log)
+        self.assertIn("skills/architect/SKILL.md", log)
+        self.assertIn("committed results Markdown", log)
+        retry = self.run_sync(PSTACK_TEST_MODE="published")
+        self.assertNotEqual(retry.returncode, 0)
+        self.assertEqual((self.root / "agent-calls").read_text(), "called\n")
+
+    def test_added_or_updated_committed_results_allow_live_owner_change(self) -> None:
+        for report in ("new.md", "earlier.md"):
+            with self.subTest(report=report):
+                result = self.run_sync(
+                    PSTACK_TEST_MODE="published", PSTACK_SYNC_STATE_DIR=str(self.root / report),
+                    PSTACK_TEST_FILES=json.dumps({
+                        "skills/architect/SKILL.md": "Changed owner.\n",
+                        f"evals/promises/results/{report}": "Current results.\n",
+                    }),
+                )
+                self.assertEqual(result.returncode, 0)
+                clone = Path((self.root / "agent-cwd").read_text())
+                self.assertTrue((clone.parent / "complete").is_file())
+
+    def test_invalid_results_do_not_satisfy_live_evidence(self) -> None:
+        reports = {
+            "empty": {"evals/promises/results/new.md": " \n\t"},
+            "unrelated": {"docs/results.md": "Current results.\n",
+                          "evals/promises/results/new.txt": "Current results.\n"},
+            "deleted": {"evals/promises/results/earlier.md": None},
+            "mode_only": {},
+        }
+        for case, files in reports.items():
+            with self.subTest(case=case):
+                result = self.run_sync(
+                    PSTACK_TEST_MODE="published", PSTACK_SYNC_STATE_DIR=str(self.root / case),
+                    PSTACK_TEST_CHMOD_REPORT="1" if case == "mode_only" else "",
+                    PSTACK_TEST_FILES=json.dumps({"skills/architect/SKILL.md": "Changed owner.\n", **files}),
+                )
+                self.assertNotEqual(result.returncode, 0)
+                clone = Path((self.root / "agent-cwd").read_text())
+                self.assertFalse((clone.parent / "complete").exists())
+                self.assertIn("committed results Markdown", (clone.parent.parent / "sync.log").read_text())
+
+    def test_added_and_deleted_live_owners_require_results(self) -> None:
+        cases = {
+            "added": {
+                "evals/promises/ledger.json": json.dumps({"promises": {
+                    "new-live-promise": {"check": "live", "owners": ["skills/new/SKILL.md"]},
+                }}),
+                "skills/new/SKILL.md": "New live owner.\n",
+            },
+            "deleted": {
+                "evals/promises/ledger.json": json.dumps({"promises": {}}),
+                "skills/architect/SKILL.md": None,
+            },
+        }
+        for case, files in cases.items():
+            with self.subTest(case=case):
+                result = self.run_sync(
+                    PSTACK_TEST_MODE="published", PSTACK_SYNC_STATE_DIR=str(self.root / case),
+                    PSTACK_TEST_FILES=json.dumps(files),
+                )
+                self.assertNotEqual(result.returncode, 0)
+                clone = Path((self.root / "agent-cwd").read_text())
+                self.assertFalse((clone.parent / "complete").exists())
+                self.assertIn("committed results Markdown", (clone.parent.parent / "sync.log").read_text())
+
+    def test_missing_or_malformed_committed_ledger_refuses_completion(self) -> None:
+        for case, contents in (("missing", None), ("malformed", "not JSON"),
+                               ("wrong_shape", '{"promises": []}')):
+            with self.subTest(case=case):
+                result = self.run_sync(
+                    PSTACK_TEST_MODE="published", PSTACK_SYNC_STATE_DIR=str(self.root / case),
+                    PSTACK_TEST_FILES=json.dumps({"evals/promises/ledger.json": contents}),
+                )
+                self.assertNotEqual(result.returncode, 0)
+                clone = Path((self.root / "agent-cwd").read_text())
+                self.assertFalse((clone.parent / "complete").exists())
+                self.assertIn("cannot verify committed promise ledger",
+                              (clone.parent.parent / "sync.log").read_text())
+
+    def test_invalid_base_ledger_cannot_be_repaired_to_bypass_guard(self) -> None:
+        ledger = self.origin / "evals" / "promises" / "ledger.json"
+        contents = ledger.read_text()
+        for case in ("missing", "malformed"):
+            with self.subTest(case=case):
+                if case == "missing":
+                    ledger.unlink()
+                else:
+                    ledger.write_text("not JSON")
+                self.git("add", "-A", cwd=self.origin)
+                self.git("commit", "-qm", "Invalid baseline ledger", cwd=self.origin)
+                result = self.run_sync(
+                    PSTACK_TEST_MODE="published", PSTACK_SYNC_STATE_DIR=str(self.root / case),
+                    PSTACK_TEST_FILES=json.dumps({"evals/promises/ledger.json": contents}),
+                )
+                self.assertNotEqual(result.returncode, 0)
+                clone = Path((self.root / "agent-cwd").read_text())
+                self.assertFalse((clone.parent / "complete").exists())
+                self.assertIn("cannot verify committed promise ledger",
+                              (clone.parent.parent / "sync.log").read_text())
 
     def test_incomplete_sync_is_rejected_even_when_agent_says_published(self) -> None:
         for mode in ("stale_recorded", "dirty", "wrong_branch", "commit_only"):
