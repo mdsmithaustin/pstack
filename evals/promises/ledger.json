@@ -724,7 +724,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "1. Reproduce it yourself on the matching surface via the control skill (Non-negotiables)"
+     "quote": "1. Reproduce it yourself on the matching surface via the control skill required by the [task triggers](../references/task-triggers.md)"
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
