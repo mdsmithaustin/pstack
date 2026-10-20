@@ -210,7 +210,7 @@ class GradeRun(unittest.TestCase):
                     with mock.patch.object(live, "load_case", return_value=case), \
                          mock.patch.object(module, "prepare", side_effect=prepare), \
                          mock.patch.object(module, "turn", side_effect=turn), redirect_stdout(output):
-                        root = live.run_case(harness, case["id"], "HEAD", out, 0)
+                        root = Path(live.run_case(harness, case["id"], "HEAD", out, 0)["run"])
                     trace = json.loads((root / "trace.json").read_text())
                     record = json.loads((root / "run.json").read_text())
                     self.assertEqual(trace["x_turns"], [
@@ -249,7 +249,7 @@ class GradeRun(unittest.TestCase):
 
             with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(codex, "prepare", side_effect=prepare), \
                     mock.patch.object(codex, "turn", side_effect=turn), redirect_stdout(io.StringIO()):
-                root = live.run_case("codex", case["id"], "HEAD", out, 0, model="gpt-6-luna", effort="xhigh")
+                root = Path(live.run_case("codex", case["id"], "HEAD", out, 0, model="gpt-6-luna", effort="xhigh")["run"])
             installed = (root / "w" / "rollup" / ".agents/skills/deslop/SKILL.md").read_text()
             trace = json.loads((root / "trace.json").read_text())
             record = json.loads((root / "run.json").read_text())
@@ -405,6 +405,33 @@ class BootstrapDependencies(unittest.TestCase):
                     self.assertEqual(set(screen["verdicts"]), set(case["promises"]))
                     self.assertFalse((scripts / "node_modules").exists() or (scripts / "node_modules").is_symlink())
                     self.assertTrue((scripts / "bootstrap.ts").is_file())
+
+    def test_a_link_swapped_into_the_bootstrap_path_is_refused_without_deleting_through_it(self):
+        import shutil
+        case = steer_case()
+        for linked in ("poteto-mode/scripts", "poteto-mode/scripts/node_modules"):
+            with self.subTest(linked=linked), tempfile.TemporaryDirectory(prefix="pstack-live-bootstrap-link-") as tmp:
+                out = Path(tmp).resolve()
+                outside = out.parent / f"{out.name}-outside"
+                self.addCleanup(shutil.rmtree, outside, True)
+
+                def swap(run, index):
+                    (outside / "node_modules" / ".bin").mkdir(parents=True)
+                    (outside / "node_modules" / ".bin" / "tsc").write_text("outside\n")
+                    target = run.project / live.adapter("codex").SKILLS_DIR / linked
+                    shutil.rmtree(target, ignore_errors=True)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.symlink_to(outside if linked.endswith("scripts") else outside / "node_modules")
+
+                prepare, turn = synthetic_turns("codex", swap)
+                with mock.patch.object(live, "load_case", return_value=case), \
+                        mock.patch.object(live.adapter("codex"), "prepare", side_effect=prepare), \
+                        mock.patch.object(live.adapter("codex"), "turn", side_effect=turn), redirect_stdout(io.StringIO()):
+                    with self.assertRaises(GradeRefused) as refused:
+                        live.run_case("codex", case["id"], "HEAD", out, 0)
+                self.assertEqual(refused.exception.receipt["reason"], "unsafe_link")
+                self.assertEqual(list(out.rglob("trace.json")), [])
+                self.assertEqual((outside / "node_modules" / ".bin" / "tsc").read_text(), "outside\n")
 
 
 class GradeRefusalBatch(unittest.TestCase):

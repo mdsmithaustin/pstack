@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from grade_boundary import create_file, grade, GradeRefused, read_file, write_file, _before_turns, _json, _lookup, _seal, _write_record
+from grade_boundary import create_file, grade, GradeRefused, read_file, write_file, _before_turns, _json, _lookup, _Root, _seal, _write_record
 from harnesses.login import LoginRequired, auth_death, death_record, error_verdict
 
 HERE = Path(__file__).resolve().parent
@@ -37,6 +37,18 @@ HARNESSES = {
     "grok": "harnesses.grok",
 }
 RUN_OVERRIDES = ("claude-code", "codex")
+# Run-root directories each harness points the agent's temp writes at (TMPDIR, and Hermes's HERMES_WRITE_SAFE_ROOT
+# profile cache). A git worktree the agent registers under one is graded; nothing else under them is read.
+SCRATCH_ROOTS = {
+    "claude-code": ("tmp",),
+    "codex": ("tmp",),
+    "grok": ("tmp",),
+    "hermes": ("tmp", "hroot/profiles/probe/cache"),
+}
+# The watch-pr bootstrap's `bun install` target. Its node_modules/.bin links would refuse the grade walk.
+BOOTSTRAP_MODULES = Path("poteto-mode/scripts/node_modules")
+# Grade refusals about the grader or its controller rather than the run: every later case would refuse the same way.
+BATCH_REFUSALS = ("boundary_unavailable", "unknown_authorization")
 MEANINGS = ("eval", "evals", "evaluation", "judge", "experiment", "rubric", "score", "compare",
             "benchmark", "candidate", "arena", "promise", "promises", "oracle", "verdict")
 
@@ -295,15 +307,26 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     run.implicit_off = skill_listing.managed_skills(run.project / module.SKILLS_DIR)
     exclude = run.project / ".git" / "info" / "exclude"
     exclude.write_text(exclude.read_text() + "".join(f"{d}\n" for d in module.PRIVATE_DIRS))
-    authorization = _before_turns(run)
-    pair = None
+    scratch = [run.root / rel for rel in SCRATCH_ROOTS[harness]]
+    for path in scratch:
+        _Root.open(path, create=True).close()
+    authorization = _before_turns(run, scratch)
+    pair = refusal = None
     try:
         died = drive(module, run, authorization)
         error = died and death_record(*died)
+        project = _Root.open(run.project)
+        try:
+            project.remove(module.SKILLS_DIR / BOOTSTRAP_MODULES)
+        finally:
+            project.close()
         if run.turns or not died:
             trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
             _seal(authorization, meta(run), trace, error=error)
-            verdict = grade(authorization)
+            try:
+                verdict = grade(authorization)
+            except GradeRefused as refused:
+                refusal = refused.receipt
         else:
             verdict = error_verdict(case, harness, commit, error)
             write_file(root / "verdict.json", _json(verdict))
@@ -328,12 +351,13 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
         finally:
             if owner is not None:
                 owner.close()
-    print(json.dumps({"run": str(root), "authorization_id": authorization._id, "case": case_id, "harness": harness, "n": index,
-                      **({"hermes_pair": str(pair.root)} if pair is not None else {}),
-                      "verdicts": {p: v["verdict"] for p, v in verdict["promises"].items()}}))
+    screen = {"run": str(root), "authorization_id": authorization._id, "case": case_id, "harness": harness, "n": index,
+              **({"hermes_pair": str(pair.root)} if pair is not None else {}),
+              **({"refusal": refusal} if refusal else {"verdicts": {p: v["verdict"] for p, v in verdict["promises"].items()}})}
+    print(json.dumps(screen))
     if died:
         raise LoginRequired(*died)
-    return root
+    return screen
 
 
 def meta(run):
@@ -364,15 +388,21 @@ def main(argv=None):
     if args.cmd == "run":
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
+        refused = False
         try:
             preflight(args.harness)
             for case_id in args.case:
                 for n in range(args.runs):
-                    run_case(args.harness, case_id, args.skills_at, out, n, args.hermes_retain_out, args.model, args.effort)
+                    screen = run_case(args.harness, case_id, args.skills_at, out, n, args.hermes_retain_out, args.model, args.effort)
+                    if "refusal" in screen:
+                        refused = True
+                        if screen["refusal"]["reason"] in BATCH_REFUSALS:
+                            print(f"batch stopped: {screen['refusal']['reason']}: {screen['refusal']['detail']}", file=sys.stderr)
+                            return 2
         except LoginRequired as expired:
             print(f"wave stopped: {expired}", file=sys.stderr)
             return 3
-        return 0
+        return 2 if refused else 0
     if args.cmd == "grade":
         for run_id in args.run_ids:
             try:
