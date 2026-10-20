@@ -1,8 +1,8 @@
-# Grader fix reruns, 2026-10-21
+# Grader fix reruns, 2026-10-20
 
 **Status: COMPLETE.** [2026-10-20-sync-7a9a3ddb.md](./2026-10-20-sync-7a9a3ddb.md) left 7 runs refused at grading and two Claude Code FAILs measured once. This wave reruns those cases with the grader from this branch and the skills at `8731b6eb`. Every run graded. No run was refused and no batch stopped.
 
-No `--model` or `--effort` was passed, so each harness ran its configured default at high effort. The run directories are kept outside the repository, under `pstack-live-runs/2026-10-21-grader-fix/`.
+No `--model` or `--effort` was passed, so each harness ran its configured default at high effort. The run directories are kept outside the repository, under `pstack-live-runs/2026-10-21-grader-fix/`. That directory name is a misdated label kept so the runs stay regradable because each grade authorization stores absolute run paths.
 
 ## Previously refused runs
 
