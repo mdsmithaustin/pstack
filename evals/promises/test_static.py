@@ -82,7 +82,7 @@ GUIDE_SLASH_SKILLS = {
     "ketchup", "in-your-own-words", "sharpen", "create-formal-verification-skill",
     "maintain-formal-verification-skill",
 }
-GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | set(PRINCIPLE_RULES) | {"pstack-harness"}
+GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | set(PRINCIPLE_RULES)
 GUIDE_SLASH_NON_SKILLS = {"loop": "loop-is-harness-facility-not-pstack"}
 
 ROUTER_ROUTES = {
