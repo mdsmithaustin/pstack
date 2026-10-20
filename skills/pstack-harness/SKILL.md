@@ -26,7 +26,7 @@ Read each selected reference in full before its action. Select only the actions 
 
 ## Runtime adapters
 
-When compaction, truncation, or skill restoration affects the next action, read [skill retention evidence](references/skill-retention.md). Keep documented limits, runtime observations, and unknown behavior separate.
+When context compaction, shortened skill content, or skill restoration affects the next action, read [skill retention evidence](references/skill-retention.md). Keep documented limits, runtime observations, and unknown behavior separate.
 
 For spawn or transcript, read only the current runtime column for that action. Other actions need no runtime adapter.
 
