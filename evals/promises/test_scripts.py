@@ -779,6 +779,12 @@ class BabysitWatcherPromises(GitHubSandbox):
 class WorktreeAuditPromises(FakeGhSandbox):
     redirect_fetch = True
 
+    def setUp(self):
+        super().setUp()
+        origin = self.bin / "origin"
+        origin.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        origin.chmod(0o755)
+
     def test_worktree_cleanup_classifies_worktrees(self):
         repo = self.tmp / "audit-repo"
         bare = self.tmp / "audit-origin.git"
@@ -811,7 +817,7 @@ class WorktreeAuditPromises(FakeGhSandbox):
         (cache / "node_modules").mkdir()
         (cache / "node_modules" / "dep.js").write_text("x\n")
         add("wt spaced", "spaced-br")
-        for name, branch in (("wt-unmerged", "unmerged-br"), ("wt-openpr", "openpr-br")):
+        for name, branch in (("wt-unmerged", "unmerged-br"), ("wt-openpr", "openpr-br"), ("wt-closedpr", "closedpr-br")):
             path = add(name, branch)
             (path / "work.txt").write_text(name)
             self.git("add", "work.txt", cwd=path)
@@ -822,7 +828,10 @@ class WorktreeAuditPromises(FakeGhSandbox):
         transcripts.mkdir(parents=True)
         (transcripts / "session.jsonl").write_text(json.dumps({"cwd": f"{chat}/"}) + "\n")
 
-        self.state = {"prs": [{"number": 9, "state": "OPEN", "headRefName": "openpr-br"}]}
+        self.state = {"prs": [
+            {"number": 9, "state": "OPEN", "headRefName": "openpr-br"},
+            {"number": 10, "state": "CLOSED", "headRefName": "closedpr-br"},
+        ]}
         self.flush()
         listing_before = self.git("worktree", "list", "--porcelain", cwd=repo)
         branches_before = self.git("branch", "--list", cwd=repo)
@@ -847,7 +856,8 @@ class WorktreeAuditPromises(FakeGhSandbox):
                 "wt-cache": ("YES", "clean", "no-remote", "-", "-", "safe"),
                 "wt spaced": ("YES", "clean", "no-remote", "-", "-", "safe"),
                 "wt-unmerged": ("no", "clean", "no-remote", "-", "-", "review"),
-                "wt-openpr": ("no", "clean", "no-remote", "#9/OPEN", "-", "hold-open-pr"),
+                "wt-openpr": ("no", "clean", "no-remote", "#9/open", "-", "hold-open-pr"),
+                "wt-closedpr": ("no", "clean", "no-remote", "#10/closed", "-", "safe"),
                 "wt-chat": ("YES", "clean", "no-remote", "-", today, "verify-recent-chat"),
             },
             result.stdout,

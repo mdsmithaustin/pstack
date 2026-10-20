@@ -300,7 +300,7 @@
   },
   "autopilot-full-owner-never-merges-own-verdict": {
    "check": "static",
-   "claim": "No Autopilot-full owner merges on its own verdict; only a clean swarm verdict on the patch that merges authorizes the merge.",
+   "claim": "No Autopilot-full owner merges on its own verdict; only a clean verifier verdict on the patch that merges authorizes the merge.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autopilot-full.md",
@@ -326,7 +326,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autopilot-full.md",
-     "quote": "One owner runs each PR from build to merge, and nothing merges without your clean swarm verdict."
+     "quote": "One owner runs each PR from build to merge, and nothing merges without your clean verifier verdict."
     },
     {
      "file": "skills/poteto-mode/playbooks/autopilot-full.md",
@@ -340,15 +340,15 @@
   },
   "autopilot-full-verifier-round-per-push": {
    "check": "static",
-   "claim": "A fresh verifier swarm runs a round at the owner's code-ready head and again at every later push that changes the patch.",
+   "claim": "A fresh verifier swarm checks the owner's code-ready head; a later rebase or minor fix gets one fresh verifier, and only new behavior, a redesign, or a large new diff calls the full swarm again.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autopilot-full.md",
-     "quote": "A round starts at the owner's code-ready head SHA and at each later push that changes the PR's patch."
+     "quote": "A full swarm runs once, at the code-ready head. Another full swarm runs only for new behavior, a redesign, or a large new diff. A rebase, a merge-conflict resolution, or a minor fix gets a single verifier at the new head"
     },
     {
      "file": "skills/poteto-mode/playbooks/autopilot-full.md",
-     "quote": "The new head gets a fresh swarm and a fresh verdict, except for lane results that stay valid under the patch-id rule in `playbooks/shipping.md`."
+     "quote": "The new head gets a fresh verdict, from a full swarm or a single verifier per the rule at the start of this step"
     }
    ],
    "harness_sensitive": false,
@@ -3219,7 +3219,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/shipping.md",
-     "quote": "A verified PR sitting above an unverified one is not landable. Report the ceiling as a PR number and say what breaks the chain."
+     "quote": "A verified PR sitting above an unverified one is not landable, because it cannot land without the code below it."
     },
     {
      "file": "skills/poteto-mode/playbooks/shipping.md",
@@ -3228,6 +3228,10 @@
     {
      "file": "skills/poteto-mode/playbooks/shipping.md",
      "quote": "GitHub CLI (`gh`) is the default. If `command -v origin` succeeds and Origin can resolve the repository, use `origin pr ...` for PR view, watch, edit, and merge operations."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/shipping.md",
+     "quote": "Report the ceiling as a PR number and say what breaks the chain."
     }
    ],
    "harness_sensitive": false,
@@ -4930,14 +4934,12 @@
    "text": "Ask for the proof as an artifact you can inspect yourself: the failing test and then the passing one, a before-and-after video, the trace, the screenshot."
   },
   "22061bd1d586": {
-   "class": "substituted",
+   "class": "promise",
    "file": "07-overnight.md",
-   "ported_as": [
-    "7e501870682f"
-   ],
    "promise": "autopilot-full-verifier-round-per-push",
    "sources": [
-    "upstream"
+    "upstream",
+    "port"
    ],
    "text": "A swarm of fresh verifiers checks the owner's code-ready head."
   },
@@ -8216,15 +8218,6 @@
     "port"
    ],
    "text": "That's the price of the rigor."
-  },
-  "7e501870682f": {
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "autopilot-full-verifier-round-per-push",
-   "sources": [
-    "port"
-   ],
-   "text": "A swarm of fresh verifiers starts a round at the owner's code-ready head and again at every later push that changes the patch."
   },
   "7e7cc9da08ed": {
    "class": "promise",
@@ -12257,14 +12250,12 @@
    "text": "```text\nask /arena for a second opinion on this thread and our approach\n```"
   },
   "ee172734355c": {
-   "class": "substituted",
+   "class": "promise",
    "file": "07-overnight.md",
-   "ported_as": [
-    "7e501870682f"
-   ],
    "promise": "autopilot-full-verifier-round-per-push",
    "sources": [
-    "upstream"
+    "upstream",
+    "port"
    ],
    "text": "A later rebase or minor fix gets one fresh verifier, and only new behavior or a large new diff calls the full swarm again."
   },

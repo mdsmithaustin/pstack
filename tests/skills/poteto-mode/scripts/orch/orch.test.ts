@@ -79,6 +79,7 @@ async function makeGitStack(directory: string): Promise<{
   readonly mergedSha: string;
   readonly closedSha: string;
   readonly openSha: string;
+  readonly draftSha: string;
 }> {
   const repo = join(directory, "repo");
   await mkdir(repo);
@@ -93,20 +94,153 @@ async function makeGitStack(directory: string): Promise<{
   git({ repo, args: ["add", "."] });
   git({ repo, args: ["commit", "-m", "main"] });
 
-  const branches = ["stack/merged", "stack/closed", "stack/open"];
+  const branches = [
+    "stack/merged",
+    "stack/closed",
+    "stack/open",
+    "stack/draft",
+  ];
   for (const [index, branch] of branches.entries()) {
     git({ repo, args: ["checkout", "-b", branch] });
     await writeFile(join(repo, `stack-${index}.txt`), `${branch}\n`);
     git({ repo, args: ["add", "."] });
     git({ repo, args: ["commit", "-m", branch] });
   }
+  git({ repo, args: ["checkout", "stack/open"] });
 
   return {
     repo,
     mergedSha: git({ repo, args: ["rev-parse", "stack/merged"] }),
     closedSha: git({ repo, args: ["rev-parse", "stack/closed"] }),
     openSha: git({ repo, args: ["rev-parse", "stack/open"] }),
+    draftSha: git({ repo, args: ["rev-parse", "stack/draft"] }),
   };
+}
+
+type OriginFixtureState = "open" | "draft" | "merged" | "closed";
+
+function originRows(
+  prs: readonly {
+    number: number;
+    state: OriginFixtureState;
+    head: string;
+    base: string;
+  }[]
+): string {
+  return JSON.stringify(
+    prs.map(({ number, state, head, base }) => ({
+      number,
+      status: state,
+      headRef: head,
+      baseRef: base,
+    }))
+  );
+}
+
+async function overrideOriginRoute({
+  directory,
+  filter,
+  branch,
+  rows,
+}: {
+  directory: string;
+  filter: "--head" | "--base";
+  branch: string;
+  rows: string;
+}): Promise<void> {
+  const routes = join(directory, "origin-routes");
+  await mkdir(routes, { recursive: true });
+  await writeFile(join(routes, `${filter}-${branch}`.replaceAll("/", "_")), `${rows}\n`);
+}
+
+async function withFakeOrigin<T>({
+  directory,
+  operation,
+  currentRows,
+}: {
+  directory: string;
+  operation: () => Promise<T>;
+  currentRows?: string;
+}): Promise<T> {
+  const bin = join(directory, "origin-bin");
+  const outputPath = join(directory, "origin-output.txt");
+  await mkdir(bin, { recursive: true });
+  await writeFile(
+    outputPath,
+    `${
+      currentRows ??
+      originRows([
+        { number: 11, state: "open", head: "stack/open", base: "stack/closed" },
+      ])
+    }\n`
+  );
+  const list = (filter: string, branch: string): string =>
+    `pr list ${filter} ${branch} --state all --json number,status,headRef,baseRef`;
+  const fake = join(bin, "origin");
+  await writeFile(
+    fake,
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [ "$(pwd -P)" != "${realpathSync(join(directory, "repo"))}" ]; then
+  printf 'origin ran outside the fixture repo: %s\\n' "$(pwd -P)" >&2
+  exit 2
+fi
+route="$3-$4"
+override="${join(directory, "origin-routes")}/\${route//\\//_}"
+if [ -f "$override" ]; then
+  cat "$override"
+  exit 0
+fi
+case "$*" in
+  "${list("--head", "stack/open")}")
+    cat "${outputPath}"
+    ;;
+  "${list("--head", "stack/closed")}")
+    printf '%s\\n' '${originRows([{ number: 13, state: "closed", head: "stack/closed", base: "stack/merged" }])}'
+    ;;
+  "${list("--head", "stack/merged")}")
+    printf '%s\\n' '${originRows([{ number: 10, state: "merged", head: "stack/merged", base: "main" }])}'
+    ;;
+  "${list("--base", "stack/open")}")
+    printf '%s\\n' '${originRows([
+      { number: 14, state: "draft", head: "stack/draft", base: "stack/open" },
+      { number: 15, state: "closed", head: "stack/abandoned", base: "stack/open" },
+    ])}'
+    ;;
+  "${list("--base", "stack/draft")}")
+    printf '[]\\n'
+    ;;
+  "${list("--head", "main")}")
+    printf '[]\\n'
+    ;;
+  *)
+    printf 'unexpected origin arguments: %s\\n' "$*" >&2
+    exit 2
+    ;;
+esac
+`
+  );
+  await chmod(fake, 0o755);
+  await writeFile(
+    join(bin, "gh"),
+    `#!/usr/bin/env bash
+printf 'gh must not run for --forge origin\\n' >&2
+exit 2
+`
+  );
+  await chmod(join(bin, "gh"), 0o755);
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${bin}:${originalPath ?? ""}`;
+  try {
+    return await operation();
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = originalPath;
+    }
+  }
 }
 
 async function withFakeGt<T>({
@@ -1214,6 +1348,398 @@ esac
     });
   });
 
+  it("resolves the ordered frontier from the Origin base chain and validates an optional pin", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        expect(
+          await store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).toEqual({
+          generation: 1,
+          prs: [
+            { pr: 10, branches: "stack/merged", sha: stack.mergedSha, state: "MERGED" },
+            { pr: 13, branches: "stack/closed", sha: stack.closedSha, state: "CLOSED" },
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+            { pr: 14, branches: "stack/draft", sha: stack.draftSha, state: "OPEN" },
+          ],
+          lowestUnmerged: 11,
+        });
+        expect(
+          (
+            await store.frontier.set({
+              repo: stack.repo,
+              forge: "origin",
+              prs: [10, 13, 11, 14],
+            })
+          ).generation
+        ).toBe(2);
+        await expect(
+          store.frontier.set({ repo: stack.repo, forge: "origin", prs: [10, 11, 12] })
+        ).rejects.toThrow(
+          "frontier pin mismatch: missing from Origin: 12; extra in Origin: 13,14"
+        );
+        await expect(
+          store.frontier.set({ repo: stack.repo, forge: "origin", prs: [13, 10, 11, 14] })
+        ).rejects.toThrow(
+          "frontier pin mismatch: order differs: expected 13,10,11,14; Origin 10,13,11,14"
+        );
+      },
+    });
+  });
+
+  it("rejects unparseable Origin output loudly", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withFakeOrigin({
+      directory,
+      currentRows: "this line is not forge output",
+      operation: async () => {
+        await expect(
+          store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).rejects.toThrow(
+          "origin pr list --head stack/open output is not valid JSON"
+        );
+      },
+    });
+  });
+
+  it("names the missing Origin pull request when a chain branch has none", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withFakeOrigin({
+      directory,
+      currentRows: "[]",
+      operation: async () => {
+        await expect(
+          store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).rejects.toThrow(
+          "branch stack/open has no pull request; open one with origin pr create"
+        );
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+      },
+    });
+  });
+
+  it("rejects malformed Origin protocol rows without overwriting the saved frontier", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const valid = { number: 11, status: "open", headRef: "stack/open", baseRef: "stack/closed" };
+    const invalid = [
+      null, {}, [null], [{}],
+      ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "11", null].map((number) => [{ ...valid, number }]),
+      ...["unknown", "OPEN", null, 1].map((status) => [{ ...valid, status }]),
+      ...["", null, 1].map((headRef) => [{ ...valid, headRef }]),
+      ...["", null, 1].map((baseRef) => [{ ...valid, baseRef }]),
+    ];
+    await withFakeOrigin({ directory, operation: async () => {
+      await store.frontier.set({ repo: stack.repo, forge: "origin" });
+      const saved = await readFile(join(directory, "frontier.json"), "utf8");
+      for (const value of invalid) {
+        await overrideOriginRoute({ directory, filter: "--head", branch: "stack/open", rows: JSON.stringify(value) });
+        await expect(store.frontier.set({ repo: stack.repo, forge: "origin" })).rejects.toThrow(
+          Array.isArray(value) ? "output has an invalid PR row" : "output is not a JSON array"
+        );
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe(saved);
+      }
+    } });
+  });
+
+  it("fails an Origin frontier request with a usage error when origin is missing", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+
+    await withoutGtOrGh({
+      directory,
+      operation: async () => {
+        const failure = await store.frontier
+          .set({ repo: stack.repo, forge: "origin" })
+          .then(
+            () => undefined,
+            (error: unknown) => error
+          );
+        expect(failure).toBeInstanceOf(UsageError);
+        expect((failure as Error).message).toContain(
+          "--forge origin requires the origin CLI"
+        );
+      },
+    });
+  });
+
+  it("reports an Origin command failure without falling back or overwriting the frontier", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    await withFakeOrigin({ directory, operation: async () => {
+      await store.frontier.set({ repo: stack.repo, forge: "origin" });
+      const saved = await readFile(join(directory, "frontier.json"), "utf8");
+      await writeFile(join(directory, "origin-bin", "origin"), "#!/bin/sh\nexit 7\n");
+      await expect(store.frontier.set({ repo: stack.repo, forge: "origin" })).rejects.toThrow(
+        "origin pr list --head stack/open --state all --json number,status,headRef,baseRef failed"
+      );
+      expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe(saved);
+    } });
+  });
+
+  it("records each Origin branch tip even when a same-named tag points elsewhere", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    for (const branch of ["stack/merged", "stack/closed", "stack/open", "stack/draft"]) {
+      git({ repo: stack.repo, args: ["tag", branch, "main"] });
+    }
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        const frontier = await store.frontier.set({ repo: stack.repo, forge: "origin" });
+        expect(frontier.prs.map((row) => row.sha)).toEqual([
+          stack.mergedSha,
+          stack.closedSha,
+          stack.openSha,
+          stack.draftSha,
+        ]);
+      },
+    });
+  });
+
+  it("does not need a local branch for a merged or closed Origin ancestor", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["branch", "-D", "stack/merged", "stack/closed"] });
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        expect(
+          await store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).toEqual({
+          generation: 1,
+          prs: [
+            { pr: 10, branches: "stack/merged", sha: "", state: "MERGED" },
+            { pr: 13, branches: "stack/closed", sha: "", state: "CLOSED" },
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+            { pr: 14, branches: "stack/draft", sha: stack.draftSha, state: "OPEN" },
+          ],
+          lowestUnmerged: 11,
+        });
+      },
+    });
+  });
+
+  it("names the missing local branch when an open Origin pull request has none", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["branch", "-D", "stack/draft"] });
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        await expect(
+          store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).rejects.toThrow("branch stack/draft has no local ref refs/heads/stack/draft");
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+      },
+    });
+  });
+
+  it("rejects Origin chains that loop, branch, repeat a head, or repeat a pull request", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const draft = { number: 14, state: "draft", head: "stack/draft", base: "stack/open" } as const;
+    const cases = [
+      {
+        route: { filter: "--head", branch: "stack/merged" },
+        rows: [{ number: 10, state: "merged", head: "stack/merged", base: "stack/open" }],
+        error: "pull request base chain loops at branch stack/open",
+      },
+      {
+        route: { filter: "--base", branch: "stack/open" },
+        rows: [{ number: 10, state: "open", head: "stack/merged", base: "stack/open" }],
+        error: "pull request base chain loops at branch stack/merged",
+      },
+      {
+        route: { filter: "--base", branch: "stack/open" },
+        rows: [draft, { number: 16, state: "open", head: "stack/sibling", base: "stack/open" }],
+        error: "stack is not linear: branches stack/draft, stack/sibling all target stack/open",
+      },
+      {
+        route: { filter: "--head", branch: "stack/open" },
+        rows: [
+          { number: 11, state: "open", head: "stack/open", base: "stack/closed" },
+          { number: 12, state: "closed", head: "stack/open", base: "stack/closed" },
+        ],
+        error: "branch stack/open has multiple pull requests (#11, #12); close the stale ones first",
+      },
+      {
+        route: { filter: "--head", branch: "stack/closed" },
+        rows: [
+          { number: 13, state: "closed", head: "stack/closed", base: "stack/merged" },
+          { number: 17, state: "open", head: "stack/closed", base: "stack/merged" },
+        ],
+        error: "branch stack/closed has multiple pull requests (#13, #17)",
+      },
+      {
+        route: { filter: "--base", branch: "stack/open" },
+        rows: [{ ...draft, number: 11 }],
+        error: "pull request base chain contains duplicate pull requests",
+      },
+    ] as const;
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        for (const { route, rows, error } of cases) {
+          await overrideOriginRoute({ directory, ...route, rows: originRows(rows) });
+          await expect(
+            store.frontier.set({ repo: stack.repo, forge: "origin" })
+          ).rejects.toThrow(error);
+          expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+          await rm(join(directory, "origin-routes"), { recursive: true, force: true });
+        }
+      },
+    });
+  });
+
+  it("reaches the Origin forge only through --forge origin on the CLI", async () => {
+    const { directory } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const storeDirectory = await makeDirectory();
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
+        const result = runCli([
+          "--store",
+          storeDirectory,
+          "--json",
+          "frontier",
+          "set",
+          "--repo",
+          stack.repo,
+          "--forge",
+          "origin",
+        ]);
+        expect(result.stderr).toBe("");
+        expect(result.code).toBe(0);
+        expect(JSON.parse(result.stdout)).toEqual({
+          generation: 1,
+          prs: [
+            { pr: 10, branches: "stack/merged", sha: stack.mergedSha, state: "MERGED" },
+            { pr: 13, branches: "stack/closed", sha: stack.closedSha, state: "CLOSED" },
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+            { pr: 14, branches: "stack/draft", sha: stack.draftSha, state: "OPEN" },
+          ],
+          lowestUnmerged: 11,
+        });
+      },
+    });
+  });
+
+  it("keeps gh as the default forge on the CLI even when an origin binary is on PATH", async () => {
+    const { directory } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const storeDirectory = await makeDirectory();
+    const decoy = join(directory, "decoy-bin");
+    await mkdir(decoy);
+    await writeFile(
+      join(decoy, "origin"),
+      `#!/usr/bin/env bash
+printf 'origin must not run without --forge origin\\n' >&2
+exit 2
+`
+    );
+    await chmod(join(decoy, "origin"), 0o755);
+
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([
+        {
+          number: 11,
+          state: "OPEN",
+          headRefName: "stack/open",
+          headRefOid: stack.openSha,
+          baseRefName: "main",
+          isCrossRepository: false,
+        },
+      ]),
+      operation: async () => {
+        const originalPath = process.env.PATH;
+        process.env.PATH = `${decoy}:${originalPath ?? ""}`;
+        try {
+          expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
+          const result = runCli([
+            "--store",
+            storeDirectory,
+            "--json",
+            "frontier",
+            "set",
+            "--repo",
+            stack.repo,
+          ]);
+          expect(result.stderr).toBe("");
+          expect(result.code).toBe(0);
+          expect(JSON.parse(result.stdout).prs).toEqual([
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+          ]);
+        } finally {
+          process.env.PATH = originalPath;
+        }
+      },
+    });
+  });
+
+  it("refuses an Origin frontier from the trunk branch instead of recording an empty one", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["checkout", "main"] });
+
+    await withFakeOrigin({
+      directory,
+      operation: async () => {
+        await expect(
+          store.frontier.set({ repo: stack.repo, forge: "origin" })
+        ).rejects.toThrow(
+          "found no PR for checked out branch main"
+        );
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+      },
+    });
+  });
+
+  it("reports a missing origin CLI before the trunk branch can short-circuit", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["checkout", "main"] });
+
+    await withoutGtOrGh({
+      directory,
+      operation: async () => {
+        const failure = await store.frontier
+          .set({ repo: stack.repo, forge: "origin" })
+          .then(
+            () => undefined,
+            (error: unknown) => error
+          );
+        expect(failure).toBeInstanceOf(UsageError);
+        expect((failure as Error).message).toContain(
+          "--forge origin requires the origin CLI"
+        );
+      },
+    });
+  });
+
+  it("rejects combining Graphite discovery with the Origin forge", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    await expect(
+      store.frontier.set({ repo: stack.repo, discovery: "graphite", forge: "origin" })
+    ).rejects.toBeInstanceOf(UsageError);
+  });
+
   it("rejects malformed TSV, verdict, frontier, and inbox data", async () => {
     const { directory, store } = await initializedStore();
 
@@ -1269,11 +1795,39 @@ describe("orch CLI", () => {
     expect(frontierHelp.stdout).toContain("--repo <dir>");
     expect(frontierHelp.stdout).toContain("--prs <n,...>");
     expect(frontierHelp.stdout).toContain("--graphite");
+    expect(frontierHelp.stdout).toContain("--forge <forge>");
 
     const directory = await makeDirectory();
     const invalid = runCli(["--store", directory, "unit", "add", "u1"]);
     expect(invalid.code).toBe(1);
     expect(invalid.stderr).toContain("required option '--track <track>'");
+
+    const badForge = runCli([
+      "--store",
+      directory,
+      "frontier",
+      "set",
+      "--repo",
+      directory,
+      "--forge",
+      "gt",
+    ]);
+    expect(badForge.code).toBe(1);
+    expect(badForge.stderr).toContain("Allowed choices are gh, origin");
+
+    const conflicting = runCli([
+      "--store",
+      directory,
+      "frontier",
+      "set",
+      "--repo",
+      directory,
+      "--graphite",
+      "--forge",
+      "origin",
+    ]);
+    expect(conflicting.code).toBe(1);
+    expect(conflicting.stderr).toContain("cannot be used with option '--forge <forge>'");
   });
 
   it("accepts ORCH_STORE and emits complete JSON", async () => {
