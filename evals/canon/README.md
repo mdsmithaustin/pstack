@@ -27,7 +27,7 @@ instructions remain in the pinned README, available through
 [archive recovery](../archive/README.md#recover-the-original-source).
 
 The [known-issues case contract](rules/steering-review-asks/cases/hermes-known-issues/case.json)
-owns the before-install safety requirements and the independent visibility and
+owns the installation-safety requirements and the independent visibility and
 result-contract checks.
 Original maintainer-preference constraints and grades remain at the archive pin.
 Other retained historical cases are development and regression material, not
