@@ -53,9 +53,9 @@ Start every multi-step task with a worklist whose first items are the matched pl
 
 The Principles section below grounds every trigger. Use a principle's leaf skill before applying it. Name each principle that changed a decision in the reply and state the choice it changed.
 
-Load these references only when their condition applies.
+Read and apply these references as follows.
 
-- Before a change, decision request, delegation, commit, review, verification, measurement, PR action, skill repair, or unattended work, read [task triggers](references/task-triggers.md). Recheck the triggers when scope changes.
+- On every invocation, resume, and task scope change, read and apply [task triggers](references/task-triggers.md). Each individual trigger governs when its named sibling skill runs.
 - Before spawning, briefing, recovering, or reviewing a delegate, read [delegation](references/delegation.md). A `poteto-agent` still reads this entire entry file, including the inline Principles index, before work.
 - Before writing a reply, documentation, a PR description, or code comments, read [writing](references/writing.md). Use the **unslop** skill on every prose surface.
 

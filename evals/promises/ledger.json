@@ -5044,6 +5044,14 @@
    ],
    "text": "Give each PR a verification swarm before it merges, and let Autopilot-stack or Autopilot-full carry the queue."
   },
+  "2366d0b35765": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "See the [README](../../README.md#usage) for continuation after compaction and what to do if the mode stops applying."
+  },
   "23b4ef38716e": {
    "class": "context",
    "file": "07-overnight.md",
@@ -7739,14 +7747,6 @@
     "port"
    ],
    "text": "[`/reflect`](../../skills/reflect/SKILL.md) sends the transcript to three parallel reviewers, then a synthesizer sorts the proposals into `Accepted`, `Rejected`, and `Backlog` and waits for your approval before any skill changes."
-  },
-  "7060f8af3657": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "Type `/poteto-mode` again if it stops applying."
   },
   "70634e327351": {
    "class": "promise",
@@ -10725,14 +10725,6 @@
     "port"
    ],
    "text": "When the reply comes back, it should carry the exact commands and outputs."
-  },
-  "c3d6057b5fdb": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "In a very long chat, the CLI may compress older messages and drop the mode."
   },
   "c41d18f82f9c": {
    "class": "promise",
