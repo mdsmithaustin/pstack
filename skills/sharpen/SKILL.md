@@ -12,6 +12,6 @@ I want a deeper version of this task, not a bigger one. Before rewriting it, do 
 3. Name the specific methods and tools they would use.
 4. Say what, other than you or me, would show the result is right.
 
-Then rewrite my prompt to ask for exactly that.
+Then rewrite my prompt using only the parts of those answers that deepen the original deliverables. Methods and checks must evaluate those deliverables without adding artifacts or implementation tasks. For a guide-only request, keep the guide as the only deliverable and check it with existing tools rather than requiring a new check script, converter, or companion document.
 
 Leave choices that are mine to make open instead of deciding them.
