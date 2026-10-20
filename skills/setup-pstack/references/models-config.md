@@ -16,7 +16,7 @@ Failure signal: nonzero exit. It prints one JSON line per arm with `role`, `arm`
 - Panel roles take a comma list, one arm per entry: `arena runners`, `arena cross-judge pool`, `architect runners`, and `interrogate reviewers`.
 - A `## codex`, `## claude-code`, `## grok`, or `## hermes` header starts a section whose lines apply to that CLI only. Lines above any header are flat lines and apply everywhere. Put a CLI's own slug, such as `gpt-6-sol` or `grok-4.7`, under that CLI's section, because Codex, Hermes, and Grok Build each accept any model name from a flat line.
 - `trail reviewer` runs the show-me-your-work reviewer and every independent verdict and review, including the audit lanes the **swarm** skill gives it. Resolve it with `--work-model <model>@<effort>` and the resolver moves the review off the model that did the work when the config allows another model in its family, per rule 7. `default` is the entry for a spawn whose skill names no role, and ships as `inherit-parent`.
-- `routine` runs a read-only scan, parse, or watch subagent that returns a reduced finding, such as a bulk transcript read, a large artifact parse, or a watcher. It ships as `sonnet@medium`, and as `gpt-6-luna@medium` under `## codex`. A skill that names its own role keeps it.
+- `routine` runs a read-only scan, parse, or watch subagent that returns a reduced finding, such as a bulk transcript read, a large artifact parse, or a watcher. Its shipped model and effort are defined in [the defaults file](../examples/pstack-models.md). A skill that names its own role keeps it.
 - `# budget: <label> (<effort>)` records the budget setup-pstack last applied. Resolution never reads it.
 
 ## Resolution
