@@ -46,7 +46,7 @@ A run is one agent conversation, including its later turns and any summary of it
 
 By default the log is a working artifact, not committed. Keep it at `decisions.tsv` in the work dir, or `.audit/<task-slug>.tsv` when several efforts run at once, and leave it out of git.
 
-Commit it only when the work is ambitious enough that a reviewer needs the trail to trust the result. Every evidence pointer in a committed trail must resolve after merge and checkout cleanup. Use commits, PRs, checked-in files, or an artifact whose published location and retention contract work for the intended reader. A private absolute path alone does not qualify. Replace scratch references with durable evidence before committing. Local trails can cite local artifacts, but retain evidence needed for later review with the capture helper.
+Commit it only when the work is ambitious enough that a reviewer needs the trail to trust the result. A trail intended for commit must use durable evidence accessible to its intended post-merge reader from its first row. Every evidence pointer in a committed trail must resolve after merge and checkout cleanup. Use commits, PRs, checked-in files, or an artifact whose published location and retention contract work for the intended reader. A private absolute path alone does not qualify. Keep a trail with scratch-only history local, preserving its append-only rows. When a reader needs durable review, publish a separate summary with durable evidence. Local trails can cite local artifacts, but retain evidence needed for later review with the capture helper.
 
 ## Rules
 
