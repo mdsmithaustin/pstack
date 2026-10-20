@@ -17,6 +17,8 @@ repo="$attempt/repo"
 
 git clone --quiet "https://github.com/$REPO.git" "$repo"
 cd "$repo"
+base=$(git rev-parse --verify 'HEAD^{commit}')
+printf '%s\n' "$base" >"$attempt/base-sha"
 git remote add upstream https://github.com/cursor/plugins.git
 git fetch upstream main --quiet
 
@@ -97,6 +99,65 @@ if [ -n "$status" ]; then
   echo "sync left uncommitted work"
   exit 1
 fi
+
+python3 - "$base" "$head" <<'PY'
+import json
+import subprocess
+import sys
+
+base, head = sys.argv[1:]
+live_owners = {}
+for revision in (base, head):
+    try:
+        ledger = json.loads(subprocess.check_output(
+            ["git", "show", f"{revision}:evals/promises/ledger.json"],
+        ))
+        promises = ledger["promises"]
+        if not isinstance(promises, dict):
+            raise ValueError("promises must be a mapping")
+        for promise_id, promise in promises.items():
+            if not isinstance(promise, dict) or not isinstance(promise.get("check"), str):
+                raise ValueError(f"invalid promise {promise_id}")
+            if promise["check"] != "live":
+                continue
+            owners = promise["owners"]
+            if not isinstance(owners, list) or not owners or any(
+                not isinstance(owner, str) or not owner for owner in owners
+            ):
+                raise ValueError(f"invalid live owners for {promise_id}")
+            for owner in owners:
+                live_owners.setdefault(owner, set()).add(promise_id)
+    except (subprocess.CalledProcessError, ValueError, KeyError, TypeError) as error:
+        sys.exit(f"cannot verify committed promise ledger at {revision}: {error}")
+
+changed = set(subprocess.check_output([
+    "git", "diff", "--no-renames", "--name-only", "-z", base, head,
+]).decode().split("\0"))
+changed_owners = sorted(changed.intersection(live_owners))
+if changed_owners:
+    reports = subprocess.check_output([
+        "git", "diff", "--no-renames", "--diff-filter=AM", "--name-only", "-z",
+        base, head, "--", "evals/promises/results/",
+    ]).decode().split("\0")
+    for report in reports:
+        if not report.endswith(".md"):
+            continue
+        previous_blob = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{base}:{report}"], capture_output=True,
+        )
+        current_blob = subprocess.check_output([
+            "git", "rev-parse", "--verify", f"{head}:{report}",
+        ])
+        if previous_blob.returncode == 0 and previous_blob.stdout == current_blob:
+            continue
+        if subprocess.check_output(["git", "show", f"{head}:{report}"]).strip():
+            break
+    else:
+        for owner in changed_owners:
+            print(f"changed live promise owner {owner}: {', '.join(sorted(live_owners[owner]))}",
+                  file=sys.stderr)
+        sys.exit("sync lacks added or modified nonempty committed results Markdown under evals/promises/results/")
+PY
 
 gh api --method GET "repos/$REPO/pulls" -f state=open -f "head=${REPO%/*}:$branch" -f base=main >"$attempt/pull-requests.json"
 python3 - "$attempt/pull-requests.json" "$REPO" "$branch" "$head" >"$attempt/verified-pr" <<'PY'
