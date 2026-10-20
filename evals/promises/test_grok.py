@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import oracles
 from grade_boundary import GradeRefused
 from harnesses import grok
 
@@ -297,6 +298,39 @@ class HarvestCaptures(unittest.TestCase):
 
     def test_harvest_never_rereads_a_capture_rewritten_after_the_copy(self):
         self.change_captures_after_copy(lambda path, outside: path.write_bytes(outside.read_bytes()))
+
+
+class CompactedHistory(unittest.TestCase):
+    """Minimized from Grok relay-6tna36t5 in the 2026-10-20 wave: turn 3 compacted and rewrote the lead's chat history."""
+
+    FIXTURE = Path(__file__).resolve().parent / "testdata" / "grok_compaction" / "relay-6tna36t5-lead-chat_history.jsonl"
+    PROMPTS = ["/poteto-mode add a --json flag. text output stays byte-identical. verify both forms.", "continue", "/poteto-mode do it",
+               "/poteto-mode new task. figure out why the cache entry survives logout. don't change any code yet."]
+
+    def harvest(self, chat):
+        tmp = tempfile.TemporaryDirectory(prefix="pstack-grok-compaction-")
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name).resolve() / "run"
+        lead = root / "grok-home" / "sessions" / "cwd" / "lead"
+        lead.mkdir(parents=True)
+        (lead / "chat_history.jsonl").write_bytes(chat)
+        run = SimpleNamespace(root=root, project=root / "w" / "relay", case={"turns": self.PROMPTS},
+                              turns=[{"index": i, "session_id": "lead", "argv": ["/bin/grok", "-p", p]} for i, p in enumerate(self.PROMPTS)])
+        with mock.patch.object(grok, "host_home", return_value=root / "host"):
+            return grok.harvest(run)
+
+    def test_the_compacted_new_task_turn_is_not_graded_a_failed_route(self):
+        case = json.loads((Path(__file__).resolve().parent / "cases" / "sticky-followup" / "case.json").read_text())
+        result = oracles.check("read-only-phrase-pins-investigation", self.harvest(self.FIXTURE.read_bytes()), case, None)
+        self.assertEqual(result["verdict"], oracles.INCONCLUSIVE, result)
+
+    def test_a_rewritten_history_records_one_compaction_in_the_turn_whose_prompt_it_kept(self):
+        trace = self.harvest(self.FIXTURE.read_bytes())
+        self.assertEqual((trace["x_compactions"], trace["x_turns_without_events"]), ([{"turn": 3, "source": "chat_history"}], [0, 1, 2]))
+
+    def test_a_history_without_compaction_records_none(self):
+        chat = b"".join(line + b"\n" for line in self.FIXTURE.read_bytes().splitlines() if b"compaction_meta" not in line)
+        self.assertEqual(self.harvest(chat)["x_compactions"], [])
 
 
 if __name__ == "__main__":

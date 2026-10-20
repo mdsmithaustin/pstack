@@ -1626,6 +1626,41 @@ class RoutedSkillLoadsAfterCompaction(unittest.TestCase):
                                          (INCONCLUSIVE, ["run killed before a routing decision"]))
 
 
+
+class ReadOnlyPinAfterCompaction(unittest.TestCase):
+    """Grok relay-6tna36t5: a compaction in the `new task` turn rewrote the history that held its playbook reads."""
+
+    case = load_case("sticky-followup")
+
+    def grade(self, compactions, more=lambda project: ()):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 2)
+        events = in_turn(3, [{"seq": 0, "kind": "user", "text": "new task"},
+                             {"seq": 1, "kind": "tool_call", "name": "read_file", "input": {"target_file": "/w/.agents/skills/how/SKILL.md"}},
+                             *more(project)])
+        trace = minimal(events=events, harness="grok", x_compactions=compactions, x_turns_without_events=[0, 1, 2])
+        return grade("read-only-phrase-pins-investigation", trace, self.case, project)
+
+    def test_a_compaction_in_the_graded_turn_leaves_a_missing_route_unproven(self):
+        result = self.grade([{"turn": 3, "source": "chat_history"}])
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_a_missing_route_still_fails_without_that_compaction(self):
+        for compactions in ([], [{"turn": 1, "source": "chat_history"}], [{"turn": 3, "source": "stream"}], [{"turn": 3, "source": "rollout"}]):
+            with self.subTest(compactions=compactions):
+                result = self.grade(compactions)
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["investigation.md not read in the `new task` turn"]), result)
+
+    def test_an_edit_or_commit_after_the_compaction_still_fails(self):
+        for failure, more in (("edited project files", lambda project: [edit(2, str(project / "f.py"))]),
+                              ("1 commit(s) made in turn 3", lambda project: bash(2, f"git -C {project} commit -am 'sneak'"))):
+            with self.subTest(failure=failure):
+                result = self.grade([{"turn": 3, "source": "chat_history"}], more)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertTrue(any(f.startswith(failure) for f in result["failures"]), result)
+
+
 class NameOnlyStaysUnloaded(unittest.TestCase):
     case = load_case("name-only-unnamed-request")
     hidden = ["figure-it-out", "poteto-mode", "show-me-your-work", "swarm"]
