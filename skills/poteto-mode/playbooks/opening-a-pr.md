@@ -8,7 +8,7 @@ Read this playbook in full. It has no numbered steps.
 
 **Commits.** Commit liberally. Rebase into small, ordered commits before opening PRs. Each commit is a future PR: landable, ordered to tell the story. Amend when the fix belongs in a just-made commit. New commit when separable. Commit bodies don't restate the subject.
 
-**PRs.** Use the **deslop** skill over the diff before commit. Use the **no-comments** skill before review. Use the **technical-writing** skill for every PR title, PR description, and commit body. Then use the **unslop** skill. Apply every technical-writing layer except Diátaxis, and apply the STE vocabulary rules: use one word for each action, keep articles, and use a plain verb over `-ing` where one works.
+**PRs.** Before every commit or amend, use the **deslop** skill. Complete its [Before each commit](../../deslop/SKILL.md#before-each-commit) check and retain the per-commit evidence. Use the **no-comments** skill before review. Use the **technical-writing** skill for every PR title, PR description, and commit body. Then use the **unslop** skill. Apply every technical-writing layer except Diátaxis, and apply the STE vocabulary rules: use one word for each action, keep articles, and use a plain verb over `-ing` where one works.
 
 **Titles.** Conventional Commits `type(scope): subject`, no trailing period. Type such as `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `perf`. Scope is the area, such as `pstack` or `poteto-mode`. Subject is short, imperative, and names a real symbol when one carries the change, for example `fix(pstack): retarget opening-a-pr babysit trigger`.
 

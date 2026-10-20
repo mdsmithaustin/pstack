@@ -11,6 +11,16 @@ Clean AI slop out of the code a branch changed, and leave behavior unchanged. Us
 
 Use the caller's files or diff. Otherwise diff against the branch this one builds on, including the working tree and untracked files (`git status --short`): the pull request's base when one is open (`gh pr view <branch> -R <host>/<owner>/<repo> --json baseRefName`, with `<host>/<owner>/<repo>` from origin's fetch URL), else the branch it was cut from (`git branch -vv` or `git reflog show <branch>`), else `main`. On a stacked branch, `main` would pull the parent's commits into the diff. Edit only inside the hunks the branch added or changed. Read whatever the rules need to judge them: callers, types, existing helpers, and the rest of the file. Slop you notice elsewhere goes in the report and stays untouched.
 
+## Before each commit
+
+Complete this check before every commit or amend, including test-only, failing-test, fix-round, and WIP commits.
+
+1. Load this skill in the agent that will commit. Read the complete `SKILL.md`, including every rule and the Report section, before each pass. Read it alone or in bounded chunks that cover the whole file. If a return is truncated, fetch the missing content before continuing. A catalog entry, successful read command, partial read, or another agent's summary does not establish a complete read.
+2. Identify the exact proposed commit, its parent, and its paths. Inspect every hunk, including staged content and new files. For an amend, include the existing commit's hunks as well as the staged changes. Apply the Process below to that scope. A branch-end pass does not cover earlier commits. No added comments does not exempt code from the other rules.
+3. Keep evidence before committing. Record the complete-read tool references, the parent, and a staged tree ID or retained patch that identifies the reviewed content. Name cuts by rule ID and file. For no changes, explain why the applicable rules require no cuts, with concrete paths and relevant callers, types, or boundary constraints. A prose-only scope can return `no code` with the inspected paths. Loading the skill or saying "clean" alone is insufficient.
+4. Record the verification commands and their observed results after cleanup, including reverted unsafe cuts and unresolved gaps. Preserve an intentionally failing test commit's expected failure and show that cleanup preserves it. If hooks or later edits change the proposed commit, review the changed content and refresh the evidence before retrying. After compaction, reload the full skill and re-establish the reviewed scope before committing.
+5. Commit only after the pass and its evidence are complete. After success, compare the commit's parent and tree with the reviewed snapshot, then record its SHA. If they differ, report a missed pre-commit check and hold acceptance. Review the changed content and make any authorized correction through a fresh pass. Retain the mismatch as history. A later review cannot prove an earlier pre-commit pass. Return one evidence reference per commit to the parent. If a required read, review, or verification remains incomplete, hold the commit and report the gap.
+
 ## Process
 
 1. Read the diff hunk by hunk and name the task each hunk serves. A hunk that serves none is rule 17.

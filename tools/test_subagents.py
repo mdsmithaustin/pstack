@@ -118,15 +118,29 @@ class SubagentCommands(unittest.TestCase):
         self.assertEqual(json.loads(self.run_cli("check", expected=1).stdout)["payload"], "invalid")
         self.assertIn("# Comment Sicko", self.run_cli("brief", "Comment Sicko").stdout)
 
+    def test_missing_deslop_refuses_brief_and_both_native_installs(self):
+        (self.installed / "deslop/SKILL.md").unlink()
+        result = self.run_cli("brief", "poteto-agent", expected=1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("missing sibling skill", result.stderr)
+        self.assertEqual(json.loads(self.run_cli("check", expected=1).stdout)["payload"], "invalid")
+        for harness in ("codex", "claude-code"):
+            with self.subTest(harness=harness):
+                self.native(harness, expected=1)
+                self.assertFalse(self.role_path("poteto-agent", harness).exists())
+                self.assertFalse(self.role_path("comment-sicko", harness).exists())
+
     def test_logical_symlink_root_owns_sibling_paths(self):
         logical = self.root / "logical skills"
         logical.mkdir()
         (logical / "pstack-harness").symlink_to(self.installed / "pstack-harness", target_is_directory=True)
         shutil.copytree(self.installed / "poteto-mode", logical / "poteto-mode")
+        shutil.copytree(self.installed / "deslop", logical / "deslop")
         shutil.rmtree(self.installed / "poteto-mode")
         script = logical / "pstack-harness/scripts/subagents.py"
         result = self.run_cli("brief", "poteto-agent", script=script)
         self.assertIn(str(logical / "poteto-mode/SKILL.md"), result.stdout)
+        self.assertIn(str(logical / "deslop/SKILL.md"), result.stdout)
         self.assertNotIn(str(self.installed), result.stdout)
 
     def test_aliases_of_one_installation_share_native_files(self):
