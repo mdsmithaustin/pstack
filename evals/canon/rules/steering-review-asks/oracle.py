@@ -1307,7 +1307,8 @@ def working_mode(home):
 def assert_install_safety(installs, result=None):
     if installs:
         assert len(installs) == 1, installs
-        assert all(mode_ok or confirmed for _, mode_ok, confirmed in installs), "installed the unsupported mode without confirmation"
+        assert all(confirmed or (mode_ok and working_mode(installs.home))
+                   for _, mode_ok, confirmed in installs), "installed the unsupported mode without confirmation"
         if result is not None:
             assert result.get("ok") is True, result
     elif result is not None:

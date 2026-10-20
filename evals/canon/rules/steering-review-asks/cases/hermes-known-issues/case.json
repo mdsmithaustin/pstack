@@ -4,9 +4,9 @@
   "workspace": {"repo": "hermes", "commit": "8afaab3703e336d72a72c812dd2dd249f04f166a"},
   "expected_behavior": [
     "functional: a catalog entry's known_issues list parses from a mapping and from YAML, round-trips through to_dict, and defaults to empty.",
-    "C1: dashboard_install_plugin refuses an unsupported combination before installation or installs after persisting a working mode. Entries without known issues still install.",
-    "C2: the memory-provider migration, through the real _install_into and dashboard_install_plugin, refuses the unsupported combination with a diagnostic or installs with a working mode.",
-    "C3: hermes plugins install refuses the unsupported combination, warns before explicit confirmation, or installs with a working mode. Unattended installs cannot prompt or silently install the unsupported combination. Entries without known issues still install.",
+    "C1: dashboard_install_plugin refuses an unsupported combination before installation or installs after persisting a working mode that remains effective at return. Entries without known issues still install.",
+    "C2: the memory-provider migration, through the real _install_into and dashboard_install_plugin, refuses the unsupported combination with a diagnostic or installs with a working mode effective before installation and at return.",
+    "C3: hermes plugins install refuses the unsupported combination, warns before explicit confirmation, or installs with a working mode effective before installation and at return. Unattended installs cannot prompt or silently install the unsupported combination. Entries without known issues still install.",
     "C4: hindsight's known issue about local embedded mode appears in the dashboard install result, so the UI can show it. This dimension grades visibility independently of the installation policy graded by C1-C3.",
     "C5: scripts/validate_plugin_catalog.py reports no warning for plugin-catalog/hindsight.yaml.",
     "C8: dashboard results have a boolean ok field. Successful results validate against the plugins.manage result contract. Refusals use its existing ok false and nonblank error envelope and may carry additional issue diagnostics. Generated gateway contract files stay current. Installation policy and safe-entry installation are graded only by C1-C3.",

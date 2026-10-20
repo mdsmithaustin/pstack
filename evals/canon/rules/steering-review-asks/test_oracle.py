@@ -911,13 +911,56 @@ class KnownIssueSafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "without confirmation"):
             self.assert_safe(calls, {"ok": True})
 
-    def test_preinstall_observations_survive_later_state_changes(self):
-        calls = self.calls("cloud")
-        self.set_mode(calls, "local_embedded")
-        self.assert_safe(calls, {"ok": True})
+    def test_restoring_the_unsupported_mode_after_installation_is_rejected(self):
+        for mode in ("cloud", "local_external"):
+            with self.subTest(mode):
+                calls = self.calls(mode)
+                self.set_mode(calls, "local_embedded")
+                calls.confirmations.append(True)
+                with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                    self.assert_safe(calls, {"ok": True})
+
+    def test_preinstall_confirmation_survives_later_state_changes(self):
         calls = self.calls("local_embedded", confirmed=True)
         calls.confirmations.clear()
         self.assert_safe(calls, {"ok": True})
+
+    def test_dashboard_and_migration_reject_unsafe_mode_transitions(self):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        for path in ("dashboard", "migration"):
+            for initial, final in (("local_embedded", "cloud"), ("local_embedded", "local_external"),
+                                   ("cloud", "local_embedded"), ("local_external", "local_embedded")):
+                with self.subTest(path=path, initial=initial, final=final):
+                    calls = self.calls(initial, installed=False)
+
+                    def install(*args, **kwargs):
+                        calls.core("hindsight")
+                        self.set_mode(calls, final)
+                        return {"ok": True}
+
+                    namespace = {"update_entry": mock.Mock(), "dashboard_install_plugin": install,
+                                 "assert_install_safety": self.assert_safe}
+                    if path == "dashboard":
+                        start = source.index("def test_dashboard_handles_known_issues_safely(")
+                        end = source.index("def test_dashboard_still_installs_entries_without_known_issues(")
+                        exec(source[start:end], namespace)
+                        for name in ("hindsight", "catalog-safety-probe"):
+                            with self.subTest(name=name), self.assertRaisesRegex(AssertionError, "without confirmation"):
+                                namespace["test_dashboard_handles_known_issues_safely"](calls, name)
+                            calls.clear()
+                            self.set_mode(calls, initial)
+                    else:
+                        def migrate(home, *, install, say):
+                            return "hindsight" if install("hindsight")["ok"] else None
+
+                        namespace["migration"] = types.SimpleNamespace(
+                            migrate_home=migrate, _install_into=lambda home: install)
+                        start = source.index("def test_memory_provider_migration_handles_known_issues_safely(")
+                        end = source.index('@pytest.mark.parametrize("tty, answer"', start)
+                        exec(source[start:end], namespace)
+                        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                            namespace["test_memory_provider_migration_handles_known_issues_safely"](
+                                calls, types.SimpleNamespace(setattr=lambda *args: None))
 
     def run_cli_check(self, *, tty, answer, name, exit_code, install=False, mode="local_embedded",
                       late_mode=None, late_confirmation=False):
@@ -966,6 +1009,22 @@ class KnownIssueSafetyTests(unittest.TestCase):
                     options.update(late)
                     with self.subTest(**options), self.assertRaisesRegex(AssertionError, "without confirmation"):
                         self.run_cli_check(**options)
+
+    def test_cli_rejects_mode_restoration_for_successful_exit_styles(self):
+        for name in ("hindsight", "catalog-safety-probe"):
+            for exit_code in ("return", 0, None):
+                for mode in ("cloud", "local_external"):
+                    with self.subTest(name=name, exit_code=exit_code, mode=mode):
+                        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                            self.run_cli_check(tty=False, answer=False, name=name, exit_code=exit_code,
+                                               install=True, mode=mode, late_mode="local_embedded")
+
+    def test_cli_accepts_preinstall_confirmation_with_mode_restoration(self):
+        for name in ("hindsight", "catalog-safety-probe"):
+            for exit_code in ("return", 0, None):
+                with self.subTest(name=name, exit_code=exit_code):
+                    self.run_cli_check(tty=True, answer=True, name=name, exit_code=exit_code,
+                                       install=True, mode="cloud", late_mode="local_embedded")
 
     def run_safe_entry_cli_check(self, exit_code, install_count=1):
         source = oracle().KNOWN_ISSUES_CHECKS
