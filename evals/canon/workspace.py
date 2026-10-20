@@ -7,6 +7,8 @@ pinned commit, so a run never touches the network or the user's own clone. The
 checkout shows only the pinned commit, unless the case adds "history": true,
 which shows every ancestor and needs a mirror fetched with --history.
 
+  workspace.py fetch REPO COMMIT [--from PATH] [--history]   put COMMIT into the mirror
+
 A review case adds case.json "review": {"patch", "title", "body_file",
 "branch"}. Its checkout gets a local `main` at the pinned commit and the PR
 branch, which holds pr.patch as one commit by a neutral author at a fixed
