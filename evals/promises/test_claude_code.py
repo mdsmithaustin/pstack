@@ -2,6 +2,8 @@ import json
 import hashlib
 import os
 import platform
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,7 +22,7 @@ class Preflight(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory(prefix="pstack-claude-preflight-")
         self.addCleanup(tmp.cleanup)
         self.binary = Path(tmp.name) / "claude"
-        self.enterContext(patch.object(claude_code, "CLAUDE_BINARY", self.binary))
+        self.enterContext(patch.object(claude_code, "CLAUDE_LAUNCHER", self.binary))
         self.enterContext(patch.object(claude_code.shutil, "which", return_value=None))
 
     def test_missing_executable_reports_installation_before_login(self):
@@ -662,16 +664,110 @@ class NativeFilesystem(unittest.TestCase):
 
 class RuntimeAdmission(unittest.TestCase):
     def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.home = Path(tmp.name).resolve()
+        self.versions = self.home / ".local/share/claude/versions"
+        self.launcher = self.home / ".local/bin/claude"
+        self.versions.mkdir(parents=True)
+        self.launcher.parent.mkdir(parents=True)
+        self.binary = self.versions / "2.1.400"
+        self.binary.write_bytes(b"installed claude")
+        self.launcher.symlink_to(self.binary)
+        self.codesign_log = self.home / "codesign-argv"
+        self.codesign = self.home / "codesign"
+        self.fake_codesign("exit 0")
+        for name, value in (("CLAUDE_LAUNCHER", self.launcher), ("CLAUDE_VERSIONS", self.versions), ("CODESIGN", self.codesign)):
+            self.enterContext(patch.object(claude_code, name, value))
         self.fingerprints = {path: digests[0] for path, digests in claude_code.PINNED_TOOLS}
-        self.fingerprints[claude_code.CLAUDE_BINARY] = claude_code.CLAUDE_SHA256
         claude_code._host_runtime.cache_clear()
         self.addCleanup(claude_code._host_runtime.cache_clear)
         for name, value in (("system", "Darwin"), ("release", "25.6.0"), ("machine", "arm64")):
             self.enterContext(patch.object(claude_code.platform, name, return_value=value))
-        self.symlink = self.enterContext(patch.object(Path, "is_symlink", autospec=True, return_value=False))
+        self.symlink = self.enterContext(patch.object(Path, "is_symlink", autospec=True,
+                                                      side_effect=lambda path: path.is_relative_to(self.home) and os.path.islink(path)))
         self.enterContext(patch.object(Path, "is_file", return_value=True))
         self.enterContext(patch.object(Path, "exists", return_value=True))
-        self.enterContext(patch.object(claude_code, "_digest", side_effect=self.fingerprints.__getitem__))
+        self.enterContext(patch.object(claude_code, "_digest", side_effect=lambda path: self.fingerprints.get(path)
+                                       or hashlib.sha256(path.read_bytes()).hexdigest()))
+
+    def fake_codesign(self, verdict):
+        self.codesign.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{self.codesign_log}'\n{verdict}\n")
+        self.codesign.chmod(0o755)
+
+    def test_the_launcher_target_is_admitted_with_its_version_and_digest(self):
+        runtime = claude_code._host_runtime()
+        self.assertEqual((runtime.binary, runtime.version), (self.binary, "2.1.400"))
+        self.assertEqual(dict(runtime.fingerprints)[self.binary], hashlib.sha256(b"installed claude").hexdigest())
+        self.assertIn(self.binary, runtime.read_files)
+        self.assertEqual(self.codesign_log.read_text().splitlines(), [
+            "--verify", "--strict",
+            '-R=identifier "com.anthropic.claude-code" and anchor apple generic'
+            " and certificate 1[field.1.2.840.113635.100.6.2.6] exists"
+            " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+            ' and certificate leaf[subject.OU] = "Q6L2SF6YDW"',
+            str(self.binary)])
+
+    def test_a_binary_that_fails_the_requirement_is_refused(self):
+        self.fake_codesign("echo 'test-requirement: code failed to satisfy specified code requirement(s)' >&2\nexit 3")
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable,
+                                    rf"{re.escape(str(self.binary))} fails code requirement .*Q6L2SF6YDW.*failed to satisfy"):
+            claude_code._host_runtime()
+
+    @unittest.skipUnless(os.access("/usr/bin/codesign", os.X_OK), "requires macOS codesign")
+    def test_real_codesign_refuses_unsigned_and_other_team_binaries(self):
+        self.enterContext(patch.object(claude_code, "CODESIGN", Path("/usr/bin/codesign")))
+        for name, install in (("unsigned", lambda: self.binary.write_text("#!/bin/sh\nexit 0\n")),
+                              ("apple-signed", lambda: shutil.copyfile("/usr/bin/true", self.binary))):
+            with self.subTest(binary=name):
+                claude_code._host_runtime.cache_clear()
+                install()
+                with self.assertRaisesRegex(claude_code.IsolationUnavailable,
+                                            rf"{re.escape(str(self.binary))} fails code requirement .*Q6L2SF6YDW"):
+                    claude_code._host_runtime()
+
+    def test_bytes_changed_during_verification_are_refused(self):
+        self.fake_codesign('for last; do :; done\nprintf swapped > "$last"\nexit 0')
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, f"supported executable changed: {re.escape(str(self.binary))}"):
+            claude_code._host_runtime()
+
+    def test_a_launcher_outside_the_versions_directory_is_refused(self):
+        elsewhere = self.home / "elsewhere" / "2.1.400"
+        elsewhere.parent.mkdir()
+        elsewhere.write_bytes(b"installed claude")
+        for name, target in (("outside", elsewhere), ("dot-dot", self.versions / ".." / "2.1.400"),
+                             ("relative", Path("../share/claude/versions/2.1.400")), ("not-a-version", self.versions / "latest")):
+            with self.subTest(target=name):
+                claude_code._host_runtime.cache_clear()
+                self.launcher.unlink()
+                self.launcher.symlink_to(target)
+                with self.assertRaisesRegex(claude_code.IsolationUnavailable, "does not select a release in"):
+                    claude_code._host_runtime()
+        self.launcher.unlink()
+        self.launcher.write_bytes(b"installed claude")
+        claude_code._host_runtime.cache_clear()
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "launcher is missing or not a symlink"):
+            claude_code._host_runtime()
+        self.assertFalse(os.path.exists(self.codesign_log))
+
+    def test_a_linked_version_entry_or_versions_directory_is_refused(self):
+        outside = self.home / "outside"
+        outside.mkdir()
+        (outside / "2.1.400").write_bytes(b"installed claude")
+        self.binary.unlink()
+        self.binary.symlink_to(outside / "2.1.400")
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, f"unsupported executable: {re.escape(str(self.binary))}"):
+            claude_code._host_runtime()
+        self.binary.unlink()
+        claude = self.versions.parent
+        (outside / "versions").mkdir()
+        (outside / "versions" / "2.1.400").write_bytes(b"installed claude")
+        shutil.rmtree(claude)
+        claude.symlink_to(outside)
+        claude_code._host_runtime.cache_clear()
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, f"unsafe directory: {re.escape(str(self.versions))}"):
+            claude_code._host_runtime()
+        self.assertFalse(os.path.exists(self.codesign_log))
 
     def test_both_supported_git_digests_become_the_selected_fingerprint(self):
         git = Path("/Library/Developer/CommandLineTools/usr/bin/git")
@@ -723,9 +819,23 @@ class RuntimeAdmission(unittest.TestCase):
                     claude_code.child_env(run)
 
 
-@unittest.skipUnless((platform.system(), platform.release(), platform.machine()) ==
-                     ("Darwin", "25.6.0", "arm64") and os.access("/usr/bin/sandbox-exec", os.X_OK),
-                     "requires the measured Claude runtime")
+measured_host = unittest.skipUnless((platform.system(), platform.release(), platform.machine()) ==
+                                    ("Darwin", "25.6.0", "arm64") and os.access("/usr/bin/sandbox-exec", os.X_OK),
+                                    "requires the measured Claude runtime")
+
+
+@measured_host
+class NativeClaude(unittest.TestCase):
+    def test_the_installed_claude_is_admitted_by_its_anthropic_signature(self):
+        if not claude_code.CLAUDE_LAUNCHER.is_symlink():
+            self.skipTest("Claude Code is not installed through the native launcher")
+        installed = Path(os.readlink(claude_code.CLAUDE_LAUNCHER))
+        runtime = claude_code._host_runtime()
+        self.assertEqual((runtime.binary, runtime.version), (installed, installed.name))
+        self.assertEqual(dict(runtime.fingerprints)[installed], hashlib.sha256(installed.read_bytes()).hexdigest())
+
+
+@measured_host
 class NativeGit(unittest.TestCase):
     def test_confined_path_resolves_native_git_without_the_selection_shim(self):
         with tempfile.TemporaryDirectory() as tmp:

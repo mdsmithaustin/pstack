@@ -86,11 +86,17 @@ class ConfinedCommand:
     session: str
 
 
-CLAUDE_VERSION = "2.1.304"
 _HOST_ACCOUNT = pwd.getpwuid(os.getuid())
 _HOST_HOME = Path(_HOST_ACCOUNT.pw_dir)
-CLAUDE_BINARY = _HOST_HOME / ".local/share/claude/versions" / CLAUDE_VERSION
-CLAUDE_SHA256 = "b9ac5374839f14abf3f1f45610637c332b5daee5ce0d1634726cef87aab78e6a"
+CLAUDE_LAUNCHER = _HOST_HOME / ".local/bin/claude"
+CLAUDE_VERSIONS = _HOST_HOME / ".local/share/claude/versions"
+CLAUDE_RELEASE = re.compile(r"\d+\.\d+\.\d+")
+CODESIGN = Path("/usr/bin/codesign")
+# The designated requirement `codesign -d -r-` prints for Anthropic's Developer ID Application signature.
+CLAUDE_REQUIREMENT = ('identifier "com.anthropic.claude-code" and anchor apple generic'
+                      " and certificate 1[field.1.2.840.113635.100.6.2.6] exists"
+                      " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+                      ' and certificate leaf[subject.OU] = "Q6L2SF6YDW"')
 PYTHON_ROOT = _HOST_HOME / ".local/share/mise/installs/python/3.14.7"
 NODE_ROOT = _HOST_HOME / ".local/share/mise/installs/node/24.20.0"
 GIT_ROOT = Path("/Library/Developer/CommandLineTools")
@@ -127,19 +133,45 @@ def _digest(path):
         return hashlib.file_digest(file, "sha256").hexdigest()
 
 
+def _installed_claude():
+    try:
+        target = Path(os.readlink(CLAUDE_LAUNCHER))
+    except OSError as error:
+        raise IsolationUnavailable(f"Claude launcher is missing or not a symlink: {CLAUDE_LAUNCHER}") from error
+    if target.parent != CLAUDE_VERSIONS or not CLAUDE_RELEASE.fullmatch(target.name):
+        raise IsolationUnavailable(f"Claude launcher {CLAUDE_LAUNCHER} does not select a release in {CLAUDE_VERSIONS}: {target}")
+    os.close(_open_dir(CLAUDE_VERSIONS))
+    if target.is_symlink():
+        raise IsolationUnavailable(f"unsupported executable: {target}")
+    return target
+
+
+def _signed_digest(path):
+    """Digest before and after codesign, so the digest names the verified bytes and `_validate` holds each launch to them."""
+    digest = _digest(path)
+    done = subprocess.run([str(CODESIGN), "--verify", "--strict", f"-R={CLAUDE_REQUIREMENT}", str(path)],
+                          env={}, capture_output=True, text=True, timeout=60)
+    if done.returncode:
+        raise IsolationUnavailable(f"{path} fails code requirement {CLAUDE_REQUIREMENT}: {done.stderr.strip()}")
+    if _digest(path) != digest:
+        raise IsolationUnavailable(f"supported executable changed: {path}")
+    return digest
+
+
 @lru_cache(maxsize=1)
 def _host_runtime():
     account = _HOST_ACCOUNT
     if (platform.system(), platform.release(), platform.machine()) != ("Darwin", "25.6.0", "arm64"):
         raise IsolationUnavailable("Claude filesystem isolation supports only the measured Darwin 25.6.0 arm64 runtime")
     home = _HOST_HOME
-    files = (CLAUDE_BINARY, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
+    claude = _installed_claude()
+    files = (claude, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
         "/", "/usr/share/icu/icudt78l.dat", "/dev/null", "/dev/random", "/dev/urandom", "/private/etc/hosts",
         "/private/var/run/resolv.conf", "/private/var/db/timezone/zoneinfo/America/Denver")))
     trees = (PYTHON_ROOT, NODE_ROOT, GIT_ROOT / "usr/libexec/git-core", GIT_ROOT / "usr/share/git-core/templates",
              Path("/System/Library"), Path("/usr/lib"), home / "Library/Keychains")
-    pins = []
-    for path, expected in ((CLAUDE_BINARY, (CLAUDE_SHA256,)), *PINNED_TOOLS):
+    pins = [(claude, _signed_digest(claude))]
+    for path, expected in PINNED_TOOLS:
         if path.is_symlink():
             raise IsolationUnavailable(f"unsupported executable: {path}")
         digest = _digest(path)
@@ -148,7 +180,7 @@ def _host_runtime():
         pins.append((path, digest))
     if not Path("/usr/bin/sandbox-exec").is_file() or any(not path.exists() for path in (*files, *trees)):
         raise IsolationUnavailable("measured Seatbelt runtime dependencies are missing")
-    return HostRuntime(CLAUDE_BINARY, CLAUDE_VERSION, home, account.pw_name, files, trees, tuple(pins),
+    return HostRuntime(claude, claude.name, home, account.pw_name, files, trees, tuple(pins),
                        f"{PYTHON_ROOT}/bin:{NODE_ROOT}/bin:{RG_BINARY.parent}:{GIT_ROOT}/usr/bin:/usr/bin:/bin", "/bin/bash")
 
 
@@ -205,7 +237,7 @@ def store(run):
 def preflight():
     """Check the host login before a private turn config exists. Keep the turn's host HOME and Keychain namespace,
     but omit exported API keys and config overrides so they cannot mask a missing login."""
-    binary = CLAUDE_BINARY if CLAUDE_BINARY.is_file() else shutil.which("claude")
+    binary = CLAUDE_LAUNCHER if CLAUDE_LAUNCHER.is_file() else shutil.which("claude")
     if not binary:
         raise RuntimeError("claude executable missing; install Claude Code before running live cases")
     env = {"HOME": os.environ["HOME"], "USER": os.environ.get("USER", ""), "LOGNAME": os.environ.get("LOGNAME", ""),

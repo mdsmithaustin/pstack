@@ -386,7 +386,7 @@ class LoginPreflight(unittest.TestCase):
 
     def claude(self, script):
         from harnesses import claude_code
-        return mock.patch.object(claude_code, "CLAUDE_BINARY", fake_cli(self.tmp, "claude", script))
+        return mock.patch.object(claude_code, "CLAUDE_LAUNCHER", fake_cli(self.tmp, "claude", script))
 
     def codex(self, script, with_auth=True):
         home = self.tmp / "codex-home"
