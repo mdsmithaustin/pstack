@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -93,4 +93,24 @@ test("rejects headings and prose outside a proper close", () => {
 test("rejects backtick info strings containing a backtick", () => {
 	const result = runPlan("```markdown `invalid`\n## Example only\n```\n", 1);
 	expect(result.stderr).toContain('"## Example only" after Close the program is not an appendix');
+});
+
+test("accepts the Verify, live line the multi-phase plan template tells authors to write", () => {
+	const playbook = readFileSync(
+		join(import.meta.dir, "../../../../skills/poteto-mode/playbooks/multi-phase-plan.md"),
+		"utf8",
+	);
+	const templateLine = playbook.split("\n").find((line) => line.startsWith("**Verify, live.**"));
+	expect(templateLine).toBeDefined();
+	const authored = templateLine!.replace("<swarm workers model>", "sonnet");
+	const directory = mkdtempSync(join(tmpdir(), "check-plan-test-"));
+	const file = join(directory, "plan.md");
+	writeFileSync(file, validPlan.replace(/^\*\*Verify, live\.\*\*.*$/m, authored));
+	try {
+		const result = spawnSync("node", [checker, file], { encoding: "utf8" });
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
+	} finally {
+		rmSync(directory, { recursive: true, force: true });
+	}
 });

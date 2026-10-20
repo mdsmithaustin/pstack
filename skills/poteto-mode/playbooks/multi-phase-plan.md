@@ -102,7 +102,7 @@ Each live lane runs in its own isolated worktree at the PR head. Drive through t
 
 - [ ] <Test file and the case it gains.> Run `<command>`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. For a full swarm, run ten lanes on `<swarm workers model>` at the PR head, per the boot recipe. For later rounds, follow the single-verifier rule in `playbooks/autopilot-full.md` step 4.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `<swarm workers model>` at the PR head, per the boot recipe, for each full swarm. For later rounds, follow the single-verifier rule in `playbooks/autopilot-full.md` step 4.
 
 - [ ] Lane 1. Regression lane against trunk. Run <the same load-bearing scenario> at trunk and head. If trunk lacks the feature, record that and gate <the behavior the diff adds plus the end state the user waits for>. Save `<slug>.png`. Pass when <predicate>.
 - [ ] Lane 2. <Scenario.> Save `<slug>.png`. Pass when <predicate>.
