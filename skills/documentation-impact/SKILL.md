@@ -48,7 +48,7 @@ For each affected reader task, identify the maintained document or explain why n
 
 In `author` mode, make the smallest corrections needed for the changed behavior. Follow the repository's documentation layout and generation commands. Update the source of generated docs instead of hand-editing generated output.
 
-Use the **technical-writing** skill on documentation you write or review. Then use the **unslop** skill on it. Keep examples tied to real symbols, paths, flags, defaults, and supported versions. If an upgrade requires user action, state that action and the old-to-new behavior.
+Use the **technical-writing** skill on documentation you write or review. Then use the **unslop** skill on it. Keep examples tied to real symbols, paths, flags, defaults, and supported versions. Example paths must resolve on a reader's machine. For machine-specific paths, use an explicit placeholder and show how to discover or supply the real value. A temporary path is valid when a preceding step creates it. A writer's unexplained scratch path is not a usable example. If an upgrade requires user action, state that action and the old-to-new behavior.
 
 Trace documented effects through the implementation. Accepting or reporting a setting does not prove that the corresponding operation runs. If intended behavior and observed behavior disagree, report the mismatch as an implementation finding instead of documenting a defect as supported behavior.
 

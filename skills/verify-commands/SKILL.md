@@ -1,6 +1,6 @@
 ---
 name: verify-commands
-description: "Apply whenever you write or review a command that decides whether work is done: a test invocation, an acceptance check, a CI gate, a shell assertion, a grep-based verify step. Names the failure signal, grounds paths, and catches the shapes that pass green while measuring nothing."
+description: "Apply whenever you write or review a command that decides whether work is done: a test invocation, an acceptance check, a CI gate, a shell assertion, a grep-based verify step, or an upgrade, deployment, migration, or install whose success you will report. Names the failure signal, grounds paths, and catches the shapes that pass green while measuring nothing."
 ---
 
 # Verify commands

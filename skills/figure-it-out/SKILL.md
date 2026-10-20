@@ -16,8 +16,11 @@ Open a worklist whose first item is to read the Principles section of the **pote
 Ground first, then commit. Don't start the run until you can state:
 
 - The definition of done as a falsifiable predicate (the **prove-it-works** principle skill).
-- Scope, quantified: rough units and effort, plus the blockers grounding surfaced.
+- A `worth doing` or `won't do` verdict for each requested item, with a brief reason tied to the project's design and the user's goal. Make these calls before sizing. A fit judgment does not cancel an explicit requirement. Record proposed exclusions and authorized scope changes separately.
+- Scope, quantified for the accepted items. Size compared options on the same basis, including implementation, tests, documentation, generated files, and verification effort. Name exclusions and uncertainty, plus the blockers grounding surfaced.
 - The rigor level, biased high. One-way doors and high blast radius get more. Reversible low-stakes steps get less. Rigor is gates and artifacts, not "try harder".
+
+Track actual scope and effort against these estimates. When the chosen option exceeds a rejected option's comparable estimate, reassess the choice and report the overrun. Under an autonomy grant, continue within that grant unless an existing gate requires the operator.
 
 Present the framing and tradeoffs before committing to a long run. Reversible work proceeds (the **never-block-on-the-human** principle skill), but a multi-hour run earns one checkpoint.
 
@@ -39,14 +42,17 @@ Use the **principle-sequence-verifiable-units** skill. Verify each unit before s
 
 - Verify by inspecting the artifact, never a self-report. When something passes too easily, suspect the observation method before the system.
 - Pair delegated work with a judge. If a worker games the gate, reset and harden the contract. If the gate itself is wrong, fix the gate in its own change rather than routing around it.
+- For each new regression test, report the behavior it protects and evidence that it fails on the relevant defect before the fix and passes after it. A parent revision, safe targeted mutation, or failing fixture can supply the defect. Keep mutations in a disposable checkout. A setup or compiler failure does not prove the intended behavior failed. Reuse one run when it covers several tests. For other new tests, state the independent oracle and a plausible defect the test rejects. If a failing run is unsafe or unavailable, record the gap instead of claiming regression proof.
 - A verdict is VERIFIED, NOT VERIFIED, or INCONCLUSIVE. Inconclusive is not a pass. Don't hide a negative.
 
 ## Phase D: Keep the audit trail
 
-Use the **show-me-your-work** skill to log the run. figure-it-out's work is usually ambitious enough to commit the trail so the reviewer can read it in the PR. The trail plus the diff is what lets the human come back and trust the work.
+Use the **show-me-your-work** skill to log the run. Let that skill choose whether the trail stays local or is committed. Keep durable completion evidence available to the reviewer.
 
 ## Phase E: Verify and hand back
 
 Check the whole against the Phase A predicate on the real product, not just the harness. Encode any recurring correction as a gate, a lint rule, a check, or a script (the **encode-lessons-in-structure** principle skill).
+
+Before handoff, link unresolved material defects and unmet requirements to existing tracker items or a checked-in known-issues file. Create missing records when authorized. Include the impact, evidence, current disposition, and owner when known. Filing a blocker does not satisfy the done predicate. If filing is unavailable or unauthorized, name that gap and the retained record.
 
 **Reply:** the playbook you designed, the rigor level and why, the decision-trail path, what's verified against the predicate, and what's still open.

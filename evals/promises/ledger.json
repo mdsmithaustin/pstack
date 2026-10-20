@@ -3932,7 +3932,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "c9016f92b729"
+    "4ea3a9976f21"
    ],
    "promise": "show-me-your-work-spawns-trail-reviewer",
    "sources": [
@@ -4105,11 +4105,13 @@
    "text": "Say yes and it writes `.cursor/skills/verify-<app>/`, a project-local skill that teaches agents to drive your app the way a user does."
   },
   "0866d912b1e3": {
-   "class": "context",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "babd3e53fdce"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) is what makes the run reviewable."
   },
@@ -4518,11 +4520,13 @@
    "text": "For prose, `/unslop` takes a target and any extra rules you have:"
   },
   "1656e82ea44c": {
-   "class": "context",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "babd3e53fdce"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "Commit it when the work is ambitious enough that a reviewer needs the trail to trust the result."
   },
@@ -5994,12 +5998,14 @@
    "text": "Choose the targets you use, including `hermes-agent` for Hermes."
   },
   "3d1cf9c0d7a8": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "babd3e53fdce"
+   ],
    "promise": "decision-log-tsv-columns-and-path",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "Each row records the time, phase, decision, reason, an evidence pointer, and the result, in a TSV at `decisions.tsv` (or `.audit/<task-slug>.tsv` when several runs share a directory)."
   },
@@ -6548,6 +6554,18 @@
    ],
    "text": "A swarm of verifiers also confirms a perf win over a big enough sample, or fuzzes the app for regressions before a PR ships."
   },
+  "4ea3a9976f21": {
+   "also": [
+    "show-me-your-work-review-ends-with-attention"
+   ],
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "show-me-your-work-spawns-trail-reviewer",
+   "sources": [
+    "port"
+   ],
+   "text": "The skill's [trail review](../../skills/show-me-your-work/SKILL.md#cross-model-review-of-the-trail) produces an Attention section."
+  },
   "4feaecd8b3ed": {
    "also": [
     "slash-skills-invocable"
@@ -7019,12 +7037,14 @@
    "text": "It picks the strongest target, not the easiest to verify."
   },
   "5f2032eaa98c": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "f667f9ac96d2"
+   ],
    "promise": "autonomous-loop-one-change-one-check-one-row",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "One change, one check, one log row, every iteration."
   },
@@ -7742,6 +7762,15 @@
     "port"
    ],
    "text": "Forcing a test through brittle mocks proves less than running the real command, and the playbook is allowed to say so."
+  },
+  "70dd8431c562": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "autonomous-loop-one-change-one-check-one-row",
+   "sources": [
+    "port"
+   ],
+   "text": "```mermaid\nflowchart TD\n    A[Check the finish condition] --> B[Make the smallest justified change]\n    B --> C[Verify against the real artifact]\n    C --> D{Progress?}\n    D -->|Yes| E[Commit]\n    D -->|No| F[Discard]\n    E --> G[Log the iteration]\n    F --> G\n    G --> A\n```"
   },
   "71416e6d5725": {
    "class": "context",
@@ -9021,12 +9050,14 @@
    "text": "Machine-readable output, such as JSON."
   },
   "9645bb3267a8": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "babd3e53fdce"
+   ],
    "promise": "decision-log-local-by-default",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "It stays local by default."
   },
@@ -10368,6 +10399,18 @@
    ],
    "text": "**Pitfall:** cleanup is not optional polish."
   },
+  "babd3e53fdce": {
+   "also": [
+    "decision-log-local-by-default"
+   ],
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "decision-log-tsv-columns-and-path",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) makes the run reviewable and owns the log format, storage, and evidence-retention rules."
+  },
   "bac411240540": {
    "class": "promise",
    "file": "01-setup.md",
@@ -10907,18 +10950,6 @@
     "port"
    ],
    "text": "In context, that's enough."
-  },
-  "c9016f92b729": {
-   "also": [
-    "show-me-your-work-review-ends-with-attention"
-   ],
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "show-me-your-work-spawns-trail-reviewer",
-   "sources": [
-    "port"
-   ],
-   "text": "Before the skill hands back its summary, it spawns a reviewer on the `trail reviewer` role, following [Spawn a role](../../skills/pstack-harness/SKILL.md#spawn-a-role) for model resolution and execution-identity disclosure, to read the trail and the transcript, and the reply ends with an Attention section listing what deserves your scrutiny."
   },
   "c90f8c31210e": {
    "class": "context",
@@ -11582,12 +11613,14 @@
    "text": "To keep `/poteto-mode` on for the whole chat, pick it from the `/` menu with Option+Enter (Mac) or Alt+Enter (Windows) instead of Enter."
   },
   "de373bcfdb7b": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "70dd8431c562"
+   ],
    "promise": "autonomous-loop-one-change-one-check-one-row",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "```mermaid\nflowchart TD\n    A[Check the finish condition] --> B[Make the smallest justified change]\n    B --> C[Verify against the real artifact]\n    C --> D{Progress?}\n    D -->|Yes| E[Commit]\n    D -->|No| F[Discard]\n    E --> G[Log one decision row]\n    F --> G\n    G --> A\n```"
   },
@@ -12561,6 +12594,15 @@
     "port"
    ],
    "text": "Some bugs live on paths nobody drives: two retries that overlap, a lock that expires mid-write, a state change that arrives out of order."
+  },
+  "f667f9ac96d2": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "autonomous-loop-one-change-one-check-one-row",
+   "sources": [
+    "port"
+   ],
+   "text": "Each iteration makes a change, checks it, and records the result under the [logging rules](../../skills/show-me-your-work/SKILL.md#logging-a-row)."
   },
   "f6c7ea9e9a43": {
    "class": "promise",
