@@ -58,10 +58,16 @@ class UpstreamSync(unittest.TestCase):
             "architect-checkpoint-opt-in": {
                 "check": "live", "owners": ["skills/architect/SKILL.md"],
             },
+            "static-contract": {
+                "check": "static", "owners": ["skills/static-check/SKILL.md"],
+            },
         }}))
         owner = self.origin / "skills" / "architect" / "SKILL.md"
         owner.parent.mkdir(parents=True)
         owner.write_text("Original live promise owner.\n")
+        static_owner = self.origin / "skills" / "static-check" / "SKILL.md"
+        static_owner.parent.mkdir(parents=True)
+        static_owner.write_text("Original static promise owner.\n")
         report = self.origin / "evals" / "promises" / "results" / "earlier.md"
         report.parent.mkdir()
         report.write_text("Earlier live results.\n")
@@ -213,6 +219,18 @@ class UpstreamSync(unittest.TestCase):
         self.assertEqual((clone / "skills/architect/SKILL.md").read_text(),
                          "Original live promise owner.\n")
         self.assertEqual((clone.parent / "claude.log").read_text(), "Draft PR published.\n")
+
+    def test_changed_static_owner_completes_without_new_results(self) -> None:
+        result = self.run_sync(
+            PSTACK_TEST_MODE="published",
+            PSTACK_TEST_FILES=json.dumps({"skills/static-check/SKILL.md": "Changed static owner.\n"}),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        clone = Path((self.root / "agent-cwd").read_text())
+        self.assertEqual(self.git("show", "HEAD:skills/static-check/SKILL.md", cwd=clone),
+                         "Changed static owner.")
+        self.assertEqual((clone.parent / "complete").read_text(),
+                         "https://github.com/mdsmithaustin/pstack/pull/123\n")
 
     def test_changed_live_owner_requires_committed_results(self) -> None:
         result = self.run_sync(
