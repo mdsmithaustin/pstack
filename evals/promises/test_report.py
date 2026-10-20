@@ -56,6 +56,28 @@ class Render(unittest.TestCase):
         self.assertIn("| `persona-delivery-hermes-grok` |  |  | INCONCLUSIVE |  |  |", table)
         self.assertNotIn("claude-effort-applies-via-effort-agents", table)
 
+    def test_a_retained_hermes_pair_counts_its_run_once(self):
+        with tempfile.TemporaryDirectory() as out:
+            for rel in ("hermes/runs/tally-a", "hermes-retained/pair-1/run"):
+                run = Path(out) / rel
+                run.mkdir(parents=True)
+                (run / "verdict.json").write_text(json.dumps({"harness": "hermes", "promises": {
+                    "p1": {"verdict": "PASS", "failures": [], "evidence": []}}}))
+                (run / "trace.json").write_text(json.dumps({"x_skill_listing": {"step": "installed"}}))
+            (Path(out) / "hermes-retained" / "pair-1" / "pair.json").write_text("{}")
+            table = report.render(Path(out), upstream=Path(out))
+        self.assertIn("hermes pass rate: 1 of 1\n", table + "\n")
+        self.assertIn("| `p1` |  |  | PASS |  |", table)
+        self.assertIn("hermes skill listing: installed 1", table)
+
+    def test_a_run_directory_without_a_pair_beside_it_still_counts(self):
+        with tempfile.TemporaryDirectory() as out:
+            self.run_dir(out, "a", "grok", {"p1": "PASS"})
+            (Path(out) / "b").mkdir()
+            self.run_dir(Path(out) / "b", "run", "grok", {"p1": "FAIL"})
+            table = report.render(Path(out), upstream=Path(out))
+        self.assertIn("grok pass rate: 1 of 2\n", table + "\n")
+
     def test_a_harness_with_no_error_prints_a_plain_pass_rate(self):
         with tempfile.TemporaryDirectory() as out:
             self.run_dir(out, "a", "grok", {"p1": "PASS", "p2": "PASS", "p3": "FAIL"})
