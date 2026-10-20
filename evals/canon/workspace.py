@@ -5,17 +5,7 @@ A case opts in with case.json "workspace": {"repo": NAME, "commit": SHA,
 "overlay": "overlay/"}. The repo comes from a local bare mirror that holds the
 pinned commit, so a run never touches the network or the user's own clone. The
 checkout shows only the pinned commit, unless the case adds "history": true,
-which shows every ancestor and needs a mirror fetched with --history. The harness copies only single files into its workspace (flattened into
-inputs/), so the per-run entry wrapper (host.py wrap --workspace, or
-sandbox.py wrap under --runner sbx) materializes the checkout itself with the
-functions here:
-
-  workspace.py fetch REPO COMMIT [--from PATH] [--history]   put COMMIT into the mirror
-
-The wrapper checks out the commit in the harness workspace, copies the
-overlay over it, and refuses to start the agent unless the result has the
-tree the build recorded. After the agent exits it writes the diff of
-everything the agent changed to a slot outside the workspace.
+which shows every ancestor and needs a mirror fetched with --history.
 
 A review case adds case.json "review": {"patch", "title", "body_file",
 "branch"}. Its checkout gets a local `main` at the pinned commit and the PR

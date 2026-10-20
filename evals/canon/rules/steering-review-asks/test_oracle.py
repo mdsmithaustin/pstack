@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import re
 import subprocess
@@ -874,6 +876,65 @@ class KnownIssueSafetyTests(unittest.TestCase):
     def test_a_failed_result_after_installation_is_rejected(self):
         with self.assertRaises(AssertionError):
             self.assert_safe(self.calls("local_external"), {"ok": False, "error": "Refused too late."})
+
+    def run_cli_check(self, *, tty, answer, name, exit_code, install=False, mode="local_embedded"):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        calls = self.calls(mode, installed=False)
+        calls.catalog = calls.home
+        issue = "Embedded mode loops on this pin."
+        output = io.StringIO()
+        patched = {}
+
+        def cmd_install(*args, **kwargs):
+            print(issue)
+            if patched["hermes_cli.plugins_cmd._is_tty"]():
+                patched["hermes_cli.plugins_cmd._ask_yes"]()
+            if install:
+                calls.append("installed")
+            if exit_code != "return":
+                raise SystemExit(exit_code)
+
+        namespace = {
+            "dataclasses": __import__("dataclasses"),
+            "update_entry": mock.Mock(),
+            "load_catalog": lambda _: [types.SimpleNamespace(known_issues=[issue])],
+            "cmd_install": cmd_install,
+            "assert_install_safety": self.assert_safe,
+        }
+        exec(source[source.index("def prose("):source.index("class Installs")], namespace)
+        exec(source[source.index("def assert_issues_shown("):source.index("def test_hindsight_known_issue")], namespace)
+        exec(source[source.index("def test_cli_handles_known_issues_safely("):
+                    source.index("def test_cli_still_installs_entries_without_known_issues(")], namespace)
+        monkeypatch = types.SimpleNamespace(setattr=lambda key, value: patched.__setitem__(key, value))
+        capsys = types.SimpleNamespace(readouterr=lambda: types.SimpleNamespace(out=output.getvalue(), err=""))
+        with contextlib.redirect_stdout(output):
+            namespace["test_cli_handles_known_issues_safely"](calls, monkeypatch, capsys, tty, answer, name)
+
+    def test_cli_cancellation_accepts_every_exit_style_without_installing(self):
+        for name in ("hindsight", "catalog-safety-probe"):
+            for tty, answer in ((False, False), (True, False), (True, True)):
+                for exit_code in (None, 0, 1, "return"):
+                    with self.subTest(name=name, tty=tty, answer=answer, exit_code=exit_code):
+                        self.run_cli_check(tty=tty, answer=answer, name=name, exit_code=exit_code)
+
+    def test_cli_exit_after_installation_is_rejected(self):
+        for exit_code in (None, 0, 1):
+            with self.subTest(exit_code=exit_code), self.assertRaises(AssertionError):
+                self.run_cli_check(tty=True, answer=False, name="hindsight", exit_code=exit_code, install=True)
+
+    def test_cli_return_still_requires_confirmation_or_working_configuration(self):
+        for tty, answer, mode, accepted in ((False, False, "local_embedded", False),
+                                             (True, False, "local_embedded", False),
+                                             (True, True, "local_embedded", True),
+                                             (False, False, "local_external", True),
+                                             (False, False, "cloud", True)):
+            with self.subTest(tty=tty, answer=answer, mode=mode):
+                options = dict(tty=tty, answer=answer, name="hindsight", exit_code="return", install=True, mode=mode)
+                if accepted:
+                    self.run_cli_check(**options)
+                else:
+                    with self.assertRaisesRegex(AssertionError, "without confirmation"):
+                        self.run_cli_check(**options)
 
 
 class WindowsTestTests(unittest.TestCase):

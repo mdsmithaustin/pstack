@@ -1360,7 +1360,7 @@ def test_cli_handles_known_issues_safely(installs, monkeypatch, capsys, tty, ans
     try:
         cmd_install(name, enable=False, no_deps=True)
     except SystemExit as exc:
-        assert exc.code not in (None, 0) and not installs, exc
+        assert not installs, exc
     assert_install_safety(installs, confirmed=any(confirmations))
 
 
