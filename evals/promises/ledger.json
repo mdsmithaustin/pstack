@@ -724,7 +724,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "1. Reproduce it yourself on the matching surface via the control skill (Non-negotiables)"
+     "quote": "1. Reproduce it yourself on the matching surface via the control skill required by the [task triggers](../references/task-triggers.md)"
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
@@ -2540,13 +2540,13 @@
    "claim": "Subagents that /poteto-mode spawns inside a playbook step carry the poteto-agent persona, which reads poteto-mode before any work.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/SKILL.md",
+     "file": "skills/poteto-mode/references/delegation.md",
      "quote": "**Use the `poteto-agent` persona for any subagent you spawn inside a playbook step**"
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/SKILL.md"
+    "skills/poteto-mode/references/delegation.md"
    ]
   },
   "poteto-mode-triggers-architect-on-boundary-crossing": {
@@ -2554,7 +2554,7 @@
    "claim": "poteto-mode's triggers send any code crossing a function boundary to architect without the user naming it.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/SKILL.md",
+     "file": "skills/poteto-mode/references/task-triggers.md",
      "quote": "Code crossing a function boundary → use the **architect** skill for parallel design exploration before implementing."
     },
     {
@@ -2568,7 +2568,7 @@
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/references/task-triggers.md",
     "skills/poteto-mode/playbooks/feature.md",
     "skills/poteto-mode/playbooks/bug-fix.md"
    ]
@@ -3036,7 +3036,7 @@
      "quote": "`routine` runs every read-only scan, parse, or watch subagent that returns a reduced finding"
     },
     {
-     "file": "skills/poteto-mode/SKILL.md",
+     "file": "skills/poteto-mode/references/delegation.md",
      "quote": "A read-only scan, parse, or watcher that returns a reduced finding takes `routine`."
     }
    ],
@@ -3044,7 +3044,7 @@
    "owners": [
     "skills/setup-pstack/examples/pstack-models.md",
     "skills/setup-pstack/SKILL.md",
-    "skills/poteto-mode/SKILL.md"
+    "skills/poteto-mode/references/delegation.md"
    ]
   },
   "setup-configures-swarm-workers-role": {
@@ -3410,7 +3410,7 @@
    "claim": "A status-only request reports a missing or stale author result or required independent review verdict as pending without starting either pass.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/SKILL.md",
+     "file": "skills/poteto-mode/references/task-triggers.md",
      "quote": "Status-only workflows report a missing or stale author result or a missing or stale required independent review verdict as pending without starting either pass."
     },
     {
@@ -3420,7 +3420,7 @@
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/references/task-triggers.md",
     "skills/poteto-mode/playbooks/babysit.md"
    ]
   },
@@ -5043,6 +5043,14 @@
     "port"
    ],
    "text": "Give each PR a verification swarm before it merges, and let Autopilot-stack or Autopilot-full carry the queue."
+  },
+  "2366d0b35765": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "See the [README](../../README.md#usage) for continuation after compaction and what to do if the mode stops applying."
   },
   "23b4ef38716e": {
    "class": "context",
@@ -7739,14 +7747,6 @@
     "port"
    ],
    "text": "[`/reflect`](../../skills/reflect/SKILL.md) sends the transcript to three parallel reviewers, then a synthesizer sorts the proposals into `Accepted`, `Rejected`, and `Backlog` and waits for your approval before any skill changes."
-  },
-  "7060f8af3657": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "Type `/poteto-mode` again if it stops applying."
   },
   "70634e327351": {
    "class": "promise",
@@ -10725,14 +10725,6 @@
     "port"
    ],
    "text": "When the reply comes back, it should carry the exact commands and outputs."
-  },
-  "c3d6057b5fdb": {
-   "class": "context",
-   "file": "01-setup.md",
-   "sources": [
-    "port"
-   ],
-   "text": "In a very long chat, the CLI may compress older messages and drop the mode."
   },
   "c41d18f82f9c": {
    "class": "promise",

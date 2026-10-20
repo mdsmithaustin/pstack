@@ -35,6 +35,7 @@ run() {
 }
 
 run lint "cross-suite references" . "${py[@]}" tools/check-cross-suite-references.py --foreign-file tools/cross-suite-foreign.txt skills
+run lint "mode entry byte budget" . "${py[@]}" tools/check-mode-entry-size.py
 run lint "personal paths" . "${py[@]}" tools/check-personal-paths.py
 run lint "subagent bundle" . "${py[@]}" tools/generate-subagents.py --check
 run lint "promise ledger" . "${py[@]}" evals/promises/ledger.py audit

@@ -48,7 +48,7 @@ pstack runs in Claude Code, Codex, Hermes, and Grok Build. Most workflow skills,
 
 `/poteto-mode` matches the task to a playbook, copies the playbook's opening prose and steps into the worklist, and runs the other skills as the steps need them. A step it skips stays in the list as `skipped: <reason>`. With the task tools off, the worklist is a numbered list in chat. A good prompt states the goal and how to tell it's done. It doesn't list skills, because a hand-written sequence tends to drop or reorder steps the playbook would keep. Read [`references/prompting.md`](references/prompting.md) before you help word one. [Guide page 2](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/02-poteto-mode.md) has examples.
 
-`/poteto-mode` is sticky. Once invoked, it stays on for the conversation, applies itself when a playbook matches or the task needs rigor, and stays out of the way otherwise. The user opts out by saying so. In a very long chat, the CLI may compress older messages and drop the mode, so tell the user to invoke `/poteto-mode` again if it stops applying. Mid-chat, "new task" makes the mode match a fresh playbook. `/poteto-mode` already uses `poteto-agent` for the subagents its playbook steps spawn. To get the same style from a subagent of your own, spawn the `poteto-agent` persona as the **pstack-harness** skill's Spawn a role section describes. `/setup-pstack` can register it as a native agent.
+`/poteto-mode` is sticky. Once invoked, it stays on for the conversation, applies itself when a playbook matches or the task needs rigor, and stays out of the way otherwise. The user opts out by saying so. For compaction or truncation, read the mode's [recovery rule](../poteto-mode/SKILL.md#recover-after-compaction-or-truncation). Mid-chat, "new task" makes the mode match a fresh playbook. `/poteto-mode` already uses `poteto-agent` for the subagents its playbook steps spawn. To get the same style from a subagent of your own, spawn the `poteto-agent` persona as the **pstack-harness** skill's Spawn a role section describes. `/setup-pstack` can register it as a native agent.
 
 ## Pick a skill
 
@@ -134,7 +134,7 @@ Principles are one-rule skills that `/poteto-mode` reads and cites in its replie
 
 | Symptom | Fix |
 |---|---|
-| The mode stopped applying | Invoke `/poteto-mode` again, or start each task with it. |
+| The mode stopped applying | Read the [README's continuation guidance](https://github.com/mdsmithaustin/pstack/blob/main/README.md#usage). |
 | A question got treated as the next step of the last task | Say "new task", or say the turn doesn't need the mode. |
 | A new model choice had no effect | A workspace `.agents/pstack-models.md` overrides the home file, and a harness section such as `## codex` beats a flat line. On Claude Code, a written effort applies only once `/setup-pstack` has registered pstack's effort agents. |
 | Runs cost more than expected | See the cost paragraph under Get set up. |
