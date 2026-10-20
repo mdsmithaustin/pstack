@@ -45,8 +45,6 @@ PR_AUTHOR = {"GIT_AUTHOR_NAME": "Sam Rivera", "GIT_AUTHOR_EMAIL": "sam.rivera@ex
 # Our own git calls ignore user and system config, whose LFS filters, fsmonitor,
 # or diff prefixes would change what a checkout writes or a diff says.
 GIT_ENV = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0"}
-# The wrapper exits with this code, without starting the agent, when the
-# workspace cannot be built or does not match the recorded tree.
 REFUSED = 97
 TREE = "skills/pstack"
 INVOCATION_POLICY = "agents/openai.yaml"
