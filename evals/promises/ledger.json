@@ -3196,29 +3196,33 @@
    ],
    "scenario": "setup-run"
   },
-  "sharpen-frames-task-before-work": {
+  "sharpen-rewrites-prompt-without-doing-task": {
    "check": "static",
-   "claim": "/sharpen asks how a top expert would approach the task, what the user is after, and whether it is over- or underspecified, loosens constraints as readily as it adds them, leaves the user's choices open, keeps one outside check, then does the work.",
+   "claim": "/sharpen says what a top professional would do that the user didn't ask for, the rawest material they would start from, their methods and tools, and an outside check that the result is right, then rewrites the prompt to ask for that, leaves the user's choices open, and doesn't do the task.",
    "evidence": [
     {
      "file": "skills/sharpen/SKILL.md",
-     "quote": "Before starting, ask how a top expert would approach this task"
+     "quote": "Say what a top professional in this field would do here that I'm not asking for."
     },
     {
      "file": "skills/sharpen/SKILL.md",
-     "quote": "whether the task is over- or underspecified"
+     "quote": "Name the rawest material they would start from"
     },
     {
      "file": "skills/sharpen/SKILL.md",
-     "quote": "Loosen constraints that don't serve the goal as readily as you add ones that do, and leave choices that are the user's to make open instead of deciding them."
+     "quote": "Name the specific methods and tools they would use."
     },
     {
      "file": "skills/sharpen/SKILL.md",
-     "quote": "always keep one outside check that the result is right"
+     "quote": "Say what, other than you or me, would show the result is right."
     },
     {
      "file": "skills/sharpen/SKILL.md",
-     "quote": "then do the work."
+     "quote": "Then rewrite my prompt to ask for exactly that."
+    },
+    {
+     "file": "skills/sharpen/SKILL.md",
+     "quote": "Leave choices that are mine to make open instead of deciding them."
     }
    ],
    "harness_sensitive": false,
@@ -4199,16 +4203,6 @@
    ],
    "text": "Tests check the cases someone thought to write."
   },
-  "0f77d985e3fc": {
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "sharpen-frames-task-before-work",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Before it starts, the agent asks how a top expert would do the task, what you're really after, and whether the ask is over- or underspecified."
-  },
   "0f9cc893bd89": {
    "class": "context",
    "file": "03-understand.md",
@@ -4311,6 +4305,16 @@
     "port"
    ],
    "text": "Catch it with a test."
+  },
+  "123a352a331d": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "sharpen-rewrites-prompt-without-doing-task",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The agent names what an expert would do that you didn't ask for, the raw material they'd start from, their methods and tools, and an outside check that the result is right."
   },
   "1278fc9c4d91": {
    "class": "context",
@@ -4845,6 +4849,16 @@
    ],
    "text": "A swarm worker that reads and judges a diff runs on `trail reviewer` instead."
   },
+  "1dd47905086a": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-rewrites-prompt-without-doing-task",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It doesn't do the task."
+  },
   "1e1d1ccadb61": {
    "class": "context",
    "file": "04-design.md",
@@ -5114,16 +5128,6 @@
     "port"
    ],
    "text": "A server on your machine holds the webhook's sender key, so the key never reaches the browser or the chat."
-  },
-  "25321c29d8ee": {
-   "class": "promise",
-   "file": "10-recipes-and-pitfalls.md",
-   "promise": "sharpen-frames-task-before-work",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It keeps one outside check that the result is right, then does the work."
   },
   "26331839fa40": {
    "class": "context",
@@ -5760,16 +5764,6 @@
    ],
    "text": "Hermes requires trust for project skills, and its project link can be skipped when `.hermes` does not exist."
   },
-  "370107715792": {
-   "class": "promise",
-   "file": "10-recipes-and-pitfalls.md",
-   "promise": "sharpen-frames-task-before-work",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "The agent asks how an expert would do the task, what you're really after, and whether the ask says too much or too little."
-  },
   "3835af2d4290": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -6045,6 +6039,16 @@
     "port"
    ],
    "text": "Before dispatch, the coordinator records its predecessor and the harness, model, and effort that will run it."
+  },
+  "3e74944d2a28": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "sharpen-rewrites-prompt-without-doing-task",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It hands back your prompt rewritten to ask for that and doesn't do the task."
   },
   "3eec39eb99a9": {
    "class": "context",
@@ -7613,15 +7617,6 @@
    ],
    "text": "[Attack the Premise](../../skills/principle-attack-the-premise/SKILL.md) writes down the premise that two or more failed fixes shared and tests it directly before the next fix."
   },
-  "6c303f8ac2d4": {
-   "class": "context",
-   "file": "02-poteto-mode.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Then it does the work."
-  },
   "6c41f8249bef": {
    "class": "promise",
    "file": "07-overnight.md",
@@ -8513,15 +8508,6 @@
    ],
    "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs `/deslop` on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
   },
-  "8616da1694e0": {
-   "class": "context",
-   "file": "02-poteto-mode.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "When you're unsure whether a task is aimed right, put [`/sharpen`](../../skills/sharpen/SKILL.md) in front of it:"
-  },
   "8626c5a5c0eb": {
    "class": "promise",
    "file": "04-design.md",
@@ -8983,16 +8969,6 @@
    ],
    "text": "Error messages that say what to do instead."
   },
-  "924614a9e8a9": {
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "sharpen-frames-task-before-work",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It drops constraints that don't serve the goal as readily as it adds ones that do, leaves your choices open, and keeps one outside check that the result is right."
-  },
   "925332aad252": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -9270,6 +9246,16 @@
     "port"
    ],
    "text": "\"bugs included\" keeps the migration from quietly fixing things on the way, which would make the old and new output impossible to compare."
+  },
+  "9ead3f17f124": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-rewrites-prompt-without-doing-task",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Then it rewrites your prompt to ask for exactly that, deeper but not bigger, and leaves your choices open."
   },
   "9ecb08f71efa": {
    "class": "context",
@@ -10076,6 +10062,16 @@
    ],
    "text": "Then it runs `/arena` to produce competing design sketches, with the caller's usage written first in each, followed by types, signatures, and a module map."
   },
+  "b1e90eb13b4e": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-rewrites-prompt-without-doing-task",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The agent says what a top professional would do that you didn't ask for, the rawest material they would start from, the methods and tools they would use, and what other than you or the agent would show the result is right."
+  },
   "b1ff4346bd4d": {
    "also": [
     "slash-skills-invocable"
@@ -10273,6 +10269,15 @@
     "port"
    ],
    "text": "Setup also configures `routine`, the model for read-only subagents that scan or parse bulk material, such as a long transcript, and return a short finding."
+  },
+  "b78bf6d55700": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Read the rewrite, then send it, for example with `/poteto-mode`."
   },
   "b79782a127a9": {
    "class": "promise",
@@ -12210,6 +12215,15 @@
    ],
    "text": "You describe what you want and how you'll know it's done."
   },
+  "eb1880162cb5": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Send the rewrite when it reads right."
+  },
   "ec5a61869e11": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -12878,6 +12892,15 @@
     "port"
    ],
    "text": "```text\n/poteto-mode update the review skill so it flags missing migrations, and eval the change.\n```"
+  },
+  "ff45621c7b54": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When you're unsure whether a prompt is aimed right, run [`/sharpen`](../../skills/sharpen/SKILL.md) on it before you send it:"
   },
   "ff8926f17118": {
    "also": [

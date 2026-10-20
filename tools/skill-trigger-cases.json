@@ -54,7 +54,7 @@
     {"skill":"reflect","example_request":"Review this transcript.","description_contains":["parallel review"],"implicit_allowed":false},
     {"skill":"runtime-probes","example_request":"Probe for defects.","description_contains":["probe, stress"],"implicit_allowed":true},
     {"skill":"setup-pstack","example_request":"Configure pstack models.","description_contains":["Configure which models"],"implicit_allowed":true},
-    {"skill":"sharpen","example_request":"Sharpen this task before starting.","description_contains":["Sharpen a task"],"implicit_allowed":false},
+    {"skill":"sharpen","example_request":"Sharpen this prompt before I send it.","description_contains":["deeper, not bigger"],"implicit_allowed":false},
     {"skill":"show-me-your-work","example_request":"Keep a decision trail.","description_contains":["reviewable decision trail"],"implicit_allowed":false},
     {"skill":"spec-probes","example_request":"Review this spec.","description_contains":["reviewing a spec"],"implicit_allowed":true},
     {"skill":"swarm","example_request":"Run parallel workers.","description_contains":["Fan out N"],"implicit_allowed":false},
