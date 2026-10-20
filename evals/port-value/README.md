@@ -10,7 +10,7 @@ The completed [2026-10-19 comparison](results/2026-10-19.md) reports acceptance,
 
 The [historical validation receipt](results/2026-10-19-validation.json) records gate run `01M5A84DM51F31XH1YTGENDRF2` at tested head `4244e8d387bc60e5e34197829429dedc32a55fb8`. This run prepared and calibrated new guidance, then executed two separate synthetic public application API canaries, one per guidance arm, with four completed named children. Raw spawn arguments, child completion, exact guidance, capture integrity, and cleanup were verified. Historical persona proof and all 36 retained study stages were reconciled separately without repeating study calls. The receipt lists six passing scenarios, relative evidence names, and full source and evidence hashes. Its `prior_validation` reference preserves run `01M5A55HYA9B86NW7Z5TQDDVB9`, the previous receipt hash, and the previous canary proof hash. Source hashes identify the executed bytes before this documentation update.
 
-Use a reader-selected external evidence root containing the listed relative artifacts. Keep raw streams and private evidence outside Git. This model-free command verifies retained artifact identity and source bytes at the receipt's `validation_head`, including its canary proof and historical analysis. That revision must be available in local Git history. The maintained checkout has since archived some of those sources. The command does not execute evidence scripts, repeat model calls, or validate the current checkout. Run it from the repository root. A nonzero exit, missing artifact or revision, hash mismatch, or absence of `retained_evidence_verified: true` means verification failed.
+Use a reader-selected external evidence root containing the listed relative artifacts. Keep raw streams and private evidence outside Git. This model-free command verifies retained artifact identity, including the receipt's canary proof and historical analysis. It checks source bytes at receipt publication commit `6a66f7818f9eb43a2be4d1f380c015de65132b2b`, which preserves all recorded source hashes and must be available in local Git history. The proof still identifies the original `validation_head`. The maintained checkout has since archived some of those sources. The command does not execute evidence scripts, repeat model calls, or validate the current checkout. Run it from the repository root. A nonzero exit, missing artifact or revision, hash mismatch, or absence of `retained_evidence_verified: true` means verification failed.
 
 ```sh
 EVIDENCE_ROOT=/absolute/external/evidence-directory
@@ -30,8 +30,9 @@ if not receipt["artifact_sha256"] or len(receipt["scenarios"]) != 6:
 for name, expected in receipt["artifact_sha256"].items():
     if hashlib.sha256((root / name).read_bytes()).hexdigest() != expected:
         raise SystemExit(f"evidence hash mismatch: {name}")
+source_revision = "6a66f7818f9eb43a2be4d1f380c015de65132b2b"
 for name, expected in receipt["source_sha256"].items():
-    source = subprocess.check_output(["git", "show", f"{receipt['validation_head']}:{name}"])
+    source = subprocess.check_output(["git", "show", f"{source_revision}:{name}"])
     if hashlib.sha256(source).hexdigest() != expected:
         raise SystemExit(f"source hash mismatch: {name}")
 proof = json.loads((root / "fresh-persona-canaries/proof.json").read_text())
