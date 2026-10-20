@@ -8,9 +8,17 @@ from harnesses.login import ERROR, applicability
 HARNESSES = ("claude-code", "codex", "hermes", "grok")
 
 
+def run_verdicts(out):
+    """A retained Hermes pair copies its run to `X/run/` beside `X/pair.json`, and the original run stays in place."""
+    out = Path(out)
+    for path in sorted(out.rglob("verdict.json")):
+        if not any(d.name == "run" and (out / d.parent / "pair.json").is_file() for d in path.relative_to(out).parents):
+            yield path
+
+
 def collect(out):
     cells = collections.defaultdict(list)
-    for path in sorted(Path(out).rglob("verdict.json")):
+    for path in run_verdicts(out):
         record = json.loads(path.read_text())
         for pid, result in record["promises"].items():
             if not result.get("not_applicable") and not applicability(pid, record["harness"]).get("not_applicable"):
@@ -23,7 +31,7 @@ def collect(out):
 
 def listing_states(out):
     states = collections.defaultdict(collections.Counter)
-    for path in sorted(Path(out).rglob("verdict.json")):
+    for path in run_verdicts(out):
         trace = path.parent / "trace.json"
         listing = json.loads(trace.read_text()).get("x_skill_listing") if trace.is_file() else None
         if listing:
