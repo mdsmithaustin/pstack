@@ -4732,6 +4732,14 @@
    ],
    "text": "A rerun of `/setup-pstack` keeps any role you changed, whether its model, effort, panel list, alias, or harness section."
   },
+  "1ac6e666f95c": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "port"
+   ],
+   "text": "To request code cleanup in plain words, say `deslop it`."
+  },
   "1ae9a2dab1b1": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -6106,6 +6114,18 @@
     "port"
    ],
    "text": "A pass covers the model or the bound, not the whole system."
+  },
+  "4070ee73075a": {
+   "also": [
+    "slash-skills-invocable"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "opening-a-pr-unslops-prose",
+   "sources": [
+    "port"
+   ],
+   "text": "The playbook also applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
   },
   "407bad5d424f": {
    "class": "promise",
@@ -7967,14 +7987,6 @@
    ],
    "text": "Changes that didn't help get discarded, not left to ride."
   },
-  "74e7065802e3": {
-   "class": "context",
-   "file": "05-build-and-clean.md",
-   "sources": [
-    "port"
-   ],
-   "text": "If you'd rather ask for the diff pass in plain words: remove narrating comments, unsupported guards, dead compatibility paths, and unrelated edits."
-  },
   "74ec8caa61ef": {
    "class": "context",
    "file": "07-overnight.md",
@@ -8500,7 +8512,8 @@
    "class": "substituted",
    "file": "05-build-and-clean.md",
    "ported_as": [
-    "f712b0e65103"
+    "cb76efa5c5d6",
+    "4070ee73075a"
    ],
    "promise": "opening-a-pr-deslops-diff",
    "sources": [
@@ -10817,7 +10830,7 @@
    "class": "substituted",
    "file": "05-build-and-clean.md",
    "ported_as": [
-    "74e7065802e3"
+    "1ac6e666f95c"
    ],
    "sources": [
     "upstream"
@@ -11020,6 +11033,15 @@
     "port"
    ],
    "text": "An agent that knows it's being evaluated behaves differently."
+  },
+  "cb76efa5c5d6": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "opening-a-pr-deslops-diff",
+   "sources": [
+    "port"
+   ],
+   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) requires deslop's [Before each commit check](../../skills/deslop/SKILL.md#before-each-commit) for every commit or amend."
   },
   "cbdc744f083c": {
    "class": "promise",
@@ -11270,6 +11292,14 @@
     "port"
    ],
    "text": "Next: [Route work through `/poteto-mode`](./02-poteto-mode.md)."
+  },
+  "d26bc95c4c38": {
+   "class": "context",
+   "file": "05-build-and-clean.md",
+   "sources": [
+    "port"
+   ],
+   "text": "That section owns the full-read and evidence requirements."
   },
   "d2eca2837ba1": {
    "class": "context",
@@ -12631,19 +12661,6 @@
     "upstream"
    ],
    "text": "**Parallel agents in one worktree.** They overwrite each other, and nobody can tell which agent changed what. Run them as cloud agents, or say \"own worktree per attempt\"."
-  },
-  "f712b0e65103": {
-   "also": [
-    "opening-a-pr-unslops-prose",
-    "slash-skills-invocable"
-   ],
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "opening-a-pr-deslops-diff",
-   "sources": [
-    "port"
-   ],
-   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs [`/deslop`](../../skills/deslop/SKILL.md) on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
   },
   "f7233b98640a": {
    "class": "promise",
