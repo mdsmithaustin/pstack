@@ -34,11 +34,11 @@ ts	phase	decision	why	evidence	result
 
 Write each entry the way you'd tell a teammate what you did. Plain words, concrete actions, no AI speak or abstract jargon. Use the **unslop** skill on log text too.
 
-Use the helper `scripts/log.sh <logfile> <phase> <decision> <why> <evidence> <result>`. It stamps `ts`, writes the header on first use, strips stray tabs/newlines, and prefixes any cell starting with `=`, `+`, `-`, or `@` with a single quote. A bare `printf` appending a row works too, but mind those same bytes if cells come from generated or user-supplied text.
+Use the helper `scripts/log.sh <logfile> <phase> <decision> <why> <evidence> <result>`. It stamps `ts`, writes the header on first use, strips stray tabs/newlines, and prefixes any cell starting with `=`, `+`, `-`, or `@` with a single quote. Use this helper for every row, including delegate rows.
 
 For evidence that must survive checkout cleanup, use the [evidence capture helper](references/evidence-capture.md). Put its completed manifest path in the existing `evidence` cell. Verify that artifact before removing its source checkout. Keep the chosen absolute store in handoffs.
 
-Log decision points and checkpoints, not every action: a fork chosen, a unit completed with its verification result, a pivot or revert with its trigger, a blocker surfaced, a gate fixed. For loop runs, one row per iteration. Skip the trivial and self-evident.
+Log every verdict, including failed review rounds, every change to the definition of done, and every constraint. Mark each constraint as `user-given`, `self-imposed`, or `unknown` in the decision cell, with a supporting pointer. A late row uses its actual append time and names the earlier event time when known. Log other decision points and checkpoints, not every action: a fork chosen, a unit completed with its verification result, a pivot or revert with its trigger, a blocker surfaced, a gate fixed. For loop runs, one row per iteration. Skip the trivial and self-evident.
 
 A run is one agent conversation, including its later turns and any summary of it. A pickup, a replacement agent, or a new chat starts a new run. When a run adds to a log that already has rows, its first row has phase `start`, and so does its first row after another run's `start` row. So a run that comes back to a log in a later turn first reads the log's last rows to see whether another run wrote since. A `start` row names the `ts` range of the rows before it that this run did not write, and its evidence names this run, such as its agent id. Use phase `start` for nothing else.
 
@@ -46,7 +46,7 @@ A run is one agent conversation, including its later turns and any summary of it
 
 By default the log is a working artifact, not committed. Keep it at `decisions.tsv` in the work dir, or `.audit/<task-slug>.tsv` when several efforts run at once, and leave it out of git.
 
-Commit it only when the work is ambitious enough that a reviewer needs the trail to trust the result.
+Commit it only when the work is ambitious enough that a reviewer needs the trail to trust the result. Every evidence pointer in a committed trail must resolve after merge and checkout cleanup. Use commits, PRs, checked-in files, or an artifact whose published location and retention contract work for the intended reader. A private absolute path alone does not qualify. Replace scratch references with durable evidence before committing. Local trails can cite local artifacts, but retain evidence needed for later review with the capture helper.
 
 ## Rules
 
@@ -72,7 +72,7 @@ Before handing back, spawn a reviewer subagent on the `trail reviewer` role. Use
 - Choices that look risky in hindsight (premature, scope-creeping, papering over a symptom).
 - Gaps the user would otherwise miss on a casual skim.
 
-Every reply for a run that produced a trail ends with an "Attention" section. Lead with the reviewer's model and effort on its own line (`reviewed by <model>@<effort>`, and the role it came from when it was not `trail reviewer`), then list each flag pointing to specific rows or moments. "No flags" is a valid value. The model name is not.
+Every reply for a run that produced a trail ends with an "Attention" section. Lead with the reviewer's model and effort on its own line (`reviewed by <model>@<effort>`, and the role it came from when it was not `trail reviewer`), then list unresolved material flags with pointers to specific rows or moments. Keep previously reported flags concise while they still apply, with their identity, current consequence, and evidence. Acknowledgment alone does not resolve a flag. Omit resolved flags and repeated history that adds no current risk or action. "No flags" is a valid value. The model name is not.
 
 ## Reviewing the trail
 

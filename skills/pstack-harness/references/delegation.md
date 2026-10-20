@@ -16,7 +16,7 @@ If `git worktree add` fails, give each writer whose output the lead collects fro
 
 **Parallelism.** Real where the mechanism allows it (independent tool calls in one message, concurrent subprocesses); otherwise sequential with the same arm count.
 
-**Read-only.** Use an enforcing option if the spawn mechanism has one; otherwise state it plainly in the brief ("read-only: do not edit or write files").
+**Read-only.** Leave the original checkout unchanged. A read-only role that runs tests, builds, linters, package runners, or other commands gets a throwaway checkout under `mktemp -d`, as defined above. Tools can write caches, coverage, environments, and generated files even when the agent edits no source. Bind that checkout to the exact reviewed input, including authorized relevant uncommitted content. Name the throwaway path as the only place to run those commands. Pure source inspection can use the original checkout. Leave generated state in the throwaway checkout instead of restoring files in the original. Use an enforcing option when it permits the required verification there. Otherwise state the original-checkout boundary plainly in the brief.
 
 
 - **Panels keep their configured arm count.** Run a three-model panel as three arms even in a one-model harness. Brief each arm the way the panel's skill says, and run the arms in parallel or sequentially. For exact model requests, apply [role resolution step 5](roles.md#spawn-a-role) and its linked required-arm rule.
