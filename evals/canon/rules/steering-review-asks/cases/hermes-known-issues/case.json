@@ -7,11 +7,11 @@
     "C1: dashboard_install_plugin refuses an unsupported combination before installation or installs after persisting a working mode. Entries without known issues still install.",
     "C2: the memory-provider migration, through the real _install_into and dashboard_install_plugin, refuses the unsupported combination with a diagnostic or installs with a working mode.",
     "C3: hermes plugins install refuses the unsupported combination, warns before explicit confirmation, or installs with a working mode. Unattended installs cannot prompt or silently install the unsupported combination. Entries without known issues still install.",
-    "C4: hindsight's known issue about local embedded mode appears in the dashboard install result, so the UI can show it.",
+    "C4: hindsight's known issue about local embedded mode appears in the dashboard install result, so the UI can show it. This dimension grades visibility independently of the installation policy graded by C1-C3.",
     "C5: scripts/validate_plugin_catalog.py reports no warning for plugin-catalog/hindsight.yaml.",
-    "C8: successful dashboard results validate against the plugins.manage result contract. Refusals use its existing ok false and error envelope and may carry additional issue diagnostics. Generated gateway contract files stay current.",
+    "C8: dashboard results have a boolean ok field. Successful results validate against the plugins.manage result contract. Refusals use its existing ok false and nonblank error envelope and may carry additional issue diagnostics. Generated gateway contract files stay current. Installation policy and safe-entry installation are graded only by C1-C3.",
     "Not graded: the later review preferences for unconditional dashboard installation, automatic memory migration, and unattended CLI installation. The visible prompt explicitly permits refusal, warning plus confirmation, or a working mode.",
     "Not graded: tests that avoid the live catalog entry, exact-once issue printing, removing a zoneinfo import, and keeping only two tests. These are later maintainer preferences, previously C6, C9, and C7.",
-    "Historical sample names are preserved. good.diff implements warning-only installation and now fails safety checks. bad.diff implements a valid refusal policy but lacks validator support. fail-closed.diff adds that support and is the current positive witness. Historical scores remain unchanged."
+    "Historical sample names are preserved. good.diff implements warning-only installation and currently fails only C1-C3 safety checks; its issue visibility and result contract pass C4/C8. bad.diff implements a valid refusal policy but lacks validator support. fail-closed.diff adds that support and is the current positive witness. Historical scores remain unchanged."
   ]
 }

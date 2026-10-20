@@ -1137,8 +1137,6 @@ class KnownIssuesTests(ReplayedPullRequest):
             f"constraint:C1: {checks}::test_dashboard_handles_known_issues_safely failed",
             f"constraint:C2: {checks}::test_memory_provider_migration_handles_known_issues_safely failed",
             f"constraint:C3: {checks}::test_cli_handles_known_issues_safely failed",
-            f"constraint:C4: {checks}::test_hindsight_known_issue_reaches_the_dashboard_result failed",
-            f"constraint:C8: {checks}::test_dashboard_result_fits_the_plugins_manage_contract failed",
         ], {"outside_footprint": [], "added": 130, "merged_added": 130}))
 
     def test_historical_pre_review_sample_lacks_catalog_validator_support(self):
