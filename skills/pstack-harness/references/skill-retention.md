@@ -11,7 +11,7 @@ Evidence checked on 2026-10-20. Runtime documentation and observed runs answer d
 
 The repository limits the whole `skills/poteto-mode/SKILL.md` file, including frontmatter, to 16,000 UTF-8 bytes. The explicit target list is `ENTRY_BUDGETS` in `tools/check-mode-entry-size.py`. This policy leaves headroom below the issue's reported historical character cutoff. Bytes, characters, and tokens are different units. This limit is not a token conversion, a smallest cross-runtime limit, or a retention guarantee.
 
-`mise run gate-lint` runs the checker through `tools/gate-check.sh`. The existing CI tools unit-test discovery also executes the checker against the repository entry. Failure is a nonzero checker exit. Missing entries and invalid UTF-8 fail too.
+The [contributor checks](../../../README.md#contributor-checks) describe the gate commands and tier assignments. The existing CI tools unit-test discovery also executes the checker against the repository entry. Failure is a nonzero checker exit. Missing entries and invalid UTF-8 fail too.
 
 For a runtime observation, record the binary version, requested and observed model, invocation route, native compaction event, and inspected payload or transcript. Keep synthetic prefix truncation separate from a native boundary. Without an observed native boundary, a recovery result is `INCONCLUSIVE`. When both parent and head recover, report no demonstrated improvement.
 
