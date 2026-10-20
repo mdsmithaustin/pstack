@@ -324,6 +324,8 @@ def add_worktree(run, path):
     live.git_run(run.project, "worktree", "add", "-q", "-b", f"candidate-{path.name}", str(path))
 
 
+@unittest.skipUnless((platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64"),
+                     "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class ScratchWorktrees(unittest.TestCase):
     def test_a_worktree_the_agent_adds_under_the_run_tmpdir_is_graded(self):
         case = steer_case()
@@ -381,6 +383,8 @@ class ScratchWorktrees(unittest.TestCase):
         self.assertTrue((candidates[0] / ".git").is_file())
 
 
+@unittest.skipUnless((platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64"),
+                     "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class BootstrapDependencies(unittest.TestCase):
     def plant(self, run, index):
         modules = run.project / live.adapter(run.harness).SKILLS_DIR / "poteto-mode" / "scripts" / "node_modules"
@@ -434,6 +438,8 @@ class BootstrapDependencies(unittest.TestCase):
                 self.assertEqual((outside / "node_modules" / ".bin" / "tsc").read_text(), "outside\n")
 
 
+@unittest.skipUnless((platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64"),
+                     "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class GradeRefusalBatch(unittest.TestCase):
     def wave(self, during_turn, runs=2):
         case = steer_case()
