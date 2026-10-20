@@ -1,0 +1,1 @@
+Catalog entries declare machine-readable known issues. The CLI refuses unattended installs and requires confirmation after a warning. The dashboard refuses these entries with their issue details. The catalog validator accepts the new field. Entries without known issues still install.

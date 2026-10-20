@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -829,39 +830,50 @@ class KnownIssueProseTests(unittest.TestCase):
                          ["Embedded mode loops."])
 
 
-class LiveEntryPinTests(unittest.TestCase):
-    """C6: the agent's own tests still pass once the edited catalog entry is restored."""
-    ENTRY = "plugin-catalog/hindsight.yaml"
-    DIFF = (f"diff --git a/{ENTRY} b/{ENTRY}\n--- a/{ENTRY}\n+++ b/{ENTRY}\n@@ -1 +1 @@\n-sha: old\n+sha: new\n"
-            "diff --git a/tests/hermes_cli/test_own.py b/tests/hermes_cli/test_own.py\nnew file mode 100644\n"
-            "--- /dev/null\n+++ b/tests/hermes_cli/test_own.py\n@@ -0,0 +1 @@\n+def test_a(): pass\n")
+class KnownIssueSafetyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        source = oracle().KNOWN_ISSUES_CHECKS
+        namespace = {"yaml": types.SimpleNamespace(safe_load=json.loads)}
+        exec(source[source.index("def working_mode("):source.index("def update_entry(")], namespace)
+        cls.assert_safe = staticmethod(namespace["assert_install_safety"])
 
-    def failures(self, edited, restored):
-        module = oracle()
-        with tempfile.TemporaryDirectory() as directory, \
-                mock.patch.object(module, "project_test_results", side_effect=[edited, restored]):
-            (Path(directory) / "plugin-catalog").mkdir()
-            (Path(directory) / self.ENTRY).write_text("sha: old\n")
-            return module.own_tests_pin_the_live_entry(Workspace(Path(directory), self.DIFF, None))
+    def calls(self, mode, installed=True):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        calls = type("Calls", (list,), {})(["installed"] if installed else [])
+        calls.home = Path(directory.name)
+        (calls.home / "config.yaml").write_text(json.dumps({"memory": {"hindsight": {"mode": mode}}}))
+        return calls
 
-    def test_a_test_that_skips_once_the_entry_is_restored_fails(self):
-        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a": "passed"},
-                                       {"tests.hermes_cli.test_own::test_a": "skipped"}),
-                         [f"constraint:C6: tests.hermes_cli.test_own::test_a skipped with {self.ENTRY} restored"])
+    def test_refusal_accepts_the_existing_error_envelope_and_extra_diagnostics(self):
+        self.assert_safe(self.calls("local_embedded", installed=False),
+                         {"ok": False, "error": "Known issue prevents installation.", "issue_details": ["trap"]})
 
-    def test_a_failure_under_a_label_the_edited_run_lacks_fails(self):
-        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a[new]": "passed"},
-                                       {"tests.hermes_cli.test_own::test_a[old]": "failed"}),
-                         [f"constraint:C6: tests.hermes_cli.test_own::test_a[old] failed with {self.ENTRY} restored"])
+    def test_explicit_confirmation_permits_the_warned_combination(self):
+        self.assert_safe(self.calls("local_embedded"), {"ok": True}, confirmed=True)
 
-    def test_a_collection_error_once_the_entry_is_restored_fails(self):
-        self.assertEqual(self.failures({"tests.hermes_cli.test_own::test_a": "passed"},
-                                       {"tests.hermes_cli.test_own": "failed"}),
-                         [f"constraint:C6: tests.hermes_cli.test_own failed with {self.ENTRY} restored"])
+    def test_a_persisted_working_mode_permits_installation(self):
+        for mode in ("local_external", "cloud"):
+            with self.subTest(mode):
+                self.assert_safe(self.calls(mode), {"ok": True})
 
-    def test_a_test_that_skips_or_fails_either_way_does_not_pin_the_entry(self):
-        both = {"tests.hermes_cli.test_own::test_windows": "skipped", "tests.hermes_cli.test_own::test_broken": "failed"}
-        self.assertEqual(self.failures(both, both), [])
+    def test_a_warning_without_confirmation_does_not_permit_the_unsupported_mode(self):
+        with self.assertRaisesRegex(AssertionError, "without confirmation"):
+            self.assert_safe(self.calls("local_embedded"), {"ok": True, "warnings": ["Known issue."]})
+
+    def test_a_success_without_an_install_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            self.assert_safe(self.calls("local_external", installed=False), {"ok": True})
+
+    def test_a_refusal_without_an_explanation_is_rejected(self):
+        for error in (None, "", " ", []):
+            with self.subTest(error), self.assertRaises(AssertionError):
+                self.assert_safe(self.calls("local_embedded", installed=False), {"ok": False, "error": error})
+
+    def test_a_failed_result_after_installation_is_rejected(self):
+        with self.assertRaises(AssertionError):
+            self.assert_safe(self.calls("local_external"), {"ok": False, "error": "Refused too late."})
 
 
 class WindowsTestTests(unittest.TestCase):
@@ -1058,22 +1070,24 @@ class DesktopSkipTests(ReplayedPullRequest):
 class KnownIssuesTests(ReplayedPullRequest):
     CASE, IMAGE = "hermes-known-issues", "hermes-8afaab3703e3"
 
-    def test_merged_known_issues_inform_and_never_gate(self):
-        self.assertEqual(self.grade_sample("good"), ([], {"outside_footprint": [], "added": 130, "merged_added": 130}))
+    def test_historical_merged_sample_warns_but_installs_without_confirmation(self):
+        checks = "tests/hermes_cli/test_catalog_known_issues_install.py"
+        self.assertEqual(self.grade_sample("good"), ([
+            f"constraint:C1: {checks}::test_dashboard_handles_known_issues_safely failed",
+            f"constraint:C2: {checks}::test_memory_provider_migration_handles_known_issues_safely failed",
+            f"constraint:C3: {checks}::test_cli_handles_known_issues_safely failed",
+            f"constraint:C4: {checks}::test_hindsight_known_issue_reaches_the_dashboard_result failed",
+            f"constraint:C8: {checks}::test_dashboard_result_fits_the_plugins_manage_contract failed",
+        ], {"outside_footprint": [], "added": 130, "merged_added": 130}))
 
-    def test_pre_review_gate_refuses_installs_the_migration_needs(self):
+    def test_historical_pre_review_sample_lacks_catalog_validator_support(self):
         checks = "tests/hermes_cli/test_catalog_known_issues_install.py"
         self.assertEqual(self.grade_sample("bad"), ([
-            f"constraint:C1: {checks}::test_dashboard_installs_an_entry_that_declares_known_issues failed",
-            f"constraint:C2: {checks}::test_memory_provider_migration_still_installs_hindsight failed",
-            f"constraint:C3: {checks}::test_noninteractive_cli_install_proceeds_without_a_prompt failed",
-            f"constraint:C4: {checks}::test_hindsight_known_issue_reaches_the_dashboard_result failed",
             f"constraint:C5: {checks}::test_validator_accepts_the_hindsight_entry failed",
-            f"constraint:C8: {checks}::test_dashboard_result_fits_the_plugins_manage_contract failed",
-            "constraint:C6: tests.hermes_cli.test_124037_catalog_known_issues_gate.TestCatalogParsing"
-            "::test_live_catalog_hindsight_declares_known_issues failed with plugin-catalog/hindsight.yaml restored",
         ], {"outside_footprint": ["tests/hermes_cli/test_124037_catalog_known_issues_gate.py"], "added": 213, "merged_added": 130}))
 
+    def test_fail_closed_sample_includes_catalog_validator_support(self):
+        self.assertEqual(self.grade_sample("fail-closed")[0], [])
 
     def test_weakening_the_generated_files_test_does_not_hide_stale_contracts(self):
         weakened = (
@@ -1091,10 +1105,12 @@ class KnownIssuesTests(ReplayedPullRequest):
             " # The emitter inventory the old gateway-events.json scan used, kept as the completeness oracle:\n")
 
         def edit(diff):
-            sections = re.split(r"(?m)^(?=diff --git )", diff)
-            return "".join(section for section in sections if "gateway-contract" not in section.split("\n", 1)[0]) + weakened
+            historical = (RULES / RULE / "cases" / self.CASE / "samples" / "good.diff").read_text()
+            contract = next(section for section in re.split(r"(?m)^(?=diff --git )", historical)
+                            if section.startswith("diff --git a/tui_gateway/contracts/tools_mcp_plugins.py"))
+            return diff + "\n" + contract + weakened
 
-        self.assertEqual(self.grade_sample("good", edit)[0], [
+        self.assertEqual(self.grade_sample("fail-closed", edit)[0], [
             "constraint:C8: tests/tui_gateway/contracts/test_generated.py::test_generated_files_are_current failed",
         ])
 

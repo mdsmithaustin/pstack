@@ -4,14 +4,14 @@
   "workspace": {"repo": "hermes", "commit": "8afaab3703e336d72a72c812dd2dd249f04f166a"},
   "expected_behavior": [
     "functional: a catalog entry's known_issues list parses from a mapping and from YAML, round-trips through to_dict, and defaults to empty.",
-    "C1: dashboard_install_plugin installs a catalog entry that declares known issues and returns ok true.",
-    "C2: the memory-provider migration, through the real _install_into and dashboard_install_plugin, still installs hindsight for a home with memory.provider hindsight.",
-    "C3: a non-interactive hermes plugins install of such an entry proceeds without a TTY, a confirmation prompt, or --force.",
+    "C1: dashboard_install_plugin refuses an unsupported combination before installation or installs after persisting a working mode. Entries without known issues still install.",
+    "C2: the memory-provider migration, through the real _install_into and dashboard_install_plugin, refuses the unsupported combination with a diagnostic or installs with a working mode.",
+    "C3: hermes plugins install refuses the unsupported combination, warns before explicit confirmation, or installs with a working mode. Unattended installs cannot prompt or silently install the unsupported combination. Entries without known issues still install.",
     "C4: hindsight's known issue about local embedded mode appears in the dashboard install result, so the UI can show it.",
     "C5: scripts/validate_plugin_catalog.py reports no warning for plugin-catalog/hindsight.yaml.",
-    "C6: the agent's own tests still pass when plugin-catalog/hindsight.yaml is restored, so none pins the live entry.",
-    "C8: the dashboard install result validates against the plugins.manage result contract, and the generated gateway contract files stay current.",
-    "C9: the CLI prints each known issue once.",
-    "Not graded: the reviewer's asks to drop the zoneinfo import and to keep two tests, which are taste; C7 in the draft."
+    "C8: successful dashboard results validate against the plugins.manage result contract. Refusals use its existing ok false and error envelope and may carry additional issue diagnostics. Generated gateway contract files stay current.",
+    "Not graded: the later review preferences for unconditional dashboard installation, automatic memory migration, and unattended CLI installation. The visible prompt explicitly permits refusal, warning plus confirmation, or a working mode.",
+    "Not graded: tests that avoid the live catalog entry, exact-once issue printing, removing a zoneinfo import, and keeping only two tests. These are later maintainer preferences, previously C6, C9, and C7.",
+    "Historical sample names are preserved. good.diff implements warning-only installation and now fails safety checks. bad.diff implements a valid refusal policy but lacks validator support. fail-closed.diff adds that support and is the current positive witness. Historical scores remain unchanged."
   ]
 }
