@@ -31,6 +31,7 @@ GITCONFIG = """[user]
 [init]
 \tdefaultBranch = main
 """
+LOCAL_COMMANDS = ("/compact",)
 SESSION_FILES = ("chat_history.jsonl", "events.jsonl", "usage.json", "summary.json", "tool_definitions.json")
 
 AUTH_PROVIDER = """#!{python}
@@ -285,6 +286,12 @@ def turn_prompts(run):
     return prompts
 
 
+def turn_of_index(prompt_index, prompts):
+    """Grok counts only the prompts it sends to the model, so a `/compact` turn takes no prompt_index."""
+    sent = [index for index, prompt in enumerate(prompts) if prompt.strip() not in LOCAL_COMMANDS]
+    return sent[prompt_index] if prompt_index < len(sent) else prompt_index
+
+
 def turn_of_prompt(prompt, prompts, previous):
     matches = [index for index, known in enumerate(prompts) if known.strip() == prompt.strip() and index > previous]
     return matches[0] if matches else previous + 1
@@ -331,18 +338,18 @@ def parse_session(chat, cwd, entry_skill, lead=False, prompts=()):
 
     for rec in load_jsonl(chat):
         kind = rec.get("type")
-        if kind == "user" and rec.get("synthetic_reason") == "compaction_meta" and not rewriting:
-            rewriting = {"turn": turn, "source": "chat_history"}
-            compactions.append(rewriting)
+        if kind == "user" and rec.get("synthetic_reason") == "compaction_meta":
+            if not rewriting:
+                rewriting = {"source": "chat_history"}
+                compactions.append(rewriting)
+            rewriting["turn"] = turn
         if kind == "user" and not rec.get("synthetic_reason") and lead and (
                 "prompt_index" in rec or USER_QUERY.search(text_of(rec.get("content")))):
             body = text_of(rec.get("content"))
             query = USER_QUERY.search(body)
             prompt = query.group(1) if query else body
-            turn = rec["prompt_index"] if "prompt_index" in rec else turn_of_prompt(prompt, prompts, turn if events else -1)
+            turn = turn_of_index(rec["prompt_index"], prompts) if "prompt_index" in rec else turn_of_prompt(prompt, prompts, turn if events else -1)
             add({"kind": "user", "text": prompt})
-            if rewriting:
-                rewriting["turn"] = turn
             turn_skills += [{"turn": turn, "skill": name} for name in SKILL_REF.findall(body)]
         if kind == "user" and not rec.get("synthetic_reason") and injection and injection.search(text_of(rec.get("content"))):
             injected = True
