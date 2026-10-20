@@ -38,6 +38,7 @@ Upstream is the source of truth for the workflows themselves. This file records 
 ## Port additions beyond substitution
 
 - Preserve deslop's [Before each commit contract](skills/deslop/SKILL.md#before-each-commit) and the pointers from poteto-mode, its PR and autopilot playbooks, and the poteto persona on upstream sync. Keep deslop in the generator's required persona skills so briefing and registration refuse a missing installation.
+- Preserve the Code review playbook's review-only deslop pass over the complete PR diff, its evidence check in the review lens, and its verdict requirement. The reviewer reports cuts for the author to apply. This final review supplements the per-commit checks.
 
 - **sharpen rewrite boundary** (port addition after upstream #729). Keep upstream's four numbered framing asks and the local instructions to return the answers and rewritten prompt, then stop. Preserve the closing restriction that methods and checks deepen the original deliverables. Guide-only requests keep the guide as their only deliverable. Live runs executed the task on Hermes and added converter work on Claude Code; the first boundary still allowed an intermittent extra check script on Grok. The [final validation receipt](evals/promises/results/2026-10-20T1935-sharpen-729-final.md) records the failures and reruns. On sync, merge upstream edits around these boundaries rather than replacing them.
 
