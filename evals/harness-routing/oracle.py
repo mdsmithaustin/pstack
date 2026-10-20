@@ -245,6 +245,7 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
     coverage = {name: [] for name in files}
     failures, late, unsupported = [], [], []
     observations, pending_reads, unverified_foreign = [], [], []
+    source_output_lines = set()
     for command in trace.commands:
         parts = read_commands[command.call_line]
         if parts is None:
@@ -271,6 +272,8 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
             if foreign_paths:
                 unverified_foreign.append(command.call_line)
             continue
+        if cutoff is not None and command.result_line < cutoff:
+            source_output_lines.add(command.result_line)
         for path, start, end, _ in parts:
             observation = {"path": path, "start": start, "end": end,
                            "call_line": command.call_line, "result_line": command.result_line}
@@ -369,7 +372,8 @@ def inspect_trace(raw: bytes, final: bytes, workspace: Path, files: dict[str, by
         hits = private_hits(scope["scope"], private_markers, private_artifacts or {})
         if hits:
             exposures.append({**scope, "markers": hits})
-        if any(re.search(r"truncat(?:ed|ion)|output (?:limit|omitted)", text, re.I) for text in texts):
+        source_output = scope["line"] in source_output_lines and set(scope["scope"]) == {"aggregated_output"}
+        if not source_output and any(re.search(r"truncat(?:ed|ion)|output (?:limit|omitted)", text, re.I) for text in texts):
             unknown_context.append(scope["line"])
     for entry in trace.records:
         record = entry["record"]
