@@ -223,6 +223,15 @@ class SkillRecoveryCliTests(unittest.TestCase):
         self.prepare([boundary(), call("read"), returned("read", [ENTRY + b"Warning: truncated output\n"]), call("action"), returned("action", [b"Done."])], [read("read")])
         self.assertIn("transport_notice", self.run_cli(2)["windows"][0]["attempts"][0]["reasons"])
 
+    def test_native_unicode_truncation_marker_is_transport(self):
+        for marker in ("…5 tokens truncated…", "…40 chars truncated…"):
+            with self.subTest(marker=marker):
+                head, tail, notice = ENTRY[:20], ENTRY[20:], marker.encode()
+                self.prepare([boundary(), call("read"), returned("read", [head + notice + tail]), call("action"), returned("action", [b"Done."])],
+                             [read("read", source=[0, 20], output=[0, 20]),
+                              read("read", source=[20, len(ENTRY)], output=[20 + len(notice), len(ENTRY) + len(notice)])])
+                self.assertIn("transport_notice", self.run_cli(2)["windows"][0]["attempts"][0]["reasons"])
+
     def test_nonzero_command_does_not_prove_delivery(self):
         self.basic()
         body = json.loads(self.rows[2]["payload"]["output"][1]["text"])
