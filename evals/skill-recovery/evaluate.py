@@ -139,7 +139,7 @@ class _Window:
 
 
 _HEADER = re.compile(r"Script completed\nWall time [0-9.]+ seconds\nOutput:\n")
-_NOTICE = re.compile(rb"(?im)^(?:Warning: truncated output\b|\[?output (?:truncated|omitted)\b|\.\.\.\s*\d+ (?:characters|tokens) truncated\b)")
+_NOTICE = re.compile(rb"(?im)^(?:Warning: truncated output\b|\[?output (?:truncated|omitted)\b|\.\.\.\s*\d+ (?:characters|tokens) truncated\b)|\xe2\x80\xa6\d+ (?:tokens|chars) truncated\xe2\x80\xa6")
 _ENVELOPE_KEYS = {"output", "exit_code", "chunk_id", "wall_time_seconds", "original_token_count", "session_id", "truncated"}
 
 
