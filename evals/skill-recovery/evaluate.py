@@ -388,6 +388,10 @@ def _bind(raw, manifest, directory):
                 for form, start in _hits(body.raw, encodings[file.id]):
                     _require(claimed or left <= start and start + len(form) <= right,
                              "undeclared_governing_body", calls[call_id].return_row)
+        bodies = calls[call_id].bodies
+        matches = {bodies[claim.block].data[claim.output[0]:claim.output[1]] == files[claim.file].data[claim.source[0]:claim.source[1]]
+                   for claim in selected if bodies[claim.block].data is not None}
+        _require(len(matches) < 2, "inconsistent_read_claims", calls[call_id].return_row)
     injections = []
     for item in _array(manifest.get("initial_injections", [])):
         _object(item, {"row", "row_sha256", "file", "block", "output_range"})
