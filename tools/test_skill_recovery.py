@@ -262,6 +262,67 @@ class SkillRecoveryCliTests(unittest.TestCase):
         self.write_manifest()
         self.assertEqual(self.run_cli(2)["errors"][0]["code"], "undeclared_governing_body")
 
+    def test_foreign_fragments_cannot_hide_complete_entry(self):
+        for embedded in (False, True):
+            for fragments in (1, 3):
+                for repaired in (False, True):
+                    with self.subTest(embedded=embedded, fragments=fragments, repaired=repaired):
+                        prefix = b"unrelated prefix\n" if embedded else b""
+                        body = prefix + ENTRY + (b"unrelated suffix\n" if embedded else b"")
+                        masks = [read("mixed", "step", source=[STEP.index(bytes([byte])), STEP.index(bytes([byte])) + 1],
+                                      output=[len(prefix) + offset, len(prefix) + offset + 1])
+                                 for offset, byte in enumerate(ENTRY[:fragments])]
+                        rows = [boundary()]
+                        if not repaired:
+                            rows += [call("valid"), returned("valid", [ENTRY])]
+                        rows += [call("mixed"), returned("mixed", [body, STEP])]
+                        if repaired:
+                            rows += [call("valid"), returned("valid", [ENTRY])]
+                        rows += [call("action"), returned("action", [b"Done."])]
+                        self.prepare(rows, masks + [read("mixed", "step", 2), read("valid")])
+                        report = self.run_cli(2)
+                        self.assertEqual(report["status"], "INCONCLUSIVE")
+                        self.assertEqual(report["errors"][0]["code"], "undeclared_governing_body")
+
+    def test_every_repeated_or_overlapping_occurrence_needs_own_claim(self):
+        for entry, body, source, output in (
+            (ENTRY, ENTRY + ENTRY, [0, len(ENTRY)], [0, len(ENTRY)]),
+            (b"aaa", b"aaaa", [0, 3], [0, 3]),
+            (ENTRY, ENTRY, [0, 12], [0, 12]),
+            (ENTRY, ENTRY + ENTRY[:12], [0, 12], [len(ENTRY), len(ENTRY) + 12]),
+        ):
+            with self.subTest(entry=entry, output=output):
+                self.files["entry"] = entry
+                self.prepare([boundary(), call("read"), returned("read", [body]),
+                              call("valid"), returned("valid", [entry]), call("action"), returned("action", [b"Done."])],
+                             [read("read", source=source, output=output), read("valid")])
+                self.assertEqual(self.run_cli(2)["errors"][0]["code"], "undeclared_governing_body")
+
+    def test_declared_repeated_occurrences_are_accounted_for(self):
+        self.prepare([boundary(), call("read"), returned("read", [ENTRY + ENTRY]),
+                      call("action"), returned("action", [b"Done."])],
+                     [read("read"), read("read", output=[len(ENTRY), 2 * len(ENTRY)])])
+        self.assertEqual(self.run_cli(0)["status"], "SATISFIED")
+
+    def test_split_blocks_cannot_hide_complete_entry(self):
+        for split in (1, 17, len(ENTRY) - 1):
+            for foreign_mask in (False, True):
+                with self.subTest(split=split, foreign_mask=foreign_mask):
+                    reads = [read("mixed", "step", 3), read("valid")]
+                    if foreign_mask:
+                        reads.append(read("mixed", "step", 1, source=[STEP.index(b"R"), STEP.index(b"R") + 1], output=[0, 1]))
+                    self.prepare([boundary(), call("mixed"), returned("mixed", [ENTRY[:split], ENTRY[split:], STEP]),
+                                  call("valid"), returned("valid", [ENTRY]), call("action"), returned("action", [b"Done."])], reads)
+                    self.assertEqual(self.run_cli(2)["errors"][0]["code"], "undeclared_governing_body")
+
+    def test_declared_split_blocks_preserve_whole_entry_policy(self):
+        self.prepare([boundary(), call("split"), returned("split", [ENTRY[:17], ENTRY[17:]]),
+                      call("valid"), returned("valid", [ENTRY]), call("action"), returned("action", [b"Done."])],
+                     [read("split", source=[0, 17]), read("split", block=2, source=[17, len(ENTRY)]), read("valid")])
+        report = self.run_cli(0)
+        self.assertEqual(report["status"], "SATISFIED_WITH_REPAIRS")
+        self.assertFalse(report["windows"][0]["attempts"][0]["whole_body"])
+
     def test_raw_hash_binding(self):
         self.basic()
         self.raw.write_bytes(self.raw.read_bytes() + b"\n")

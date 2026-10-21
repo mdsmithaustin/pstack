@@ -357,13 +357,21 @@ def _bind(raw, manifest, directory):
         for block in {claim.block for claim in selected}:
             spans = sorted(claim.output for claim in selected if claim.block == block)
             _require(all(left[1] <= right[0] for left, right in zip(spans, spans[1:])), "overlapping_output_claims", calls[call_id].return_row)
+        data = b""
+        offsets = {}
         for body in calls[call_id].bodies:
-            if body.data:
-                spans = [claim.output for claim in selected if claim.block == body.block and
-                         body.data[claim.output[0]:claim.output[1]] == files[claim.file].data[claim.source[0]:claim.source[1]]]
-                residual = _residual(body.data, spans)
-                _require(not any(file.data in residual for file in files.values()),
+            if body.data is not None:
+                offsets[body.block] = len(data)
+                data += body.data
+        for file in files.values():
+            start = data.find(file.data)
+            while start != -1:
+                spans = [claim.source for claim in selected if claim.file == file.id and claim.block in offsets and
+                         offsets[claim.block] + claim.output[0] == start + claim.source[0] and
+                         offsets[claim.block] + claim.output[1] == start + claim.source[1]]
+                _require(_complete(spans, len(file.data)),
                          "undeclared_governing_body", calls[call_id].return_row)
+                start = data.find(file.data, start + 1)
     injections = []
     for item in _array(manifest.get("initial_injections", [])):
         _object(item, {"row", "row_sha256", "file", "block", "output_range"})
