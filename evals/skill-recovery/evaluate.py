@@ -392,6 +392,10 @@ def _bind(raw, manifest, directory):
         matches = {bodies[claim.block].data[claim.output[0]:claim.output[1]] == files[claim.file].data[claim.source[0]:claim.source[1]]
                    for claim in selected if bodies[claim.block].data is not None}
         _require(len(matches) < 2, "inconsistent_read_claims", calls[call_id].return_row)
+        ordered = sorted(selected, key=lambda claim: (claim.block, claim.output))
+        _require(not any(left.block == right.block and left.file == right.file and left.output[1] == right.output[0] and
+                         left.source[1] == right.source[0] for left, right in zip(ordered, ordered[1:])),
+                 "split_read_claim", calls[call_id].return_row)
     injections = []
     for item in _array(manifest.get("initial_injections", [])):
         _object(item, {"row", "row_sha256", "file", "block", "output_range"})
