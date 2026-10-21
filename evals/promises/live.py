@@ -315,11 +315,12 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     try:
         died = drive(module, run, authorization)
         error = died and death_record(*died)
-        project = _Root.open(run.project)
-        try:
-            project.remove(module.SKILLS_DIR / BOOTSTRAP_MODULES)
-        finally:
-            project.close()
+        if os.path.lexists(run.project):
+            project = _Root.open(run.project)
+            try:
+                project.remove(module.SKILLS_DIR / BOOTSTRAP_MODULES)
+            finally:
+                project.close()
         if run.turns or not died:
             trace = {**module.harvest(run), "x_implicit_off": run.implicit_off}
             _seal(authorization, meta(run), trace, error=error)

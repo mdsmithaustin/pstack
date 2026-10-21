@@ -386,6 +386,23 @@ class ScratchWorktrees(unittest.TestCase):
 @unittest.skipUnless((platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64"),
                      "native parent grading requires the reviewed Darwin 25.6.0 arm64 runtime")
 class BootstrapDependencies(unittest.TestCase):
+    def test_a_project_deleted_during_the_turn_reaches_grading(self):
+        import shutil
+        case = steer_case()
+        module = live.adapter("codex")
+        prepare, turn = synthetic_turns("codex", lambda run, index: shutil.rmtree(run.project))
+        with tempfile.TemporaryDirectory(prefix="pstack-live-bootstrap-deleted-") as tmp:
+            out = Path(tmp).resolve()
+            output = io.StringIO()
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(module, "prepare", side_effect=prepare), \
+                    mock.patch.object(module, "turn", side_effect=turn), mock.patch.object(live, "grade", wraps=live.grade) as grade, \
+                    redirect_stdout(output):
+                screen = live.run_case("codex", case["id"], "HEAD", out, 0)
+            grade.assert_called_once()
+            self.assertEqual(json.loads(output.getvalue()), screen)
+            self.assertIn("refusal", screen)
+            self.assertTrue((Path(screen["run"]) / "trace.json").is_file())
+
     def plant(self, run, index):
         modules = run.project / live.adapter(run.harness).SKILLS_DIR / "poteto-mode" / "scripts" / "node_modules"
         (modules / "typescript" / "bin").mkdir(parents=True)
