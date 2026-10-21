@@ -180,6 +180,20 @@ class SkillRecoveryCliTests(unittest.TestCase):
         report = self.run_cli(1)
         self.assertEqual(report["windows"][0]["requirements"][0]["unrepaired_violation_attempts"], [1])
 
+    def test_unverified_attempt_after_valid_read_is_inconclusive(self):
+        for observation in ("wrong_bytes", "truncated", "unsupported_carrier"):
+            with self.subTest(observation=observation):
+                later = returned("later", [ENTRY])
+                if observation == "wrong_bytes":
+                    later = returned("later", [b"x" * len(ENTRY)])
+                elif observation == "truncated":
+                    later["truncated"] = True
+                else:
+                    later["payload"]["output"][1]["text"] = json.dumps({"status": "fulfilled", "value": {"exit_code": 0, "output": ENTRY.decode()}})
+                self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]), call("later"), later,
+                              call("action"), returned("action", [b"Done."])], [read("valid"), read("later")])
+                self.assertEqual(self.run_cli(2)["status"], "INCONCLUSIVE")
+
     def test_flagged_attempt_can_be_repaired_before_action(self):
         self.prepare([boundary(), call("flagged"), returned("flagged", [ENTRY], truncated=True), call("repair"), returned("repair", [ENTRY]),
                       call("action"), returned("action", [b"Done."])], [read("flagged"), read("repair")])
