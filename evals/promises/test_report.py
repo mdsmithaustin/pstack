@@ -64,11 +64,27 @@ class Render(unittest.TestCase):
                 (run / "verdict.json").write_text(json.dumps({"harness": "hermes", "promises": {
                     "p1": {"verdict": "PASS", "failures": [], "evidence": []}}}))
                 (run / "trace.json").write_text(json.dumps({"x_skill_listing": {"step": "installed"}}))
-            (Path(out) / "hermes-retained" / "pair-1" / "pair.json").write_text("{}")
-            table = report.render(Path(out), upstream=Path(out))
-        self.assertIn("hermes pass rate: 1 of 1\n", table + "\n")
-        self.assertIn("| `p1` |  |  | PASS |  |", table)
-        self.assertIn("hermes skill listing: installed 1", table)
+            pair = Path(out) / "hermes-retained" / "pair-1"
+            (pair / "pair.json").write_text(json.dumps({"original_root": str(Path(out) / "hermes/runs/tally-a")}))
+            for scope in (Path(out), pair.parent, pair):
+                with self.subTest(scope=scope):
+                    table = report.render(scope, upstream=Path(out))
+                    self.assertIn("hermes pass rate: 1 of 1\n", table + "\n")
+                    self.assertIn("| `p1` |  |  | PASS |  |", table)
+                    self.assertIn("hermes skill listing: installed 1", table)
+
+    def test_a_retained_hermes_pair_counts_when_its_original_run_is_missing(self):
+        with tempfile.TemporaryDirectory() as out:
+            pair = Path(out) / "hermes-retained" / "pair-1"
+            pair.mkdir(parents=True)
+            self.run_dir(pair, "run", "hermes", {"p1": "PASS"})
+            (pair / "run" / "trace.json").write_text(json.dumps({"x_skill_listing": {"step": "installed"}}))
+            (pair / "pair.json").write_text(json.dumps({"original_root": str(Path(out) / "hermes/runs/tally-a")}))
+            for scope in (Path(out), pair.parent, pair):
+                with self.subTest(scope=scope):
+                    table = report.render(scope, upstream=Path(out))
+                    self.assertIn("hermes pass rate: 1 of 1\n", table + "\n")
+                    self.assertIn("hermes skill listing: installed 1", table)
 
     def test_a_run_directory_without_a_pair_beside_it_still_counts(self):
         with tempfile.TemporaryDirectory() as out:

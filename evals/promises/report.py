@@ -9,10 +9,17 @@ HARNESSES = ("claude-code", "codex", "hermes", "grok")
 
 
 def run_verdicts(out):
-    """A retained Hermes pair copies its run to `X/run/` beside `X/pair.json`, and the original run stays in place."""
     out = Path(out)
     for path in sorted(out.rglob("verdict.json")):
-        if not any(d.name == "run" and (out / d.parent / "pair.json").is_file() for d in path.relative_to(out).parents):
+        for d in path.relative_to(out).parents:
+            pair = out / d.parent / "pair.json"
+            if d.name == "run" and pair.is_file():
+                original_root = json.loads(pair.read_text()).get("original_root")
+                if original_root is not None:
+                    original = (Path(original_root) / "verdict.json").resolve()
+                    if original.is_relative_to(out.resolve()) and original.is_file():
+                        break
+        else:
             yield path
 
 
