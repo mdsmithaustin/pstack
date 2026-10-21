@@ -52,9 +52,9 @@ class SkillRecoveryCliTests(unittest.TestCase):
         self.write_raw()
         lines = self.raw.read_bytes().splitlines(keepends=True)
         calls = {r["payload"]["call_id"]: n for n, r in enumerate(rows, 1)
-                 if r["type"] == "response_item" and r["payload"].get("type") == "custom_tool_call"}
+                 if r["type"] == "response_item" and r["payload"].get("type") in ("custom_tool_call", "function_call")}
         returns = {r["payload"]["call_id"]: n for n, r in enumerate(rows, 1)
-                   if r["type"] == "response_item" and r["payload"].get("type") == "custom_tool_call_output"}
+                   if r["type"] == "response_item" and r["payload"].get("type") in ("custom_tool_call_output", "function_call_output")}
         boundaries = [(n, "native_compacted") for n, r in enumerate(rows, 1) if r["type"] == "compacted"]
         boundaries += [(n, "supplied_context_summary") for n in supplied]
         required = requirements or [{"file": "entry", "policy": "whole_standalone"}]
@@ -231,6 +231,23 @@ class SkillRecoveryCliTests(unittest.TestCase):
                              [read("read", source=[0, 20], output=[0, 20]),
                               read("read", source=[20, len(ENTRY)], output=[20 + len(notice), len(ENTRY) + len(notice)])])
                 self.assertIn("transport_notice", self.run_cli(2)["windows"][0]["attempts"][0]["reasons"])
+
+    def test_failed_or_running_script_header_is_inconclusive(self):
+        for header in ("Script failed\nWall time 0.1 seconds\nOutput:\n", "Script running with cell ID 7\nWall time 0.1 seconds\nOutput:\n",
+                       "Script failed\nError: interrupted\n"):
+            with self.subTest(header=header):
+                self.basic()
+                self.rows[2]["payload"]["output"][0]["text"] = header
+                self.rebind()
+                self.assertEqual(self.run_cli(2)["status"], "INCONCLUSIVE")
+
+    def test_native_function_call_text_header_is_inconclusive(self):
+        header = b"Chunk ID: c1\nWall time: 0.0100 seconds\nProcess exited with code 0\nOriginal token count: 20\nOutput:\n"
+        native = {"type": "response_item", "payload": {"type": "function_call", "name": "exec_command", "call_id": "read", "arguments": "{}"}}
+        output = {"type": "response_item", "payload": {"type": "function_call_output", "call_id": "read", "output": (header + ENTRY).decode()}}
+        self.prepare([boundary(), native, output, call("action"), returned("action", [b"Done."])],
+                     [read("read", block=0, output=[len(header), len(header) + len(ENTRY)])])
+        self.assertEqual(self.run_cli(2)["status"], "INCONCLUSIVE")
 
     def test_nonzero_command_does_not_prove_delivery(self):
         self.basic()
