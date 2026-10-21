@@ -465,6 +465,29 @@ class SkillRecoveryCliTests(unittest.TestCase):
                     else:
                         self.assertEqual(report["status"], "SATISFIED")
 
+    def test_escaped_bodies_in_supported_carriers_cannot_hide_mixed_batch(self):
+        header = {"type": "input_text", "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"}
+        batch = json.dumps([{"status": "fulfilled", "value": {"exit_code": 0, "output": body.decode()}} for body in (ENTRY, STEP)])
+        both = (ENTRY + STEP).decode()
+        shapes = {
+            "array_text": [header, {"type": "input_text", "text": batch}],
+            "prefixed_json_text": [header, {"type": "input_text", "text": "results: " + batch}],
+            "envelope_output_is_json": [header, {"type": "input_text", "text": json.dumps({"exit_code": 0, "output": json.dumps([ENTRY.decode(), STEP.decode()])})}],
+            "string_text": [header, {"type": "input_text", "text": json.dumps(both)}],
+            "envelope_metadata": [header, {"type": "input_text", "text": json.dumps({"exit_code": 0, "chunk_id": both, "output": "Done.\n"})}],
+            "function_call_string": batch,
+        }
+        for name, output in shapes.items():
+            for batch_first in (False, True):
+                with self.subTest(shape=name, batch_first=batch_first):
+                    kind = "function_call" if isinstance(output, str) else "custom_tool_call"
+                    mixed = [{"type": "response_item", "payload": {"type": kind, "name": "exec", "call_id": "mixed", "input": "reviewed input"}},
+                             {"type": "response_item", "payload": {"type": kind + "_output", "call_id": "mixed", "output": output}}]
+                    valid = [call("valid"), returned("valid", [ENTRY])]
+                    self.prepare([boundary(), *(mixed + valid if batch_first else valid + mixed), call("action"), returned("action", [b"Done."])],
+                                 [read("valid")])
+                    self.assertEqual(self.run_cli(2)["errors"][0]["code"], "undeclared_governing_body")
+
     def test_every_repeated_or_overlapping_occurrence_needs_own_claim(self):
         for entry, body, source, output in (
             (ENTRY, ENTRY + ENTRY, [0, len(ENTRY)], [0, len(ENTRY)]),
