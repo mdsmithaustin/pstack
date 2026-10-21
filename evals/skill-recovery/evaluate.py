@@ -466,7 +466,7 @@ def _measure(call, claims, files):
         packaging = "MIXED_FILES"
     elif unsupported:
         packaging = "UNVERIFIED"
-    elif extra:
+    elif extra and file_ids:
         packaging = "EXTRA_CONTENT"
     elif len(file_ids) == 1:
         packaging = "STANDALONE"
@@ -540,22 +540,27 @@ def _evaluate(files, windows, calls, dispositions, claims, injections, scope):
             unrepaired = []
             if satisfied:
                 for index, attempt in attempts:
-                    unverified = attempt["transport"] != "CLEAR" or attempt["content"] == "UNVERIFIED"
-                    proven_violation = (attempt["content"] != "UNVERIFIED" and
-                                        (attempt["packaging"] in ("MIXED_FILES", "EXTRA_CONTENT") or
-                                         (policy == "whole_standalone" and attempt["content"] == "COMPLETE" and
-                                          attempt["packaging"] == "STANDALONE" and not attempt["whole_body"])))
-                    if (unverified or proven_violation) and attempt["ordering"] == "BEFORE_ACTION":
-                        if _complete([span for span, witness in progress
-                                      if window.attempts[witness]["return_row"] > attempt["return_row"]],
-                                     len(files[file_id].data)):
-                            attempt["repaired_before_action"] = True
-                            repaired = True
-                        elif proven_violation:
-                            unrepaired.append(index)
-                            failed = True
-                        else:
-                            inconclusive = True
+                    if attempt["ordering"] != "BEFORE_ACTION":
+                        continue
+                    if (attempt["packaging"] in ("MIXED_FILES", "EXTRA_CONTENT") or
+                        (policy == "whole_standalone" and not attempt["whole_body"] and
+                         attempt["transport"] == "CLEAR" and attempt["content"] != "UNVERIFIED")):
+                        outcome = "FAIL"
+                    elif (attempt["transport"] != "CLEAR" or attempt["content"] == "UNVERIFIED" or
+                          attempt["packaging"] == "UNVERIFIED"):
+                        outcome = "INCONCLUSIVE"
+                    else:
+                        continue
+                    if _complete([span for span, witness in progress
+                                  if window.attempts[witness]["return_row"] > attempt["return_row"]],
+                                 len(files[file_id].data)):
+                        attempt["repaired_before_action"] = True
+                        repaired = True
+                    elif outcome == "FAIL":
+                        unrepaired.append(index)
+                        failed = True
+                    else:
+                        inconclusive = True
             else:
                 failed = True
                 if any(attempt["ordering"] == "BEFORE_ACTION" and

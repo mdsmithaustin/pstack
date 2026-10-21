@@ -180,6 +180,37 @@ class SkillRecoveryCliTests(unittest.TestCase):
         report = self.run_cli(1)
         self.assertEqual(report["windows"][0]["requirements"][0]["unrepaired_violation_attempts"], [1])
 
+    def test_satisfied_requirement_attempt_precedence(self):
+        mixed = returned("attempt", [ENTRY, STEP, b"ls failed\n"])
+        mixed["payload"]["output"][3]["text"] = json.dumps({"exit_code": 1, "output": "ls failed\n"})
+        unsupported = returned("attempt", [])
+        unsupported["payload"]["output"].extend([
+            {"type": "input_text", "text": ENTRY.decode()},
+            {"type": "input_text", "text": "Chunk ID: unsupported\n"}])
+        for name, output, reads, before_valid, code, status in (
+                ("mixed_failed_ls", mixed, [read("attempt"), read("attempt", "step", 2)], False, 1, "FAIL"),
+                ("unsupported_sibling", unsupported, [read("attempt")], False, 2, "INCONCLUSIVE"),
+                ("clear_partial_after", returned("attempt", [ENTRY[:17]]),
+                 [read("attempt", source=[0, 17])], False, 1, "FAIL"),
+                ("clear_partial_before", returned("attempt", [ENTRY[:17]]),
+                 [read("attempt", source=[0, 17])], True, 0, "SATISFIED_WITH_REPAIRS"),
+                ("truncated_partial", returned("attempt", [ENTRY[:17]], truncated=True),
+                 [read("attempt", source=[0, 17])], False, 2, "INCONCLUSIVE")):
+            with self.subTest(case=name):
+                valid_rows = [call("valid"), returned("valid", [ENTRY])]
+                attempt_rows = [call("attempt"), output]
+                ordered = attempt_rows + valid_rows if before_valid else valid_rows + attempt_rows
+                self.prepare([boundary(), *ordered, call("action"), returned("action", [b"Done."])],
+                             [read("valid"), *reads])
+                report = self.run_cli(code)
+                self.assertEqual(report["status"], status)
+                window = report["windows"][0]
+                requirement = window["requirements"][0]
+                self.assertTrue(requirement["satisfied_before_action"])
+                self.assertEqual(requirement["unrepaired_violation_attempts"], [1] if code == 1 else [])
+                attempt = next(a for a in window["attempts"] if a["call_id"] == "attempt" and a["file"] == "entry")
+                self.assertEqual(attempt["repaired_before_action"], before_valid)
+
     def test_exact_mixed_batch_with_failed_command_after_valid_read_fails(self):
         mixed = returned("mixed", [ENTRY, STEP, b"ls failed\n"])
         mixed["payload"]["output"][3]["text"] = json.dumps({"exit_code": 1, "output": "ls failed\n"})
@@ -197,19 +228,20 @@ class SkillRecoveryCliTests(unittest.TestCase):
         self.assertIn("command_failed", attempt["reasons"])
         self.assertFalse(attempt["repaired_before_action"])
 
-    def test_exact_packaging_breaches_with_unclear_transport_fail(self):
-        for bodies, reads, packaging in (
-                ([ENTRY, b"extra"], [read("later")], "EXTRA_CONTENT"),
+    def test_packaging_and_split_entry_with_unclear_transport(self):
+        for bodies, reads, packaging, code, status in (
+                ([ENTRY, b"extra"], [read("later")], "EXTRA_CONTENT", 1, "FAIL"),
                 ([ENTRY[:17], ENTRY[17:]],
-                 [read("later", source=[0, 17]), read("later", block=2, source=[17, len(ENTRY)])], "STANDALONE")):
+                 [read("later", source=[0, 17]), read("later", block=2, source=[17, len(ENTRY)])],
+                 "STANDALONE", 2, "INCONCLUSIVE")):
             with self.subTest(bodies=bodies):
                 self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]),
                               call("later"), returned("later", bodies, truncated=True),
                               call("action"), returned("action", [b"Done."])], [read("valid"), *reads])
-                report = self.run_cli(1)
-                self.assertEqual(report["status"], "FAIL")
+                report = self.run_cli(code)
+                self.assertEqual(report["status"], status)
                 window = report["windows"][0]
-                self.assertEqual(window["requirements"][0]["unrepaired_violation_attempts"], [1])
+                self.assertEqual(window["requirements"][0]["unrepaired_violation_attempts"], [1] if code == 1 else [])
                 self.assertEqual(window["attempts"][1]["packaging"], packaging)
                 self.assertEqual(window["attempts"][1]["transport"], "UNVERIFIED")
 
