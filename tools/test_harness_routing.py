@@ -54,6 +54,76 @@ class ReadProofTests(unittest.TestCase):
         self.assertEqual(result["reads"]["status"], "PASS")
         self.assertEqual(result["observations"][0], {"path": "entry.md", "start": 0, "end": 13, "call_line": 1, "result_line": 2})
 
+    def test_complete_source_text_is_not_a_runtime_truncation_notice(self):
+        sources = (
+            "When compaction, truncation, or skill restoration affects the next action, read the skill retention evidence.\n",
+            "Read the full file if an earlier result was truncated or reached an output limit.\n",
+            "Résumé: preserve the source's truncation guidance.\n",
+            "output truncated\n",
+        )
+        for source in sources:
+            for command in ("cat entry.md", "sed -n '1,1p' entry.md"):
+                with self.subTest(source=source, command=command):
+                    result = self.inspect(command, source, files={"entry.md": source.encode()})
+                    self.assertEqual(result["reads"]["status"], "PASS")
+                    self.assertEqual(result["context"]["coverage"], "all paired saved returned fields")
+                    self.assertEqual(result["context"]["unpaired_context_lines"], [])
+        result = self.inspect("cat entry.md another.md", sources[0] + sources[2],
+                              files={"entry.md": sources[0].encode(), "another.md": sources[2].encode()})
+        self.assertEqual(result["reads"]["status"], "PASS")
+        self.assertEqual(result["context"]["coverage"], "all paired saved returned fields")
+
+    def test_unproven_source_text_retains_truncation_uncertainty(self):
+        source = "Résumé: retain truncation guidance.\n"
+        for command, output in (
+            ("cat entry.md", "output truncated"),
+            ("cat entry.md", source[:-1]),
+            ("cat entry.md", source.replace("é", "e\u0301")),
+            ("head entry.md", source),
+        ):
+            with self.subTest(command=command, output=output):
+                result = self.inspect(command, output, files={"entry.md": source.encode()})
+                self.assertEqual(result["reads"]["status"], "INCONCLUSIVE")
+                self.assertEqual(result["context"]["coverage"], "unverified")
+                self.assertEqual(result["context"]["unpaired_context_lines"], [2])
+
+    def test_source_proof_does_not_clear_other_context_or_structured_flags(self):
+        source = "Read the truncation guidance.\n"
+        for extra in ("record_flag", "item_flag", "intermediate", "other_result", "after_cutoff", "unpaired"):
+            with self.subTest(extra=extra):
+                records = [
+                    {"type": "item.started", "item": {"id": "one", "type": "command_execution", "command": "cat entry.md"}},
+                    {"type": "item.completed", "item": {"id": "one", "type": "command_execution", "command": "cat entry.md", "aggregated_output": source, "exit_code": 0, "status": "completed"}},
+                    {"type": "item.completed", "item": {"id": "final", "type": "agent_message", "text": "Prepared."}},
+                ]
+                gaps = [2]
+                if extra == "record_flag":
+                    records[1]["truncated"] = True
+                elif extra == "item_flag":
+                    records[1]["item"]["truncated"] = True
+                elif extra == "intermediate":
+                    records[0]["item"]["aggregated_output"] = "output truncated"
+                    gaps = [1]
+                elif extra == "other_result":
+                    records.extend([
+                        {"type": "item.started", "item": {"id": "two", "type": "mcp_tool_call"}},
+                        {"type": "item.completed", "item": {"id": "two", "type": "mcp_tool_call", "result": "output truncated"}},
+                    ])
+                    gaps = [5]
+                elif extra == "after_cutoff":
+                    records.insert(0, records.pop())
+                    gaps = [3]
+                elif extra == "unpaired":
+                    records.pop(0)
+                    gaps = [1]
+                raw = "".join(json.dumps(record) + "\n" for record in records).encode()
+                result = oracle.inspect_trace(raw, b"Prepared.", Path("/grove/maple"),
+                                              {"entry.md": source.encode()}, ["entry.md"], [], ["truncation guidance"])
+                self.assertEqual(result["context"]["coverage"], "unverified")
+                self.assertEqual(result["context"]["unpaired_context_lines"], gaps)
+                self.assertEqual(result["reads"]["status"], "FAIL" if extra == "after_cutoff" else "INCONCLUSIVE" if extra == "unpaired" else "PASS")
+                self.assertEqual(len(result["context"]["exposures"]), 1)
+
     def test_command_output_presence_and_type_at_every_lifecycle(self):
         marker = "parent-routing-criteria-6f82d1b9"
         values = ({"private": marker}, {}, [marker], [], 7, 1.5, None, True, False, "", "visible")
