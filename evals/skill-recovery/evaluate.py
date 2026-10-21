@@ -138,7 +138,9 @@ class _Window:
     unresolved: list = field(default_factory=list)
 
 
-_HEADER = re.compile(r"Script completed\nWall time [0-9.]+ seconds\nOutput:\n")
+_HEADER = re.compile(r"Script (completed|failed|running with cell ID [^\n]+)\nWall time [0-9.]+ seconds\nOutput:\n")
+_HEADER_FLAGS = {"completed": (), "failed": ("command_failed",), "running": ("command_still_running",)}
+_NATIVE_HEADER = re.compile(r"Script (?:completed|failed|running)\b|Chunk ID: |Wall time: |Exit code: |Process exited with code |Original token count: ")
 _NOTICE = re.compile(rb"(?im)^(?:Warning: truncated output\b|\[?output (?:truncated|omitted)\b|\.\.\.\s*\d+ (?:characters|tokens) truncated\b)|\xe2\x80\xa6\d+ (?:tokens|chars) truncated\xe2\x80\xa6")
 _ENVELOPE_KEYS = {"output", "exit_code", "chunk_id", "wall_time_seconds", "original_token_count", "session_id", "truncated"}
 
@@ -159,8 +161,13 @@ def _bodies(output, row):
         else:
             text = block
         data = _text(text, row)
-        if index == 0 and _HEADER.fullmatch(text):
+        header = _HEADER.fullmatch(text) if index == 0 else None
+        if header:
+            flags += _HEADER_FLAGS[header[1].split()[0]]
             result.append(_Body(index, "completion_header", data, None, flags))
+            continue
+        if _NATIVE_HEADER.match(text):
+            result.append(_Body(index, "unsupported", data, None, flags))
             continue
         inner = None
         if text.lstrip().startswith("{"):
