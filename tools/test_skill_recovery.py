@@ -527,6 +527,17 @@ class SkillRecoveryCliTests(unittest.TestCase):
         self.assertEqual(report["status"], "SATISFIED_WITH_REPAIRS")
         self.assertFalse(report["windows"][0]["attempts"][0]["whole_body"])
 
+    def test_mismatched_claim_beside_exact_claim_is_manifest_error(self):
+        part = ENTRY[:30]
+        for name, bodies, reads in (
+                ("separate_blocks", [ENTRY, part], [read("again"), read("again", block=2, source=[5, 35], output=[0, 30])]),
+                ("same_block", [ENTRY + part], [read("again"), read("again", source=[5, 35], output=[len(ENTRY), len(ENTRY) + 30])]),
+                ("other_file", [ENTRY, part], [read("again"), read("again", "step", 2, source=[0, 30])])):
+            with self.subTest(case=name):
+                self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]), call("again"), returned("again", bodies),
+                              call("action"), returned("action", [b"Done."])], [read("valid"), *reads])
+                self.assertEqual(self.run_cli(2)["errors"], [{"code": "inconsistent_read_claims", "row": 5}])
+
     def test_raw_hash_binding(self):
         self.basic()
         self.raw.write_bytes(self.raw.read_bytes() + b"\n")
