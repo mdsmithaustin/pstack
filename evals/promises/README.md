@@ -161,7 +161,7 @@ Use the Hermes retention argument when an external controller may remove the tem
 python3 evals/promises/live.py run --harness hermes --case principle-steer-run --out /tmp/pstack-live --hermes-retain-out /path/to/retained-evidence
 ```
 
-A nonzero exit or missing `hermes_pair` in a successful run's JSON output means retention did not complete. The argument is a destination parent controlled by the evaluator. Other adapters reject it. The Python entry point accepts the same parent as `run_case(..., hermes_retain_out=Path(...))`.
+Retention completed exactly when the printed JSON screen names `hermes_pair`. This includes a screen that also carries `refusal` with exit 2. A missing `hermes_pair` means retention did not complete. The argument is a destination parent controlled by the evaluator. Other adapters reject it. The Python entry point accepts the same parent as `run_case(..., hermes_retain_out=Path(...))`.
 
 Every ancestor in the retention-parent spelling must be a real directory. A symlinked ancestor refuses binding, even if its target exists.
 
