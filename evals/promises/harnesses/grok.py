@@ -31,6 +31,7 @@ GITCONFIG = """[user]
 [init]
 \tdefaultBranch = main
 """
+LOCAL_COMMANDS = ("/compact",)
 SESSION_FILES = ("chat_history.jsonl", "events.jsonl", "usage.json", "summary.json", "tool_definitions.json")
 
 AUTH_PROVIDER = """#!{python}
@@ -285,6 +286,12 @@ def turn_prompts(run):
     return prompts
 
 
+def turn_of_index(prompt_index, prompts):
+    """Grok counts only the prompts it sends to the model, so a `/compact` turn takes no prompt_index."""
+    sent = [index for index, prompt in enumerate(prompts) if prompt.strip() not in LOCAL_COMMANDS]
+    return sent[prompt_index] if prompt_index < len(sent) else prompt_index
+
+
 def turn_of_prompt(prompt, prompts, previous):
     matches = [index for index, known in enumerate(prompts) if known.strip() == prompt.strip() and index > previous]
     return matches[0] if matches else previous + 1
@@ -317,6 +324,7 @@ def parse_session(chat, cwd, entry_skill, lead=False, prompts=()):
     injected = False
     read_entry = False
     todos = []
+    compactions, rewriting = [], None
     injection = re.compile(rf'<skill name="{re.escape(entry_skill)}"[^>]*args=') if entry_skill else None
 
     def mark():
@@ -330,17 +338,23 @@ def parse_session(chat, cwd, entry_skill, lead=False, prompts=()):
 
     for rec in load_jsonl(chat):
         kind = rec.get("type")
+        if kind == "user" and rec.get("synthetic_reason") == "compaction_meta":
+            if not rewriting:
+                rewriting = {"source": "chat_history"}
+                compactions.append(rewriting)
+            rewriting["turn"] = turn
         if kind == "user" and not rec.get("synthetic_reason") and lead and (
                 "prompt_index" in rec or USER_QUERY.search(text_of(rec.get("content")))):
             body = text_of(rec.get("content"))
             query = USER_QUERY.search(body)
             prompt = query.group(1) if query else body
-            turn = rec["prompt_index"] if "prompt_index" in rec else turn_of_prompt(prompt, prompts, turn if events else -1)
+            turn = turn_of_index(rec["prompt_index"], prompts) if "prompt_index" in rec else turn_of_prompt(prompt, prompts, turn if events else -1)
             add({"kind": "user", "text": prompt})
             turn_skills += [{"turn": turn, "skill": name} for name in SKILL_REF.findall(body)]
         if kind == "user" and not rec.get("synthetic_reason") and injection and injection.search(text_of(rec.get("content"))):
             injected = True
         elif kind == "assistant":
+            rewriting = None
             model = rec.get("model_id") or model
             effort = rec.get("reasoning_effort") or effort
             content = text_of(rec.get("content"))
@@ -387,7 +401,7 @@ def parse_session(chat, cwd, entry_skill, lead=False, prompts=()):
                  "output_head": (content or "")[:400], "id": rec.get("tool_call_id")})
     return {"events": events, "files_read": list(dict.fromkeys(files)), "worklist": worklist, "spawns": spawns,
             "final_reply": final, "model": model, "effort": effort, "injected": injected, "read_entry": read_entry,
-            "first_reply": first_reply, "turn_skills": turn_skills}
+            "first_reply": first_reply, "turn_skills": turn_skills, "compactions": compactions}
 
 
 def decoded_cwd(chat_path):
@@ -454,7 +468,7 @@ def harvest(run):
     cwd = str(run.project)
     empty = {"events": [], "files_read": [], "worklist": [], "spawns": [], "final_reply": None,
              "model": None, "effort": None, "injected": False, "read_entry": False,
-             "first_reply": None, "turn_skills": []}
+             "first_reply": None, "turn_skills": [], "compactions": []}
     lead = parse_session(evidence[leads[0]], decoded_cwd(leads[0]), entry, lead=True, prompts=turn_prompts(run)) if leads else empty
     launch = json.loads((run.root / "launch.json").read_text()) if (run.root / "launch.json").is_file() else {}
 
@@ -517,6 +531,7 @@ def harvest(run):
         "x_todo_tools": "off" if run.case.get("env", {}).get("todo_tools") is False else "on",
         "x_turn_entries": turn_entries(run, lead),
         "x_turns_without_events": turns_without_events(lead["events"], len(run.turns)),
+        "x_compactions": lead["compactions"],
         "x_subagents": subagents,
         "x_unlinked_children": sorted(s["session_id"] for s in subagents if not s["parent_session_id"]),
         "x_host_skill_hits": host_skill_hits([*evidence.values(), *streams.values()]),

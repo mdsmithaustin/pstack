@@ -7,6 +7,7 @@ import os
 import platform
 import pwd
 import shlex
+import shutil
 import signal
 import stat
 import subprocess
@@ -191,6 +192,25 @@ class _Root:
             raise GradeRefused("unsafe_link", self.path) from error
         self.verify()
         return found
+
+    def remove(self, rel):
+        """Delete the directory at rel without following a link on the way to it or inside it. Absent is done."""
+        self.verify()
+        try:
+            parent, name = self._parent(rel)
+        except FileNotFoundError:
+            return
+        try:
+            info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            if not stat.S_ISDIR(info.st_mode):
+                raise GradeRefused("unsafe_link" if stat.S_ISLNK(info.st_mode) else "unsafe_object", self.path / rel)
+            shutil.rmtree(name, dir_fd=parent)
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            raise GradeRefused("unsafe_link", self.path / rel) from error
+        finally:
+            os.close(parent)
 
     def write(self, name, data):
         if Path(name).name != name:
@@ -438,12 +458,12 @@ def _lookup(out, run_id):
     return _Controller(out).load(run_id)[0]
 
 
-def _before_turns(run):
+def _before_turns(run, scratch=()):
     _runtime()
     record = {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at,
               "project": str(run.project), "timeout_s": run.timeout_s, "turns": [], "baseline": run.baseline}
     controller = _Controller(run.root.parent, create=True)
-    return controller.issue(run.root, run.project, run.case, record, allocations=(run.project.parent,))
+    return controller.issue(run.root, run.project, run.case, record, allocations=(run.project.parent, *scratch))
 
 
 def _write_record(handle, record):

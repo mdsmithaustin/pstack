@@ -1157,9 +1157,14 @@ def read_only_pin(view):
         evidence = [f"turn {turn} playbook reads: {[PLAYBOOK.match(r).group(1) for r in reads if PLAYBOOK.match(r)]}"]
         failures, more = no_edits_verdict(view, turn)
         evidence += more
-        if not routed:
+        rewritten = any(c.get("source") == "chat_history" and c.get("turn") == turn for c in view.trace.get("x_compactions") or [])
+        if not routed and not rewritten:
             failures.insert(0, "investigation.md not read in the `new task` turn")
-        return failed(failures, *evidence) if failures else passed(*evidence)
+        if failures:
+            return failed(failures, *evidence)
+        if not routed:
+            return inconclusive(f"a compaction rewrote turn {turn}'s chat history, so its playbook reads may be gone", *evidence)
+        return passed(*evidence)
     result = route_verdict(view)
     failures, evidence = no_edits_verdict(view)
     if result["verdict"] != PASS:
@@ -2634,7 +2639,13 @@ def doc_impact_before_completion(view):
     if not read_any:
         return inconclusive("run killed before completion", *evidence) if view.killed else failed("documentation-impact never ran before completion", *evidence)
     if not result:
-        return failed("completion reply carries no author result", *evidence) if reply else inconclusive("no completion reply", *evidence)
+        if not reply:
+            return inconclusive("no completion reply", *evidence)
+        named = next((t for t in [reply, *view.texts(turn)] if "independent review" in t.lower()), None)
+        if named:
+            return inconclusive("the turn names independent review in words the author-result reader does not parse", *evidence,
+                                needs_judge=True, excerpt=excerpt_of(named))
+        return failed("completion reply carries no author result", *evidence)
     return passed(*evidence)
 
 

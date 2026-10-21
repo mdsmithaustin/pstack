@@ -8,9 +8,24 @@ from harnesses.login import ERROR, applicability
 HARNESSES = ("claude-code", "codex", "hermes", "grok")
 
 
+def run_verdicts(out):
+    out = Path(out)
+    for path in sorted(out.rglob("verdict.json")):
+        for d in path.relative_to(out).parents:
+            pair = out / d.parent / "pair.json"
+            if d.name == "run" and pair.is_file():
+                original_root = json.loads(pair.read_text()).get("original_root")
+                if original_root is not None:
+                    original = (Path(original_root) / "verdict.json").resolve()
+                    if original.is_relative_to(out.resolve()) and original.is_file():
+                        break
+        else:
+            yield path
+
+
 def collect(out):
     cells = collections.defaultdict(list)
-    for path in sorted(Path(out).rglob("verdict.json")):
+    for path in run_verdicts(out):
         record = json.loads(path.read_text())
         for pid, result in record["promises"].items():
             if not result.get("not_applicable") and not applicability(pid, record["harness"]).get("not_applicable"):
@@ -23,7 +38,7 @@ def collect(out):
 
 def listing_states(out):
     states = collections.defaultdict(collections.Counter)
-    for path in sorted(Path(out).rglob("verdict.json")):
+    for path in run_verdicts(out):
         trace = path.parent / "trace.json"
         listing = json.loads(trace.read_text()).get("x_skill_listing") if trace.is_file() else None
         if listing:
