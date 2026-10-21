@@ -323,6 +323,32 @@ class SkillRecoveryCliTests(unittest.TestCase):
                               read("read", source=[20, len(ENTRY)], output=[20 + len(notice), len(ENTRY) + len(notice)])])
                 self.assertIn("transport_notice", self.run_cli(2)["windows"][0]["attempts"][0]["reasons"])
 
+    def test_transport_markers_after_valid_read_are_not_extra_content(self):
+        head, tail = ENTRY[:20], ENTRY[20:]
+        native = b"Warning: truncated output (original token count: 90)\nTotal output lines: 3\n\n"
+        for name, prefix, marker, suffix, code in (
+                ("unicode_marker", b"", "…5 tokens truncated…".encode(), b"", 2),
+                ("ascii_marker_line", b"", b"\n... 5 tokens truncated\n", b"", 2),
+                ("warning_suffix", b"", b"", b"Warning: truncated output\n", 2),
+                ("native_prefix", native, "…5 tokens truncated…".encode(), b"", 2),
+                ("warning_and_content", b"", b"", b"Warning: truncated output\nunrelated output\n", 1)):
+            with self.subTest(case=name):
+                start = len(prefix)
+                if marker:
+                    reads = [read("again", source=[0, 20], output=[start, start + 20]),
+                             read("again", source=[20, len(ENTRY)], output=[start + 20 + len(marker), start + len(marker) + len(ENTRY)])]
+                else:
+                    reads = [read("again", output=[start, start + len(ENTRY)])]
+                self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]),
+                              call("again"), returned("again", [prefix + head + marker + tail + suffix]),
+                              call("action"), returned("action", [b"Done."])], [read("valid"), *reads])
+                window = self.run_cli(code)["windows"][0]
+                attempt = window["attempts"][1]
+                self.assertTrue(window["requirements"][0]["satisfied_before_action"])
+                self.assertEqual(window["requirements"][0]["unrepaired_violation_attempts"], [1] if code == 1 else [])
+                self.assertEqual((attempt["packaging"], attempt["transport"]), ("EXTRA_CONTENT" if code == 1 else "STANDALONE", "UNVERIFIED"))
+                self.assertIn("transport_notice", attempt["reasons"])
+
     def test_failed_or_running_script_header_is_inconclusive(self):
         for header in ("Script failed\nWall time 0.1 seconds\nOutput:\n", "Script running with cell ID 7\nWall time 0.1 seconds\nOutput:\n",
                        "Script failed\nError: interrupted\n"):
