@@ -103,8 +103,7 @@ class _File:
 class _Body:
     block: int
     kind: str
-    raw_hash: str
-    raw_size: int
+    raw: bytes
     data: bytes | None
     flags: tuple[str, ...]
 
@@ -154,27 +153,27 @@ def _bodies(output, row):
             flags = _flags(block)
             if block.get("type") not in ("input_text", "text") or "text" not in block or block.keys() - {"type", "text", "truncated"}:
                 encoded = json.dumps(block, sort_keys=True).encode()
-                result.append(_Body(index, "unsupported", _sha(encoded), len(encoded), None, flags))
+                result.append(_Body(index, "unsupported", encoded, None, flags))
                 continue
             text = block["text"]
         else:
             text = block
         data = _text(text, row)
         if index == 0 and _HEADER.fullmatch(text):
-            result.append(_Body(index, "completion_header", _sha(data), len(data), None, flags))
+            result.append(_Body(index, "completion_header", data, None, flags))
             continue
         inner = None
         if text.lstrip().startswith("{"):
             try:
                 inner = _json(text, row)
             except _InputError:
-                result.append(_Body(index, "unsupported", _sha(data), len(data), None, flags))
+                result.append(_Body(index, "unsupported", data, None, flags))
                 continue
         kind = "text"
         if isinstance(inner, dict) and set(inner) == {"i", "result"}:
             settled = inner["result"]
             if type(inner["i"]) is not int or not isinstance(settled, dict) or set(settled) != {"status", "value"} or settled["status"] != "fulfilled":
-                result.append(_Body(index, "unsupported", _sha(data), len(data), None, flags + ("settled_result_not_fulfilled",)))
+                result.append(_Body(index, "unsupported", data, None, flags + ("settled_result_not_fulfilled",)))
                 continue
             inner = settled["value"]
             kind = "settled_command_result"
@@ -182,7 +181,7 @@ def _bodies(output, row):
             kind = "command_result"
         if kind != "text":
             if not isinstance(inner, dict) or inner.keys() - _ENVELOPE_KEYS or not isinstance(inner.get("output"), str):
-                result.append(_Body(index, "unsupported", _sha(data), len(data), None, flags))
+                result.append(_Body(index, "unsupported", data, None, flags))
                 continue
             flags += _flags(inner)
             code = inner.get("exit_code")
@@ -193,9 +192,11 @@ def _bodies(output, row):
                 flags += ("command_failed",)
             if "session_id" in inner and code is None:
                 flags += ("command_still_running",)
-            result.append(_Body(index, kind, _sha(data), len(data), _text(inner["output"], row), flags))
+            result.append(_Body(index, kind, data, _text(inner["output"], row), flags))
+        elif inner is not None:
+            result.append(_Body(index, "unsupported", data, None, flags))
         else:
-            result.append(_Body(index, kind, _sha(data), len(data), data, flags))
+            result.append(_Body(index, kind, data, data, flags))
     return tuple(result)
 
 
@@ -352,6 +353,7 @@ def _bind(raw, manifest, directory):
         _require(claim not in seen_claims, "duplicate_read_claim", number)
         seen_claims.add(claim)
         claims.append(claim)
+    encodings = {file.id: _encodings(file.data) for file in files.values()}
     for call_id in calls:
         selected = [claim for claim in claims if claim.call == call_id]
         for block in {claim.block for claim in selected}:
@@ -372,6 +374,12 @@ def _bind(raw, manifest, directory):
                 _require(_complete(spans, len(file.data)),
                          "undeclared_governing_body", calls[call_id].return_row)
                 start = data.find(file.data, start + 1)
+        for body in calls[call_id].bodies:
+            if body.kind == "unsupported":
+                for file in files.values():
+                    _require(not any(form in body.raw for form in encodings[file.id]) or
+                             any(claim.file == file.id and claim.block == body.block for claim in selected),
+                             "undeclared_governing_body", calls[call_id].return_row)
     injections = []
     for item in _array(manifest.get("initial_injections", [])):
         _object(item, {"row", "row_sha256", "file", "block", "output_range"})
@@ -389,6 +397,13 @@ def _bind(raw, manifest, directory):
         injections.append({"row": number, "file": file_id, "exact_content": data[start:end] == files[file_id].data,
                            "recovery_credit": False})
     return files, windows, calls, dispositions, claims, injections
+
+
+def _encodings(data):
+    forms = {data}
+    for _ in range(2):
+        forms |= {json.dumps(form.decode(), ensure_ascii=ascii_only)[1:-1].encode() for form in forms for ascii_only in (False, True)}
+    return forms
 
 
 def _complete(spans, size):
@@ -587,8 +602,8 @@ def main(argv=None):
         files, _, calls, _, _, _ = bound
         report["files"] = [{"id": item.id, "role": item.role, "sha256": _sha(item.data), "bytes": len(item.data)} for item in files.values()]
         report["outer_responses"] = [{"call_id": call.id, "call_row": call.row, "return_row": call.return_row,
-                                       "blocks": [{"index": body.block, "carrier": body.kind, "raw_sha256": body.raw_hash,
-                                                   "raw_bytes": body.raw_size, "body_sha256": _sha(body.data) if body.data is not None else None,
+                                       "blocks": [{"index": body.block, "carrier": body.kind, "raw_sha256": _sha(body.raw),
+                                                   "raw_bytes": len(body.raw), "body_sha256": _sha(body.data) if body.data is not None else None,
                                                    "body_bytes": len(body.data) if body.data is not None else None} for body in call.bodies]}
                                       for call in calls.values()]
     except _InputError as error:
