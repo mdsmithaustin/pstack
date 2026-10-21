@@ -541,19 +541,20 @@ def _evaluate(files, windows, calls, dispositions, claims, injections, scope):
             if satisfied:
                 for index, attempt in attempts:
                     unverified = attempt["transport"] != "CLEAR" or attempt["content"] == "UNVERIFIED"
-                    invalid = (unverified or attempt["packaging"] != "STANDALONE" or
-                               (policy == "whole_standalone" and not attempt["whole_body"]))
-                    if invalid and attempt["ordering"] == "BEFORE_ACTION":
+                    proven_violation = (attempt["content"] != "UNVERIFIED" and
+                                        (attempt["packaging"] != "STANDALONE" or
+                                         (policy == "whole_standalone" and not attempt["whole_body"])))
+                    if (unverified or proven_violation) and attempt["ordering"] == "BEFORE_ACTION":
                         if _complete([span for span, witness in progress
                                       if window.attempts[witness]["return_row"] > attempt["return_row"]],
                                      len(files[file_id].data)):
                             attempt["repaired_before_action"] = True
                             repaired = True
-                        elif unverified:
-                            inconclusive = True
-                        else:
+                        elif proven_violation:
                             unrepaired.append(index)
                             failed = True
+                        else:
+                            inconclusive = True
             else:
                 failed = True
                 if any(attempt["ordering"] == "BEFORE_ACTION" and

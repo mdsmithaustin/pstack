@@ -79,7 +79,7 @@ Structured truncation flags, transport notices outside matched source spans, com
 
 A requirement is satisfied only by clear, standalone, exact content returned within its recovery window before the first governed call. The entry requires one whole-body claim. Explicit helper chunks can accumulate within one window. Pre-boundary reads, initial injections, replacement history, late returns, and reads crossing a later boundary receive no recovery credit.
 
-Attempts remain in the report after a repair. Later eligible reads must cover the entire required file after each violation and before the action to repair it. Earlier chunks cannot supply missing repair coverage. An invalid required-file attempt after the final eligible read remains unrepaired. It is a violation when exact claims show the packaging failure. It makes the window `INCONCLUSIVE` when its content or transport is unverified. The evaluator does not erase a bad batch to produce an unqualified clean result.
+Attempts remain in the report after a repair. Later eligible reads must cover the entire required file after each violation and before the action to repair it. Earlier chunks cannot supply missing repair coverage. An invalid required-file attempt after the final eligible read remains unrepaired. After a requirement is satisfied, an unrepaired pre-action attempt fails when exact content proves a packaging or whole-body policy violation, even if transport is unverified. Otherwise, unverified content or transport makes that attempt inconclusive. The evaluator does not erase a bad batch to produce an unqualified clean result.
 
 ## Test reference
 

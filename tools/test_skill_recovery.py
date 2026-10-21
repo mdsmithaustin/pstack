@@ -180,6 +180,40 @@ class SkillRecoveryCliTests(unittest.TestCase):
         report = self.run_cli(1)
         self.assertEqual(report["windows"][0]["requirements"][0]["unrepaired_violation_attempts"], [1])
 
+    def test_exact_mixed_batch_with_failed_command_after_valid_read_fails(self):
+        mixed = returned("mixed", [ENTRY, STEP, b"ls failed\n"])
+        mixed["payload"]["output"][3]["text"] = json.dumps({"exit_code": 1, "output": "ls failed\n"})
+        self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]), call("mixed"), mixed,
+                      call("action"), returned("action", [b"Done."])],
+                     [read("valid"), read("mixed"), read("mixed", "step", 2)])
+        report = self.run_cli(1)
+        self.assertEqual(report["status"], "FAIL")
+        window = report["windows"][0]
+        self.assertTrue(window["requirements"][0]["satisfied_before_action"])
+        self.assertEqual(window["requirements"][0]["unrepaired_violation_attempts"], [1])
+        attempt = window["attempts"][1]
+        self.assertEqual((attempt["content"], attempt["packaging"], attempt["transport"]),
+                         ("COMPLETE", "MIXED_FILES", "UNVERIFIED"))
+        self.assertIn("command_failed", attempt["reasons"])
+        self.assertFalse(attempt["repaired_before_action"])
+
+    def test_exact_packaging_breaches_with_unclear_transport_fail(self):
+        for bodies, reads, packaging in (
+                ([ENTRY, b"extra"], [read("later")], "EXTRA_CONTENT"),
+                ([ENTRY[:17], ENTRY[17:]],
+                 [read("later", source=[0, 17]), read("later", block=2, source=[17, len(ENTRY)])], "STANDALONE"),
+                ([ENTRY[:17]], [read("later", source=[0, 17])], "STANDALONE")):
+            with self.subTest(bodies=bodies):
+                self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]),
+                              call("later"), returned("later", bodies, truncated=True),
+                              call("action"), returned("action", [b"Done."])], [read("valid"), *reads])
+                report = self.run_cli(1)
+                self.assertEqual(report["status"], "FAIL")
+                window = report["windows"][0]
+                self.assertEqual(window["requirements"][0]["unrepaired_violation_attempts"], [1])
+                self.assertEqual(window["attempts"][1]["packaging"], packaging)
+                self.assertEqual(window["attempts"][1]["transport"], "UNVERIFIED")
+
     def test_unverified_attempt_after_valid_read_is_inconclusive(self):
         for observation in ("wrong_bytes", "truncated", "unsupported_carrier"):
             with self.subTest(observation=observation):
