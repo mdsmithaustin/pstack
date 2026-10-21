@@ -412,6 +412,19 @@ class SkillRecoveryCliTests(unittest.TestCase):
                 self.write_manifest()
                 self.run_cli(2)
 
+    def test_deeply_nested_json_is_reported(self):
+        depth = 300000
+        self.basic()
+        self.raw.write_bytes(self.raw.read_bytes() + b'{"type": "event_msg", "payload": ' + b"[" * depth + b"]" * depth + b"}\n")
+        self.manifest["raw_sha256"] = digest(self.raw.read_bytes())
+        self.write_manifest()
+        self.assertEqual(self.run_cli(2)["errors"], [{"code": "json_nesting_too_deep", "row": 6}])
+        self.prepare([boundary(), call("read"), returned("read", [ENTRY]), call("deep"), returned("deep", []),
+                      call("action"), returned("action", [b"Done."])], [read("read")])
+        self.rows[4]["payload"]["output"].append({"type": "input_text", "text": '{"a":' * depth + "1" + "}" * depth})
+        self.rebind()
+        self.assertEqual(self.run_cli(0)["status"], "SATISFIED")
+
     def test_duplicate_json_keys(self):
         self.basic()
         self.raw.write_bytes(self.raw.read_bytes().replace(b'"type": "compacted"', b'"type": "compacted", "type": "compacted"', 1))
