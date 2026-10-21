@@ -201,8 +201,7 @@ class SkillRecoveryCliTests(unittest.TestCase):
         for bodies, reads, packaging in (
                 ([ENTRY, b"extra"], [read("later")], "EXTRA_CONTENT"),
                 ([ENTRY[:17], ENTRY[17:]],
-                 [read("later", source=[0, 17]), read("later", block=2, source=[17, len(ENTRY)])], "STANDALONE"),
-                ([ENTRY[:17]], [read("later", source=[0, 17])], "STANDALONE")):
+                 [read("later", source=[0, 17]), read("later", block=2, source=[17, len(ENTRY)])], "STANDALONE")):
             with self.subTest(bodies=bodies):
                 self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]),
                               call("later"), returned("later", bodies, truncated=True),
@@ -214,18 +213,44 @@ class SkillRecoveryCliTests(unittest.TestCase):
                 self.assertEqual(window["attempts"][1]["packaging"], packaging)
                 self.assertEqual(window["attempts"][1]["transport"], "UNVERIFIED")
 
+    def test_unsupported_sibling_after_valid_read_is_inconclusive(self):
+        for bodies, reads, content in (
+                ([ENTRY], [read("later")], "COMPLETE"),
+                ([ENTRY[:17], ENTRY[17:]],
+                 [read("later", source=[0, 17]), read("later", block=2, source=[17, len(ENTRY)])], "COMPLETE"),
+                ([ENTRY[:17]], [read("later", source=[0, 17])], "EXACT_CHUNK")):
+            with self.subTest(content=content, blocks=len(bodies)):
+                later = returned("later", [])
+                later["payload"]["output"].extend({"type": "input_text", "text": body.decode()} for body in bodies)
+                later["payload"]["output"].append({"type": "input_text", "text": "Chunk ID: unsupported\n"})
+                self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]), call("later"), later,
+                              call("action"), returned("action", [b"Done."])], [read("valid"), *reads])
+                report = self.run_cli(2)
+                self.assertEqual(report["status"], "INCONCLUSIVE")
+                window = report["windows"][0]
+                self.assertTrue(window["requirements"][0]["satisfied_before_action"])
+                self.assertEqual(window["requirements"][0]["unrepaired_violation_attempts"], [])
+                attempt = window["attempts"][1]
+                self.assertEqual((attempt["content"], attempt["packaging"], attempt["transport"]),
+                                 (content, "UNVERIFIED", "UNVERIFIED"))
+                self.assertIn("unsupported_output_carrier", attempt["reasons"])
+                self.assertFalse(attempt["repaired_before_action"])
+
     def test_unverified_attempt_after_valid_read_is_inconclusive(self):
-        for observation in ("wrong_bytes", "truncated", "unsupported_carrier"):
+        for observation in ("wrong_bytes", "truncated", "partial_truncated", "unsupported_carrier"):
             with self.subTest(observation=observation):
                 later = returned("later", [ENTRY])
                 if observation == "wrong_bytes":
                     later = returned("later", [b"x" * len(ENTRY)])
                 elif observation == "truncated":
                     later["truncated"] = True
+                elif observation == "partial_truncated":
+                    later = returned("later", [ENTRY[:17]], truncated=True)
                 else:
                     later["payload"]["output"][1]["text"] = json.dumps({"status": "fulfilled", "value": {"exit_code": 0, "output": ENTRY.decode()}})
                 self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]), call("later"), later,
-                              call("action"), returned("action", [b"Done."])], [read("valid"), read("later")])
+                              call("action"), returned("action", [b"Done."])],
+                             [read("valid"), read("later", source=[0, 17] if observation == "partial_truncated" else None)])
                 self.assertEqual(self.run_cli(2)["status"], "INCONCLUSIVE")
 
     def test_flagged_attempt_can_be_repaired_before_action(self):
