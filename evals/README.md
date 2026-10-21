@@ -18,7 +18,9 @@ Oracle and login regression fixtures under `promises/testdata/` are an exception
 They are reduced, sanitized traces, CLI error records, and recorded verdicts used by model-free tests.
 `promises/reduce_trace.py` reduces raw traces for oracle fixtures. `promises/results/`
 is a second exception. It holds aggregated verdict matrices with no model
-answers.
+answers. `skill-recovery/fixtures/` is a third exception. It holds hand-built,
+sanitized projections of native Codex records with replacement text, used by
+model-free evaluator tests.
 
 The [port-value comparison](port-value/README.md) documents the separate
 native, upstream, and current-port application study, including its published
@@ -34,6 +36,7 @@ Raw execution evidence stays outside Git.
 | `runtime-probes/`, `spec-probes/`, `unslop/` | Small development corpora. Findings, scope restraint, and preservation matter more than requested vocabulary or loading alone. |
 | `canon/` | Native application capture and supported outcome-grader controls. Historical screens and process census are in the [archive index](archive/README.md). |
 | `harness-routing/` | Targeted read/routing instrumentation with separate unresolved validity axes. |
+| `skill-recovery/` | Offline evaluator for recovery reads in saved native Codex JSONL. A result covers only its reviewed manifest and recording, not model obedience. |
 | `port-value/` and pipeline-exit | Completed comparisons and reproducibility records. Exposed ceiling cases can protect regressions, but repeated results are not fresh efficacy evidence. |
 
 Passing instrument tests validates the evaluator, not the skill. Count tasks,
