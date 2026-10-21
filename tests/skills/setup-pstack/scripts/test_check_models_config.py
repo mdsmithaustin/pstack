@@ -1471,6 +1471,17 @@ class ShippedDefaultLeak(ResolveRunner, unittest.TestCase):
     def test_no_config_means_the_shipped_defaults_are_intended(self):
         self.assertEqual(self.notes("claude-code", "hardest tasks"), [[]])
 
+    def test_a_step_setting_without_role_bindings_preserves_default_output(self):
+        for harness in ("claude-code", "codex", "hermes", "grok"):
+            expected = self.resolve(harness, user="", workspace="")
+            self.assertTrue(expected)
+            for location in ("user", "workspace"):
+                for section in ("", f"## {harness}\n"):
+                    for value in ("on", "off"):
+                        with self.subTest(harness=harness, location=location, section=section, value=value):
+                            config = f"{section}trail reviewer step: {value}\n"
+                            self.assertEqual(self.resolve(harness, **{location: config}), expected)
+
     def test_a_role_the_config_binds_gets_no_note(self):
         self.assertEqual(self.notes("claude-code", "feature", user="feature, refactoring: sonnet\n"), [[]])
 

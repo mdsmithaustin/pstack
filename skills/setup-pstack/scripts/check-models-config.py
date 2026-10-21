@@ -447,7 +447,7 @@ def _step_pinned(layers: list[Layer]) -> bool:
 
 def _written_tiers(layers: list[Layer], harness: str) -> frozenset[str] | None:
     user_layers = layers[:4]
-    if not any(layer.roles for layer in user_layers):
+    if not any(role in ROLES for layer in user_layers for role in layer.roles):
         return None
     return frozenset(
         _tier(_resolve_model(model, None, harness)[0])
