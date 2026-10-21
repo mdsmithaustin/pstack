@@ -284,6 +284,30 @@ class SkillRecoveryCliTests(unittest.TestCase):
                         self.assertEqual(report["status"], "INCONCLUSIVE")
                         self.assertEqual(report["errors"][0]["code"], "undeclared_governing_body")
 
+    def test_unsupported_carriers_cannot_hide_complete_entry(self):
+        def envelope(body):
+            return {"chunk_id": "c", "wall_time_seconds": 0.1, "exit_code": 0, "original_token_count": 1, "output": body.decode()}
+
+        shapes = {
+            "status_value": lambda body: {"type": "input_text", "text": json.dumps({"status": "fulfilled", "value": envelope(body)})},
+            "i_status_value": lambda body: {"type": "input_text", "text": json.dumps({"i": 0, "status": "fulfilled", "value": envelope(body)})},
+            "envelope_extra_key": lambda body: {"type": "input_text", "text": json.dumps(dict(envelope(body), stderr=""))},
+            "output_metadata": lambda body: {"type": "input_text", "text": json.dumps({"output": body.decode(), "metadata": {"exit_code": 0}})},
+            "block_extra_key": lambda body: {"type": "input_text", "text": json.dumps(envelope(body)), "annotations": []},
+        }
+        for name, shape in shapes.items():
+            for hidden in (True, False):
+                with self.subTest(shape=name, hidden=hidden):
+                    mixed = returned("mixed", [])
+                    mixed["payload"]["output"] += [shape(ENTRY if hidden else b"Done.\n"), shape(STEP if hidden else b"Done.\n")]
+                    self.prepare([boundary(), call("valid"), returned("valid", [ENTRY]), call("mixed"), mixed,
+                                  call("action"), returned("action", [b"Done."])], [read("valid")])
+                    report = self.run_cli(2 if hidden else 0)
+                    if hidden:
+                        self.assertEqual(report["errors"][0]["code"], "undeclared_governing_body")
+                    else:
+                        self.assertEqual(report["status"], "SATISFIED")
+
     def test_every_repeated_or_overlapping_occurrence_needs_own_claim(self):
         for entry, body, source, output in (
             (ENTRY, ENTRY + ENTRY, [0, len(ENTRY)], [0, len(ENTRY)]),
