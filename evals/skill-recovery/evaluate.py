@@ -531,14 +531,17 @@ def _evaluate(files, windows, calls, dispositions, claims, injections, scope):
             unrepaired = []
             if satisfied:
                 for index, attempt in attempts:
-                    invalid = (attempt["packaging"] != "STANDALONE" or attempt["transport"] != "CLEAR" or
-                               attempt["content"] == "UNVERIFIED" or (policy == "whole_standalone" and not attempt["whole_body"]))
+                    unverified = attempt["transport"] != "CLEAR" or attempt["content"] == "UNVERIFIED"
+                    invalid = (unverified or attempt["packaging"] != "STANDALONE" or
+                               (policy == "whole_standalone" and not attempt["whole_body"]))
                     if invalid and attempt["ordering"] == "BEFORE_ACTION":
                         if _complete([span for span, witness in progress
                                       if window.attempts[witness]["return_row"] > attempt["return_row"]],
                                      len(files[file_id].data)):
                             attempt["repaired_before_action"] = True
                             repaired = True
+                        elif unverified:
+                            inconclusive = True
                         else:
                             unrepaired.append(index)
                             failed = True
