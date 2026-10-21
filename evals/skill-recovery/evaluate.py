@@ -375,19 +375,18 @@ def _bind(raw, manifest, directory):
                 offsets[body.block] = len(data)
                 data += body.data
         for file in files.values():
-            start = data.find(file.data)
-            while start != -1:
+            for form, start in _hits(data, encodings[file.id]):
                 spans = [claim.source for claim in selected if claim.file == file.id and claim.block in offsets and
                          offsets[claim.block] + claim.output[0] == start + claim.source[0] and
-                         offsets[claim.block] + claim.output[1] == start + claim.source[1]]
+                         offsets[claim.block] + claim.output[1] == start + claim.source[1]] if form == file.data else []
                 _require(_complete(spans, len(file.data)),
                          "undeclared_governing_body", calls[call_id].return_row)
-                start = data.find(file.data, start + 1)
         for body in calls[call_id].bodies:
-            if body.kind == "unsupported":
-                for file in files.values():
-                    _require(not any(form in body.raw for form in encodings[file.id]) or
-                             any(claim.file == file.id and claim.block == body.block for claim in selected),
+            left, right = _region(body)
+            for file in files.values():
+                claimed = body.data is None and any(claim.file == file.id and claim.block == body.block for claim in selected)
+                for form, start in _hits(body.raw, encodings[file.id]):
+                    _require(claimed or left <= start and start + len(form) <= right,
                              "undeclared_governing_body", calls[call_id].return_row)
     injections = []
     for item in _array(manifest.get("initial_injections", [])):
@@ -413,6 +412,27 @@ def _encodings(data):
     for _ in range(2):
         forms |= {json.dumps(form.decode(), ensure_ascii=ascii_only)[1:-1].encode() for form in forms for ascii_only in (False, True)}
     return forms
+
+
+def _hits(data, forms):
+    for form in forms:
+        start = data.find(form)
+        while start != -1:
+            yield form, start
+            start = data.find(form, start + 1)
+
+
+def _region(body):
+    if body.data is None:
+        return 0, 0
+    if body.raw == body.data:
+        return 0, len(body.raw)
+    for ascii_only in (False, True):
+        encoded = json.dumps(body.data.decode(), ensure_ascii=ascii_only)[1:-1].encode()
+        start = body.raw.find(encoded)
+        if start != -1:
+            return start, start + len(encoded)
+    return 0, 0
 
 
 def _complete(spans, size):
