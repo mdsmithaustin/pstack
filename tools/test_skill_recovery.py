@@ -538,6 +538,15 @@ class SkillRecoveryCliTests(unittest.TestCase):
                               call("action"), returned("action", [b"Done."])], [read("valid"), *reads])
                 self.assertEqual(self.run_cli(2)["errors"], [{"code": "inconsistent_read_claims", "row": 5}])
 
+    def test_adjacent_claims_of_one_read_are_manifest_error(self):
+        halves = [read("again", source=[0, 17]), read("again", source=[17, len(ENTRY)], output=[17, len(ENTRY)])]
+        for valid_first in (False, True):
+            with self.subTest(valid_first=valid_first):
+                valid = [call("valid"), returned("valid", [ENTRY])] if valid_first else []
+                self.prepare([boundary(), *valid, call("again"), returned("again", [ENTRY]), call("action"), returned("action", [b"Done."])],
+                             halves + ([read("valid")] if valid_first else []))
+                self.assertEqual(self.run_cli(2)["errors"][0]["code"], "split_read_claim")
+
     def test_raw_hash_binding(self):
         self.basic()
         self.raw.write_bytes(self.raw.read_bytes() + b"\n")
