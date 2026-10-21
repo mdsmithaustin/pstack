@@ -37,6 +37,8 @@ def _json(data, row=None):
         return json.loads(data, object_pairs_hook=pairs, parse_constant=constant)
     except (ValueError, UnicodeError) as error:
         raise _InputError("invalid_json_or_utf8", row) from error
+    except RecursionError as error:
+        raise _InputError("json_nesting_too_deep", row) from error
 
 
 def _sha(data):
