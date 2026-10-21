@@ -26,6 +26,8 @@ PANEL_ROLES = {
     "architect runners", "interrogate reviewers",
 }
 AGREEING_PANELS = PANEL_ROLES - {"arena cross-judge pool"}
+STEP_SETTING = "trail reviewer step"
+STEP_VALUES = ("on", "off")
 REFLECT_SHORTHANDS = {"divergent", "synthesizer", "tooling", "judgment"}
 
 EFFORT_ORDER = ("none", "low", "medium", "high", "xhigh", "max", "ultra")
@@ -250,6 +252,19 @@ def parse(text: str) -> tuple[dict, list]:
             continue
 
         names = _expand_names(raw_names)
+        if STEP_SETTING in names:
+            if len(names) > 1:
+                findings.append((line_no, "error", f"{STEP_SETTING!r} cannot share a line with a role"))
+                continue
+            value = entries_str.strip()
+            if value not in STEP_VALUES:
+                findings.append((line_no, "error", f"{STEP_SETTING!r} takes {' or '.join(STEP_VALUES)}, not {value!r}"))
+            elif STEP_SETTING in roles_seen[current_section]:
+                findings.append((line_no, "error", f"{STEP_SETTING!r} bound twice in section {current_section!r}"))
+            else:
+                roles_seen[current_section].add(STEP_SETTING)
+                sections[current_section][STEP_SETTING] = [(value, None)]
+            continue
         entries, deferred_flat_notices = _parse_entries(entries_str, line_no, findings, current_section)
         if not entries:
             continue
@@ -383,11 +398,14 @@ def _shift_effort(base: str, delta: int, floor: str) -> str:
 
 def step_reviewer(
     reviewer: ResolvedArm, work_model: str, work_effort: str | None,
-    harness: str, allowed: frozenset[str], listed: Mapping[str, frozenset[str]],
+    harness: str, allowed: Mapping[str, set[str]], pinned: bool, listed: Mapping[str, frozenset[str]],
 ) -> ResolvedArm:
     tier = _tier(work_model)
     if reviewer.model == INHERIT or _tier(reviewer.model) != tier:
         return reviewer
+    if pinned:
+        note = f"trail reviewer matched work model {work_model}; {STEP_SETTING} is off, so this is a same-model review"
+        return reviewer._replace(notes=(*reviewer.notes, note), step="same-model")
     family = next((f for f in TIER_FAMILIES if tier in f), (tier,))
     held = {_tier(m) for m in allowed}
     above = [t for t in family[:family.index(tier)] if t in held]
@@ -399,7 +417,7 @@ def step_reviewer(
     else:
         step, delta, floor, target_tier = "same-model", 1, EFFORT_ORDER[0], tier
     base = work_effort if work_effort not in (None, INHERIT) else reviewer.effort
-    model = reviewer.model if step == "same-model" else _newest_allowed(target_tier, allowed)
+    model = reviewer.model if step == "same-model" else _newest_allowed(target_tier, frozenset(allowed))
     effort = INHERIT
     if base != INHERIT:
         target = _shift_effort(base, delta, floor)
@@ -408,11 +426,23 @@ def step_reviewer(
         effort = _nearest_at_or_below(target, offered) if offered else target
     result = (
         "the config allows no other model in its family, so this is a same-model review"
-        if step == "same-model" else f"stepped {step} to {model}"
+        if step == "same-model" else f"stepped {step} to {model}{_allowed_by(target_tier, allowed)}"
     )
     note = f"trail reviewer matched work model {work_model}; {result}"
     notes = (*reviewer.notes, note) if step == "same-model" else (note,)
     return reviewer._replace(model=model, effort=effort, notes=notes, step=step)
+
+
+def _allowed_by(tier: str, allowed: Mapping[str, set[str]]) -> str:
+    roles = sorted({role for model, holders in allowed.items() if _tier(model) == tier for role in holders})
+    return f" (allowed by {', '.join(roles)})" if len(roles) <= 3 else ""
+
+
+def _step_pinned(layers: list[Layer]) -> bool:
+    for layer in layers:
+        if STEP_SETTING in layer.roles:
+            return layer.roles[STEP_SETTING][0][0] == "off"
+    return False
 
 
 def _written_tiers(layers: list[Layer], harness: str) -> frozenset[str] | None:
@@ -422,7 +452,8 @@ def _written_tiers(layers: list[Layer], harness: str) -> frozenset[str] | None:
     return frozenset(
         _tier(_resolve_model(model, None, harness)[0])
         for layer in user_layers
-        for entries in layer.roles.values()
+        for role, entries in layer.roles.items()
+        if role in ROLES
         for model, _ in entries
     )
 
@@ -535,15 +566,18 @@ def _resolve_main(argv: list[str]) -> int:
     if args.work_model:
         work_model, work_effort, work_notes = _resolve_model(work_name, work_written_effort, args.harness)
         unusable = [f"work model {note}; no step applied" for note in work_notes if work_model == INHERIT]
-        allowed = frozenset(
-            arm.model for role in ROLES for arm in resolve_role(role, args.harness, layers, listed)
-        ) - {INHERIT}
+        allowed: dict[str, set[str]] = {}
+        for role in ROLES:
+            for arm in resolve_role(role, args.harness, layers, listed):
+                if arm.model != INHERIT:
+                    allowed.setdefault(arm.model, set()).add(role)
+        pinned = _step_pinned(layers)
     written = _written_tiers(layers, args.harness)
     for role in args.roles or sorted(ROLES):
         arms = resolve_role(role, args.harness, layers, listed)
         if args.work_model and role == "trail reviewer":
             arms = [
-                _with_notes(step_reviewer(arm, work_model, work_effort, args.harness, allowed, listed), *unusable)
+                _with_notes(step_reviewer(arm, work_model, work_effort, args.harness, allowed, pinned, listed), *unusable)
                 for arm in arms
             ]
         arms = [_with_notes(arm, _default_leak_note(arm, written)) for arm in arms]

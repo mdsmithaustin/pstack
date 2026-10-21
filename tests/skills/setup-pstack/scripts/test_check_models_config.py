@@ -853,10 +853,13 @@ default: inherit-parent
 STEP_CATALOG = catalog_json("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna")
 
 
-class TrailReviewerStep(ResolveRunner, unittest.TestCase):
+class ReviewerRunner(ResolveRunner):
     def reviewer(self, harness, work_model, user=OPERATOR_FILE, codex_catalog=None):
         [arm] = self.resolve(harness, "trail reviewer", user=user, codex_catalog=codex_catalog, work_model=work_model)
         return arm
+
+
+class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
 
     def test_a_step_target_with_no_recognized_levels_keeps_the_target_effort(self):
         catalog = catalog_json("gpt-6-sol", catalog_entry("gpt-6-astra", levels=["minimal"]))
@@ -865,7 +868,7 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
             self.reviewer("codex", "gpt-6-sol@xhigh", user=user, codex_catalog=catalog),
             {
                 "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
-                "notes": ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], "step": "up",
+                "notes": ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra (allowed by feature)"], "step": "up",
             },
         )
 
@@ -883,14 +886,14 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
             self.reviewer("codex", "gpt-6.1-sol@xhigh", codex_catalog=STEP_CATALOG),
             {
                 "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
-                "notes": ["trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra"], "step": "up",
+                "notes": ["trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra (allowed by arena cross-judge pool)"], "step": "up",
             },
         )
 
     def test_either_release_of_the_work_tier_counts_as_the_same_model(self):
         arm = self.reviewer("codex", "gpt-6-sol@xhigh", codex_catalog=STEP_CATALOG)
         self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("gpt-6-astra", "high", "up"))
-        self.assertEqual(arm["notes"], ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"])
+        self.assertEqual(arm["notes"], ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra (allowed by arena cross-judge pool)"])
 
     def test_grok_with_one_model_in_the_config_is_a_same_model_review(self):
         self.assertEqual(
@@ -912,7 +915,7 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
             {
                 "role": "trail reviewer", "arm": 1, "model": "grok-4.7-build-fast", "effort": "xhigh",
                 "source": "user ## grok",
-                "notes": ["trail reviewer matched work model grok-4.7; stepped down to grok-4.7-build-fast"],
+                "notes": ["trail reviewer matched work model grok-4.7; stepped down to grok-4.7-build-fast (allowed by swarm workers)"],
                 "step": "down",
             },
         )
@@ -1000,7 +1003,7 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
             (arm["model"], arm["effort"], arm["step"], arm["notes"][-1]),
             (
                 "gpt-6-astra", "high", "up",
-                "trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra",
+                "trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra (allowed by swarm workers)",
             ),
         )
 
@@ -1064,7 +1067,7 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
             arm,
             {
                 "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
-                "notes": ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], "step": "up",
+                "notes": ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra (allowed by swarm workers)"], "step": "up",
             },
         )
 
@@ -1175,7 +1178,7 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
     def test_a_moved_arm_drops_the_notes_that_described_the_old_model(self):
         arm = self.reviewer("codex", "gpt-6-sol@xhigh", codex_catalog=catalog_json("gpt-6-sol", "gpt-6-astra", "gpt-6-luna"))
         self.assertEqual(
-            arm["notes"], ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"],
+            arm["notes"], ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra (allowed by arena cross-judge pool)"],
         )
 
     def test_hermes_with_a_distinct_work_model_prints_unchanged(self):
@@ -1204,6 +1207,123 @@ class TrailReviewerStep(ResolveRunner, unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertEqual(result.stdout, "")
         self.assertIn("unknown effort 'turbo'", result.stderr)
+
+
+class TrailReviewerStepNote(ReviewerRunner, unittest.TestCase):
+    def test_the_issue_config_steps_to_astra_and_names_the_role_that_allows_it(self):
+        self.assertEqual(
+            self.reviewer("codex", "gpt-6.1-sol@high", codex_catalog=STEP_CATALOG),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
+                "notes": [
+                    "trail reviewer matched work model gpt-6.1-sol; "
+                    "stepped up to gpt-6-astra (allowed by arena cross-judge pool)"
+                ],
+                "step": "up",
+            },
+        )
+
+    def test_the_note_lists_up_to_three_allowing_roles_and_omits_more(self):
+        three = "## codex\ntrail reviewer: gpt-6.1-sol@xhigh\nroutine, swarm workers, hillclimb: gpt-6-astra@high\n"
+        [arm] = self.resolve("codex", "trail reviewer", user=three, work_model="gpt-6.1-sol@high")
+        self.assertEqual(
+            arm["notes"],
+            ["trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra (allowed by hillclimb, routine, swarm workers)"],
+        )
+        four = three.replace("hillclimb", "hillclimb, bug-fix")
+        [arm] = self.resolve("codex", "trail reviewer", user=four, work_model="gpt-6.1-sol@high")
+        self.assertEqual(
+            arm["notes"],
+            ["trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra"],
+        )
+
+class TrailReviewerPin(ReviewerRunner, unittest.TestCase):
+    PIN = "trail reviewer step: off"
+
+    def pinned_file(self, reviewer="gpt-6.1-sol@high", pin=PIN):
+        return OPERATOR_FILE.replace("trail reviewer: gpt-6.1-sol@xhigh", f"trail reviewer: {reviewer}\n{pin}")
+
+    def test_a_pinned_reviewer_stands_on_a_match_at_its_written_effort(self):
+        self.assertEqual(
+            self.reviewer("codex", "gpt-6.1-sol@high", user=self.pinned_file(), codex_catalog=STEP_CATALOG),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6.1-sol", "effort": "high", "source": "user ## codex",
+                "notes": [
+                    "trail reviewer matched work model gpt-6.1-sol; "
+                    "trail reviewer step is off, so this is a same-model review"
+                ],
+                "step": "same-model",
+            },
+        )
+
+    def test_the_pin_keeps_the_written_effort_whatever_the_work_effort(self):
+        for written in ("medium", "high", "xhigh"):
+            with self.subTest(written=written):
+                arm = self.reviewer(
+                    "codex", "gpt-6.1-sol@xhigh", user=self.pinned_file(f"gpt-6.1-sol@{written}"),
+                    codex_catalog=STEP_CATALOG,
+                )
+                self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("gpt-6.1-sol", written, "same-model"))
+
+    def test_a_pinned_reviewer_on_claude_code_stands_as_written(self):
+        user = "trail reviewer: opus@high\ntrail reviewer step: off\n"
+        arm = self.reviewer("claude-code", "opus@xhigh", user=user)
+        self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("opus", "high", "same-model"))
+
+    def test_a_pin_changes_nothing_when_the_reviewer_already_differs(self):
+        user = "trail reviewer: haiku@low\ntrail reviewer step: off\n"
+        self.assertEqual(
+            self.reviewer("claude-code", "opus@xhigh", user=user),
+            {"role": "trail reviewer", "arm": 1, "model": "haiku", "effort": "low", "source": "user flat"},
+        )
+
+    def test_the_pin_follows_layer_order_so_a_workspace_section_on_overrides_a_user_off(self):
+        [arm] = self.resolve(
+            "codex", "trail reviewer", user=self.pinned_file(), workspace="## codex\ntrail reviewer step: on\n",
+            codex_catalog=STEP_CATALOG, work_model="gpt-6.1-sol@high",
+        )
+        self.assertEqual((arm["model"], arm["step"]), ("gpt-6-astra", "up"))
+
+    def test_a_codex_section_pin_does_not_bind_claude_code(self):
+        user = "trail reviewer: opus@xhigh\n\n## codex\ntrail reviewer step: off\n"
+        self.assertEqual(self.reviewer("claude-code", "opus@xhigh", user=user)["step"], "up")
+
+    def test_the_setting_is_not_a_role(self):
+        self.assertNotIn("trail reviewer step", cmc.ROLES)
+        arms = self.resolve("codex", user=self.pinned_file(), codex_catalog=STEP_CATALOG)
+        self.assertEqual({a["role"] for a in arms}, set(cmc.ROLES))
+
+
+class TrailReviewerPinLint(unittest.TestCase):
+    def test_off_and_on_lint_clean_in_every_section(self):
+        for value in ("off", "on"):
+            with self.subTest(value=value):
+                sections, findings = cmc.parse(f"trail reviewer step: {value}\n\n## codex\ntrail reviewer step: {value}\n")
+                self.assertEqual(errors_of(findings), [])
+                self.assertEqual(sections[""]["trail reviewer step"], [(value, None)])
+                self.assertEqual(sections["codex"]["trail reviewer step"], [(value, None)])
+
+    def test_any_other_value_is_an_error(self):
+        for value in ("maybe", "off@high", "off, on", "opus"):
+            with self.subTest(value=value):
+                _, findings = cmc.parse(f"trail reviewer step: {value}\n")
+                self.assertEqual(len(errors_of(findings)), 1, findings)
+
+    def test_the_setting_cannot_share_a_line_with_a_role(self):
+        sections, findings = cmc.parse("trail reviewer, trail reviewer step: off\n")
+        self.assertEqual(len(errors_of(findings)), 1)
+        self.assertNotIn("trail reviewer", sections[""])
+
+    def test_binding_the_setting_twice_in_a_section_is_an_error(self):
+        _, findings = cmc.parse("trail reviewer step: off\ntrail reviewer step: on\n")
+        self.assertEqual(len(errors_of(findings)), 1)
+
+    def test_the_cli_lint_exits_zero_for_a_pinned_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "pstack-models.md"
+            path.write_text("trail reviewer: gpt-6.1-sol@high\ntrail reviewer step: off\n", encoding="utf-8")
+            result = run_script([str(path)])
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
 
 
 class ListedModels(unittest.TestCase):

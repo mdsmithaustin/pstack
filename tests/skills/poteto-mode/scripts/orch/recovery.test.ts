@@ -1546,7 +1546,7 @@ describe("CLI bot core regressions", () => {
     expect(JSON.parse(await readFile(join(dir, "attempts.json"), "utf8"))[0].resolutionContext).toEqual(resolutionContext);
     expect(run("attempt", "begin", "--file", path).out).toBe(created.out);
     expect(normal("codex", saved.resolutionContext.workModel)).toEqual({ role: "trail reviewer", arm: 1, model: "gpt-6-astra",
-      effort: "high", source: "workspace ## codex", notes: ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra"], step: "up" });
+      effort: "high", source: "workspace ## codex", notes: ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra (allowed by feature)"], step: "up" });
     expect(JSON.parse(run("attempt", "list").out)[0]).toEqual(saved);
   });
   it("round trips numeric saved role arms through the normal resolver", async () => {
