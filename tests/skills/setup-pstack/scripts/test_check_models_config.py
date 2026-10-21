@@ -1277,12 +1277,52 @@ class TrailReviewerPin(ReviewerRunner, unittest.TestCase):
             {"role": "trail reviewer", "arm": 1, "model": "haiku", "effort": "low", "source": "user flat"},
         )
 
+    def test_a_pinned_inherit_parent_reviewer_stays_unlabeled(self):
+        for harness, work_model, user in (
+            ("claude-code", "opus@xhigh", "trail reviewer: inherit-parent\ntrail reviewer step: off\n"),
+            ("hermes", "model-b@high", "## hermes\ntrail reviewer: inherit-parent\ntrail reviewer step: off\n"),
+        ):
+            with self.subTest(harness=harness):
+                arm = self.reviewer(harness, work_model, user=user)
+                self.assertEqual((arm["model"], arm["effort"]), ("inherit-parent", "inherit-parent"))
+                self.assertNotIn("step", arm)
+                self.assertNotIn("notes", arm)
+
+    def test_the_pin_keeps_the_notes_the_arm_already_carried(self):
+        user = "## grok\ntrail reviewer: opus@high\ntrail reviewer step: off\n"
+        self.assertEqual(
+            self.reviewer("grok", "grok-4.7@high", user=user),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "grok-4.7", "effort": "high", "source": "user ## grok",
+                "notes": [
+                    "opus translated to grok-4.7",
+                    "trail reviewer matched work model grok-4.7; "
+                    "trail reviewer step is off, so this is a same-model review",
+                ],
+                "step": "same-model",
+            },
+        )
+
     def test_the_pin_follows_layer_order_so_a_workspace_section_on_overrides_a_user_off(self):
         [arm] = self.resolve(
             "codex", "trail reviewer", user=self.pinned_file(), workspace="## codex\ntrail reviewer step: on\n",
             codex_catalog=STEP_CATALOG, work_model="gpt-6.1-sol@high",
         )
         self.assertEqual((arm["model"], arm["step"]), ("gpt-6-astra", "up"))
+
+    def test_each_section_binds_its_own_harness(self):
+        for value, claude_step, codex_step in (("off", "same-model", "same-model"), ("on", "down", "up")):
+            with self.subTest(value=value):
+                user = OPERATOR_FILE.replace(
+                    "trail reviewer: opus@xhigh", f"trail reviewer: opus@xhigh\ntrail reviewer step: {value}"
+                ).replace(
+                    "trail reviewer: gpt-6.1-sol@xhigh", f"trail reviewer: gpt-6.1-sol@xhigh\ntrail reviewer step: {value}"
+                )
+                self.assertEqual(self.reviewer("claude-code", "opus@xhigh", user=user)["step"], claude_step)
+                self.assertEqual(
+                    self.reviewer("codex", "gpt-6.1-sol@xhigh", user=user, codex_catalog=STEP_CATALOG)["step"],
+                    codex_step,
+                )
 
     def test_a_codex_section_pin_does_not_bind_claude_code(self):
         user = "trail reviewer: opus@xhigh\n\n## codex\ntrail reviewer step: off\n"
@@ -1298,10 +1338,11 @@ class TrailReviewerPinLint(unittest.TestCase):
     def test_off_and_on_lint_clean_in_every_section(self):
         for value in ("off", "on"):
             with self.subTest(value=value):
-                sections, findings = cmc.parse(f"trail reviewer step: {value}\n\n## codex\ntrail reviewer step: {value}\n")
-                self.assertEqual(errors_of(findings), [])
-                self.assertEqual(sections[""]["trail reviewer step"], [(value, None)])
-                self.assertEqual(sections["codex"]["trail reviewer step"], [(value, None)])
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / "pstack-models.md"
+                    path.write_text(f"trail reviewer step: {value}\n\n## codex\ntrail reviewer step: {value}\n", encoding="utf-8")
+                    result = run_script([str(path)])
+                self.assertEqual((result.returncode, result.stdout), (0, ""))
 
     def test_any_other_value_is_an_error(self):
         for value in ("maybe", "off@high", "off, on", "opus"):
