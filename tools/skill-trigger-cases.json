@@ -58,6 +58,7 @@
     {"skill":"sharpen","example_request":"Rewrite this prompt with /sharpen before I send it.","description_contains":["rewrite the prompt"],"implicit_allowed":false},
     {"skill":"show-me-your-work","example_request":"Keep a decision trail.","description_contains":["reviewable decision trail"],"implicit_allowed":false},
     {"skill":"spec-probes","example_request":"Review this spec.","description_contains":["reviewing a spec"],"implicit_allowed":true},
+    {"skill":"statechart","example_request":"Show the PM the bug as a chart.","description_contains":["Mermaid statechart"],"implicit_allowed":false},
     {"skill":"swarm","example_request":"Run parallel workers.","description_contains":["Fan out N"],"implicit_allowed":false},
     {"skill":"technical-writing","example_request":"Edit this README.","description_contains":["technical-writing standard"],"implicit_allowed":false},
     {"skill":"typescript-best-practices","example_request":"Review this TypeScript file.","description_contains":["TypeScript best practices"],"implicit_allowed":false},

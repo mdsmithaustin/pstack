@@ -76,6 +76,8 @@ jobs:
       - name: pr-recap sketch tests
         working-directory: skills/pr-recap/scripts/sketch
         run: bun run test
+      - name: statechart script tests
+        run: node --test tests/skills/statechart/scripts/test/*.test.mjs
   worktree-audit:
     runs-on: ubuntu-latest
     steps:

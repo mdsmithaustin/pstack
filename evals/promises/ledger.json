@@ -3405,6 +3405,188 @@
    ],
    "scenario": "autopilot-stack-run"
   },
+  "statechart-audit-marks-differences-and-bug-paths": {
+   "check": "static",
+   "claim": "In an audit, the chart marks the steps where the code model and the spec differ, and each rule either breaks is a numbered path.",
+   "evidence": [
+    {
+     "file": "skills/statechart/scripts/statechart.mjs",
+     "quote": "With --against, red states break a rule in"
+    },
+    {
+     "file": "skills/statechart/scripts/statechart.mjs",
+     "quote": "A label \"with the fix, STEP\" or \"in the spec, STEP\" is a step that only the other model takes."
+    },
+    {
+     "file": "skills/statechart/scripts/statechart.mjs",
+     "quote": "A thick blue border and numbered labels mark the bug."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/scripts/statechart.mjs"
+   ]
+  },
+  "statechart-audits-code-against-spec": {
+   "check": "static",
+   "claim": "When the code has a TLA+ spec, /statechart audits the code by modeling what it does and checking that model beside the unchanged spec.",
+   "evidence": [
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "To audit the code against that spec, make the copy model what the code does, and pass the spec unchanged as `--against`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/SKILL.md",
+    "skills/statechart/scripts/statechart.mjs"
+   ]
+  },
+  "statechart-checks-agreed-chart-rules-before-code": {
+   "check": "static",
+   "claim": "TLC checks the agreed chart's rules before any code is written or changed.",
+   "evidence": [
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Use `from-chart` when there is no model and the PM should agree on the behavior before anyone writes or changes the code."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Add one `%% never` line per rule, with the PM's sentence."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "If a rule breaks, the agreed chart has a design bug."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/SKILL.md"
+   ]
+  },
+  "statechart-draws-user-view-from-tla-model": {
+   "check": "static",
+   "claim": "/statechart draws what the user sees as a Mermaid statechart generated from a TLA+ model.",
+   "evidence": [
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Draw what an app's user sees as a Mermaid statechart from a TLA+ model."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Label each state with what is on the screen"
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Run `from-spec`, then fill in the mapping file it writes."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/SKILL.md"
+   ]
+  },
+  "statechart-marks-states-and-numbers-bug-paths": {
+   "check": "static",
+   "claim": "Each bug TLC finds is drawn as a numbered path in the reader's words, and each state is marked as working, still wrong, or fixed by the open fix.",
+   "evidence": [
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Each bug TLC finds is a numbered path."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "States are gray if they work, red if still wrong, and green if fixed."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Keep variable and action names out of labels."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "If there is an open fix, model it from the code and pass that model as `--fixed`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/SKILL.md",
+    "skills/statechart/scripts/statechart.mjs"
+   ]
+  },
+  "statechart-reader-rules-become-invariants": {
+   "check": "static",
+   "claim": "Each rule the reader agrees to becomes a TLA+ invariant, and a broken rule is never weakened.",
+   "evidence": [
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Write each rule the PM agrees to as one invariant, with the PM's sentence as its comment."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Never weaken a rule to make the chart pass."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/SKILL.md"
+   ]
+  },
+  "statechart-replays-bugs-in-real-code": {
+   "check": "static",
+   "claim": "Before the hand-off, the agent replays each bug path against the real code and treats a bug that does not reproduce as a model error.",
+   "evidence": [
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Replay each bug's story against the real code, as a test or a live repro, one step per model action."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "If a bug does not reproduce, assume the model is wrong until you show otherwise."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/SKILL.md"
+   ]
+  },
+  "statechart-shows-code-chart-differences": {
+   "check": "static",
+   "claim": "After the real code's guards go into the spec, each difference from the agreed chart goes to the reader to decide.",
+   "evidence": [
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "For each difference it prints, ask the PM whether the code is wrong or the chart needs a correction."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/SKILL.md",
+    "skills/statechart/scripts/compare-charts.mjs"
+   ]
+  },
+  "statechart-writes-tla-skeleton-from-agreed-chart": {
+   "check": "static",
+   "claim": "From an agreed chart, /statechart writes a TLA+ skeleton.",
+   "evidence": [
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "turn an agreed chart into a TLA+ skeleton"
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Draw the chart the PM agrees to."
+    },
+    {
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Add the real code's guards and variables to the spec that `from-chart` wrote"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/statechart/SKILL.md",
+    "skills/statechart/scripts/chart-to-tla.mjs"
+   ]
+  },
   "status-only-reports-doc-results-pending": {
    "check": "static",
    "claim": "A status-only request reports a missing or stale author result or required independent review verdict as pending without starting either pass.",
@@ -3855,6 +4037,15 @@
     "port"
    ],
    "text": "One prompt can carry a whole program, from research through execution:"
+  },
+  "0277ec421b88": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "A counterexample in model terms convinces you."
   },
   "028ebae5ea21": {
    "class": "context",
@@ -4639,6 +4830,15 @@
    ],
    "text": "You might be wondering whether every change needs this."
   },
+  "18f3cf23aaee": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The PM or designer who owns the behavior needs to see it in their terms."
+  },
   "19069e6c9e15": {
    "class": "context",
    "file": "01-setup.md",
@@ -4704,6 +4904,16 @@
     "port"
    ],
    "text": "[Run work while you sleep](./07-overnight.md) covers the full overnight contract."
+  },
+  "1a6b84b83aad": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-draws-user-view-from-tla-model",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "[`/statechart`](../../skills/statechart/SKILL.md) draws a Mermaid statechart of what the user sees, generated from a TLA+ model, so the picture and the checked model can't drift apart."
   },
   "1a6bb0c03e0e": {
    "class": "context",
@@ -5246,6 +5456,15 @@
    ],
    "text": "The fix lands in the repo as architecture, a type, a lint, or a test, so the next agent can't make the mistake."
   },
+  "2a1c7c9cb75e": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "```text\n/statechart what the user sees when they edit a note offline\n```"
+  },
   "2a201edf4e1b": {
    "class": "context",
    "file": "01-setup.md",
@@ -5488,6 +5707,15 @@
     "port"
    ],
    "text": "pstack ships 24 principles as individual skills."
+  },
+  "3125a7906580": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It also runs the other way."
   },
   "317dfe8ba6bf": {
    "class": "promise",
@@ -6568,6 +6796,16 @@
    ],
    "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
   },
+  "4d1cb0a44dea": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-audit-marks-differences-and-bug-paths",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The chart marks the steps where the two differ, and each rule either one breaks is a numbered path."
+  },
   "4d1f50b5fd58": {
    "class": "context",
    "file": "07-overnight.md",
@@ -6585,6 +6823,15 @@
     "port"
    ],
    "text": "A swarm of verifiers also confirms a perf win over a big enough sample, or fuzzes the app for regressions before a PR ships."
+  },
+  "4e6431fed625": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Run:"
   },
   "4ea3a9976f21": {
    "also": [
@@ -7635,6 +7882,16 @@
    ],
    "text": "[`/swarm`](../../skills/swarm/SKILL.md) fans N workers across independent slices, coverage matrices, gauntlet lanes, exploration partitions, or declared race arms."
   },
+  "6be213a62bdb": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-marks-states-and-numbers-bug-paths",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Each bug TLC finds is a numbered path in the reader's words, and each state is marked works, still wrong, or fixed by your open PR."
+  },
   "6becdca4aa3d": {
    "class": "promise",
    "file": "08-principles.md",
@@ -8049,6 +8306,16 @@
    ],
    "text": "`/deslop` cleans slop out of the code, `/unslop` cleans it out of prose, and `/no-comments` hands the comments to a reviewer who didn't write them."
   },
+  "777ad2d0c068": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-reader-rules-become-invariants",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The reader's rules (\"you never see Synced while you're offline\") become invariants."
+  },
   "77f61819ef39": {
    "also": [
     "slash-skills-invocable"
@@ -8355,6 +8622,16 @@
     "port"
    ],
    "text": "Approve a proposal only if it would change a future decision."
+  },
+  "8034eaf910bb": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-shows-code-chart-differences",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "As guards from the real code go into the spec, each place the code departs from the chart shows up as a difference for the reader to decide."
   },
   "8041ff5e31b1": {
    "class": "context",
@@ -9209,6 +9486,16 @@
     "port"
    ],
    "text": "When a skill keeps missing and you know what it should do, change and test it in one task:"
+  },
+  "9caabe32f064": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-audits-code-against-spec",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "When the code already has a TLA+ spec, the skill can audit the code against it."
   },
   "9d40f211b151": {
    "class": "promise",
@@ -10885,6 +11172,16 @@
    ],
    "text": "Missing runtime evidence leaves an attempt uncertain."
   },
+  "c6e19df9605c": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-writes-tla-skeleton-from-agreed-chart",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Sketch the behavior as a chart, agree on it with the reader, and the skill writes a TLA+ skeleton from it."
+  },
   "c6f75c4a665a": {
    "class": "substituted",
    "file": "README.md",
@@ -11088,6 +11385,16 @@
     "port"
    ],
    "text": "The playbook already sequences them, and a hand-written sequence usually reorders or drops steps the playbook would have kept."
+  },
+  "cd34560e22a7": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-audits-code-against-spec",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The agent models what the code does and checks that model next to the unchanged spec."
   },
   "cda575a11923": {
    "class": "promise",
@@ -11878,6 +12185,16 @@
    ],
    "text": "Skills aren't the only prose you ship."
   },
+  "e2ef24660ad9": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-replays-bugs-in-real-code",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "Before the hand-off, the agent reproduces each bug path in the real code, so a modeling error doesn't reach the reader as a bug."
+  },
   "e2f8cbe9052f": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -12620,6 +12937,16 @@
     "port"
    ],
    "text": "When the findings point at a fix, start the fix as a new task."
+  },
+  "f498d5e7a809": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-checks-agreed-chart-rules-before-code",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "TLC checks the agreed chart's rules before any code exists."
   },
   "f4c94ee7fe28": {
    "class": "cursor-only",

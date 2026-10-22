@@ -51,5 +51,6 @@ run test "poteto-mode bun tests" skills/poteto-mode/scripts bun run test
 run test "poteto-mode typecheck" skills/poteto-mode/scripts bun run typecheck
 run test "pr-recap bun install" skills/pr-recap/scripts/sketch bun install --frozen-lockfile
 run test "pr-recap sketch tests" skills/pr-recap/scripts/sketch bun run test
+run test "statechart node tests" . node --test tests/skills/statechart/scripts/test/statechart.test.mjs
 
 exit "$failed"
