@@ -42,6 +42,7 @@ class WorktreeAuditTranscriptSlugTest(unittest.TestCase):
             repo.mkdir()
 
             env = dict(os.environ)
+            env.pop("CODEX_HOME", None)
             env["HOME"] = str(home)
             env["GIT_AUTHOR_NAME"] = "pstack-test"
             env["GIT_AUTHOR_EMAIL"] = "pstack-test@example.com"
@@ -103,6 +104,7 @@ class WorktreeAuditBaseTest(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.tmp / "home"),
                         GIT_AUTHOR_NAME="pstack-test", GIT_AUTHOR_EMAIL="pstack-test@example.com",
                         GIT_COMMITTER_NAME="pstack-test", GIT_COMMITTER_EMAIL="pstack-test@example.com")
+        self.env.pop("CODEX_HOME", None)
         self.env["PATH"] = f"{failing_origin_cli(self.tmp / 'failing-origin')}:{self.env['PATH']}"
         (self.tmp / "home").mkdir()
         self.repo = self.tmp / "repo"
@@ -390,6 +392,15 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         transcripts = self.tmp / "home" / ".claude" / "projects" / slug
         transcripts.mkdir(parents=True)
         (transcripts / "s.jsonl").write_text(json.dumps({"cwd": f"{str(worktree).lower()}/"}) + "\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
+
+    def test_recent_chat_found_in_a_private_codex_home(self):
+        worktree = self.merged_worktree("wt-codex")
+        codex_home = self.tmp / "wrapper-codex-home"
+        self.env["CODEX_HOME"] = str(codex_home)
+        transcripts = codex_home / "sessions" / "2026" / "10" / "22"
+        transcripts.mkdir(parents=True)
+        (transcripts / "rollout-s.jsonl").write_text(json.dumps({"cwd": f"{worktree}/"}) + "\n", encoding="utf-8")
         self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
 
     def test_prunable_worktree_holds(self):

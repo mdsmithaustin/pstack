@@ -101,7 +101,7 @@ fi
 # date tree.
 slug=$(printf '%s' "$main_wt" | sed 's/[^a-zA-Z0-9]/-/g')
 transcripts="$HOME/.claude/projects/$slug"
-[ -d "$transcripts" ] || transcripts="$HOME/.codex/sessions"
+[ -d "$transcripts" ] || transcripts="${CODEX_HOME:-$HOME/.codex}/sessions"
 now=$(date +%s)
 
 is_build_cache() {
