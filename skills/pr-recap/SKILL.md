@@ -53,7 +53,9 @@ Use the **technical-writing** skill on the recap's sentences. Then use the **uns
 
 ## Draw the sketch
 
-Follow [the sketch](references/sketch.md). In short: pick one drawing from its catalog, write a scene file, render it with `scripts/sketch/sketch.mjs`, fix every problem it reports, then look at the PNG yourself before you use it.
+Use one writable work folder outside the skill for `scene.json`, `sketch.png`, `story.txt`, and `recap.md`. Run the render, reader, and posting commands from that folder. Replace `<skill>` with the absolute path to this skill's directory.
+
+Follow [the sketch](references/sketch.md). In short: pick one drawing from its catalog, write `scene.json` in the work folder, render it with `bun "<skill>/scripts/sketch/sketch.mjs" scene.json sketch.png`, fix every problem it reports, then look at the PNG yourself before you use it.
 
 When your runtime cannot run Bun, or cannot show you an image, skip the sketch. Post the story, the "Not covered" line, and the details block, and say in your reply that the sketch was skipped and why. Do not substitute a Mermaid diagram or a table.
 
@@ -69,7 +71,7 @@ Keep the marks in your notes, not in the comment. Report the counts in your repl
 
 ## Post or update the comment
 
-Write the recap to `recap.md` in the folder that holds the PNG. The image line must name the file you attach, as `![<alt text>](./sketch.png)` for `--attach sketch.png`. `gh` uploads the attachment and rewrites that link.
+Write the recap to `recap.md` in the same work folder, including when the sketch is skipped. Run the posting commands from that folder. The image line must name the file you attach, as `![<alt text>](./sketch.png)` for `--attach sketch.png`. `gh` uploads the attachment and rewrites that link.
 
 ```sh
 gh pr comment <n> -R <host>/<owner>/<repo> --body-file recap.md --attach sketch.png

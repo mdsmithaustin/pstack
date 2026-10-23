@@ -37,7 +37,7 @@ Ask these in order and take the first yes:
 
 ## Write the scene
 
-A scene is JSON: a `story`, a `height` (at most 420), and a list of `shapes`.
+A scene is JSON: a `story`, a `height` (at most 420), and a list of `shapes`. Write it to `scene.json` in one writable work folder outside the skill. Keep `sketch.png`, `story.txt`, and `recap.md` in that same folder.
 
 Write the `story` first, from your notes. The tool fails the scene when the drawing leaves any of it out.
 
@@ -66,10 +66,10 @@ Tones are `ink`, `gray`, `accent`, and `faint`.
 
 ## Render and check
 
-Run the tool from the skill's directory:
+Run the tool from the work folder. Replace `<skill>` with the absolute path to this skill's directory:
 
 ```sh
-bun scripts/sketch/sketch.mjs scene.json sketch.png
+bun "<skill>/scripts/sketch/sketch.mjs" scene.json sketch.png
 ```
 
 It prints a JSON report and exits 0 when the image is clean, 1 when it lists `problems`, and 2 when it could not render. It reports text under 16 px, text off the canvas, text that does not fit its box, overlapping text, a line through text, more than 12 gloss words, identifier-style words such as `snake_case`, `ALLCAPS`, or `camelCase`, characters the hand-drawn font cannot draw, such as `→` or `≤`, and any part of the `story` that the drawing leaves out. File names such as `order-check.py` pass. Move shapes and rewrite words until `problems` is empty.
@@ -78,7 +78,7 @@ Then open `sketch.png` and look at it yourself. The tool cannot see a crowded co
 
 Last, have another model read it as a reviewer would. Put the two story sentences in `story.txt` next to the PNG, then give a fresh reader only [the reader prompt](reader.md), `story.txt`, and the PNG. Pick a reader from a different model family when you can:
 
-Run both commands from the folder that holds `sketch.png` and `story.txt`. Replace `<skill>` with the absolute path to this skill's directory:
+Run both commands from the same work folder that holds `sketch.png` and `story.txt`, using the same absolute `<skill>` path:
 
 - On Claude Code, run `codex exec -s read-only --skip-git-repo-check -i sketch.png -- - < "<skill>/references/reader.md"` when `codex` is on PATH.
 - On Codex, run `claude -p --model sonnet --allowedTools Read < "<skill>/references/reader.md"` when `claude` is on PATH.
