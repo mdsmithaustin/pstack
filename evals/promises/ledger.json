@@ -8676,6 +8676,14 @@
    ],
    "text": "This page covers stating a finish condition, vetting a measured number, generating a verification skill for your app, formally verifying a property tests rarely reach, opening the PR, and driving it to merged."
   },
+  "8a4079b02648": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "port"
+   ],
+   "text": "The playbook also invokes [pr-recap](../../skills/pr-recap/SKILL.md), which defines when to post a reviewer recap and its comment format."
+  },
   "8a52a937d01b": {
    "class": "context",
    "file": "02-poteto-mode.md",

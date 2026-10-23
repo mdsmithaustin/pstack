@@ -1,0 +1,190 @@
+{
+ "story": {
+  "drawing": "check",
+  "seen": "\"v42 started before its migration and served errors for 20 minutes.\"",
+  "symptom": "app ran on old schema",
+  "added": [
+   "order-check.py"
+  ]
+ },
+ "height": 380,
+ "shapes": [
+  {
+   "kind": "text",
+   "x": 30,
+   "y": 30,
+   "text": "deploy log",
+   "size": "note",
+   "tone": "gray",
+   "words": false
+  },
+  {
+   "kind": "box",
+   "x": 100,
+   "y": 62,
+   "w": 200,
+   "h": 76,
+   "label": "start app",
+   "sub": "v42",
+   "tone": "gray"
+  },
+  {
+   "kind": "cross",
+   "x": 318,
+   "y": 70
+  },
+  {
+   "kind": "text",
+   "x": 340,
+   "y": 66,
+   "text": "app ran on old schema",
+   "size": "note"
+  },
+  {
+   "kind": "text",
+   "x": 340,
+   "y": 90,
+   "text": "seen only in outage review",
+   "size": "sub",
+   "tone": "gray"
+  },
+  {
+   "kind": "box",
+   "x": 540,
+   "y": 70,
+   "w": 190,
+   "h": 60,
+   "label": "migrate db",
+   "tone": "faint"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    30,
+    168
+   ],
+   "to": [
+    750,
+    168
+   ],
+   "bend": [
+    390,
+    166
+   ],
+   "tone": "gray"
+  },
+  {
+   "kind": "line",
+   "from": [
+    56,
+    146
+   ],
+   "to": [
+    56,
+    190
+   ]
+  },
+  {
+   "kind": "text",
+   "x": 56,
+   "y": 220,
+   "text": "deploy",
+   "size": "sub",
+   "anchor": "middle",
+   "words": false
+  },
+  {
+   "kind": "line",
+   "from": [
+    200,
+    146
+   ],
+   "to": [
+    200,
+    190
+   ],
+   "tone": "gray"
+  },
+  {
+   "kind": "line",
+   "from": [
+    635,
+    146
+   ],
+   "to": [
+    635,
+    190
+   ],
+   "tone": "gray"
+  },
+  {
+   "kind": "text",
+   "x": 635,
+   "y": 220,
+   "text": "too late",
+   "size": "sub",
+   "tone": "gray",
+   "anchor": "middle"
+  },
+  {
+   "kind": "box",
+   "x": 100,
+   "y": 276,
+   "w": 220,
+   "h": 76,
+   "label": "order-check.py",
+   "sub": "+ step list",
+   "tone": "accent"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    200,
+    270
+   ],
+   "to": [
+    200,
+    200
+   ],
+   "bend": [
+    196,
+    236
+   ],
+   "tone": "accent"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    328,
+    314
+   ],
+   "to": [
+    430,
+    314
+   ],
+   "tone": "accent"
+  },
+  {
+   "kind": "brace",
+   "x": 450,
+   "y0": 256,
+   "y1": 370,
+   "keyWidth": 96,
+   "rows": [
+    [
+     "pass",
+     "migrate, then start"
+    ],
+    [
+     "fail",
+     "start first",
+     "accent"
+    ],
+    [
+     "unsure",
+     "log incomplete"
+    ]
+   ]
+  }
+ ]
+}

@@ -49,5 +49,7 @@ run test "setup-pstack unit tests" . "${py[@]}" -m unittest discover -s tests/sk
 run test "poteto-mode bun install" skills/poteto-mode/scripts bun install --frozen-lockfile
 run test "poteto-mode bun tests" skills/poteto-mode/scripts bun run test
 run test "poteto-mode typecheck" skills/poteto-mode/scripts bun run typecheck
+run test "pr-recap bun install" skills/pr-recap/scripts/sketch bun install --frozen-lockfile
+run test "pr-recap sketch tests" skills/pr-recap/scripts/sketch bun run test
 
 exit "$failed"

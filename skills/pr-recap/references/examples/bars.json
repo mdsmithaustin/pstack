@@ -1,0 +1,152 @@
+{
+ "story": {
+  "drawing": "bars",
+  "seen": "\"EU users wait over two seconds for the first page.\"",
+  "symptom": "2.4 s",
+  "number": "2 s target",
+  "added": []
+ },
+ "height": 290,
+ "shapes": [
+  {
+   "kind": "text",
+   "x": 150,
+   "y": 36,
+   "text": "before",
+   "size": "note",
+   "tone": "gray",
+   "words": false
+  },
+  {
+   "kind": "text",
+   "x": 440,
+   "y": 36,
+   "text": "after",
+   "size": "note",
+   "words": false
+  },
+  {
+   "kind": "text",
+   "x": 24,
+   "y": 83,
+   "text": "us-east",
+   "words": false
+  },
+  {
+   "kind": "box",
+   "x": 150,
+   "y": 56,
+   "w": 220,
+   "h": 40,
+   "label": "2.2 s",
+   "tone": "gray"
+  },
+  {
+   "kind": "box",
+   "x": 440,
+   "y": 56,
+   "w": 90,
+   "h": 40,
+   "label": "0.9 s",
+   "tone": "accent"
+  },
+  {
+   "kind": "text",
+   "x": 24,
+   "y": 139,
+   "text": "eu-west",
+   "words": false
+  },
+  {
+   "kind": "box",
+   "x": 150,
+   "y": 112,
+   "w": 240,
+   "h": 40,
+   "label": "2.4 s",
+   "tone": "gray"
+  },
+  {
+   "kind": "box",
+   "x": 440,
+   "y": 112,
+   "w": 100,
+   "h": 40,
+   "label": "1.0 s",
+   "tone": "accent"
+  },
+  {
+   "kind": "text",
+   "x": 24,
+   "y": 195,
+   "text": "ap-south",
+   "words": false
+  },
+  {
+   "kind": "cross",
+   "x": 172,
+   "y": 188
+  },
+  {
+   "kind": "box",
+   "x": 440,
+   "y": 168,
+   "w": 110,
+   "h": 40,
+   "label": "1.1 s",
+   "tone": "accent"
+  },
+  {
+   "kind": "line",
+   "from": [
+    350,
+    232
+   ],
+   "to": [
+    350,
+    46
+   ],
+   "dashed": true,
+   "tone": "gray"
+  },
+  {
+   "kind": "line",
+   "from": [
+    640,
+    232
+   ],
+   "to": [
+    640,
+    46
+   ],
+   "dashed": true,
+   "tone": "gray"
+  },
+  {
+   "kind": "text",
+   "x": 640,
+   "y": 258,
+   "text": "2 s target",
+   "size": "sub",
+   "tone": "gray",
+   "anchor": "middle",
+   "words": false
+  },
+  {
+   "kind": "text",
+   "x": 350,
+   "y": 258,
+   "text": "2 s target",
+   "size": "sub",
+   "tone": "gray",
+   "anchor": "middle",
+   "words": false
+  },
+  {
+   "kind": "text",
+   "x": 192,
+   "y": 194,
+   "text": "probe down"
+  }
+ ]
+}

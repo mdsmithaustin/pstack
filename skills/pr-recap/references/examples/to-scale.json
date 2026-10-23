@@ -1,0 +1,106 @@
+{
+ "story": {
+  "drawing": "to scale",
+  "seen": "\"Uploads over 10 MB fail with a 413 from the proxy.\"",
+  "symptom": "upload fails",
+  "number": "10 MB",
+  "added": [
+   "4 MB"
+  ]
+ },
+ "height": 320,
+ "shapes": [
+  {
+   "kind": "page",
+   "x": 70,
+   "y": 48,
+   "w": 150,
+   "h": 240,
+   "tone": "gray",
+   "title": "before",
+   "lines": false,
+   "label": "12 MB"
+  },
+  {
+   "kind": "line",
+   "from": [
+    40,
+    248
+   ],
+   "to": [
+    640,
+    248
+   ],
+   "dashed": true
+  },
+  {
+   "kind": "text",
+   "x": 652,
+   "y": 254,
+   "text": "proxy limit",
+   "words": false
+  },
+  {
+   "kind": "text",
+   "x": 652,
+   "y": 276,
+   "text": "10 MB",
+   "size": "sub",
+   "tone": "gray",
+   "words": false
+  },
+  {
+   "kind": "cross",
+   "x": 250,
+   "y": 276
+  },
+  {
+   "kind": "text",
+   "x": 272,
+   "y": 283,
+   "text": "upload fails"
+  },
+  {
+   "kind": "text",
+   "x": 340,
+   "y": 32,
+   "text": "after",
+   "size": "note",
+   "words": false
+  },
+  {
+   "kind": "box",
+   "x": 340,
+   "y": 48,
+   "w": 90,
+   "h": 80,
+   "label": "4 MB",
+   "tone": "accent"
+  },
+  {
+   "kind": "box",
+   "x": 445,
+   "y": 48,
+   "w": 90,
+   "h": 80,
+   "label": "4 MB",
+   "tone": "accent"
+  },
+  {
+   "kind": "box",
+   "x": 550,
+   "y": 48,
+   "w": 90,
+   "h": 80,
+   "label": "4 MB",
+   "tone": "accent"
+  },
+  {
+   "kind": "text",
+   "x": 340,
+   "y": 160,
+   "text": "each chunk fits under the limit",
+   "tone": "gray"
+  }
+ ]
+}

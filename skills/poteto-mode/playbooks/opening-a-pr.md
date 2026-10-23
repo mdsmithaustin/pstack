@@ -78,6 +78,8 @@ The URL check below is for github.com attachments and uses its token. For Enterp
 
 For upstream-sync publication routes and draft requirements, follow [Syncing from upstream](../../../PORTING.md#syncing-from-upstream).
 
+**Recap.** After a PR opens, and after each push that changes its diff, use the **pr-recap** skill.
+
 **Babysit.** Opening a PR does not start a babysit. Post the URL and keep building. Finish the phase or stack first. Run a separate babysit pass only when the user asks for one after the whole stack exists. A babysit for each new PR stalls the build and spends checks on commits later waves restart. Push back when feedback drifts from intent.
 
 A subagent that opens a PR uses the **interrogate** skill, the **deslop** skill, and the **no-comments** skill, and posts the URL. A non-owner subagent finalizes the body per **Descriptions** before it posts the URL. It returns to the parent without babysitting, unless it is an Autopilot-full or Autopilot-stack owner. That owner's brief assigns the babysit loop and is the ask `playbooks/babysit.md` waits for. The owner starts the loop after its code-ready report, reports merge-ready or STACK-READY per its playbook, and is exempt from the rules here and in `playbooks/babysit.md` that hold babysitting until a whole stack is built.

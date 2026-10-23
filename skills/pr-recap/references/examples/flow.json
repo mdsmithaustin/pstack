@@ -1,0 +1,159 @@
+{
+ "story": {
+  "drawing": "flow",
+  "seen": "\"Checkout pages showed prices from an hour ago.\"",
+  "symptom": "stale for 1 h",
+  "added": [
+   "version check"
+  ]
+ },
+ "height": 250,
+ "shapes": [
+  {
+   "kind": "text",
+   "x": 24,
+   "y": 40,
+   "text": "before",
+   "size": "note",
+   "tone": "gray",
+   "words": false
+  },
+  {
+   "kind": "box",
+   "x": 24,
+   "y": 56,
+   "w": 120,
+   "h": 48,
+   "label": "request",
+   "tone": "gray"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    150,
+    80
+   ],
+   "to": [
+    214,
+    80
+   ],
+   "tone": "gray"
+  },
+  {
+   "kind": "box",
+   "x": 222,
+   "y": 56,
+   "w": 120,
+   "h": 48,
+   "label": "cache",
+   "tone": "gray"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    348,
+    80
+   ],
+   "to": [
+    412,
+    80
+   ],
+   "tone": "gray"
+  },
+  {
+   "kind": "box",
+   "x": 420,
+   "y": 56,
+   "w": 120,
+   "h": 48,
+   "label": "price",
+   "tone": "gray"
+  },
+  {
+   "kind": "cross",
+   "x": 566,
+   "y": 80
+  },
+  {
+   "kind": "text",
+   "x": 588,
+   "y": 86,
+   "text": "stale for 1 h"
+  },
+  {
+   "kind": "text",
+   "x": 24,
+   "y": 156,
+   "text": "after",
+   "size": "note",
+   "words": false
+  },
+  {
+   "kind": "box",
+   "x": 24,
+   "y": 172,
+   "w": 120,
+   "h": 48,
+   "label": "request"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    150,
+    196
+   ],
+   "to": [
+    204,
+    196
+   ]
+  },
+  {
+   "kind": "box",
+   "x": 212,
+   "y": 172,
+   "w": 120,
+   "h": 48,
+   "label": "cache"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    338,
+    196
+   ],
+   "to": [
+    392,
+    196
+   ]
+  },
+  {
+   "kind": "box",
+   "x": 400,
+   "y": 172,
+   "w": 176,
+   "h": 48,
+   "label": "version check",
+   "tone": "accent"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    582,
+    196
+   ],
+   "to": [
+    624,
+    196
+   ],
+   "tone": "accent"
+  },
+  {
+   "kind": "box",
+   "x": 632,
+   "y": 172,
+   "w": 120,
+   "h": 48,
+   "label": "price"
+  }
+ ]
+}
