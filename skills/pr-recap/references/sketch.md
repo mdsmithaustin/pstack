@@ -48,7 +48,8 @@ Write the `story` first, from your notes. The tool fails the scene when the draw
 | `symptom` | That sentence restated in six plain words or fewer, as the gloss beside the ✕, such as `stale for 1 h`. Name what the person saw, not the rule that was broken or the check that was skipped | Some text in the drawing holds it |
 | `number` | The one number the why depends on, such as the limit that cut the file: `10 MB`. Optional, except in a `to scale` drawing | Some text holds it, and a `to scale` drawing has a line for it |
 | `added` | Each part the PR adds or moves, named as rule 1 says: up to four names, or one `6 webhook handlers` count | Each one is drawn |
- The canvas is 782 px wide, the width of a GitHub comment. `x` and `y` are in CSS pixels from the top left. A text `y` is its baseline.
+
+The canvas is 782 px wide, the width of a GitHub comment. `x` and `y` are in CSS pixels from the top left. A text `y` is its baseline.
 
 | Kind | Fields | Draws |
 |---|---|---|
@@ -79,7 +80,7 @@ Last, have another model read it as a reviewer would. Put the two story sentence
 
 Run both commands from the folder that holds `sketch.png` and `story.txt`. Replace `<skill>` with the absolute path to this skill's directory:
 
-- On Claude Code, run `codex exec -s read-only -i sketch.png -- - < "<skill>/references/reader.md"` when `codex` is on PATH.
+- On Claude Code, run `codex exec -s read-only --skip-git-repo-check -i sketch.png -- - < "<skill>/references/reader.md"` when `codex` is on PATH.
 - On Codex, run `claude -p --model sonnet --allowedTools Read < "<skill>/references/reader.md"` when `claude` is on PATH.
 - Otherwise use a subagent of your own family, and say so in your reply.
 

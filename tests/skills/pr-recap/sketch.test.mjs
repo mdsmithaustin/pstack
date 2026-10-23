@@ -73,6 +73,22 @@ describe('sketch tool', () => {
     }
   }, 30000);
 
+  test('a scene that is not an object, or a field that is not a number or a known word, exits 2', () => {
+    const flow = example('flow');
+    for (const scene of [
+      'null',
+      withShapes(flow, null),
+      withShapes(flow, { kind: 'text', x: 20, y: 300, text: 'ok', anchor: 'start"/><image href="/x.png' }),
+      withShapes(flow, { kind: 'box', x: '20"/>', y: 10, w: 40, h: 40, label: 'a' }),
+      withShapes(flow, { kind: 'arrow', from: [0, 0], to: [1] }),
+      withShapes(flow, { kind: 'page', x: 10, y: 10, w: 80, h: 80, bands: [{ y0: 'a', y1: 20 }] }),
+    ]) {
+      const { code, stderr } = render(scene);
+      expect(code).toBe(2);
+      expect(stderr).toContain('bad scene:');
+    }
+  });
+
   for (const name of ['rewire', 'to-scale', 'flow', 'check', 'bars']) {
     test(`the ${name} example renders a PNG with no problems`, () => {
       const { code, report, outPath } = render(example(name));

@@ -39,12 +39,29 @@ if (!installed(here)) {
   try { depsDir = mkdtempSync(join(tmpdir(), 'pr-recap-sketch-')); }
   catch (e) { fail(`cannot create temporary dependency folder: ${e.message}`); }
   process.on('exit', () => rmSync(depsDir, { recursive: true, force: true }));
+  for (const [sig, n] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) process.on(sig, () => process.exit(n));
   if (!installed(depsDir)) fail('could not install the sketch packages; see the messages above');
 }
 
 let scene;
 try { scene = JSON.parse(readFileSync(scenePath, 'utf8')); } catch (e) { fail(`bad scene: ${e.message}`); }
-if (!Number.isFinite(scene.height) || !Array.isArray(scene.shapes)) fail('bad scene: needs "height" and "shapes"');
+if (!Number.isFinite(scene?.height) || !Array.isArray(scene.shapes)) fail('bad scene: needs "height" and "shapes"');
+// Every field that reaches the SVG as an attribute must be a number or a known word.
+const isPoint = v => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite);
+const fieldOk = {
+  x: Number.isFinite, y: Number.isFinite, w: Number.isFinite, h: Number.isFinite,
+  y0: Number.isFinite, y1: Number.isFinite, keyWidth: Number.isFinite, stack: Number.isFinite,
+  from: isPoint, to: isPoint, bend: isPoint,
+  anchor: v => ['start', 'middle', 'end'].includes(v),
+  size: v => ['label', 'big', 'sub', 'note'].includes(v),
+  tone: v => ['ink', 'gray', 'accent', 'faint'].includes(v),
+};
+scene.shapes.forEach((shape, i) => {
+  if (!shape || typeof shape !== 'object') fail(`bad scene: shape ${i} is not an object`);
+  for (const part of [shape, ...(Array.isArray(shape.bands) ? shape.bands : [])])
+    for (const [k, ok] of Object.entries(fieldOk))
+      if (part?.[k] !== undefined && !ok(part[k])) fail(`bad scene: shape ${i} has a bad "${k}": ${JSON.stringify(part[k])}`);
+});
 
 try {
   const require = createRequire(join(depsDir, 'package.json'));

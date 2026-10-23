@@ -80,7 +80,7 @@ The command prints the new comment URL. Then delete your older recap comment, so
 ```sh
 me=$(gh api --hostname <host> user --jq .login)
 gh api --hostname <host> --paginate "repos/<owner>/<repo>/issues/<n>/comments" \
-	--jq ".[] | select(.user.login == \"$me\" and (.body | contains(\"<!-- pstack-recap:start -->\"))) | .id" |
+	--jq ".[] | select(.user.login == \"$me\" and (.body | startswith(\"<!-- pstack-recap:start -->\"))) | .id" |
 	sed '$d' | while read -r id; do gh api --hostname <host> -X DELETE "repos/<owner>/<repo>/issues/comments/$id"; done
 ```
 
