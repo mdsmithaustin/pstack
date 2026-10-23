@@ -72,6 +72,7 @@ The default answer is `/poteto-mode`, which runs most of the others when its ste
 | Fix a bug test-first when a cheap local test exists | [`/poteto-tdd`](../poteto-tdd/SKILL.md) |
 | Apply TypeScript rules to `.ts` or `.tsx` work | [`/typescript-best-practices`](../typescript-best-practices/SKILL.md) |
 | Strip comments before review, using a reviewer that didn't write them | [`/no-comments`](../no-comments/SKILL.md) |
+| Show reviewers why a pull request exists and what it changes, with a sketch, in one comment | [`/pr-recap`](../pr-recap/SKILL.md) |
 | Clean slop out of the code a branch changed before a commit | [`/deslop`](../deslop/SKILL.md) |
 | Clean AI tells out of prose | [`/unslop`](../unslop/SKILL.md) |
 | Write docs, an RFC, a README, a PR description, or a commit message to a standard | [`/technical-writing`](../technical-writing/SKILL.md) |
@@ -138,7 +139,7 @@ Principles are one-rule skills that `/poteto-mode` reads and cites in its replie
 | A question got treated as the next step of the last task | Say "new task", or say the turn doesn't need the mode. |
 | A new model choice had no effect | A workspace `.agents/pstack-models.md` overrides the home file, and a harness section such as `## codex` beats a flat line. On Claude Code, a written effort applies only once `/setup-pstack` has registered pstack's effort agents. |
 | Runs cost more than expected | See the cost paragraph under Get set up. |
-| A skill didn't load on its own | On Codex, and on Claude Code once `/setup-pstack` sets the skill listing, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when another pstack skill, such as `/poteto-mode`, tells the agent to use them. `/poteto-mode` doesn't run every skill. |
+| A skill didn't load on its own | On Codex, and on Claude Code once `/setup-pstack` sets the skill listing, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/pr-recap`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when another pstack skill, such as `/poteto-mode`, tells the agent to use them. `/poteto-mode` doesn't run every skill. |
 | Parallel agents overwrote each other | Give each agent its own worktree. |
 | An overnight run moved but finished nothing | `/loop` needs a check that can pass or fail, not a duration. See [guide page 7](https://github.com/mdsmithaustin/pstack/blob/main/docs/guide/07-overnight.md). |
 | The reply claims success from a green build | Ask for the real command, flow, stored value, or profile. That's the prove-it-works principle. |

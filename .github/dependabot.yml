@@ -7,6 +7,12 @@ updates:
     open-pull-requests-limit: 5
 
   - package-ecosystem: bun
+    directory: /skills/pr-recap/scripts/sketch
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: bun
     directory: /skills/poteto-mode/scripts
     schedule:
       interval: weekly

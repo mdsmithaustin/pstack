@@ -1,0 +1,116 @@
+{
+ "story": {
+  "drawing": "rewire",
+  "seen": "\"Each webhook call holds the request open for about nine seconds.\"",
+  "symptom": "= request waits 9 s",
+  "added": [
+   "job queue"
+  ]
+ },
+ "height": 300,
+ "shapes": [
+  {
+   "kind": "box",
+   "x": 24,
+   "y": 110,
+   "w": 236,
+   "h": 86,
+   "stack": 3,
+   "label": "6 webhook handlers",
+   "sub": "orders \u00b7 refunds"
+  },
+  {
+   "kind": "box",
+   "x": 372,
+   "y": 34,
+   "w": 150,
+   "h": 50,
+   "label": "sync call",
+   "tone": "gray"
+  },
+  {
+   "kind": "text",
+   "x": 538,
+   "y": 66,
+   "text": "= request waits 9 s",
+   "tone": "gray"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    290,
+    104
+   ],
+   "to": [
+    364,
+    63
+   ],
+   "bend": [
+    318,
+    70
+   ],
+   "tone": "gray",
+   "crossed": true
+  },
+  {
+   "kind": "box",
+   "x": 372,
+   "y": 196,
+   "w": 150,
+   "h": 54,
+   "label": "job queue",
+   "size": "big",
+   "tone": "accent"
+  },
+  {
+   "kind": "arrow",
+   "from": [
+    270,
+    192
+   ],
+   "to": [
+    364,
+    223
+   ],
+   "bend": [
+    310,
+    220
+   ],
+   "tone": "accent"
+  },
+  {
+   "kind": "line",
+   "from": [
+    530,
+    223
+   ],
+   "to": [
+    542,
+    212
+   ],
+   "tone": "accent"
+  },
+  {
+   "kind": "brace",
+   "x": 558,
+   "y0": 160,
+   "y1": 262,
+   "keyWidth": 96,
+   "rows": [
+    [
+     "orders",
+     "3 retries"
+    ],
+    [
+     "refunds",
+     "5 retries"
+    ],
+    [
+     "other",
+     "no retry",
+     "gray"
+    ]
+   ]
+  }
+ ]
+}

@@ -70,6 +70,12 @@ jobs:
       - name: poteto-mode script typecheck
         working-directory: skills/poteto-mode/scripts
         run: bun run typecheck
+      - name: Install pr-recap sketch dependencies
+        working-directory: skills/pr-recap/scripts/sketch
+        run: bun install --frozen-lockfile
+      - name: pr-recap sketch tests
+        working-directory: skills/pr-recap/scripts/sketch
+        run: bun run test
   worktree-audit:
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,13 @@
+{
+  "name": "@pstack/pr-recap-sketch",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test ../../../../tests/skills/pr-recap"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2",
+    "opentype.js": "1.3.4",
+    "roughjs": "4.6.6"
+  }
+}
