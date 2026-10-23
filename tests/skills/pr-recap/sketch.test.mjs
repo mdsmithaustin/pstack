@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -22,6 +23,35 @@ const example = name => JSON.parse(readFileSync(join(examples, `${name}.json`), 
 const withShapes = (scene, ...shapes) => ({ ...scene, shapes: [...scene.shapes, ...shapes] });
 
 describe('sketch tool', () => {
+  test('fallback renders without loading a forged shared dependency cache', () => {
+    const fixture = mkdtempSync(join(work, 'fallback-'));
+    const renderer = join(fixture, 'renderer');
+    cpSync(join(skill, 'scripts/sketch'), renderer, {
+      recursive: true,
+      filter: path => !path.split(/[\\/]/).includes('node_modules'),
+    });
+    writeFileSync(join(renderer, 'node_modules'), 'installation blocked');
+    const temp = join(fixture, 'tmp');
+    mkdirSync(temp);
+    const key = createHash('sha256')
+      .update(readFileSync(join(renderer, 'package.json'))).update('\0')
+      .update(readFileSync(join(renderer, 'bun.lock'))).digest('hex');
+    const poison = join(temp, `pr-recap-sketch-${key.slice(0, 12)}`, 'node_modules');
+    mkdirSync(join(poison, 'opentype.js'), { recursive: true });
+    writeFileSync(join(poison, '.pr-recap-sketch-install-key'), `${key}\n`);
+    const executed = join(fixture, 'poison-executed');
+    writeFileSync(join(poison, 'opentype.js/index.js'),
+      `require('node:fs').writeFileSync(${JSON.stringify(executed)}, 'executed'); throw new Error('forged dependency');`);
+    const outPath = join(fixture, 'sketch.png');
+    const r = Bun.spawnSync([process.execPath, join(renderer, 'sketch.mjs'), join(examples, 'flow.json'), outPath], {
+      env: { ...process.env, TMPDIR: temp, TMP: temp, TEMP: temp },
+    });
+    expect(existsSync(executed)).toBe(false);
+    expect(r.exitCode).toBe(0);
+    expect(JSON.parse(r.stdout.toString()).problems).toEqual([]);
+    expect(readFileSync(outPath).subarray(1, 4).toString()).toBe('PNG');
+  }, 30000);
+
   for (const name of ['rewire', 'to-scale', 'flow', 'check', 'bars']) {
     test(`the ${name} example renders a PNG with no problems`, () => {
       const { code, report, outPath } = render(example(name));
