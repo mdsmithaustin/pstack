@@ -66,7 +66,7 @@ Copyright (c) 2024 by Excalidraw. Excalifont derives from Virgil, with modificat
 
 ## Packages the sketch tool installs
 
-`scripts/sketch/package.json` pins three npm packages. `bun install` fetches them into `scripts/sketch/node_modules`. pstack does not vendor or modify them.
+[`scripts/sketch/package.json`](scripts/sketch/package.json) pins the npm packages below. pstack does not vendor or modify them. See [sketch setup](references/sketch.md#setup) for installation behavior.
 
 - Rough.js 4.6.6, MIT License, https://github.com/rough-stuff/rough
 - opentype.js 1.3.4, MIT License, https://github.com/opentypejs/opentype.js
@@ -74,7 +74,7 @@ Copyright (c) 2024 by Excalidraw. Excalifont derives from Virgil, with modificat
 
 ## MIT permission notice
 
-Each source above is licensed under the MIT License, whose notice reads:
+The six adapted skill projects above use the MIT License, whose notice reads:
 
 > Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 >

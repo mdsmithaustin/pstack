@@ -7,7 +7,7 @@ description: Write or refresh a visual recap of a GitHub pull request for its re
 
 Write one recap of a pull request for the people who review it. A reviewer should understand from the first screen why the change exists, what it changes, and how. The recap points into the diff. It does not replace reading the diff.
 
-The recap is one PR comment: GitHub Markdown plus one PNG that `gh` attaches. It needs `gh`, and for the sketch, Bun and the bundled sketch tool. It posts nothing to any other host.
+Run this workflow locally. The recap is one PR comment: GitHub Markdown plus one PNG that `gh` attaches. It needs `gh`, and for the sketch, Bun and the bundled sketch tool. It posts nothing to any other host.
 
 ## Decide whether the PR gets a recap
 
@@ -62,7 +62,7 @@ When your runtime cannot run Bun, or cannot show you an image, skip the sketch. 
 1. List each factual sentence in the recap and each label in the sketch.
 2. Check each one against a hunk of the diff or a SHA-pinned line. Mark it verified, corrected, unsupported, or unverifiable.
 3. Fix each corrected claim. Delete each unsupported or unverifiable claim, or rewrite it as a guess. Re-render the sketch if a label changed.
-4. Check each link. It must be SHA-pinned and point at a record that exists on the PR.
+4. Check each link. Pin source links to the recorded head SHA. Review and CI links must point at records on the PR, with CI runs on that head.
 5. Read `headRefOid` again. If it moved, rebuild the recap from the new diff.
 
 Keep the marks in your notes, not in the comment. Report the counts in your reply.
@@ -84,7 +84,7 @@ gh api --hostname <host> --paginate "repos/<owner>/<repo>/issues/<n>/comments" \
 	sed '$d' | while read -r id; do gh api --hostname <host> -X DELETE "repos/<owner>/<repo>/issues/comments/$id"; done
 ```
 
-Read the new comment back with `gh api --hostname <host> "repos/<owner>/<repo>/issues/comments/<id>" --jq .body`. Confirm it holds both markers, the head SHA you recorded, and a `user-attachments` image link. Without a sketch, post with `--body-file recap.md` alone.
+Read the new comment back with `gh api --hostname <host> "repos/<owner>/<repo>/issues/comments/<id>" --jq .body`. Confirm it holds both markers and the head SHA you recorded. When you attach a sketch, also confirm a `user-attachments` image link. Without a sketch, post with `--body-file recap.md` alone.
 
 Post it as a PR comment, never in the PR body. In a repository gated by no-mistakes, the gate owns the PR body.
 
