@@ -2,7 +2,7 @@
  "story": {
   "drawing": "to scale",
   "seen": "\"Uploads over 10 MB fail with a 413 from the proxy.\"",
-  "symptom": "413, upload fails",
+  "symptom": "upload fails",
   "number": "10 MB",
   "added": [
    "4 MB"
@@ -58,7 +58,7 @@
    "kind": "text",
    "x": 272,
    "y": 283,
-   "text": "413, upload fails"
+   "text": "upload fails"
   },
   {
    "kind": "text",

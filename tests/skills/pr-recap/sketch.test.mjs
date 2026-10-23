@@ -49,6 +49,16 @@ describe('sketch tool', () => {
     expect(render(bare).report.problems).toContain('no "story" in the scene');
   });
 
+  test.each([undefined, null, '', 'to-scale', 'scale', 'Flow', 42, ['flow']].map(drawing => [drawing]))('rejects an invalid story drawing: %j', drawing => {
+    const scene = example('flow');
+    scene.story.drawing = drawing;
+    const { code, report } = render(scene);
+    const gap = 'story "drawing" must be one of: rewire, to scale, flow, check, bars';
+    expect(code).toBe(1);
+    expect(report.storyGaps).toContain(gap);
+    expect(report.problems).toContain(gap);
+  });
+
   test('every story part must be drawn', () => {
     const scene = example('check');
     scene.story = { ...scene.story, symptom: 'pages went blank', added: ['order-check.py', 'rollback.sh'] };

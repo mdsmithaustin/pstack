@@ -123,6 +123,7 @@ export function draw(scene, font, rough) {
   const storyGaps = [];
   if (!story) storyGaps.push('no "story" in the scene');
   else {
+    if (!['rewire', 'to scale', 'flow', 'check', 'bars'].includes(story.drawing)) storyGaps.push('story "drawing" must be one of: rewire, to scale, flow, check, bars');
     const sym = story.symptom && texts.find(t => t.s.includes(story.symptom));
     if (!story.seen) storyGaps.push('story has no "seen" quote from a record');
     if (!story.symptom) storyGaps.push('story has no "symptom"');

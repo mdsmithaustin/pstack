@@ -26,7 +26,7 @@ Ask these in order and take the first yes:
 
 1. **Name the things, and count only crowds.** Draw up to four like things as separate boxes with their real names, such as `auth`, `billing`, `search`. Draw five or more as one stacked box with a count, such as `6 webhook handlers`, with their kinds on its second line. Never draw one box per call site.
 2. **Give the changed thing one name.** When the PR moves or resizes something, label it the same way in the old picture and the new one, so the eye can follow it.
-3. **Cross out the old path.** Draw what used to happen in gray. Put a ✕ on the arrow or step that went wrong, and next to it a short gloss with the symptom, such as `413, upload fails`.
+3. **Cross out the old path.** Draw what used to happen in gray. Put a ✕ on the arrow or step that went wrong, and next to it a short gloss with the symptom, such as `upload fails`.
 4. **Draw the new path in the accent tone.** Use `accent` only for what this PR adds or changes. Everything unchanged stays `ink` or `gray`.
 5. **Put the why on an element, in plain words.** The gloss next to the old target says what it meant to a person, such as `= request waits 9 s` or `app ran on old schema`. Write it so a reader who has never opened this repository understands it. Status codes, enum values, and internal terms such as `ERR_PARTIAL_WRITE` or `shard window` stay out of the image. The comment can name them.
 6. **Keep one number per side.** Show the number the why depends on, such as the limit that cut the file. Leave other sizes, budgets, and counts to the comment.
@@ -43,7 +43,7 @@ Write the `story` first, from your notes. The tool fails the scene when the draw
 
 | Field | Holds | The tool checks |
 |---|---|---|
-| `drawing` | The catalog drawing: `rewire`, `to scale`, `flow`, `check`, or `bars` | Every drawing except `bars` has a ✕ |
+| `drawing` | The catalog drawing: `rewire`, `to scale`, `flow`, `check`, or `bars` | It is one of these five values; every drawing except `bars` has a ✕ |
 | `seen` | A sentence quoted from the PR body, a linked issue, a commit, or a review that says what a person saw go wrong, such as `"Checkout pages showed prices from an hour ago."` | It is present |
 | `symptom` | That sentence restated in six plain words or fewer, as the gloss beside the ✕, such as `stale for 1 h`. Name what the person saw, not the rule that was broken or the check that was skipped | Some text in the drawing holds it |
 | `number` | The one number the why depends on, such as the limit that cut the file: `10 MB`. Optional, except in a `to scale` drawing | Some text holds it, and a `to scale` drawing has a line for it |
@@ -77,8 +77,10 @@ Then open `sketch.png` and look at it yourself. The tool cannot see a crowded co
 
 Last, have another model read it as a reviewer would. Put the two story sentences in `story.txt` next to the PNG, then give a fresh reader only [the reader prompt](reader.md), `story.txt`, and the PNG. Pick a reader from a different model family when you can:
 
-- On Claude Code, run `codex exec -s read-only -i sketch.png - < reader.md` when `codex` is on PATH.
-- On Codex, run `claude -p --model sonnet --allowedTools Read < reader.md` from the folder that holds the PNG, when `claude` is on PATH.
+Run both commands from the folder that holds `sketch.png` and `story.txt`. Replace `<skill>` with the absolute path to this skill's directory:
+
+- On Claude Code, run `codex exec -s read-only -i sketch.png -- - < "<skill>/references/reader.md"` when `codex` is on PATH.
+- On Codex, run `claude -p --model sonnet --allowedTools Read < "<skill>/references/reader.md"` when `claude` is on PATH.
 - Otherwise use a subagent of your own family, and say so in your reply.
 
 Then fix the sketch from its answer. Change at most two labels per read, and make every word you add replace one, so the sketch gets clearer instead of busier:
