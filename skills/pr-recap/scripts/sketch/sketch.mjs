@@ -3,7 +3,7 @@
 // Renders the scene at 2x with resvg, writes <out.png>, and prints a JSON report.
 // Exits 1 when the drawing breaks a layout rule, 2 on bad input or a render failure.
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +38,7 @@ let depsDir = here;
 if (!installed(here)) {
   try { depsDir = mkdtempSync(join(tmpdir(), 'pr-recap-sketch-')); }
   catch (e) { fail(`cannot create temporary dependency folder: ${e.message}`); }
+  process.on('exit', () => rmSync(depsDir, { recursive: true, force: true }));
   if (!installed(depsDir)) fail('could not install the sketch packages; see the messages above');
 }
 

@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,7 +23,7 @@ const example = name => JSON.parse(readFileSync(join(examples, `${name}.json`), 
 const withShapes = (scene, ...shapes) => ({ ...scene, shapes: [...scene.shapes, ...shapes] });
 
 describe('sketch tool', () => {
-  test('fallback renders without loading a forged shared dependency cache', () => {
+  test('fallback avoids forged dependencies and cleans up on every exit', () => {
     const fixture = mkdtempSync(join(work, 'fallback-'));
     const renderer = join(fixture, 'renderer');
     cpSync(join(skill, 'scripts/sketch'), renderer, {
@@ -42,6 +42,7 @@ describe('sketch tool', () => {
     const executed = join(fixture, 'poison-executed');
     writeFileSync(join(poison, 'opentype.js/index.js'),
       `require('node:fs').writeFileSync(${JSON.stringify(executed)}, 'executed'); throw new Error('forged dependency');`);
+    const originalEntries = readdirSync(temp);
     const outPath = join(fixture, 'sketch.png');
     const r = Bun.spawnSync([process.execPath, join(renderer, 'sketch.mjs'), join(examples, 'flow.json'), outPath], {
       env: { ...process.env, TMPDIR: temp, TMP: temp, TEMP: temp },
@@ -50,6 +51,26 @@ describe('sketch tool', () => {
     expect(r.exitCode).toBe(0);
     expect(JSON.parse(r.stdout.toString()).problems).toEqual([]);
     expect(readFileSync(outPath).subarray(1, 4).toString()).toBe('PNG');
+    expect(readdirSync(temp)).toEqual(originalEntries);
+
+    const rejected = example('flow');
+    delete rejected.story;
+    const scenePath = join(fixture, 'scene.json');
+    for (const { scene, output, installFailure, message, code } of [
+      { scene: JSON.stringify(rejected), output: outPath, code: 1 },
+      { scene: '{not json', output: outPath, code: 2, message: 'bad scene:' },
+      { scene: JSON.stringify(example('flow')), output: join(fixture, 'missing', 'sketch.png'), code: 2, message: 'render failed:' },
+      { scene: JSON.stringify(example('flow')), output: outPath, installFailure: true, code: 2, message: 'could not install the sketch packages' },
+    ]) {
+      writeFileSync(scenePath, scene);
+      if (installFailure) writeFileSync(join(renderer, 'bun.lock'), 'not a lockfile');
+      const result = Bun.spawnSync([process.execPath, join(renderer, 'sketch.mjs'), scenePath, output], {
+        env: { ...process.env, TMPDIR: temp, TMP: temp, TEMP: temp },
+      });
+      expect(result.exitCode).toBe(code);
+      if (message) expect(result.stderr.toString()).toContain(message);
+      expect(readdirSync(temp)).toEqual(originalEntries);
+    }
   }, 30000);
 
   for (const name of ['rewire', 'to-scale', 'flow', 'check', 'bars']) {
