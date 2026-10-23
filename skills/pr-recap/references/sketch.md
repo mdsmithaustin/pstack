@@ -93,8 +93,8 @@ Render again and repeat the read once. Report the reader's model and what you ch
 
 ## Setup
 
-The tool needs Bun. Its pinned dependencies are in [`scripts/sketch/package.json`](../scripts/sketch/package.json): Rough.js for the strokes, opentype.js to measure text, and resvg to write the PNG. On its first run, and after `package.json` or `bun.lock` changes, the tool runs `bun install --frozen-lockfile`, which needs network access. It first tries its own folder. If installation there fails, it tries a temporary folder keyed by the manifest and lockfile contents. None of the packages starts a browser. A sandbox needs a writable output folder and either a writable skill folder or a writable temporary folder for the dependencies.
+The tool needs Bun. Its pinned dependencies are in [its package.json](../scripts/sketch/package.json): Rough.js for the strokes, opentype.js to measure text, and resvg to write the PNG. On its first run, and after `package.json` or `bun.lock` changes, the tool runs `bun install --frozen-lockfile`, which needs network access. It first tries its own folder. If installation there fails, it tries a temporary folder keyed by the manifest and lockfile contents. None of the packages starts a browser. A sandbox needs a writable output folder and either a writable skill folder or a writable temporary folder for the dependencies.
 
-Image viewing and Bun execution remain untested on Hermes and Grok Build. Follow the skill's [sketch fallback](../SKILL.md#draw-the-sketch) when either capability is unavailable.
+Image viewing and Bun execution remain untested on Hermes only. Follow the skill's [sketch fallback](../SKILL.md#draw-the-sketch) when either capability is unavailable.
 
 When the tool exits 2, read its message. If it cannot install a package or write the PNG, skip the sketch and say why in your reply.
