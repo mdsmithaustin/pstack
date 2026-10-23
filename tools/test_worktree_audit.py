@@ -392,6 +392,15 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         (transcripts / "s.jsonl").write_text(json.dumps({"cwd": f"{str(worktree).lower()}/"}) + "\n", encoding="utf-8")
         self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
 
+    def test_recent_chat_found_in_a_private_codex_home(self):
+        worktree = self.merged_worktree("wt-codex")
+        codex_home = self.tmp / "wrapper-codex-home"
+        self.env["CODEX_HOME"] = str(codex_home)
+        transcripts = codex_home / "sessions" / "2026" / "10" / "22"
+        transcripts.mkdir(parents=True)
+        (transcripts / "rollout-s.jsonl").write_text(json.dumps({"cwd": f"{worktree}/"}) + "\n", encoding="utf-8")
+        self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
+
     def test_prunable_worktree_holds(self):
         worktree = self.merged_worktree("wt-gone")
         shutil.rmtree(worktree)
