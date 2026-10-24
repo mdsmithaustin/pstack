@@ -182,6 +182,7 @@ export const isTrustedComment = (
 ): boolean =>
   !comment.author.isBot &&
   (comment.author.login === prAuthor || comment.association !== "untrusted");
+const RECAP_START = "<!-- pstack-recap:start -->";
 export function acknowledgment(
   comments: readonly ConversationComment[],
   prAuthor: string | null,
@@ -190,6 +191,7 @@ export function acknowledgment(
   const comment = comments.find(
     (candidate) =>
       isTrustedComment(candidate, prAuthor) &&
+      !candidate.body.trimStart().startsWith(RECAP_START) &&
       linksReview(candidate.body, reviewUrl)
   );
   return comment === undefined
