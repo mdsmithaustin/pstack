@@ -78,7 +78,7 @@ The URL check below is for github.com attachments and uses its token. For Enterp
 
 For upstream-sync publication routes and draft requirements, follow [Syncing from upstream](../../../PORTING.md#syncing-from-upstream).
 
-**Recap.** After a PR opens, and after each push that changes its diff, use the **pr-recap** skill.
+**Recap.** After a PR opens, use the **pr-recap** skill. For post-push refresh timing, follow [task triggers](../references/task-triggers.md).
 
 **Babysit.** Opening a PR does not start a babysit. Post the URL and keep building. Finish the phase or stack first. Run a separate babysit pass only when the user asks for one after the whole stack exists. A babysit for each new PR stalls the build and spends checks on commits later waves restart. Push back when feedback drifts from intent.
 
