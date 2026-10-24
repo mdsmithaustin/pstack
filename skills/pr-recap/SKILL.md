@@ -17,7 +17,7 @@ For a skipped PR, post nothing on GitHub. Put one line in your reply:
 
 `Recap skipped for PR <n>: <what the diff is>, <why it needs no recap>.`
 
-Otherwise, write the recap. Write it again after each push that changes the diff, once the new head is published and any gate run on it has reached its outcome.
+Otherwise, write the recap. For post-push refresh timing, follow [task triggers](../poteto-mode/references/task-triggers.md).
 
 ## Gather the facts
 
