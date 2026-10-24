@@ -11,13 +11,13 @@ Run this workflow locally. The recap is one PR comment: GitHub Markdown plus one
 
 ## Decide whether the PR gets a recap
 
-Skip the recap when the diff has no behavior that a reviewer must trace. Examples are a version pin and its hashes, a typo or wording fix, a formatting-only change, a lockfile-only change, and the revert of one commit.
+Skip the recap when the diff has no behavior that a reviewer must trace. Examples are a version pin and its hashes, a typo or wording fix, a formatting-only change, a lockfile-only change, and the revert of one commit. A version pin skips even across a major version, because a pin has no mechanism to sketch.
 
 For a skipped PR, post nothing on GitHub. Put one line in your reply:
 
 `Recap skipped for PR <n>: <what the diff is>, <why it needs no recap>.`
 
-Otherwise, write the recap. Write it again after each push that changes the diff.
+Otherwise, write the recap. Write it again after each push that changes the diff, once the new head is published and any gate run on it has reached its outcome.
 
 ## Gather the facts
 
@@ -64,7 +64,7 @@ When your runtime cannot run Bun, or cannot show you an image, skip the sketch. 
 1. List each factual sentence in the recap and each label in the sketch.
 2. Check each one against a hunk of the diff or a SHA-pinned line. Mark it verified, corrected, unsupported, or unverifiable.
 3. Fix each corrected claim. Delete each unsupported or unverifiable claim, or rewrite it as a guess. Re-render the sketch if a label changed.
-4. Check each link. Pin source links to the recorded head SHA. Review and CI links must point at records on the PR, with CI runs on that head.
+4. Check each link. Pin source links to the recorded head SHA. Review and CI links must point at records on the PR, with CI runs on that head. Never link a bot's review, because watch-pr and merge-gate read a trusted comment that links one as acknowledging its findings.
 5. Read `headRefOid` again. If it moved, rebuild the recap from the new diff.
 
 Keep the marks in your notes, not in the comment. Report the counts in your reply.
