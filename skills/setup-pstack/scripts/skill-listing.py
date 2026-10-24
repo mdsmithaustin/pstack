@@ -19,7 +19,7 @@ OVERRIDES_KEY = "skillOverrides"
 PSTACK_SKILLS = frozenset({
     "architect", "arena", "automate-me", "benchmark-checklist", "blast-radius", "bro", "correct",
     "create-formal-verification-skill", "create-verification-skill", "deslop", "documentation-impact",
-    "figure-it-out", "how", "in-your-own-words", "interrogate", "ketchup",
+    "figure-it-out", "how", "in-your-own-words", "interrogate", "ketchup", "ketchup-video",
     "maintain-formal-verification-skill", "maintain-verification-skill", "make-bot-ui", "no-comments",
     "poteto-help", "poteto-mode", "poteto-tdd", "poteto-teach", "pr-recap", "principle-attack-the-premise",
     "principle-boundary-discipline", "principle-build-the-lever", "principle-encode-lessons-in-structure",

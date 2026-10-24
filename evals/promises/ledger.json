@@ -1775,6 +1775,25 @@
     "skills/ketchup/SKILL.md"
    ]
   },
+  "ketchup-video-shows-catch-up-as-video": {
+   "check": "static",
+   "claim": "/ketchup-video shows the catch-up in a short silent video of slides and lists the calls waiting on the user as text under it.",
+   "evidence": [
+    {
+     "file": "skills/ketchup-video/SKILL.md",
+     "quote": "Show what happened in a short silent video instead of its summary and visuals."
+    },
+    {
+     "file": "skills/ketchup-video/SKILL.md",
+     "quote": "The reply is ketchup's opening sentence, the embedded video, one line naming any work left that you can do yourself, and the action items."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/ketchup-video/SKILL.md",
+    "skills/ketchup/SKILL.md"
+   ]
+  },
   "land-prompt-routes-to-shipping": {
    "check": "live",
    "claim": "`land the stack.` runs the Shipping playbook.",
@@ -3410,21 +3429,22 @@
    "claim": "In an audit, the chart marks the steps where the code model and the spec differ, and each rule either breaks is a numbered path.",
    "evidence": [
     {
-     "file": "skills/statechart/scripts/statechart.mjs",
-     "quote": "With --against, red states break a rule in"
+     "file": "skills/statechart/scripts/statechart-help.mjs",
+     "quote": "state takes the worse of its two models' colors"
     },
     {
-     "file": "skills/statechart/scripts/statechart.mjs",
+     "file": "skills/statechart/scripts/statechart-help.mjs",
      "quote": "A label \"with the fix, STEP\" or \"in the spec, STEP\" is a step that only the other model takes."
     },
     {
-     "file": "skills/statechart/scripts/statechart.mjs",
+     "file": "skills/statechart/scripts/statechart-help.mjs",
      "quote": "A thick blue border and numbered labels mark the bug."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/statechart/scripts/statechart.mjs"
+    "skills/statechart/scripts/statechart.mjs",
+    "skills/statechart/scripts/statechart-help.mjs"
    ]
   },
   "statechart-audits-code-against-spec": {
@@ -3448,11 +3468,11 @@
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Use `from-chart` when there is no model and the PM should agree on the behavior before anyone writes or changes the code."
+     "quote": "Use `from-chart` when there is no model, and the people who own the behavior should agree on it before anyone builds or changes it."
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Add one `%% never` line per rule, with the PM's sentence."
+     "quote": "Add one `%% never` line per rule, with the reader's sentence."
     },
     {
      "file": "skills/statechart/SKILL.md",
@@ -3470,11 +3490,11 @@
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Draw what an app's user sees as a Mermaid statechart from a TLA+ model."
+     "quote": "Draw how any system moves between states, such as a product flow, a protocol, or a service, as a Mermaid statechart from a TLA+ model."
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Label each state with what is on the screen"
+     "quote": "Label each state with what the reader can observe or cares about, such as \"Paying\" in an app"
     },
     {
      "file": "skills/statechart/SKILL.md",
@@ -3492,11 +3512,11 @@
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Each bug TLC finds is a numbered path."
+     "quote": "Each bug is a numbered path with blue borders to a state that breaks a rule."
     },
     {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "States are gray if they work, red if still wrong, and green if fixed."
+     "file": "skills/statechart/scripts/statechart-help.mjs",
+     "quote": "Gray states work. Red states break a rule."
     },
     {
      "file": "skills/statechart/SKILL.md",
@@ -3504,13 +3524,18 @@
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "If there is an open fix, model it from the code and pass that model as `--fixed`."
+     "quote": "If there is a proposed fix, model it and pass that model as `--fixed`."
+    },
+    {
+     "file": "skills/statechart/scripts/statechart-help.mjs",
+     "quote": "fix, and green states are fixed by it or exist only with it."
     }
    ],
    "harness_sensitive": false,
    "owners": [
     "skills/statechart/SKILL.md",
-    "skills/statechart/scripts/statechart.mjs"
+    "skills/statechart/scripts/statechart.mjs",
+    "skills/statechart/scripts/statechart-help.mjs"
    ]
   },
   "statechart-reader-rules-become-invariants": {
@@ -3519,7 +3544,7 @@
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Write each rule the PM agrees to as one invariant, with the PM's sentence as its comment."
+     "quote": "Write each rule that the reader agrees to as one invariant, with the reader's sentence as its comment."
     },
     {
      "file": "skills/statechart/SKILL.md",
@@ -3537,7 +3562,7 @@
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Replay each bug's story against the real code, as a test or a live repro, one step per model action."
+     "quote": "When the model describes code, replay each bug's story against the real code, as a test or a live repro, one step per model action."
     },
     {
      "file": "skills/statechart/SKILL.md",
@@ -3555,7 +3580,7 @@
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "For each difference it prints, ask the PM whether the code is wrong or the chart needs a correction."
+     "quote": "For each difference it prints, ask the reader whether the code is wrong or the chart needs a correction."
     }
    ],
    "harness_sensitive": false,
@@ -3574,7 +3599,7 @@
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Draw the chart the PM agrees to."
+     "quote": "Draw the chart that the reader agrees to."
     },
     {
      "file": "skills/statechart/SKILL.md",
@@ -11868,6 +11893,15 @@
    ],
    "text": "Writing a skill matches the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md), which drafts the `SKILL.md` in the [agentskills.io](https://agentskills.io) format, validates the frontmatter and links, and ships the result through the Opening a PR playbook."
   },
+  "dbf2d6ecabb8": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "To watch the catch-up instead, run [`/ketchup-video`](../../skills/ketchup-video/SKILL.md)."
+  },
   "dc1ae2001c3b": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -13189,6 +13223,16 @@
     "port"
    ],
    "text": "`/poteto-mode` picks the playbook, runs the other skills as the steps need them, and shows you the evidence."
+  },
+  "fe89b2fd0770": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "ketchup-video-shows-catch-up-as-video",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "It shows what happened in a short silent video of slides, and lists the calls waiting on you as text under it."
   },
   "fe89bf16b8de": {
    "class": "promise",
