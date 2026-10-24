@@ -106,7 +106,8 @@ PINNED_TOOLS = (
     (PYTHON_ROOT / "bin/python3.14", ("1bfa9a829d950ecd4870a3d7a6826eb57edb4aa93f69d07cd3bb21e9fcc6d439",)),
     (NODE_ROOT / "bin/node", ("9d050fd455b56426e25d4d603c7c501cbb2630348e836cf221dcce748e90588a",)),
     (RG_BINARY, ("268128f0b67b319ce00e659bc9130b28aff1edd7a184660a9930f797b135576c",
-                 "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9")),
+                 "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9",
+                 "1507d45d9b1f6e7a3b0daaa788554c327e95e040fa7048d93d19ba97f71fa073")),
     (GIT_ROOT / "usr/bin/git", ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
                               "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae")),
 )
