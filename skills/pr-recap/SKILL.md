@@ -11,7 +11,7 @@ Run this workflow locally. The recap is one PR comment: GitHub Markdown plus one
 
 ## Decide whether the PR gets a recap
 
-Skip the recap when the diff has no behavior that a reviewer must trace. Examples are a version pin and its hashes, even across a major version, a typo or wording fix, a formatting-only change, a lockfile-only change, and the revert of one commit.
+Skip the recap when the diff has no behavior that a reviewer must trace. Examples are a version pin and its hashes, a typo or wording fix, a formatting-only change, a lockfile-only change, and the revert of one commit. A version pin skips even across a major version, because CI, not a sketch, covers a dependency's behavior.
 
 For a skipped PR, post nothing on GitHub. Put one line in your reply:
 
