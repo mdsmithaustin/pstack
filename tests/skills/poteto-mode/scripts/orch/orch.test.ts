@@ -1184,7 +1184,7 @@ esac
         error: "multiple PRs for base branch stack/merged",
       },
       {
-        rows: [selected, { ...selected, number: 12, state: "MERGED" }],
+        rows: [selected, { ...selected, number: 12, state: "OPEN" }],
         error: "multiple PRs for checked out branch stack/open",
       },
       {
@@ -1218,6 +1218,31 @@ esac
           );
           expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
         }
+      },
+    });
+  });
+
+  it("prefers a branch's open PR over its closed or merged history", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const selected = {
+      number: 11,
+      state: "OPEN",
+      headRefName: "stack/open",
+      headRefOid: stack.openSha,
+      baseRefName: "main",
+      isCrossRepository: false,
+    };
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([
+        selected,
+        { ...selected, number: 9, state: "MERGED" },
+        { ...selected, number: 8, state: "CLOSED" },
+      ]),
+      operation: async () => {
+        const frontier = await store.frontier.set({ repo: stack.repo });
+        expect(frontier.prs.map((row) => row.pr)).toEqual([11]);
       },
     });
   });

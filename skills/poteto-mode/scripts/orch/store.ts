@@ -1711,6 +1711,14 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
     rows.push(row);
     byBranch.set(row.branches, rows);
   }
+  // A branch may have closed or merged historical PRs after stack surgery.
+  // Prefer its active PRs, but retain historical anchors when none is open.
+  for (const [branch, rows] of byBranch) {
+    const active = rows.filter((row) => row.state === "OPEN");
+    if (active.length > 0) {
+      byBranch.set(branch, active);
+    }
+  }
 
   const children = new Map<string, GithubPullRequest[]>();
   for (const rows of byBranch.values()) {

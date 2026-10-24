@@ -47,8 +47,6 @@ Present the synthesizer's full Accepted / Rejected / Backlog output and wait for
 
 File each ordinary Backlog item to your team's devex or backlog tracker without waiting. Security, privacy, auth, data, and permission-boundary findings are the exception. Keep those findings private and report them to the operator directly. Never post or link them in a public tracker, issue, PR, or comment. Only the Accepted list waits for approval.
 
-Never edit a pstack skill in the copy that `npx skills` installed, such as `~/.agents/skills/<skill>/`, `~/.claude/skills/<skill>/`, or `~/.codex/skills/<skill>/`, because the next install or update replaces it. Before approval, show its destination: a project skill directory under `.agents/skills/`, or a user skill directory under `~/.agents/skills/`, that `npx skills` does not manage. After approval, copy the skill folder there and edit the copy. Never open a PR or push.
-
 Follow each approved row's Routing exactly:
 
 - Trivial existing-skill edit (a one-line bullet, a tightened sentence, a stale fact corrected): the parent does it directly.
