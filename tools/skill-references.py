@@ -24,6 +24,7 @@ USER_FACING = {
     "skills/create-verification-skill/SKILL.md": ["Point the user at `/maintain-verification-skill`"],
     "skills/deslop/SKILL.md": ["and on `/deslop`,"],
     "skills/ketchup/SKILL.md": ["the last message they wrote before `/ketchup`"],
+    "skills/ketchup-video/SKILL.md": ["the last message the user wrote before `/ketchup-video`, not before any earlier `/ketchup`"],
     "skills/maintain-formal-verification-skill/SKILL.md": ["point at `/create-formal-verification-skill`"],
     "skills/maintain-verification-skill/SKILL.md": ["point at `/create-verification-skill`"],
     "skills/pstack-harness/references/roles.md": ["Run `/setup-pstack` to register it.\""],

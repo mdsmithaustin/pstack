@@ -79,7 +79,7 @@ GUIDE_SLASH_SKILLS = {
     "maintain-verification-skill", "documentation-impact", "show-me-your-work", "figure-it-out",
     "automate-me", "reflect", "technical-writing", "bro", "setup-pstack", "poteto-mode",
     "poteto-help", "typescript-best-practices", "benchmark-checklist", "correct", "make-bot-ui",
-    "ketchup", "in-your-own-words", "sharpen", "create-formal-verification-skill",
+    "ketchup", "ketchup-video", "in-your-own-words", "sharpen", "create-formal-verification-skill",
     "maintain-formal-verification-skill", "statechart",
 }
 GUIDE_LINKED_SKILLS = GUIDE_SLASH_SKILLS | set(PRINCIPLE_RULES) | {"pr-recap"}

@@ -1484,6 +1484,40 @@ esac
     } });
   });
 
+  it("resolves a replacement Origin PR alongside closed branch history", async () => {
+    for (const historicalState of ["closed", "merged"] as const) {
+      const { directory, store } = await initializedStore();
+      const stack = await makeGitStack(directory);
+      await withFakeOrigin({
+        directory,
+        currentRows: originRows([
+          { number: 9, state: historicalState, head: "stack/open", base: "main" },
+          { number: 11, state: "open", head: "stack/open", base: "stack/closed" },
+        ]),
+        operation: async () => {
+          const frontier = await store.frontier.set({ repo: stack.repo, forge: "origin" });
+          expect(frontier.prs.map((row) => row.pr)).toEqual([10, 13, 11, 14]);
+          expect(frontier.lowestUnmerged).toBe(11);
+        },
+      });
+    }
+  });
+
+  it("still rejects multiple active Origin PRs on one branch", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    await withFakeOrigin({
+      directory,
+      currentRows: originRows([
+        { number: 11, state: "open", head: "stack/open", base: "stack/closed" },
+        { number: 12, state: "draft", head: "stack/open", base: "main" },
+      ]),
+      operation: async () => {
+        await expect(store.frontier.set({ repo: stack.repo, forge: "origin" })).rejects.toThrow("multiple pull requests");
+      },
+    });
+  });
+
   it("records each Origin branch tip even when a same-named tag points elsewhere", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
@@ -1569,7 +1603,7 @@ esac
         route: { filter: "--head", branch: "stack/open" },
         rows: [
           { number: 11, state: "open", head: "stack/open", base: "stack/closed" },
-          { number: 12, state: "closed", head: "stack/open", base: "stack/closed" },
+          { number: 12, state: "draft", head: "stack/open", base: "stack/closed" },
         ],
         error: "branch stack/open has multiple pull requests (#11, #12); close the stale ones first",
       },
@@ -1577,7 +1611,7 @@ esac
         route: { filter: "--head", branch: "stack/closed" },
         rows: [
           { number: 13, state: "closed", head: "stack/closed", base: "stack/merged" },
-          { number: 17, state: "open", head: "stack/closed", base: "stack/merged" },
+          { number: 17, state: "closed", head: "stack/closed", base: "stack/merged" },
         ],
         error: "branch stack/closed has multiple pull requests (#13, #17)",
       },
