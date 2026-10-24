@@ -313,6 +313,19 @@ describe("acknowledging a flagged review", () => {
     ).toEqual(["acknowledged"]);
   });
 
+  it("rejects a pr-recap comment that links the review", () => {
+    expect(
+      statusOf([
+        comment({
+          id: 1,
+          body: `\n<!-- pstack-recap:start -->\nReviewed in [Copilot's pass](${link}).\n<!-- pstack-recap:end -->`,
+          login: "mdsmithaustin",
+          association: "OWNER",
+        }),
+      ])
+    ).toEqual(["open"]);
+  });
+
   it("rejects a comment that mentions the review without linking it", () => {
     expect(
       statusOf([

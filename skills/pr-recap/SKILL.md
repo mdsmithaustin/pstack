@@ -64,7 +64,7 @@ When your runtime cannot run Bun, or cannot show you an image, skip the sketch. 
 1. List each factual sentence in the recap and each label in the sketch.
 2. Check each one against a hunk of the diff or a SHA-pinned line. Mark it verified, corrected, unsupported, or unverifiable.
 3. Fix each corrected claim. Delete each unsupported or unverifiable claim, or rewrite it as a guess. Re-render the sketch if a label changed.
-4. Check each link. Pin source links to the recorded head SHA. Review and CI links must point at records on the PR, with CI runs on that head. Never link a bot's review, because watch-pr and merge-gate read a trusted comment that links one as acknowledging its findings.
+4. Check each link. Pin source links to the recorded head SHA. Review and CI links must point at records on the PR, with CI runs on that head. Never link a bot's review, because a recap does not triage its findings, and watch-pr and merge-gate never count a recap as acknowledging one.
 5. Read `headRefOid` again. If it moved, rebuild the recap from the new diff.
 
 Keep the marks in your notes, not in the comment. Report the counts in your reply.

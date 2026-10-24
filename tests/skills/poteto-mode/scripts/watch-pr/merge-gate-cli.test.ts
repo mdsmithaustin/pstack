@@ -14,6 +14,7 @@ import {
   failureThrownByGitHub,
   issueComment,
   testRuntime,
+  unreadReview,
   unresolvedThread,
   verdictBody,
   world,
@@ -275,6 +276,29 @@ describe("merge-gate", () => {
         },
       });
       expect(partial.stdout.join("")).toContain("fail-rounds=3+ fail-state=stop");
+    });
+
+    it("accepts an acknowledgment of an unread bot body, but not a recap that links it", async () => {
+      const unread = unreadReview();
+      const gateWith = async (body: string) => {
+        const result = await run([...MERGE_ARGS, "--check"], {
+          unreadReviews: [unread],
+          port: { comments: [issueComment(), issueComment({ body })] },
+        });
+        return {
+          exitCode: result.exitCode,
+          failed: parsed(result.stdout)
+            .report.gates.filter((gate: { ok: boolean }) => !gate.ok)
+            .map((gate: { gate: string }) => gate.gate),
+        };
+      };
+      expect(
+        await gateWith(`<!-- pstack-recap:start -->\nSee ${unread.url}.\n<!-- pstack-recap:end -->`)
+      ).toEqual({ exitCode: 10, failed: ["review-bodies"] });
+      expect(await gateWith(`Read ${unread.url}, nothing to fix.`)).toEqual({
+        exitCode: 0,
+        failed: [],
+      });
     });
 
     it("needs neither a subject nor a body file", async () => {
