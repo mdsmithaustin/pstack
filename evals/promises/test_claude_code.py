@@ -877,10 +877,11 @@ class RuntimeAdmission(unittest.TestCase):
                 runtime = claude_code._host_runtime()
                 self.assertEqual(dict(runtime.fingerprints)[git], digest)
 
-    def test_both_reviewed_ripgrep_digests_become_the_selected_fingerprint(self):
+    def test_every_reviewed_ripgrep_digest_becomes_the_selected_fingerprint(self):
         rg = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path/rg")
         for digest in ("268128f0b67b319ce00e659bc9130b28aff1edd7a184660a9930f797b135576c",
-                       "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9"):
+                       "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9",
+                       "1507d45d9b1f6e7a3b0daaa788554c327e95e040fa7048d93d19ba97f71fa073"):
             with self.subTest(digest=digest):
                 claude_code._host_runtime.cache_clear()
                 self.fingerprints[rg] = digest
