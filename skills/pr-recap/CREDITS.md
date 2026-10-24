@@ -69,7 +69,7 @@ Copyright (c) 2024 by Excalidraw. Excalifont derives from Virgil, with modificat
 [`scripts/sketch/package.json`](scripts/sketch/package.json) pins the npm packages below. pstack does not vendor or modify them. See [sketch setup](references/sketch.md#setup) for installation behavior.
 
 - Rough.js 4.6.6, MIT License, https://github.com/rough-stuff/rough
-- opentype.js 1.3.4, MIT License, https://github.com/opentypejs/opentype.js
+- opentype.js 2.0.0, MIT License, https://github.com/opentypejs/opentype.js
 - resvg-js 2.6.2, Mozilla Public License 2.0, https://github.com/thx/resvg-js
 
 ## MIT permission notice
