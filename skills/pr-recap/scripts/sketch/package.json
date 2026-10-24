@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "@resvg/resvg-js": "2.6.2",
-    "opentype.js": "1.3.4",
+    "opentype.js": "2.0.0",
     "roughjs": "4.6.6"
   }
 }
