@@ -33,7 +33,7 @@ PSTACK_SKILLS = frozenset({
     "principle-sequence-verifiable-units", "principle-subtract-before-you-add",
     "principle-test-behavior-not-implementation", "principle-type-system-discipline", "pstack-harness",
     "recall", "reflect", "runtime-probes", "setup-pstack", "sharpen", "show-me-your-work", "spec-probes",
-    "swarm", "technical-writing", "typescript-best-practices", "unslop", "verify-commands", "why",
+    "statechart", "swarm", "technical-writing", "typescript-best-practices", "unslop", "verify-commands", "why",
 })
 
 POLICY_HEADER = re.compile(r"^policy\s*:\s*(?P<inline>.*?)\s*(?:#.*)?$")
