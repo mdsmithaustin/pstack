@@ -1057,5 +1057,24 @@ class NativeGit(unittest.TestCase):
                     claude_code.child_env(run)
 
 
+@measured_host
+class NativeFixtureScripts(unittest.TestCase):
+    def test_fixture_scripts_report_the_same_result_inside_the_sandbox(self):
+        scripts = [("kiln", ".", (f"{{project}}/packages/{p}/check.sh",))
+                   for p in ("ingest", "shape", "render", "publish")]
+        scripts += [("kiln", "packages/render", ("sh", "check.sh")), ("relay", ".", ("sh", "tools/old_callers.sh"))]
+        for fixture, cwd, argv in scripts:
+            with self.subTest(fixture=fixture, cwd=cwd, argv=argv), tempfile.TemporaryDirectory() as tmp:
+                run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": fixture}, "0" * 40, 60)
+                shutil.copytree(live.FIXTURES / fixture, run.project, copy_function=shutil.copy)
+                state = claude_code._bind_paths(run, claude_code._host_runtime())
+                command = [arg.format(project=run.project) for arg in argv]
+                results = [subprocess.run(prefix + command, cwd=run.project / cwd, env=claude_code.child_env(run),
+                                          capture_output=True, text=True, timeout=60)
+                           for prefix in ([], ["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0)])]
+                plain, confined = ((r.returncode, r.stdout) for r in results)
+                self.assertEqual(confined, plain)
+
+
 if __name__ == "__main__":
     unittest.main()
