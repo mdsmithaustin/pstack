@@ -682,7 +682,7 @@ class CodesignInvocation(unittest.TestCase):
             binary.write_bytes(b"installed claude")
             done = subprocess.CompletedProcess([], 0, "", "")
             with patch.object(claude_code.subprocess, "run", return_value=done) as spawned:
-                claude_code._signed_digest(binary)
+                claude_code._signed_digest(binary, claude_code.CLAUDE_REQUIREMENT)
         self.assertEqual(spawned.call_args.args[0][0], "/usr/bin/codesign")
         self.assertEqual(spawned.call_args.kwargs["env"], {})
 
@@ -705,6 +705,7 @@ class RuntimeAdmission(unittest.TestCase):
         for name, value in (("CLAUDE_LAUNCHER", self.launcher), ("CLAUDE_VERSIONS", self.versions), ("CODESIGN", self.codesign)):
             self.enterContext(patch.object(claude_code, name, value))
         self.fingerprints = {path: digests[0] for path, digests in claude_code.PINNED_TOOLS}
+        self.fingerprints[claude_code.RG_BINARY] = hashlib.sha256(b"ripgrep signed by OpenAI").hexdigest()
         claude_code._host_runtime.cache_clear()
         self.addCleanup(claude_code._host_runtime.cache_clear)
         for name, value in (("system", "Darwin"), ("release", "25.6.0"), ("machine", "arm64")):
@@ -725,6 +726,15 @@ class RuntimeAdmission(unittest.TestCase):
     def codesign_calls(self):
         return [call.splitlines() for call in self.codesign_log.read_text().split("\n\n") if call]
 
+    def ripgrep_judged_by_real_codesign(self):
+        rg = self.home / "codex-path/rg"
+        rg.parent.mkdir()
+        self.enterContext(patch.object(claude_code, "RG_BINARY", rg))
+        self.enterContext(patch.object(claude_code, "CODESIGN", Path("/usr/bin/codesign")))
+        self.enterContext(patch.object(claude_code, "admitted_claude",
+                                       return_value=(self.binary, hashlib.sha256(b"installed claude").hexdigest())))
+        return rg
+
     def test_the_launcher_target_is_admitted_with_its_version_and_digest(self):
         runtime = claude_code._host_runtime()
         self.assertEqual((runtime.binary, runtime.version), (self.binary, "2.1.400"))
@@ -744,7 +754,7 @@ class RuntimeAdmission(unittest.TestCase):
         env_log = self.home / "codesign-env"
         self.fake_codesign(f"env > '{env_log}'\nexit 0")
         with patch.dict(os.environ, hostile):
-            claude_code._signed_digest(self.binary)
+            claude_code._signed_digest(self.binary, claude_code.CLAUDE_REQUIREMENT)
         seen = {line.split("=", 1)[0] for line in env_log.read_text().splitlines()}
         self.assertEqual(seen & set(hostile), set())
 
@@ -880,24 +890,13 @@ class RuntimeAdmission(unittest.TestCase):
                 runtime = claude_code._host_runtime()
                 self.assertEqual(dict(runtime.fingerprints)[git], digest)
 
-    def test_every_reviewed_ripgrep_digest_becomes_the_selected_fingerprint(self):
-        rg = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path/rg")
-        for digest in ("268128f0b67b319ce00e659bc9130b28aff1edd7a184660a9930f797b135576c",
-                       "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9",
-                       "1507d45d9b1f6e7a3b0daaa788554c327e95e040fa7048d93d19ba97f71fa073"):
-            with self.subTest(digest=digest):
-                claude_code._host_runtime.cache_clear()
-                self.fingerprints[rg] = digest
-                runtime = claude_code._host_runtime()
-                self.assertEqual(dict(runtime.fingerprints)[rg], digest)
-                self.assertIn(rg, runtime.read_files)
-                self.assertIn(str(rg.parent), runtime.path_env.split(":"))
-
     def test_a_resigned_ripgrep_that_meets_the_openai_requirement_is_admitted(self):
         rg = claude_code.RG_BINARY
         self.fingerprints[rg] = hashlib.sha256(b"ripgrep 15.2.0 re-signed by OpenAI").hexdigest()
         runtime = claude_code._host_runtime()
         self.assertEqual(dict(runtime.fingerprints)[rg], self.fingerprints[rg])
+        self.assertIn(rg, runtime.read_files)
+        self.assertIn(str(rg.parent), runtime.path_env.split(":"))
         self.assertIn([
             "--verify", "--strict",
             '-R=identifier "com.openai.codex.rg" and anchor apple generic'
@@ -906,32 +905,69 @@ class RuntimeAdmission(unittest.TestCase):
             ' and certificate leaf[subject.OU] = "2DC432GLL2"',
             str(rg)], self.codesign_calls())
 
-    def test_unknown_ripgrep_digest_is_refused(self):
-        self.fingerprints[claude_code.RG_BINARY] = "0" * 64
-        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "unsupported executable: .*codex-path/rg"):
+    def test_a_ripgrep_that_fails_the_openai_requirement_is_refused(self):
+        self.fake_codesign('case "$3" in *2DC432GLL2*) echo \'code failed to satisfy specified code requirement(s)\' >&2; exit 3;; esac\nexit 0')
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable,
+                                    r"codex-path/rg fails code requirement .*2DC432GLL2.*failed to satisfy"):
             claude_code._host_runtime()
 
-    def test_symlink_at_reviewed_ripgrep_path_is_refused(self):
-        self.symlink.side_effect = lambda path: path == claude_code.RG_BINARY
-        with self.assertRaisesRegex(claude_code.IsolationUnavailable, "unsupported executable: .*codex-path/rg"):
+    def test_a_symlink_at_the_ripgrep_path_is_refused_before_codesign_judges_it(self):
+        rg = self.home / "codex-path/rg"
+        rg.parent.mkdir()
+        (self.home / "signed-rg").write_bytes(b"ripgrep")
+        rg.symlink_to(self.home / "signed-rg")
+        self.enterContext(patch.object(claude_code, "RG_BINARY", rg))
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, f"unsupported executable: {re.escape(str(rg))}"):
             claude_code._host_runtime()
+        self.assertNotIn(str(rg), [call[-1] for call in self.codesign_calls()])
 
-    def test_prepared_runtime_rejects_a_different_reviewed_ripgrep_digest(self):
+    def test_prepared_runtime_rejects_a_ripgrep_re_signed_after_preparation(self):
         rg = claude_code.RG_BINARY
-        old = "268128f0b67b319ce00e659bc9130b28aff1edd7a184660a9930f797b135576c"
-        new = "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9"
-        for selected, changed in ((old, new), (new, old)):
-            with self.subTest(selected=selected), tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = claude_code._host_runtime()
+            run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": "tally"}, "0" * 40, 60)
+            run.project.mkdir(parents=True)
+            state = claude_code._bind_paths(run, replace(runtime, read_trees=()))
+            self.assertEqual(dict(state.runtime.fingerprints)[rg], self.fingerprints[rg])
+            self.fingerprints[rg] = hashlib.sha256(b"ripgrep 15.2.0 re-signed by OpenAI").hexdigest()
+            with self.assertRaisesRegex(claude_code.IsolationUnavailable, "supported executable changed: .*codex-path/rg"):
+                claude_code.child_env(run)
+
+    @unittest.skipUnless(os.path.isfile(claude_code.RG_BINARY), "requires the ChatGPT app's ripgrep")
+    def test_real_codesign_admits_the_openai_signed_ripgrep(self):
+        installed = claude_code.RG_BINARY
+        rg = self.ripgrep_judged_by_real_codesign()
+        shutil.copyfile(installed, rg)
+        runtime = claude_code._host_runtime()
+        self.assertEqual(dict(runtime.fingerprints)[rg], hashlib.sha256(rg.read_bytes()).hexdigest())
+
+    @unittest.skipUnless(os.access("/usr/bin/codesign", os.X_OK), "requires macOS codesign")
+    def test_real_codesign_refuses_unsigned_and_other_signer_ripgrep(self):
+        installed = claude_code.RG_BINARY
+        rg = self.ripgrep_judged_by_real_codesign()
+        candidates = [("unsigned", lambda: rg.write_text("#!/bin/sh\nexit 0\n")),
+                      ("apple-signed", lambda: shutil.copyfile("/usr/bin/true", rg))]
+        if os.path.isfile(installed):
+            def resigned(*flags):
+                shutil.copyfile(installed, rg)
+                subprocess.run(["/usr/bin/codesign", *flags, str(rg)], check=True, capture_output=True)
+            candidates += [("signature-removed", lambda: resigned("--remove-signature")),
+                           ("ad-hoc-re-signed", lambda: resigned("--force", "--sign", "-"))]
+        for name, install in candidates:
+            with self.subTest(binary=name):
                 claude_code._host_runtime.cache_clear()
-                self.fingerprints[rg] = selected
-                runtime = claude_code._host_runtime()
-                run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": "tally"}, "0" * 40, 60)
-                run.project.mkdir(parents=True)
-                state = claude_code._bind_paths(run, replace(runtime, read_trees=()))
-                self.assertEqual(dict(state.runtime.fingerprints)[rg], selected)
-                self.fingerprints[rg] = changed
-                with self.assertRaisesRegex(claude_code.IsolationUnavailable, "supported executable changed: .*codex-path/rg"):
-                    claude_code.child_env(run)
+                install()
+                with self.assertRaisesRegex(claude_code.IsolationUnavailable,
+                                            rf"{re.escape(str(rg))} fails code requirement .*2DC432GLL2"):
+                    claude_code._host_runtime()
+
+    @unittest.skipUnless(os.path.isfile(claude_code.RG_BINARY), "requires the ChatGPT app's ripgrep")
+    def test_real_codesign_never_admits_a_symlink_to_the_signed_ripgrep(self):
+        installed = claude_code.RG_BINARY
+        rg = self.ripgrep_judged_by_real_codesign()
+        rg.symlink_to(installed)
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable, f"unsupported executable: {re.escape(str(rg))}"):
+            claude_code._host_runtime()
 
 
 measured_host = unittest.skipUnless((platform.system(), platform.release(), platform.machine()) ==

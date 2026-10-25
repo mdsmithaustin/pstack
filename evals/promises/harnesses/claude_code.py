@@ -102,12 +102,14 @@ PYTHON_ROOT = _HOST_HOME / ".local/share/mise/installs/python/3.14.7"
 NODE_ROOT = _HOST_HOME / ".local/share/mise/installs/node/24.20.0"
 GIT_ROOT = Path("/Library/Developer/CommandLineTools")
 RG_BINARY = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path/rg")
+# The designated requirement `codesign -d -r-` prints for OpenAI's Developer ID Application signature on ripgrep.
+RG_REQUIREMENT = ('identifier "com.openai.codex.rg" and anchor apple generic'
+                  " and certificate 1[field.1.2.840.113635.100.6.2.6] exists"
+                  " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+                  ' and certificate leaf[subject.OU] = "2DC432GLL2"')
 PINNED_TOOLS = (
     (PYTHON_ROOT / "bin/python3.14", ("1bfa9a829d950ecd4870a3d7a6826eb57edb4aa93f69d07cd3bb21e9fcc6d439",)),
     (NODE_ROOT / "bin/node", ("9d050fd455b56426e25d4d603c7c501cbb2630348e836cf221dcce748e90588a",)),
-    (RG_BINARY, ("268128f0b67b319ce00e659bc9130b28aff1edd7a184660a9930f797b135576c",
-                 "e97d666f32c3e86b2bd0e047cb1398d4385ea1f05bfb791a8201d3fa98a91bb9",
-                 "1507d45d9b1f6e7a3b0daaa788554c327e95e040fa7048d93d19ba97f71fa073")),
     (GIT_ROOT / "usr/bin/git", ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
                               "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae")),
 )
@@ -152,13 +154,13 @@ def _installed_claude():
     return target
 
 
-def _signed_digest(path):
+def _signed_digest(path, requirement):
     """Digest before and after codesign, so the digest names the verified bytes and `_validate` holds each launch to them."""
     digest = _digest(path)
-    done = subprocess.run([str(CODESIGN), "--verify", "--strict", f"-R={CLAUDE_REQUIREMENT}", str(path)],
+    done = subprocess.run([str(CODESIGN), "--verify", "--strict", f"-R={requirement}", str(path)],
                           env={}, capture_output=True, text=True, timeout=60)
     if done.returncode:
-        raise IsolationUnavailable(f"{path} fails code requirement {CLAUDE_REQUIREMENT}: {done.stderr.strip()}")
+        raise IsolationUnavailable(f"{path} fails code requirement {requirement}: {done.stderr.strip()}")
     if _digest(path) != digest:
         raise IsolationUnavailable(f"supported executable changed: {path}")
     return digest
@@ -167,7 +169,7 @@ def _signed_digest(path):
 def admitted_claude():
     """The installed release and its verified digest. Every launch of the installed Claude goes through here."""
     claude = _installed_claude()
-    return claude, _signed_digest(claude)
+    return claude, _signed_digest(claude, CLAUDE_REQUIREMENT)
 
 
 @lru_cache(maxsize=1)
@@ -177,7 +179,7 @@ def _host_runtime():
         raise IsolationUnavailable("Claude filesystem isolation supports only the measured Darwin 25.6.0 arm64 runtime")
     home = _HOST_HOME
     claude, claude_digest = admitted_claude()
-    files = (claude, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
+    files = (claude, RG_BINARY, *(p for p, _ in PINNED_TOOLS), *SYSTEM_TOOLS, GIT_ROOT / "usr/share/git-core/gitattributes", *(Path(p) for p in (
         "/", "/usr/share/icu/icudt78l.dat", "/dev/null", "/dev/random", "/dev/urandom", "/private/etc/hosts",
         "/private/var/run/resolv.conf", "/private/var/db/timezone/zoneinfo/America/Denver")))
     trees = (PYTHON_ROOT, NODE_ROOT, GIT_ROOT / "usr/libexec/git-core", GIT_ROOT / "usr/share/git-core/templates",
@@ -190,6 +192,9 @@ def _host_runtime():
         if digest not in expected:
             raise IsolationUnavailable(f"unsupported executable: {path}")
         pins.append((path, digest))
+    if RG_BINARY.is_symlink():
+        raise IsolationUnavailable(f"unsupported executable: {RG_BINARY}")
+    pins.append((RG_BINARY, _signed_digest(RG_BINARY, RG_REQUIREMENT)))
     if not Path("/usr/bin/sandbox-exec").is_file() or any(not path.exists() for path in (*files, *trees)):
         raise IsolationUnavailable("measured Seatbelt runtime dependencies are missing")
     return HostRuntime(claude, claude.name, home, account.pw_name, files, trees, tuple(pins),
