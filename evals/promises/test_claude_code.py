@@ -719,15 +719,18 @@ class RuntimeAdmission(unittest.TestCase):
                                        or hashlib.sha256(path.read_bytes()).hexdigest()))
 
     def fake_codesign(self, verdict):
-        self.codesign.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{self.codesign_log}'\n{verdict}\n")
+        self.codesign.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$@\" '' >> '{self.codesign_log}'\n{verdict}\n")
         self.codesign.chmod(0o755)
+
+    def codesign_calls(self):
+        return [call.splitlines() for call in self.codesign_log.read_text().split("\n\n") if call]
 
     def test_the_launcher_target_is_admitted_with_its_version_and_digest(self):
         runtime = claude_code._host_runtime()
         self.assertEqual((runtime.binary, runtime.version), (self.binary, "2.1.400"))
         self.assertEqual(dict(runtime.fingerprints)[self.binary], hashlib.sha256(b"installed claude").hexdigest())
         self.assertIn(self.binary, runtime.read_files)
-        self.assertEqual(self.codesign_log.read_text().splitlines(), [
+        self.assertEqual(self.codesign_calls()[0], [
             "--verify", "--strict",
             '-R=identifier "com.anthropic.claude-code" and anchor apple generic'
             " and certificate 1[field.1.2.840.113635.100.6.2.6] exists"
@@ -889,6 +892,19 @@ class RuntimeAdmission(unittest.TestCase):
                 self.assertEqual(dict(runtime.fingerprints)[rg], digest)
                 self.assertIn(rg, runtime.read_files)
                 self.assertIn(str(rg.parent), runtime.path_env.split(":"))
+
+    def test_a_resigned_ripgrep_that_meets_the_openai_requirement_is_admitted(self):
+        rg = claude_code.RG_BINARY
+        self.fingerprints[rg] = hashlib.sha256(b"ripgrep 15.2.0 re-signed by OpenAI").hexdigest()
+        runtime = claude_code._host_runtime()
+        self.assertEqual(dict(runtime.fingerprints)[rg], self.fingerprints[rg])
+        self.assertIn([
+            "--verify", "--strict",
+            '-R=identifier "com.openai.codex.rg" and anchor apple generic'
+            " and certificate 1[field.1.2.840.113635.100.6.2.6] exists"
+            " and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+            ' and certificate leaf[subject.OU] = "2DC432GLL2"',
+            str(rg)], self.codesign_calls())
 
     def test_unknown_ripgrep_digest_is_refused(self):
         self.fingerprints[claude_code.RG_BINARY] = "0" * 64
