@@ -94,10 +94,10 @@ Render again and repeat the read once. Report the reader's model and what you ch
 
 ## Setup
 
-The tool needs Bun 1.4.0 or later. Bun 1.3.14 and older cannot read its `bun.lock` and fail with `Unknown lockfile version`, so the tool exits 2. With an older Bun, run the same command through `npx bun@1.4.0` in place of `bun`, which needs Node and network access. When that is not possible, skip the sketch and say why in your reply. `npm ci` does not work here, because the folder has no `package-lock.json`.
+The tool needs Bun 1.4.0 or later. Earlier releases cannot read its `bun.lock`. Most fail, for example with `Unknown lockfile version`, and the tool exits 2. Some ignore the lockfile and install unpinned packages. With a Bun older than 1.4.0, run `npx --allow-scripts=bun bun@1.4.0 "<skill>/scripts/sketch/sketch.mjs" scene.json sketch.png`, which needs Node and network access. Without `--allow-scripts=bun`, npm 12 skips Bun's install script and the command fails. `npm ci` does not work here, because the folder has no `package-lock.json`.
 
 Its pinned dependencies are in [its package.json](../scripts/sketch/package.json): Rough.js for the strokes, opentype.js to measure text, and resvg to write the PNG. On its first run, and after `package.json` or `bun.lock` changes, the tool runs `bun install --frozen-lockfile`, which needs network access. It first tries its own folder. If installation there fails, it creates a fresh private temporary folder and installs there for that invocation. None of the packages starts a browser. A sandbox needs a writable output folder and either a writable skill folder or a writable temporary folder for the dependencies.
 
 Hermes v0.22.4 has run the tool and viewed the PNG with `vision_analyze`. Follow the skill's [sketch fallback](../SKILL.md#draw-the-sketch) when either capability is unavailable.
 
-When the tool exits 2, read its message. If it cannot install a package or write the PNG, skip the sketch and say why in your reply.
+When the tool exits 2, read its message. If it could not install a package, run the `npx` command above unless you already did. Skip the sketch and say why in your reply when that command also fails or the tool cannot write the PNG.
