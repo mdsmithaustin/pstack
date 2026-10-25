@@ -212,7 +212,8 @@ def _bind_paths(run, runtime):
     for path in (paths.config, paths.tmp, paths.cache, paths.xdg, paths.transcripts):
         path.mkdir(mode=0o700, exist_ok=True)
     (root / LAUNCH_RECORD).write_text(json.dumps({"path": str(runtime.binary), "version": runtime.version,
-                                                  "sha256": dict(runtime.fingerprints)[runtime.binary]}) + "\n")
+                                                  "sha256": dict(runtime.fingerprints)[runtime.binary],
+                                                  "fingerprints": {str(path): digest for path, digest in runtime.fingerprints}}) + "\n")
     identities = []
     for path in sorted({*project.parents, project, paths.config, paths.tmp, paths.cache, paths.xdg, paths.transcripts, *runtime.read_trees}):
         fd = _open_dir(path)
