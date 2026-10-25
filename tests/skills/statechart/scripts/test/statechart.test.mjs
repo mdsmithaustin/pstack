@@ -1457,7 +1457,7 @@ test("statechart.mjs writes the spec next to the chart, keeps it on the next run
 });
 
 const installCommand = (...tools) =>
-  `cd "$(mktemp -d)" && MISE_CEILING_PATHS="$PWD" mise install ${tools.map((t) => `'${t}'`).join(" ")}`;
+  `cd "$(mktemp -d)" && MISE_CEILING_PATHS="$(pwd -P)" mise install ${tools.map((t) => `'${t}'`).join(" ")}`;
 
 test("statechart.mjs shows mise's own error when mise fails before it can look for TLC", () => {
   const dir = mkdtempSync(join(tmpdir(), "statechart-"));
