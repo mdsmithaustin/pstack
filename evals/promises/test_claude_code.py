@@ -317,8 +317,10 @@ class PreparedHarvest(unittest.TestCase):
         self.run.project.mkdir(parents=True)
         binary = self.root / "native.bin"
         binary.write_bytes(b"test executable identity")
+        self.rg = self.root / "rg"
+        self.rg.write_bytes(b"ripgrep signed by OpenAI")
         runtime = claude_code.HostRuntime(binary, "test", self.root / "outside-home", "test-user", (), (),
-                                          ((binary, hashlib.sha256(binary.read_bytes()).hexdigest()),),
+                                          tuple((path, hashlib.sha256(path.read_bytes()).hexdigest()) for path in (binary, self.rg)),
                                           "/usr/bin:/bin", "/bin/sh")
         self.state = claude_code._bind_paths(self.run, runtime)
         self.native = self.state.paths.config / "projects" / "slug"
@@ -485,12 +487,14 @@ class PreparedHarvest(unittest.TestCase):
         self.assertEqual(trace["x_child_skill_calls"], {"agent-c1": [{"skill": "no-comments", "ok": False, "output_head": "Unknown skill: no-comments"}]})
         self.assertEqual(trace["x_skill_listing"], {"step": "absent", "name_only": [], "setting_sources": "user,project"})
 
-    def test_the_bound_binary_version_and_digest_reach_prepared_and_replayed_traces(self):
+    def test_the_bound_binary_version_and_every_pinned_digest_reach_prepared_and_replayed_traces(self):
         self.prepare_run()
         self.launch([{"type": "text", "text": "done"}], {"type": "result", "subtype": "success", "result": "done"})
         trace = claude_code.harvest(self.run)
-        self.assertEqual(trace["x_binary"], {"path": str(self.root / "native.bin"), "version": "test",
-                                             "sha256": hashlib.sha256(b"test executable identity").hexdigest()})
+        claude = hashlib.sha256(b"test executable identity").hexdigest()
+        self.assertEqual(trace["x_binary"], {"path": str(self.root / "native.bin"), "version": "test", "sha256": claude,
+                                             "fingerprints": {str(self.root / "native.bin"): claude,
+                                                              str(self.rg): hashlib.sha256(b"ripgrep signed by OpenAI").hexdigest()}})
         replay = live.Run(self.root, "claude-code", self.run.case, "0" * 40, 60)
         replay.turns = list(self.run._claude_state.records)
         self.assertEqual(claude_code.harvest(replay)["x_binary"], trace["x_binary"])
@@ -685,6 +689,9 @@ class CodesignInvocation(unittest.TestCase):
                 claude_code._signed_digest(binary, claude_code.CLAUDE_REQUIREMENT)
         self.assertEqual(spawned.call_args.args[0][0], "/usr/bin/codesign")
         self.assertEqual(spawned.call_args.kwargs["env"], {})
+
+
+CHATGPT_CODEX = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex")
 
 
 class RuntimeAdmission(unittest.TestCase):
@@ -960,6 +967,17 @@ class RuntimeAdmission(unittest.TestCase):
                 with self.assertRaisesRegex(claude_code.IsolationUnavailable,
                                             rf"{re.escape(str(rg))} fails code requirement .*2DC432GLL2"):
                     claude_code._host_runtime()
+
+    @unittest.skipUnless(os.path.isfile(CHATGPT_CODEX), "requires the ChatGPT app's codex")
+    def test_real_codesign_refuses_the_apps_codex_that_shares_ripgreps_team(self):
+        team_only = 'anchor apple generic and certificate leaf[subject.OU] = "2DC432GLL2"'
+        self.assertEqual(subprocess.run(["/usr/bin/codesign", "--verify", "--strict", f"-R={team_only}", str(CHATGPT_CODEX)],
+                                        capture_output=True).returncode, 0)
+        self.ripgrep_judged_by_real_codesign()
+        self.enterContext(patch.object(claude_code, "RG_BINARY", CHATGPT_CODEX))
+        with self.assertRaisesRegex(claude_code.IsolationUnavailable,
+                                    rf"{re.escape(str(CHATGPT_CODEX))} fails code requirement .*code failed to satisfy"):
+            claude_code._host_runtime()
 
     @unittest.skipUnless(os.path.isfile(claude_code.RG_BINARY), "requires the ChatGPT app's ripgrep")
     def test_real_codesign_never_admits_a_symlink_to_the_signed_ripgrep(self):
