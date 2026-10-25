@@ -2004,6 +2004,36 @@ test(
   },
 );
 
+test("findTlc installs TLC with mise under a mise.toml that sets locked = true above a TMPDIR reached through a symlink", () => {
+  const { at, dir, env } = outsideRepoWithoutTlc();
+  const root = dirname(dir);
+  writeFileSync(join(dir, "mise.toml"), "[settings]\nlocked = true\n");
+  mkdirSync(join(dir, "tmp"));
+  symlinkSync(dir, join(root, "link"));
+  const home = join(root, "tlaplus");
+  mkdirSync(home);
+  writeFileSync(join(home, "tla2tools.jar"), "");
+  const findTlcHere = `import { findTlc } from ${JSON.stringify(pathToFileURL(join(at, "tlc-tools.mjs")).href)};
+console.log(JSON.stringify(findTlc()));`;
+  const r = spawnSync(process.execPath, ["--input-type=module", "-e", findTlcHere], {
+    cwd: dir,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...env,
+      TLAPLUS_HOME: home,
+      TLC_JAVA: process.execPath,
+      TMPDIR: join(root, "link", "tmp"),
+    },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, INSTALLING);
+  assert.deepEqual(JSON.parse(r.stdout), {
+    jar: join(home, "tla2tools.jar"),
+    java: process.execPath,
+  });
+});
+
 test(
   "statechart.mjs finds TLC with the real mise when an untrusted mise.toml is next to the spec and above a TMPDIR reached through a symlink",
   {
