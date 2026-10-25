@@ -94,8 +94,10 @@ Render again and repeat the read once. Report the reader's model and what you ch
 
 ## Setup
 
-The tool needs Bun. Its pinned dependencies are in [its package.json](../scripts/sketch/package.json): Rough.js for the strokes, opentype.js to measure text, and resvg to write the PNG. On its first run, and after `package.json` or `bun.lock` changes, the tool runs `bun install --frozen-lockfile`, which needs network access. It first tries its own folder. If installation there fails, it creates a fresh private temporary folder and installs there for that invocation. None of the packages starts a browser. A sandbox needs a writable output folder and either a writable skill folder or a writable temporary folder for the dependencies.
+The tool needs Bun 1.4.0 or later. Bun 1.3.14 and older cannot read its `bun.lock` and fail with `Unknown lockfile version`, so the tool exits 2. With an older Bun, run the same command through `npx bun@1.4.0` in place of `bun`, which needs Node and network access. When that is not possible, skip the sketch and say why in your reply. `npm ci` does not work here, because the folder has no `package-lock.json`.
 
-Image viewing and Bun execution remain untested on Hermes only. Follow the skill's [sketch fallback](../SKILL.md#draw-the-sketch) when either capability is unavailable.
+Its pinned dependencies are in [its package.json](../scripts/sketch/package.json): Rough.js for the strokes, opentype.js to measure text, and resvg to write the PNG. On its first run, and after `package.json` or `bun.lock` changes, the tool runs `bun install --frozen-lockfile`, which needs network access. It first tries its own folder. If installation there fails, it creates a fresh private temporary folder and installs there for that invocation. None of the packages starts a browser. A sandbox needs a writable output folder and either a writable skill folder or a writable temporary folder for the dependencies.
+
+Hermes v0.22.4 has run the tool and viewed the PNG with `vision_analyze`. Follow the skill's [sketch fallback](../SKILL.md#draw-the-sketch) when either capability is unavailable.
 
 When the tool exits 2, read its message. If it cannot install a package or write the PNG, skip the sketch and say why in your reply.
