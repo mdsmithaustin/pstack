@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildReviewState,
   parseReviewStatePage,
@@ -324,6 +326,26 @@ describe("acknowledging a flagged review", () => {
         }),
       ])
     ).toEqual(["open"]);
+  });
+
+  describe("the comment the pr-recap skill writes", () => {
+    const skill = join(import.meta.dir, "../../../../../skills/pr-recap");
+    const block = readFileSync(join(skill, "references/block.md"), "utf8");
+    const template = block.match(/````markdown\n([\s\S]*?)\n````/)?.[1] ?? "";
+
+    it("never acknowledges a review, even when it names the review's URL", () => {
+      expect(template).toStartWith("<!-- pstack-recap:start -->");
+      expect(
+        statusOf([
+          comment({
+            id: 1,
+            body: `${template}\n\nReviewed: ${link}`,
+            login: "mdsmithaustin",
+            association: "OWNER",
+          }),
+        ])
+      ).toEqual(["open"]);
+    });
   });
 
   it("rejects a comment that mentions the review without linking it", () => {
