@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
-cd "$(dirname "$0")"
+case $0 in */*) cd "${0%/*}" ;; esac
 python3 -m unittest -q

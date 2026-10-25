@@ -1057,5 +1057,29 @@ class NativeGit(unittest.TestCase):
                     claude_code.child_env(run)
 
 
+@measured_host
+class NativeFixtureScripts(unittest.TestCase):
+    def test_fixture_scripts_report_their_result_inside_the_sandbox(self):
+        expected = {f"kiln/packages/{p}/check.sh": (code, "", summary) for p, code, summary in (
+            ("ingest", 0, "OK"), ("shape", 0, "OK"), ("render", 1, "FAILED (failures=1)"), ("publish", 0, "OK"))}
+        expected["relay/tools/old_callers.sh"] = (0, "3\n", None)
+        self.assertEqual({p.relative_to(live.FIXTURES).as_posix() for p in live.FIXTURES.rglob("*.sh")}, set(expected))
+        for script, (code, stdout, summary) in expected.items():
+            fixture, path = script.split("/", 1)
+            folder, name = path.rsplit("/", 1)
+            with tempfile.TemporaryDirectory() as tmp:
+                run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": fixture}, "0" * 40, 60)
+                shutil.copytree(live.FIXTURES / fixture, run.project, copy_function=shutil.copy)
+                state = claude_code._bind_paths(run, claude_code._host_runtime())
+                for prefix in ([], ["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0)]):
+                    for cwd, argv in ((".", [str(run.project / path)]), (folder, ["sh", name])):
+                        with self.subTest(script=script, confined=bool(prefix), argv=argv[-1]):
+                            done = subprocess.run(prefix + argv, cwd=run.project / cwd, env=claude_code.child_env(run),
+                                                  capture_output=True, text=True, timeout=60)
+                            self.assertEqual((done.returncode, done.stdout), (code, stdout), done.stderr)
+                            if summary:
+                                self.assertIn(summary, done.stderr.splitlines(), done.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
