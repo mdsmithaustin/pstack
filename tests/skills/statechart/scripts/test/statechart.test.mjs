@@ -2005,7 +2005,7 @@ test(
 );
 
 test(
-  "statechart.mjs finds TLC with the real mise when an untrusted mise.toml is next to the spec and above TMPDIR",
+  "statechart.mjs finds TLC with the real mise when an untrusted mise.toml is next to the spec and above a TMPDIR reached through a symlink",
   {
     skip:
       !tools || process.env.TLA2TOOLS
@@ -2023,7 +2023,8 @@ test(
     mkdirSync(tmp, { recursive: true });
     writeFileSync(join(dir, "mise.toml"), '[tools]\njava = "17"\n\n[env]\nSTATECHART = "1"\n');
     writeFileSync(join(dir, "upload.mmd"), fixture("upload.mmd"));
-    const env = { JAVA: "", TMPDIR: tmp };
+    symlinkSync(dir, join(root, "link"));
+    const env = { JAVA: "", TMPDIR: join(root, "link", "tmp") };
     const r = node("statechart.mjs", ["from-chart", "upload.mmd"], dir, env, at);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stderr, "");
