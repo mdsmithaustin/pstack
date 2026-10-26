@@ -12,7 +12,16 @@ To reproduce one receipt, run this command from the repository root. A nonzero e
 python3 skills/pstack-harness/scripts/loading-path.py --action worklist --baseline d3d8fd4d1354385390050a4e18e8cd579c565f75
 ```
 
-The baseline comparison reads the old guide from Git history, so it needs a source checkout that contains the baseline commit. Without `--baseline`, the script prints a current-only report whose `baseline` and `before` are `null`. That works from an installed copy outside any checkout. A copy outside a Git checkout, a baseline commit the checkout lacks, and a baseline that lacks a harness file each exit 1 with a separate error.
+Without `--baseline`, the script prints a current-only report whose `baseline` and `before` are `null`. That works from an installed copy outside any checkout and does not require Git.
+
+The baseline comparison reads the old guide from Git history, so it needs Git on `PATH` and a source checkout that contains the baseline commit. With `--baseline`, the following failures exit 1 with `loading-path.py: error: ...` on stderr:
+
+- Git is not on `PATH`. Omit `--baseline` for a current-only report.
+- Git cannot open the directory as a repository. The error includes Git's reason and suggests running the copy inside a pstack source checkout or omitting `--baseline`.
+- The baseline is not a commit in the checkout. Fetch the history that contains it or pass a commit the checkout has.
+- The baseline lacks a required harness file. The error names the file and includes Git's message.
+
+Invalid command-line usage exits 2 through argparse.
 
 For a runtime spawn, use `--action spawn --runtime codex`. The supported runtime names are `claude-code`, `codex`, `hermes`, `grok`, and `other`. Add `--persona` when the spawn needs a persona. Every spawn includes portable-root instructions in both revisions because role resolution uses `PSTACK_SKILLS_ROOT`. A persona additionally includes the persona contract. For a transcript lookup, use `--action transcript --runtime hermes`.
 
