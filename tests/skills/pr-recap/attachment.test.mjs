@@ -96,6 +96,20 @@ describe('record, stamp, and check', () => {
 });
 
 describe('command line', () => {
+  test('check --no-image accepts a recap posted without a sketch and still demands the markers and head SHA', () => {
+    const head = 'abcd1234';
+    const bare = `${START}\nStory.\n\n**Not covered.** x\n${head}\n${END}\n`;
+    expect(check(bare, 'git.example.test', head, false)).toEqual({ problems: [], url: undefined });
+    expect(check(bare, 'git.example.test', head).problems).toEqual(['the body holds no git.example.test attachment image']);
+    const ok = run(f => ['check', '--host', 'git.example.test', '--head', head, '--no-image', f.body], { body: bare });
+    expect([ok.code, ok.out]).toEqual([0, '']);
+    const noHead = run(f => ['check', '--host', 'git.example.test', '--head', 'ffffffff', '--no-image', f.body], { body: bare });
+    expect(noHead.code).toBe(1);
+    expect(noHead.err).toContain('the body lacks head SHA ffffffff');
+    const noMarkers = run(f => ['check', '--host', 'git.example.test', '--no-image', f.body], { body: 'just text' });
+    expect(noMarkers.code).toBe(1);
+  });
+
   test('url prints the normalized URL from pasted markup and exits 1 on a foreign one', () => {
     const ok = run(f => ['url', '--host', 'git.example.test', f.paste], { paste: editorImg(GHES) });
     expect([ok.code, ok.out]).toEqual([0, `${GHES}\n`]);

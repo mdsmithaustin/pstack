@@ -106,26 +106,30 @@ It prints the new comment's URL. Its `#issuecomment-<id>` is `<keep>`. Read that
 
 When `gh` refuses the upload, or has no `--attach`, the CLI cannot upload to this host. Classify it once as a CLI limitation. GHES can reject the upload. It does not show that the repository disallows attachments. Do not retry the route.
 
-- **The user authorized a manual upload.** Give the user the absolute path of `sketch.png`. Ask them to drag it into a comment box on the PR in the web UI, without submitting, and paste back the URL or the `![...](...)` or `<img>` markup that appears. Write the paste to `paste.txt` and run `url --host <host> paste.txt`. It accepts the markup forms and prints the bare URL, or exits 1 for any other host or path. Run `stamp --host <host> sketch.png recap.md "$url" > body.md`. PATCH `current` with `body.md`, or when there is none, POST it with `gh api --hostname <host> -X POST "repos/<owner>/<repo>/issues/<n>/comments" -f body="$(cat body.md)"` and take `<keep>` from the returned `id`.
+- **The user authorized a manual upload.** Give the user the absolute path of `sketch.png`. Ask them to drag it into a comment box on the PR in the web UI, without submitting, and paste back the URL or the `![...](...)` or `<img>` markup that appears. Write the paste to `paste.txt` and run `url --host <host> paste.txt`. It accepts the markup forms and prints the bare URL, or exits 1 for any other host or path. When it exits 1, the paste is not an attachment on this host: treat it as upload unavailable, do not guess the URL, and take the no-authorization path. Otherwise run `stamp --host <host> sketch.png recap.md "$url" > body.md`. PATCH `current` with `body.md` (`<keep>` is `current`), or when there is none, POST it with `gh api --hostname <host> -X POST "repos/<owner>/<repo>/issues/<n>/comments" -f body="$(cat body.md)"` and take `<keep>` from the returned `id`.
 - **No authorization.** Remove the image line from `recap.md`. Write that body over `current`, or post it when there is none, and take `<keep>`. Report `upload unavailable: <the gh error>`.
 
 4. Delete every other recap of yours, so the PR keeps one.
 
 ```sh
+me=$(gh api --hostname <host> user --jq .login)
 gh api --hostname <host> --paginate "repos/<owner>/<repo>/issues/<n>/comments" \
 	--jq ".[] | select(.user.login == \"$me\" and (.body | startswith(\"<!-- pstack-recap:start -->\")) and .id != <keep>) | .id" |
 	while read -r id; do gh api --hostname <host> -X DELETE "repos/<owner>/<repo>/issues/comments/$id"; done
 ```
 
-5. Check the saved comment, then check that the image renders. Report the upload, the saved comment, and the render as three separate outcomes.
+5. Check the saved comment, count your recaps, then check that the image renders. Report the upload, the saved comment, and the render as three separate outcomes.
 
 ```sh
+me=$(gh api --hostname <host> user --jq .login)
+gh api --hostname <host> --paginate "repos/<owner>/<repo>/issues/<n>/comments" \
+	--jq ".[] | select(.user.login == \"$me\" and (.body | startswith(\"<!-- pstack-recap:start -->\"))) | .id" | grep -c .
 gh api --hostname <host> "repos/<owner>/<repo>/issues/comments/<keep>" --jq .body > saved.md
 bun "<skill>/scripts/attachment.mjs" check --host <host> --head <head SHA, 8 characters> saved.md
 curl -s -o /dev/null -w '%{http_code} %{content_type}' -L -H "Authorization: Bearer $(gh auth token --hostname <host>)" "<url that check printed>"
 ```
 
-`check` confirms the start marker, the end marker, the head SHA, and an image on this host in either form. When a record is present, it checks that the recorded URL is an image URL in the body. It does not require a record or verify its hash. Read its error to identify which check failed. The fetch must print `200 image/png`. A 404 means the asset is unavailable to this request. When a reused URL fails the fetch, treat the record as dead and upload again from step 3. A signed-out fetch can fail on a working upload, so it proves nothing. Without a sketch, check the markers and the head SHA only.
+`check` confirms the start marker, the end marker, the head SHA, and an image on this host in either form. When a record is present, it checks that the recorded URL is an image URL in the body. It does not require a record or verify its hash. Read its error to identify which check failed. The count must print `1`. Any other number means step 4 failed, so run it again. The fetch must print `200 image/png`. A 404 means the asset is unavailable to this request. When a reused URL fails the fetch, treat the record as dead and upload again from step 3. A signed-out fetch can fail on a working upload, so it proves nothing. Without a sketch, run `check` with `--no-image`, which checks the markers and the head SHA only, and skip the fetch.
 
 The editor's `<img width=... alt=... src="...">` markup passes `url` and `check`. Author the recap with the Markdown image form and the alt text from [the block](references/block.md). `stamp` preserves the image form in the body it reads. Hosting the image in the repository or as a release asset is not part of this skill.
 

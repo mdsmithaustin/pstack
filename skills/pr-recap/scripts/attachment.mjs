@@ -48,13 +48,13 @@ export function stamp(body, png, host, url) {
   return `${START}\n${record}${out.slice(START.length)}`;
 }
 
-export function check(body, host, head) {
+export function check(body, host, head, requireImage = true) {
   const problems = [];
   if (!body.trimStart().startsWith(START)) problems.push(`the body does not start with ${START}`);
   if (!body.includes(END)) problems.push(`the body lacks ${END}`);
   if (head !== undefined && !body.includes(head)) problems.push(`the body lacks head SHA ${head}`);
   const urls = imageUrls(body, host);
-  if (urls.length === 0) problems.push(`the body holds no ${host} attachment image`);
+  if (requireImage && urls.length === 0) problems.push(`the body holds no ${host} attachment image`);
   const record = readRecord(body);
   if (record !== undefined && !urls.includes(record.url)) problems.push('the recorded URL is not the image URL');
   return { problems, url: urls[0] };
@@ -68,6 +68,7 @@ function main(argv) {
   const args = [];
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--host' || rest[i] === '--head') opts[rest[i].slice(2)] = rest[++i];
+    else if (rest[i] === '--no-image') opts.noImage = true;
     else args.push(rest[i]);
   }
   const fail = message => { console.error(message); process.exit(1); };
@@ -84,9 +85,9 @@ function main(argv) {
     } else if (command === 'stamp') {
       process.stdout.write(stamp(readText(args[1]), readFileSync(args[0]), opts.host, args[2]));
     } else if (command === 'check') {
-      const { problems, url } = check(readText(args[0]), opts.host, opts.head);
+      const { problems, url } = check(readText(args[0]), opts.host, opts.head, !opts.noImage);
       if (problems.length > 0) fail(problems.join('\n'));
-      console.log(url);
+      if (url !== undefined) console.log(url);
     } else {
       fail(`unknown command ${command}`);
     }
