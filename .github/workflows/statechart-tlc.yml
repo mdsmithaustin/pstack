@@ -53,6 +53,6 @@ jobs:
           set -euo pipefail
           node --test --test-reporter=tap tests/skills/statechart/scripts/test/*.test.mjs | tee "$RUNNER_TEMP/tap.txt"
           grep -Eq '^# tests [1-9]' "$RUNNER_TEMP/tap.txt"
-          if grep -E '# SKIP (cannot find TLC|cannot install Pele)' "$RUNNER_TEMP/tap.txt"; then
+          if grep -E '# SKIP (cannot find TLC|cannot install Pele|cannot compile a rename preload)' "$RUNNER_TEMP/tap.txt"; then
             exit 1
           fi
