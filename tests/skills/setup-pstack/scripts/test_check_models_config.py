@@ -1143,17 +1143,23 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
                     },
                 )
 
-    def test_inherit_parent_and_auto_work_models_print_the_reviewer_unchanged_with_no_note(self):
+    def test_inherit_parent_and_auto_work_models_print_the_reviewer_unchanged_with_a_session_model_note(self):
         hermes_user = "## hermes\ntrail reviewer: model-a@high\n"
         for harness, work_model, user, expected in (
             ("claude-code", "inherit-parent@high", OPERATOR_FILE, {"model": "opus", "effort": "xhigh", "source": "user flat"}),
             ("claude-code", "auto", OPERATOR_FILE, {"model": "opus", "effort": "xhigh", "source": "user flat"}),
             ("hermes", "inherit-parent", hermes_user, {"model": "model-a", "effort": "high", "source": "user ## hermes"}),
+            ("codex", "auto", OPERATOR_FILE, {"model": "gpt-6.1-sol", "effort": "xhigh", "source": "user ## codex"}),
+            ("grok", "inherit-parent@high", OPERATOR_FILE, {"model": "grok-4.7", "effort": "high", "source": "user ## grok"}),
         ):
+            alias = work_model.partition("@")[0]
             with self.subTest(harness=harness, work_model=work_model):
                 self.assertEqual(
                     self.reviewer(harness, work_model, user=user),
-                    {"role": "trail reviewer", "arm": 1, **expected},
+                    {
+                        "role": "trail reviewer", "arm": 1, **expected,
+                        "notes": [f"work model {alias} names no model, so pass the session model; no step applied"],
+                    },
                 )
 
     def test_a_work_model_hermes_cannot_use_adds_a_note_and_applies_no_step(self):
