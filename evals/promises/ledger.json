@@ -437,7 +437,7 @@
   },
   "babysit-body-only-finding-acknowledged-in-pr-comment": {
    "check": "script",
-   "claim": "The watcher stops with the review-findings blocker (exit 8) on a bot review body that reports a finding with no thread, until a PR comment from the author or a maintainer contains that review's URL.",
+   "claim": "The watcher stops with the review-findings blocker (exit 8) on a bot review body that reports a finding with no thread, until the author or a maintainer posts a PR comment that contains that review's URL and does not open with the pr-recap start marker.",
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/scripts/watch-pr/policy.ts",
