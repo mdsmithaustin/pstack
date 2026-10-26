@@ -1,0 +1,50 @@
+name: statechart-tlc
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skills/statechart/**"
+      - "tests/skills/statechart/**"
+      - ".github/workflows/statechart-tlc.yml"
+  pull_request:
+    paths:
+      - "skills/statechart/**"
+      - "tests/skills/statechart/**"
+      - ".github/workflows/statechart-tlc.yml"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  tlc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the TLC jar that tlc-tools.mjs pins and check its sha256
+        run: |
+          set -euo pipefail
+          pin=$(node --input-type=module -e '
+            import { TLC_TOOL } from "./skills/statechart/scripts/tlc-tools.mjs";
+            const [, sha, version] = TLC_TOOL.match(/checksum=sha256:([0-9a-f]{64})\]@(\S+)$/);
+            console.log(sha, version);
+          ')
+          read -r sha version <<< "$pin"
+          jar="$RUNNER_TEMP/tla2tools.jar"
+          curl --fail --silent --show-error --location --output "$jar" \
+            "https://github.com/tlaplus/tlaplus/releases/download/v${version}/tla2tools.jar"
+          echo "$sha  $jar" | sha256sum -c -
+          : "${JAVA_HOME_25_X64:?this runner image has no Java 25}"
+          echo "TLA2TOOLS=$jar" >> "$GITHUB_ENV"
+          echo "JAVA=$JAVA_HOME_25_X64/bin/java" >> "$GITHUB_ENV"
+      - name: TLC resolves, so no TLC test can skip
+        run: |
+          node --input-type=module -e '
+            import { findTlc } from "./skills/statechart/scripts/tlc-tools.mjs";
+            console.log(findTlc());
+          '
+      - name: statechart script tests with TLC
+        run: node --test tests/skills/statechart/scripts/test/*.test.mjs
