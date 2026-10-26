@@ -1081,5 +1081,47 @@ class NativeFixtureScripts(unittest.TestCase):
                                 self.assertIn(summary, done.stderr.splitlines(), done.stderr)
 
 
+@measured_host
+class NativeSkillCommands(unittest.TestCase):
+    def portable_paths_block(self, heading):
+        text = (live.ROOT / "skills/pstack-harness/references/portable-paths.md").read_text()
+        return text.split(f"\n## {heading}\n", 1)[1].split("```sh\n", 1)[1].split("\n```", 1)[0]
+
+    def test_skill_commands_give_the_host_result_inside_the_sandbox(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = live.Run(Path(tmp).resolve(), "claude-code", {"fixture": "tally"}, "0" * 40, 60)
+            shutil.copytree(live.FIXTURES / "tally", run.project, copy_function=shutil.copy)
+            skills = run.project / claude_code.SKILLS_DIR
+            for name in ("show-me-your-work", "pstack-harness"):
+                shutil.copytree(live.ROOT / "skills" / name, skills / name, copy_function=shutil.copy)
+            state = claude_code._bind_paths(run, claude_code._host_runtime())
+            env = {**claude_code.child_env(run), "PSTACK_HARNESS_SKILL": str(skills / "pstack-harness/SKILL.md")}
+            cleanup = self.portable_paths_block("Clean up a program-owned source clone")
+            commands = {
+                "log.sh": (f"{claude_code.SKILLS_DIR}/show-me-your-work/scripts/log.sh trail/log.tsv phase decision why evidence result"
+                           " && cat trail/log.tsv",
+                           r"ts\tphase\tdecision\twhy\tevidence\tresult\n\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\tphase\tdecision\twhy\tevidence\tresult\n"),
+                "skills root": (self.portable_paths_block("Resolve the installed skills root") + '\nprintf "%s\\n" "$PSTACK_SKILLS_ROOT"',
+                                re.escape(f"{skills}\n")),
+                "mktemp": ('d=$(mktemp -d "${TMPDIR:-/tmp}/pstack-check.XXXXXX") && test -d "$d" && rm -r "$d"'
+                           ' && ! test -e "$d" && printf "%s\\n" "${d%.*}"',
+                           re.escape(f"{state.paths.tmp}/pstack-check\n")),
+                "source clone cleanup": ('PSTACK_TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/pstack-source.XXXXXX") || exit 1\n'
+                                         'PSTACK_SOURCE_ROOT=$PSTACK_TEMP_ROOT/source\nmkdir "$PSTACK_SOURCE_ROOT" || exit 1\n'
+                                         'printf "%s\\n" "$PSTACK_SOURCE_ROOT" > "$PSTACK_TEMP_ROOT/.pstack-program-owned"\n'
+                                         f'{cleanup}\ntest -e "$PSTACK_TEMP_ROOT" || echo removed',
+                                         "removed\n"),
+            }
+            for prefix in ([], ["/usr/bin/sandbox-exec", "-p", claude_code._policy(state, 0)]):
+                for name, (script, stdout) in commands.items():
+                    with self.subTest(command=name, confined=bool(prefix)):
+                        shutil.rmtree(run.project / "trail", ignore_errors=True)
+                        done = subprocess.run(prefix + ["/bin/sh", "-c", script], cwd=run.project, env=env,
+                                              capture_output=True, text=True, timeout=60)
+                        self.assertEqual(done.returncode, 0, done.stderr)
+                        self.assertRegex(done.stdout, rf"\A{stdout}\Z")
+                        self.assertNotIn("command not found", done.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

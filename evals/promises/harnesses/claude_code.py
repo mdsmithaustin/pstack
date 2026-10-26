@@ -113,8 +113,9 @@ PINNED_TOOLS = (
     (GIT_ROOT / "usr/bin/git", ("a73bf622a2e470d5d57a4b1d5aef1e8680e67278018d4858a2f93825b7d595c7",
                               "be4afb2b003904725826250de9fb76567bbacf82323457b5a1ec26706b66bcae")),
 )
-SYSTEM_TOOLS = tuple(Path("/bin") / n for n in ("sh", "bash", "zsh", "cat", "cp", "mv", "rm", "mkdir", "ls", "pwd", "chmod")) + tuple(
-    Path("/usr/bin") / n for n in ("security", "uname", "sw_vers", "sed", "awk", "grep", "head", "tail", "wc", "find", "xargs", "env", "diff", "sort", "touch", "true", "false", "tee", "tr"))
+SYSTEM_TOOLS = tuple(Path("/bin") / n for n in ("sh", "bash", "zsh", "cat", "cp", "mv", "rm", "mkdir", "ls", "pwd", "chmod", "date")) + tuple(
+    Path("/usr/bin") / n for n in ("security", "uname", "sw_vers", "sed", "awk", "grep", "head", "tail", "wc", "find", "xargs", "env", "diff",
+                                   "sort", "touch", "true", "false", "tee", "tr", "dirname", "basename", "mktemp"))
 
 
 def _open_dir(path):
