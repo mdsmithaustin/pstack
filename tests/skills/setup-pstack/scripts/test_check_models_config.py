@@ -1149,6 +1149,8 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
             ("claude-code", "inherit-parent@high", OPERATOR_FILE, {"model": "opus", "effort": "xhigh", "source": "user flat"}),
             ("claude-code", "auto", OPERATOR_FILE, {"model": "opus", "effort": "xhigh", "source": "user flat"}),
             ("hermes", "inherit-parent", hermes_user, {"model": "model-a", "effort": "high", "source": "user ## hermes"}),
+            ("codex", "auto", OPERATOR_FILE, {"model": "gpt-6.1-sol", "effort": "xhigh", "source": "user ## codex"}),
+            ("grok", "inherit-parent@high", OPERATOR_FILE, {"model": "grok-4.7", "effort": "high", "source": "user ## grok"}),
         ):
             alias = work_model.partition("@")[0]
             with self.subTest(harness=harness, work_model=work_model):
