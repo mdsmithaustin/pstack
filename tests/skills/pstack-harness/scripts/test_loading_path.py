@@ -97,7 +97,10 @@ class CopiesOutsideTheSourceCheckout(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name).resolve()
         self.env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
-        self.env['GIT_CEILING_DIRECTORIES'] = str(self.root.parent)
+        self.env.update(
+            GIT_CEILING_DIRECTORIES=str(self.root.parent), GIT_CONFIG_GLOBAL=os.devnull,
+            GIT_CONFIG_NOSYSTEM='1', LC_ALL='C',
+        )
 
     def install(self, parent):
         skill = parent / 'skills/pstack-harness'
@@ -105,11 +108,11 @@ class CopiesOutsideTheSourceCheckout(unittest.TestCase):
         return skill / 'scripts/loading-path.py'
 
     def git(self, *command):
-        subprocess.run(
+        return subprocess.run(
             ['git', '-C', str(self.root), '-c', 'user.name=t', '-c', 'user.email=t@t',
              '-c', 'commit.gpgsign=false', *command],
-            check=True, env=self.env,
-        )
+            check=True, env=self.env, capture_output=True, text=True,
+        ).stdout.strip()
 
     def run_script(self, script, *options):
         return subprocess.run(
@@ -163,15 +166,43 @@ class CopiesOutsideTheSourceCheckout(unittest.TestCase):
         self.assertIn('baseline HEAD has no ' + PREFIX + 'SKILL.md', result.stderr)
         self.assertNotIn('Traceback', result.stderr)
 
+    def test_git_error_bytes_outside_the_locale_encoding_exit_with_a_message(self):
+        script = self.install(self.root)
+        self.git('init', '-q')
+        self.git('commit', '-q', '--allow-empty', '-m', 'empty')
+        tag = b'caf\xe9'
+        with open(self.root / '.git/packed-refs', 'ab') as refs:
+            refs.write(self.git('rev-parse', 'HEAD').encode() + b' refs/tags/' + tag + b'\n')
+        absent_file = self.run_script(script, '--baseline', os.fsdecode(tag))
+        self.env['GIT_DIR'] = os.fsdecode(b'/nonexistent/' + tag)
+        no_repository = self.run_script(script, '--baseline', 'HEAD')
+        for result, message in (
+            (absent_file, 'has no ' + PREFIX + 'SKILL.md'), (no_repository, 'git cannot open'),
+        ):
+            with self.subTest(message):
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(result.stdout, '')
+                self.assertIn(message, result.stderr)
+                self.assertNotIn('Traceback', result.stderr)
+
     def test_copy_inside_another_repository_compares_its_own_history(self):
         script = self.install(self.root / '.claude')
+        guide = self.root / '.claude' / PREFIX / 'SKILL.md'
+        current = guide.read_bytes()
+        old = b'old guide\n'
+        guide.write_bytes(old)
         self.git('init', '-q')
-        self.git('add', '-A')
+        self.git('add', '-A', '--force')
         self.git('commit', '-qm', 'install')
-        result = self.run_script(script, '--baseline', 'HEAD')
+        commit = self.git('rev-parse', 'HEAD')
+        guide.write_bytes(current)
+        result = self.run_script(script, '--baseline', commit)
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual(report['before']['files'], report['after']['files'][:1])
+        self.assertEqual(report['baseline'], commit)
+        self.assertEqual(report['before']['files'], [
+            {'path': PREFIX + 'SKILL.md', 'bytes': len(old)},
+        ])
 
 
 if __name__ == '__main__':
