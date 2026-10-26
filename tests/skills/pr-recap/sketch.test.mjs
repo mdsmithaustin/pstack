@@ -19,17 +19,22 @@ function render(scene) {
   return { code: r.exitCode, report: stdout ? JSON.parse(stdout) : null, outPath, stderr: r.stderr.toString() };
 }
 
+const copySketch = dir => {
+  const renderer = join(dir, 'renderer');
+  cpSync(join(skill, 'scripts/sketch'), renderer, {
+    recursive: true,
+    filter: path => !path.split(/[\\/]/).includes('node_modules'),
+  });
+  return join(renderer, 'sketch.mjs');
+};
+
 const example = name => JSON.parse(readFileSync(join(examples, `${name}.json`), 'utf8'));
 const withShapes = (scene, ...shapes) => ({ ...scene, shapes: [...scene.shapes, ...shapes] });
 
 describe('sketch tool', () => {
   test('fallback avoids forged dependencies and cleans up on every exit', () => {
     const fixture = mkdtempSync(join(work, 'fallback-'));
-    const renderer = join(fixture, 'renderer');
-    cpSync(join(skill, 'scripts/sketch'), renderer, {
-      recursive: true,
-      filter: path => !path.split(/[\\/]/).includes('node_modules'),
-    });
+    const renderer = dirname(copySketch(fixture));
     writeFileSync(join(renderer, 'node_modules'), 'installation blocked');
     const temp = join(fixture, 'tmp');
     mkdirSync(temp);
@@ -75,67 +80,110 @@ describe('sketch tool', () => {
 
   describe('Bun version check', () => {
     const flow = join(examples, 'flow.json');
-    const npxRoute = `npx --allow-scripts=bun bun@1.4.0 ${JSON.stringify(tool)}`;
-    const expectRefusal = (r, version) => {
-      expect(r.exitCode).toBe(2);
-      const stderr = r.stderr.toString();
-      expect(stderr).toContain(`this is Bun ${version}`);
-      expect(stderr).toContain(npxRoute);
-      expect(r.stdout.toString()).toBe('');
+    const npx = ['--allow-scripts=bun', 'bun@1.4.0'];
+    const oddDir = prefix => realpathSync(mkdtempSync(join(work, `${prefix}-it's a $HOME \`dir\` `)));
+    const bunAs = version => {
+      const preload = join(work, `bun-${version}.mjs`);
+      writeFileSync(preload, `Object.defineProperty(process.versions, 'bun', { value: '${version}' });`);
+      return ['--preload', preload];
+    };
+    const printedArgs = (stderr, dir) => {
+      const command = stderr.match(/^ {2}(npx .*)$/m)?.[1];
+      expect(command).toBeDefined();
+      const bin = join(dir, 'fake-npx');
+      mkdirSync(bin, { recursive: true });
+      const record = join(dir, 'npx-args');
+      writeFileSync(join(bin, 'npx'), '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$NPX_ARGS"\n', { mode: 0o755 });
+      const r = Bun.spawnSync(['/bin/sh', '-c', command], { env: { ...process.env, NPX_ARGS: record, PATH: `${bin}${delimiter}${process.env.PATH}` } });
+      expect(r.exitCode).toBe(0);
+      return readFileSync(record, 'utf8').split('\n').slice(0, -1);
     };
 
     for (const version of ['1.1.38', '1.3.9', '0.8.1']) {
-      test(`Bun ${version} refuses before it reads the scene or installs anything`, () => {
-        const preload = join(work, `bun-${version}.mjs`);
-        writeFileSync(preload, `Object.defineProperty(process.versions, 'bun', { value: '${version}' });`);
-        const outPath = join(work, `old-${version}.png`);
-        const r = Bun.spawnSync([process.execPath, '--preload', preload, tool, join(work, 'no-such-scene.json'), outPath]);
-        expectRefusal(r, version);
-        expect(existsSync(outPath)).toBe(false);
+      test(`Bun ${version} refuses before it installs anything and prints a command that runs`, () => {
+        const dir = oddDir('old-bun');
+        const renderer = copySketch(dir);
+        const scene = join(dir, 'a scene.json');
+        const out = join(dir, 'out.png');
+        const r = Bun.spawnSync([process.execPath, ...bunAs(version), renderer, scene, out]);
+        const stderr = r.stderr.toString();
+        expect(r.exitCode).toBe(2);
+        expect(stderr).toContain(`this is Bun ${version}`);
+        expect(r.stdout.toString()).toBe('');
+        expect(existsSync(out)).toBe(false);
+        expect(existsSync(join(dirname(renderer), 'node_modules'))).toBe(false);
+        expect(printedArgs(stderr, dir)).toEqual([...npx, renderer, scene, out]);
       });
     }
 
-    test('Bun 1.4.0 and later pass the check', () => {
-      for (const version of ['1.4.0', '1.4.2', '1.10.0', '2.0.0', '1.4.0-canary.1']) {
-        const preload = join(work, `bun-${version}.mjs`);
-        writeFileSync(preload, `Object.defineProperty(process.versions, 'bun', { value: '${version}' });`);
-        const r = Bun.spawnSync([process.execPath, '--preload', preload, tool, join(work, 'no-such-scene.json'), join(work, 'x.png')]);
-        expect(r.stderr.toString()).not.toContain('needs Bun');
-      }
+    test('the printed command turns relative scene and output paths into absolute ones', () => {
+      const dir = oddDir('relative');
+      const renderer = copySketch(dir);
+      const r = Bun.spawnSync([process.execPath, ...bunAs('1.1.38'), renderer, 'scene.json', 'out.png'], { cwd: dir });
+      expect(printedArgs(r.stderr.toString(), dir)).toEqual([...npx, renderer, join(dir, 'scene.json'), join(dir, 'out.png')]);
     });
+
+    test('Bun 1.4.0 and later get past the check and render', () => {
+      for (const version of ['1.4.0', '1.4.2', '1.10.0', '2.0.0', '1.4.0-canary.1']) {
+        const out = join(work, `bun-${version}.png`);
+        const r = Bun.spawnSync([process.execPath, ...bunAs(version), tool, flow, out]);
+        expect(r.stderr.toString()).toBe('');
+        expect(r.exitCode).toBe(0);
+        expect(JSON.parse(r.stdout.toString()).problems).toEqual([]);
+        expect(readFileSync(out).subarray(1, 4).toString()).toBe('PNG');
+      }
+    }, 30000);
 
     const node = Bun.which('node');
     const nodeMajor = node ? Number(Bun.spawnSync([node, '--version']).stdout.toString().match(/^v(\d+)/)?.[1]) : 0;
     const nodeTest = node && nodeMajor >= 20 && process.platform !== 'win32' ? test : test.skip;
 
-    nodeTest('Node renders when the Bun on PATH is current', () => {
-      const outPath = join(work, 'node.png');
-      const r = Bun.spawnSync([node, tool, flow, outPath], {
+    nodeTest('Node installs and renders when the Bun on PATH is current', () => {
+      const dir = oddDir('current-bun');
+      const renderer = copySketch(dir);
+      const out = join(dir, 'sketch.png');
+      const r = Bun.spawnSync([node, renderer, flow, out], {
         env: { ...process.env, PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH}` },
       });
       expect(r.exitCode).toBe(0);
       expect(JSON.parse(r.stdout.toString()).problems).toEqual([]);
-      expect(readFileSync(outPath).subarray(1, 4).toString()).toBe('PNG');
+      expect(readFileSync(out).subarray(1, 4).toString()).toBe('PNG');
+      expect(existsSync(join(dirname(renderer), 'node_modules/.pr-recap-sketch-install-key'))).toBe(true);
     }, 30000);
 
     nodeTest('Node refuses when the Bun on PATH is older than 1.4.0', () => {
-      const fixture = realpathSync(mkdtempSync(join(work, 'old-bun-path-')));
-      const renderer = join(fixture, 'renderer');
-      cpSync(join(skill, 'scripts/sketch'), renderer, {
-        recursive: true,
-        filter: path => !path.split(/[\\/]/).includes('node_modules'),
-      });
-      const bin = join(fixture, 'bin');
+      const dir = oddDir('old-bun-path');
+      const renderer = copySketch(dir);
+      const bin = join(dir, 'bin');
       mkdirSync(bin);
       writeFileSync(join(bin, 'bun'), '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 1.1.38; else echo "installed" > "$PWD/installed-by-old-bun"; fi\n', { mode: 0o755 });
-      const r = Bun.spawnSync([node, join(renderer, 'sketch.mjs'), flow, join(fixture, 'sketch.png')], {
-        env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}` },
-      });
+      const scene = join(dir, 'scene.json');
+      const out = join(dir, 'sketch.png');
+      const r = Bun.spawnSync([node, renderer, scene, out], { env: { ...process.env, PATH: `${bin}${delimiter}${process.env.PATH}` } });
+      const stderr = r.stderr.toString();
       expect(r.exitCode).toBe(2);
-      expect(r.stderr.toString()).toContain('this is Bun 1.1.38');
-      expect(r.stderr.toString()).toContain(`npx --allow-scripts=bun bun@1.4.0 ${JSON.stringify(join(renderer, 'sketch.mjs'))}`);
-      expect(existsSync(join(renderer, 'installed-by-old-bun'))).toBe(false);
-      expect(existsSync(join(renderer, 'node_modules'))).toBe(false);
+      expect(stderr).toContain('this is Bun 1.1.38');
+      expect(existsSync(join(dirname(renderer), 'installed-by-old-bun'))).toBe(false);
+      expect(existsSync(join(dirname(renderer), 'node_modules'))).toBe(false);
+      expect(printedArgs(stderr, dir)).toEqual([...npx, renderer, scene, out]);
+    });
+
+    nodeTest('Node with no bun on PATH prints the npx command and installs nothing', () => {
+      const dir = oddDir('no-bun');
+      const renderer = copySketch(dir);
+      const empty = join(dir, 'empty');
+      const temp = join(dir, 'tmp');
+      mkdirSync(empty);
+      mkdirSync(temp);
+      const scene = join(dir, 'scene.json');
+      const out = join(dir, 'sketch.png');
+      const r = Bun.spawnSync([node, renderer, scene, out], { env: { ...process.env, PATH: empty, TMPDIR: temp, TMP: temp, TEMP: temp } });
+      const stderr = r.stderr.toString();
+      expect(r.exitCode).toBe(2);
+      expect(stderr).toContain('no working bun on PATH');
+      expect(existsSync(join(dirname(renderer), 'node_modules'))).toBe(false);
+      expect(readdirSync(temp)).toEqual([]);
+      expect(printedArgs(stderr, dir)).toEqual([...npx, renderer, scene, out]);
     });
   });
 
