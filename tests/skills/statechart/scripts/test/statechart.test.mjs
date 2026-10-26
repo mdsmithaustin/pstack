@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -46,6 +47,10 @@ import {
 import { ruleBook } from "../../../../../skills/statechart/scripts/rule-book.mjs";
 import { copyPath } from "../../../../../skills/statechart/scripts/snapshot.mjs";
 import { findTlc, JAVA_TOOL, TLC_TOOL } from "../../../../../skills/statechart/scripts/tlc-tools.mjs";
+
+// A run's cwd is a resolved path, so the folders it names must be built from a resolved TMPDIR.
+// macOS keeps TMPDIR under /var, a link to /private/var.
+process.env.TMPDIR = realpathSync(tmpdir());
 
 const here = dirname(fileURLToPath(import.meta.url));
 const scripts = join(here, "../../../../../skills/statechart/scripts");
@@ -1452,7 +1457,7 @@ test("statechart.mjs writes the spec next to the chart, keeps it on the next run
 });
 
 const installCommand = (...tools) =>
-  `cd "$(mktemp -d)" && MISE_CEILING_PATHS="$PWD" mise install ${tools.map((t) => `'${t}'`).join(" ")}`;
+  `cd "$(mktemp -d)" && MISE_CEILING_PATHS="$(pwd -P)" mise install ${tools.map((t) => `'${t}'`).join(" ")}`;
 
 test("statechart.mjs shows mise's own error when mise fails before it can look for TLC", () => {
   const dir = mkdtempSync(join(tmpdir(), "statechart-"));
@@ -1999,8 +2004,38 @@ test(
   },
 );
 
+test("findTlc installs TLC with mise under a mise.toml that sets locked = true above a TMPDIR reached through a symlink", () => {
+  const { at, dir, env } = outsideRepoWithoutTlc();
+  const root = dirname(dir);
+  writeFileSync(join(dir, "mise.toml"), "[settings]\nlocked = true\n");
+  mkdirSync(join(dir, "tmp"));
+  symlinkSync(dir, join(root, "link"));
+  const home = join(root, "tlaplus");
+  mkdirSync(home);
+  writeFileSync(join(home, "tla2tools.jar"), "");
+  const findTlcHere = `import { findTlc } from ${JSON.stringify(pathToFileURL(join(at, "tlc-tools.mjs")).href)};
+console.log(JSON.stringify(findTlc()));`;
+  const r = spawnSync(process.execPath, ["--input-type=module", "-e", findTlcHere], {
+    cwd: dir,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...env,
+      TLAPLUS_HOME: home,
+      TLC_JAVA: process.execPath,
+      TMPDIR: join(root, "link", "tmp"),
+    },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, INSTALLING);
+  assert.deepEqual(JSON.parse(r.stdout), {
+    jar: join(home, "tla2tools.jar"),
+    java: process.execPath,
+  });
+});
+
 test(
-  "statechart.mjs finds TLC with the real mise when an untrusted mise.toml is next to the spec and above TMPDIR",
+  "statechart.mjs finds TLC with the real mise when an untrusted mise.toml is next to the spec and above a TMPDIR reached through a symlink",
   {
     skip:
       !tools || process.env.TLA2TOOLS
@@ -2018,7 +2053,8 @@ test(
     mkdirSync(tmp, { recursive: true });
     writeFileSync(join(dir, "mise.toml"), '[tools]\njava = "17"\n\n[env]\nSTATECHART = "1"\n');
     writeFileSync(join(dir, "upload.mmd"), fixture("upload.mmd"));
-    const env = { JAVA: "", TMPDIR: tmp };
+    symlinkSync(dir, join(root, "link"));
+    const env = { JAVA: "", TMPDIR: join(root, "link", "tmp") };
     const r = node("statechart.mjs", ["from-chart", "upload.mmd"], dir, env, at);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stderr, "");
@@ -6073,6 +6109,14 @@ const failRenames = `#define _GNU_SOURCE
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#ifdef __APPLE__
+/* dyld replaces a function only through an __interpose entry, and there dlsym(RTLD_NEXT)
+   returns the replacement, so original() hands out libc's functions instead. */
+#define mkdir preloaded_mkdir
+#define rename preloaded_rename
+#define dlsym(handle, name) original(name)
+static void *original(const char *name);
+#endif
 static size_t hits;
 static int raced;
 static int removeOne(const char *path, const struct stat *s, int type, struct FTW *at) {
@@ -6158,13 +6202,26 @@ int rename(const char *from, const char *to) {
   if (renamed == 0 && named(to, "shared") && racing("when-made")) takeOver(to);
   return renamed;
 }
+#ifdef __APPLE__
+#undef mkdir
+#undef rename
+static void *original(const char *name) {
+  return strcmp(name, "mkdir") == 0 ? (void *)mkdir : (void *)rename;
+}
+__attribute__((used, section("__DATA,__interpose"))) static const void *interposed[][2] = {
+  {(const void *)preloaded_mkdir, (const void *)mkdir},
+  {(const void *)preloaded_rename, (const void *)rename},
+};
+#endif
 `;
+// macOS ignores LD_PRELOAD. Node's signature lets DYLD_INSERT_LIBRARIES load the library.
 const failingRenames = (() => {
   const dir = mkdtempSync(join(tmpdir(), "statechart-preload-"));
   writeFileSync(join(dir, "rename.c"), failRenames);
   const so = join(dir, "rename.so");
   const cc = spawnSync("cc", ["-shared", "-fPIC", "-o", so, join(dir, "rename.c"), "-ldl"]);
-  return cc.status === 0 ? so : null;
+  if (cc.status !== 0) return null;
+  return process.platform === "darwin" ? { DYLD_INSERT_LIBRARIES: so } : { LD_PRELOAD: so };
 })();
 test(
   "a run whose rename fails after it moves the output folder aside puts the folder back, or says where it is",
@@ -6178,7 +6235,7 @@ test(
     assert.equal(first.status, 0, first.stderr);
     const chart = readFileSync(join(shared, "chart.mmd"), "utf8");
     const run = (fails) =>
-      node("statechart.mjs", args, dir, { LD_PRELOAD: failingRenames, RENAME_FAILS: fails });
+      node("statechart.mjs", args, dir, { ...failingRenames, RENAME_FAILS: fails });
 
     const back = run("NI");
     assert.equal(back.status, 2, back.stderr);
@@ -6219,7 +6276,7 @@ test(
         `export const state = (v) => (v.on ? "On" : "Off");\nexport const step = () => "${label}";\n`,
       );
       const r = node("statechart.mjs", args, dir, {
-        LD_PRELOAD: failingRenames,
+        ...failingRenames,
         RENAME_CANNOT: cannot,
       });
       assert.equal(r.status, 0, r.stderr);
@@ -6238,7 +6295,7 @@ test(
     const shared = join(dir, "shared", "chart.mmd");
     const run = (anotherRun) =>
       node("statechart.mjs", ["from-spec", "Lamp.tla", "--out", "shared"], dir, {
-        LD_PRELOAD: failingRenames,
+        ...failingRenames,
         RENAME_CANNOT: "ENOSYS",
         ANOTHER_RUN: anotherRun,
       });
@@ -6268,7 +6325,7 @@ test(
     const dir = mkdtempSync(join(tmpdir(), "statechart-"));
     writeLamp(dir);
     const r = node("statechart.mjs", ["from-spec", "Lamp.tla", "--out", "shared"], dir, {
-      LD_PRELOAD: failingRenames,
+      ...failingRenames,
       RENAME_CANNOT: "ENOSYS",
       ANOTHER_RUN: "removed-during-copy",
     });
@@ -6289,7 +6346,7 @@ test(
     const dir = mkdtempSync(join(tmpdir(), "statechart-"));
     writeLamp(dir);
     const r = node("statechart.mjs", ["from-spec", "Lamp.tla", "--out", "shared"], dir, {
-      LD_PRELOAD: failingRenames,
+      ...failingRenames,
       RENAME_CANNOT: "ENOSYS",
       ANOTHER_RUN: "when-made",
     });
