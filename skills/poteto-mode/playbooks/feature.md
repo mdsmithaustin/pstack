@@ -2,7 +2,7 @@
 
 **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
 
-1. `how` over the affected subsystem. Use the **how** skill. List the components, hooks, helpers, and UI patterns the repository already has for this job. The design and the step 4 brief reuse or extend them. Give the reason for each new one.
+1. `how` over the affected subsystem. Use the **how** skill, and ask it to list the components, hooks, helpers, and UI patterns the repository already has for this job. Reuse them in the design and the step 4 brief. Extend a shared one only when every caller keeps its behavior. Give the reason for each new one.
 2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes. Use the **architect** skill for it. A small, self-contained change keeps this step with `skipped: <reason>`.
 3. Write the throughput checkpoint as four items in the same worklist. A dimension that genuinely does not apply (single file, no fan-out) keeps its item with `skipped: <reason>` rather than being dropped:
    - **Blocking first steps.** Gates run before fan-out.
