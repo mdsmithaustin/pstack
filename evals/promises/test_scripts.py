@@ -756,6 +756,7 @@ class BabysitWatcherPromises(GitHubSandbox):
             "a link from a stranger": self.comment(f"See {REVIEW_URL}", login="mallory", association="NONE", n=2),
             "a link from a bot": self.comment(f"See {REVIEW_URL}", login="helper-bot", association="MEMBER", kind="Bot", n=2),
             "a link to a longer review id": self.comment(f"See {REVIEW_URL}9", login="alice", association="NONE", n=2),
+            "a pr-recap comment from the author": self.comment(f"\n<!-- pstack-recap:start -->\nSee {REVIEW_URL}.\n<!-- pstack-recap:end -->", login="alice", association="NONE", n=2),
         }
         for label, comment in not_acknowledgments.items():
             with self.subTest(label):
