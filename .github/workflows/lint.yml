@@ -59,6 +59,8 @@ jobs:
         run: python3 tools/probe-subagent-install.py
       - name: pstack-models.md lint tests
         run: python3 -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
+      - name: pstack-harness loading-path script tests
+        run: python3 -m unittest discover -s tests/skills/pstack-harness/scripts -p 'test_*.py'
       - name: pstack-models.md shipped default lints clean
         run: python3 skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
       - name: Install poteto-mode script dependencies
