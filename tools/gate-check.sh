@@ -46,6 +46,7 @@ run lint "skill reference spelling" . "${py[@]}" -m unittest discover -s tools -
 run test "tools unit tests" . "${py[@]}" -m unittest discover -s tools -p 'test_*.py'
 run test "promise unit tests" . "${py[@]}" -m unittest discover -s evals/promises -p 'test_*.py'
 run test "setup-pstack unit tests" . "${py[@]}" -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
+run test "pstack-harness unit tests" . "${py[@]}" -m unittest discover -s tests/skills/pstack-harness/scripts -p 'test_*.py'
 run test "poteto-mode bun install" skills/poteto-mode/scripts bun install --frozen-lockfile
 run test "poteto-mode bun tests" skills/poteto-mode/scripts bun run test
 run test "poteto-mode typecheck" skills/poteto-mode/scripts bun run typecheck

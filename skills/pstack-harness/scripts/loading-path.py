@@ -2,15 +2,17 @@
 """Report the declared harness loading path and its UTF-8 source bytes."""
 import argparse
 import json
+import locale
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--action', required=True)
 parser.add_argument('--runtime', choices=['claude-code', 'codex', 'hermes', 'grok', 'other'])
 parser.add_argument('--persona', action='store_true')
-parser.add_argument('--baseline', required=True, help='Git commit containing the unsplit guide')
+parser.add_argument('--baseline', help='Git commit containing the unsplit guide; omit for a current-only report')
 args = parser.parse_args()
 skill = Path(__file__).resolve().parents[1]
 project = skill.parents[1]
@@ -49,16 +51,38 @@ if args.persona or args.action == 'persona':
     before_paths.append(Path('references/named-roles.md'))
 if args.persona or args.action in {'spawn', 'persona', 'portable-paths'}:
     before_paths.append(Path('references/portable-paths.md'))
-before = []
-for path in before_paths:
-    relative = str((skill / path).relative_to(project))
-    data = subprocess.run(['git', '-C', str(project), 'show', args.baseline + ':' + relative],
-                          check=True, capture_output=True).stdout
-    before.append({'path': relative, 'bytes': len(data)})
+before = None
+if args.baseline is not None:
+    def git(*command):
+        try:
+            result = subprocess.run(['git', '-C', str(project), *command], capture_output=True)
+        except FileNotFoundError:
+            sys.exit('loading-path.py: error: --baseline needs git, which is not on PATH. '
+                     'Omit --baseline for a current-only report.')
+        result.stderr = result.stderr.decode(locale.getpreferredencoding(False), 'replace').strip()
+        return result
+    opened = git('rev-parse', '--git-dir')
+    if opened.returncode:
+        sys.exit(f'loading-path.py: error: git cannot open {project} as a repository '
+                 f'({opened.stderr}). --baseline reads the old guide from Git '
+                 'history, so run the copy inside a pstack source checkout, or omit --baseline '
+                 'for a current-only report.')
+    if git('rev-parse', '--verify', '--quiet', args.baseline + '^{commit}').returncode:
+        sys.exit(f'loading-path.py: error: baseline {args.baseline} is not a commit in {project}. '
+                 'Fetch the history that contains it, or pass a commit this checkout has.')
+    files = []
+    for path in before_paths:
+        relative = str((skill / path).relative_to(project))
+        shown = git('show', f'{args.baseline}:./{relative}')
+        if shown.returncode:
+            sys.exit(f'loading-path.py: error: baseline {args.baseline} has no {relative}: '
+                     + shown.stderr)
+        files.append({'path': relative, 'bytes': len(shown.stdout)})
+    before = {'files': files, 'bytes': sum(row['bytes'] for row in files)}
 print(json.dumps({
     'measurement': 'declared harness source loading contract, not observed agent reads or provider tokens',
     'action': args.action, 'runtime': args.runtime, 'persona': args.persona,
     'baseline': args.baseline,
-    'before': {'files': before, 'bytes': sum(row['bytes'] for row in before)},
+    'before': before,
     'after': {'files': after, 'bytes': sum(row['bytes'] for row in after)},
 }, indent=2))
