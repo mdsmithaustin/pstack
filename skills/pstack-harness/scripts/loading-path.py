@@ -2,6 +2,7 @@
 """Report the declared harness loading path and its UTF-8 source bytes."""
 import argparse
 import json
+import locale
 import re
 import subprocess
 import sys
@@ -54,14 +55,16 @@ before = None
 if args.baseline is not None:
     def git(*command):
         try:
-            return subprocess.run(['git', '-C', str(project), *command], capture_output=True)
+            result = subprocess.run(['git', '-C', str(project), *command], capture_output=True)
         except FileNotFoundError:
             sys.exit('loading-path.py: error: --baseline needs git, which is not on PATH. '
                      'Omit --baseline for a current-only report.')
+        result.stderr = result.stderr.decode(locale.getpreferredencoding(False), 'replace').strip()
+        return result
     opened = git('rev-parse', '--git-dir')
     if opened.returncode:
         sys.exit(f'loading-path.py: error: git cannot open {project} as a repository '
-                 f'({opened.stderr.decode().strip()}). --baseline reads the old guide from Git '
+                 f'({opened.stderr}). --baseline reads the old guide from Git '
                  'history, so run the copy inside a pstack source checkout, or omit --baseline '
                  'for a current-only report.')
     if git('rev-parse', '--verify', '--quiet', args.baseline + '^{commit}').returncode:
@@ -73,7 +76,7 @@ if args.baseline is not None:
         shown = git('show', f'{args.baseline}:./{relative}')
         if shown.returncode:
             sys.exit(f'loading-path.py: error: baseline {args.baseline} has no {relative}: '
-                     + shown.stderr.decode().strip())
+                     + shown.stderr)
         files.append({'path': relative, 'bytes': len(shown.stdout)})
     before = {'files': files, 'bytes': sum(row['bytes'] for row in files)}
 print(json.dumps({
