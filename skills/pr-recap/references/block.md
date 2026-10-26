@@ -1,6 +1,6 @@
 # The recap block
 
-Copy this shape. Replace each `<...>` with facts from the PR record and the diff. Keep the markers exactly as written, because the cleanup command finds earlier recaps by the start marker.
+Copy this shape. Replace each `<...>` with facts from the PR record and the diff. Keep the markers exactly as written, because the cleanup command finds earlier recaps by the start marker. Do not write the sketch record line. `attachment.mjs stamp` adds it on the line after the start marker, which stays first.
 
 ````markdown
 <!-- pstack-recap:start -->
