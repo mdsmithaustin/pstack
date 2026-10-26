@@ -1,0 +1,58 @@
+name: statechart-tlc
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skills/statechart/**"
+      - "tests/skills/statechart/**"
+      - ".github/workflows/statechart-tlc.yml"
+  pull_request:
+    paths:
+      - "skills/statechart/**"
+      - "tests/skills/statechart/**"
+      - ".github/workflows/statechart-tlc.yml"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  tlc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the TLC jar and pick the Java that tlc-tools.mjs pins
+        run: |
+          set -euo pipefail
+          pin=$(node --input-type=module -e '
+            import { JAVA_TOOL, TLC_TOOL } from "./skills/statechart/scripts/tlc-tools.mjs";
+            const [, sha, version] = TLC_TOOL.match(/checksum=sha256:([0-9a-f]{64})\]@(\S+)$/);
+            const [, major] = JAVA_TOOL.match(/^java@temurin-(\d+)$/);
+            console.log(sha, version, major);
+          ')
+          read -r sha version major <<< "$pin"
+          jar="$RUNNER_TEMP/tla2tools.jar"
+          curl --fail --silent --show-error --location --output "$jar" \
+            "https://github.com/tlaplus/tlaplus/releases/download/v${version}/tla2tools.jar"
+          echo "$sha  $jar" | sha256sum -c -
+          java_home="JAVA_HOME_${major}_X64"
+          : "${!java_home:?this runner image has no Java ${major}}"
+          echo "TLA2TOOLS=$jar" >> "$GITHUB_ENV"
+          echo "JAVA=${!java_home}/bin/java" >> "$GITHUB_ENV"
+      - name: TLC resolves
+        run: |
+          node --input-type=module -e '
+            import { findTlc } from "./skills/statechart/scripts/tlc-tools.mjs";
+            console.log(findTlc());
+          '
+      - name: statechart script tests with TLC, none skipped for lack of TLC or Pele
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap tests/skills/statechart/scripts/test/*.test.mjs | tee "$RUNNER_TEMP/tap.txt"
+          grep -Eq '^# tests [1-9]' "$RUNNER_TEMP/tap.txt"
+          if grep -E '# SKIP (cannot find TLC|cannot install Pele|cannot compile a rename preload)' "$RUNNER_TEMP/tap.txt"; then
+            exit 1
+          fi
