@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // usage: bun sketch.mjs <scene.json> <out.png>
 // Renders the scene at 2x with resvg, writes <out.png>, and prints a JSON report.
-// Exits 1 when the drawing breaks a layout rule, 2 on bad input or a render failure.
+// Exits 1 when the drawing breaks a layout rule, 2 on bad input, a render failure, or a Bun older than 1.4.0.
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,6 +11,17 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const fail = msg => { console.error(msg); process.exit(2); };
+const MIN_BUN = [1, 4, 0];
+const bunTooOld = version => {
+  const parts = version.split(/[.-]/).map(Number);
+  for (let i = 0; i < MIN_BUN.length; i++) if (parts[i] !== MIN_BUN[i]) return !(parts[i] > MIN_BUN[i]);
+  return false;
+};
+const refuseOldBun = version => fail(
+  `sketch.mjs needs Bun ${MIN_BUN.join('.')} or later, and this is Bun ${version}. Earlier releases ignore or cannot read bun.lock, so the packages would not be the pinned ones.\n` +
+  `Run it through npx instead, which needs Node 20 or later, npm, and network access:\n` +
+  `  npx --allow-scripts=bun bun@${MIN_BUN.join('.')} ${JSON.stringify(fileURLToPath(import.meta.url))} <scene.json> <out.png>`);
+if (process.versions.bun && bunTooOld(process.versions.bun)) refuseOldBun(process.versions.bun);
 const [scenePath, outPath] = process.argv.slice(2);
 if (!scenePath || !outPath) fail('usage: bun sketch.mjs <scene.json> <out.png>');
 const here = dirname(fileURLToPath(import.meta.url));
@@ -23,9 +34,14 @@ function installed(dir) {
   const keyPath = join(dir, 'node_modules/.pr-recap-sketch-install-key');
   if (existsSync(keyPath) && readFileSync(keyPath, 'utf8').trim() === key) return true;
   try {
+    const bun = process.versions.bun ? process.execPath : 'bun';
+    if (!process.versions.bun) {
+      const v = spawnSync(bun, ['--version'], { encoding: 'utf8' }).stdout?.trim();
+      if (v && bunTooOld(v)) refuseOldBun(v);
+    }
     mkdirSync(join(dir, 'node_modules'), { recursive: true });
     if (dir !== here) for (const f of ['package.json', 'bun.lock']) copyFileSync(join(here, f), join(dir, f));
-    const r = spawnSync(process.versions.bun ? process.execPath : 'bun', ['install', '--frozen-lockfile'], { cwd: dir, encoding: 'utf8' });
+    const r = spawnSync(bun, ['install', '--frozen-lockfile'], { cwd: dir, encoding: 'utf8' });
     if (r.status !== 0) { console.error(`bun install --frozen-lockfile failed in ${dir}:\n${r.stderr || r.error}`); return false; }
     writeFileSync(keyPath, `${key}\n`);
     return true;

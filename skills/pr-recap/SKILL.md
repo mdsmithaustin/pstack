@@ -57,7 +57,7 @@ Use one writable work folder outside the skill for `scene.json`, `sketch.png`, `
 
 Follow [the sketch](references/sketch.md). In short: pick one drawing from its catalog, write `scene.json` in the work folder, render it with `bun "<skill>/scripts/sketch/sketch.mjs" scene.json sketch.png`, fix every problem it reports, then look at the PNG yourself before you use it.
 
-When your runtime cannot run Bun, or cannot show you an image, skip the sketch. Post the story, the "Not covered" line, and the details block, and say in your reply that the sketch was skipped and why. Do not substitute a Mermaid diagram or a table.
+When your runtime has no Bun or only an older one, render through the `npx --allow-scripts=bun bun@1.4.0` route in [the sketch](references/sketch.md#setup). Skip the sketch when that route fails too, or when your runtime cannot show you an image. Post the story, the "Not covered" line, and the details block, and say in your reply that the sketch was skipped and why. Do not substitute a Mermaid diagram or a table.
 
 ## Check every claim before you post
 
