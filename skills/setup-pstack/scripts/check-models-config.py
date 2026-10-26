@@ -565,6 +565,8 @@ def _resolve_main(argv: list[str]) -> int:
     listed = listed_models(catalog) if catalog else NO_CATALOG
     if args.work_model:
         work_model, work_effort, work_notes = _resolve_model(work_name, work_written_effort, args.harness)
+        if work_name in OTHER_ALIASES:
+            work_notes = [f"{work_name} names no model, so pass the session model"]
         unusable = [f"work model {note}; no step applied" for note in work_notes if work_model == INHERIT]
         allowed: dict[str, set[str]] = {}
         for role in ROLES:
