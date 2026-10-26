@@ -125,9 +125,9 @@ bun "<skill>/scripts/attachment.mjs" check --host <host> --head <head SHA, 8 cha
 curl -s -o /dev/null -w '%{http_code} %{content_type}' -L -H "Authorization: Bearer $(gh auth token --hostname <host>)" "<url that check printed>"
 ```
 
-`check` confirms the start marker, the end marker, the head SHA, an image on this host in either form, and a record that matches the image. A failure there means the write lost the URL. The fetch must print `200 image/png`. A 404 means the asset is gone. When a reused URL fails the fetch, treat the record as dead and upload again from step 3. A signed-out fetch can fail on a working upload, so it proves nothing. Without a sketch, check the markers and the head SHA only.
+`check` confirms the start marker, the end marker, the head SHA, and an image on this host in either form. When a record is present, it checks that the recorded URL is an image URL in the body. It does not require a record or verify its hash. Read its error to identify which check failed. The fetch must print `200 image/png`. A 404 means the asset is unavailable to this request. When a reused URL fails the fetch, treat the record as dead and upload again from step 3. A signed-out fetch can fail on a working upload, so it proves nothing. Without a sketch, check the markers and the head SHA only.
 
-The editor's `<img width=... alt=... src="...">` markup passes `url` and `check`. The recap itself always carries the Markdown image form with the alt text from [the block](references/block.md). Hosting the image in the repository or as a release asset is not part of this skill.
+The editor's `<img width=... alt=... src="...">` markup passes `url` and `check`. Author the recap with the Markdown image form and the alt text from [the block](references/block.md). `stamp` preserves the image form in the body it reads. Hosting the image in the repository or as a release asset is not part of this skill.
 
 Post it as a PR comment, never in the PR body. In a repository gated by no-mistakes, the gate owns the PR body.
 
