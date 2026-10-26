@@ -1103,9 +1103,9 @@ class NativeSkillCommands(unittest.TestCase):
                            r"ts\tphase\tdecision\twhy\tevidence\tresult\n\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\tphase\tdecision\twhy\tevidence\tresult\n"),
                 "skills root": (self.portable_paths_block("Resolve the installed skills root") + '\nprintf "%s\\n" "$PSTACK_SKILLS_ROOT"',
                                 re.escape(f"{skills}\n")),
-                "mktemp and rmdir": ('d=$(mktemp -d "${TMPDIR:-/tmp}/pstack-check.XXXXXX") && test -d "$d" && rmdir "$d"'
-                                     ' && ! test -e "$d" && printf "%s\\n" "${d%.*}"',
-                                     re.escape(f"{state.paths.tmp}/pstack-check\n")),
+                "mktemp": ('d=$(mktemp -d "${TMPDIR:-/tmp}/pstack-check.XXXXXX") && test -d "$d" && rm -r "$d"'
+                           ' && ! test -e "$d" && printf "%s\\n" "${d%.*}"',
+                           re.escape(f"{state.paths.tmp}/pstack-check\n")),
                 "source clone cleanup": ('PSTACK_TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/pstack-source.XXXXXX") || exit 1\n'
                                          'PSTACK_SOURCE_ROOT=$PSTACK_TEMP_ROOT/source\nmkdir "$PSTACK_SOURCE_ROOT" || exit 1\n'
                                          'printf "%s\\n" "$PSTACK_SOURCE_ROOT" > "$PSTACK_TEMP_ROOT/.pstack-program-owned"\n'
@@ -1120,6 +1120,7 @@ class NativeSkillCommands(unittest.TestCase):
                                               capture_output=True, text=True, timeout=60)
                         self.assertEqual(done.returncode, 0, done.stderr)
                         self.assertRegex(done.stdout, rf"\A{stdout}\Z")
+                        self.assertNotIn("command not found", done.stderr)
 
 
 if __name__ == "__main__":
