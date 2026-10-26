@@ -1,18 +1,40 @@
 #!/usr/bin/env bun
 // usage: bun sketch.mjs <scene.json> <out.png>
 // Renders the scene at 2x with resvg, writes <out.png>, and prints a JSON report.
-// Exits 1 when the drawing breaks a layout rule, 2 on bad input or a render failure.
+// Exits 1 when the drawing breaks a layout rule, 2 on bad input, a render failure, or a Bun older than 1.4.0 (or none, when Node must install).
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const fail = msg => { console.error(msg); process.exit(2); };
+const MIN_BUN = [1, 4, 0];
+const bunTooOld = version => {
+  const parts = version.split(/[.-]/).map(Number);
+  for (let i = 0; i < MIN_BUN.length; i++) if (parts[i] !== MIN_BUN[i]) return !(parts[i] > MIN_BUN[i]);
+  return false;
+};
+const quote = text => `'${text.replaceAll("'", `'\\''`)}'`;
 const [scenePath, outPath] = process.argv.slice(2);
 if (!scenePath || !outPath) fail('usage: bun sketch.mjs <scene.json> <out.png>');
+const refuseBun = problem => fail(
+  `${problem}\n` +
+  `Run it through npx instead, which needs Node 20 or later, npm, and network access:\n` +
+  `  npx --allow-scripts=bun bun@${MIN_BUN.join('.')} ${[fileURLToPath(import.meta.url), resolve(scenePath), resolve(outPath)].map(quote).join(' ')}`);
+const refuseOldBun = version => refuseBun(
+  `sketch.mjs needs Bun ${MIN_BUN.join('.')} or later, and this is Bun ${version}. Earlier releases ignore or cannot read bun.lock, so the packages would not be the pinned ones.`);
+if (process.versions.bun && bunTooOld(process.versions.bun)) refuseOldBun(process.versions.bun);
+let bun = process.versions.bun ? process.execPath : undefined;
+function findBun() {
+  const r = spawnSync('bun', ['--version'], { encoding: 'utf8' });
+  const version = r.stdout?.trim();
+  if (r.status !== 0 || !version) refuseBun(`sketch.mjs found no working bun on PATH, and it needs Bun ${MIN_BUN.join('.')} or later to install its packages.`);
+  if (bunTooOld(version)) refuseOldBun(version);
+  return 'bun';
+}
 const here = dirname(fileURLToPath(import.meta.url));
 const fontPath = join(here, 'vendor/Excalifont-Regular.ttf');
 
@@ -22,10 +44,11 @@ const key = createHash('sha256').update(readFileSync(join(here, 'package.json'))
 function installed(dir) {
   const keyPath = join(dir, 'node_modules/.pr-recap-sketch-install-key');
   if (existsSync(keyPath) && readFileSync(keyPath, 'utf8').trim() === key) return true;
+  bun ??= findBun();
   try {
     mkdirSync(join(dir, 'node_modules'), { recursive: true });
     if (dir !== here) for (const f of ['package.json', 'bun.lock']) copyFileSync(join(here, f), join(dir, f));
-    const r = spawnSync(process.versions.bun ? process.execPath : 'bun', ['install', '--frozen-lockfile'], { cwd: dir, encoding: 'utf8' });
+    const r = spawnSync(bun, ['install', '--frozen-lockfile'], { cwd: dir, encoding: 'utf8' });
     if (r.status !== 0) { console.error(`bun install --frozen-lockfile failed in ${dir}:\n${r.stderr || r.error}`); return false; }
     writeFileSync(keyPath, `${key}\n`);
     return true;
