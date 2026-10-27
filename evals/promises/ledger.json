@@ -437,7 +437,7 @@
   },
   "babysit-body-only-finding-acknowledged-in-pr-comment": {
    "check": "script",
-   "claim": "The watcher stops with the review-findings blocker (exit 8) on a bot review of the current head whose body reports a finding that no thread carries, or whose Copilot body it cannot read, until the PR author or an OWNER, MEMBER, or COLLABORATOR, never a bot, posts a PR comment that links that review's URL and does not start with the literal `<!-- pstack-recap:start -->` once leading whitespace is dropped. A marker later in the comment does not disqualify it. A push that moves the head clears the blocker without a comment, and only the latest 100 PR comments count.",
+   "claim": "The watcher stops with the review-findings blocker (exit 8) on a bot review of the current head whose body is in a format the watcher reads (today, Copilot's overview) and reports a finding that no thread carries, or whose body comes from Copilot and no format reads, until the PR author or an OWNER, MEMBER, or COLLABORATOR, never a bot, posts a PR comment that links that review's URL and does not start with the literal `<!-- pstack-recap:start -->` once leading whitespace is dropped. A marker later in the comment does not disqualify it. Another bot's body that no format reads only adds a note to READY and blocks nothing. A push that moves the head clears the blocker without a comment, and the watcher sees only the latest 100 reviews and the latest 100 PR comments.",
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/scripts/watch-pr/policy.ts",
