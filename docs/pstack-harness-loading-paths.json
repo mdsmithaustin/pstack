@@ -5,6 +5,7 @@
     "runtime": null,
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -18,14 +19,14 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/worklist.md",
           "bytes": 1824
         }
       ],
-      "bytes": 7330
+      "bytes": 7568
     }
   },
   {
@@ -34,6 +35,7 @@
     "runtime": null,
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -47,14 +49,14 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/questions.md",
           "bytes": 155
         }
       ],
-      "bytes": 5661
+      "bytes": 5899
     }
   },
   {
@@ -63,6 +65,7 @@
     "runtime": null,
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -76,14 +79,14 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/loops.md",
           "bytes": 333
         }
       ],
-      "bytes": 5839
+      "bytes": 6077
     }
   },
   {
@@ -92,6 +95,7 @@
     "runtime": "codex",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -109,15 +113,15 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
-          "bytes": 7280
+          "bytes": 8702
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3790
+          "bytes": 5349
         },
         {
           "path": "skills/pstack-harness/references/portable-paths.md",
@@ -128,7 +132,7 @@
           "bytes": 3122
         }
       ],
-      "bytes": 26950
+      "bytes": 30169
     }
   },
   {
@@ -137,6 +141,7 @@
     "runtime": "claude-code",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -154,15 +159,15 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
-          "bytes": 7280
+          "bytes": 8702
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3790
+          "bytes": 5349
         },
         {
           "path": "skills/pstack-harness/references/portable-paths.md",
@@ -173,7 +178,7 @@
           "bytes": 1364
         }
       ],
-      "bytes": 25192
+      "bytes": 28411
     }
   },
   {
@@ -182,6 +187,7 @@
     "runtime": "hermes",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -199,15 +205,15 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
-          "bytes": 7280
+          "bytes": 8702
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3790
+          "bytes": 5349
         },
         {
           "path": "skills/pstack-harness/references/portable-paths.md",
@@ -218,7 +224,7 @@
           "bytes": 547
         }
       ],
-      "bytes": 24375
+      "bytes": 27594
     }
   },
   {
@@ -227,6 +233,7 @@
     "runtime": "grok",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -244,15 +251,15 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
-          "bytes": 7280
+          "bytes": 8702
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3790
+          "bytes": 5349
         },
         {
           "path": "skills/pstack-harness/references/portable-paths.md",
@@ -263,7 +270,7 @@
           "bytes": 2608
         }
       ],
-      "bytes": 26436
+      "bytes": 29655
     }
   },
   {
@@ -272,6 +279,7 @@
     "runtime": "codex",
     "persona": true,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -293,15 +301,15 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/roles.md",
-          "bytes": 7280
+          "bytes": 8702
         },
         {
           "path": "skills/pstack-harness/references/delegation.md",
-          "bytes": 3790
+          "bytes": 5349
         },
         {
           "path": "skills/pstack-harness/references/portable-paths.md",
@@ -316,7 +324,7 @@
           "bytes": 2871
         }
       ],
-      "bytes": 29821
+      "bytes": 33040
     }
   },
   {
@@ -325,6 +333,7 @@
     "runtime": "hermes",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -338,7 +347,7 @@
       "files": [
         {
           "path": "skills/pstack-harness/SKILL.md",
-          "bytes": 5506
+          "bytes": 5744
         },
         {
           "path": "skills/pstack-harness/references/transcripts.md",
@@ -349,7 +358,7 @@
           "bytes": 174
         }
       ],
-      "bytes": 6102
+      "bytes": 6340
     }
   }
 ]
