@@ -3677,7 +3677,7 @@
     },
     {
      "file": "skills/pstack-harness/references/roles.md",
-     "quote": "pass `--work-model <model>@<effort>` with the model and effort that did the work, and use the printed arm."
+     "quote": "pass `--work-model '<model>@<effort>'` with the model and effort that did the work, and use the printed arm."
     }
    ],
    "harness_sensitive": false,
