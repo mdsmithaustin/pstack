@@ -185,6 +185,28 @@ describe('sketch tool', () => {
       expect(readdirSync(temp)).toEqual([]);
       expect(printedArgs(stderr, dir)).toEqual([...npx, renderer, scene, out]);
     });
+
+    for (const [name, versionLine] of [['prints nothing', ''], ['prints a current version', 'echo 1.4.0; ']]) {
+      nodeTest(`Node refuses when a bun on PATH exits 1 and ${name}`, () => {
+        const dir = oddDir('failing-bun');
+        const renderer = copySketch(dir);
+        const bin = join(dir, 'bin');
+        const temp = join(dir, 'tmp');
+        mkdirSync(bin);
+        mkdirSync(temp);
+        writeFileSync(join(bin, 'bun'), `#!/bin/sh\nif [ "$1" = "--version" ]; then ${versionLine}exit 1; fi\necho "$@" > "$PWD/installed-by-failing-bun"\nexit 1\n`, { mode: 0o755 });
+        const scene = join(dir, 'scene.json');
+        const out = join(dir, 'sketch.png');
+        const r = Bun.spawnSync([node, renderer, scene, out], { cwd: dir, env: { ...process.env, PATH: bin, TMPDIR: temp, TMP: temp, TEMP: temp } });
+        const stderr = r.stderr.toString();
+        expect(r.exitCode).toBe(2);
+        expect(stderr).toContain('no working bun on PATH');
+        expect(existsSync(join(dirname(renderer), 'installed-by-failing-bun'))).toBe(false);
+        expect(existsSync(join(dirname(renderer), 'node_modules'))).toBe(false);
+        expect(readdirSync(temp)).toEqual([]);
+        expect(printedArgs(stderr, dir)).toEqual([...npx, renderer, scene, out]);
+      });
+    }
   });
 
   test('a scene that is not an object, or a field that is not a number or a known word, exits 2', () => {
