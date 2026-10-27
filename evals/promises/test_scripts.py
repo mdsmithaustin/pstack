@@ -768,6 +768,7 @@ class BabysitWatcherPromises(GitHubSandbox):
         for label, comment in {
             "the PR author": self.comment(f"Disproved, the guard is in `write()`: {REVIEW_URL}", login="alice", association="NONE", n=2),
             "a maintainer": self.comment(f"Disproved: {REVIEW_URL}", login="maint", association="MEMBER", n=2),
+            "a comment that quotes the pr-recap marker after its first line": self.comment(f"Disproved: {REVIEW_URL}\n\n> <!-- pstack-recap:start -->", login="alice", association="NONE", n=2),
         }.items():
             with self.subTest(label):
                 self.state["comments"] = [comment]
