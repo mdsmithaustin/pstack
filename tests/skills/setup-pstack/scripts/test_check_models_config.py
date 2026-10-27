@@ -1162,6 +1162,62 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
                     },
                 )
 
+    def test_work_model_aliases_match_in_any_case_on_every_harness(self):
+        hermes_user = "## hermes\ntrail reviewer: model-a@high\n"
+        for harness, user in (
+            ("claude-code", OPERATOR_FILE), ("codex", OPERATOR_FILE), ("grok", OPERATOR_FILE), ("hermes", hermes_user),
+        ):
+            for written, lowered in (
+                ("AUTO", "auto"), ("Auto@high", "auto@high"), ("Inherit-Parent", "inherit-parent"),
+                ("OPUS@xhigh", "opus@xhigh"), ("Sonnet@high", "sonnet@high"),
+            ):
+                with self.subTest(harness=harness, work_model=written):
+                    self.assertEqual(
+                        self.reviewer(harness, written, user=user), self.reviewer(harness, lowered, user=user),
+                    )
+
+    def test_a_mixed_case_alias_is_not_a_literal_slug_on_hermes(self):
+        user = "## hermes\ntrail reviewer: model-a@high\n"
+        self.assertEqual(
+            self.reviewer("hermes", "Opus@xhigh", user=user)["notes"],
+            ["work model opus is not usable on hermes; no step applied"],
+        )
+
+    def test_a_mixed_case_claude_id_maps_to_its_alias(self):
+        self.assertEqual(
+            self.reviewer("claude-code", "Claude-Opus-5-5@xhigh"), self.reviewer("claude-code", "opus@xhigh"),
+        )
+
+    def test_a_work_model_with_a_provider_prefix_or_tag_exits_2_with_a_hint_to_use_the_bare_name(self):
+        for harness in ("hermes", "claude-code", "codex"):
+            for work_model, named in (
+                ("anthropic/claude-opus-4.7@high", "anthropic/claude-opus-4.7"),
+                ("qwen3:8b", "qwen3:8b"),
+            ):
+                with self.subTest(harness=harness, work_model=work_model):
+                    result = self.rejected(harness, work_model)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(result.stdout, "")
+                    self.assertIn(f"argument --work-model: invalid model name {named!r}", result.stderr)
+                    self.assertIn(
+                        "pass the bare model name with no provider prefix or tag, "
+                        "such as claude-opus-4.7 for anthropic/claude-opus-4.7, or omit --work-model",
+                        result.stderr,
+                    )
+
+    def test_an_invalid_work_model_name_without_a_prefix_or_tag_gets_no_hint(self):
+        result = self.rejected("hermes", "bad name")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid model name 'bad name'", result.stderr)
+        self.assertNotIn("provider prefix", result.stderr)
+
+    def test_a_dotted_bare_slug_is_a_valid_hermes_work_model(self):
+        user = "## hermes\ntrail reviewer: model-a@high\n"
+        self.assertEqual(
+            self.reviewer("hermes", "claude-opus-4.7@high", user=user),
+            {"role": "trail reviewer", "arm": 1, "model": "model-a", "effort": "high", "source": "user ## hermes"},
+        )
+
     def test_a_work_model_hermes_cannot_use_adds_a_note_and_applies_no_step(self):
         user = "## hermes\ntrail reviewer: model-a@high\n"
         self.assertEqual(

@@ -514,10 +514,12 @@ def _work_model(value: str) -> tuple[str, str | None]:
 
 def _claude_alias_of(model: str, harness: str) -> str:
     cli = CLIS[harness]
-    full_id = re.fullmatch(r"claude-([a-z]+)(?:-.*)?", model)
-    alias = full_id[1] if full_id else model
-    if alias in CLAUDE_ALIASES and (cli.native_aliases or alias in cli.translation):
-        return alias
+    lowered = model.lower()
+    if lowered in CLAUDE_ALIASES | OTHER_ALIASES:
+        return lowered
+    full_id = re.fullmatch(r"claude-([a-z]+)(?:-.*)?", lowered)
+    if full_id and full_id[1] in CLAUDE_ALIASES and (cli.native_aliases or full_id[1] in cli.translation):
+        return full_id[1]
     return model
 
 
@@ -534,7 +536,12 @@ def _resolve_main(argv: list[str]) -> int:
         work_name, work_written_effort = args.work_model
         work_name = _claude_alias_of(work_name, args.harness)
         if not _is_valid_model_name(work_name):
-            parser.error(f"argument --work-model: invalid model name {work_name!r}")
+            hint = (
+                "; pass the bare model name with no provider prefix or tag, "
+                "such as claude-opus-4.7 for anthropic/claude-opus-4.7, or omit --work-model"
+                if re.search(r"[/:]", work_name) else ""
+            )
+            parser.error(f"argument --work-model: invalid model name {work_name!r}{hint}")
         if CLIS[args.harness].native_aliases and work_name not in CLAUDE_ALIASES | OTHER_ALIASES:
             parser.error(
                 f"argument --work-model: {work_name!r} is not a Claude Code model; "
