@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / 'skills/pstack-harness/scripts/loading-path.py'
+RECEIPTS = ROOT / 'docs/pstack-harness-loading-paths.json'
 BASELINE = 'b5622490de2db0b32108bc071df32ae477f117fe'
 PREFIX = 'skills/pstack-harness/'
 
@@ -76,6 +78,39 @@ class HarnessLoadingPaths(unittest.TestCase):
             PREFIX + 'references/transcripts-hermes.md',
         ])
 
+    def test_recorded_receipts_match_the_script(self):
+        for entry in json.loads(RECEIPTS.read_text(encoding='utf-8')):
+            options = ['--baseline', entry['baseline'], '--action', entry['action']]
+            if entry['runtime']:
+                options += ['--runtime', entry['runtime']]
+            if entry['persona']:
+                options.append('--persona')
+            with self.subTest(options=options):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPT), *options], capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    json.loads(result.stdout), entry,
+                    'docs/pstack-harness-loading-paths.json is stale: regenerate this entry '
+                    'with loading-path.py ' + ' '.join(options),
+                )
+
+    def test_help_lists_every_action_and_what_a_baseline_needs(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), '--help'], capture_output=True, text=True, check=True,
+        )
+        help_text = ' '.join(result.stdout.split())
+        guide = (ROOT / PREFIX / 'SKILL.md').read_text(encoding='utf-8')
+        table = guide.split('## Runtime adapters\n', 1)[0]
+        actions = re.findall(r'^\| `([^`]+)` \|', table, re.MULTILINE)
+        self.assertTrue(actions)
+        for action in actions:
+            with self.subTest(action=action):
+                self.assertRegex(help_text, rf'[{{,]{re.escape(action)}[,}}]')
+        self.assertIn('Needs git on PATH and a pstack source checkout', help_text)
+        self.assertIn('symlinked install', help_text)
+
     def test_invalid_routes_fail_instead_of_emitting_an_empty_success(self):
         for options in (
             ['--action', 'unknown'], ['--action', 'spawn'],
@@ -137,6 +172,7 @@ class CopiesOutsideTheSourceCheckout(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, '')
         self.assertIn(f'git cannot open {self.root} as a repository', result.stderr)
+        self.assertIn('not a git repository', result.stderr)
         self.assertIn('omit --baseline', result.stderr)
         self.assertNotIn('Traceback', result.stderr)
 
@@ -150,11 +186,14 @@ class CopiesOutsideTheSourceCheckout(unittest.TestCase):
         self.assertNotIn('Traceback', result.stderr)
 
     def test_unavailable_baseline_names_the_missing_commit(self):
+        script = self.install(self.root)
+        self.git('init', '-q')
+        self.git('commit', '-q', '--allow-empty', '-m', 'empty')
         missing = '0' * 40
-        result = self.run_script(SCRIPT, '--baseline', missing)
+        result = self.run_script(script, '--baseline', missing)
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, '')
-        self.assertIn(f'baseline {missing} is not a commit in {ROOT}', result.stderr)
+        self.assertIn(f'baseline {missing} is not a commit in {self.root}', result.stderr)
         self.assertNotIn('Traceback', result.stderr)
 
     def test_baseline_before_the_harness_existed_names_the_missing_file(self):
@@ -164,6 +203,7 @@ class CopiesOutsideTheSourceCheckout(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, '')
         self.assertIn('baseline HEAD has no ' + PREFIX + 'SKILL.md', result.stderr)
+        self.assertIn("but not in 'HEAD'", result.stderr)
         self.assertNotIn('Traceback', result.stderr)
 
     def test_git_error_bytes_outside_the_locale_encoding_exit_with_a_message(self):
@@ -184,6 +224,48 @@ class CopiesOutsideTheSourceCheckout(unittest.TestCase):
                 self.assertEqual(result.stdout, '')
                 self.assertIn(message, result.stderr)
                 self.assertNotIn('Traceback', result.stderr)
+
+    def test_dubious_ownership_is_named_with_gits_safe_directory_hint(self):
+        script = self.install(self.root)
+        self.git('init', '-q')
+        self.git('commit', '-q', '--allow-empty', '-m', 'empty')
+        self.env['GIT_TEST_ASSUME_DIFFERENT_OWNER'] = '1'
+        result = self.run_script(script, '--baseline', 'HEAD')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, '')
+        self.assertIn(
+            f'git refuses to open the repository that holds {self.root} because another user '
+            'owns it', result.stderr)
+        self.assertIn('safe.directory', result.stderr)
+        self.assertIn('omit --baseline', result.stderr)
+        self.assertNotIn('not a pstack source checkout', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+
+    def test_symlinked_install_compares_against_the_target_repository(self):
+        target = self.root / 'clone'
+        project = self.root / 'project'
+        self.install(target)
+        guide = target / PREFIX / 'SKILL.md'
+        current = guide.read_bytes()
+        old = b'old guide\n'
+        guide.write_bytes(old)
+        self.git('-C', str(target), 'init', '-q')
+        self.git('-C', str(target), 'add', '-A', '--force')
+        self.git('-C', str(target), 'commit', '-qm', 'install')
+        commit = self.git('-C', str(target), 'rev-parse', 'HEAD')
+        guide.write_bytes(current)
+        (project / 'skills').mkdir(parents=True)
+        (project / 'skills/pstack-harness').symlink_to(target / PREFIX.rstrip('/'))
+        self.git('-C', str(project), 'init', '-q')
+        self.git('-C', str(project), 'commit', '-q', '--allow-empty', '-m', 'empty')
+        result = self.run_script(project / 'skills/pstack-harness/scripts/loading-path.py',
+                                 '--baseline', commit)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['before']['bytes'], len(old))
+        missing = self.run_script(project / 'skills/pstack-harness/scripts/loading-path.py',
+                                  '--baseline', '0' * 40)
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn(f'is not a commit in {target}', missing.stderr)
 
     def test_copy_inside_another_repository_compares_its_own_history(self):
         script = self.install(self.root / '.claude')

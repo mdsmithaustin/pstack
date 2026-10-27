@@ -8,12 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--action', required=True)
-parser.add_argument('--runtime', choices=['claude-code', 'codex', 'hermes', 'grok', 'other'])
-parser.add_argument('--persona', action='store_true')
-parser.add_argument('--baseline', help='Git commit containing the unsplit guide; omit for a current-only report')
-args = parser.parse_args()
 skill = Path(__file__).resolve().parents[1]
 project = skill.parents[1]
 main = skill / 'SKILL.md'
@@ -21,8 +15,17 @@ text = main.read_text(encoding='utf-8')
 tables = text.split('## Runtime adapters\n', 1)
 actions = dict(re.findall(r'^\| `([^`]+)` \| (.+) \|$', tables[0], re.MULTILINE))
 runtimes = dict(re.findall(r'^\| `([^`]+)` \| (.+) \|$', tables[1], re.MULTILINE))
-if args.action not in actions:
-    parser.error('unknown action: ' + args.action)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--action', required=True, choices=list(actions),
+                    help='Action whose loading path to report, as named in the harness skill')
+parser.add_argument('--runtime', choices=['claude-code', 'codex', 'hermes', 'grok', 'other'],
+                    help='Required for spawn and transcript')
+parser.add_argument('--persona', action='store_true', help='Add the persona contract; spawn only')
+parser.add_argument('--baseline', help='Git commit containing the unsplit guide; omit for a '
+                    'current-only report. Needs git on PATH and a pstack source checkout whose '
+                    'history holds the commit. The script resolves its own path first, so a '
+                    "symlinked install compares against the symlink target's repository.")
+args = parser.parse_args()
 if args.action in {'spawn', 'transcript'} and args.runtime is None:
     parser.error('--runtime is required for ' + args.action)
 if args.persona and args.action != 'spawn':
@@ -62,6 +65,10 @@ if args.baseline is not None:
         result.stderr = result.stderr.decode(locale.getpreferredencoding(False), 'replace').strip()
         return result
     opened = git('rev-parse', '--git-dir')
+    if opened.returncode and 'safe.directory' in opened.stderr:
+        sys.exit(f'loading-path.py: error: git refuses to open the repository that holds '
+                 f'{project} because another user owns it. Mark the directory safe as git '
+                 f'describes below, or omit --baseline for a current-only report.\n{opened.stderr}')
     if opened.returncode:
         sys.exit(f'loading-path.py: error: git cannot open {project} as a repository '
                  f'({opened.stderr}). --baseline reads the old guide from Git '
