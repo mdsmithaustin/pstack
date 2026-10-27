@@ -78,23 +78,47 @@ class HarnessLoadingPaths(unittest.TestCase):
             PREFIX + 'references/transcripts-hermes.md',
         ])
 
-    def test_recorded_receipts_match_the_script(self):
-        for entry in json.loads(RECEIPTS.read_text(encoding='utf-8')):
-            options = ['--baseline', entry['baseline'], '--action', entry['action']]
-            if entry['runtime']:
-                options += ['--runtime', entry['runtime']]
-            if entry['persona']:
-                options.append('--persona')
-            with self.subTest(options=options):
-                result = subprocess.run(
-                    [sys.executable, str(SCRIPT), *options], capture_output=True, text=True,
-                )
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(
-                    json.loads(result.stdout), entry,
-                    'docs/pstack-harness-loading-paths.json is stale: regenerate this entry '
-                    'with loading-path.py ' + ' '.join(options),
-                )
+    def test_recorded_receipts_match_the_script_at_the_commit_they_name(self):
+        entries = json.loads(RECEIPTS.read_text(encoding='utf-8'))
+        git_dir = subprocess.run(
+            ['git', '-C', str(ROOT), 'rev-parse', '--absolute-git-dir'],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+        env['GIT_DIR'] = git_dir
+        with tempfile.TemporaryDirectory() as tmp:
+            trees = {}
+            for entry in entries:
+                commit = entry['measured_at']
+                self.assertRegex(commit, r'^[0-9a-f]{40}$')
+                if commit not in trees:
+                    tree = Path(tmp) / commit
+                    tree.mkdir()
+                    archive = subprocess.run(
+                        ['git', '-C', str(ROOT), 'archive', commit, PREFIX.rstrip('/')],
+                        capture_output=True, check=True,
+                    ).stdout
+                    subprocess.run(['tar', '-x', '-C', str(tree)], input=archive, check=True)
+                    shutil.copy(SCRIPT, tree / PREFIX / 'scripts/loading-path.py')
+                    trees[commit] = tree / PREFIX / 'scripts/loading-path.py'
+                options = ['--baseline', entry['baseline'], '--action', entry['action']]
+                if entry['runtime']:
+                    options += ['--runtime', entry['runtime']]
+                if entry['persona']:
+                    options.append('--persona')
+                with self.subTest(options=options):
+                    result = subprocess.run(
+                        [sys.executable, str(trees[commit]), *options],
+                        capture_output=True, text=True, env=env,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    recorded = {key: value for key, value in entry.items() if key != 'measured_at'}
+                    self.assertEqual(
+                        json.loads(result.stdout), recorded,
+                        'docs/pstack-harness-loading-paths.json records a different report '
+                        f'than the script gives for the files at {commit}. Replace the entry '
+                        f'with this report plus "measured_at": "{commit}":\n{result.stdout}',
+                    )
 
     def test_help_lists_every_action_and_what_a_baseline_needs(self):
         result = subprocess.run(

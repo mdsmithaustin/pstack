@@ -5,6 +5,7 @@
     "runtime": null,
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -34,6 +35,7 @@
     "runtime": null,
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -63,6 +65,7 @@
     "runtime": null,
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -92,6 +95,7 @@
     "runtime": "codex",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -137,6 +141,7 @@
     "runtime": "claude-code",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -182,6 +187,7 @@
     "runtime": "hermes",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -227,6 +233,7 @@
     "runtime": "grok",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -272,6 +279,7 @@
     "runtime": "codex",
     "persona": true,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
@@ -325,6 +333,7 @@
     "runtime": "hermes",
     "persona": false,
     "baseline": "d3d8fd4d1354385390050a4e18e8cd579c565f75",
+    "measured_at": "5888efea1e21d67f110bb5a56984c52d4bc02d0a",
     "before": {
       "files": [
         {
