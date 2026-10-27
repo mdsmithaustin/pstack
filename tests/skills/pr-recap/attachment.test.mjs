@@ -110,6 +110,24 @@ describe('command line', () => {
     expect(noMarkers.code).toBe(1);
   });
 
+  test('check --no-image fails on a missing start marker, a missing end marker, and a record URL the body lacks', () => {
+    const head = 'abcd1234';
+    const record = url => `<!-- pstack-recap:sketch sha256=${sha256(png)} url=${url} -->\n`;
+    const cases = [
+      ['start marker', `Story.\n\n**Not covered.** x\n${head}\n${END}\n`, `the body does not start with ${START}`],
+      ['end marker', `${START}\nStory.\n\n**Not covered.** x\n${head}\n`, `the body lacks ${END}`],
+      ['record URL', `${START}\n${record(GHES)}Story.\n\n**Not covered.** x\n${head}\n${END}\n`, 'the recorded URL is not the image URL'],
+    ];
+    for (const [name, text, problem] of cases) {
+      expect(check(text, 'git.example.test', head, false).problems).toEqual([problem]);
+      const r = run(f => ['check', '--host', 'git.example.test', '--head', head, '--no-image', f.body], { body: text });
+      expect([name, r.code, r.err]).toEqual([name, 1, `${problem}\n`]);
+    }
+    const sketched = `${START}\n${record(GHES)}Story.\n\n${editorImg(GHES)}\n${head}\n${END}\n`;
+    const ok = run(f => ['check', '--host', 'git.example.test', '--head', head, '--no-image', f.body], { body: sketched });
+    expect([ok.code, ok.out]).toEqual([0, `${GHES}\n`]);
+  });
+
   test('url prints the normalized URL from pasted markup and exits 1 on a foreign one', () => {
     const ok = run(f => ['url', '--host', 'git.example.test', f.paste], { paste: editorImg(GHES) });
     expect([ok.code, ok.out]).toEqual([0, `${GHES}\n`]);
