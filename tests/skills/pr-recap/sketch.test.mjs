@@ -201,7 +201,7 @@ describe('sketch tool', () => {
         const stderr = r.stderr.toString();
         expect(r.exitCode).toBe(2);
         expect(stderr).toContain('no working bun on PATH');
-        expect(existsSync(join(dir, 'installed-by-failing-bun'))).toBe(false);
+        expect(existsSync(join(dirname(renderer), 'installed-by-failing-bun'))).toBe(false);
         expect(existsSync(join(dirname(renderer), 'node_modules'))).toBe(false);
         expect(readdirSync(temp)).toEqual([]);
         expect(printedArgs(stderr, dir)).toEqual([...npx, renderer, scene, out]);
