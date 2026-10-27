@@ -106,7 +106,14 @@ It prints the new comment's URL. Its `#issuecomment-<id>` is `<keep>`. Read that
 
 When `gh` refuses the upload, or has no `--attach`, the CLI cannot upload to this host. Classify it once as a CLI limitation. GHES can reject the upload. It does not show that the repository disallows attachments. Do not retry the route.
 
-- **The user authorized a manual upload.** Give the user the absolute path of `sketch.png`. Ask them to drag it into a comment box on the PR in the web UI, without submitting, and paste back the URL or the `![...](...)` or `<img>` markup that appears. Write the paste to `paste.txt` and run `url --host <host> paste.txt`. It accepts the markup forms and prints the bare URL, or exits 1 for any other host or path. When it exits 1, the paste is not an attachment on this host: treat it as upload unavailable, do not guess the URL, and take the no-authorization path. Otherwise run `stamp --host <host> sketch.png recap.md "$url" > body.md`. PATCH `current` with `body.md` (`<keep>` is `current`), or when there is none, POST it with `gh api --hostname <host> -X POST "repos/<owner>/<repo>/issues/<n>/comments" -f body="$(cat body.md)"` and take `<keep>` from the returned `id`.
+- **The user authorized a manual upload.** Give the user the absolute path of `sketch.png`. Ask them to drag it into a comment box on the PR in the web UI, without submitting, and paste back the URL or the `![...](...)` or `<img>` markup that appears. Write the paste to `paste.txt` and run this block:
+
+  ```sh
+  url=$(bun "<skill>/scripts/attachment.mjs" url --host <host> paste.txt) &&
+  bun "<skill>/scripts/attachment.mjs" stamp --host <host> sketch.png recap.md "$url" > body.md
+  ```
+
+  `url` accepts the markup forms and prints the bare URL, or exits 1 for any other host or path. When it exits 1, the paste is not an attachment on this host. Treat it as upload unavailable, do not guess the URL, and take the no-authorization path. When the block exits 0, PATCH `current` with `body.md` (`<keep>` is `current`), or when there is none, POST it with `gh api --hostname <host> -X POST "repos/<owner>/<repo>/issues/<n>/comments" -f body="$(cat body.md)"` and take `<keep>` from the returned `id`.
 - **No authorization.** Remove the image line from `recap.md`. Write that body over `current`, or post it when there is none, and take `<keep>`. Report `upload unavailable: <the gh error>`.
 
 4. Delete every other recap of yours, so the PR keeps one.
