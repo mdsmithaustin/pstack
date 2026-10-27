@@ -517,7 +517,7 @@ def _claude_alias_of(model: str, harness: str) -> str:
     lowered = model.lower()
     if lowered in CLAUDE_ALIASES | OTHER_ALIASES:
         return lowered
-    full_id = re.fullmatch(r"claude-([a-z]+)(?:-.*)?", lowered)
+    full_id = re.fullmatch(r"claude-([a-z]+)(?:-[^/:]*)?", lowered)
     if full_id and full_id[1] in CLAUDE_ALIASES and (cli.native_aliases or full_id[1] in cli.translation):
         return full_id[1]
     return model

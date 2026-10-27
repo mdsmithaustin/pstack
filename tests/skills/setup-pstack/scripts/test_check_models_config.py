@@ -1189,10 +1189,12 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
         )
 
     def test_a_work_model_with_a_provider_prefix_or_tag_exits_2_with_a_hint_to_use_the_bare_name(self):
-        for harness in ("hermes", "claude-code", "codex"):
+        for harness in ("hermes", "claude-code", "codex", "grok"):
             for work_model, named in (
                 ("anthropic/claude-opus-4.7@high", "anthropic/claude-opus-4.7"),
                 ("qwen3:8b", "qwen3:8b"),
+                ("claude-opus-4.7/tag@high", "claude-opus-4.7/tag"),
+                ("claude-opus-4.7:tag", "claude-opus-4.7:tag"),
             ):
                 with self.subTest(harness=harness, work_model=work_model):
                     result = self.rejected(harness, work_model)
