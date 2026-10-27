@@ -78,8 +78,12 @@ jobs:
       - name: pr-recap sketch tests
         working-directory: skills/pr-recap/scripts/sketch
         run: bun run test
+      - name: Install statechart test dependencies
+        working-directory: tests/skills/statechart/scripts
+        run: bun install --frozen-lockfile
       - name: statechart script tests
-        run: node --test tests/skills/statechart/scripts/test/*.test.mjs
+        working-directory: tests/skills/statechart/scripts
+        run: bun run test
   worktree-audit:
     runs-on: ubuntu-latest
     steps:

@@ -1,0 +1,70 @@
+strict digraph DiskGraph {
+nodesep=0.35;
+subgraph cluster_graph {
+color="white";
+100002 [label="/\\ done = FALSE\n/\\ x = 0",style = filled]
+100002 -> 100003 [label="Pick",color="black",fontcolor="black"];
+100003 [label="/\\ done = FALSE\n/\\ x = 1"];
+100002 -> 100004 [label="Pick",color="black",fontcolor="black"];
+100004 [label="/\\ done = FALSE\n/\\ x = 2"];
+100002 -> 100005 [label="Pick",color="black",fontcolor="black"];
+100005 [label="/\\ done = FALSE\n/\\ x = 3"];
+100002 -> 100006 [label="Pick",color="black",fontcolor="black"];
+100006 [label="/\\ done = FALSE\n/\\ x = 4"];
+100002 -> 100007 [label="Pick",color="black",fontcolor="black"];
+100007 [label="/\\ done = FALSE\n/\\ x = 5"];
+100002 -> 100008 [label="Pick",color="black",fontcolor="black"];
+100008 [label="/\\ done = FALSE\n/\\ x = 6"];
+100002 -> 100009 [label="Pick",color="black",fontcolor="black"];
+100009 [label="/\\ done = FALSE\n/\\ x = 7"];
+100002 -> 100010 [label="Pick",color="black",fontcolor="black"];
+100010 [label="/\\ done = FALSE\n/\\ x = 8"];
+100002 -> 100011 [label="Pick",color="black",fontcolor="black"];
+100011 [label="/\\ done = FALSE\n/\\ x = 9"];
+100002 -> 100012 [label="Pick",color="black",fontcolor="black"];
+100012 [label="/\\ done = FALSE\n/\\ x = 10"];
+100002 -> 100013 [label="Pick",color="black",fontcolor="black"];
+100013 [label="/\\ done = FALSE\n/\\ x = 11"];
+100002 -> 100014 [label="Pick",color="black",fontcolor="black"];
+100014 [label="/\\ done = FALSE\n/\\ x = 12"];
+100003 -> 100015 [label="Finish",color="black",fontcolor="black"];
+100015 [label="/\\ done = TRUE\n/\\ x = 1"];
+100004 -> 100016 [label="Finish",color="black",fontcolor="black"];
+100016 [label="/\\ done = TRUE\n/\\ x = 2"];
+100005 -> 100017 [label="Finish",color="black",fontcolor="black"];
+100017 [label="/\\ done = TRUE\n/\\ x = 3"];
+100006 -> 100018 [label="Finish",color="black",fontcolor="black"];
+100018 [label="/\\ done = TRUE\n/\\ x = 4"];
+100007 -> 100019 [label="Finish",color="black",fontcolor="black"];
+100019 [label="/\\ done = TRUE\n/\\ x = 5"];
+100008 -> 100020 [label="Finish",color="black",fontcolor="black"];
+100020 [label="/\\ done = TRUE\n/\\ x = 6"];
+100009 -> 100021 [label="Finish",color="black",fontcolor="black"];
+100021 [label="/\\ done = TRUE\n/\\ x = 7"];
+100010 -> 100022 [label="Finish",color="black",fontcolor="black"];
+100022 [label="/\\ done = TRUE\n/\\ x = 8"];
+100011 -> 100023 [label="Finish",color="black",fontcolor="black"];
+100023 [label="/\\ done = TRUE\n/\\ x = 9"];
+100012 -> 100024 [label="Finish",color="black",fontcolor="black"];
+100024 [label="/\\ done = TRUE\n/\\ x = 10"];
+100013 -> 100025 [label="Finish",color="black",fontcolor="black"];
+100025 [label="/\\ done = TRUE\n/\\ x = 11"];
+100014 -> 100026 [label="Finish",color="black",fontcolor="black"];
+100026 [label="/\\ done = TRUE\n/\\ x = 12"];
+100015 -> 100002 [label="Again",color="black",fontcolor="black"];
+100016 -> 100002 [label="Again",color="black",fontcolor="black"];
+100017 -> 100002 [label="Again",color="black",fontcolor="black"];
+100018 -> 100002 [label="Again",color="black",fontcolor="black"];
+100019 -> 100002 [label="Again",color="black",fontcolor="black"];
+100020 -> 100002 [label="Again",color="black",fontcolor="black"];
+100021 -> 100002 [label="Again",color="black",fontcolor="black"];
+100022 -> 100002 [label="Again",color="black",fontcolor="black"];
+100023 -> 100002 [label="Again",color="black",fontcolor="black"];
+100024 -> 100002 [label="Again",color="black",fontcolor="black"];
+100025 -> 100002 [label="Again",color="black",fontcolor="black"];
+100026 -> 100002 [label="Again",color="black",fontcolor="black"];
+{rank = same; 100002;}
+{rank = same; 100011;100004;100008;100012;100003;100007;100013;100006;100010;100014;100005;100009;}
+{rank = same; 100016;100020;100023;100015;100019;100024;100018;100025;100017;100021;100022;100026;}
+}
+}

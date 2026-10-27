@@ -3424,81 +3424,21 @@
    ],
    "scenario": "autopilot-stack-run"
   },
-  "statechart-audit-marks-differences-and-bug-paths": {
-   "check": "static",
-   "claim": "In an audit, the chart marks the steps where the code model and the spec differ, and each rule either breaks is a numbered path.",
-   "evidence": [
-    {
-     "file": "skills/statechart/scripts/statechart-help.mjs",
-     "quote": "state takes the worse of its two models' colors"
-    },
-    {
-     "file": "skills/statechart/scripts/statechart-help.mjs",
-     "quote": "A label \"with the fix, STEP\" or \"in the spec, STEP\" is a step that only the other model takes."
-    },
-    {
-     "file": "skills/statechart/scripts/statechart-help.mjs",
-     "quote": "A thick blue border and numbered labels mark the bug."
-    }
-   ],
-   "harness_sensitive": false,
-   "owners": [
-    "skills/statechart/scripts/statechart.mjs",
-    "skills/statechart/scripts/statechart-help.mjs"
-   ]
-  },
-  "statechart-audits-code-against-spec": {
-   "check": "static",
-   "claim": "When the code has a TLA+ spec, /statechart audits the code by modeling what it does and checking that model beside the unchanged spec.",
-   "evidence": [
-    {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "To audit the code against that spec, make the copy model what the code does, and pass the spec unchanged as `--against`."
-    }
-   ],
-   "harness_sensitive": false,
-   "owners": [
-    "skills/statechart/SKILL.md",
-    "skills/statechart/scripts/statechart.mjs"
-   ]
-  },
-  "statechart-checks-agreed-chart-rules-before-code": {
-   "check": "static",
-   "claim": "TLC checks the agreed chart's rules before any code is written or changed.",
-   "evidence": [
-    {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "Use `from-chart` when there is no model, and the people who own the behavior should agree on it before anyone builds or changes it."
-    },
-    {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "Add one `%% never` line per rule, with the reader's sentence."
-    },
-    {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "If a rule breaks, the agreed chart has a design bug."
-    }
-   ],
-   "harness_sensitive": false,
-   "owners": [
-    "skills/statechart/SKILL.md"
-   ]
-  },
   "statechart-draws-user-view-from-tla-model": {
    "check": "static",
    "claim": "/statechart draws what the user sees as a Mermaid statechart generated from a TLA+ model.",
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Draw how any system moves between states, such as a product flow, a protocol, or a service, as a Mermaid statechart from a TLA+ model."
+     "quote": "Check a TLA+ model of a system that moves between states, such as a product flow, a protocol, or a service, and draw it as a Mermaid statechart."
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Label each state with what the reader can observe or cares about, such as \"Paying\" in an app"
+     "quote": "Label each state with what the reader can see or cares about, such as \"Paying\" or \"Lease held, write pending\"."
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Run `from-spec`, then fill in the mapping file it writes."
+     "quote": "To show the reader's words, the view exports `state(vars)`."
     }
    ],
    "harness_sensitive": false,
@@ -3508,34 +3448,30 @@
   },
   "statechart-marks-states-and-numbers-bug-paths": {
    "check": "static",
-   "claim": "Each bug TLC finds is drawn as a numbered path in the reader's words, and each state is marked as working, still wrong, or fixed by the open fix.",
+   "claim": "The chart marks each state that breaks a rule, and the report gives the shortest path to it in the reader's words.",
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Each bug is a numbered path with blue borders to a state that breaks a rule."
-    },
-    {
-     "file": "skills/statechart/scripts/statechart-help.mjs",
-     "quote": "Gray states work. Red states break a rule."
+     "quote": "The report gives the shortest path to each state that breaks a rule."
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Keep variable and action names out of labels."
+     "quote": "In the chart, a state that breaks a rule has the class `breaks`."
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "If there is a proposed fix, model it and pass that model as `--fixed`."
+     "quote": "Keep variable names out of labels."
     },
     {
-     "file": "skills/statechart/scripts/statechart-help.mjs",
-     "quote": "fix, and green states are fixed by it or exist only with it."
+     "file": "skills/statechart/SKILL.md",
+     "quote": "Write each step label as the user sees it happen"
     }
    ],
    "harness_sensitive": false,
    "owners": [
     "skills/statechart/SKILL.md",
-    "skills/statechart/scripts/statechart.mjs",
-    "skills/statechart/scripts/statechart-help.mjs"
+    "skills/statechart/scripts/passes/annotate.ts",
+    "skills/statechart/scripts/backends/report.ts"
    ]
   },
   "statechart-reader-rules-become-invariants": {
@@ -3544,11 +3480,11 @@
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Write each rule that the reader agrees to as one invariant, with the reader's sentence as its comment."
+     "quote": "Write each rule that the reader agrees to as an INVARIANT."
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "Never weaken a rule to make the chart pass."
+     "quote": "Never weaken a rule to make it hold."
     }
    ],
    "harness_sensitive": false,
@@ -3562,54 +3498,16 @@
    "evidence": [
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "When the model describes code, replay each bug's story against the real code, as a test or a live repro, one step per model action."
+     "quote": "When the model describes code, replay each bug path against the real code, as a test or a live repro, one step for each action."
     },
     {
      "file": "skills/statechart/SKILL.md",
-     "quote": "If a bug does not reproduce, assume the model is wrong until you show otherwise."
+     "quote": "If a bug does not occur, think that the model is wrong until you show that it is not."
     }
    ],
    "harness_sensitive": false,
    "owners": [
     "skills/statechart/SKILL.md"
-   ]
-  },
-  "statechart-shows-code-chart-differences": {
-   "check": "static",
-   "claim": "After the real code's guards go into the spec, each difference from the agreed chart goes to the reader to decide.",
-   "evidence": [
-    {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "For each difference it prints, ask the reader whether the code is wrong or the chart needs a correction."
-    }
-   ],
-   "harness_sensitive": false,
-   "owners": [
-    "skills/statechart/SKILL.md",
-    "skills/statechart/scripts/compare-charts.mjs"
-   ]
-  },
-  "statechart-writes-tla-skeleton-from-agreed-chart": {
-   "check": "static",
-   "claim": "From an agreed chart, /statechart writes a TLA+ skeleton.",
-   "evidence": [
-    {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "turn an agreed chart into a TLA+ skeleton"
-    },
-    {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "Draw the chart that the reader agrees to."
-    },
-    {
-     "file": "skills/statechart/SKILL.md",
-     "quote": "Add the real code's guards and variables to the spec that `from-chart` wrote"
-    }
-   ],
-   "harness_sensitive": false,
-   "owners": [
-    "skills/statechart/SKILL.md",
-    "skills/statechart/scripts/chart-to-tla.mjs"
    ]
   },
   "status-only-reports-doc-results-pending": {
@@ -5733,15 +5631,6 @@
    ],
    "text": "pstack ships 24 principles as individual skills."
   },
-  "3125a7906580": {
-   "class": "context",
-   "file": "06-verify-and-ship.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It also runs the other way."
-  },
   "317dfe8ba6bf": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -6821,16 +6710,6 @@
    ],
    "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
   },
-  "4d1cb0a44dea": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "statechart-audit-marks-differences-and-bug-paths",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "The chart marks the steps where the two differ, and each rule either one breaks is a numbered path."
-  },
   "4d1f50b5fd58": {
    "class": "context",
    "file": "07-overnight.md",
@@ -7907,16 +7786,6 @@
    ],
    "text": "[`/swarm`](../../skills/swarm/SKILL.md) fans N workers across independent slices, coverage matrices, gauntlet lanes, exploration partitions, or declared race arms."
   },
-  "6be213a62bdb": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "statechart-marks-states-and-numbers-bug-paths",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Each bug TLC finds is a numbered path in the reader's words, and each state is marked works, still wrong, or fixed by your open PR."
-  },
   "6becdca4aa3d": {
    "class": "promise",
    "file": "08-principles.md",
@@ -8647,16 +8516,6 @@
     "port"
    ],
    "text": "Approve a proposal only if it would change a future decision."
-  },
-  "8034eaf910bb": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "statechart-shows-code-chart-differences",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "As guards from the real code go into the spec, each place the code departs from the chart shows up as a difference for the reader to decide."
   },
   "8041ff5e31b1": {
    "class": "context",
@@ -9511,16 +9370,6 @@
     "port"
    ],
    "text": "When a skill keeps missing and you know what it should do, change and test it in one task:"
-  },
-  "9caabe32f064": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "statechart-audits-code-against-spec",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "When the code already has a TLA+ spec, the skill can audit the code against it."
   },
   "9d40f211b151": {
    "class": "promise",
@@ -11197,16 +11046,6 @@
    ],
    "text": "Missing runtime evidence leaves an attempt uncertain."
   },
-  "c6e19df9605c": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "statechart-writes-tla-skeleton-from-agreed-chart",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Sketch the behavior as a chart, agree on it with the reader, and the skill writes a TLA+ skeleton from it."
-  },
   "c6f75c4a665a": {
    "class": "substituted",
    "file": "README.md",
@@ -11410,16 +11249,6 @@
     "port"
    ],
    "text": "The playbook already sequences them, and a hand-written sequence usually reorders or drops steps the playbook would have kept."
-  },
-  "cd34560e22a7": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "statechart-audits-code-against-spec",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "The agent models what the code does and checks that model next to the unchanged spec."
   },
   "cda575a11923": {
    "class": "promise",
@@ -12491,6 +12320,16 @@
    ],
    "text": "That's the guide."
   },
+  "e96967fa8e02": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "statechart-marks-states-and-numbers-bug-paths",
+   "sources": [
+    "upstream",
+    "port"
+   ],
+   "text": "The chart marks each state that breaks a rule, and the report gives the shortest path to it in the reader's words."
+  },
   "e97938698cf8": {
    "also": [
     "verification-skill-written-to-agents-skills"
@@ -12971,16 +12810,6 @@
     "port"
    ],
    "text": "When the findings point at a fix, start the fix as a new task."
-  },
-  "f498d5e7a809": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "statechart-checks-agreed-chart-rules-before-code",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "TLC checks the agreed chart's rules before any code exists."
   },
   "f4c94ee7fe28": {
    "class": "cursor-only",

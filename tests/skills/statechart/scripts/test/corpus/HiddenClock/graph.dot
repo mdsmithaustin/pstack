@@ -1,0 +1,12 @@
+strict digraph DiskGraph {
+nodesep=0.35;
+subgraph cluster_graph {
+color="white";
+100002 [label="/\\ x = 0\n/\\ clock = 0",style = filled]
+100002 -> 100003 [label="Tick",color="black",fontcolor="black"];
+100003 [label="/\\ x = 1\n/\\ clock = 1"];
+100003 -> 100003 [label="Tick",color="black",fontcolor="black"];
+{rank = same; 100002;}
+{rank = same; 100003;}
+}
+}
