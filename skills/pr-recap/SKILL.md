@@ -7,7 +7,7 @@ description: Write or refresh a visual recap of a GitHub pull request for its re
 
 Write one recap of a pull request for the people who review it. A reviewer should understand from the first screen why the change exists, what it changes, and how. The recap points into the diff. It does not replace reading the diff.
 
-Run this workflow locally. The recap is one PR comment: GitHub Markdown plus one PNG that `gh` attaches. It needs `gh`, and for the sketch, Bun and the bundled sketch tool. It posts nothing to any other host.
+Run this workflow locally. The recap is one PR comment: GitHub Markdown plus one PNG uploaded to the PR's own host. It needs `gh`, and for the sketch, Bun and the bundled sketch tool. It posts nothing to any other host.
 
 ## Decide whether the PR gets a recap
 
@@ -71,22 +71,67 @@ Keep the marks in your notes, not in the comment. Report the counts in your repl
 
 ## Post or update the comment
 
-Write the recap to `recap.md` in the same work folder, including when the sketch is skipped. Run the posting commands from that folder. The image line must name the file you attach, as `![<alt text>](./sketch.png)` for `--attach sketch.png`. `gh` uploads the attachment and rewrites that link.
+Write the recap to `recap.md` in the same work folder, including when the sketch is skipped. With a sketch, the image line is `![<alt text>](./sketch.png)`. Run every command from that folder. `attachment.mjs` is `<skill>/scripts/attachment.mjs`. Run it with `bun` or `node`. Pass the PR's host as `--host`.
+
+The comment records its sketch on the line after the start marker: `<!-- pstack-recap:sketch sha256=<sketch hash> url=<attachment URL> -->`. The next refresh reads it back and reuses the upload when the sketch is unchanged. The comment ID is not recorded, because a comment cannot hold its own ID. Find your recap comments by the start marker and author.
+
+Without a sketch, do step 1, skip steps 2 and 3, and write `recap.md` over `current` with `gh api --hostname <host> -X PATCH "repos/<owner>/<repo>/issues/comments/<current>" -f body="$(cat recap.md)"`. When there is none, run `gh pr comment <n> -R <host>/<owner>/<repo> --body-file recap.md`. Take `<keep>` from the comment, then go to step 4.
+
+1. List your recap comments, oldest first. The last one is `current`. Without one, go to step 3.
+
+```sh
+me=$(gh api --hostname <host> user --jq .login)
+gh api --hostname <host> --paginate "repos/<owner>/<repo>/issues/<n>/comments" \
+	--jq ".[] | select(.user.login == \"$me\" and (.body | startswith(\"<!-- pstack-recap:start -->\"))) | .id"
+gh api --hostname <host> "repos/<owner>/<repo>/issues/comments/<current>" --jq .body > old.md
+```
+
+2. Reuse the upload. `reuse` prints the recorded URL only when `old.md` records the hash of this `sketch.png`. Then `stamp` puts that URL and a fresh record into the new body, and the API writes it over `current`. No attach runs.
+
+```sh
+url=$(bun "<skill>/scripts/attachment.mjs" reuse --host <host> sketch.png old.md) &&
+bun "<skill>/scripts/attachment.mjs" stamp --host <host> sketch.png recap.md "$url" > body.md &&
+gh api --hostname <host> -X PATCH "repos/<owner>/<repo>/issues/comments/<current>" -f body="$(cat body.md)"
+```
+
+Keep `<current>` as `<keep>` and go to step 4. When `reuse` exits 1, the sketch changed or the comment has no record, so upload.
+
+3. Upload the sketch. Try the CLI once:
 
 ```sh
 gh pr comment <n> -R <host>/<owner>/<repo> --body-file recap.md --attach sketch.png
 ```
 
-The command prints the new comment URL. Then delete your older recap comment, so the PR keeps one recap:
+It prints the new comment's URL. Its `#issuecomment-<id>` is `<keep>`. Read that comment's body into `new.md` with `gh api --hostname <host> "repos/<owner>/<repo>/issues/comments/<keep>" --jq .body > new.md`, run `stamp --host <host> sketch.png new.md > body.md`, and PATCH `<keep>` with `body.md`. Go to step 4.
+
+When `gh` refuses the upload, or has no `--attach`, the CLI cannot upload to this host. Classify it once as a CLI limitation. GHES can reject the upload. It does not show that the repository disallows attachments. Do not retry the route.
+
+- **The user authorized a manual upload.** Give the user the absolute path of `sketch.png`. Ask them to drag it into a comment box on the PR in the web UI, without submitting, and paste back the URL or the `![...](...)` or `<img>` markup that appears. Write the paste to `paste.txt` and run `url --host <host> paste.txt`. It accepts the markup forms and prints the bare URL, or exits 1 for any other host or path. When it exits 1, the paste is not an attachment on this host: treat it as upload unavailable, do not guess the URL, and take the no-authorization path. Otherwise run `stamp --host <host> sketch.png recap.md "$url" > body.md`. PATCH `current` with `body.md` (`<keep>` is `current`), or when there is none, POST it with `gh api --hostname <host> -X POST "repos/<owner>/<repo>/issues/<n>/comments" -f body="$(cat body.md)"` and take `<keep>` from the returned `id`.
+- **No authorization.** Remove the image line from `recap.md`. Write that body over `current`, or post it when there is none, and take `<keep>`. Report `upload unavailable: <the gh error>`.
+
+4. Delete every other recap of yours, so the PR keeps one.
 
 ```sh
 me=$(gh api --hostname <host> user --jq .login)
 gh api --hostname <host> --paginate "repos/<owner>/<repo>/issues/<n>/comments" \
-	--jq ".[] | select(.user.login == \"$me\" and (.body | startswith(\"<!-- pstack-recap:start -->\"))) | .id" |
-	sed '$d' | while read -r id; do gh api --hostname <host> -X DELETE "repos/<owner>/<repo>/issues/comments/$id"; done
+	--jq ".[] | select(.user.login == \"$me\" and (.body | startswith(\"<!-- pstack-recap:start -->\")) and .id != <keep>) | .id" |
+	while read -r id; do gh api --hostname <host> -X DELETE "repos/<owner>/<repo>/issues/comments/$id"; done
 ```
 
-Read the new comment back with `gh api --hostname <host> "repos/<owner>/<repo>/issues/comments/<id>" --jq .body`. Confirm it holds both markers and the head SHA you recorded. When you attach a sketch, also confirm a `user-attachments` image link. Without a sketch, post with `--body-file recap.md` alone.
+5. Check the saved comment, count your recaps, then check that the image renders. Report the upload, the saved comment, and the render as three separate outcomes.
+
+```sh
+me=$(gh api --hostname <host> user --jq .login)
+gh api --hostname <host> --paginate "repos/<owner>/<repo>/issues/<n>/comments" \
+	--jq ".[] | select(.user.login == \"$me\" and (.body | startswith(\"<!-- pstack-recap:start -->\"))) | .id" | grep -c .
+gh api --hostname <host> "repos/<owner>/<repo>/issues/comments/<keep>" --jq .body > saved.md
+bun "<skill>/scripts/attachment.mjs" check --host <host> --head <head SHA, 8 characters> saved.md
+curl -s -o /dev/null -w '%{http_code} %{content_type}' -L -H "Authorization: Bearer $(gh auth token --hostname <host>)" "<url that check printed>"
+```
+
+`check` confirms the start marker, the end marker, the head SHA, and an image on this host in either form. When a record is present, it checks that the recorded URL is an image URL in the body. It does not require a record or verify its hash. Read its error to identify which check failed. The count must print `1`. Any other number means step 4 failed, so run it again. The fetch must print `200 image/png`. A 404 means the asset is unavailable to this request. When a reused URL fails the fetch, treat the record as dead and upload again from step 3. A signed-out fetch can fail on a working upload, so it proves nothing. Without a sketch, run `check` with `--no-image`, which checks the markers and the head SHA only, and skip the fetch.
+
+The editor's `<img width=... alt=... src="...">` markup passes `url` and `check`. Author the recap with the Markdown image form and the alt text from [the block](references/block.md). `stamp` preserves the image form in the body it reads. Hosting the image in the repository or as a release asset is not part of this skill.
 
 Post it as a PR comment, never in the PR body. In a repository gated by no-mistakes, the gate owns the PR body.
 
