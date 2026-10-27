@@ -17,8 +17,8 @@ const IMAGE_FORMS = [
 
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
-// GitHub's docs do not publish the attachment URL shape. This is the shape that github.com and a GHES
-// instance returned for a native upload.
+// github.com and a GHES instance returned this shape for a native upload. GitHub's docs show it only for
+// GHE.com, and the GHES subdomain isolation page never mentions it, so isolated GHES hosts stay refused.
 export function acceptedUrl(url, host) {
   const m = new RegExp(`^https://([^/]+)/user-attachments/assets/${UUID}$`).exec(url);
   return m !== null && m[1].toLowerCase() === host.toLowerCase();
