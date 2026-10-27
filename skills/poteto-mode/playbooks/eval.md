@@ -26,6 +26,6 @@
 
    Keep raw grades separate from validity notes for each affected criterion. State whether its observations precede or follow confirmed exposure, or whether their timing is unverified. Preserve earlier observations with their coverage limits. After confirmed exposure, mark affected later observations unsupported as blinded comparison evidence. Unverified coverage cannot establish blinding. Claim behavioral influence or changed judgments only when distinguishing evidence supports it. Limit the promotion recommendation to comparison evidence that remains valid.
 
-   When a human picks between candidate outputs, show what the existing code already does beside every choice. State it as a fact, never as a recommendation. A person who doesn't know the codebase can't tell which option keeps an established pattern and which overrules it, so a pick made without that fact doesn't measure their taste for consistency.
+   When a human picks between candidate outputs, show what the existing code already does beside every choice. State it as a fact, never as a recommendation. When no pattern exists, or both styles do, say so. A person who doesn't know the codebase can't tell which option keeps an established pattern. A pick made without that fact doesn't measure their taste for consistency.
 
 **Reply:** variant under test, rubric, per-candidate notes, judge's verdict, your synthesis, and a recommendation for whether to promote the variant.
