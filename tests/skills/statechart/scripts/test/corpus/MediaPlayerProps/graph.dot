@@ -1,0 +1,93 @@
+strict digraph DiskGraph {
+nodesep=0.35;
+subgraph cluster_graph {
+color="white";
+100002 [label="/\\ volume = \"Normal volume\"\n/\\ playback = \"Stopped\"",style = filled]
+100002 -> 100003 [label="YouPressPlay",color="black",fontcolor="black"];
+100003 [label="/\\ volume = \"Normal volume\"\n/\\ playback = \"Buffering\""];
+100002 -> 100004 [label="ACallComesIn",color="black",fontcolor="black"];
+100004 [label="/\\ volume = \"Muted\"\n/\\ playback = \"Stopped\""];
+100002 -> 100005 [label="YouTurnItUp",color="black",fontcolor="black"];
+100005 [label="/\\ volume = \"Loud\"\n/\\ playback = \"Stopped\""];
+100002 -> 100004 [label="YouPressMute",color="black",fontcolor="black"];
+100003 -> 100006 [label="EnoughDataArrives",color="black",fontcolor="black"];
+100006 [label="/\\ volume = \"Normal volume\"\n/\\ playback = \"Playing\""];
+100003 -> 100007 [label="ACallComesIn",color="black",fontcolor="black"];
+100007 [label="/\\ volume = \"Muted\"\n/\\ playback = \"Buffering\""];
+100003 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100003 -> 100008 [label="YouTurnItUp",color="black",fontcolor="black"];
+100008 [label="/\\ volume = \"Loud\"\n/\\ playback = \"Buffering\""];
+100003 -> 100007 [label="YouPressMute",color="black",fontcolor="black"];
+100004 -> 100007 [label="YouPressPlay",color="black",fontcolor="black"];
+100004 -> 100002 [label="YouPressMute",color="black",fontcolor="black"];
+100004 -> 100002 [label="TheCallEnds",color="black",fontcolor="black"];
+100005 -> 100008 [label="YouPressPlay",color="black",fontcolor="black"];
+100005 -> 100004 [label="ACallComesIn",color="black",fontcolor="black"];
+100005 -> 100002 [label="TheTrackEnds",color="black",fontcolor="black"];
+100005 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100005 -> 100002 [label="YouTurnItDown",color="black",fontcolor="black"];
+100005 -> 100004 [label="YouPressMute",color="black",fontcolor="black"];
+100006 -> 100003 [label="TheNetworkSlows",color="black",fontcolor="black"];
+100006 -> 100009 [label="YouPressPause",color="black",fontcolor="black"];
+100009 [label="/\\ volume = \"Normal volume\"\n/\\ playback = \"Paused\""];
+100006 -> 100010 [label="ACallComesIn",color="black",fontcolor="black"];
+100010 [label="/\\ volume = \"Muted\"\n/\\ playback = \"Paused\""];
+100006 -> 100010 [label="ACallComesIn",color="black",fontcolor="black"];
+100006 -> 100002 [label="TheTrackEnds",color="black",fontcolor="black"];
+100006 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100006 -> 100011 [label="YouTurnItUp",color="black",fontcolor="black"];
+100011 [label="/\\ volume = \"Loud\"\n/\\ playback = \"Playing\""];
+100006 -> 100012 [label="YouPressMute",color="black",fontcolor="black"];
+100012 [label="/\\ volume = \"Muted\"\n/\\ playback = \"Playing\""];
+100007 -> 100012 [label="EnoughDataArrives",color="black",fontcolor="black"];
+100007 -> 100004 [label="YouPressStop",color="black",fontcolor="black"];
+100007 -> 100003 [label="YouPressMute",color="black",fontcolor="black"];
+100007 -> 100003 [label="TheCallEnds",color="black",fontcolor="black"];
+100008 -> 100011 [label="EnoughDataArrives",color="black",fontcolor="black"];
+100008 -> 100007 [label="ACallComesIn",color="black",fontcolor="black"];
+100008 -> 100003 [label="TheTrackEnds",color="black",fontcolor="black"];
+100008 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100008 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100008 -> 100003 [label="YouTurnItDown",color="black",fontcolor="black"];
+100008 -> 100007 [label="YouPressMute",color="black",fontcolor="black"];
+100009 -> 100006 [label="YouPressPlay",color="black",fontcolor="black"];
+100009 -> 100010 [label="ACallComesIn",color="black",fontcolor="black"];
+100009 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100009 -> 100013 [label="YouTurnItUp",color="black",fontcolor="black"];
+100013 [label="/\\ volume = \"Loud\"\n/\\ playback = \"Paused\""];
+100009 -> 100010 [label="YouPressMute",color="black",fontcolor="black"];
+100010 -> 100012 [label="YouPressPlay",color="black",fontcolor="black"];
+100010 -> 100004 [label="YouPressStop",color="black",fontcolor="black"];
+100010 -> 100009 [label="YouPressMute",color="black",fontcolor="black"];
+100010 -> 100009 [label="TheCallEnds",color="black",fontcolor="black"];
+100011 -> 100008 [label="TheNetworkSlows",color="black",fontcolor="black"];
+100011 -> 100013 [label="YouPressPause",color="black",fontcolor="black"];
+100011 -> 100010 [label="ACallComesIn",color="black",fontcolor="black"];
+100011 -> 100010 [label="ACallComesIn",color="black",fontcolor="black"];
+100011 -> 100002 [label="TheTrackEnds",color="black",fontcolor="black"];
+100011 -> 100002 [label="TheTrackEnds",color="black",fontcolor="black"];
+100011 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100011 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100011 -> 100006 [label="YouTurnItDown",color="black",fontcolor="black"];
+100011 -> 100012 [label="YouPressMute",color="black",fontcolor="black"];
+100012 -> 100007 [label="TheNetworkSlows",color="black",fontcolor="black"];
+100012 -> 100010 [label="YouPressPause",color="black",fontcolor="black"];
+100012 -> 100010 [label="ACallComesIn",color="black",fontcolor="black"];
+100012 -> 100004 [label="TheTrackEnds",color="black",fontcolor="black"];
+100012 -> 100004 [label="YouPressStop",color="black",fontcolor="black"];
+100012 -> 100006 [label="YouPressMute",color="black",fontcolor="black"];
+100012 -> 100006 [label="TheCallEnds",color="black",fontcolor="black"];
+100013 -> 100011 [label="YouPressPlay",color="black",fontcolor="black"];
+100013 -> 100010 [label="ACallComesIn",color="black",fontcolor="black"];
+100013 -> 100009 [label="TheTrackEnds",color="black",fontcolor="black"];
+100013 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100013 -> 100002 [label="YouPressStop",color="black",fontcolor="black"];
+100013 -> 100009 [label="YouTurnItDown",color="black",fontcolor="black"];
+100013 -> 100010 [label="YouPressMute",color="black",fontcolor="black"];
+{rank = same; 100002;}
+{rank = same; 100005;100004;100003;}
+{rank = same; 100007;100006;100008;}
+{rank = same; 100011;100010;100009;100012;}
+{rank = same; 100013;}
+}
+}

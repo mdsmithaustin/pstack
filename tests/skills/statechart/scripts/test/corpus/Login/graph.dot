@@ -1,0 +1,40 @@
+strict digraph DiskGraph {
+nodesep=0.35;
+subgraph cluster_graph {
+color="white";
+100002 [label="main = \"Signed out\"",style = filled]
+100002 -> 100003 [label="YouSubmitAPassword",color="black",fontcolor="black"];
+100003 [label="main = \"Trying to sign in.Checking first try\""];
+100003 -> 100004 [label="ThePasswordIsRight",color="black",fontcolor="black"];
+100004 [label="main = \"Signed in\""];
+100003 -> 100005 [label="ThePasswordIsWrong",color="black",fontcolor="black"];
+100005 [label="main = \"Trying to sign in.Wrong password, 2 tries left\""];
+100003 -> 100006 [label="YouTapForgotPassword",color="black",fontcolor="black"];
+100006 [label="main = \"Reset email sent\""];
+100004 -> 100002 [label="YouSignOut",color="black",fontcolor="black"];
+100005 -> 100007 [label="YouSubmitAPassword",color="black",fontcolor="black"];
+100007 [label="main = \"Trying to sign in.Checking second try\""];
+100005 -> 100006 [label="YouTapForgotPassword",color="black",fontcolor="black"];
+100006 -> 100002 [label="YouSetANewPassword",color="black",fontcolor="black"];
+100007 -> 100004 [label="ThePasswordIsRight",color="black",fontcolor="black"];
+100007 -> 100008 [label="ThePasswordIsWrong",color="black",fontcolor="black"];
+100008 [label="main = \"Trying to sign in.Wrong password, 1 try left\""];
+100007 -> 100006 [label="YouTapForgotPassword",color="black",fontcolor="black"];
+100008 -> 100009 [label="YouSubmitAPassword",color="black",fontcolor="black"];
+100009 [label="main = \"Trying to sign in.Checking last try\""];
+100008 -> 100006 [label="YouTapForgotPassword",color="black",fontcolor="black"];
+100009 -> 100004 [label="ThePasswordIsRight",color="black",fontcolor="black"];
+100009 -> 100010 [label="ThePasswordIsWrong",color="black",fontcolor="black"];
+100010 [label="main = \"Locked out\""];
+100009 -> 100006 [label="YouTapForgotPassword",color="black",fontcolor="black"];
+100010 -> 100006 [label="YouTapForgotPassword",color="black",fontcolor="black"];
+100010 -> 100002 [label="S15MinutesPass",color="black",fontcolor="black"];
+{rank = same; 100002;}
+{rank = same; 100003;}
+{rank = same; 100006;100005;100004;}
+{rank = same; 100007;}
+{rank = same; 100008;}
+{rank = same; 100009;}
+{rank = same; 100010;}
+}
+}
