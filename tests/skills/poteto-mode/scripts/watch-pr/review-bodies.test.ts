@@ -564,6 +564,13 @@ describe("bodies in any format", () => {
         expect(at(`Example:\n\n${fence}html\n${literal}\n${fence}\n`).flaggedReviews).toEqual([]);
     });
 
+    it("still reads a finding after a line starting with a triple-backtick code span", () => {
+      const body = "```x``` here\n\n<details><summary><strong>1 previously missed issue</strong></summary>\n<details><summary>Real</summary>body</details>\n</details>";
+      expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("previously missed issue", "Real", null)],
+      ]);
+    });
+
     it("reads a counted summary in inline code as clean", () => {
       expect(at(`A body may quote \`${literal}\` in prose.\n`).flaggedReviews).toEqual([]);
       expect(at(`Doubled: \`\` ${literal} \`\` too.\n`).flaggedReviews).toEqual([]);

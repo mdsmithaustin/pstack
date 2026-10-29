@@ -41,7 +41,7 @@ const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
 const FENCED_CODE =
-  /^ {0,3}(`{3,}|~{3,})[^\n]*(?:\n[\s\S]*?^ {0,3}\1[`~]*[ \t]*$|[\s\S]*)/gm;
+  /^ {0,3}(`{3,}(?=[^`\n]*$)|~{3,})[^\n]*(?:\n[\s\S]*?^ {0,3}\1[`~]*[ \t]*$|[\s\S]*)/gm;
 const INLINE_CODE = /(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
 const withoutCode = (markdown: string): string =>
