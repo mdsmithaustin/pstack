@@ -168,8 +168,10 @@ def preflight():
     if not expiring(auth):
         return
     # grok renews a token only when it counts the token as expired, so match its early expiry to TOKEN_MARGIN.
+    # grok debug logs can carry token prefixes, and the refusal forwards the tail of the renewal's output.
     env = {**os.environ, "GROK_HOME": str(host_grok_home()),
-           "GROK_AUTH_EARLY_INVALIDATION_SECS": str(int(TOKEN_MARGIN.total_seconds()))}
+           "GROK_AUTH_EARLY_INVALIDATION_SECS": str(int(TOKEN_MARGIN.total_seconds())), "RUST_LOG": "off"}
+    env.pop("GROK_LOG_FILE", None)
     cause = renew(env)
     if not auth.is_file():
         raise LoginRequired(LOGIN, f"grok removed the host login at {auth} during renewal, and {cause}")
