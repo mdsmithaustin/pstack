@@ -119,19 +119,6 @@ describe("review body classification over the real fixtures", () => {
       );
     });
 
-  it("#50 flags each item of Copilot's older Suppressed comments section, as a heading or a summary", () => {
-    expect(
-      restReviews(50).map((review) =>
-        flagged({ head: review.commit_id, reviews: [review] }).flaggedReviews.map((row) =>
-          row.findings.map((item) => item.section)
-        )
-      )
-    ).toEqual([
-      [["Suppressed comments"]],
-      [Array(4).fill("Suppressed comments")],
-    ]);
-  });
-
   it("never reads a user-authored review, even with a bot's findings in its body", () => {
     const body = restReviews(104)[2]?.body ?? "";
     const review = {
@@ -396,6 +383,36 @@ describe("bodies in any format", () => {
     expect(
       at("Bugbot reviewed your changes and found no bugs!", "cursor-bugbot").flaggedReviews
     ).toEqual([]);
+  });
+
+  it("reads plain counted summaries and headings as clean", () => {
+    for (const body of [
+      "<summary>📒 Files selected for processing (5)</summary>",
+      "<summary>Files not reviewed (2)</summary>",
+      "### Suppressed comments (2)",
+    ])
+      expect(at(body).flaggedReviews).toEqual([]);
+  });
+
+  it("keeps both Open items across a fenced code block with a counted heading", () => {
+    const body = "<summary><strong>Open (2)</strong></summary>\n- First item\n```\n# x (3)\n```\n- Second item";
+    expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
+      [finding("Open", "First item", null), finding("Open", "Second item", null)],
+    ]);
+  });
+
+  it("keeps both Open items across a counted Details heading", () => {
+    const body = "<summary><strong>Open (2)</strong></summary>\n- First item\n### Details (1)\n- Second item";
+    expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
+      [finding("Open", "First item", null), finding("Open", "Second item", null)],
+    ]);
+  });
+
+  it("keeps a counted nested summary as an item title", () => {
+    const body = "<summary><strong>Previously missed (1)</strong></summary>\n<details><summary>Item title (2)</summary>body</details>";
+    expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
+      [finding("Previously missed", "Item title (2)", null)],
+    ]);
   });
 
   it("flags a threadless counted section from any bot, with or without the Copilot marker", () => {

@@ -241,7 +241,7 @@ function reviewBodiesGate(
   if (row.pendingReviewBots.length > 0)
     problems.push(`review bot pending: ${row.pendingReviewBots.join(", ")}`);
   return problems.length === 0
-    ? pass("every bot review body on the head is acknowledged or clean")
+    ? pass("no bot review body on the head shows an unacknowledged finding without a thread")
     : fail(problems.join("; "));
 }
 

@@ -437,7 +437,7 @@
   },
   "babysit-body-only-finding-acknowledged-in-pr-comment": {
    "check": "script",
-   "claim": "The watcher stops with the review-findings blocker (exit 8) on a bot review of the current head whose body proves a finding that no thread carries, meaning a counted section other than Resolved since last review, in any markup and from any bot, until the PR author or an OWNER, MEMBER, or COLLABORATOR, never a bot, posts a PR comment that links that review's URL and does not start with the literal `<!-- pstack-recap:start -->` once leading whitespace is dropped. A marker later in the comment does not disqualify it. A body without that proof blocks nothing, whatever its format. A push that moves the head clears the blocker without a comment, and the watcher sees only the latest 100 reviews and the latest 100 PR comments.",
+   "claim": "The watcher stops with the review-findings blocker (exit 8) on a bot review of the current head whose body proves a finding that no thread carries, meaning a bold counted summary `<summary><strong>Name (N)</strong></summary>` with N above 0, other than Resolved since last review, from any bot, until the PR author or an OWNER, MEMBER, or COLLABORATOR, never a bot, posts a PR comment that links that review's URL and does not start with the literal `<!-- pstack-recap:start -->` once leading whitespace is dropped. A marker later in the comment does not disqualify it. A body without that proof blocks nothing, whatever its format. A push that moves the head clears the blocker without a comment, and the watcher sees only the latest 100 reviews and the latest 100 PR comments.",
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/scripts/watch-pr/policy.ts",

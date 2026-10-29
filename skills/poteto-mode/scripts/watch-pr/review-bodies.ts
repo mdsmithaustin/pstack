@@ -32,10 +32,7 @@ interface CountedSection {
   readonly count: number;
   readonly text: string;
 }
-// Copilot has titled a section with a bold summary, a plain counted summary,
-// and a Markdown heading.
-const SECTION =
-  /<summary><strong>([^<]*)<\/strong><\/summary>|<summary>([^<]*\(\d+\))<\/summary>|^#{1,6} +(.*)$/gm;
+const SECTION = /<summary><strong>([^<]*)<\/strong><\/summary>/g;
 const COUNTED = /^(.*) \((\d+)\)$/;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
@@ -55,7 +52,7 @@ const MAX_PADDED_FINDINGS = 20;
 function countedSections(body: string): readonly CountedSection[] {
   const heads = [...body.matchAll(SECTION)];
   return heads.flatMap((head, index) => {
-    const counted = COUNTED.exec((head[1] ?? head[2] ?? head[3] ?? "").trim());
+    const counted = COUNTED.exec((head[1] ?? "").trim());
     if (counted === null) return [];
     const start = (head.index ?? 0) + head[0].length;
     return [
