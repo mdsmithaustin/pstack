@@ -1,3 +1,4 @@
+import datetime
 import fcntl
 import hashlib
 import json
@@ -612,15 +613,24 @@ class LoginPreflight(unittest.TestCase):
         binary = fake_cli(self.tmp, "codex", script)
         return mock.patch.dict(os.environ, {"CODEX_HOME": str(home), "CODEX_BIN": str(binary)})
 
-    def grok(self, expires_at, renews_to=None):
+    def grok(self, expires_at, models=":", version="echo grok 1"):
         from harnesses import grok
         home = self.tmp / "grok-home"
         home.mkdir(exist_ok=True)
         (home / "auth.json").write_text(json.dumps({"xai": {"key": "k", "expires_at": expires_at}}))
-        renewal = f"echo '{json.dumps({'xai': {'key': 'k', 'expires_at': renews_to}})}' > \"$GROK_HOME/auth.json\"" if renews_to else ":"
-        binary = fake_cli(self.tmp, "grok", f'case "$1" in --version) echo grok 1;; models) {renewal};; esac\n')
+        script = f'case "$1" in --version) {version};; models) echo models >> "{self.tmp / "models-calls"}"; {models};; esac\n'
+        binary = fake_cli(self.tmp, "grok", script)
         self.enterContext(mock.patch.dict(os.environ, {"GROK_BIN": str(binary)}))
         return mock.patch.object(grok, "host_grok_home", return_value=home)
+
+    @staticmethod
+    def grok_renews(expires_at):
+        return f"echo '{json.dumps({'xai': {'key': 'k', 'expires_at': expires_at}})}' > \"$GROK_HOME/auth.json\""
+
+    def assertGrokStopped(self, outcome, *causes):
+        self.assertStopped(outcome, "grok", "grok login")
+        for cause in causes:
+            self.assertIn(cause, outcome[2])
 
     def assertStopped(self, outcome, cli, command):
         code, run_case, stderr = outcome
@@ -655,8 +665,43 @@ class LoginPreflight(unittest.TestCase):
         self.assertStopped(self.wave("grok", self.grok("2020-01-01T00:00:00Z")), "grok", "grok login")
 
     def test_grok_renews_an_expired_host_token_and_runs_every_case(self):
-        code, run_case, _ = self.wave("grok", self.grok("2020-01-01T00:00:00Z", renews_to="2999-01-01T00:00:00Z"))
+        code, run_case, _ = self.wave("grok", self.grok("2020-01-01T00:00:00Z", self.grok_renews("2999-01-01T00:00:00Z")))
         self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+
+    def test_grok_with_a_valid_host_token_runs_every_case_without_renewing(self):
+        code, run_case, _ = self.wave("grok", self.grok("2999-01-01T00:00:00Z"))
+        self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+        self.assertFalse((self.tmp / "models-calls").exists())
+
+    def test_grok_renews_a_host_token_inside_the_margin_even_when_the_host_sets_a_shorter_early_refresh(self):
+        soon = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        renews_like_grok = f'[ "${{GROK_AUTH_EARLY_INVALIDATION_SECS:-300}}" -ge 120 ] && {self.grok_renews("2999-01-01T00:00:00Z")}'
+        code, run_case, _ = self.wave("grok", self.grok(soon, renews_like_grok),
+                                      mock.patch.dict(os.environ, {"GROK_AUTH_EARLY_INVALIDATION_SECS": "60"}))
+        self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+
+    def test_grok_renewal_exiting_nonzero_stops_the_wave_with_its_output(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", 'echo "xai refused the refresh grant" >&2; exit 7'))
+        self.assertGrokStopped(outcome, "exited 7", "xai refused the refresh grant")
+
+    def test_grok_renewal_that_hangs_stops_the_wave_as_not_finished(self):
+        from harnesses import grok
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", "exec sleep 3"),
+                            mock.patch.object(grok, "RENEWAL_TIMEOUT_S", 0.5, create=True))
+        self.assertGrokStopped(outcome, "did not finish", "TimeoutExpired")
+
+    def test_grok_with_no_working_binary_stops_the_wave_saying_the_renewal_never_ran(self):
+        from harnesses import grok
+        empty = self.tmp / "empty-path"
+        empty.mkdir()
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", version="exit 1"),
+                            mock.patch.dict(os.environ, {"PATH": str(empty)}),
+                            mock.patch.object(grok, "DEFAULT_BIN", self.tmp / "no-such-grok"))
+        self.assertGrokStopped(outcome, "no working grok binary", "never ran")
+
+    def test_grok_binary_that_vanishes_before_the_renewal_stops_the_wave_as_not_finished(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", version='echo grok 1; rm -f "$0"'))
+        self.assertGrokStopped(outcome, "did not finish", "FileNotFoundError")
 
     def test_a_valid_login_lets_every_case_run(self):
         script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
