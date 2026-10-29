@@ -629,6 +629,49 @@ describe("bodies in any format", () => {
       expect(at(body).flaggedReviews).toEqual([]);
     });
 
+    const missed = "<details><summary><strong>1 previously missed issue</strong></summary>\n<details><summary>Real</summary>body</details>\n</details>";
+    const real: [[ReturnType<typeof finding>]] = [[finding("previously missed issue", "Real", null)]];
+
+    it("still reads a finding after a fence that opens on a list marker", () => {
+      for (const body of [
+        `- \`\`\`js\n  const x = 1;\n  \`\`\`\n\n${missed}`,
+        `1. Example:\n   \`\`\`js\n   const x = 1;\n   \`\`\`\n\n${missed}`,
+        `- \`\`\`js\n  const x = 1;\n${missed}`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
+    it("still reads a finding between lines with backslash-escaped backticks", () => {
+      const body = `Escape a \\\` like this.\n${missed}\nAnd \\\` again.\n`;
+      expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
+    it("reads a counted summary in a fence inside a list item as clean", () => {
+      for (const body of [
+        `1.  Example:\n\n    \`\`\`html\n    ${literal}\n\n    \`\`\`\n`,
+        `- Example:\n\n  - Nested:\n\n    ~~~\n    ${literal}\n    ~~~\n`,
+      ])
+        expect(at(body).flaggedReviews).toEqual([]);
+    });
+
+    it("keeps a backtick fence open past a line that mixes in a tilde", () => {
+      expect(at(`\`\`\`\n\`\`\`~\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+      expect(at(`~~~\n~~~\`\n${literal}\n~~~\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("reads a counted summary after an unclosed fence as clean", () => {
+      expect(at(`Example:\n\n\`\`\`html\n${literal}\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("closes a fence on a longer run of the same character", () => {
+      expect(at(`\`\`\`\n${literal}\n\`\`\`\`\n\n${missed}`).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
+    it("does not let a code span cross a blank line", () => {
+      const body = `A stray \` in prose.\n\n${missed}\n\nAnother \` here.\n`;
+      expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
     it("does not take a thread link quoted in code as the item's thread", () => {
       const body = "<summary><strong>Open (1)</strong></summary>\n\n- Mention `[x](#discussion_r42)` in docs\n";
       expect(at(body).flaggedReviews).toMatchObject([
