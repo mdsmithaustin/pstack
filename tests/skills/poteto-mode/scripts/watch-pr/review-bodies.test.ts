@@ -637,6 +637,10 @@ describe("bodies in any format", () => {
         `- \`\`\`js\n  const x = 1;\n  \`\`\`\n\n${missed}`,
         `1. Example:\n   \`\`\`js\n   const x = 1;\n   \`\`\`\n\n${missed}`,
         `- \`\`\`js\n  const x = 1;\n${missed}`,
+        `+ \`\`\`js\n  const x = 1;\n  \`\`\`\n\n${missed}`,
+        `1) \`\`\`js\n   const x = 1;\n   \`\`\`\n\n${missed}`,
+        `-\t\`\`\`js\n  const x = 1;\n  \`\`\`\n\n${missed}`,
+        `   \`\`\`\n${literal}\n   \`\`\`\n\n${missed}`,
       ])
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
     });
@@ -674,6 +678,7 @@ describe("bodies in any format", () => {
       for (const body of [
         `1.  Example:\n\n    \`\`\`html\n    ${literal}\n\n    \`\`\`\n`,
         `- Example:\n\n  - Nested:\n\n    ~~~\n    ${literal}\n    ~~~\n`,
+        `1.  Example:\n  \n    \`\`\`html\n    ${literal}\n    \`\`\`\n`,
       ])
         expect(at(body).flaggedReviews).toEqual([]);
     });
@@ -693,6 +698,14 @@ describe("bodies in any format", () => {
 
     it("keeps a fence open past a closer indented four spaces", () => {
       expect(at(`\`\`\`\n    \`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("keeps a fence open past a shorter closer", () => {
+      expect(at(`\`\`\`\`\n\`\`\`\n${literal}\n\`\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("masks a counted summary in a tilde fence's info string", () => {
+      expect(at(`~~~ ${literal}\n~~~\n`).flaggedReviews).toEqual([]);
     });
 
     it("does not let a code span cross a blank line", () => {
