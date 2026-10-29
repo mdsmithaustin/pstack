@@ -100,10 +100,20 @@ describe("review body classification over the real fixtures", () => {
       ),
     ],
     [351, "5697766820", none],
+    [353, "5700131442", none],
+    [
+      353,
+      "5700727173",
+      finding(
+        "previously missed issue",
+        "Ignore counted summaries inside Markdown code literals",
+        "skills/poteto-mode/scripts/watch-pr/review-bodies.ts:163"
+      ),
+    ],
   ];
 
   it("covers every review in the fixture files", () => {
-    for (const pr of [104, 107, 108, 351] as const)
+    for (const pr of [104, 107, 108, 351, 353] as const)
       expect(
         restReviews(pr).map((review) => review.html_url.split("-").pop())
       ).toEqual(table.filter(([row]) => row === pr).map(([, id]) => id));
@@ -522,6 +532,74 @@ describe("bodies in any format", () => {
   it("skips an Open item whose link destination is a review thread", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (2)</strong></summary>\n\n- [Rename it](#discussion_r123) · New\n- [Rename that](https://github.com/o/r/pull/1#discussion_r456)\n</details>`;
     expect(at(body).flaggedReviews).toEqual([]);
+  });
+
+  it("reads a leading count as a counted section, with its nested items", () => {
+    const body = `${MARKER}\n<details>\n<summary><strong>2 previously missed issues</strong></summary>\n\n<details>\n<summary>First</summary>\n\n\`a.ts:1\`\n</details>\n<details>\n<summary>Second</summary>\n</details>\n</details>`;
+    expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
+      [
+        finding("previously missed issues", "First", "a.ts:1"),
+        finding("previously missed issues", "Second", null),
+      ],
+    ]);
+  });
+
+  it("reads a zero or Resolved section as clean in either count form", () => {
+    for (const heading of [
+      "0 previously missed issues",
+      "2 resolved issues",
+      "Resolved since last review (2)",
+    ])
+      expect(
+        at(`<summary><strong>${heading}</strong></summary>\n<details><summary>Done</summary></details>`)
+          .flaggedReviews
+      ).toEqual([]);
+  });
+
+  describe("markup inside Markdown code", () => {
+    const literal = "<summary><strong>Open (1)</strong></summary>";
+
+    it("reads a counted summary in fenced code as clean", () => {
+      for (const fence of ["```", "~~~"])
+        expect(at(`Example:\n\n${fence}html\n${literal}\n${fence}\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("reads a counted summary in inline code as clean", () => {
+      expect(at(`A body may quote \`${literal}\` in prose.\n`).flaggedReviews).toEqual([]);
+      expect(at(`Doubled: \`\` ${literal} \`\` too.\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("still reads a counted summary after a closed code span", () => {
+      expect(at(`Quote \`x\`.\n\n<summary><strong>Previously missed (1)</strong></summary>\n`).flaggedReviews).toMatchObject([
+        { findings: [{ section: "Previously missed", title: "(unparsed)" }] },
+      ]);
+    });
+
+    it("keeps a section whole across a heading in fenced code", () => {
+      const body = "<summary><strong>Open (2)</strong></summary>\n- First item\n```\n<summary><strong>Notes</strong></summary>\n```\n- Second item";
+      expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("Open", "First item", null), finding("Open", "Second item", null)],
+      ]);
+    });
+
+    it("ignores a nested summary quoted in an item's text", () => {
+      const body = "<summary><strong>Previously missed (1)</strong></summary>\n<details><summary>Real</summary>\n\nQuotes `<summary>Fake</summary>` at `a.ts:3`\n</details>";
+      expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("Previously missed", "Real", "a.ts:3")],
+      ]);
+    });
+
+    it("ignores list lines in fenced code inside an Open section", () => {
+      const body = "<summary><strong>Open (1)</strong></summary>\n\n- [Rename it](#discussion_r42)\n\n```\n- not an item\n```\n";
+      expect(at(body).flaggedReviews).toEqual([]);
+    });
+
+    it("does not take a thread link quoted in code as the item's thread", () => {
+      const body = "<summary><strong>Open (1)</strong></summary>\n\n- Mention `[x](#discussion_r42)` in docs\n";
+      expect(at(body).flaggedReviews).toMatchObject([
+        { findings: [{ section: "Open", title: "Mention `[x](#discussion_r42)` in docs" }] },
+      ]);
+    });
   });
 
   it("flags an Open item that no thread carries", () => {

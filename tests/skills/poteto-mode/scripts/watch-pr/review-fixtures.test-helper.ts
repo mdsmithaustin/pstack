@@ -21,6 +21,7 @@ export const HEADS = {
   107: "5bb33dccdd0b56b11dc87cec527c0d05144b7a23",
   108: "3e3260b7d4b7b93caf3f5d3990335a69ba94f9ba",
   351: "61bce8f8b346530ee175ffcfbf6880657637393f",
+  353: "5a09c75b47fd5c57287d14e9c29ba09811b1e8b3",
 } as const;
 
 export function restReviews(pr: keyof typeof HEADS): readonly RestReview[] {
