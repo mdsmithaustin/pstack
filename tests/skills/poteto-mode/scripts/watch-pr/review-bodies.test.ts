@@ -110,6 +110,7 @@ describe("review body classification over the real fixtures", () => {
         "skills/poteto-mode/scripts/watch-pr/review-bodies.ts:163"
       ),
     ],
+    [353, "5701377075", none],
   ];
 
   it("covers every review in the fixture files", () => {
@@ -137,6 +138,18 @@ describe("review body classification over the real fixtures", () => {
     };
     const state = flagged({ head: HEADS[104], reviews: [review] });
     expect(state.flaggedReviews).toEqual([]);
+  });
+
+  it("flags only the item without a thread link in #353 review 5701377075's open issues", () => {
+    const review = restReviews(353).find((row) => row.id === 5701377075);
+    if (review === undefined) throw new Error("fixture lacks 5701377075");
+    const title = "Honor escaped backticks when detecting code spans";
+    const link = `[${title}](https://github.com/mdsmithaustin/pstack/pull/353#discussion_r4415105466)`;
+    const body = review.body.replace(link, title);
+    const state = flagged({ head: review.commit_id, reviews: [{ ...review, body }] });
+    expect(state.flaggedReviews.map((row) => row.findings)).toEqual([
+      [finding("open issues", `${title} · New`, null)],
+    ]);
   });
 });
 
@@ -454,6 +467,21 @@ describe("bodies in any format", () => {
   it("leaves thread-linked Open items and Resolved items to the thread gate", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- [Rename it](#discussion_r42) · New\n</details>\n<details>\n<summary><strong>Resolved since last review (2)</strong></summary>\n\n- [Done](#discussion_r41)\n</details>`;
     expect(at(body).flaggedReviews).toEqual([]);
+  });
+
+  it("reads an Open section by its first word in any case and either count form", () => {
+    for (const [heading, name] of [
+      ["open (1)", "open"],
+      ["1 Open issue", "Open issue"],
+      ["1 open issue", "open issue"],
+      ["1 OPEN", "OPEN"],
+    ]) {
+      const section = `<summary><strong>${heading}</strong></summary>\n\n`;
+      expect(at(`${section}- [Linked](#discussion_r42)\n`).flaggedReviews).toEqual([]);
+      expect(at(`${section}- Loose item\n`).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding(name, "Loose item", null)],
+      ]);
+    }
   });
 
   it("flags a counted Open section in a body without a Findings line", () => {
