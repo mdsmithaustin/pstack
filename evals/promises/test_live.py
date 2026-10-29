@@ -1,3 +1,4 @@
+import datetime
 import fcntl
 import hashlib
 import json
@@ -5,6 +6,7 @@ import io
 import os
 import platform
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -612,15 +614,35 @@ class LoginPreflight(unittest.TestCase):
         binary = fake_cli(self.tmp, "codex", script)
         return mock.patch.dict(os.environ, {"CODEX_HOME": str(home), "CODEX_BIN": str(binary)})
 
-    def grok(self, expires_at, renews_to=None):
+    def grok(self, expires_at, models=":", version="echo grok 1"):
         from harnesses import grok
         home = self.tmp / "grok-home"
         home.mkdir(exist_ok=True)
         (home / "auth.json").write_text(json.dumps({"xai": {"key": "k", "expires_at": expires_at}}))
-        renewal = f"echo '{json.dumps({'xai': {'key': 'k', 'expires_at': renews_to}})}' > \"$GROK_HOME/auth.json\"" if renews_to else ":"
-        binary = fake_cli(self.tmp, "grok", f'case "$1" in --version) echo grok 1;; models) {renewal};; esac\n')
+        script = f'case "$1" in --version) {version};; models) echo models >> "{self.tmp / "models-calls"}"; {models};; esac\n'
+        binary = fake_cli(self.tmp, "grok", script)
         self.enterContext(mock.patch.dict(os.environ, {"GROK_BIN": str(binary)}))
         return mock.patch.object(grok, "host_grok_home", return_value=home)
+
+    @staticmethod
+    def grok_renews(expires_at):
+        return f"echo '{json.dumps({'xai': {'key': 'k', 'expires_at': expires_at}})}' > \"$GROK_HOME/auth.json\""
+
+    def grok_renews_when_due(self, expires_at):
+        due = ('import datetime, json, os, sys; '
+               'expiry = datetime.datetime.fromisoformat(json.load(open(os.environ["GROK_HOME"] + "/auth.json"))["xai"]["expires_at"]); '
+               'left = (expiry - datetime.datetime.now(datetime.timezone.utc)).total_seconds(); '
+               'sys.exit(left > int(os.environ.get("GROK_AUTH_EARLY_INVALIDATION_SECS") or 300))')
+        return f"if \"{sys.executable}\" -c '{due}'; then {self.grok_renews(expires_at)}; fi"
+
+    @staticmethod
+    def in_seconds(seconds):
+        return (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def assertGrokStopped(self, outcome, *causes):
+        self.assertStopped(outcome, "grok", "grok login")
+        for cause in causes:
+            self.assertIn(cause, outcome[2])
 
     def assertStopped(self, outcome, cli, command):
         code, run_case, stderr = outcome
@@ -655,8 +677,75 @@ class LoginPreflight(unittest.TestCase):
         self.assertStopped(self.wave("grok", self.grok("2020-01-01T00:00:00Z")), "grok", "grok login")
 
     def test_grok_renews_an_expired_host_token_and_runs_every_case(self):
-        code, run_case, _ = self.wave("grok", self.grok("2020-01-01T00:00:00Z", renews_to="2999-01-01T00:00:00Z"))
+        code, run_case, _ = self.wave("grok", self.grok("2020-01-01T00:00:00Z", self.grok_renews("2999-01-01T00:00:00Z")))
         self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+
+    def test_grok_with_a_valid_host_token_runs_every_case_without_renewing(self):
+        code, run_case, _ = self.wave("grok", self.grok("2999-01-01T00:00:00Z"))
+        self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+        self.assertFalse((self.tmp / "models-calls").exists())
+
+    def test_grok_renews_a_host_token_inside_the_margin_even_when_the_host_sets_a_shorter_early_refresh(self):
+        code, run_case, _ = self.wave("grok", self.grok(self.in_seconds(240), self.grok_renews_when_due("2999-01-01T00:00:00Z")),
+                                      mock.patch.dict(os.environ, {"GROK_AUTH_EARLY_INVALIDATION_SECS": "60"}))
+        self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+
+    def test_grok_with_an_expired_host_token_that_renewal_leaves_expired_says_when_it_expired(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z"))
+        self.assertGrokStopped(outcome, "the host token expired at 2020-01-01T00:00Z")
+
+    def test_grok_with_a_host_token_inside_the_margin_that_renewal_leaves_alone_says_when_it_expires(self):
+        outcome = self.wave("grok", self.grok(self.in_seconds(240)))
+        self.assertGrokStopped(outcome, "the host token expires at")
+
+    def test_grok_renewal_that_removes_the_host_login_stops_the_wave_saying_grok_removed_it(self):
+        removes = 'rm -f "$GROK_HOME/auth.json"; echo "You are not authenticated."'
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", removes))
+        self.assertGrokStopped(outcome, "grok removed the host login", "exited 0", "You are not authenticated.")
+
+    def test_grok_renewal_exiting_zero_without_renewing_stops_the_wave_with_its_stdout(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", 'echo "You are not authenticated."'))
+        self.assertGrokStopped(outcome, "exited 0", "You are not authenticated.")
+
+    def test_grok_renewal_output_in_the_refusal_keeps_only_its_last_300_characters(self):
+        output = "HEAD-OF-OUTPUT" + "0" * 400 + "TAIL-OF-OUTPUT"
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", f"printf '{output}'; exit 1"))
+        self.assertGrokStopped(outcome, "TAIL-OF-OUTPUT", output[-300:])
+        self.assertNotIn("HEAD-OF-OUTPUT", outcome[2])
+
+    def test_grok_renewal_runs_without_the_debug_logging_the_host_turns_on(self):
+        seen = self.tmp / "renewal-env"
+        records = f'echo "RUST_LOG=$RUST_LOG GROK_LOG_FILE=${{GROK_LOG_FILE-absent}}" > "{seen}"'
+        self.wave("grok", self.grok("2020-01-01T00:00:00Z", records),
+                  mock.patch.dict(os.environ, {"RUST_LOG": "trace", "GROK_LOG_FILE": str(self.tmp / "grok.log")}))
+        self.assertEqual(seen.read_text(), "RUST_LOG=off GROK_LOG_FILE=absent\n")
+
+    def test_grok_renewal_exiting_nonzero_stops_the_wave_with_its_output(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", 'echo "xai refused the refresh grant" >&2; exit 7'))
+        self.assertGrokStopped(outcome, "exited 7", "xai refused the refresh grant")
+
+    def test_grok_renewal_with_undecodable_output_still_stops_the_wave_with_its_exit_code(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", "printf '\\377' >&2; exit 1"))
+        self.assertGrokStopped(outcome, "exited 1")
+
+    def test_grok_renewal_that_hangs_stops_the_wave_as_not_finished(self):
+        from harnesses import grok
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", "exec sleep 3"),
+                            mock.patch.object(grok, "RENEWAL_TIMEOUT_S", 0.5))
+        self.assertGrokStopped(outcome, "did not finish", "TimeoutExpired")
+
+    def test_grok_with_no_working_binary_stops_the_wave_saying_the_renewal_never_ran(self):
+        from harnesses import grok
+        empty = self.tmp / "empty-path"
+        empty.mkdir()
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", version="exit 1"),
+                            mock.patch.dict(os.environ, {"PATH": str(empty)}),
+                            mock.patch.object(grok, "DEFAULT_BIN", self.tmp / "no-such-grok"))
+        self.assertGrokStopped(outcome, "no working grok binary", "never ran")
+
+    def test_grok_binary_that_vanishes_before_the_renewal_stops_the_wave_as_not_finished(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", version='echo grok 1; rm -f "$0"'))
+        self.assertGrokStopped(outcome, "did not finish", "FileNotFoundError")
 
     def test_a_valid_login_lets_every_case_run(self):
         script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
