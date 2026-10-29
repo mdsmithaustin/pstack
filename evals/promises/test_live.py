@@ -6,6 +6,7 @@ import io
 import os
 import platform
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -627,6 +628,17 @@ class LoginPreflight(unittest.TestCase):
     def grok_renews(expires_at):
         return f"echo '{json.dumps({'xai': {'key': 'k', 'expires_at': expires_at}})}' > \"$GROK_HOME/auth.json\""
 
+    def grok_renews_when_due(self, expires_at):
+        due = ('import datetime, json, os, sys; '
+               'expiry = datetime.datetime.fromisoformat(json.load(open(os.environ["GROK_HOME"] + "/auth.json"))["xai"]["expires_at"]); '
+               'left = (expiry - datetime.datetime.now(datetime.timezone.utc)).total_seconds(); '
+               'sys.exit(left > int(os.environ.get("GROK_AUTH_EARLY_INVALIDATION_SECS") or 300))')
+        return f"if \"{sys.executable}\" -c '{due}'; then {self.grok_renews(expires_at)}; fi"
+
+    @staticmethod
+    def in_seconds(seconds):
+        return (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     def assertGrokStopped(self, outcome, *causes):
         self.assertStopped(outcome, "grok", "grok login")
         for cause in causes:
@@ -674,11 +686,32 @@ class LoginPreflight(unittest.TestCase):
         self.assertFalse((self.tmp / "models-calls").exists())
 
     def test_grok_renews_a_host_token_inside_the_margin_even_when_the_host_sets_a_shorter_early_refresh(self):
-        soon = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        renews_like_grok = f'[ "${{GROK_AUTH_EARLY_INVALIDATION_SECS:-300}}" -ge 120 ] && {self.grok_renews("2999-01-01T00:00:00Z")}'
-        code, run_case, _ = self.wave("grok", self.grok(soon, renews_like_grok),
+        code, run_case, _ = self.wave("grok", self.grok(self.in_seconds(240), self.grok_renews_when_due("2999-01-01T00:00:00Z")),
                                       mock.patch.dict(os.environ, {"GROK_AUTH_EARLY_INVALIDATION_SECS": "60"}))
         self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+
+    def test_grok_with_an_expired_host_token_that_renewal_leaves_expired_says_when_it_expired(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z"))
+        self.assertGrokStopped(outcome, "the host token expired at 2020-01-01T00:00Z")
+
+    def test_grok_with_a_host_token_inside_the_margin_that_renewal_leaves_alone_says_when_it_expires(self):
+        outcome = self.wave("grok", self.grok(self.in_seconds(240)))
+        self.assertGrokStopped(outcome, "the host token expires at")
+
+    def test_grok_renewal_that_removes_the_host_login_stops_the_wave_saying_grok_removed_it(self):
+        removes = 'rm -f "$GROK_HOME/auth.json"; echo "You are not authenticated."'
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", removes))
+        self.assertGrokStopped(outcome, "grok removed the host login", "exited 0", "You are not authenticated.")
+
+    def test_grok_renewal_exiting_zero_without_renewing_stops_the_wave_with_its_stdout(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", 'echo "You are not authenticated."'))
+        self.assertGrokStopped(outcome, "exited 0", "You are not authenticated.")
+
+    def test_grok_renewal_output_in_the_refusal_keeps_only_its_last_300_characters(self):
+        output = "HEAD-OF-OUTPUT" + "0" * 400 + "TAIL-OF-OUTPUT"
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", f"printf '{output}'; exit 1"))
+        self.assertGrokStopped(outcome, "TAIL-OF-OUTPUT", output[-300:])
+        self.assertNotIn("HEAD-OF-OUTPUT", outcome[2])
 
     def test_grok_renewal_exiting_nonzero_stops_the_wave_with_its_output(self):
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", 'echo "xai refused the refresh grant" >&2; exit 7'))
