@@ -1945,7 +1945,7 @@
   },
   "merge-gate-refuses-until-gates-hold": {
    "check": "script",
-   "claim": "merge-gate merges only when the latest verdict block matches the PR's current head and patch-id, every check passed, every bot review body is acknowledged, threads are resolved, the PR is mergeable, and its base branch has no merge queue; otherwise it exits 10 with nothing merged.",
+   "claim": "merge-gate merges only when the latest verdict block matches the PR's current head and patch-id, every check passed, every bot review of the head whose body shows a finding with no thread is acknowledged, threads are resolved, the PR is mergeable, and its base branch has no merge queue; otherwise it exits 10 with nothing merged.",
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/scripts/watch-pr/merge-gate",
@@ -10294,15 +10294,6 @@
    ],
    "text": "`/arena` gives every worker the same design or code brief, then picks a base and grafts the best parts."
   },
-  "b28854335d6d": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "merge-gate-refuses-until-gates-hold",
-   "sources": [
-    "port"
-   ],
-   "text": "It refuses to merge until the verdict still matches the PR's patch, every check passed, and every bot's review is acknowledged."
-  },
   "b2c172e15403": {
    "class": "promise",
    "file": "04-design.md",
@@ -10321,6 +10312,15 @@
     "port"
    ],
    "text": "Did anything error or return wrong output?"
+  },
+  "b3ac73f75c14": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "merge-gate-refuses-until-gates-hold",
+   "sources": [
+    "port"
+   ],
+   "text": "It refuses to merge until the verdict still matches the PR's patch, every check passed, and every bot review of the head whose body shows a finding with no thread is acknowledged."
   },
   "b3e210fbbb8d": {
    "also": [
