@@ -640,7 +640,7 @@ describe("bodies in any format", () => {
         `+ \`\`\`js\n  const x = 1;\n  \`\`\`\n\n${missed}`,
         `1) \`\`\`js\n   const x = 1;\n   \`\`\`\n\n${missed}`,
         `-\t\`\`\`js\n  const x = 1;\n  \`\`\`\n\n${missed}`,
-        `   \`\`\`\n${literal}\n   \`\`\`\n\n${missed}`,
+        `   \`\`\`\n\n${literal}\n\n   \`\`\`\n\n${missed}`,
       ])
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
     });
@@ -678,7 +678,7 @@ describe("bodies in any format", () => {
       for (const body of [
         `1.  Example:\n\n    \`\`\`html\n    ${literal}\n\n    \`\`\`\n`,
         `- Example:\n\n  - Nested:\n\n    ~~~\n    ${literal}\n    ~~~\n`,
-        `1.  Example:\n  \n    \`\`\`html\n    ${literal}\n    \`\`\`\n`,
+        `1.  Example:\n  \n    \`\`\`html\n    ${literal}\n\n    \`\`\`\n`,
       ])
         expect(at(body).flaggedReviews).toEqual([]);
     });

@@ -41,7 +41,7 @@ const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
-const LIST_MARKER = /^(?:[-*+]|\d{1,9}[.)])(?: +|$)/;
+const LIST_MARKER = /^(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)/;
 const THEMATIC_BREAK = /^([-*_])(?:[ \t]*\1){2,}[ \t\r]*$/;
 const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
 const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
