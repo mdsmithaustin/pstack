@@ -689,6 +689,11 @@ describe("bodies in any format", () => {
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
     });
 
+    it("reads a paragraph's continuation lines as text", () => {
+      for (const body of [`text\n2. \`\`\`\n   ${counted}\n`, `- para\nlazy\n  \`\`\`\n${counted}\n`])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+    });
+
     it("opens no fence inside an HTML block", () => {
       for (const body of [
         `<details><summary>Fix</summary>\n\`\`\`suggestion\nfixed()\n</details>\n\n${missed}`,
