@@ -713,6 +713,13 @@ class LoginPreflight(unittest.TestCase):
         self.assertGrokStopped(outcome, "TAIL-OF-OUTPUT", output[-300:])
         self.assertNotIn("HEAD-OF-OUTPUT", outcome[2])
 
+    def test_grok_renewal_runs_without_the_debug_logging_the_host_turns_on(self):
+        seen = self.tmp / "renewal-env"
+        records = f'echo "RUST_LOG=$RUST_LOG GROK_LOG_FILE=${{GROK_LOG_FILE-absent}}" > "{seen}"'
+        self.wave("grok", self.grok("2020-01-01T00:00:00Z", records),
+                  mock.patch.dict(os.environ, {"RUST_LOG": "trace", "GROK_LOG_FILE": str(self.tmp / "grok.log")}))
+        self.assertEqual(seen.read_text(), "RUST_LOG=off GROK_LOG_FILE=absent\n")
+
     def test_grok_renewal_exiting_nonzero_stops_the_wave_with_its_output(self):
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", 'echo "xai refused the refresh grant" >&2; exit 7'))
         self.assertGrokStopped(outcome, "exited 7", "xai refused the refresh grant")
