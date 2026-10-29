@@ -37,6 +37,7 @@ const SECTION = /<summary><strong>([^<]*)<\/strong><\/summary>/dg;
 const TRAILING_COUNT = /^(.*) \((\d+)\)$/;
 const LEADING_COUNT = /^(\d+) (.+)$/;
 const RESOLVED = /^resolved\b/i;
+const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
@@ -139,7 +140,7 @@ const threadlessFindings = (body: string): readonly T.BodyFinding[] =>
   countedSections(body).flatMap((section) => {
     if (RESOLVED.test(section.name) || section.count === 0)
       return [];
-    return section.name === "Open"
+    return OPEN.test(section.name)
       ? threadlessOpenItems(section)
       : threadlessSectionItems(section);
   });
