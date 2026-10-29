@@ -31,12 +31,34 @@ interface CountedSection {
   readonly name: string;
   readonly count: number;
   readonly text: string;
+  readonly structure: string;
 }
-const SECTION = /<summary><strong>([^<]*)<\/strong><\/summary>/g;
-const COUNTED = /^(.*) \((\d+)\)$/;
+const SECTION = /<summary><strong>([^<]*)<\/strong><\/summary>/dg;
+const TRAILING_COUNT = /^(.*) \((\d+)\)$/;
+const LEADING_COUNT = /^(\d+) (.+)$/;
+const RESOLVED = /^resolved\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
-  /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/g;
+  /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
+const FENCED_CODE =
+  /^ {0,3}(`{3,}|~{3,})[^\n]*(?:\n[\s\S]*?^ {0,3}\1[`~]*[ \t]*$|[\s\S]*)/gm;
+const INLINE_CODE = /(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
+const blank = (code: string): string => code.replace(/[^\n]/g, " ");
+const withoutCode = (markdown: string): string =>
+  markdown.replace(FENCED_CODE, blank).replace(INLINE_CODE, blank);
+function group(match: RegExpExecArray, index: number, text: string): string {
+  const span = match.indices?.[index];
+  return span === undefined ? "" : text.slice(...span);
+}
+function countOf(heading: string): { name: string; count: number } | null {
+  const trailing = TRAILING_COUNT.exec(heading);
+  if (trailing !== null)
+    return { name: trailing[1], count: Number(trailing[2]) };
+  const leading = LEADING_COUNT.exec(heading);
+  return leading === null
+    ? null
+    : { name: leading[2], count: Number(leading[1]) };
+}
 function stripTags(html: string): string {
   let text = html;
   for (let previous = ""; previous !== text; ) {
@@ -50,27 +72,34 @@ function stripTags(html: string): string {
 
 const MAX_PADDED_FINDINGS = 20;
 function countedSections(body: string): readonly CountedSection[] {
-  const heads = [...body.matchAll(SECTION)];
+  const structure = withoutCode(body);
+  const heads = [...structure.matchAll(SECTION)];
   return heads.flatMap((head, index) => {
-    const counted = COUNTED.exec((head[1] ?? "").trim());
+    const counted = countOf(group(head, 1, body).trim());
     if (counted === null) return [];
-    const start = (head.index ?? 0) + head[0].length;
+    const start = head.index + head[0].length;
+    const end = heads[index + 1]?.index ?? body.length;
     return [
       {
-        name: counted[1] ?? "",
-        count: Number(counted[2]),
-        text: body.slice(start, heads[index + 1]?.index ?? body.length),
+        ...counted,
+        text: body.slice(start, end),
+        structure: structure.slice(start, end),
       },
     ];
   });
 }
 function threadlessOpenItems(section: CountedSection): readonly T.BodyFinding[] {
-  const lines = section.text.split("\n").filter((line) => line.startsWith("- "));
+  const raw = section.text.split("\n");
+  const lines = section.structure
+    .split("\n")
+    .flatMap((line, index) =>
+      line.startsWith("- ") ? [{ line, text: raw[index] }] : []
+    );
   const loose = lines
-    .filter((line) => !THREAD_LINK.test(line))
-    .map((line) => ({
+    .filter(({ line }) => !THREAD_LINK.test(line))
+    .map(({ text }) => ({
       section: section.name,
-      title: stripTags(line.slice(2)),
+      title: stripTags(text.slice(2)),
       location: null,
     }));
   const unparsed = Array.from(
@@ -87,7 +116,7 @@ function threadlessOpenItems(section: CountedSection): readonly T.BodyFinding[] 
 function threadlessSectionItems(
   section: CountedSection
 ): readonly T.BodyFinding[] {
-  const items = [...section.text.matchAll(NESTED_ITEM)];
+  const items = [...section.structure.matchAll(NESTED_ITEM)];
   return Array.from(
     { length: Math.max(Math.min(section.count, MAX_PADDED_FINDINGS), items.length) },
     (_, index) => {
@@ -96,10 +125,11 @@ function threadlessSectionItems(
         return { section: section.name, title: "(unparsed)", location: null };
       return {
         section: section.name,
-        title: stripTags(item[1] ?? ""),
+        title: stripTags(group(item, 1, section.text)),
         location:
-          /`([^`\n]+:\d+)`/.exec(item[2] ?? "")?.[1]?.replace(/\u200b/g, "") ??
-          null,
+          /`([^`\n]+:\d+)`/
+            .exec(group(item, 2, section.text))?.[1]
+            ?.replace(/\u200b/g, "") ?? null,
       };
     }
   );
@@ -107,7 +137,7 @@ function threadlessSectionItems(
 
 const threadlessFindings = (body: string): readonly T.BodyFinding[] =>
   countedSections(body).flatMap((section) => {
-    if (section.name === "Resolved since last review" || section.count === 0)
+    if (RESOLVED.test(section.name) || section.count === 0)
       return [];
     return section.name === "Open"
       ? threadlessOpenItems(section)
