@@ -157,8 +157,8 @@ def renew(env):
                               errors="replace", timeout=RENEWAL_TIMEOUT_S)
     except (OSError, subprocess.TimeoutExpired) as error:
         return f"`{command}` did not finish: {error!r}"
-    if done.returncode:
-        return f"`{command}` exited {done.returncode}: {(done.stdout + done.stderr).strip()[-300:]}"
+    tail = (done.stdout + done.stderr).strip()[-300:]
+    return f"`{command}` exited {done.returncode}" + (f": {tail}" if tail else "")
 
 
 def preflight():
@@ -170,9 +170,13 @@ def preflight():
     # grok renews a token only when it counts the token as expired, so match its early expiry to TOKEN_MARGIN.
     env = {**os.environ, "GROK_HOME": str(host_grok_home()),
            "GROK_AUTH_EARLY_INVALIDATION_SECS": str(int(TOKEN_MARGIN.total_seconds()))}
-    cause = renew(env) or "`grok models` exited 0 without renewing it"
+    cause = renew(env)
+    if not auth.is_file():
+        raise LoginRequired(LOGIN, f"grok removed the host login at {auth} during renewal, and {cause}")
     if expiring(auth):
-        raise LoginRequired(LOGIN, f"the host token is valid only until {host_token_expiry(auth):%Y-%m-%dT%H:%MZ}, and {cause}")
+        expiry = host_token_expiry(auth)
+        verb = "expired" if expiry <= datetime.datetime.now(datetime.timezone.utc) else "expires"
+        raise LoginRequired(LOGIN, f"the host token {verb} at {expiry:%Y-%m-%dT%H:%MZ}, and {cause}")
 
 
 def prepare(run):
