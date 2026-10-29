@@ -5,7 +5,7 @@
  "fixture": "tally",
  "entry": "poteto-mode",
  "turns": [
-  "autopilot these five changes but stack them, don't ship. i'll land the stack in the morning."
+  "autopilot these five changes, but don't merge. i'll land them in the morning."
  ],
  "timeout_s": {
   "default": 300,

@@ -134,7 +134,7 @@
   },
   "arena-readonly-cross-judge": {
    "check": "live",
-   "claim": "A read-only cross-judge, on a different model family or tier when the configuration allows, scores every candidate against the rubric.",
+   "claim": "A read-only cross-judge on a model other than the parent's, from a different family when the configuration has one, scores every candidate against the rubric.",
    "harness_sensitive": true,
    "live_case": "tally fixture; prompt `/arena this, 5 candidates. the cache key format is expensive to change later.`; pass when five candidates spawn in one message into separate worktrees, a read-only cross-judge scores them, and the lead reads rationales plus the base before grafting.",
    "owners": [
@@ -152,6 +152,24 @@
     "skills/arena/SKILL.md"
    ],
    "scenario": "arena-run"
+  },
+  "arena-skips-judge-without-other-model": {
+   "check": "static",
+   "claim": "When no cross-judge entry runs on a model other than the parent's, the arena lead skips the judge and picks the base itself.",
+   "evidence": [
+    {
+     "file": "skills/arena/SKILL.md",
+     "quote": "If no entry runs on another model, skip the judge, pick the base alone in Phase D, and say so."
+    },
+    {
+     "file": "skills/arena/SKILL.md",
+     "quote": "When Phase C skipped the judge, read every candidate's full artifact."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/arena/SKILL.md"
+   ]
   },
   "authoring-playbook-validates-and-ships": {
    "check": "static",
@@ -367,13 +385,13 @@
    ],
    "scenario": "autopilot-full-run"
   },
-  "autopilot-stack-delivers-linear-verified-stack": {
+  "autopilot-stack-delivers-verified-prs": {
    "check": "static",
-   "claim": "Autopilot-stack delivers one linear base-branch stack with a verifier verdict on every link for the operator to land.",
+   "claim": "Autopilot-stack delivers verified PRs, each with its verifier verdict, for the operator to review and land.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
-     "quote": "The deliverable is one linear chain of verified PRs, reviewable bottom-up in the resolved forge, every link carrying its verifier verdict in the PR body or a comment. The operator reviews and lands it, with their own clicks or by arming merge-when-ready."
+     "quote": "The deliverable is the verified PRs, each stack reviewable bottom-up in the resolved forge, every PR carrying its verifier verdict in the PR body or a comment. After the handoff, nobody pushes without the operator's go."
     },
     {
      "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
@@ -387,8 +405,12 @@
   },
   "autopilot-stack-ships-nothing": {
    "check": "static",
-   "claim": "Autopilot-stack runs the owner loop but no owner merges, arms auto-merge, or closes a PR.",
+   "claim": "Autopilot-stack is Autopilot-full without the merge: it runs the owner loop, and no owner merges, arms auto-merge, or closes a PR.",
    "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
+     "quote": "Run Autopilot-full without the merge."
+    },
     {
      "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
      "quote": "**Run the owner loop unchanged.**"
@@ -396,6 +418,20 @@
     {
      "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
      "quote": "**Append on a clean verdict, never ship.** No owner merges, arms auto-merge, or closes."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/autopilot-stack.md"
+   ]
+  },
+  "autopilot-stack-stacks-only-dependents": {
+   "check": "static",
+   "claim": "Autopilot-stack stacks a PR only on a PR it builds on, and every other PR keeps trunk as its base.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
+     "quote": "A clean verdict appends a PR that builds on another PR to that PR's stack, in dependency order. Every other PR keeps trunk as its base."
     }
    ],
    "harness_sensitive": false,
@@ -1665,14 +1701,24 @@
     "skills/pstack-harness/references/registration.md"
    ]
   },
+  "interrogate-keeps-run-proven-findings": {
+   "check": "live",
+   "claim": "/interrogate keeps only findings whose rerun shows a failure that breaks the intent, lists each verified finding with the adversaries that found it and what each adversary dropped and why, and applies nothing.",
+   "harness_sensitive": false,
+   "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one adversary per configured model spawns, no project file changes, and the reply lists each verified finding with its command and output, then each adversary's dropped findings and why.",
+   "owners": [
+    "skills/interrogate/SKILL.md"
+   ],
+   "scenario": "interrogate-run"
+  },
   "interrogate-multi-reviewer-adversarial": {
    "check": "live",
-   "claim": "/interrogate sends the same diff, intent, and rubric to several reviewers and returns a synthesized verdict.",
+   "claim": "/interrogate gives the change and its intent to several adversaries, each of which tries to break it with a run, and returns a verified verdict.",
    "harness_sensitive": true,
-   "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one reviewer per configured model spawns, no file changes, and the reply sorts findings into Act on, Consider, Noted, Dismissed with reasons.",
+   "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one adversary per configured model spawns, no project file changes, and the reply lists each verified finding with its command and output, then each adversary's dropped findings and why.",
    "owners": [
     "skills/interrogate/SKILL.md",
-    "skills/interrogate/references/reviewer-prompt.md"
+    "skills/arena/SKILL.md"
    ],
    "scenario": "interrogate-run"
   },
@@ -1680,7 +1726,7 @@
    "check": "live",
    "claim": "`don't change anything yet` keeps interrogate read-only.",
    "harness_sensitive": true,
-   "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one reviewer per configured model spawns, no file changes, and the reply sorts findings into Act on, Consider, Noted, Dismissed with reasons.",
+   "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one adversary per configured model spawns, no project file changes, and the reply lists each verified finding with its command and output, then each adversary's dropped findings and why.",
    "owners": [
     "skills/interrogate/SKILL.md"
    ],
@@ -1688,22 +1734,12 @@
   },
   "interrogate-reviewers-on-different-models": {
    "check": "live",
-   "claim": "interrogate's reviewers run on different models per the configured panel, or as same-model arms with distinct reviewer letters where the harness offers one vendor.",
+   "claim": "interrogate's adversaries run on different models per the configured panel, or as same-model arms where the harness offers one vendor.",
    "harness_sensitive": true,
-   "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one reviewer per configured model spawns, no file changes, and the reply sorts findings into Act on, Consider, Noted, Dismissed with reasons.",
+   "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one adversary per configured model spawns, no project file changes, and the reply lists each verified finding with its command and output, then each adversary's dropped findings and why.",
    "owners": [
     "skills/interrogate/SKILL.md",
     "skills/pstack-harness/SKILL.md"
-   ],
-   "scenario": "interrogate-run"
-  },
-  "interrogate-sorts-four-buckets-no-auto-apply": {
-   "check": "live",
-   "claim": "The interrogate lead sorts findings into Act on, Consider, Noted, and Dismissed with a reason per dismissal and applies nothing automatically.",
-   "harness_sensitive": false,
-   "live_case": "fixture branch; prompt `/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug.`; pass when one reviewer per configured model spawns, no file changes, and the reply sorts findings into Act on, Consider, Noted, Dismissed with reasons.",
-   "owners": [
-    "skills/interrogate/SKILL.md"
    ],
    "scenario": "interrogate-run"
   },
@@ -1777,11 +1813,11 @@
   },
   "ketchup-video-shows-catch-up-as-video": {
    "check": "static",
-   "claim": "/ketchup-video shows the catch-up in a short silent video of slides and lists the calls waiting on the user as text under it.",
+   "claim": "/ketchup-video shows the catch-up in a short subtitled video of slides and lists the calls waiting on the user as text under it.",
    "evidence": [
     {
      "file": "skills/ketchup-video/SKILL.md",
-     "quote": "Show what happened in a short silent video instead of its summary and visuals."
+     "quote": "Show what happened in a short subtitled video instead of its summary and visuals."
     },
     {
      "file": "skills/ketchup-video/SKILL.md",
@@ -2276,7 +2312,7 @@
   },
   "orchestrate-coordinator-never-writes-code": {
    "check": "static",
-   "claim": "The Orchestrate coordinator authors briefs, drains the inbox, keeps the lowest unmerged PR green, and never authors or edits code.",
+   "claim": "The Orchestrate coordinator decides which agent does each piece of work through its briefs, checks what each one produces, keeps the lowest unmerged PR green, and never authors or edits code.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
@@ -2285,6 +2321,10 @@
     {
      "file": "skills/poteto-mode/playbooks/orchestrate.md",
      "quote": "Keep the frontier green before upper-stack work."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/orchestrate.md",
+     "quote": "Whatever the unit's scale, a PR lands only on a pass from a verifier that is not its author, at the PR's current head."
     }
    ],
    "harness_sensitive": false,
@@ -3415,9 +3455,9 @@
   },
   "stack-prompt-routes-to-autopilot-stack": {
    "check": "live",
-   "claim": "`stack them, don't ship` runs the Autopilot-stack playbook.",
+   "claim": "`autopilot these ... changes, but don't merge` runs the Autopilot-stack playbook.",
    "harness_sensitive": true,
-   "live_case": "test repo with three coupled items; prompt `/poteto-mode autopilot these five changes but stack them, don't ship.`; pass when a linear stack with verdicts exists and nothing merged.",
+   "live_case": "test repo with five changes; prompt `/poteto-mode autopilot these five changes, but don't merge. i'll land them in the morning.`; pass when the lead routes to Autopilot-stack and nothing merges.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/playbooks/autopilot-stack.md"
@@ -4353,15 +4393,6 @@
    ],
    "text": "Name an area or a bug to start there instead:"
   },
-  "1041c1b909bb": {
-   "class": "context",
-   "file": "04-design.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Different models have different blind spots, so a finding two models raise independently is high-confidence signal."
-  },
   "106fbcf5944a": {
    "class": "promise",
    "file": "07-overnight.md",
@@ -4648,15 +4679,6 @@
    ],
    "text": "Commit it when the work is ambitious enough that a reviewer needs the trail to trust the result."
   },
-  "165da8e8f0d5": {
-   "class": "context",
-   "file": "04-design.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "The lead is a pragmatic senior engineer, not an oracle, and you can override it."
-  },
   "16efbef9dc59": {
    "class": "substituted",
    "file": "07-overnight.md",
@@ -4846,15 +4868,6 @@
     "port"
    ],
    "text": "**Correcting the same mistake by hand.** A correction in chat helps one run. `/correct` fixes the repo so no later run repeats it."
-  },
-  "1a8a4a4147be": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "interrogate-reviewers-on-different-models",
-   "sources": [
-    "port"
-   ],
-   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to the configured reviewer panel, which may run on one model."
   },
   "1a8bb2d8254d": {
    "class": "promise",
@@ -5414,6 +5427,18 @@
    ],
    "text": "```text\n/benchmark-checklist vet this 40% speedup before it goes in the pr description\n```"
   },
+  "2ae33e5230ff": {
+   "class": "substituted",
+   "file": "04-design.md",
+   "ported_as": [
+    "921f7d7de9fb"
+   ],
+   "promise": "arena-readonly-cross-judge",
+   "sources": [
+    "upstream"
+   ],
+   "text": "A read-only judge from a different model family scores every candidate against a rubric."
+  },
   "2b2895947649": {
    "class": "promise",
    "file": "README.md",
@@ -5760,6 +5785,16 @@
    ],
    "text": "When one is off, setup shows you the exact setting and writes it only if you say yes."
   },
+  "335e0cbca8c1": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-keeps-run-proven-findings",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "The report lists every verified finding with the adversaries that found it, then what each adversary dropped and why, and applies nothing."
+  },
   "337013f34211": {
    "class": "promise",
    "file": "08-principles.md",
@@ -5921,6 +5956,16 @@
     "port"
    ],
    "text": "Hermes requires trust for project skills, and its project link can be skipped when `.hermes` does not exist."
+  },
+  "36d080d28bc8": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "autopilot-stack-ships-nothing",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "[Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) is Autopilot-full without the merge."
   },
   "3835af2d4290": {
    "class": "promise",
@@ -6102,16 +6147,6 @@
     "port"
    ],
    "text": "`/recall` rebuilds your own recent context on a topic."
-  },
-  "3c5db6e95fd3": {
-   "class": "promise",
-   "file": "10-recipes-and-pitfalls.md",
-   "promise": "interrogate-sorts-four-buckets-no-auto-apply",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "**Accepting every review comment.** Bots and humans both file real catches and noise in one list. `/interrogate` sorts findings into act-on and dismissed buckets with reasons, and you can override either way."
   },
   "3c65e7242410": {
    "class": "context",
@@ -6307,6 +6342,15 @@
     "port"
    ],
    "text": "It updates the verification from the code, reruns it, shows that each updated check can still fail, and tells you whether each failure is drift in the verification or a bug in the code."
+  },
+  "41a3787d8ef6": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "arena-skips-judge-without-other-model",
+   "sources": [
+    "port"
+   ],
+   "text": "When no such model can run, the coordinator skips the judge and picks the base itself."
   },
   "4201dba7448d": {
    "class": "substituted",
@@ -6530,16 +6574,6 @@
    ],
    "text": "**Enumerating skills in the prompt.** \"use /how then /architect then /arena\" reorders steps the playbook already sequences. State the goal and constraints. Name a skill only to override a default."
   },
-  "4787376eac89": {
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "orchestrate-coordinator-never-writes-code",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "The coordinator authors briefs, collects what its subagents finish, keeps the lowest unmerged PR green, and never writes code itself."
-  },
   "482ba486f2dd": {
    "class": "substituted",
    "file": "01-setup.md",
@@ -6628,16 +6662,6 @@
    ],
    "text": "The contract above drives one task to one finish condition."
   },
-  "4ac84148ecf9": {
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "stack-prompt-routes-to-autopilot-stack",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "```text\n/poteto-mode autopilot these five changes but stack them, don't ship. i'll land the stack in the morning.\n```"
-  },
   "4b079863fa47": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -6683,15 +6707,6 @@
     "port"
    ],
    "text": "**Pitfall:** don't skip this page's skills because \"the agent will read the code anyway.\" An agent that starts editing without a traced model tends to fix the symptom at the first plausible spot."
-  },
-  "4c192f6b0c89": {
-   "class": "context",
-   "file": "04-design.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "`/interrogate` belongs on a diff."
   },
   "4c5cb33af9ed": {
    "class": "context",
@@ -6781,6 +6796,15 @@
    ],
    "text": "Each worker owns one package."
   },
+  "50ac24547d33": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "Read the Dropped list too."
+  },
   "50e5eaf55cc2": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -6855,6 +6879,15 @@
     "upstream"
    ],
    "text": "Grok tops out at `xhigh`, so it stays there."
+  },
+  "533e4c6014e3": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-reviewers-on-different-models",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) gives the change and its intent to adversaries on the configured reviewer panel, which may run on one model, and each tries to break it with a run against the real code."
   },
   "5391a1a84035": {
    "class": "promise",
@@ -7069,6 +7102,15 @@
    ],
    "text": "Without those two phrases, a mode mid-Feature tends to treat your question as the next feature step."
   },
+  "5901207190f0": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "Pick it over Autopilot-full when you want your own eyes on the work before anything merges:"
+  },
   "5944dd5bc16e": {
    "class": "substituted",
    "file": "01-setup.md",
@@ -7270,6 +7312,16 @@
    ],
    "text": "```text\n/architect with checkpoint. stop and show me before implementing.\n```"
   },
+  "5fcf592a0e51": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "autopilot-stack-delivers-verified-prs",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "You wake up to verified PRs, each with its verdict, and you review and land them yourself."
+  },
   "5fec60521f6d": {
    "class": "promise",
    "file": "README.md",
@@ -7317,16 +7369,6 @@
     "port"
    ],
    "text": "You don't write a spec."
-  },
-  "615092f99f7f": {
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "autopilot-stack-ships-nothing",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "[Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) runs the same owner loop but ships nothing."
   },
   "61b9825f7364": {
    "class": "promise",
@@ -7754,6 +7796,16 @@
    ],
    "text": "Before you report or act on a number, type:"
   },
+  "6a96d97d1833": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "ketchup-video-shows-catch-up-as-video",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "It shows what happened in a short subtitled video of slides, and lists the calls waiting on you as text under it."
+  },
   "6ae1e6114f67": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -8051,18 +8103,6 @@
    ],
    "text": "Give each body of work its own Project, such as a feature, a migration, a perf push, or a tech-debt cleanup. Several can run side by side."
   },
-  "7285a3d9185e": {
-   "class": "substituted",
-   "file": "04-design.md",
-   "ported_as": [
-    "1a8a4a4147be"
-   ],
-   "promise": "interrogate-reviewers-on-different-models",
-   "sources": [
-    "upstream"
-   ],
-   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) sends the same diff, intent, and rubric to reviewers on different model families."
-  },
   "72d03515a709": {
    "class": "promise",
    "file": "04-design.md",
@@ -8110,6 +8150,18 @@
    ],
    "text": "So before review, hand them to fresh eyes:"
   },
+  "73ea518cc68a": {
+   "class": "substituted",
+   "file": "04-design.md",
+   "ported_as": [
+    "533e4c6014e3"
+   ],
+   "promise": "interrogate-reviewers-on-different-models",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[`/interrogate`](../../skills/interrogate/SKILL.md) gives the change and its intent to adversaries on the configured models, and each tries to break it with a run against the real code."
+  },
   "7464a664deff": {
    "class": "context",
    "file": "07-overnight.md",
@@ -8138,15 +8190,6 @@
    ],
    "text": "Changes that didn't help get discarded, not left to ride."
   },
-  "74ec8caa61ef": {
-   "class": "context",
-   "file": "07-overnight.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Pick it over Autopilot-full when the changes are coupled, or when you want your own eyes on the work before anything merges:"
-  },
   "750dec6eb607": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -8165,6 +8208,15 @@
     "port"
    ],
    "text": "The [Multi-phase plan playbook](../../skills/poteto-mode/playbooks/multi-phase-plan.md) settles any remaining open questions by prototype, then writes one section per PR, each ending in proof that the change works."
+  },
+  "75c5a0651240": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "You can override the verdict."
   },
   "768813397fb2": {
    "class": "context",
@@ -8444,6 +8496,15 @@
    ],
    "text": "That's the price of the rigor."
   },
+  "7e5a74fa4959": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "orchestrate-coordinator-never-writes-code",
+   "sources": [
+    "port"
+   ],
+   "text": "The coordinator decides which agent does each piece of work, checks what each one produces, keeps the lowest unmerged PR green, and never writes code itself."
+  },
   "7e7cc9da08ed": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -8489,6 +8550,16 @@
     "port"
    ],
    "text": "Next: [Verify and ship](./06-verify-and-ship.md)."
+  },
+  "7f95a9cf8f94": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "interrogate-read-only-when-asked",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "\"don't change anything yet\" keeps it read-only, and the nitpick rule pre-filters the noise so the verified findings are worth your time."
   },
   "7fec3c772765": {
    "class": "context",
@@ -8546,6 +8617,15 @@
     "port"
    ],
    "text": "When all you want is status, ask smaller and Babysit answers without starting the loop:"
+  },
+  "820ddf7e8cd8": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "Don't spend adversaries on an abstract plan."
   },
   "8261582447ac": {
    "class": "promise",
@@ -8619,6 +8699,16 @@
     "port"
    ],
    "text": "[Minimize Reader Load](../../skills/principle-minimize-reader-load/SKILL.md) collapses layers and hidden state a reader must hold in their head."
+  },
+  "8453603b45b4": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "autopilot-stack-stacks-only-dependents",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "A PR stacks only on a PR it builds on."
   },
   "845818c61be6": {
    "class": "context",
@@ -8739,6 +8829,15 @@
    ],
    "text": "It pushes around the gate only after you say \"bypass no-mistakes\" in the session."
   },
+  "88765b3e86f8": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "Adversaries find different failures."
+  },
   "88ad0ac4d9b3": {
    "class": "substituted",
    "file": "01-setup.md",
@@ -8769,16 +8868,6 @@
     "port"
    ],
    "text": "`changed` means one PR of proven corrections, confined to the verification skill's own directory."
-  },
-  "891befaad4be": {
-   "class": "promise",
-   "file": "10-recipes-and-pitfalls.md",
-   "promise": "interrogate-read-only-when-asked",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "\"don't change anything yet\" keeps it read-only, and the nitpick rule pre-filters the noise so `Act on` findings are worth your time."
   },
   "8921b1eb1ee6": {
    "class": "promise",
@@ -9046,16 +9135,6 @@
    ],
    "text": "Next: [Make it yours](./09-make-it-yours.md)."
   },
-  "908ad725ff56": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "arena-readonly-cross-judge",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "A read-only judge, on a different model family when your configuration allows one, scores every candidate against a rubric."
-  },
   "908e3fe3345b": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -9141,6 +9220,25 @@
     "port"
    ],
    "text": "Five narrow PRs beat one fat one, and stacked follow-ups beat a growing branch."
+  },
+  "921f7d7de9fb": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "arena-readonly-cross-judge",
+   "sources": [
+    "port"
+   ],
+   "text": "A read-only judge on a model other than the parent's, from a different model family when your configuration has one, scores every candidate against a rubric."
+  },
+  "9223ab98b214": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "interrogate-keeps-run-proven-findings",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "A finding survives only when rerunning its command shows a failure that breaks the intent."
   },
   "923ba7bda583": {
    "class": "context",
@@ -9392,6 +9490,18 @@
     "port"
    ],
    "text": "```text\n/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.\n```"
+  },
+  "9de0185254fd": {
+   "class": "substituted",
+   "file": "07-overnight.md",
+   "ported_as": [
+    "7e5a74fa4959"
+   ],
+   "promise": "orchestrate-coordinator-never-writes-code",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The coordinator decides which agent does each piece of work, checks what each one produces, and never writes code itself."
   },
   "9ded9f8061cc": {
    "class": "context",
@@ -9721,6 +9831,16 @@
     "port"
    ],
    "text": "It doesn't start the work, because a pstack run spends real tokens, so you send the prompt when you're ready."
+  },
+  "a731f6e7be68": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "stack-prompt-routes-to-autopilot-stack",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "```text\n/poteto-mode autopilot these five changes, but don't merge. i'll land them in the morning.\n```"
   },
   "a7ab7a5e0010": {
    "also": [
@@ -10069,7 +10189,6 @@
    "class": "context",
    "file": "07-overnight.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "It's deliberately heavy machinery."
@@ -10082,15 +10201,6 @@
     "port"
    ],
    "text": "On Codex it also checks whether native subagent spawning is available, because without it pstack runs each role through a `codex exec` subprocess or inline, and an inline review is not independent."
-  },
-  "ae65b145c0ba": {
-   "class": "context",
-   "file": "04-design.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Point adversarial review at a plan with no code behind it and the reviewers invent theoretical risks and edge cases that will never happen."
   },
   "ae9d0c366843": {
    "class": "promise",
@@ -10233,6 +10343,18 @@
     "port"
    ],
    "text": "Name a skill only when you want to override a specific choice."
+  },
+  "b1559fb3dc93": {
+   "class": "substituted",
+   "file": "04-design.md",
+   "ported_as": [
+    "41a3787d8ef6"
+   ],
+   "promise": "arena-skips-judge-without-other-model",
+   "sources": [
+    "upstream"
+   ],
+   "text": "When no model from another family can run, the coordinator skips the judge and picks the base itself."
   },
   "b1de7266e82e": {
    "class": "promise",
@@ -10497,16 +10619,6 @@
     "port"
    ],
    "text": "[Verify and ship](./06-verify-and-ship.md#create-a-project-verification-skill) covers it in depth."
-  },
-  "b8765fa1ea14": {
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "autopilot-stack-delivers-linear-verified-stack",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "You wake up to one linear base-branch stack with a verifier's verdict on every link, and you review and land it yourself."
   },
   "b8772a83c464": {
    "class": "promise",
@@ -11350,15 +11462,6 @@
    ],
    "text": "Drag related chats into the Project, finished ones included. They become context for every agent in it."
   },
-  "d055f1ca652a": {
-   "class": "context",
-   "file": "04-design.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Read the dismissals too."
-  },
   "d060852b7fc5": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -12161,24 +12264,6 @@
    ],
    "text": "Then setup offers once to generate a formal verification skill with [`/create-formal-verification-skill`](../../skills/create-formal-verification-skill/SKILL.md), unless the project already has one."
   },
-  "e4f2a183b2d5": {
-   "class": "context",
-   "file": "04-design.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Don't spend reviewers on an abstract plan."
-  },
-  "e539d136021b": {
-   "class": "context",
-   "file": "04-design.md",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "Model diversity is the point."
-  },
   "e54f8645ae93": {
    "class": "context",
    "file": "README.md",
@@ -12829,6 +12914,16 @@
    ],
    "text": "Some bugs live on paths nobody drives: two retries that overlap, a lock that expires mid-write, a state change that arrives out of order."
   },
+  "f57538d0e50c": {
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "interrogate-keeps-run-proven-findings",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "**Accepting every review comment.** Bots and humans both file real catches and noise in one list. `/interrogate` keeps only the findings a rerun proves and lists what it dropped and why, and you can override either way."
+  },
   "f667f9ac96d2": {
    "class": "promise",
    "file": "07-overnight.md",
@@ -12869,6 +12964,15 @@
     "port"
    ],
    "text": "```text\n/poteto-mode add a --json flag. text output stays byte-identical. verify both forms.\n```"
+  },
+  "f842bd38d90e": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "`/interrogate` drops every finding a run does not prove, so a plan with no code behind it gives them little to break."
   },
   "f87f981bda52": {
    "class": "promise",
@@ -13052,26 +13156,6 @@
     "port"
    ],
    "text": "`/poteto-mode` picks the playbook, runs the other skills as the steps need them, and shows you the evidence."
-  },
-  "fe89b2fd0770": {
-   "class": "promise",
-   "file": "10-recipes-and-pitfalls.md",
-   "promise": "ketchup-video-shows-catch-up-as-video",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "It shows what happened in a short silent video of slides, and lists the calls waiting on you as text under it."
-  },
-  "fe89bf16b8de": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "interrogate-sorts-four-buckets-no-auto-apply",
-   "sources": [
-    "upstream",
-    "port"
-   ],
-   "text": "The lead sorts everything into `Act on`, `Consider`, `Noted`, and `Dismissed`, with a reason for each dismissal, and applies nothing automatically."
   },
   "fe8c017f6e91": {
    "class": "context",

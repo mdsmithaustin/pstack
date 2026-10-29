@@ -560,22 +560,22 @@ class HowWhyOracles(unittest.TestCase):
 
 
 class InterrogateSwarmArena(unittest.TestCase):
-    def test_interrogate_buckets_and_models(self):
+    def test_interrogate_sections_and_models(self):
         case = load_case("interrogate-run")
         reviewers = [{"seq": 1, "tool": "Agent", "persona": None, "model": "fable", "prompt_head": "You are an adversarial code reviewer. Reviewer A"},
                      {"seq": 2, "tool": "Agent", "persona": None, "model": "opus", "prompt_head": "You are an adversarial code reviewer. Reviewer B"}]
         events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}}]
-        reply = "## Verdict\n### Act On\n- bug\n### Consider\n- x\n### Noted\n- y\n### Dismissed\n- z: nit"
+        reply = "## Verdict\n### Intent\n- dedupe\n### Findings\n- bug: `pytest -k dedupe` printed 2, intent needs 1\n### Dropped\n- Reviewer A: 1, no run"
         trace = minimal(events=events, spawns=reviewers, final_reply=reply)
         for pid in ("interrogate-multi-reviewer-adversarial", "interrogate-reviewers-on-different-models",
-                    "interrogate-sorts-four-buckets-no-auto-apply", "interrogate-read-only-when-asked"):
+                    "interrogate-keeps-run-proven-findings", "interrogate-read-only-when-asked"):
             with self.subTest(pid=pid):
                 self.assertEqual(grade(pid, trace, case)["verdict"], PASS)
         same = minimal(events=events, spawns=[dict(r, model="opus", prompt_head="You are an adversarial code reviewer.") for r in reviewers], final_reply=reply)
         self.assertEqual(grade("interrogate-reviewers-on-different-models", same, case)["verdict"], FAIL)
         edited = minimal(events=events + [edit(3, "/w/relay/dedupe.py")], spawns=reviewers, final_reply=reply)
         self.assertEqual(grade("interrogate-read-only-when-asked", edited, case)["verdict"], FAIL)
-        self.assertEqual(grade("interrogate-sorts-four-buckets-no-auto-apply", minimal(final_reply="Act on: fix it"), case)["verdict"], FAIL)
+        self.assertEqual(grade("interrogate-keeps-run-proven-findings", minimal(final_reply="Findings: fix it"), case)["verdict"], FAIL)
 
     def test_swarm_statuses(self):
         case = load_case("swarm-run")
