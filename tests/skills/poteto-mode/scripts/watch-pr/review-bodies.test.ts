@@ -710,6 +710,19 @@ describe("bodies in any format", () => {
         expect(at(body).flaggedReviews).toEqual([]);
     });
 
+    it("opens no fence inside any kind of HTML block", () => {
+      for (const body of [
+        `<!-- c\n~~~\n- ${counted}\n`,
+        `<pre>\n  ~~~\n${counted}\n`,
+        `<pre>\n\n\`\`\`\n</pre>\n\n${counted}\n`,
+        `<?x\n\`\`\` \n  ${counted}\n`,
+        `<span>\n\`\`\`\`\n${counted}\n`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+      expect(at(`text\n<span>\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+      expect(at(`<!-- c -->\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
     it("opens no fence inside an HTML block", () => {
       for (const body of [
         `<details><summary>Fix</summary>\n\`\`\`suggestion\nfixed()\n</details>\n\n${missed}`,
