@@ -721,6 +721,13 @@ describe("bodies in any format", () => {
         `text\n<details>\n\`\`\`\n${counted}\n`,
       ])
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+      for (const body of [
+        `- <div>\n~~~js\nx\n\ny\n~~~\n\n${missed}`,
+        `# Example\n2. ~~~js\n   x\n   ~~~\n\n${missed}`,
+        `# Example\n<span>\n~~~\n\n${missed}`,
+        `<!-- a --!>\n\`\`\`\n\n${missed}`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
       expect(at(`text\n<span>\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
       expect(at(`<!-- c -->\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
       expect(at(`<pre>\nx\n</pre>\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
