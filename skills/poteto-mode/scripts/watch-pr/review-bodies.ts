@@ -41,46 +41,65 @@ const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
-const LIST_MARKER = /^(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)/;
-const THEMATIC_BREAK = /^([-*_])(?:[ \t]*\1){2,}[ \t\r]*$/;
+const LIST_MARKER = /^([-*+]|\d{1,9}[.)])(?:( +)(?=[^ ])| *$)/;
+const THEMATIC_BREAK = /^([-*_])(?: *\1){2,} *$/;
+const HTML_BLOCK =
+  /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ >]|\/>|$)/i;
 const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
-const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
+const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`).*?(?<!`)\1(?!`)/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
+function expandTabs(line: string): string {
+  let text = "";
+  for (const char of line) text += char === "\t" ? " ".repeat(4 - (text.length % 4)) : char;
+  return text;
+}
 const closesFence = (rest: string, opener: string): boolean => {
-  const run = rest.replace(/[ \t\r]+$/, "");
+  const run = rest.replace(/ +$/, "");
   return run.length >= opener.length && [...run].every((char) => char === opener[0]);
 };
-function withoutFences(markdown: string): string {
+function withoutCode(markdown: string): string {
   const items: number[] = [];
   let fence: { readonly opener: string; readonly container: number } | null = null;
+  let html = false;
+  let emptyItem = false;
   return markdown
     .split("\n")
     .map((line) => {
-      const indent = line.search(/[^ ]|$/);
-      if (line.trim() !== "") {
-        while (indent < (items.at(-1) ?? 0)) items.pop();
-        if (fence !== null && indent < fence.container) fence = null;
+      const text = expandTabs(line.replace(/\r$/, ""));
+      const indent = text.search(/[^ ]|$/);
+      if (indent === text.length) {
+        if (emptyItem) items.pop();
+        html = emptyItem = false;
+        return line;
       }
+      emptyItem = false;
+      while (indent < (items.at(-1) ?? 0)) items.pop();
+      if (fence !== null && indent < fence.container) fence = null;
       if (fence !== null) {
-        if (indent - fence.container <= 3 && closesFence(line.slice(indent), fence.opener))
+        if (indent - fence.container <= 3 && closesFence(text.slice(indent), fence.opener))
           fence = null;
         return blank(line);
       }
-      if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(line.slice(indent))) return line;
+      if (html) return line;
+      if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(text.slice(indent)))
+        return line.replace(INLINE_CODE, blank);
       let column = indent;
-      for (let marker; (marker = LIST_MARKER.exec(line.slice(column))) !== null; ) {
-        column += marker[0].length;
+      for (let marker; (marker = LIST_MARKER.exec(text.slice(column))) !== null; ) {
+        const gap = marker[2]?.length ?? 0;
+        column += marker[1].length + (gap === 0 || gap > 4 ? 1 : gap);
         items.push(column);
+        emptyItem = gap === 0;
       }
-      const opener = FENCE_OPENER.exec(line.slice(column))?.[0];
-      if (opener === undefined) return line;
+      const rest = text.slice(column);
+      html = HTML_BLOCK.test(rest);
+      if (html) return line;
+      const opener = FENCE_OPENER.exec(rest)?.[0];
+      if (opener === undefined) return line.replace(INLINE_CODE, blank);
       fence = { opener, container: items.at(-1) ?? 0 };
       return blank(line);
     })
     .join("\n");
 }
-const withoutCode = (markdown: string): string =>
-  withoutFences(markdown).replace(INLINE_CODE, blank);
 function group(match: RegExpExecArray, index: number, text: string): string {
   const span = match.indices?.[index];
   return span === undefined ? "" : text.slice(...span);

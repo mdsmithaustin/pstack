@@ -611,7 +611,7 @@ describe("bodies in any format", () => {
     });
 
     it("keeps a section whole across a heading in fenced code", () => {
-      const body = "<summary><strong>Open (2)</strong></summary>\n- First item\n```\n<summary><strong>Notes</strong></summary>\n```\n- Second item";
+      const body = "<summary><strong>Open (2)</strong></summary>\n\n- First item\n```\n<summary><strong>Notes</strong></summary>\n```\n- Second item";
       expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
         [finding("Open", "First item", null), finding("Open", "Second item", null)],
       ]);
@@ -648,12 +648,16 @@ describe("bodies in any format", () => {
     it("still reads a finding between lines with backslash-escaped backticks", () => {
       const body = `Escape a \\\` like this.\n${missed}\nAnd \\\` again.\n`;
       expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+      const inline = `Escape \\\` then ${literal} then \\\` again.\n`;
+      expect(at(inline).flaggedReviews).toMatchObject([{ findings: [{ section: "Open", title: "(unparsed)" }] }]);
     });
 
     it("opens a code span after an escaped backslash", () => {
       for (const slashes of ["\\\\", "\\\\\\\\"]) {
         const body = `Path ${slashes}\`code\` here.\n${missed}\nThen \`x\` there.\n`;
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+        const inline = `Path ${slashes}\`code\` ${literal} \`x\` there.\n`;
+        expect(at(inline).flaggedReviews).toMatchObject([{ findings: [{ section: "Open", title: "(unparsed)" }] }]);
       }
     });
 
@@ -677,6 +681,8 @@ describe("bodies in any format", () => {
         `-\n  \`\`\`\n${missed}\n`.replace(/\n/g, "\r\n"),
         `-     foo\n  \`\`\`\n  code\n${missed}`,
         `-\n  \`\`\`\n x\n ${missed}`,
+        `-\n\n    \`\`\`\n  ${missed}\n`,
+        `-\t\n  ~~~\n- ${missed}\n`,
       ])
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
       for (const body of [`-\t\`\`\`js\n  ${counted}\n`, `-\t\`\`\`\n      x\n      \`\`\`\n      ${counted}\n`])
@@ -698,9 +704,12 @@ describe("bodies in any format", () => {
         `    \`\`\`\n${counted}\n    \`\`\`\n`,
         `- one \` a\n- ${counted} \` b\n`,
         `### Note \` here\n${counted} and \` there\n`,
-        `A stray \` in prose.\n<details>\n${counted}\n<details><summary>Use \`foo\`</summary>body</details>\n</details>\n`,
       ])
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+      const nested = `A stray \` in prose.\n<details>\n${counted}\n<details><summary>Use \`foo\`</summary>body</details>\n</details>\n`;
+      expect(at(nested).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("Previously missed", "Use `foo`", null)],
+      ]);
     });
 
     it("reads CRLF line endings like LF", () => {
@@ -735,6 +744,14 @@ describe("bodies in any format", () => {
 
     it("keeps a fence open past a closer indented four spaces", () => {
       expect(at(`\`\`\`\n    \`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("closes a fence on a closer with trailing spaces", () => {
+      expect(at(`\`\`\`\n${literal}\n\`\`\`   \n\n${missed}`).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
+    it("reads a counted summary in a code span on a list item's continuation line as clean", () => {
+      expect(at(`- Example:\n      \`${literal}\`\n`).flaggedReviews).toEqual([]);
     });
 
     it("keeps a fence open past a shorter closer", () => {
