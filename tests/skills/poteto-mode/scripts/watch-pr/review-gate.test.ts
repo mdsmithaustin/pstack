@@ -113,6 +113,15 @@ describe("the review-findings gate on the real PRs", () => {
     expect(decision.pr.proof.unreadReviews).toEqual([]);
   });
 
+  it("reports #351 READY at the head Copilot approved without a Findings line", async () => {
+    const row = await snapshotAt({
+      number: 351,
+      head: HEADS[351],
+      reviews: restReviews(351),
+    });
+    expect(classifyPr(row).kind).toBe("ready");
+  });
+
   it("blocks #108 at 3e3260b7 on review 5388128492", async () => {
     const row = await snapshotAt({
       number: 108,

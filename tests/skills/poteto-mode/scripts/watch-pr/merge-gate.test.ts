@@ -4,7 +4,17 @@ import {
   evaluateGates,
   type GateReport,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-gate.ts";
+import {
+  buildReviewState,
+  parseReviewStatePage,
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import { passingCheck, pendingCheck } from "./fakes.test-helper.ts";
+import {
+  HEADS,
+  botReview,
+  restReviews,
+  reviewBodiesResponse,
+} from "./review-fixtures.test-helper.ts";
 import {
   CONTEXT,
   HEAD,
@@ -307,6 +317,27 @@ describe("evaluateGates", () => {
         },
       });
       expect(acked.report.ready).toBe(true);
+    });
+
+    it("review-bodies: passes bot bodies that show no open finding, whatever their format", async () => {
+      const head = HEADS[351];
+      const state = buildReviewState([
+        parseReviewStatePage(
+          reviewBodiesResponse({
+            headRefOid: head,
+            reviews: [
+              ...restReviews(351),
+              botReview({ id: 31, commit: head, body: "Found no bugs!", login: "other-bot" }),
+            ],
+          })
+        ),
+      ]);
+      const { report: result } = await report({
+        facts: { headRefOid: head },
+        flaggedReviews: state.flaggedReviews,
+        unreadReviews: state.unreadReviews,
+      });
+      expect(failedNames(result)).toEqual([]);
     });
 
     it("threads: an unresolved thread", async () => {

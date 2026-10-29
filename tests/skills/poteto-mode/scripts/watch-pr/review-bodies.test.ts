@@ -48,7 +48,7 @@ const finding = (section: string, title: string, location: string | null) => ({
 describe("review body classification over the real fixtures", () => {
   const none: null = null;
   const table: readonly [
-    pr: 104 | 107 | 108,
+    pr: keyof typeof HEADS,
     id: string,
     expected: ReturnType<typeof finding> | null,
   ][] = [
@@ -99,10 +99,11 @@ describe("review body classification over the real fixtures", () => {
         "PORTING.md:45"
       ),
     ],
+    [351, "5697766820", none],
   ];
 
-  it("covers every review in the three fixture files", () => {
-    for (const pr of [104, 107, 108] as const)
+  it("covers every review in the fixture files", () => {
+    for (const pr of [104, 107, 108, 351] as const)
       expect(
         restReviews(pr).map((review) => review.html_url.split("-").pop())
       ).toEqual(table.filter(([row]) => row === pr).map(([, id]) => id));
@@ -126,6 +127,21 @@ describe("review body classification over the real fixtures", () => {
       );
       expect(state.unreadReviews).toEqual([]);
     });
+
+  it("#50 flags each item of Copilot's older Suppressed comments section, as a heading or a summary", () => {
+    expect(
+      restReviews(50).map((review) =>
+        flagged({ head: review.commit_id, reviews: [review] }).flaggedReviews.map((row) =>
+          row.reading.kind === "findings"
+            ? row.reading.findings.map((item) => item.section)
+            : []
+        )
+      )
+    ).toEqual([
+      [["Suppressed comments"]],
+      [Array(4).fill("Suppressed comments")],
+    ]);
+  });
 
   it("never reads a user-authored review, even with a bot's findings in its body", () => {
     const body = restReviews(104)[2]?.body ?? "";
@@ -412,6 +428,14 @@ describe("bodies the registry does not understand", () => {
         untrustedExcerpt: "Bugbot reviewed your changes and found no bugs!",
       },
     ]);
+  });
+
+  it("flags a threadless counted section from any bot, with or without the Copilot marker", () => {
+    const section = `<details>\n<summary><strong>Previously missed (1)</strong></summary>\n</details>`;
+    for (const body of [section, `${OVERVIEW}\n${section}`])
+      expect(at(body, "cursor-bugbot").flaggedReviews).toMatchObject([
+        { id: "77", bot: "cursor-bugbot", status: "open" },
+      ]);
   });
 
   it("treats an empty or blank body as clean for every bot", () => {
