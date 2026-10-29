@@ -778,7 +778,7 @@ class BabysitWatcherPromises(GitHubSandbox):
 
         for label, login, body in [
             ("unfamiliar clean Copilot body", BOT, "### 🟢 Approval recommended\n\n**No open issues** 🎉"),
-            ("another bot's counted metadata", "coderabbitai", "<details>\n<summary>📒 Files selected for processing (5)</summary>\n\n* `a.ts`\n</details>"),
+            ("counted metadata in a plain summary", BOT, "<details>\n<summary>📒 Files selected for processing (5)</summary>\n\n* `a.ts`\n</details>"),
         ]:
             with self.subTest(label):
                 self.state["reviews"] = [self.bot_review(body=body, login=login)]
