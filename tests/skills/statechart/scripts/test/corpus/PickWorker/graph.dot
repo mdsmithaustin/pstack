@@ -1,0 +1,11 @@
+strict digraph DiskGraph {
+nodesep=0.35;
+subgraph cluster_graph {
+color="white";
+100002 [label="picked = {}",style = filled]
+100002 -> 100003 [label="Pick",color="black",fontcolor="black"];
+100003 [label="picked = {w1}"];
+100002 -> 100003 [label="Pick",color="black",fontcolor="black"];
+{rank = same; 100002;}
+}
+}

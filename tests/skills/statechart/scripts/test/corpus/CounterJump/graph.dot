@@ -1,0 +1,22 @@
+strict digraph DiskGraph {
+nodesep=0.35;
+subgraph cluster_graph {
+color="white";
+100002 [label="/\\ jumps = 0\n/\\ x = 0",style = filled]
+100002 -> 100003 [label="Step",color="black",fontcolor="black"];
+100003 [label="/\\ jumps = 0\n/\\ x = 1"];
+100003 -> 100004 [label="Step",color="black",fontcolor="black"];
+100004 [label="/\\ jumps = 0\n/\\ x = 2"];
+100004 -> 100005 [label="Step",color="black",fontcolor="black"];
+100005 [label="/\\ jumps = 0\n/\\ x = 3"];
+100005 -> 100006 [label="Step",color="black",fontcolor="black"];
+100006 [label="/\\ jumps = 0\n/\\ x = 4"];
+100006 -> 100007 [label="Step",color="black",fontcolor="black"];
+100007 [label="/\\ jumps = 0\n/\\ x = 5"];
+{rank = same; 100002;}
+{rank = same; 100003;}
+{rank = same; 100004;}
+{rank = same; 100005;}
+{rank = same; 100006;}
+}
+}

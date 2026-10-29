@@ -24,13 +24,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Download the TLC jar and pick the Java that tlc-tools.mjs pins
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.0"
+      - name: Download the TLC jar and pick the Java that run.ts pins
         run: |
           set -euo pipefail
-          pin=$(node --input-type=module -e '
-            import { JAVA_TOOL, TLC_TOOL } from "./skills/statechart/scripts/tlc-tools.mjs";
-            const [, sha, version] = TLC_TOOL.match(/checksum=sha256:([0-9a-f]{64})\]@(\S+)$/);
-            const [, major] = JAVA_TOOL.match(/^java@temurin-(\d+)$/);
+          pin=$(node -e '
+            const text = require("fs").readFileSync("skills/statechart/scripts/run.ts", "utf8");
+            const [, sha, version] = text.match(/checksum=sha256:([0-9a-f]{64})\]@(\S+?)"/);
+            const [, major] = text.match(/^const JAVA_TOOL = "java@temurin-(\d+)";$/m);
             console.log(sha, version, major);
           ')
           read -r sha version major <<< "$pin"
@@ -42,17 +45,15 @@ jobs:
           : "${!java_home:?this runner image has no Java ${major}}"
           echo "TLA2TOOLS=$jar" >> "$GITHUB_ENV"
           echo "JAVA=${!java_home}/bin/java" >> "$GITHUB_ENV"
-      - name: TLC resolves
-        run: |
-          node --input-type=module -e '
-            import { findTlc } from "./skills/statechart/scripts/tlc-tools.mjs";
-            console.log(findTlc());
-          '
-      - name: statechart script tests with TLC, none skipped for lack of TLC or Pele
+      - name: Install statechart test dependencies
+        working-directory: tests/skills/statechart/scripts
+        run: bun install --frozen-lockfile
+      - name: statechart script tests with TLC, none skipped for lack of TLC
+        working-directory: tests/skills/statechart/scripts
         run: |
           set -euo pipefail
-          node --test --test-reporter=tap tests/skills/statechart/scripts/test/*.test.mjs | tee "$RUNNER_TEMP/tap.txt"
+          node --disable-warning=ExperimentalWarning --test --test-reporter=tap test/*.test.ts | tee "$RUNNER_TEMP/tap.txt"
           grep -Eq '^# tests [1-9]' "$RUNNER_TEMP/tap.txt"
-          if grep -E '# SKIP (cannot find TLC|cannot install Pele|cannot compile a rename preload)' "$RUNNER_TEMP/tap.txt"; then
+          if grep -E '# SKIP set TLA2TOOLS' "$RUNNER_TEMP/tap.txt"; then
             exit 1
           fi

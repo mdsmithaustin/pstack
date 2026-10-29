@@ -1,0 +1,126 @@
+strict digraph DiskGraph {
+nodesep=0.35;
+subgraph cluster_graph {
+color="white";
+100002 [label="/\\ big = 0\n/\\ small = 0",style = filled]
+100002 -> 100003 [label="FillSmall",color="black",fontcolor="black"];
+100003 [label="/\\ big = 0\n/\\ small = 3"];
+100002 -> 100004 [label="FillBig",color="black",fontcolor="black"];
+100004 [label="/\\ big = 5\n/\\ small = 0"];
+100002 -> 100002 [label="EmptySmall",color="black",fontcolor="black"];
+100002 -> 100002 [label="EmptyBig",color="black",fontcolor="black"];
+100002 -> 100002 [label="SmallToBig",color="black",fontcolor="black"];
+100002 -> 100002 [label="BigToSmall",color="black",fontcolor="black"];
+100003 -> 100003 [label="FillSmall",color="black",fontcolor="black"];
+100003 -> 100005 [label="FillBig",color="black",fontcolor="black"];
+100005 [label="/\\ big = 5\n/\\ small = 3"];
+100003 -> 100002 [label="EmptySmall",color="black",fontcolor="black"];
+100003 -> 100003 [label="EmptyBig",color="black",fontcolor="black"];
+100003 -> 100006 [label="SmallToBig",color="black",fontcolor="black"];
+100006 [label="/\\ big = 3\n/\\ small = 0"];
+100003 -> 100003 [label="BigToSmall",color="black",fontcolor="black"];
+100004 -> 100005 [label="FillSmall",color="black",fontcolor="black"];
+100004 -> 100004 [label="FillBig",color="black",fontcolor="black"];
+100004 -> 100004 [label="EmptySmall",color="black",fontcolor="black"];
+100004 -> 100002 [label="EmptyBig",color="black",fontcolor="black"];
+100004 -> 100004 [label="SmallToBig",color="black",fontcolor="black"];
+100004 -> 100007 [label="BigToSmall",color="black",fontcolor="black"];
+100007 [label="/\\ big = 2\n/\\ small = 3"];
+100005 -> 100005 [label="FillSmall",color="black",fontcolor="black"];
+100005 -> 100005 [label="FillBig",color="black",fontcolor="black"];
+100005 -> 100004 [label="EmptySmall",color="black",fontcolor="black"];
+100005 -> 100003 [label="EmptyBig",color="black",fontcolor="black"];
+100005 -> 100005 [label="SmallToBig",color="black",fontcolor="black"];
+100005 -> 100005 [label="BigToSmall",color="black",fontcolor="black"];
+100006 -> 100008 [label="FillSmall",color="black",fontcolor="black"];
+100008 [label="/\\ big = 3\n/\\ small = 3"];
+100006 -> 100004 [label="FillBig",color="black",fontcolor="black"];
+100006 -> 100006 [label="EmptySmall",color="black",fontcolor="black"];
+100006 -> 100002 [label="EmptyBig",color="black",fontcolor="black"];
+100006 -> 100006 [label="SmallToBig",color="black",fontcolor="black"];
+100006 -> 100003 [label="BigToSmall",color="black",fontcolor="black"];
+100007 -> 100007 [label="FillSmall",color="black",fontcolor="black"];
+100007 -> 100005 [label="FillBig",color="black",fontcolor="black"];
+100007 -> 100009 [label="EmptySmall",color="black",fontcolor="black"];
+100009 [label="/\\ big = 2\n/\\ small = 0"];
+100007 -> 100003 [label="EmptyBig",color="black",fontcolor="black"];
+100007 -> 100004 [label="SmallToBig",color="black",fontcolor="black"];
+100007 -> 100007 [label="BigToSmall",color="black",fontcolor="black"];
+100008 -> 100008 [label="FillSmall",color="black",fontcolor="black"];
+100008 -> 100005 [label="FillBig",color="black",fontcolor="black"];
+100008 -> 100006 [label="EmptySmall",color="black",fontcolor="black"];
+100008 -> 100003 [label="EmptyBig",color="black",fontcolor="black"];
+100008 -> 100010 [label="SmallToBig",color="black",fontcolor="black"];
+100010 [label="/\\ big = 5\n/\\ small = 1"];
+100008 -> 100008 [label="BigToSmall",color="black",fontcolor="black"];
+100009 -> 100007 [label="FillSmall",color="black",fontcolor="black"];
+100009 -> 100004 [label="FillBig",color="black",fontcolor="black"];
+100009 -> 100009 [label="EmptySmall",color="black",fontcolor="black"];
+100009 -> 100002 [label="EmptyBig",color="black",fontcolor="black"];
+100009 -> 100009 [label="SmallToBig",color="black",fontcolor="black"];
+100009 -> 100011 [label="BigToSmall",color="black",fontcolor="black"];
+100011 [label="/\\ big = 0\n/\\ small = 2"];
+100010 -> 100005 [label="FillSmall",color="black",fontcolor="black"];
+100010 -> 100010 [label="FillBig",color="black",fontcolor="black"];
+100010 -> 100004 [label="EmptySmall",color="black",fontcolor="black"];
+100010 -> 100012 [label="EmptyBig",color="black",fontcolor="black"];
+100012 [label="/\\ big = 0\n/\\ small = 1"];
+100010 -> 100010 [label="SmallToBig",color="black",fontcolor="black"];
+100010 -> 100008 [label="BigToSmall",color="black",fontcolor="black"];
+100011 -> 100003 [label="FillSmall",color="black",fontcolor="black"];
+100011 -> 100013 [label="FillBig",color="black",fontcolor="black"];
+100013 [label="/\\ big = 5\n/\\ small = 2"];
+100011 -> 100002 [label="EmptySmall",color="black",fontcolor="black"];
+100011 -> 100011 [label="EmptyBig",color="black",fontcolor="black"];
+100011 -> 100009 [label="SmallToBig",color="black",fontcolor="black"];
+100011 -> 100011 [label="BigToSmall",color="black",fontcolor="black"];
+100012 -> 100003 [label="FillSmall",color="black",fontcolor="black"];
+100012 -> 100010 [label="FillBig",color="black",fontcolor="black"];
+100012 -> 100002 [label="EmptySmall",color="black",fontcolor="black"];
+100012 -> 100012 [label="EmptyBig",color="black",fontcolor="black"];
+100012 -> 100014 [label="SmallToBig",color="black",fontcolor="black"];
+100014 [label="/\\ big = 1\n/\\ small = 0"];
+100012 -> 100012 [label="BigToSmall",color="black",fontcolor="black"];
+100013 -> 100005 [label="FillSmall",color="black",fontcolor="black"];
+100013 -> 100013 [label="FillBig",color="black",fontcolor="black"];
+100013 -> 100004 [label="EmptySmall",color="black",fontcolor="black"];
+100013 -> 100011 [label="EmptyBig",color="black",fontcolor="black"];
+100013 -> 100013 [label="SmallToBig",color="black",fontcolor="black"];
+100013 -> 100015 [label="BigToSmall",color="black",fontcolor="black"];
+100015 [label="/\\ big = 4\n/\\ small = 3"];
+100014 -> 100016 [label="FillSmall",color="black",fontcolor="black"];
+100016 [label="/\\ big = 1\n/\\ small = 3"];
+100014 -> 100004 [label="FillBig",color="black",fontcolor="black"];
+100014 -> 100014 [label="EmptySmall",color="black",fontcolor="black"];
+100014 -> 100002 [label="EmptyBig",color="black",fontcolor="black"];
+100014 -> 100014 [label="SmallToBig",color="black",fontcolor="black"];
+100014 -> 100012 [label="BigToSmall",color="black",fontcolor="black"];
+100015 -> 100015 [label="FillSmall",color="black",fontcolor="black"];
+100015 -> 100005 [label="FillBig",color="black",fontcolor="black"];
+100015 -> 100017 [label="EmptySmall",color="black",fontcolor="black"];
+100017 [label="/\\ big = 4\n/\\ small = 0"];
+100015 -> 100003 [label="EmptyBig",color="black",fontcolor="black"];
+100015 -> 100013 [label="SmallToBig",color="black",fontcolor="black"];
+100015 -> 100015 [label="BigToSmall",color="black",fontcolor="black"];
+100016 -> 100016 [label="FillSmall",color="black",fontcolor="black"];
+100016 -> 100005 [label="FillBig",color="black",fontcolor="black"];
+100016 -> 100014 [label="EmptySmall",color="black",fontcolor="black"];
+100016 -> 100003 [label="EmptyBig",color="black",fontcolor="black"];
+100016 -> 100017 [label="SmallToBig",color="black",fontcolor="black"];
+100016 -> 100016 [label="BigToSmall",color="black",fontcolor="black"];
+100017 -> 100015 [label="FillSmall",color="black",fontcolor="black"];
+100017 -> 100004 [label="FillBig",color="black",fontcolor="black"];
+100017 -> 100017 [label="EmptySmall",color="black",fontcolor="black"];
+100017 -> 100002 [label="EmptyBig",color="black",fontcolor="black"];
+100017 -> 100017 [label="SmallToBig",color="black",fontcolor="black"];
+100017 -> 100016 [label="BigToSmall",color="black",fontcolor="black"];
+{rank = same; 100002;}
+{rank = same; 100004;100003;}
+{rank = same; 100005;100007;100006;}
+{rank = same; 100009;100008;}
+{rank = same; 100011;100010;}
+{rank = same; 100012;100013;}
+{rank = same; 100015;100014;}
+{rank = same; 100017;100016;}
+}
+}
