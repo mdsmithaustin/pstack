@@ -81,13 +81,13 @@ The contract above drives one task to one finish condition. Some nights hold mor
 
 On a base branch with a merge queue, owners stop at merge-ready, and the final reply lists those PRs as open operator gates.
 
-[Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) runs the same owner loop but ships nothing. You wake up to one linear base-branch stack with a verifier's verdict on every link, and you review and land it yourself. Pick it over Autopilot-full when the changes are coupled, or when you want your own eyes on the work before anything merges:
+[Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) is Autopilot-full without the merge. You wake up to verified PRs, each with its verdict, and you review and land them yourself. A PR stacks only on a PR it builds on. Pick it over Autopilot-full when you want your own eyes on the work before anything merges:
 
 ```text
-/poteto-mode autopilot these five changes but stack them, don't ship. i'll land the stack in the morning.
+/poteto-mode autopilot these five changes, but don't merge. i'll land them in the morning.
 ```
 
-[Orchestrate](../../skills/poteto-mode/playbooks/orchestrate.md) is for a program that outlives any single agent: multi-day, many stacked PRs, fleets of subagents under one standing coordinator chat. The coordinator authors briefs, collects what its subagents finish, keeps the lowest unmerged PR green, and never writes code itself. After a restart, the coordinator reads retained completions and attempt identities from `.orchestrate/`, then reconciles them with runtime evidence, pushed branches, and open PRs. Missing runtime evidence leaves an attempt uncertain. A replacement resolves the saved role and exact panel arm like any other spawn. Before dispatch, the coordinator records its predecessor and the harness, model, and effort that will run it. The [orch reference](../../skills/poteto-mode/scripts/orch/README.md) describes acknowledgment. It's deliberately heavy machinery. If one agent could finish the work in a session, the playbook itself routes you back to the overnight contract above:
+[Orchestrate](../../skills/poteto-mode/playbooks/orchestrate.md) is for a program that outlives any single agent: multi-day, many stacked PRs, fleets of subagents under one standing coordinator chat. The coordinator decides which agent does each piece of work, checks what each one produces, keeps the lowest unmerged PR green, and never writes code itself. After a restart, the coordinator reads retained completions and attempt identities from `.orchestrate/`, then reconciles them with runtime evidence, pushed branches, and open PRs. Missing runtime evidence leaves an attempt uncertain. A replacement resolves the saved role and exact panel arm like any other spawn. Before dispatch, the coordinator records its predecessor and the harness, model, and effort that will run it. The [orch reference](../../skills/poteto-mode/scripts/orch/README.md) describes acknowledgment. It's deliberately heavy machinery. If one agent could finish the work in a session, the playbook itself routes you back to the overnight contract above:
 
 ```text
 /poteto-mode orchestrate the store migration. own it until every package is converted and merged. i'll check in twice a day.

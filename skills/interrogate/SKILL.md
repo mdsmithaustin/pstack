@@ -1,77 +1,35 @@
 ---
 name: interrogate
-description: "Use for \"interrogate\", \"adversarial review\", \"multi-model review\", \"challenge this\", \"stress test this code\", \"find blind spots\", or \"tear this apart\". Multiple LLM reviewers challenge changes from independent angles."
+description: "Use for \"interrogate\", \"adversarial review\", \"multi-model review\", \"challenge this\", \"stress test this code\", \"find blind spots\", or \"tear this apart\". Adversaries try to break a change or design, and only findings proven by a run survive."
 ---
 
 # Interrogate
 
-Spawn one reviewer per configured model to adversarially review code changes. The adversarial signal comes from model diversity, not assigned personas. The deliverable is a synthesized verdict. Do NOT auto-apply changes.
+Adversaries try to break a change or a design. A finding survives only when a run proves it. Report the findings. Do not apply fixes.
 
-## Step 1, Scope
+## Frame
 
-Identify what to review from context:
+The scope is what the user names. Otherwise it is the branch diff from its merge base with the base branch, through the working tree. State the intent. Use the **in-your-own-words** skill. Take the intent from the user's message, the commits, and the PR description. Ask the user when the intent is unclear.
 
-- If the user points at specific files or a diff, use that.
-- If on a feature branch, run `git diff main...HEAD` (or the appropriate base branch) for the full changeset.
-- If the user's message references recent work, gather the relevant files.
+## Fan out
 
-Package the diff or file contents with any surrounding context files the reviewers need to understand the code.
+Use the **arena** skill. Run its Phase A steps 3 and 4 and its Phase B, with four changes. Use the `interrogate reviewers` role in place of `arena runners`, one adversary per entry. Its default is one each on `fable`, `opus`, `sonnet`. Label the adversaries Adversary A, B, and so on to match the entry count, and put each label in its brief, so arms stay distinct when they share a model. Copy the scope's uncommitted changes into each worktree. Spawn each adversary as `general-purpose`. In place of the arena task and rationale, give each adversary the scope, the intent, and this brief:
 
-## Step 2, Intent
+> Break this change. Prove each finding with a run against the real code, such as a failing test, a repro script, or command output that shows the wrong behavior. For a design or plan, run a prototype or probe the current tree. Keep repros in your own worktree. Report each finding with a title, the exact command, the output it printed, and the output the intent requires. Leave out anything you did not run. That covers style, naming, structure, and risks that need a future change to matter. No findings is a valid result.
 
-Before spawning reviewers, state the intent in one clear paragraph from the user's message, commit messages, the PR description if one exists, and the code. If you're unsure about the intent, ask the user before proceeding.
+When the scope's context declares threats, add each declared threat to the brief and ask the adversaries to break its mitigation.
 
-## Step 3, Spawn Reviewers
+If a spawn rejects a default entry, also open a separate PR to update this step's default and `skills/setup-pstack/examples/pstack-models.md` in the pstack repository, the file the resolver reads. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.
 
-Launch all reviewers in a single message with the Task tool, one per entry of the `interrogate reviewers` role, labeled Reviewer A, B, and so on to match the entry count. Its default is the table below. Use the **pstack-harness** skill for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
+## Verify
 
-| Subagent | Default model |
-|----------|---------------|
-| Reviewer A | `fable` |
-| Reviewer B | `opus` |
-| Reviewer C | `sonnet` |
+Verify each finding per arena Phase F by rerunning its command. Keep a finding when the output shows the failure and the failure breaks the intent. Drop the rest. Before you merge anything, state which models the adversaries ran on and count arms that shared a model as one adversary. Merge findings that share a root cause.
 
-For each reviewer:
-- `subagent_type`: `general-purpose`
-- `model` and effort: that reviewer's resolved arm, per **Spawn a role**.
-- `readonly`: `true`
+Skip arena Phases C, D, and E. Adversaries find different failures, so the verdict keeps every verified finding, not one adversary's list.
 
-If the Task tool rejects a configured entry or a table default, use the **pstack-harness** skill to handle it. When it rejects a table default, also open a separate PR to update this step's Default model table and `skills/setup-pstack/examples/pstack-models.md` in the pstack repository, the file the resolver reads. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.
+## Output
 
-Read `references/reviewer-prompt.md` and fill in the same template for every reviewer with the stated intent, the diff or file contents, the rubric from `references/rubric.md`, and the code-quality lens from `references/code-quality-review.md`.
-
-## Step 4, Synthesize
-
-As results come back, build a unified picture. Before you merge anything, state which models the reviewers ran on and count arms that shared a model as one reviewer. Parse every reviewer's findings. Merge findings that describe the same issue differently, and note which models raised each one. Findings two or more models raised independently are the highest signal. Read a lone model's finding, but weight it accordingly. Note disagreements. If one model flags something and another explicitly says the opposite, that is context for the verdict.
-
-## Step 5, Lead Judgment
-
-You are the lead reviewer, a pragmatic senior engineer, not a neutral aggregator. Read `references/lead-judgment.md` for the full framework. Put every finding in one of four buckets, with the model(s) that raised it and a one-line rationale.
-
-- **Act on**. Real issues affecting correctness, security, or maintainability given the actual goals. They would block a real PR.
-- **Consider**. Legitimate, but you're not sure they outweigh the cost of addressing them now. Worth the user's attention.
-- **Noted**. Technically valid but not actionable. Context-dependent, premature optimization, or low-impact at this stage.
-- **Dismissed**. Wrong, nitpicky, or missing context, with a brief reason.
-
-## Output Format
-
-### Intent
-> [The stated intent paragraph from Step 2]
-
-### Reviewers
-- Reviewer [label]: [model name], [N findings] (one bullet per reviewer)
-
-### Act On
-[Each: description, which models raised it, why it matters.]
-
-### Consider
-[Each: description, which models raised it, the tradeoff.]
-
-### Noted
-[Brief list.]
-
-### Dismissed
-[Each with a brief rationale.]
-
-### Agreement Map
-[Where models agreed and diverged, and what that pattern tells us.]
+- **Intent**: the restatement.
+- **Findings**: for each verified finding, the command, its output, how it breaks the intent, and the adversaries that found it. Say "no verified findings" when none survive.
+- **Threats**: when the context declares threats, reconcile each with mitigation evidence or an explicit disposition per [Prove It Works](../principle-prove-it-works/SKILL.md).
+- **Dropped**: for each adversary, the count of dropped findings and why.

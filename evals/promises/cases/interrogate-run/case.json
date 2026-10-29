@@ -1,9 +1,9 @@
 {
  "promises": [
+  "interrogate-keeps-run-proven-findings",
   "interrogate-multi-reviewer-adversarial",
   "interrogate-read-only-when-asked",
-  "interrogate-reviewers-on-different-models",
-  "interrogate-sorts-four-buckets-no-auto-apply"
+  "interrogate-reviewers-on-different-models"
  ],
  "fixture": "relay",
  "entry": "interrogate",

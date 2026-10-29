@@ -81,7 +81,7 @@ PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
 HOW_SECTIONS = ("overview", "key concepts", "how it works", "where things live", "gotchas")
-BUCKETS = ("act on", "consider", "noted", "dismissed")
+INTERROGATE_SECTIONS = ("findings", "dropped")
 STOP = {"the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "it", "its", "this", "that",
         "with", "per", "as", "be", "by", "at", "from", "over", "into", "if", "then", "run", "use"}
 JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
@@ -1868,7 +1868,7 @@ def reviewer_arms(view):
         given = calls.get(spawn.get("seq")) or {}
         label = " ".join([view.spawn_text(spawn)] + [str(given.get(k) or "") for k in ("task_name", "description", "name")]).lower()
         sealed = bool(spawn.get("x_prompt_encrypted")) or str(given.get("message") or "").startswith("gAAAA")
-        if "review" in label or "adversarial" in label:
+        if "review" in label or "adversar" in label:
             picked.append(spawn)
         elif sealed and entry == "interrogate":
             picked.append(spawn)
@@ -1895,7 +1895,7 @@ def interrogate_readonly(view):
 def interrogate_multi(view):
     reviewers = reviewer_spawns(view)
     evidence = [f"reviewer spawns: {len(reviewers)}", f"one message: {view.one_message(reviewers)}",
-                f"reply has a verdict section: {'verdict' in view.final_reply.lower() or 'act on' in view.final_reply.lower()}",
+                f"reply has a verdict section: {'verdict' in view.final_reply.lower() or 'findings' in view.final_reply.lower()}",
                 *reviewer_evidence(view)]
     if len(reviewers) < 2:
         if view.killed and not view.spawns:
@@ -1918,7 +1918,7 @@ def interrogate_models(view):
     evidence = [f"reviewer models: {models}", *reviewer_evidence(view)]
     if len(distinct) >= 2:
         return passed(*evidence)
-    labels = {hit.group(0) for hit in (re.search(r"reviewer [a-c]\b", (s.get("prompt_head") or "").lower()) for s in reviewers) if hit}
+    labels = {hit.group(0) for hit in (re.search(r"(?:reviewer|adversary) [a-c]\b", (s.get("prompt_head") or "").lower()) for s in reviewers) if hit}
     if not any(models):
         if len(labels) >= 2:
             return passed(*evidence, f"no model field on this harness; arms differentiated by label: {len(labels)}")
@@ -1928,17 +1928,17 @@ def interrogate_models(view):
     return failed("all reviewers on one model with identical arms", *evidence)
 
 
-@oracle("interrogate-sorts-four-buckets-no-auto-apply")
-def interrogate_buckets(view):
+@oracle("interrogate-keeps-run-proven-findings")
+def interrogate_proven_findings(view):
     gate = completion_gate(view)
     if gate:
         return gate
     low = view.final_reply.lower()
-    present = [b for b in BUCKETS if re.search(rf"(?:^|\n)\W*{b}\b", low)]
+    present = [s for s in INTERROGATE_SECTIONS if re.search(rf"(?:^|\n)\W*{s}\b", low)]
     failures, evidence = no_edits_verdict(view)
-    evidence.append(f"buckets present: {present}")
-    if len(present) < 4:
-        failures.append(f"missing buckets: {[b for b in BUCKETS if b not in present]}")
+    evidence.append(f"sections present: {present}")
+    if len(present) < len(INTERROGATE_SECTIONS):
+        failures.append(f"missing sections: {[s for s in INTERROGATE_SECTIONS if s not in present]}")
     return failed(failures, *evidence) if failures else passed(*evidence)
 
 
