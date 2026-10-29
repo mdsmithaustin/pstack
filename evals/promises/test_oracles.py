@@ -573,6 +573,8 @@ class InterrogateSwarmArena(unittest.TestCase):
                 self.assertEqual(grade(pid, trace, case)["verdict"], PASS)
         same = minimal(events=events, spawns=[dict(r, model="opus", prompt_head="You are an adversarial code reviewer.") for r in reviewers], final_reply=reply)
         self.assertEqual(grade("interrogate-reviewers-on-different-models", same, case)["verdict"], FAIL)
+        labeled = minimal(events=events, spawns=[dict(r, model="opus", prompt_head=f"Break this change. Adversary {l}") for r, l in zip(reviewers, "AB")], final_reply=reply)
+        self.assertEqual(grade("interrogate-reviewers-on-different-models", labeled, case)["verdict"], PASS)
         edited = minimal(events=events + [edit(3, "/w/relay/dedupe.py")], spawns=reviewers, final_reply=reply)
         self.assertEqual(grade("interrogate-read-only-when-asked", edited, case)["verdict"], FAIL)
         self.assertEqual(grade("interrogate-keeps-run-proven-findings", minimal(final_reply="Findings: fix it"), case)["verdict"], FAIL)

@@ -1918,7 +1918,7 @@ def interrogate_models(view):
     evidence = [f"reviewer models: {models}", *reviewer_evidence(view)]
     if len(distinct) >= 2:
         return passed(*evidence)
-    labels = {hit.group(0) for hit in (re.search(r"reviewer [a-c]\b", (s.get("prompt_head") or "").lower()) for s in reviewers) if hit}
+    labels = {hit.group(0) for hit in (re.search(r"(?:reviewer|adversary) [a-c]\b", (s.get("prompt_head") or "").lower()) for s in reviewers) if hit}
     if not any(models):
         if len(labels) >= 2:
             return passed(*evidence, f"no model field on this harness; arms differentiated by label: {len(labels)}")

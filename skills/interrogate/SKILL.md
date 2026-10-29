@@ -13,7 +13,7 @@ The scope is what the user names. Otherwise it is the branch diff from its merge
 
 ## Fan out
 
-Use the **arena** skill. Run its Phase A steps 3 and 4 and its Phase B, with four changes. Use the `interrogate reviewers` role in place of `arena runners`, one adversary per entry. Its default is one each on `fable`, `opus`, `sonnet`. Copy the scope's uncommitted changes into each worktree. Spawn each adversary as `general-purpose`. In place of the arena task and rationale, give each adversary the scope, the intent, and this brief:
+Use the **arena** skill. Run its Phase A steps 3 and 4 and its Phase B, with four changes. Use the `interrogate reviewers` role in place of `arena runners`, one adversary per entry. Its default is one each on `fable`, `opus`, `sonnet`. Label the adversaries Adversary A, B, and so on to match the entry count, and put each label in its brief, so arms stay distinct when they share a model. Copy the scope's uncommitted changes into each worktree. Spawn each adversary as `general-purpose`. In place of the arena task and rationale, give each adversary the scope, the intent, and this brief:
 
 > Break this change. Prove each finding with a run against the real code, such as a failing test, a repro script, or command output that shows the wrong behavior. For a design or plan, run a prototype or probe the current tree. Keep repros in your own worktree. Report each finding with a title, the exact command, the output it printed, and the output the intent requires. Leave out anything you did not run. That covers style, naming, structure, and risks that need a future change to matter. No findings is a valid result.
 
