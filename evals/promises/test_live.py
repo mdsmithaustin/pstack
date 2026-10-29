@@ -684,10 +684,14 @@ class LoginPreflight(unittest.TestCase):
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", 'echo "xai refused the refresh grant" >&2; exit 7'))
         self.assertGrokStopped(outcome, "exited 7", "xai refused the refresh grant")
 
+    def test_grok_renewal_with_undecodable_output_still_stops_the_wave_with_its_exit_code(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", "printf '\\377' >&2; exit 1"))
+        self.assertGrokStopped(outcome, "exited 1")
+
     def test_grok_renewal_that_hangs_stops_the_wave_as_not_finished(self):
         from harnesses import grok
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", "exec sleep 3"),
-                            mock.patch.object(grok, "RENEWAL_TIMEOUT_S", 0.5, create=True))
+                            mock.patch.object(grok, "RENEWAL_TIMEOUT_S", 0.5))
         self.assertGrokStopped(outcome, "did not finish", "TimeoutExpired")
 
     def test_grok_with_no_working_binary_stops_the_wave_saying_the_renewal_never_ran(self):
