@@ -43,8 +43,19 @@ const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
 const LIST_MARKER = /^([-*+]|\d{1,9}[.)])(?:( +)(?=[^ ])| *$)/;
 const THEMATIC_BREAK = /^([-*_])(?: *\1){2,} *$/;
-const HTML_BLOCK =
-  /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ >]|\/>|$)/i;
+const HTML_BLOCKS: readonly (readonly [start: RegExp, end: RegExp | "blank"])[] = [
+  [/^<(?:pre|script|style|textarea)(?:[ >]|$)/i, /<\/(?:pre|script|style|textarea)>/i],
+  [/^<!--/, /-->/],
+  [/^<\?/, /\?>/],
+  [/^<![A-Za-z]/, />/],
+  [/^<!\[CDATA\[/, /\]\]>/],
+  [
+    /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ >]|\/>|$)/i,
+    "blank",
+  ],
+];
+const LONE_TAG =
+  /^(?:<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>)\s*$/;
 const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
 const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`).*?(?<!`)\1(?!`)/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
@@ -53,11 +64,19 @@ function expandTabs(line: string): string {
   for (const char of line) text += char === "\t" ? " ".repeat(4 - (text.length % 4)) : char;
   return text;
 }
+function htmlBlockEnd(rest: string): RegExp | "blank" | null {
+  const block = HTML_BLOCKS.find(([start]) => start.test(rest));
+  if (block !== undefined) return block[1];
+  return LONE_TAG.test(rest) ? "blank" : null;
+}
 function interruptsParagraph(rest: string, lazy: boolean): boolean {
   const marker = LIST_MARKER.exec(rest);
   if (marker !== null)
     return lazy || (marker[2] !== undefined && /^(?:[-*+]|1[.)])$/.test(marker[1]));
-  return [THEMATIC_BREAK, HTML_BLOCK, FENCE_OPENER, /^(?:#{1,6}(?: |$)|>)/].some((block) => block.test(rest));
+  return (
+    HTML_BLOCKS.some(([start]) => start.test(rest)) ||
+    [THEMATIC_BREAK, FENCE_OPENER, /^(?:#{1,6}(?: |$)|>)/].some((block) => block.test(rest))
+  );
 }
 const closesFence = (rest: string, opener: string): boolean => {
   const run = rest.replace(/ +$/, "");
@@ -66,7 +85,7 @@ const closesFence = (rest: string, opener: string): boolean => {
 function withoutCode(markdown: string): string {
   const items: number[] = [];
   let fence: { readonly opener: string; readonly container: number } | null = null;
-  let html = false;
+  let html: RegExp | "blank" | null = null;
   let emptyItem = false;
   let paragraph = false;
   return markdown
@@ -76,7 +95,8 @@ function withoutCode(markdown: string): string {
       const indent = text.search(/[^ ]|$/);
       if (indent === text.length) {
         if (emptyItem) items.pop();
-        html = emptyItem = paragraph = false;
+        if (html === "blank") html = null;
+        emptyItem = paragraph = false;
         return line;
       }
       emptyItem = false;
@@ -93,7 +113,10 @@ function withoutCode(markdown: string): string {
           fence = null;
         return blank(line);
       }
-      if (html) return line;
+      if (html !== null) {
+        if (html !== "blank" && html.test(text)) html = null;
+        return line;
+      }
       if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(text.slice(indent))) {
         paragraph = false;
         return line.replace(INLINE_CODE, blank);
@@ -106,10 +129,14 @@ function withoutCode(markdown: string): string {
         emptyItem = gap === 0;
       }
       const rest = text.slice(column);
-      html = HTML_BLOCK.test(rest);
+      const end = htmlBlockEnd(rest);
+      if (end !== null) {
+        html = end === "blank" || !end.test(rest) ? end : null;
+        paragraph = false;
+        return line;
+      }
       const opener = FENCE_OPENER.exec(rest)?.[0];
-      paragraph = !html && opener === undefined && rest !== "" && !rest.startsWith(">");
-      if (html) return line;
+      paragraph = opener === undefined && /^[^ >]/.test(rest);
       if (opener === undefined) return line.replace(INLINE_CODE, blank);
       fence = { opener, container: items.at(-1) ?? 0 };
       return blank(line);

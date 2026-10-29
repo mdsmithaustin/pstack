@@ -717,10 +717,13 @@ describe("bodies in any format", () => {
         `<pre>\n\n\`\`\`\n</pre>\n\n${counted}\n`,
         `<?x\n\`\`\` \n  ${counted}\n`,
         `<span>\n\`\`\`\`\n${counted}\n`,
+        `-     x\n</span>\n\`\`\` \n  ${counted}\n`,
+        `text\n<details>\n\`\`\`\n${counted}\n`,
       ])
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
       expect(at(`text\n<span>\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
       expect(at(`<!-- c -->\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+      expect(at(`<pre>\nx\n</pre>\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
     });
 
     it("opens no fence inside an HTML block", () => {
