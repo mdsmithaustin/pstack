@@ -41,12 +41,45 @@ const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
-const FENCED_CODE =
-  /^ {0,3}(`{3,}(?=[^`\n]*$)|~{3,})[^\n]*(?:\n[\s\S]*?^ {0,3}\1[`~]*[ \t]*$|[\s\S]*)/gm;
-const INLINE_CODE = /(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
+const LIST_MARKER = /^(?:[-*+]|\d{1,9}[.)])(?: +|$)/;
+const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
+const INLINE_CODE = /(?<![`\\])(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
+const closesFence = (rest: string, opener: string): boolean => {
+  const run = rest.trimEnd();
+  return run.length >= opener.length && [...run].every((char) => char === opener[0]);
+};
+function withoutFences(markdown: string): string {
+  const items: number[] = [];
+  let fence: { readonly opener: string; readonly container: number } | null = null;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const indent = line.search(/[^ ]|$/);
+      if (line.trim() !== "") {
+        while (indent < (items.at(-1) ?? 0)) items.pop();
+        if (fence !== null && indent < fence.container) fence = null;
+      }
+      if (fence !== null) {
+        if (indent - fence.container <= 3 && closesFence(line.slice(indent), fence.opener))
+          fence = null;
+        return blank(line);
+      }
+      if (indent - (items.at(-1) ?? 0) > 3) return line;
+      let column = indent;
+      for (let marker; (marker = LIST_MARKER.exec(line.slice(column))) !== null; ) {
+        column += marker[0].length;
+        items.push(column);
+      }
+      const opener = FENCE_OPENER.exec(line.slice(column))?.[0];
+      if (opener === undefined) return line;
+      fence = { opener, container: items.at(-1) ?? 0 };
+      return blank(line);
+    })
+    .join("\n");
+}
 const withoutCode = (markdown: string): string =>
-  markdown.replace(FENCED_CODE, blank).replace(INLINE_CODE, blank);
+  withoutFences(markdown).replace(INLINE_CODE, blank);
 function group(match: RegExpExecArray, index: number, text: string): string {
   const span = match.indices?.[index];
   return span === undefined ? "" : text.slice(...span);

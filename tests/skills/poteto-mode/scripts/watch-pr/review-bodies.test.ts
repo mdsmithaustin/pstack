@@ -667,6 +667,10 @@ describe("bodies in any format", () => {
       expect(at(`\`\`\`\n${literal}\n\`\`\`\`\n\n${missed}`).flaggedReviews.map((row) => row.findings)).toEqual(real);
     });
 
+    it("keeps a fence open past a closer indented four spaces", () => {
+      expect(at(`\`\`\`\n    \`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
     it("does not let a code span cross a blank line", () => {
       const body = `A stray \` in prose.\n\n${missed}\n\nAnother \` here.\n`;
       expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
