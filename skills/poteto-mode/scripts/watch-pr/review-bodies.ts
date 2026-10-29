@@ -44,18 +44,19 @@ const NESTED_ITEM =
 const LIST_MARKER = /^([-*+]|\d{1,9}[.)])(?:( +)(?=[^ ])| *$)/;
 const THEMATIC_BREAK = /^([-*_])(?: *\1){2,} *$/;
 const HTML_BLOCKS: readonly (readonly [start: RegExp, end: RegExp | "blank"])[] = [
-  [/^<(?:pre|script|style|textarea)(?:[ >]|$)/i, /<\/(?:pre|script|style|textarea)>/i],
+  [/^<(?:pre|script|style|textarea)(?:[ \t>]|$)/i, /<\/(?:pre|script|style|textarea)>/i],
   [/^<!--/, /-->/],
   [/^<\?/, /\?>/],
   [/^<![A-Za-z]/, />/],
   [/^<!\[CDATA\[/, /\]\]>/],
   [
-    /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ >]|\/>|$)/i,
+    /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t>]|\/>|$)/i,
     "blank",
   ],
 ];
 const LONE_TAG =
   /^(?:<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>)\s*$/;
+const ATX_HEADING = /^#{1,6}(?: |$)/;
 const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
 const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`).*?(?<!`)\1(?!`)/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
@@ -75,7 +76,7 @@ function interruptsParagraph(rest: string, lazy: boolean): boolean {
     return lazy || (marker[2] !== undefined && /^(?:[-*+]|1[.)])$/.test(marker[1]));
   return (
     HTML_BLOCKS.some(([start]) => start.test(rest)) ||
-    [THEMATIC_BREAK, FENCE_OPENER, /^(?:#{1,6}(?: |$)|>)/].some((block) => block.test(rest))
+    [THEMATIC_BREAK, FENCE_OPENER, ATX_HEADING, /^>/].some((block) => block.test(rest))
   );
 }
 const closesFence = (rest: string, opener: string): boolean => {
@@ -85,7 +86,7 @@ const closesFence = (rest: string, opener: string): boolean => {
 function withoutCode(markdown: string): string {
   const items: number[] = [];
   let fence: { readonly opener: string; readonly container: number } | null = null;
-  let html: RegExp | "blank" | null = null;
+  let html: { readonly end: RegExp | "blank"; readonly container: number } | null = null;
   let emptyItem = false;
   let paragraph = false;
   return markdown
@@ -95,7 +96,7 @@ function withoutCode(markdown: string): string {
       const indent = text.search(/[^ ]|$/);
       if (indent === text.length) {
         if (emptyItem) items.pop();
-        if (html === "blank") html = null;
+        if (html?.end === "blank") html = null;
         emptyItem = paragraph = false;
         return line;
       }
@@ -108,13 +109,14 @@ function withoutCode(markdown: string): string {
         return line.replace(INLINE_CODE, blank);
       while (indent < (items.at(-1) ?? 0)) items.pop();
       if (fence !== null && indent < fence.container) fence = null;
+      if (html !== null && indent < html.container) html = null;
       if (fence !== null) {
         if (indent - fence.container <= 3 && closesFence(text.slice(indent), fence.opener))
           fence = null;
         return blank(line);
       }
       if (html !== null) {
-        if (html !== "blank" && html.test(text)) html = null;
+        if (html.end !== "blank" && html.end.test(text)) html = null;
         return line;
       }
       if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(text.slice(indent))) {
@@ -131,12 +133,12 @@ function withoutCode(markdown: string): string {
       const rest = text.slice(column);
       const end = htmlBlockEnd(rest);
       if (end !== null) {
-        html = end === "blank" || !end.test(rest) ? end : null;
+        html = end === "blank" || !end.test(rest) ? { end, container: items.at(-1) ?? 0 } : null;
         paragraph = false;
         return line;
       }
       const opener = FENCE_OPENER.exec(rest)?.[0];
-      paragraph = opener === undefined && /^[^ >]/.test(rest);
+      paragraph = opener === undefined && /^[^ >]/.test(rest) && !ATX_HEADING.test(rest);
       if (opener === undefined) return line.replace(INLINE_CODE, blank);
       fence = { opener, container: items.at(-1) ?? 0 };
       return blank(line);
