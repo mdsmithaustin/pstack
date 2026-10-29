@@ -53,6 +53,12 @@ function expandTabs(line: string): string {
   for (const char of line) text += char === "\t" ? " ".repeat(4 - (text.length % 4)) : char;
   return text;
 }
+function interruptsParagraph(rest: string, lazy: boolean): boolean {
+  const marker = LIST_MARKER.exec(rest);
+  if (marker !== null)
+    return lazy || (marker[2] !== undefined && /^(?:[-*+]|1[.)])$/.test(marker[1]));
+  return [THEMATIC_BREAK, HTML_BLOCK, FENCE_OPENER, /^(?:#{1,6}(?: |$)|>)/].some((block) => block.test(rest));
+}
 const closesFence = (rest: string, opener: string): boolean => {
   const run = rest.replace(/ +$/, "");
   return run.length >= opener.length && [...run].every((char) => char === opener[0]);
@@ -62,6 +68,7 @@ function withoutCode(markdown: string): string {
   let fence: { readonly opener: string; readonly container: number } | null = null;
   let html = false;
   let emptyItem = false;
+  let paragraph = false;
   return markdown
     .split("\n")
     .map((line) => {
@@ -69,10 +76,16 @@ function withoutCode(markdown: string): string {
       const indent = text.search(/[^ ]|$/);
       if (indent === text.length) {
         if (emptyItem) items.pop();
-        html = emptyItem = false;
+        html = emptyItem = paragraph = false;
         return line;
       }
       emptyItem = false;
+      const container = items.at(-1) ?? 0;
+      if (
+        paragraph &&
+        (indent - container > 3 || !interruptsParagraph(text.slice(indent), indent < container))
+      )
+        return line.replace(INLINE_CODE, blank);
       while (indent < (items.at(-1) ?? 0)) items.pop();
       if (fence !== null && indent < fence.container) fence = null;
       if (fence !== null) {
@@ -81,8 +94,10 @@ function withoutCode(markdown: string): string {
         return blank(line);
       }
       if (html) return line;
-      if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(text.slice(indent)))
+      if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(text.slice(indent))) {
+        paragraph = false;
         return line.replace(INLINE_CODE, blank);
+      }
       let column = indent;
       for (let marker; (marker = LIST_MARKER.exec(text.slice(column))) !== null; ) {
         const gap = marker[2]?.length ?? 0;
@@ -92,8 +107,9 @@ function withoutCode(markdown: string): string {
       }
       const rest = text.slice(column);
       html = HTML_BLOCK.test(rest);
-      if (html) return line;
       const opener = FENCE_OPENER.exec(rest)?.[0];
+      paragraph = !html && opener === undefined && rest !== "" && !rest.startsWith(">");
+      if (html) return line;
       if (opener === undefined) return line.replace(INLINE_CODE, blank);
       fence = { opener, container: items.at(-1) ?? 0 };
       return blank(line);

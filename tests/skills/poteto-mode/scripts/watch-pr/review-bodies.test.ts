@@ -690,8 +690,24 @@ describe("bodies in any format", () => {
     });
 
     it("reads a paragraph's continuation lines as text", () => {
-      for (const body of [`text\n2. \`\`\`\n   ${counted}\n`, `- para\nlazy\n  \`\`\`\n${counted}\n`])
+      for (const body of [
+        `text\n2. \`\`\`\n   ${counted}\n`,
+        `- para\nlazy\n  \`\`\`\n${counted}\n`,
+        `text\n    \`\`\`\n2. \`\`\`\n   ${counted}\n`,
+        `-\n   text\n10) x\n    \`\`\`\n  ${counted}\n`,
+        `> text\n-\n  ~~~\n- ${counted}\n`,
+      ])
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+    });
+
+    it("ends a paragraph where CommonMark ends it", () => {
+      for (const body of [
+        `text\n\n2. \`\`\`\n   ${literal}\n   \`\`\`\n`,
+        `text\n* * *\n2. \`\`\`\n   ${literal}\n   \`\`\`\n`,
+        `\`\n-\n   \`\`\`\n${literal}\n`,
+        `Example:\n\n    \`${literal}\`\n`,
+      ])
+        expect(at(body).flaggedReviews).toEqual([]);
     });
 
     it("opens no fence inside an HTML block", () => {
