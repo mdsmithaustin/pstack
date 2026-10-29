@@ -18,7 +18,7 @@ The two bound cases, `poteto-help-run` and `poteto-help-unclear-run`, ran once e
 
 1 promise, 2 verdicts: PASS 2. No grader refusal, no preflight error, and no timeout. The turns took 62.5 s and 73.0 s.
 
-I read both final replies by hand. `poteto-help-run` routes the review question to `/poteto-mode review this branch` and the Code review playbook, with `/interrogate` and `/blast-radius` named for their narrower uses, a prompt block, and a public link. `poteto-help-unclear-run` offers the five help sections, reports that no models file exists, and gives a Bug fix prompt from `recipes.md`. Each run read skills only from its own `.agents/skills` (`x_host_skill_hits` is empty), spawned no subagents, and left the project unedited.
+Both runs were read by hand. `poteto-help-run`'s final reply routes the review question to `/poteto-mode review this branch` and the Code review playbook, with `/interrogate` and `/blast-radius` named for their narrower uses, a prompt block, and a public link. `poteto-help-unclear-run` offers the five help sections in an `ask_user_question` call, which the oracle counts. The call got no answer, and the final reply then reports that no models file exists and gives a Bug fix prompt from `recipes.md`. Each run read skills only from its own `.agents/skills` (`x_host_skill_hits` is empty), spawned no subagents, and left the project unedited.
 
 ## Why the 519d36a wave did not run Grok
 
