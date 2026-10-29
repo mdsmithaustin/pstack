@@ -1,4 +1,3 @@
-import { acknowledgment } from "./review-bodies.ts";
 import {
   ciBlocker,
   conflictBlocker,
@@ -241,15 +240,6 @@ function reviewBodiesGate(
     );
   if (row.pendingReviewBots.length > 0)
     problems.push(`review bot pending: ${row.pendingReviewBots.join(", ")}`);
-  const unacknowledged = row.unreadReviews.filter(
-    (unread) =>
-      acknowledgment(conversation.comments, conversation.prAuthor, unread.url) ===
-      undefined
-  );
-  if (unacknowledged.length > 0)
-    problems.push(
-      `${plural(unacknowledged.length, "unread bot review body")} with no acknowledgment: ${unacknowledged.map((unread) => `${unread.bot} ${unread.url}`).join(", ")}`
-    );
   return problems.length === 0
     ? pass("every bot review body on the head is acknowledged or clean")
     : fail(problems.join("; "));

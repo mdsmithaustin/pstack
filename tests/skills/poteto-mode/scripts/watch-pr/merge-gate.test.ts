@@ -24,7 +24,6 @@ import {
   failingChecks,
   issueComment,
   openFlaggedReview,
-  unreadReview,
   unresolvedThread,
   verdictBody,
   world,
@@ -302,23 +301,6 @@ describe("evaluateGates", () => {
       );
     });
 
-    it("review-bodies: an unread bot body fails until a trusted comment links it", async () => {
-      const unread = unreadReview();
-      const open = await report({ unreadReviews: [unread] });
-      expect(failedNames(open.report)).toEqual(["review-bodies"]);
-      expect(detailOf(open.report, "review-bodies")).toContain(unread.url);
-      const acked = await report({
-        unreadReviews: [unread],
-        port: {
-          comments: [
-            issueComment(),
-            issueComment({ body: `Read ${unread.url}, nothing to fix.` }),
-          ],
-        },
-      });
-      expect(acked.report.ready).toBe(true);
-    });
-
     it("review-bodies: passes bot bodies that show no open finding, whatever their format", async () => {
       const head = HEADS[351];
       const state = buildReviewState([
@@ -335,7 +317,6 @@ describe("evaluateGates", () => {
       const { report: result } = await report({
         facts: { headRefOid: head },
         flaggedReviews: state.flaggedReviews,
-        unreadReviews: state.unreadReviews,
       });
       expect(failedNames(result)).toEqual([]);
     });

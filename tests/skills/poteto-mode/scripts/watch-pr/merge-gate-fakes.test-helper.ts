@@ -25,7 +25,6 @@ import type {
   Repository,
   ReviewId,
   ReviewThread,
-  UnreadReview,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 import { fakeReader, failedCheck } from "./fakes.test-helper.ts";
@@ -151,7 +150,6 @@ export interface WorldOptions {
   readonly threads?: readonly ReviewThread[];
   readonly pendingBots?: readonly string[];
   readonly flaggedReviews?: readonly FlaggedReview[];
-  readonly unreadReviews?: readonly UnreadReview[];
   readonly origin?: Repository | null;
   readonly port?: FakePortOptions;
 }
@@ -174,9 +172,6 @@ export function world(options: WorldOptions = {}): {
       ...(options.flaggedReviews === undefined
         ? {}
         : { flaggedReviews: options.flaggedReviews }),
-      ...(options.unreadReviews === undefined
-        ? {}
-        : { unreadReviews: options.unreadReviews }),
     }),
     port: fakePort(options.port),
   };
@@ -195,22 +190,10 @@ export function openFlaggedReview(): FlaggedReview {
     url: REVIEW_URL,
     bot: "copilot-pull-request-reviewer",
     commitOid: HEAD,
-    reading: {
-      kind: "findings",
-      format: "copilot-overview-v2",
-      findings: [
-        { section: "Open", title: "unchecked cast", location: "a.ts:3" },
-      ],
-    },
+    findings: [
+      { section: "Open", title: "unchecked cast", location: "a.ts:3" },
+    ],
     status: "open",
-  };
-}
-export function unreadReview(): UnreadReview {
-  return {
-    id: "778" as ReviewId,
-    url: "https://github.com/owner/repo/pull/1#pullrequestreview-778",
-    bot: "other-bot",
-    untrustedExcerpt: "looks fine to me",
   };
 }
 export function unresolvedThread(): ReviewThread {

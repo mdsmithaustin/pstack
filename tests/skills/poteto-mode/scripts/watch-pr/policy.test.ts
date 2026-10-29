@@ -145,7 +145,6 @@ describe("PRs with no checks", () => {
             reviewLogins: [],
             pendingBots: [],
             flaggedReviews: [],
-            unreadReviews: [],
           };
         },
       },
@@ -389,7 +388,6 @@ describe("pending review bots", () => {
           reviewLogins: [],
           pendingBots: bots,
           flaggedReviews: [],
-          unreadReviews: [],
         };
       },
     } satisfies GitHubReader;

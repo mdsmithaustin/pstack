@@ -114,27 +114,16 @@ describe("review body classification over the real fixtures", () => {
       const review = restReviews(pr).find((row) => row.id === Number(id));
       if (review === undefined) throw new Error(`fixture lacks ${id}`);
       const state = flagged({ head: review.commit_id, reviews: [review] });
-      expect(state.flaggedReviews.map((row) => row.reading)).toEqual(
-        expected === null
-          ? []
-          : [
-              {
-                kind: "findings",
-                format: "copilot-overview-v2",
-                findings: [expected],
-              },
-            ]
+      expect(state.flaggedReviews.map((row) => row.findings)).toEqual(
+        expected === null ? [] : [[expected]]
       );
-      expect(state.unreadReviews).toEqual([]);
     });
 
   it("#50 flags each item of Copilot's older Suppressed comments section, as a heading or a summary", () => {
     expect(
       restReviews(50).map((review) =>
         flagged({ head: review.commit_id, reviews: [review] }).flaggedReviews.map((row) =>
-          row.reading.kind === "findings"
-            ? row.reading.findings.map((item) => item.section)
-            : []
+          row.findings.map((item) => item.section)
         )
       )
     ).toEqual([
@@ -151,7 +140,6 @@ describe("review body classification over the real fixtures", () => {
     };
     const state = flagged({ head: HEADS[104], reviews: [review] });
     expect(state.flaggedReviews).toEqual([]);
-    expect(state.unreadReviews).toEqual([]);
   });
 });
 
@@ -175,7 +163,6 @@ describe("which reviews count", () => {
   it("#107 at its final head is clean, though two earlier passes had findings", () => {
     const state = flagged({ head: HEADS[107], reviews: restReviews(107) });
     expect(state.flaggedReviews).toEqual([]);
-    expect(state.unreadReviews).toEqual([]);
   });
 
   it("#108 at 3e3260b7 flags review 5388128492 as open", () => {
@@ -397,37 +384,18 @@ describe("acknowledging a flagged review", () => {
   });
 });
 
-describe("bodies the registry does not understand", () => {
+describe("bodies in any format", () => {
   const at = (body: string, login = COPILOT) =>
     flagged({
       head: "head",
       reviews: [botReview({ id: 77, commit: "head", body, login })],
     });
 
-  it("blocks on a non-empty body from the Copilot login that no format claims", () => {
-    const state = at("## Copilot code review v3\n\nLooks risky.\n");
-    expect(state.flaggedReviews).toMatchObject([
-      {
-        id: "77",
-        status: "open",
-        bot: COPILOT,
-        reading: { kind: "unrecognized", untrustedExcerpt: "## Copilot code review v3" },
-      },
-    ]);
-    expect(state.unreadReviews).toEqual([]);
-  });
-
-  it("notes, without blocking, a non-empty body from any other bot", () => {
-    const state = at("Bugbot reviewed your changes and found no bugs!", "cursor-bugbot");
-    expect(state.flaggedReviews).toEqual([]);
-    expect(json(state.unreadReviews)).toEqual([
-      {
-        id: "77",
-        url: "https://github.com/owner/repo/pull/1#pullrequestreview-77",
-        bot: "cursor-bugbot",
-        untrustedExcerpt: "Bugbot reviewed your changes and found no bugs!",
-      },
-    ]);
+  it("reads a body with no counted section as clean, from Copilot or any other bot", () => {
+    expect(at("## Copilot code review v3\n\nLooks risky.\n").flaggedReviews).toEqual([]);
+    expect(
+      at("Bugbot reviewed your changes and found no bugs!", "cursor-bugbot").flaggedReviews
+    ).toEqual([]);
   });
 
   it("flags a threadless counted section from any bot, with or without the Copilot marker", () => {
@@ -440,23 +408,18 @@ describe("bodies the registry does not understand", () => {
 
   it("treats an empty or blank body as clean for every bot", () => {
     for (const login of [COPILOT, "cursor-bugbot"]) {
-      const state = at("  \n", login);
-      expect(state.flaggedReviews).toEqual([]);
-      expect(state.unreadReviews).toEqual([]);
+      expect(at("  \n", login).flaggedReviews).toEqual([]);
     }
   });
 
-  it("counts every item of an unknown section in a recognized Copilot body", () => {
+  it("counts every item of an unknown section", () => {
     const body = `${OVERVIEW}\n<details>\n<summary><strong>Low confidence (2)</strong></summary>\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
-        reading: {
-          kind: "findings",
-          findings: [
-            { section: "Low confidence", title: "(unparsed)", location: null },
-            { section: "Low confidence", title: "(unparsed)", location: null },
-          ],
-        },
+        findings: [
+          { section: "Low confidence", title: "(unparsed)", location: null },
+          { section: "Low confidence", title: "(unparsed)", location: null },
+        ],
       },
     ]);
   });
@@ -466,13 +429,10 @@ describe("bodies the registry does not understand", () => {
     expect(at(body).flaggedReviews).toEqual([]);
   });
 
-  it("blocks a marked Copilot body that has no Findings line, as unrecognized", () => {
+  it("flags a counted Open section in a body without a Findings line", () => {
     const body = `${MARKER}\n\n## Copilot review overview\n\n<details>\n<summary><strong>Open (1)</strong></summary>\n</details>\n`;
     expect(at(body).flaggedReviews).toMatchObject([
-      {
-        status: "open",
-        reading: { kind: "unrecognized", untrustedExcerpt: MARKER },
-      },
+      { status: "open", findings: [{ section: "Open", title: "(unparsed)" }] },
     ]);
   });
 
@@ -485,24 +445,21 @@ describe("bodies the registry does not understand", () => {
     for (const section of ["Previously missed", "Open"]) {
       const body = `${OVERVIEW}\n<details>\n<summary><strong>${section} (99999999999)</strong></summary>\n</details>`;
       const [row] = at(body).flaggedReviews;
-      expect(row?.reading.kind).toBe("findings");
-      expect(
-        row?.reading.kind === "findings" ? row.reading.findings.length : 0
-      ).toBe(20);
+      expect(row?.findings.length).toBe(20);
     }
   });
 
-  it("reads a body whose section count is not a finite number as unrecognized", () => {
+  it("bounds a section count too large for a number", () => {
     const body = `${OVERVIEW}\n<details>\n<summary><strong>Previously missed (${"9".repeat(400)})</strong></summary>\n</details>`;
-    expect(at(body).flaggedReviews).toMatchObject([
-      { status: "open", reading: { kind: "unrecognized" } },
-    ]);
+    const [row] = at(body).flaggedReviews;
+    expect(row?.status).toBe("open");
+    expect(row?.findings.length).toBe(20);
   });
 
   it("keeps the text around a stray angle bracket in a title", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Handle a < b and c > d\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
-      { reading: { findings: [{ title: "Handle a < b and c > d" }] } },
+      { findings: [{ title: "Handle a < b and c > d" }] },
     ]);
   });
 
@@ -510,9 +467,7 @@ describe("bodies the registry does not understand", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (2)</strong></summary>\n\n- <<b>script>alert(1)</b>\n- tail <script\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
-        reading: {
-          findings: [{ title: "alert(1)" }, { title: "tail script" }],
-        },
+        findings: [{ title: "alert(1)" }, { title: "tail script" }],
       },
     ]);
   });
@@ -521,10 +476,7 @@ describe("bodies the registry does not understand", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n<details><summary>Nested item</summary>body</details>\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
-        reading: {
-          kind: "findings",
-          findings: [{ section: "Open", title: "(unparsed)", location: null }],
-        },
+        findings: [{ section: "Open", title: "(unparsed)", location: null }],
       },
     ]);
   });
@@ -533,9 +485,7 @@ describe("bodies the registry does not understand", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (3)</strong></summary>\n\n- [Linked](#discussion_r42)\n- Loose item\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
-        reading: {
-          findings: [{ title: "Loose item" }, { title: "(unparsed)" }],
-        },
+        findings: [{ title: "Loose item" }, { title: "(unparsed)" }],
       },
     ]);
   });
@@ -544,12 +494,10 @@ describe("bodies the registry does not understand", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (2)</strong></summary>\n\n- [Mention #discussion_r42 in the docs](#something)\n- Mention #discussion_r42 in the docs\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
-        reading: {
-          findings: [
-            { title: "[Mention #discussion_r42 in the docs](#something)" },
-            { title: "Mention #discussion_r42 in the docs" },
-          ],
-        },
+        findings: [
+          { title: "[Mention #discussion_r42 in the docs](#something)" },
+          { title: "Mention #discussion_r42 in the docs" },
+        ],
       },
     ]);
   });
@@ -563,10 +511,7 @@ describe("bodies the registry does not understand", () => {
     const body = `${OVERVIEW}\n<details open>\n<summary><strong>Open (1)</strong></summary>\n\n- Needs a thread-less look\n</details>`;
     expect(at(body).flaggedReviews).toMatchObject([
       {
-        reading: {
-          kind: "findings",
-          findings: [{ section: "Open", title: "Needs a thread-less look", location: null }],
-        },
+        findings: [{ section: "Open", title: "Needs a thread-less look", location: null }],
       },
     ]);
   });

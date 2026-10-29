@@ -448,7 +448,7 @@ function parseConversationComment(
 function parseBodyReviews(
   pullRequest: Record<string, unknown>,
   reviewNodes: readonly unknown[]
-): Pick<T.ReviewState, "flaggedReviews" | "unreadReviews"> {
+): readonly T.FlaggedReview[] {
   const headRefOid = optionalString(
     at(pullRequest, ["headRefOid"]),
     "pullRequest.headRefOid"
@@ -472,9 +472,8 @@ function parseBodyReviews(
     const comment = parseConversationComment(node, `comments.nodes[${index}]`);
     return comment === null ? [] : [comment];
   });
-  if (headRefOid === null) return { flaggedReviews: [], unreadReviews: [] };
-  const report = flagReviewBodies({ headRefOid, prAuthor, reviews, comments });
-  return { flaggedReviews: report.flagged, unreadReviews: report.unread };
+  if (headRefOid === null) return [];
+  return flagReviewBodies({ headRefOid, prAuthor, reviews, comments });
 }
 export function parseReviewStatePage(value: unknown): T.ReviewStatePage {
   const pullRequest = record(
@@ -555,7 +554,7 @@ export function parseReviewStatePage(value: unknown): T.ReviewStatePage {
     endCursor: page.hasNextPage && cursor ? cursor : null,
     reviewLogins,
     pendingBots,
-    ...parseBodyReviews(pullRequest, reviewNodes),
+    flaggedReviews: parseBodyReviews(pullRequest, reviewNodes),
   };
 }
 // Bot pass counts come from every thread on every page, so the pages are
@@ -563,7 +562,7 @@ export function parseReviewStatePage(value: unknown): T.ReviewStatePage {
 export function buildReviewState(
   pages: T.NonEmpty<T.ReviewStatePage>
 ): T.ReviewState {
-  const [{ reviewLogins, pendingBots, flaggedReviews, unreadReviews }] = pages;
+  const [{ reviewLogins, pendingBots, flaggedReviews }] = pages;
   const threads = pages.flatMap((page) => page.threads);
   const keys = new Set<string>();
   let keyless = false;
@@ -594,7 +593,6 @@ export function buildReviewState(
       })),
     pendingBots,
     flaggedReviews,
-    unreadReviews,
   };
 }
 export function parsePullRequest(

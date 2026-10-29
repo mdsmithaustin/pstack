@@ -51,8 +51,6 @@ function mergeCell(row: T.PrSnapshot): string {
 }
 const prUrl = (pr: T.PrContext): string =>
   `https://${pr.host}/${pr.owner}/${pr.repo}/pull/${pr.number}`;
-const unreadNote = (unread: T.UnreadReview, pr: T.PrContext | null): string =>
-  `note=${pr === null ? "" : `#${pr.number} `}unread bot review body: ${unread.bot} ${unread.url} ${unread.untrustedExcerpt}`;
 export function renderStatusTable(rows: T.NonEmpty<T.PrSnapshot>): string {
   const lines = ["| PR | CI | Review | Merge |", "| --- | --- | --- | --- |"];
   for (const row of rows) {
@@ -60,10 +58,6 @@ export function renderStatusTable(rows: T.NonEmpty<T.PrSnapshot>): string {
       `| [#${row.context.number}](${prUrl(row.context)}) | ${ciCell(row)} | ${reviewCell(row)} | ${mergeCell(row)} |`
     );
   }
-  for (const row of rows)
-    if (row.kind === "open")
-      for (const unread of row.unreadReviews)
-        lines.push(unreadNote(unread, row.context));
   return `${lines.join("\n")}\n`;
 }
 function threadLine(thread: T.ReviewThread): string {
@@ -80,15 +74,12 @@ function threadLine(thread: T.ReviewThread): string {
   ].join(" ");
 }
 function reviewLines(review: T.OpenReview): readonly string[] {
-  const reading = review.reading;
   return [
-    `${review.id} ${review.bot} ${reading.kind === "findings" ? reading.format : "unrecognized"} ${review.url}`,
-    ...(reading.kind === "findings"
-      ? reading.findings.map(
-          (finding) =>
-            `  ${finding.section}: ${finding.title}${finding.location === null ? "" : ` ${finding.location}`}`
-        )
-      : [`  unrecognized body: ${reading.untrustedExcerpt}`]),
+    `${review.id} ${review.bot} ${review.url}`,
+    ...review.findings.map(
+      (finding) =>
+        `  ${finding.section}: ${finding.title}${finding.location === null ? "" : ` ${finding.location}`}`
+    ),
   ];
 }
 type StatusQueryBlocker = {
@@ -171,7 +162,6 @@ function readyReviewLines(pr: T.ReadyPr): readonly string[] {
       (review) =>
         `acknowledged=${review.id} pr=#${pr.context.number} by=${review.ack.author} ack=${review.ack.url}`
     ),
-    ...pr.proof.unreadReviews.map((unread) => unreadNote(unread, null)),
   ];
 }
 export function renderPretty(verdict: T.WatcherVerdict): string {

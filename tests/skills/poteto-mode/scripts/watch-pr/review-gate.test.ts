@@ -65,7 +65,6 @@ async function snapshotAt(args: {
       facts: { headRefOid: args.head },
       commitRollups: [{ oid: args.head, state: "SUCCESS" }],
       flaggedReviews: state.flaggedReviews,
-      unreadReviews: state.unreadReviews,
       ...args.reader,
     }),
     context: context(args.number),
@@ -100,7 +99,7 @@ describe("the review-findings gate on the real PRs", () => {
     expect(classifyPr(row).kind).toBe("ready");
   });
 
-  it("reports #107 READY at its final head with nothing acknowledged or unread", async () => {
+  it("reports #107 READY at its final head with nothing acknowledged", async () => {
     const row = await snapshotAt({
       number: 107,
       head: HEADS[107],
@@ -110,7 +109,6 @@ describe("the review-findings gate on the real PRs", () => {
     expect(decision.kind).toBe("ready");
     if (decision.kind !== "ready") throw new Error("expected ready");
     expect(decision.pr.proof.acknowledgedReviews).toEqual([]);
-    expect(decision.pr.proof.unreadReviews).toEqual([]);
   });
 
   it("reports #351 READY at the head Copilot approved without a Findings line", async () => {
@@ -183,26 +181,6 @@ describe("the review-findings gate on the real PRs", () => {
     expect(json(classifyPr(row))).toMatchObject({
       kind: "blocker",
       blocker: { kind: "review-findings", reviews: [{ id: "22" }] },
-    });
-  });
-
-  it("lists an unread bot body on a READY PR without blocking it", async () => {
-    const row = await snapshotAt({
-      number: 1,
-      head: "head",
-      reviews: [
-        botReview({
-          id: 31,
-          commit: "head",
-          body: "Found no bugs!",
-          login: "other-bot",
-        }),
-      ],
-    });
-    const decision = classifyPr(row);
-    expect(json(decision)).toMatchObject({
-      kind: "ready",
-      pr: { proof: { unreadReviews: [{ id: "31", bot: "other-bot" }] } },
     });
   });
 });
