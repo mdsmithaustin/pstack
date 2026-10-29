@@ -10,7 +10,6 @@ import type { GitHubReader, WatcherVerdict } from "../../../../../skills/poteto-
 import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 import {
   HEADS,
-  botReview,
   realAckComment,
   restReviews,
   reviewBodiesResponse,
@@ -264,7 +263,6 @@ describe("bot review findings in the output", () => {
       facts: { headRefOid: args.head },
       commitRollups: [{ oid: args.head, state: "SUCCESS" }],
       flaggedReviews: state.flaggedReviews,
-      unreadReviews: state.unreadReviews,
     });
   }
   const review104 = `https://github.com/mdsmithaustin/pstack/pull/104#pullrequestreview-5386371606`;
@@ -285,15 +283,12 @@ describe("bot review findings in the output", () => {
             id: "5386371606",
             status: "open",
             url: review104,
-            reading: {
-              kind: "findings",
-              findings: [
-                {
-                  section: "Previously missed",
-                  location: "skills/setup-pstack/scripts/check-models-config.py:108",
-                },
-              ],
-            },
+            findings: [
+              {
+                section: "Previously missed",
+                location: "skills/setup-pstack/scripts/check-models-config.py:108",
+              },
+            ],
           },
         ],
       },
@@ -310,7 +305,7 @@ describe("bot review findings in the output", () => {
         "BLOCKER: review-findings",
         "pr=104",
         "unacknowledged=1",
-        `5386371606 copilot-pull-request-reviewer copilot-overview-v2 ${review104}`,
+        `5386371606 copilot-pull-request-reviewer ${review104}`,
         "  Previously missed: Require listed model catalog to support requested reasoning effort skills/setup-pstack/scripts/check-models-config.py:108",
         "action=fix and push, or post a PR comment that links the review URL with the disproof or the fixing commit",
         "",
@@ -318,19 +313,11 @@ describe("bot review findings in the output", () => {
     );
   });
 
-  it("prints an unrecognized Copilot body as its first line", async () => {
+  it("exits 0 on #351, whose clean Copilot body has no Findings line", async () => {
     const harness = testRuntime(
-      readerFor({
-        head: "head",
-        reviews: [
-          botReview({ id: 5, commit: "head", body: "## Copilot v3\n\nRisky.\n" }),
-        ],
-      })
+      readerFor({ head: HEADS[351], reviews: restReviews(351) })
     );
-    await main(argv(1, "--pretty"), harness.runtime);
-    expect(harness.stdout.join("")).toContain(
-      "5 copilot-pull-request-reviewer unrecognized https://github.com/owner/repo/pull/1#pullrequestreview-5\n  unrecognized body: ## Copilot v3\n"
-    );
+    expect(await main(argv(351), harness.runtime)).toBe(0);
   });
 
   it("reports #107 READY without claiming more than it checked", async () => {
@@ -363,64 +350,13 @@ describe("bot review findings in the output", () => {
     );
   });
 
-  it("notes an unread bot body on READY and in the READY JSON, without blocking", async () => {
-    const reader = () =>
-      readerFor({
-        head: "head",
-        reviews: [
-          botReview({
-            id: 9,
-            commit: "head",
-            body: "Found no bugs!\nMore.",
-            login: "other-bot",
-          }),
-        ],
-      });
-    const pretty = testRuntime(reader());
-    expect(await main(argv(1, "--pretty"), pretty.runtime)).toBe(0);
-    expect(pretty.stdout.join("")).toContain(
-      "note=unread bot review body: other-bot https://github.com/owner/repo/pull/1#pullrequestreview-9 Found no bugs!\n"
-    );
-    const raw = testRuntime(reader());
-    await main(argv(1), raw.runtime);
-    expect(JSON.parse(raw.stdout[0] ?? "")).toMatchObject({
-      kind: "READY",
-      scope: {
-        pr: {
-          proof: {
-            unreadReviews: [
-              {
-                id: "9",
-                bot: "other-bot",
-                url: "https://github.com/owner/repo/pull/1#pullrequestreview-9",
-                untrustedExcerpt: "Found no bugs!",
-              },
-            ],
-          },
-        },
-      },
-    });
-  });
-
-  it("shows flagged reviews in the Review cell and the unread note under the status table", async () => {
+  it("shows flagged reviews in the Review cell", async () => {
     const flagged = testRuntime(
       readerFor({ head: HEADS[104], reviews: restReviews(104) })
     );
     await main(argv(104, "--status-only", "--pretty"), flagged.runtime);
     expect(flagged.stdout.join("")).toContain(
       "| [#104](https://github.com/owner/repo/pull/104) | ✅ | 📝 1 flagged review | ✅ |"
-    );
-    const unread = testRuntime(
-      readerFor({
-        head: "head",
-        reviews: [
-          botReview({ id: 9, commit: "head", body: "Found no bugs!", login: "other-bot" }),
-        ],
-      })
-    );
-    await main(argv(1, "--status-only", "--pretty"), unread.runtime);
-    expect(unread.stdout.join("")).toContain(
-      "\nnote=#1 unread bot review body: other-bot https://github.com/owner/repo/pull/1#pullrequestreview-9 Found no bugs!\n"
     );
   });
 });

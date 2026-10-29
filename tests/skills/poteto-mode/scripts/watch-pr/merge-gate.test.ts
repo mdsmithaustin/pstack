@@ -4,7 +4,17 @@ import {
   evaluateGates,
   type GateReport,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/merge-gate.ts";
+import {
+  buildReviewState,
+  parseReviewStatePage,
+} from "../../../../../skills/poteto-mode/scripts/watch-pr/github.ts";
 import { passingCheck, pendingCheck } from "./fakes.test-helper.ts";
+import {
+  HEADS,
+  botReview,
+  restReviews,
+  reviewBodiesResponse,
+} from "./review-fixtures.test-helper.ts";
 import {
   CONTEXT,
   HEAD,
@@ -14,7 +24,6 @@ import {
   failingChecks,
   issueComment,
   openFlaggedReview,
-  unreadReview,
   unresolvedThread,
   verdictBody,
   world,
@@ -292,21 +301,24 @@ describe("evaluateGates", () => {
       );
     });
 
-    it("review-bodies: an unread bot body fails until a trusted comment links it", async () => {
-      const unread = unreadReview();
-      const open = await report({ unreadReviews: [unread] });
-      expect(failedNames(open.report)).toEqual(["review-bodies"]);
-      expect(detailOf(open.report, "review-bodies")).toContain(unread.url);
-      const acked = await report({
-        unreadReviews: [unread],
-        port: {
-          comments: [
-            issueComment(),
-            issueComment({ body: `Read ${unread.url}, nothing to fix.` }),
-          ],
-        },
+    it("review-bodies: passes bot bodies that show no open finding, whatever their format", async () => {
+      const head = HEADS[351];
+      const state = buildReviewState([
+        parseReviewStatePage(
+          reviewBodiesResponse({
+            headRefOid: head,
+            reviews: [
+              ...restReviews(351),
+              botReview({ id: 31, commit: head, body: "Found no bugs!", login: "other-bot" }),
+            ],
+          })
+        ),
+      ]);
+      const { report: result } = await report({
+        facts: { headRefOid: head },
+        flaggedReviews: state.flaggedReviews,
       });
-      expect(acked.report.ready).toBe(true);
+      expect(failedNames(result)).toEqual([]);
     });
 
     it("threads: an unresolved thread", async () => {

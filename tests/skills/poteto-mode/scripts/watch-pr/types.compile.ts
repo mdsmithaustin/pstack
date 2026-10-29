@@ -47,7 +47,6 @@ const readyPr = {
     mergeability: "clear",
     threads: [],
     acknowledgedReviews: [],
-    unreadReviews: [],
     ci: cleanCi,
     gate: {
       state: "OPEN",

@@ -12,7 +12,6 @@ import type {
   ReviewStatePage,
   ReviewThread,
   RollupPage,
-  UnreadReview,
 } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 import { parsePrNumber } from "../../../../../skills/poteto-mode/scripts/watch-pr/types.ts";
 
@@ -24,7 +23,6 @@ export interface FakeReaderOptions {
   readonly threadPages?: readonly Pick<ReviewStatePage, "threads" | "endCursor">[];
   readonly pendingBots?: readonly string[];
   readonly flaggedReviews?: readonly FlaggedReview[];
-  readonly unreadReviews?: readonly UnreadReview[];
   readonly commitRollups?: readonly CommitRollup[];
   readonly openPullRequests?: readonly OpenPullRequest[];
   readonly origin?: Repository | null;
@@ -135,7 +133,6 @@ export function fakeReader(
         reviewLogins: [],
         pendingBots: options.pendingBots ?? [],
         flaggedReviews: options.flaggedReviews ?? [],
-        unreadReviews: options.unreadReviews ?? [],
       };
     },
     async commitRollups() {

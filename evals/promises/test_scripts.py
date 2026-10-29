@@ -314,10 +314,10 @@ class GitHubSandbox(FakeGhSandbox):
             "merge_queue": False,
         }
 
-    def bot_review(self, body=COPILOT_FINDING_BODY, url=REVIEW_URL):
+    def bot_review(self, body=COPILOT_FINDING_BODY, url=REVIEW_URL, login=BOT):
         return {
             "body": body, "state": "COMMENTED", "url": url, "commit": {"oid": self.head},
-            "author": {"login": BOT, "__typename": "Bot"},
+            "author": {"login": login, "__typename": "Bot"},
         }
 
     def unresolved_thread(self):
@@ -772,6 +772,17 @@ class BabysitWatcherPromises(GitHubSandbox):
         }.items():
             with self.subTest(label):
                 self.state["comments"] = [comment]
+                result, verdict = self.watch()
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(verdict["kind"], "READY")
+
+        for label, login, body in [
+            ("unfamiliar clean Copilot body", BOT, "### 🟢 Approval recommended\n\n**No open issues** 🎉"),
+            ("another bot's counted metadata", "coderabbitai", "<details>\n<summary>📒 Files selected for processing (5)</summary>\n\n* `a.ts`\n</details>"),
+        ]:
+            with self.subTest(label):
+                self.state["reviews"] = [self.bot_review(body=body, login=login)]
+                self.state["comments"] = []
                 result, verdict = self.watch()
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(verdict["kind"], "READY")

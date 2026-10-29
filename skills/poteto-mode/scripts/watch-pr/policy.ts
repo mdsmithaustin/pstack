@@ -147,7 +147,6 @@ export async function readSnapshot(args: {
       ) || reviewState.pendingBots.length > 0,
     pendingReviewBots: reviewState.pendingBots,
     flaggedReviews: reviewState.flaggedReviews,
-    unreadReviews: reviewState.unreadReviews,
   };
 }
 export const conflictBlocker = (row: T.PrSnapshot): T.MergeBlocker | null =>
@@ -233,7 +232,6 @@ function readyContribution(
       mergeability: "clear",
       threads: [],
       acknowledgedReviews: row.flaggedReviews.filter(isAcknowledgedReview),
-      unreadReviews: row.unreadReviews,
       ci: row.ci,
       gate: {
         state: "OPEN",

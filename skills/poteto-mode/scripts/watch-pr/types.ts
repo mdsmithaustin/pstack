@@ -1,4 +1,3 @@
-import type { BodyFormatName } from "./review-bodies.ts";
 declare const prNumberBrand: unique symbol;
 export type PrNumber = number & { readonly [prNumberBrand]: "PrNumber" };
 export type NonEmpty<T> = readonly [T, ...T[]];
@@ -81,22 +80,12 @@ export interface BodyFinding {
   readonly title: string;
   readonly location: string | null;
 }
-export type BodyReading =
-  | {
-      readonly kind: "findings";
-      readonly format: BodyFormatName;
-      readonly findings: NonEmpty<BodyFinding>;
-    }
-  | {
-      readonly kind: "unrecognized";
-      readonly untrustedExcerpt: string;
-    };
 interface FlaggedReviewBase {
   readonly id: ReviewId;
   readonly url: string;
   readonly bot: string;
   readonly commitOid: string;
-  readonly reading: BodyReading;
+  readonly findings: NonEmpty<BodyFinding>;
 }
 export type OpenReview = FlaggedReviewBase & { readonly status: "open" };
 export type AcknowledgedReview = FlaggedReviewBase & {
@@ -104,17 +93,10 @@ export type AcknowledgedReview = FlaggedReviewBase & {
   readonly ack: { readonly author: string; readonly url: string };
 };
 export type FlaggedReview = OpenReview | AcknowledgedReview;
-export interface UnreadReview {
-  readonly id: ReviewId;
-  readonly url: string;
-  readonly bot: string;
-  readonly untrustedExcerpt: string;
-}
 export interface ReviewState {
   readonly threads: readonly ReviewThread[];
   readonly pendingBots: readonly string[];
   readonly flaggedReviews: readonly FlaggedReview[];
-  readonly unreadReviews: readonly UnreadReview[];
 }
 export interface RawReviewThread {
   readonly id: string;
@@ -130,7 +112,6 @@ export interface ReviewStatePage {
   readonly reviewLogins: readonly string[];
   readonly pendingBots: readonly string[];
   readonly flaggedReviews: readonly FlaggedReview[];
-  readonly unreadReviews: readonly UnreadReview[];
 }
 interface CheckDetails {
   readonly name: string;
@@ -221,7 +202,6 @@ export type PrSnapshot =
       readonly reviewAutomationRunning: boolean;
       readonly pendingReviewBots: readonly string[];
       readonly flaggedReviews: readonly FlaggedReview[];
-      readonly unreadReviews: readonly UnreadReview[];
     };
 export interface ReadyPr {
   readonly kind: "ready-pr";
@@ -230,7 +210,6 @@ export interface ReadyPr {
     readonly mergeability: "clear";
     readonly threads: readonly [];
     readonly acknowledgedReviews: readonly AcknowledgedReview[];
-    readonly unreadReviews: readonly UnreadReview[];
     readonly ci: CiClean;
     readonly gate: {
       readonly state: "OPEN";
