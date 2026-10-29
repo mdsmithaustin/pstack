@@ -18,11 +18,11 @@ The two bound cases, `poteto-help-run` and `poteto-help-unclear-run`, ran once e
 
 1 promise, 2 verdicts: PASS 2. No grader refusal, no preflight error, and no timeout. The turns took 62.5 s and 73.0 s.
 
-I read both final replies by hand. `poteto-help-run` routes the review question to `/poteto-mode review this branch` and the Code review playbook, with `/interrogate` and `/blast-radius` named for their narrower uses, a prompt block, and a public link. `poteto-help-unclear-run` offers the five help sections, reports that no models file exists, and gives a Bug fix prompt from `recipes.md`. Each run read skills only from its own `.agents/skills` (`x_host_skill_hits` is empty), spawned no subagents, and left the project unedited.
+Both runs were read by hand. `poteto-help-run`'s final reply routes the review question to `/poteto-mode review this branch` and the Code review playbook, with `/interrogate` and `/blast-radius` named for their narrower uses, a prompt block, and a public link. `poteto-help-unclear-run` offers the five help sections in an `ask_user_question` call, which the oracle counts. The call got no answer, and the final reply then reports that no models file exists and gives a Bug fix prompt from `recipes.md`. Each run read skills only from its own `.agents/skills` (`x_host_skill_hits` is empty), spawned no subagents, and left the project unedited.
 
 ## Why the 519d36a wave did not run Grok
 
-The 519d36a receipt recorded `grok login is not usable: the host token expired at 2026-10-27T01:20Z` and said a maintainer must run `grok login`. That remedy was wrong. The adapter reads the host's cached access token from `~/.grok/auth.json`. That token is short-lived, and the host login also stores a refresh token. Starting the Grok CLI on the host renewed the access token without a new login. The adapter's own auth provider says the same, but its preflight refuses with the `grok login` advice instead of renewing the token. Follow-up: the preflight should renew through a host Grok command before it refuses.
+The 519d36a receipt recorded `grok login is not usable: the host token expired at 2026-10-27T01:20Z` and said a maintainer must run `grok login`. That remedy was wrong. Starting the Grok CLI on the host renewed the cached access token from the stored refresh token without a new login. At the time, the adapter's preflight refused with the `grok login` advice instead of renewing the token. See the [live-evaluation README](../README.md#run-live-cases) for current preflight behavior.
 
 ## Comparison baseline
 

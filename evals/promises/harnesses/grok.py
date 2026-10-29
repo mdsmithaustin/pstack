@@ -40,7 +40,7 @@ entry = next(v for v in json.load(open({auth!r})).values() if isinstance(v, dict
 expires = datetime.datetime.fromisoformat(entry["expires_at"].replace("Z", "+00:00"))
 ttl = int((expires - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 if ttl < 300:
-    sys.exit("host grok token expires in under 5 minutes; run any grok command on the host to refresh it")
+    sys.exit("host grok token expires in under 5 minutes; run `grok models` on the host to refresh it")
 print(json.dumps({{"access_token": entry["key"], "expires_in": ttl}}))
 """
 
@@ -140,14 +140,25 @@ LOGIN = Login("grok", "grok login", re.compile(
 TOKEN_MARGIN = datetime.timedelta(minutes=5)
 
 
+def expiring(auth):
+    expiry = host_token_expiry(auth)
+    return expiry is not None and expiry <= datetime.datetime.now(datetime.timezone.utc) + TOKEN_MARGIN
+
+
 def preflight():
-    """Refuse a missing or expired host token. The run's read-only provider never refreshes it, so only `grok login` on the host does."""
     auth = host_grok_home() / "auth.json"
     if not auth.is_file():
         raise LoginRequired(LOGIN, f"no login at {auth}")
-    expiry = host_token_expiry(auth)
-    if expiry is not None and expiry <= datetime.datetime.now(datetime.timezone.utc) + TOKEN_MARGIN:
-        raise LoginRequired(LOGIN, f"the host token expired at {expiry:%Y-%m-%dT%H:%MZ}, and the run's read-only provider never refreshes it")
+    if not expiring(auth):
+        return
+    env = {**os.environ, "GROK_HOME": str(host_grok_home())}
+    try:
+        subprocess.run([resolve_binary(env)["path"], "models"], env=env, stdin=subprocess.DEVNULL,
+                       capture_output=True, timeout=120)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        pass
+    if expiring(auth):
+        raise LoginRequired(LOGIN, f"the host token expired at {host_token_expiry(auth):%Y-%m-%dT%H:%MZ}, and `grok models` on the host did not renew it")
 
 
 def prepare(run):

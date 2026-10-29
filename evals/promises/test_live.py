@@ -612,11 +612,14 @@ class LoginPreflight(unittest.TestCase):
         binary = fake_cli(self.tmp, "codex", script)
         return mock.patch.dict(os.environ, {"CODEX_HOME": str(home), "CODEX_BIN": str(binary)})
 
-    def grok(self, expires_at):
+    def grok(self, expires_at, renews_to=None):
         from harnesses import grok
         home = self.tmp / "grok-home"
         home.mkdir(exist_ok=True)
         (home / "auth.json").write_text(json.dumps({"xai": {"key": "k", "expires_at": expires_at}}))
+        renewal = f"echo '{json.dumps({'xai': {'key': 'k', 'expires_at': renews_to}})}' > \"$GROK_HOME/auth.json\"" if renews_to else ":"
+        binary = fake_cli(self.tmp, "grok", f'case "$1" in --version) echo grok 1;; models) {renewal};; esac\n')
+        self.enterContext(mock.patch.dict(os.environ, {"GROK_BIN": str(binary)}))
         return mock.patch.object(grok, "host_grok_home", return_value=home)
 
     def assertStopped(self, outcome, cli, command):
@@ -650,6 +653,10 @@ class LoginPreflight(unittest.TestCase):
 
     def test_grok_with_an_expired_host_token_stops_the_wave(self):
         self.assertStopped(self.wave("grok", self.grok("2020-01-01T00:00:00Z")), "grok", "grok login")
+
+    def test_grok_renews_an_expired_host_token_and_runs_every_case(self):
+        code, run_case, _ = self.wave("grok", self.grok("2020-01-01T00:00:00Z", renews_to="2999-01-01T00:00:00Z"))
+        self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
 
     def test_a_valid_login_lets_every_case_run(self):
         script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
