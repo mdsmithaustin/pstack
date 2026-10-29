@@ -42,11 +42,12 @@ const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
 const LIST_MARKER = /^(?:[-*+]|\d{1,9}[.)])(?: +|$)/;
+const THEMATIC_BREAK = /^([-*_])(?:[ \t]*\1){2,}[ \t\r]*$/;
 const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
-const INLINE_CODE = /(?<![`\\])(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
+const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
 const closesFence = (rest: string, opener: string): boolean => {
-  const run = rest.trimEnd();
+  const run = rest.replace(/[ \t\r]+$/, "");
   return run.length >= opener.length && [...run].every((char) => char === opener[0]);
 };
 function withoutFences(markdown: string): string {
@@ -65,7 +66,7 @@ function withoutFences(markdown: string): string {
           fence = null;
         return blank(line);
       }
-      if (indent - (items.at(-1) ?? 0) > 3) return line;
+      if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(line.slice(indent))) return line;
       let column = indent;
       for (let marker; (marker = LIST_MARKER.exec(line.slice(column))) !== null; ) {
         column += marker[0].length;

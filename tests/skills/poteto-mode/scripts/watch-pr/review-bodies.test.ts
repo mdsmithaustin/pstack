@@ -662,6 +662,14 @@ describe("bodies in any format", () => {
         expect(at(`${rule}\n  \`\`\`\n${literal}\n  \`\`\`\n`).flaggedReviews).toEqual([]);
     });
 
+    it("reads CRLF line endings like LF", () => {
+      const crlf = (text: string) => text.replace(/\n/g, "\r\n");
+      expect(
+        at(crlf(`\`\`\`\n${literal}\n\`\`\`\n\n${missed}`)).flaggedReviews.map((row) => row.findings)
+      ).toEqual(real);
+      expect(at(crlf(`- - -\n  \`\`\`\n${literal}\n  \`\`\`\n`)).flaggedReviews).toEqual([]);
+    });
+
     it("reads a counted summary in a fence inside a list item as clean", () => {
       for (const body of [
         `1.  Example:\n\n    \`\`\`html\n    ${literal}\n\n    \`\`\`\n`,
