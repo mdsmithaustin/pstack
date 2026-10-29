@@ -646,6 +646,22 @@ describe("bodies in any format", () => {
       expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
     });
 
+    it("opens a code span after an escaped backslash", () => {
+      for (const slashes of ["\\\\", "\\\\\\\\"]) {
+        const body = `Path ${slashes}\`code\` here.\n${missed}\nThen \`x\` there.\n`;
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+      }
+    });
+
+    it("keeps a fence open past a closer followed by a non-breaking space", () => {
+      expect(at(`\`\`\`\n\`\`\` \n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("reads a spaced thematic break as a break, not as list items", () => {
+      for (const rule of ["- - -", "* * *"])
+        expect(at(`${rule}\n  \`\`\`\n${literal}\n  \`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
     it("reads a counted summary in a fence inside a list item as clean", () => {
       for (const body of [
         `1.  Example:\n\n    \`\`\`html\n    ${literal}\n\n    \`\`\`\n`,
