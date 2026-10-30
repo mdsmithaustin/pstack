@@ -805,6 +805,13 @@ describe("bodies in any format", () => {
         "- Mention `[x](#discussion_r42)` next to |",
         "- <picture>p</picture> Mention `[x](#discussion_r42)` here",
         '- See <a title="[x](#discussion_r42)">this</a>',
+        "- Escape \\` then quote `[x](#discussion_r42)` here",
+        '- See <a title="> [x](#discussion_r42)">this</a>',
+        "- a < b `c > [x](#discussion_r42)`",
+        "- <!-- > [x](#discussion_r42) -->",
+        "- <a href=\"u\" title='[x](#discussion_r42)\n  '>tip</a>",
+        "- see <!-- [x](#discussion_r42)\n  -->",
+        "- see <? [x](#discussion_r42)\n  ?>",
       ])
         expect(at(`<summary><strong>Open (1)</strong></summary>\n\n${item}\n`).flaggedReviews).toMatchObject([
           { findings: [{ section: "Open", title: expect.any(String), location: null }] },
@@ -821,6 +828,10 @@ describe("bodies in any format", () => {
       const body = "<summary><strong>Open (1)</strong></summary>\n\n  ```\n- [Rename it](#discussion_r123) · New";
       expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
         [finding("Open", "[Rename it](#discussion_r123) · New", null)],
+      ]);
+      const afterEm = "<summary><strong>Open (1)</strong></summary>\n\nExample <em>snippet</em>:\n```\n- [x](#discussion_r42)\n```";
+      expect(at(afterEm).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("Open", "[x](#discussion_r42)", null)],
       ]);
       const opener = "<summary><strong>Open (1)</strong></summary>\n\n- ```[x](#discussion_r1)";
       expect(at(opener).flaggedReviews.map((row) => row.findings)).toEqual([

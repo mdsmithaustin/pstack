@@ -91,6 +91,10 @@ const OPEN_ITEMS = [
   "- [x](#discussion_r1) `",
   '- <a title="[x](#discussion_r1)">t</a>',
   "  - nested [x](#discussion_r1)",
+  "- Escape \\` then quote `[x](#discussion_r42)` here",
+  '- See <a title="> [x](#discussion_r42)">this</a>',
+  "- a < b `c > [x](#discussion_r42)`",
+  "- <!-- > [x](#discussion_r42) -->",
 ];
 const OPEN_CONTEXT = ["", "text", "```", "~~~", "    ```", "- ```", "  ```", "<div>", "<!--", "`", "<br>", "| a | b |"];
 
