@@ -4775,7 +4775,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "fb8f1333cce6"
+    "987157874aac"
    ],
    "promise": "pre-answered-permission-not-asked",
    "sources": [
@@ -8987,6 +8987,15 @@
    ],
    "text": "[Experience First](../../skills/principle-experience-first/SKILL.md) chooses the user's result over implementation convenience."
   },
+  "8bf14aedf5a5": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "user-no-stops-commit-and-pr-steps",
+   "sources": [
+    "port"
+   ],
+   "text": "Add \"no PR\" to the prompt to stop at local commits, as [Open the PR](./06-verify-and-ship.md#open-the-pr) explains."
+  },
   "8c0cc6508dd7": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -9339,6 +9348,18 @@
     "port"
    ],
    "text": "When the gate is broken, it stops and reports."
+  },
+  "987157874aac": {
+   "also": [
+    "pr-steps-run-unasked"
+   ],
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "pre-answered-permission-not-asked",
+   "sources": [
+    "port"
+   ],
+   "text": "\"don't ask me before committing\" pre-answers commit permission for the loop's per-iteration commits. A playbook that ends in a PR commits without asking anyway, as [Open the PR](./06-verify-and-ship.md#open-the-pr) explains."
   },
   "98be6a0a22ac": {
    "class": "promise",
@@ -10167,6 +10188,15 @@
     "port"
    ],
    "text": "It's deliberately heavy machinery."
+  },
+  "adc441cd1549": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "In a repository with a remote, the run ends by pushing a branch and opening a PR."
   },
   "ae455157a458": {
    "class": "promise",
@@ -13060,18 +13090,6 @@
     "port"
    ],
    "text": "```text\n/interrogate the whole branch, but skeptically. no nitpicks unless it's an actual bug or regression.\n```"
-  },
-  "fb8f1333cce6": {
-   "also": [
-    "pr-steps-run-unasked"
-   ],
-   "class": "promise",
-   "file": "07-overnight.md",
-   "promise": "pre-answered-permission-not-asked",
-   "sources": [
-    "port"
-   ],
-   "text": "\"don't ask me before committing\" pre-answers commit permission. A playbook that ends in a PR already commits without asking, as [Open the PR](./06-verify-and-ship.md#open-the-pr) explains."
   },
   "fb8f8df9b70a": {
    "class": "promise",
