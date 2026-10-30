@@ -733,6 +733,24 @@ describe("bodies in any format", () => {
       expect(at(`<pre>\nx\n</pre>\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
     });
 
+    it("starts HTML blocks where GitHub's renderer starts them", () => {
+      for (const body of [
+        `<!doctype\n~~~\nx>\n~~~\n\n${counted}`,
+        `text\n<source>\n- \`\`\`\n  ${counted}\n`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+      for (const body of [
+        `<!DOCTYPE\n~~~\nx>\n~~~\n\n${literal}`,
+        `text\n<search>\n- \`\`\`\n  ${literal}\n`,
+      ])
+        expect(at(body).flaggedReviews).toEqual([]);
+    });
+
+    it("bounds a code span by whole backtick runs", () => {
+      for (const body of [`\`\`a\` ${literal} \`b\n`, `\`a\`\` ${literal} \`\n`])
+        expect(at(body).flaggedReviews).toEqual([]);
+    });
+
     it("opens no fence inside an HTML block", () => {
       for (const body of [
         `<details><summary>Fix</summary>\n\`\`\`suggestion\nfixed()\n</details>\n\n${missed}`,
