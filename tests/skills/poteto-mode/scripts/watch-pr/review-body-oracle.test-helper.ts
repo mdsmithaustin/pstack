@@ -7,11 +7,11 @@ await init(readFileSync(new URL(import.meta.resolve("gfm-wasm/wasm"))));
 
 export const SUMMARY = "<summary><strong>Previously missed (1)</strong></summary>";
 
-// gfm-wasm runs cmark-gfm 0.29.0.gfm.13, GitHub's renderer, in safe mode, which drops
-// raw HTML rather than escape it. A summary rendered as HTML therefore leaves no escaped
-// copy, while one rendered as code or text does. Safe mode also drops a link reference
-// definition, and gfm-wasm reads a footnote as one, so the corpus keeps the summary out
-// of both.
+// gfm-wasm runs cmark-gfm, GitHub's renderer, in safe mode, which drops raw HTML rather
+// than escape it. A summary rendered as HTML therefore leaves no escaped copy, while one
+// rendered as code or text does. A link reference definition renders nothing either, and
+// gfm-wasm enables no footnotes, so `[^1]: x` parses as one; the corpus keeps the summary
+// out of both.
 export const rendersSummary = (body: string): boolean =>
   !render(body).includes("&lt;summary&gt;");
 
@@ -38,7 +38,7 @@ const LINES = [
   "| a | b |", "|---|---|", "http://x`", "www.x`", "- text", "> text", "    text", "-",
   "- <pre>", "> <!--", "- <div>", "1) x", "-\t<pre>", "1. <pre>", "<script>", "<style>",
   "<textarea>", "<PRE>", "<pre x", "<pre></b>", "<!-- ->", "<?x>", "<![CDATA[ ]>", "```\t", "\u00a0",
-  "a `b",
+  "a `b", "~~",
 ];
 const SUMMARY_LINES = [
   SUMMARY, ` ${SUMMARY}`, `    ${SUMMARY}`, `- ${SUMMARY}`, `> ${SUMMARY}`, `1. ${SUMMARY}`,
@@ -67,7 +67,6 @@ function* contexts(depth: number): Generator<string[]> {
   else for (const rest of contexts(depth - 1)) for (const line of LINES) yield [line, ...rest];
 }
 
-/** The summary at every position among every `depth` vocabulary lines, then seeded longer bodies. */
 export function* summaryBodies(depth = 2): Generator<string> {
   for (const summary of SUMMARY_LINES)
     for (const lines of contexts(depth))

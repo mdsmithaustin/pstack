@@ -63,13 +63,9 @@ function maskSpans(line: string): { readonly text: string; readonly open: boolea
   });
   return { text: line.includes("|") ? line : text, open };
 }
-// Masks only text that cmark-gfm must render as code. When the scanner cannot tell how
-// cmark-gfm reads a line, it stops masking until the next blank line or for the rest of
-// the body, so an unclear body can block a clean review but cannot hide a finding.
-function withoutCode(markdown: string): string {
+function maskProvenCode(markdown: string): string {
   let fence: string | null = null;
-  let bounded = true;
-  let clean = true;
+  let masking: "on" | "until-blank" | "off" = "on";
   return markdown
     .split("\n")
     .map((line) => {
@@ -80,21 +76,21 @@ function withoutCode(markdown: string): string {
         return blank(line);
       }
       if (/^[ \t]*$/.test(text)) {
-        clean = true;
+        if (masking === "until-blank") masking = "on";
         return line;
       }
       const content = text.replace(CONTAINER, "");
       if (RAW_BLOCKS.some(([start, end]) => start.test(content) && !end.test(content)))
-        bounded = false;
+        masking = "off";
       const opener = FENCE_OPENER.exec(text)?.[0];
-      if (opener !== undefined && bounded && clean) {
+      if (opener !== undefined && masking === "on") {
         fence = opener;
         return blank(line);
       }
-      if (/^(?:`{3}|~{3})/.test(content)) bounded = false;
-      if (!bounded || !clean) return line;
+      if (/^(?:`{3}|~{3})/.test(content)) masking = "off";
+      if (masking !== "on") return line;
       const masked = maskSpans(line);
-      clean = !masked.open;
+      if (masked.open) masking = "until-blank";
       return masked.text;
     })
     .join("\n");
@@ -125,7 +121,7 @@ function stripTags(html: string): string {
 
 const MAX_PADDED_FINDINGS = 20;
 function countedSections(body: string): readonly CountedSection[] {
-  const structure = withoutCode(body);
+  const structure = maskProvenCode(body);
   const heads = [...structure.matchAll(SECTION)];
   return heads.flatMap((head, index) => {
     const counted = countOf(group(head, 1, body).trim());

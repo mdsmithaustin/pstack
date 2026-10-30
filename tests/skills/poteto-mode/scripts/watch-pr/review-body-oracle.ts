@@ -1,8 +1,3 @@
-// Dev-time tools for the review-body scanner's oracle tests. Run from tests/skills/poteto-mode/scripts:
-//   bun watch-pr/review-body-oracle.ts calibrate                  re-record fixtures/github-render-calibration.json
-//   bun watch-pr/review-body-oracle.ts fetch <owner/repo> <out>   save every bot review body on the repo's PRs
-//   bun watch-pr/review-body-oracle.ts compare <base-ref> [reviews.json] [depth]
-// calibrate and fetch call GitHub. compare exits 1 when the working tree's scanner misses a shown summary.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
