@@ -1,5 +1,7 @@
+import datetime
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -62,6 +64,22 @@ class GrokHome(unittest.TestCase):
         self.assertFalse((home / ".config" / "secret").exists())
         self.assertFalse((home / ".local" / "secret").exists())
         self.assertNotIn("gpgsign = true", (home / ".gitconfig").read_text())
+
+
+class AuthProvider(unittest.TestCase):
+    def provider_failure(self, seconds_left):
+        with tempfile.TemporaryDirectory(prefix="pstack-grok-provider-") as tmp:
+            expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=seconds_left)
+            auth = Path(tmp) / "auth.json"
+            auth.write_text(json.dumps({"x": {"key": "k", "expires_at": expires.isoformat()}}))
+            script = Path(tmp) / "auth-provider.py"
+            script.write_text(grok.AUTH_PROVIDER.format(python=sys.executable, auth=str(auth)))
+            return subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+
+    def test_a_token_inside_the_margin_tells_the_reader_how_to_renew_it_the_way_preflight_does(self):
+        done = self.provider_failure(240)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("GROK_AUTH_EARLY_INVALIDATION_SECS=300 grok models", done.stderr)
 
 
 class CallIds(unittest.TestCase):
