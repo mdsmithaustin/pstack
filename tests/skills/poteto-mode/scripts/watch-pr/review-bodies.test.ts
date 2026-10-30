@@ -611,7 +611,7 @@ describe("bodies in any format", () => {
     });
 
     it("keeps a section whole across a heading in fenced code", () => {
-      const body = "<summary><strong>Open (2)</strong></summary>\n- First item\n```\n<summary><strong>Notes</strong></summary>\n```\n- Second item";
+      const body = "<summary><strong>Open (2)</strong></summary>\n\n- First item\n```\n<summary><strong>Notes</strong></summary>\n```\n- Second item";
       expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
         [finding("Open", "First item", null), finding("Open", "Second item", null)],
       ]);
@@ -627,6 +627,207 @@ describe("bodies in any format", () => {
     it("ignores list lines in fenced code inside an Open section", () => {
       const body = "<summary><strong>Open (1)</strong></summary>\n\n- [Rename it](#discussion_r42)\n\n```\n- not an item\n```\n";
       expect(at(body).flaggedReviews).toEqual([]);
+    });
+
+    const missed = "<details><summary><strong>1 previously missed issue</strong></summary>\n<details><summary>Real</summary>body</details>\n</details>";
+    const real: [[ReturnType<typeof finding>]] = [[finding("previously missed issue", "Real", null)]];
+
+    it("still reads a finding after a fence that opens on a list marker", () => {
+      for (const body of [
+        `- \`\`\`js\n  const x = 1;\n  \`\`\`\n\n${missed}`,
+        `1. Example:\n   \`\`\`js\n   const x = 1;\n   \`\`\`\n\n${missed}`,
+        `- \`\`\`js\n  const x = 1;\n${missed}`,
+        `+ \`\`\`js\n  const x = 1;\n  \`\`\`\n\n${missed}`,
+        `1) \`\`\`js\n   const x = 1;\n   \`\`\`\n\n${missed}`,
+        `-\t\`\`\`js\n    const x = 1;\n    \`\`\`\n\n${missed}`,
+        `   \`\`\`\n\n${literal}\n\n   \`\`\`\n\n${missed}`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
+    it("still reads a finding between lines with backslash-escaped backticks", () => {
+      const body = `Escape a \\\` like this.\n${missed}\nAnd \\\` again.\n`;
+      expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+      const inline = `Escape \\\` then ${literal} then \\\` again.\n`;
+      expect(at(inline).flaggedReviews).toMatchObject([{ findings: [{ section: "Open", title: "(unparsed)" }] }]);
+    });
+
+    it("opens a code span after an escaped backslash", () => {
+      for (const slashes of ["\\\\", "\\\\\\\\"]) {
+        const body = `Path ${slashes}\`code\` here.\n${missed}\nThen \`x\` there.\n`;
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+        const inline = `Path ${slashes}\`code\` ${literal} \`x\` there.\n`;
+        expect(at(inline).flaggedReviews).toMatchObject([{ findings: [{ section: "Open", title: "(unparsed)" }] }]);
+      }
+    });
+
+    it("keeps a fence open past a closer followed by a non-breaking space", () => {
+      expect(at(`\`\`\`\n\`\`\`\u00a0\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("reads a spaced thematic break as a break, not as list items", () => {
+      for (const rule of ["- - -", "* * *"])
+        expect(at(`${rule}\n  \`\`\`\n${literal}\n  \`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    const counted = "<summary><strong>Previously missed (1)</strong></summary>";
+    const unparsed: [[ReturnType<typeof finding>]] = [[finding("Previously missed", "(unparsed)", null)]];
+
+    it("ends a list item's fence where CommonMark ends the item", () => {
+      for (const body of [
+        `1. Suggested change:\n\n   \`\`\`go\n   func f() {\n\treturn\n   }\n   \`\`\`\n\n${missed}`,
+        `1. Guard the nil map:\n   \`\`\`go\n   if m == nil {\n\treturn nil\n   }\n   \`\`\`\n2. Done.\n\n${missed}`,
+        `- \`\`\`\n \n  ${missed}\n`,
+        `-\n  \`\`\`\n${missed}\n`.replace(/\n/g, "\r\n"),
+        `-     foo\n  \`\`\`\n  code\n${missed}`,
+        `-\n  \`\`\`\n x\n ${missed}`,
+        `-\n\n    \`\`\`\n  ${missed}\n`,
+        `-\t\n  ~~~\n- ${missed}\n`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+      for (const body of [`-\t\`\`\`js\n  ${counted}\n`, `-\t\`\`\`\n      x\n      \`\`\`\n      ${counted}\n`])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+    });
+
+    it("reads a paragraph's continuation lines as text", () => {
+      for (const body of [
+        `text\n2. \`\`\`\n   ${counted}\n`,
+        `- para\nlazy\n  \`\`\`\n${counted}\n`,
+        `text\n    \`\`\`\n2. \`\`\`\n   ${counted}\n`,
+        `-\n   text\n10) x\n    \`\`\`\n  ${counted}\n`,
+        `> text\n-\n  ~~~\n- ${counted}\n`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+    });
+
+    it("ends a paragraph where CommonMark ends it", () => {
+      for (const body of [
+        `text\n\n2. \`\`\`\n   ${literal}\n   \`\`\`\n`,
+        `text\n* * *\n2. \`\`\`\n   ${literal}\n   \`\`\`\n`,
+        `\`\n-\n   \`\`\`\n${literal}\n`,
+        `Example:\n\n    \`${literal}\`\n`,
+      ])
+        expect(at(body).flaggedReviews).toEqual([]);
+    });
+
+    it("opens no fence inside any kind of HTML block", () => {
+      for (const body of [
+        `<!-- c\n~~~\n- ${counted}\n`,
+        `<pre>\n  ~~~\n${counted}\n`,
+        `<pre>\n\n\`\`\`\n</pre>\n\n${counted}\n`,
+        `<?x\n\`\`\` \n  ${counted}\n`,
+        `<span>\n\`\`\`\`\n${counted}\n`,
+        `-     x\n</span>\n\`\`\` \n  ${counted}\n`,
+        `text\n<details>\n\`\`\`\n${counted}\n`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+      for (const body of [
+        `- <div>\n~~~js\nx\n\ny\n~~~\n\n${missed}`,
+        `# Example\n2. ~~~js\n   x\n   ~~~\n\n${missed}`,
+        `# Example\n<span>\n~~~\n\n${missed}`,
+        `<!-- a --!>\n\`\`\`\n\n${missed}`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+      expect(at(`text\n<span>\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+      expect(at(`<!-- c -->\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+      expect(at(`<pre>\nx\n</pre>\n\`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("starts HTML blocks where GitHub's renderer starts them", () => {
+      for (const body of [
+        `<!doctype\n~~~\nx>\n~~~\n\n${counted}`,
+        `text\n<source>\n- \`\`\`\n  ${counted}\n`,
+        `text\n# h\n<span>\n\`\`\`\n${counted}\n`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+      for (const body of [
+        `<!DOCTYPE\n~~~\nx>\n~~~\n\n${literal}`,
+        `text\n<search>\n- \`\`\`\n  ${literal}\n`,
+      ])
+        expect(at(body).flaggedReviews).toEqual([]);
+    });
+
+    it("bounds a code span by whole backtick runs", () => {
+      for (const body of [`\`\`a\` ${literal} \`b\n`, `\`a\`\` ${literal} \`\n`])
+        expect(at(body).flaggedReviews).toEqual([]);
+    });
+
+    it("opens no fence inside an HTML block", () => {
+      for (const body of [
+        `<details><summary>Fix</summary>\n\`\`\`suggestion\nfixed()\n</details>\n\n${missed}`,
+        `<details>\n- \`\`\`js\n  ${missed}\n</details>\n`,
+        `</details>\n1. \`\`\`\n   ${missed}\n`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
+    it("keeps a code span on one line", () => {
+      for (const body of [
+        `> \`\`\`\n${counted}\n> \`\`\`\n`,
+        `    \`\`\`\n${counted}\n    \`\`\`\n`,
+        `- one \` a\n- ${counted} \` b\n`,
+        `### Note \` here\n${counted} and \` there\n`,
+      ])
+        expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
+      const nested = `A stray \` in prose.\n<details>\n${counted}\n<details><summary>Use \`foo\`</summary>body</details>\n</details>\n`;
+      expect(at(nested).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("Previously missed", "Use `foo`", null)],
+      ]);
+    });
+
+    it("reads CRLF line endings like LF", () => {
+      const crlf = (text: string) => text.replace(/\n/g, "\r\n");
+      expect(
+        at(crlf(`\`\`\`\n${literal}\n\`\`\`\n\n${missed}`)).flaggedReviews.map((row) => row.findings)
+      ).toEqual(real);
+      expect(at(crlf(`- - -\n  \`\`\`\n${literal}\n  \`\`\`\n`)).flaggedReviews).toEqual([]);
+    });
+
+    it("reads a counted summary in a fence inside a list item as clean", () => {
+      for (const body of [
+        `1.  Example:\n\n    \`\`\`html\n    ${literal}\n\n    \`\`\`\n`,
+        `- Example:\n\n  - Nested:\n\n    ~~~\n    ${literal}\n    ~~~\n`,
+        `1.  Example:\n  \n    \`\`\`html\n    ${literal}\n\n    \`\`\`\n`,
+      ])
+        expect(at(body).flaggedReviews).toEqual([]);
+    });
+
+    it("keeps a backtick fence open past a line that mixes in a tilde", () => {
+      expect(at(`\`\`\`\n\`\`\`~\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+      expect(at(`~~~\n~~~\`\n${literal}\n~~~\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("reads a counted summary after an unclosed fence as clean", () => {
+      expect(at(`Example:\n\n\`\`\`html\n${literal}\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("closes a fence on a longer run of the same character", () => {
+      expect(at(`\`\`\`\n${literal}\n\`\`\`\`\n\n${missed}`).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
+    it("keeps a fence open past a closer indented four spaces", () => {
+      expect(at(`\`\`\`\n    \`\`\`\n${literal}\n\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("closes a fence on a closer with trailing spaces", () => {
+      expect(at(`\`\`\`\n${literal}\n\`\`\`   \n\n${missed}`).flaggedReviews.map((row) => row.findings)).toEqual(real);
+    });
+
+    it("reads a counted summary in a code span on a list item's continuation line as clean", () => {
+      expect(at(`- Example:\n      \`${literal}\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("keeps a fence open past a shorter closer", () => {
+      expect(at(`\`\`\`\`\n\`\`\`\n${literal}\n\`\`\`\`\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("masks a counted summary in a tilde fence's info string", () => {
+      expect(at(`~~~ ${literal}\n~~~\n`).flaggedReviews).toEqual([]);
+    });
+
+    it("does not let a code span cross a blank line", () => {
+      const body = `A stray \` in prose.\n\n${missed}\n\nAnother \` here.\n`;
+      expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(real);
     });
 
     it("does not take a thread link quoted in code as the item's thread", () => {

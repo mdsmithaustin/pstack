@@ -41,12 +41,110 @@ const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
-const FENCED_CODE =
-  /^ {0,3}(`{3,}(?=[^`\n]*$)|~{3,})[^\n]*(?:\n[\s\S]*?^ {0,3}\1[`~]*[ \t]*$|[\s\S]*)/gm;
-const INLINE_CODE = /(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
+const LIST_MARKER = /^([-*+]|\d{1,9}[.)])(?:( +)(?=[^ ])| *$)/;
+const THEMATIC_BREAK = /^([-*_])(?: *\1){2,} *$/;
+const HTML_BLOCKS: readonly (readonly [start: RegExp, end: RegExp | "blank"])[] = [
+  [/^<(?:pre|script|style|textarea)(?:[ \t>]|$)/i, /<\/(?:pre|script|style|textarea)>/i],
+  [/^<!--/, /-->/],
+  [/^<\?/, /\?>/],
+  [/^<![A-Z]/, />/],
+  [/^<!\[CDATA\[/, /\]\]>/],
+  [
+    /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t>]|\/>|$)/i,
+    "blank",
+  ],
+];
+const LONE_TAG =
+  /^(?:<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>)\s*$/;
+const ATX_HEADING = /^#{1,6}(?: |$)/;
+const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
+const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`).*?(?<!`)\1(?!`)/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
-const withoutCode = (markdown: string): string =>
-  markdown.replace(FENCED_CODE, blank).replace(INLINE_CODE, blank);
+function expandTabs(line: string): string {
+  let text = "";
+  for (const char of line) text += char === "\t" ? " ".repeat(4 - (text.length % 4)) : char;
+  return text;
+}
+function htmlBlockEnd(rest: string): RegExp | "blank" | null {
+  const block = HTML_BLOCKS.find(([start]) => start.test(rest));
+  if (block !== undefined) return block[1];
+  return LONE_TAG.test(rest) ? "blank" : null;
+}
+function interruptsParagraph(rest: string, lazy: boolean): boolean {
+  const marker = LIST_MARKER.exec(rest);
+  if (marker !== null)
+    return lazy || (marker[2] !== undefined && /^(?:[-*+]|1[.)])$/.test(marker[1]));
+  return (
+    HTML_BLOCKS.some(([start]) => start.test(rest)) ||
+    [THEMATIC_BREAK, FENCE_OPENER, ATX_HEADING, /^>/].some((block) => block.test(rest))
+  );
+}
+const closesFence = (rest: string, opener: string): boolean => {
+  const run = rest.replace(/ +$/, "");
+  return run.length >= opener.length && [...run].every((char) => char === opener[0]);
+};
+function withoutCode(markdown: string): string {
+  const items: number[] = [];
+  let fence: { readonly opener: string; readonly container: number } | null = null;
+  let html: { readonly end: RegExp | "blank"; readonly container: number } | null = null;
+  let emptyItem = false;
+  let paragraph = false;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const text = expandTabs(line.replace(/\r$/, ""));
+      const indent = text.search(/[^ ]|$/);
+      if (indent === text.length) {
+        if (emptyItem) items.pop();
+        if (html?.end === "blank") html = null;
+        emptyItem = paragraph = false;
+        return line;
+      }
+      emptyItem = false;
+      const container = items.at(-1) ?? 0;
+      if (
+        paragraph &&
+        (indent - container > 3 || !interruptsParagraph(text.slice(indent), indent < container))
+      )
+        return line.replace(INLINE_CODE, blank);
+      while (indent < (items.at(-1) ?? 0)) items.pop();
+      if (fence !== null && indent < fence.container) fence = null;
+      if (html !== null && indent < html.container) html = null;
+      if (fence !== null) {
+        if (indent - fence.container <= 3 && closesFence(text.slice(indent), fence.opener))
+          fence = null;
+        return blank(line);
+      }
+      if (html !== null) {
+        if (html.end !== "blank" && html.end.test(text)) html = null;
+        return line;
+      }
+      if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(text.slice(indent))) {
+        paragraph = false;
+        return line.replace(INLINE_CODE, blank);
+      }
+      let column = indent;
+      for (let marker; (marker = LIST_MARKER.exec(text.slice(column))) !== null; ) {
+        const gap = marker[2]?.length ?? 0;
+        column += marker[1].length + (gap === 0 || gap > 4 ? 1 : gap);
+        items.push(column);
+        emptyItem = gap === 0;
+      }
+      const rest = text.slice(column);
+      const end = htmlBlockEnd(rest);
+      if (end !== null) {
+        html = end === "blank" || !end.test(rest) ? { end, container: items.at(-1) ?? 0 } : null;
+        paragraph = false;
+        return line;
+      }
+      const opener = FENCE_OPENER.exec(rest)?.[0];
+      paragraph = opener === undefined && /^[^ >]/.test(rest) && !ATX_HEADING.test(rest);
+      if (opener === undefined) return line.replace(INLINE_CODE, blank);
+      fence = { opener, container: items.at(-1) ?? 0 };
+      return blank(line);
+    })
+    .join("\n");
+}
 function group(match: RegExpExecArray, index: number, text: string): string {
   const span = match.indices?.[index];
   return span === undefined ? "" : text.slice(...span);
