@@ -2109,7 +2109,7 @@
   },
   "no-remote-skips-pr-step": {
    "check": "static",
-   "claim": "In a repository with no remote, a playbook that ends in Opening a PR still commits and records its PR step as skipped with a reason.",
+   "claim": "In a repository with no remote, Feature and Bug fix still commit, and the PR step is recorded as skipped.",
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
@@ -2122,11 +2122,16 @@
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
      "quote": "If the task has no commits to propose, or the repository has no remote, mark this step `skipped: <reason>`."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/bug-fix.md",
+     "quote": "Stage the commits so the failing repro lands before the fix in git history."
     }
    ],
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/playbooks/bug-fix.md",
     "skills/poteto-mode/playbooks/feature.md"
    ]
   },
@@ -7853,6 +7858,18 @@
    ],
    "text": "[`/swarm`](../../skills/swarm/SKILL.md) fans N workers across independent slices, coverage matrices, gauntlet lanes, exploration partitions, or declared race arms."
   },
+  "6bcd34fc5a60": {
+   "also": [
+    "skipped-step-stays-in-worklist"
+   ],
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "no-remote-skips-pr-step",
+   "sources": [
+    "port"
+   ],
+   "text": "In a repository with no remote, Feature and Bug fix still commit and record the PR step as skipped."
+  },
   "6becdca4aa3d": {
    "class": "promise",
    "file": "08-principles.md",
@@ -8732,15 +8749,6 @@
     "port"
    ],
    "text": "When you correct agents for the same mistake again and again, the fix belongs in the repo, not in your next prompt."
-  },
-  "855eb53e881e": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "no-remote-skips-pr-step",
-   "sources": [
-    "port"
-   ],
-   "text": "In a repository with no remote, it commits and records the PR step as skipped."
   },
   "85dcd4d37510": {
    "also": [
