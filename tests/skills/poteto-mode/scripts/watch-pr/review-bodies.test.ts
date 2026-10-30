@@ -737,6 +737,7 @@ describe("bodies in any format", () => {
       for (const body of [
         `<!doctype\n~~~\nx>\n~~~\n\n${counted}`,
         `text\n<source>\n- \`\`\`\n  ${counted}\n`,
+        `text\n# h\n<span>\n\`\`\`\n${counted}\n`,
       ])
         expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual(unparsed);
       for (const body of [
