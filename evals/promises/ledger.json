@@ -9768,15 +9768,6 @@
    ],
    "text": "[Outcome-Oriented Execution](../../skills/principle-outcome-oriented-execution/SKILL.md) converges rewrites on the target design instead of preserving throwaway compatibility states."
   },
-  "a5c898034929": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "commits-leave-out-credentials-and-local-files",
-   "sources": [
-    "port"
-   ],
-   "text": "Its commits leave out credential files such as `.env`, and notes or data you did not ask to version."
-  },
   "a625580fed56": {
    "also": [
     "slash-skills-invocable"
@@ -11099,6 +11090,15 @@
     "port"
    ],
    "text": "So candidate agents get an organic-looking task in sanitized directories, never the words \"eval\" or \"candidate\", and never each other's existence."
+  },
+  "c4fed3c118fd": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "commits-leave-out-credentials-and-local-files",
+   "sources": [
+    "port"
+   ],
+   "text": "Every commit leaves out credential files such as `.env`, and notes or data you did not ask to version."
   },
   "c52d250f1580": {
    "class": "context",
