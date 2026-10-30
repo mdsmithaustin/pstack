@@ -814,7 +814,7 @@ class LoginPreflight(unittest.TestCase):
         empty.mkdir()
         run = live.Run(self.tmp / "run", "grok", {"id": "x", "fixture": "relay", "turns": ["one"]}, "0" * 40, 60)
         run.root.mkdir()
-        self.grok("2020-01-01T00:00:00Z", version="exit 1")
+        self.enterContext(self.grok("2020-01-01T00:00:00Z", version="exit 1"))
         with mock.patch.dict(os.environ, {"PATH": str(empty)}), mock.patch.object(grok, "DEFAULT_BIN", self.tmp / "no-such-grok"):
             died = live.drive(grok, run, object())
             self.assertIn("never ran", died[1])
