@@ -5,6 +5,7 @@ import json
 import io
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -807,6 +808,20 @@ class LoginPreflight(unittest.TestCase):
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", version='echo grok 1; rm -f "$0"'))
         self.assertGrokNotRun(outcome, "did not finish", "FileNotFoundError")
 
+    def test_grok_preparation_that_never_ran_the_renewal_hands_its_remedy_to_the_wave_stop(self):
+        from harnesses import grok
+        empty = self.tmp / "empty-path"
+        empty.mkdir()
+        run = live.Run(self.tmp / "run", "grok", {"id": "x", "fixture": "relay", "turns": ["one"]}, "0" * 40, 60)
+        run.root.mkdir()
+        self.grok("2020-01-01T00:00:00Z", version="exit 1")
+        with mock.patch.dict(os.environ, {"PATH": str(empty)}), mock.patch.object(grok, "DEFAULT_BIN", self.tmp / "no-such-grok"):
+            died = live.drive(grok, run, object())
+            self.assertIn("never ran", died[1])
+            refusal = str(LoginRequired(*died))
+        self.assertNotIn("Run `grok login`", refusal)
+        self.assertIn(grok.NOT_RUN_REMEDY, refusal)
+
     def test_a_valid_login_lets_every_case_run(self):
         script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
         code, run_case, _ = self.wave("codex", self.codex(script))
@@ -1051,15 +1066,21 @@ class ErrorRun(unittest.TestCase):
             written = sorted(p.name for p in out.rglob("*.json") if p.name in ("trace.json", "verdict.json"))
         self.assertEqual(written, [])
 
-    def test_a_remedy_from_prepare_reaches_the_refusal_the_wave_stops_on(self):
+    def test_a_grok_renewal_that_never_ran_in_preparation_stops_the_wave_without_login_advice(self):
         from harnesses import grok
         case = live.load_case("principle-steer-run")
         case["tmp_lock"] = False
-        died = LoginRequired(grok.LOGIN, "the host token expired", grok.NOT_RUN_REMEDY)
-        with tempfile.TemporaryDirectory(prefix="pstack-live-remedy-") as tmp, redirect_stdout(io.StringIO()), \
-                mock.patch.object(live, "load_case", return_value=case), mock.patch.object(grok, "prepare", side_effect=died):
-            with self.assertRaises(live.LoginRequired) as refused:
-                live.run_case("grok", case["id"], "HEAD", Path(tmp).resolve(), 0)
+        with tempfile.TemporaryDirectory(prefix="pstack-live-remedy-") as tmp, redirect_stdout(io.StringIO()):
+            out = Path(tmp).resolve()
+            home = out / "grok-home"
+            home.mkdir()
+            (home / "auth.json").write_text(json.dumps({"xai": {"key": "k", "expires_at": "2020-01-01T00:00:00Z"}}))
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(grok, "host_grok_home", return_value=home), \
+                    mock.patch.dict(os.environ, {"GROK_BIN": str(out / "no-such-grok"), "PATH": str(Path(shutil.which("git")).parent)}), \
+                    mock.patch.object(grok, "DEFAULT_BIN", out / "no-such-grok-either"):
+                with self.assertRaises(live.LoginRequired) as refused:
+                    live.run_case("grok", case["id"], "HEAD", out, 0)
+        self.assertIn("never ran", str(refused.exception))
         self.assertNotIn("Run `grok login`", str(refused.exception))
         self.assertIn(grok.NOT_RUN_REMEDY, str(refused.exception))
 
