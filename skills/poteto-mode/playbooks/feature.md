@@ -2,7 +2,7 @@
 
 **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
 
-Run every step, or mark it `skipped: <reason>` with a reason that covers that step alone.
+Run every step in order. Skip a step only as the Playbooks paragraph of the poteto-mode skill allows, and mark it `skipped: <reason>` with a reason that covers that step alone. Where a step says how to run in a new project, run it that way instead of skipping it.
 
 1. `how` over the affected subsystem. Use the **how** skill, and ask it to list the components, hooks, helpers, and UI patterns the repository already has for this job. Reuse them in the design and the step 4 brief. Extend a shared one only when every caller keeps its behavior. Give the reason for each new one. In an empty or new project, run the step anyway and record `no existing code` as its outcome.
 2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes. Use the **architect** skill for it. A small, self-contained change keeps this step with `skipped: <reason>`.
@@ -21,7 +21,7 @@ Run every step, or mark it `skipped: <reason>` with a reason that covers that st
    - a show/hide or focus behavior that differs from what the replaced or neighboring UI did.
 
    Search the repository for each. An existing pattern records an earlier taste decision, so overruling one has to be visible.
-6. Rebase into small, ordered commits. Stack follow-ups. If the project has no git repository, run `git init` at the project root first.
+6. Rebase into small, ordered commits. Stack follow-ups. In an existing repository, commit on a branch off main, never on main, as the **Worktree** rule in `playbooks/opening-a-pr.md` says. If the working directory has no git repository, run `git init` in it first and commit on its first branch.
    Use the **sequence-verifiable-units** principle skill, building, verifying, and committing each small unit before the next.
 7. If the design is contested, use the **interrogate** skill before shipping. Otherwise mark this step `skipped: <reason>`.
 8. Run **Opening a PR**. If the task has no commits to propose, or the repository has no remote, mark this step `skipped: <reason>`.
