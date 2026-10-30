@@ -4775,7 +4775,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "cc098962d96b"
+    "fb8f1333cce6"
    ],
    "promise": "pre-answered-permission-not-asked",
    "sources": [
@@ -11316,14 +11316,6 @@
    ],
    "text": "For a narrow question it just reads and explains."
   },
-  "cc098962d96b": {
-   "class": "context",
-   "file": "07-overnight.md",
-   "sources": [
-    "port"
-   ],
-   "text": "For commit and PR permissions, see [Open the PR](./06-verify-and-ship.md#open-the-pr)."
-  },
   "cc484a91b469": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -13068,6 +13060,18 @@
     "port"
    ],
    "text": "```text\n/interrogate the whole branch, but skeptically. no nitpicks unless it's an actual bug or regression.\n```"
+  },
+  "fb8f1333cce6": {
+   "also": [
+    "pr-steps-run-unasked"
+   ],
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "pre-answered-permission-not-asked",
+   "sources": [
+    "port"
+   ],
+   "text": "\"don't ask me before committing\" pre-answers commit permission. A playbook that ends in a PR already commits without asking, as [Open the PR](./06-verify-and-ship.md#open-the-pr) explains."
   },
   "fb8f8df9b70a": {
    "class": "promise",
