@@ -41,107 +41,61 @@ const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
-const LIST_MARKER = /^([-*+]|\d{1,9}[.)])(?:( +)(?=[^ ])| *$)/;
-const THEMATIC_BREAK = /^([-*_])(?: *\1){2,} *$/;
-const HTML_BLOCKS: readonly (readonly [start: RegExp, end: RegExp | "blank"])[] = [
+const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
+const CONTAINER = /^(?:[ \t*+\-\d.)]|\[\^[^\]]*\]:)*/;
+const RAW_BLOCKS: readonly (readonly [start: RegExp, end: RegExp])[] = [
   [/^<(?:pre|script|style|textarea)(?:[ \t>]|$)/i, /<\/(?:pre|script|style|textarea)>/i],
   [/^<!--/, /-->/],
   [/^<\?/, /\?>/],
   [/^<![A-Z]/, />/],
   [/^<!\[CDATA\[/, /\]\]>/],
-  [
-    /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t>]|\/>|$)/i,
-    "blank",
-  ],
 ];
-const LONE_TAG =
-  /^(?:<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>)\s*$/;
-const ATX_HEADING = /^#{1,6}(?: |$)/;
-const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
-const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`).*?(?<!`)\1(?!`)/g;
+const INLINE = /\\.|<.*|(`+)(?:.*?(?<!`)\1(?!`))?/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
-function expandTabs(line: string): string {
-  let text = "";
-  for (const char of line) text += char === "\t" ? " ".repeat(4 - (text.length % 4)) : char;
-  return text;
+function maskSpans(line: string): { readonly text: string; readonly open: boolean } {
+  let open = false;
+  let raw = false;
+  const text = line.replace(INLINE, (token: string, run: string | undefined, at: number) => {
+    const autolink = run !== undefined && token !== run && /(?::|www\.)\S*$/i.test(line.slice(0, at));
+    raw ||= token[0] === "<" || autolink;
+    open ||= raw || token === run;
+    return raw || token === run || run === undefined ? token : blank(token);
+  });
+  return { text: line.includes("|") ? line : text, open };
 }
-function htmlBlockEnd(rest: string): RegExp | "blank" | null {
-  const block = HTML_BLOCKS.find(([start]) => start.test(rest));
-  if (block !== undefined) return block[1];
-  return LONE_TAG.test(rest) ? "blank" : null;
-}
-function interruptsParagraph(rest: string, lazy: boolean): boolean {
-  const marker = LIST_MARKER.exec(rest);
-  if (marker !== null)
-    return lazy || (marker[2] !== undefined && /^(?:[-*+]|1[.)])$/.test(marker[1]));
-  return (
-    HTML_BLOCKS.some(([start]) => start.test(rest)) ||
-    [THEMATIC_BREAK, FENCE_OPENER, ATX_HEADING, /^>/].some((block) => block.test(rest))
-  );
-}
-const closesFence = (rest: string, opener: string): boolean => {
-  const run = rest.replace(/ +$/, "");
-  return run.length >= opener.length && [...run].every((char) => char === opener[0]);
-};
+// Masks only text that cmark-gfm must render as code. When the scanner cannot tell how
+// cmark-gfm reads a line, it stops masking until the next blank line or for the rest of
+// the body, so an unclear body can block a clean review but cannot hide a finding.
 function withoutCode(markdown: string): string {
-  const items: number[] = [];
-  let fence: { readonly opener: string; readonly container: number } | null = null;
-  let html: { readonly end: RegExp | "blank"; readonly container: number } | null = null;
-  let emptyItem = false;
-  let paragraph = false;
+  let fence: string | null = null;
+  let bounded = true;
+  let clean = true;
   return markdown
     .split("\n")
     .map((line) => {
-      const text = expandTabs(line.replace(/\r$/, ""));
-      const indent = text.search(/[^ ]|$/);
-      if (indent === text.length) {
-        if (emptyItem) items.pop();
-        if (html?.end === "blank") html = null;
-        emptyItem = paragraph = false;
-        return line;
-      }
-      emptyItem = false;
-      const container = items.at(-1) ?? 0;
-      if (
-        paragraph &&
-        (indent - container > 3 || !interruptsParagraph(text.slice(indent), indent < container))
-      )
-        return line.replace(INLINE_CODE, blank);
-      while (indent < (items.at(-1) ?? 0)) items.pop();
-      if (fence !== null && indent < fence.container) fence = null;
-      if (html !== null && indent < html.container) html = null;
+      const text = line.replace(/\r$/, "");
       if (fence !== null) {
-        if (indent - fence.container <= 3 && closesFence(text.slice(indent), fence.opener))
-          fence = null;
+        const run = /^ {0,3}(`+|~+)[ \t]*$/.exec(text)?.[1];
+        if (run !== undefined && run[0] === fence[0] && run.length >= fence.length) fence = null;
         return blank(line);
       }
-      if (html !== null) {
-        if (html.end !== "blank" && html.end.test(text)) html = null;
+      if (/^[ \t]*$/.test(text)) {
+        clean = true;
         return line;
       }
-      if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(text.slice(indent))) {
-        paragraph = false;
-        return line.replace(INLINE_CODE, blank);
+      const content = text.replace(CONTAINER, "");
+      if (RAW_BLOCKS.some(([start, end]) => start.test(content) && !end.test(content)))
+        bounded = false;
+      const opener = FENCE_OPENER.exec(text)?.[0];
+      if (opener !== undefined && bounded && clean) {
+        fence = opener;
+        return blank(line);
       }
-      let column = indent;
-      for (let marker; (marker = LIST_MARKER.exec(text.slice(column))) !== null; ) {
-        const gap = marker[2]?.length ?? 0;
-        column += marker[1].length + (gap === 0 || gap > 4 ? 1 : gap);
-        items.push(column);
-        emptyItem = gap === 0;
-      }
-      const rest = text.slice(column);
-      const end = htmlBlockEnd(rest);
-      if (end !== null) {
-        html = end === "blank" || !end.test(rest) ? { end, container: items.at(-1) ?? 0 } : null;
-        paragraph = false;
-        return line;
-      }
-      const opener = FENCE_OPENER.exec(rest)?.[0];
-      paragraph = opener === undefined && /^[^ >]/.test(rest) && !ATX_HEADING.test(rest);
-      if (opener === undefined) return line.replace(INLINE_CODE, blank);
-      fence = { opener, container: items.at(-1) ?? 0 };
-      return blank(line);
+      if (/^(?:`{3}|~{3})/.test(content)) bounded = false;
+      if (!bounded || !clean) return line;
+      const masked = maskSpans(line);
+      clean = !masked.open;
+      return masked.text;
     })
     .join("\n");
 }
