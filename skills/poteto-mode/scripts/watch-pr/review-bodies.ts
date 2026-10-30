@@ -50,7 +50,7 @@ const RAW_BLOCKS: readonly (readonly [start: RegExp, end: RegExp])[] = [
   [/^<![A-Z]/, />/],
   [/^<!\[CDATA\[/, /\]\]>/],
 ];
-const INLINE = /\\.|(?:<|\]\().*|(`+)(?:.*?(?<!`)\1(?!`))?/gs;
+const INLINE = /\\.|(?:<|\]\().*|(`+)(?:.*?(?<!`)\1(?!`))?/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
 function maskSpans(line: string): { readonly text: string; readonly open: boolean } {
   let open = false;
