@@ -842,6 +842,25 @@
     "skills/pstack-harness/references/subagents/roles.json"
    ]
   },
+  "commits-go-on-a-branch-off-trunk": {
+   "check": "static",
+   "claim": "In an existing repository, a playbook's commits go on a branch off trunk, not on trunk.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "In an existing repository, commit on a branch off trunk."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "In an existing repository, commit on a branch off trunk, never on trunk itself."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/playbooks/feature.md"
+   ]
+  },
   "commits-leave-out-credentials-and-local-files": {
    "check": "static",
    "claim": "A playbook's commits leave out credential files such as `.env`, and the user's own notes or data they did not ask to version.",
@@ -7394,6 +7413,15 @@
     "port"
    ],
    "text": "You don't write a spec."
+  },
+  "6082a055d33e": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "commits-go-on-a-branch-off-trunk",
+   "sources": [
+    "port"
+   ],
+   "text": "In an existing repository, the commits go on a branch off your main branch, not on main."
   },
   "615092f99f7f": {
    "class": "promise",
