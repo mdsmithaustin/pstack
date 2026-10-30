@@ -834,9 +834,9 @@ describe("bodies in any format", () => {
       expect(at(afterEm).flaggedReviews.map((row) => row.findings)).toEqual([
         [finding("Open", "[x](#discussion_r42)", null)],
       ]);
-      const opener = "<summary><strong>Open (1)</strong></summary>\n\n- ```[x](#discussion_r1)";
+      const opener = "<summary><strong>Open (1)</strong></summary>\n\n- ~~~[x](#discussion_r1)";
       expect(at(opener).flaggedReviews.map((row) => row.findings)).toEqual([
-        [finding("Open", "```[x](#discussion_r1)", null)],
+        [finding("Open", "~~~[x](#discussion_r1)", null)],
       ]);
     });
   });
