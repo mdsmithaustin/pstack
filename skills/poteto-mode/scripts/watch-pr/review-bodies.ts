@@ -39,6 +39,7 @@ const LEADING_COUNT = /^(\d+) (.+)$/;
 const RESOLVED = /^resolved\b/i;
 const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
+const MAYBE_CODE_OR_TAG = /<[^>]*>|(`+)(?:.*?(?<!`)\1(?!`))?/g;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
 const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
@@ -141,12 +142,10 @@ function threadlessOpenItems(section: CountedSection): readonly T.BodyFinding[] 
   const raw = section.text.split("\n");
   const lines = section.structure
     .split("\n")
-    .flatMap((line, index) =>
-      line.startsWith("- ") ? [{ line, text: raw[index] }] : []
-    );
+    .flatMap((line, index) => (line.startsWith("- ") ? [raw[index]] : []));
   const loose = lines
-    .filter(({ line }) => !THREAD_LINK.test(line))
-    .map(({ text }) => ({
+    .filter((text) => !THREAD_LINK.test(text.replace(MAYBE_CODE_OR_TAG, blank)))
+    .map((text) => ({
       section: section.name,
       title: stripTags(text.slice(2)),
       location: null,

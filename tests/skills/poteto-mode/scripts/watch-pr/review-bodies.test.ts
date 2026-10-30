@@ -801,6 +801,16 @@ describe("bodies in any format", () => {
       expect(at(body).flaggedReviews).toMatchObject([
         { findings: [{ section: "Open", title: "Mention `[x](#discussion_r42)` in docs" }] },
       ]);
+      for (const item of [
+        "- Mention `[x](#discussion_r42)` next to |",
+        "- <picture>p</picture> Mention `[x](#discussion_r42)` here",
+        '- See <a title="[x](#discussion_r42)">this</a>',
+      ])
+        expect(at(`<summary><strong>Open (1)</strong></summary>\n\n${item}\n`).flaggedReviews).toMatchObject([
+          { findings: [{ section: "Open", title: expect.any(String), location: null }] },
+        ]);
+      const threaded = "<summary><strong>Open (1)</strong></summary>\n\n- <picture>p</picture> [Handle `foo` here](https://github.com/o/r/pull/1#discussion_r9) · New\n";
+      expect(at(threaded).flaggedReviews).toEqual([]);
     });
   });
 
