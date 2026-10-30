@@ -24,6 +24,6 @@ Run every step, or mark it `skipped: <reason>` with a reason that covers that st
 6. Rebase into small, ordered commits. Stack follow-ups. If the project has no git repository, run `git init` at the project root first.
    Use the **sequence-verifiable-units** principle skill, building, verifying, and committing each small unit before the next.
 7. If the design is contested, use the **interrogate** skill before shipping. Otherwise mark this step `skipped: <reason>`.
-8. Run **Opening a PR**. If step 6 produced no commits, or the repository has no remote, mark this step `skipped: <reason>`.
+8. Run **Opening a PR**. If the task has no commits to propose, or the repository has no remote, mark this step `skipped: <reason>`.
 
 **Reply:** what you built, what you chose and why, the throughput checkpoint, open decisions, and **Departures from existing patterns**. For each departure, give the pattern it overrules, where that pattern lives, and why the change overrules it, or write None. Carry the same section into the PR body. Tables for design alternatives.
