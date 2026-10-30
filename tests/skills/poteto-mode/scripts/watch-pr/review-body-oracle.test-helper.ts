@@ -38,7 +38,7 @@ const LINES = [
   "| a | b |", "|---|---|", "http://x`", "www.x`", "- text", "> text", "    text", "-",
   "- <pre>", "> <!--", "- <div>", "1) x", "-\t<pre>", "1. <pre>", "<script>", "<style>",
   "<textarea>", "<PRE>", "<pre x", "<pre></b>", "<!-- ->", "<?x>", "<![CDATA[ ]>", "```\t", "\u00a0",
-  "a `b", "~~",
+  "a `b", "~~", "   ~~~",
 ];
 const SUMMARY_LINES = [
   SUMMARY, ` ${SUMMARY}`, `    ${SUMMARY}`, `- ${SUMMARY}`, `> ${SUMMARY}`, `1. ${SUMMARY}`,
