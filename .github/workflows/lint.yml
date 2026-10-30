@@ -66,6 +66,9 @@ jobs:
       - name: Install poteto-mode script dependencies
         working-directory: skills/poteto-mode/scripts
         run: bun install --frozen-lockfile
+      - name: Install poteto-mode test dependencies
+        working-directory: tests/skills/poteto-mode/scripts
+        run: bun install --frozen-lockfile
       - name: poteto-mode script tests
         working-directory: skills/poteto-mode/scripts
         run: bun run test

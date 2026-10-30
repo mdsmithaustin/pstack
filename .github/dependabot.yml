@@ -19,6 +19,12 @@ updates:
     open-pull-requests-limit: 5
 
   - package-ecosystem: bun
+    directory: /tests/skills/poteto-mode/scripts
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: bun
     directory: /tests/skills/statechart/scripts
     schedule:
       interval: weekly

@@ -1,0 +1,8 @@
+{
+  "name": "@pstack-tests/poteto-mode",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "gfm-wasm": "1.0.1"
+  }
+}
