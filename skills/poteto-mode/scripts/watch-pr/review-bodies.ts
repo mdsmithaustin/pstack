@@ -67,22 +67,22 @@ function maskProvenCode(markdown: string): string {
   let fence: string | null = null;
   let masking: "on" | "until-blank" | "off" = "on";
   return markdown
-    .split("\n")
-    .map((line) => {
-      const text = line.replace(/\r$/, "");
+    .split(/(\r\n?|\n)/)
+    .map((line, index) => {
+      if (index % 2 === 1) return line;
       if (fence !== null) {
-        const run = /^ {0,3}(`+|~+)[ \t]*$/.exec(text)?.[1];
+        const run = /^ {0,3}(`+|~+)[ \t]*$/.exec(line)?.[1];
         if (run !== undefined && run[0] === fence[0] && run.length >= fence.length) fence = null;
         return blank(line);
       }
-      if (/^[ \t]*$/.test(text)) {
+      if (/^[ \t]*$/.test(line)) {
         if (masking === "until-blank") masking = "on";
         return line;
       }
-      const content = text.replace(CONTAINER, "");
+      const content = line.replace(CONTAINER, "");
       if (RAW_BLOCKS.some(([start, end]) => start.test(content) && !end.test(content)))
         masking = "off";
-      const opener = FENCE_OPENER.exec(text)?.[0];
+      const opener = FENCE_OPENER.exec(line)?.[0];
       if (opener !== undefined && masking === "on") {
         fence = opener;
         return blank(line);
@@ -93,7 +93,7 @@ function maskProvenCode(markdown: string): string {
       if (masked.open) masking = "until-blank";
       return masked.text;
     })
-    .join("\n");
+    .join("");
 }
 function group(match: RegExpExecArray, index: number, text: string): string {
   const span = match.indices?.[index];
