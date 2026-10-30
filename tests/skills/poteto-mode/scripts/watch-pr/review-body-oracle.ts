@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SUMMARY, findings, flags, rendersSummary, summaryBodies } from "./review-body-oracle.test-helper.ts";
+import { SUMMARY, findings, flags, openBodies, rendersSummary, summaryBodies } from "./review-body-oracle.test-helper.ts";
 
 const FIXTURE = join(import.meta.dir, "fixtures", "github-render-calibration.json");
 const S = SUMMARY;
@@ -128,6 +128,10 @@ async function compare(base: string, reviewsPath: string | undefined, depth: num
   };
   const recorded: { body: string; shown: boolean }[] = JSON.parse(readFileSync(FIXTURE, "utf8"));
   const clean = [tally(`generated corpus (depth ${depth}, cmark-gfm oracle)`, generated()), tally("recorded GitHub renders", recorded)];
+  const cleared = [...openBodies()].filter((body) => flags(body, baseApi) && !flags(body));
+  console.log(`generated Open sections: ${[...openBodies()].length}, base flags and head reads clean: ${cleared.length}`);
+  for (const body of cleared.slice(0, 5)) console.log("  head clears", JSON.stringify(body));
+  clean.push(cleared.length === 0);
   if (reviewsPath !== undefined) {
     const reviews: { pr: number; id: number; body: string }[] = JSON.parse(readFileSync(reviewsPath, "utf8"));
     const changed = reviews.flatMap((review) => {

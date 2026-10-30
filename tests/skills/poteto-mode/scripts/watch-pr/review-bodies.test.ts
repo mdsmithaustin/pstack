@@ -811,6 +811,21 @@ describe("bodies in any format", () => {
         ]);
       const threaded = "<summary><strong>Open (1)</strong></summary>\n\n- <picture>p</picture> [Handle `foo` here](https://github.com/o/r/pull/1#discussion_r9) · New\n";
       expect(at(threaded).flaggedReviews).toEqual([]);
+      const afterThread = "<summary><strong>Open (2)</strong></summary>\n\n- [Rename it](#discussion_r123) · New\n- Mention `[x](#discussion_r42)` in docs";
+      expect(at(afterThread).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("Open", "Mention `[x](#discussion_r42)` in docs", null)],
+      ]);
+    });
+
+    it("grants no thread exemption once a fence it cannot prove has turned masking off", () => {
+      const body = "<summary><strong>Open (1)</strong></summary>\n\n  ```\n- [Rename it](#discussion_r123) · New";
+      expect(at(body).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("Open", "[Rename it](#discussion_r123) · New", null)],
+      ]);
+      const opener = "<summary><strong>Open (1)</strong></summary>\n\n- ```[x](#discussion_r1)";
+      expect(at(opener).flaggedReviews.map((row) => row.findings)).toEqual([
+        [finding("Open", "```[x](#discussion_r1)", null)],
+      ]);
     });
   });
 

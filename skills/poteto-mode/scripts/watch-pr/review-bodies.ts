@@ -32,6 +32,7 @@ interface CountedSection {
   readonly count: number;
   readonly text: string;
   readonly structure: string;
+  readonly proven: number;
 }
 const SECTION = /<summary><strong>([^<]*)<\/strong><\/summary>/dg;
 const TRAILING_COUNT = /^(.*) \((\d+)\)$/;
@@ -64,12 +65,16 @@ function maskSpans(line: string): { readonly text: string; readonly open: boolea
   });
   return { text: line.includes("|") ? line : text, open };
 }
-function maskProvenCode(markdown: string): string {
+function maskProvenCode(markdown: string): { readonly structure: string; readonly provenUntil: number } {
   let fence: string | null = null;
   let masking: "on" | "until-blank" | "off" = "on";
-  return markdown
+  let at = 0;
+  let provenUntil = markdown.length;
+  const structure = markdown
     .split(/(\r\n?|\n)/)
     .map((line, index) => {
+      const start = at;
+      at += line.length;
       if (index % 2 === 1) return line;
       if (fence !== null) {
         const run = /^ {0,3}(`+|~+)[ \t]*$/.exec(line)?.[1];
@@ -89,12 +94,14 @@ function maskProvenCode(markdown: string): string {
         return blank(line);
       }
       if (/^(?:`{3}|~{3})/.test(content)) masking = "off";
+      if (masking === "off") provenUntil = Math.min(provenUntil, start);
       if (masking !== "on") return line;
       const masked = maskSpans(line);
       if (masked.open) masking = "until-blank";
       return masked.text;
     })
     .join("");
+  return { structure, provenUntil };
 }
 function group(match: RegExpExecArray, index: number, text: string): string {
   const span = match.indices?.[index];
@@ -122,7 +129,7 @@ function stripTags(html: string): string {
 
 const MAX_PADDED_FINDINGS = 20;
 function countedSections(body: string): readonly CountedSection[] {
-  const structure = maskProvenCode(body);
+  const { structure, provenUntil } = maskProvenCode(body);
   const heads = [...structure.matchAll(SECTION)];
   return heads.flatMap((head, index) => {
     const counted = countOf(group(head, 1, body).trim());
@@ -134,18 +141,25 @@ function countedSections(body: string): readonly CountedSection[] {
         ...counted,
         text: body.slice(start, end),
         structure: structure.slice(start, end),
+        proven: provenUntil - start,
       },
     ];
   });
 }
 function threadlessOpenItems(section: CountedSection): readonly T.BodyFinding[] {
   const raw = section.text.split("\n");
-  const lines = section.structure
-    .split("\n")
-    .flatMap((line, index) => (line.startsWith("- ") ? [raw[index]] : []));
+  let at = 0;
+  const lines = section.structure.split("\n").flatMap((line, index) => {
+    const text = raw[index];
+    const proven = at < section.proven;
+    at += text.length + 1;
+    return line.startsWith("- ") ? [{ text, proven }] : [];
+  });
   const loose = lines
-    .filter((text) => !THREAD_LINK.test(text.replace(MAYBE_CODE_OR_TAG, blank)))
-    .map((text) => ({
+    .filter(
+      ({ text, proven }) => !proven || !THREAD_LINK.test(text.replace(MAYBE_CODE_OR_TAG, blank))
+    )
+    .map(({ text }) => ({
       section: section.name,
       title: stripTags(text.slice(2)),
       location: null,

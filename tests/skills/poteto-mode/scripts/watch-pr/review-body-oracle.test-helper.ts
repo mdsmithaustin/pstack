@@ -79,3 +79,27 @@ export function* summaryBodies(depth = 2): Generator<string> {
       for (let at = 0; at <= depth; at++) yield lines.toSpliced(at, 0, summary).join("\n");
   yield* random(100_000, 361);
 }
+
+const OPEN_ITEMS = [
+  "- [Rename it](#discussion_r123) · New",
+  "- <picture>p</picture> [Fix](https://github.com/o/r/pull/1#discussion_r9) · New",
+  "- Mention `[x](#discussion_r42)` in docs",
+  "- <picture>p</picture> Mention `[x](#discussion_r42)`",
+  "- Plain finding",
+  "- a | `[x](#discussion_r1)`",
+  "- [A `b`](#discussion_r5)",
+  "- [x](#discussion_r1) `",
+  '- <a title="[x](#discussion_r1)">t</a>',
+  "  - nested [x](#discussion_r1)",
+];
+const OPEN_CONTEXT = ["", "text", "```", "~~~", "    ```", "- ```", "  ```", "<div>", "<!--", "`", "<br>", "| a | b |"];
+
+/** Open sections whose items mix thread links, quoted links, and code around them. */
+export function* openBodies(): Generator<string> {
+  for (const count of [1, 2, 3])
+    for (const a of OPEN_ITEMS)
+      for (const b of OPEN_ITEMS)
+        for (const context of OPEN_CONTEXT)
+          for (let at = 0; at <= 2; at++)
+            yield [`<summary><strong>Open (${count})</strong></summary>`, "", ...[a, b].toSpliced(at, 0, context)].join("\n");
+}
