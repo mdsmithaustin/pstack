@@ -20,7 +20,6 @@ For sustained improvement against a metric rather than a one-off fix, use the Hi
 3. Plan the fix from the trace. If it crosses a function boundary, use the **architect** skill first. Delegate implementation to a subagent on the `perf-issue` role. Use the **pstack-harness** skill's **Spawn a role** section to resolve the role. Review the diff. Capture a post-fix trace.
    Use the **principle-sequence-verifiable-units** skill. Verify each attempt before trying the next.
 4. Parse and compare the artifacts (JSON to sqlite, diff). "Inconclusive" or wrong-surface is not a pass. Flag it.
-5. Cite the measurement in the PR.
-6. Run **Opening a PR**.
+5. Run **Opening a PR**. Cite the measurement in the PR.
 
 **Reply:** baseline number, post-fix number, delta, artifact path.
