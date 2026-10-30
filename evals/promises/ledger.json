@@ -4772,12 +4772,14 @@
    "text": "`/poteto-mode` is sticky."
   },
   "1865703ed86c": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "cc098962d96b"
+   ],
    "promise": "pre-answered-permission-not-asked",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "\"don't ask me before committing\" pre-answers the permission the agent would otherwise block on."
   },
@@ -11313,6 +11315,14 @@
     "port"
    ],
    "text": "For a narrow question it just reads and explains."
+  },
+  "cc098962d96b": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "For commit and PR permissions, see [Open the PR](./06-verify-and-ship.md#open-the-pr)."
   },
   "cc484a91b469": {
    "class": "context",

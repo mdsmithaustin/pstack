@@ -31,7 +31,7 @@ Walk through what each line buys you:
 - "im going to bed" is a session override. The agent stops asking and keeps going.
 - "done means..." turns the goal into checks every iteration can run.
 - "fresh worktree off `<base>`" keeps the run from colliding with anything else you have open.
-- "don't ask me before committing" pre-answers the permission the agent would otherwise block on.
+- For commit and PR permissions, see [Open the PR](./06-verify-and-ship.md#open-the-pr).
 - `/loop` is your CLI's wake mechanism, not a pstack skill. Claude Code has one built in; in a CLI without it, re-prompt on an interval or run a watcher subagent. The [Autonomous run playbook](../../skills/poteto-mode/playbooks/autonomous-run.md) uses it to re-check the finish condition on events or a heartbeat.
 - The escape hatch lets it stop at a genuine dead end and write up why, which beats eight hours of creative goal reinterpretation.
 
