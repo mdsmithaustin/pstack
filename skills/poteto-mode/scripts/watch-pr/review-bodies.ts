@@ -32,6 +32,7 @@ interface CountedSection {
   readonly count: number;
   readonly text: string;
   readonly structure: string;
+  readonly proven: number;
 }
 const SECTION = /<summary><strong>([^<]*)<\/strong><\/summary>/dg;
 const TRAILING_COUNT = /^(.*) \((\d+)\)$/;
@@ -39,111 +40,69 @@ const LEADING_COUNT = /^(\d+) (.+)$/;
 const RESOLVED = /^resolved\b/i;
 const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
+const MAYBE_CODE_OR_TAG =
+  /\\.|<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>|<!--.*?-->|<[A-Za-z/!?].*|(`+)(?:.*?(?<!`)\1(?!`)|.*)/g;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
-const LIST_MARKER = /^([-*+]|\d{1,9}[.)])(?:( +)(?=[^ ])| *$)/;
-const THEMATIC_BREAK = /^([-*_])(?: *\1){2,} *$/;
-const HTML_BLOCKS: readonly (readonly [start: RegExp, end: RegExp | "blank"])[] = [
+const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
+const CONTAINER = /^(?:[ \t*+\-\d.)\ufeff]|\[\^[^\]]*\]:)*/;
+const RAW_BLOCKS: readonly (readonly [start: RegExp, end: RegExp])[] = [
   [/^<(?:pre|script|style|textarea)(?:[ \t>]|$)/i, /<\/(?:pre|script|style|textarea)>/i],
   [/^<!--/, /-->/],
   [/^<\?/, /\?>/],
   [/^<![A-Z]/, />/],
   [/^<!\[CDATA\[/, /\]\]>/],
-  [
-    /^<\/?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|section|source|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?:[ \t>]|\/>|$)/i,
-    "blank",
-  ],
 ];
-const LONE_TAG =
-  /^(?:<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>)\s*$/;
-const ATX_HEADING = /^#{1,6}(?: |$)/;
-const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
-const INLINE_CODE = /(?<!`)(?<=(?:^|[^\\])(?:\\\\)*)(`+)(?!`).*?(?<!`)\1(?!`)/g;
+const INLINE = /\\.|(?:<|\][(\[]).*|(`+)(?:.*?(?<!`)\1(?!`))?/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
-function expandTabs(line: string): string {
-  let text = "";
-  for (const char of line) text += char === "\t" ? " ".repeat(4 - (text.length % 4)) : char;
-  return text;
+function maskSpans(line: string): { readonly text: string; readonly open: boolean } {
+  let open = false;
+  const text = line.replace(INLINE, (token: string, run: string | undefined, at: number) => {
+    open ||=
+      run === undefined
+        ? token[0] !== "\\"
+        : token === run || run.length > 80 || /(?::|www\.)[^ \t]*$/i.test(line.slice(0, at));
+    return open || run === undefined ? token : blank(token);
+  });
+  return { text: line.includes("|") ? line : text, open };
 }
-function htmlBlockEnd(rest: string): RegExp | "blank" | null {
-  const block = HTML_BLOCKS.find(([start]) => start.test(rest));
-  if (block !== undefined) return block[1];
-  return LONE_TAG.test(rest) ? "blank" : null;
-}
-function interruptsParagraph(rest: string, lazy: boolean): boolean {
-  const marker = LIST_MARKER.exec(rest);
-  if (marker !== null)
-    return lazy || (marker[2] !== undefined && /^(?:[-*+]|1[.)])$/.test(marker[1]));
-  return (
-    HTML_BLOCKS.some(([start]) => start.test(rest)) ||
-    [THEMATIC_BREAK, FENCE_OPENER, ATX_HEADING, /^>/].some((block) => block.test(rest))
-  );
-}
-const closesFence = (rest: string, opener: string): boolean => {
-  const run = rest.replace(/ +$/, "");
-  return run.length >= opener.length && [...run].every((char) => char === opener[0]);
-};
-function withoutCode(markdown: string): string {
-  const items: number[] = [];
-  let fence: { readonly opener: string; readonly container: number } | null = null;
-  let html: { readonly end: RegExp | "blank"; readonly container: number } | null = null;
-  let emptyItem = false;
-  let paragraph = false;
-  return markdown
-    .split("\n")
-    .map((line) => {
-      const text = expandTabs(line.replace(/\r$/, ""));
-      const indent = text.search(/[^ ]|$/);
-      if (indent === text.length) {
-        if (emptyItem) items.pop();
-        if (html?.end === "blank") html = null;
-        emptyItem = paragraph = false;
-        return line;
-      }
-      emptyItem = false;
-      const container = items.at(-1) ?? 0;
-      if (
-        paragraph &&
-        (indent - container > 3 || !interruptsParagraph(text.slice(indent), indent < container))
-      )
-        return line.replace(INLINE_CODE, blank);
-      while (indent < (items.at(-1) ?? 0)) items.pop();
-      if (fence !== null && indent < fence.container) fence = null;
-      if (html !== null && indent < html.container) html = null;
+function maskProvenCode(markdown: string): { readonly structure: string; readonly provenUntil: number } {
+  let fence: string | null = null;
+  let masking: "on" | "until-blank" | "off" = "on";
+  let at = 0;
+  let provenUntil = markdown.length;
+  const structure = markdown
+    .split(/(\r\n?|\n)/)
+    .map((line, index) => {
+      const start = at;
+      at += line.length;
+      if (index % 2 === 1) return line;
       if (fence !== null) {
-        if (indent - fence.container <= 3 && closesFence(text.slice(indent), fence.opener))
-          fence = null;
+        const run = /^ {0,3}(`+|~+)[ \t]*$/.exec(line)?.[1];
+        if (run !== undefined && run[0] === fence[0] && run.length >= fence.length) fence = null;
         return blank(line);
       }
-      if (html !== null) {
-        if (html.end !== "blank" && html.end.test(text)) html = null;
+      if (/^[ \t]*$/.test(line)) {
+        if (masking === "until-blank") masking = "on";
         return line;
       }
-      if (indent - (items.at(-1) ?? 0) > 3 || THEMATIC_BREAK.test(text.slice(indent))) {
-        paragraph = false;
-        return line.replace(INLINE_CODE, blank);
+      const content = line.replace(CONTAINER, "");
+      if (RAW_BLOCKS.some(([start, end]) => start.test(content) && !end.test(content)))
+        masking = "off";
+      const opener = FENCE_OPENER.exec(line)?.[0];
+      if (opener !== undefined && masking === "on") {
+        fence = opener;
+        return blank(line);
       }
-      let column = indent;
-      for (let marker; (marker = LIST_MARKER.exec(text.slice(column))) !== null; ) {
-        const gap = marker[2]?.length ?? 0;
-        column += marker[1].length + (gap === 0 || gap > 4 ? 1 : gap);
-        items.push(column);
-        emptyItem = gap === 0;
-      }
-      const rest = text.slice(column);
-      const end = htmlBlockEnd(rest);
-      if (end !== null) {
-        html = end === "blank" || !end.test(rest) ? { end, container: items.at(-1) ?? 0 } : null;
-        paragraph = false;
-        return line;
-      }
-      const opener = FENCE_OPENER.exec(rest)?.[0];
-      paragraph = opener === undefined && /^[^ >]/.test(rest) && !ATX_HEADING.test(rest);
-      if (opener === undefined) return line.replace(INLINE_CODE, blank);
-      fence = { opener, container: items.at(-1) ?? 0 };
-      return blank(line);
+      if (/^(?:`{3}|~{3})/.test(content)) masking = "off";
+      if (masking === "off") provenUntil = Math.min(provenUntil, start);
+      if (masking !== "on") return line;
+      const masked = maskSpans(line);
+      if (masked.open) masking = "until-blank";
+      return masked.text;
     })
-    .join("\n");
+    .join("");
+  return { structure, provenUntil };
 }
 function group(match: RegExpExecArray, index: number, text: string): string {
   const span = match.indices?.[index];
@@ -171,7 +130,7 @@ function stripTags(html: string): string {
 
 const MAX_PADDED_FINDINGS = 20;
 function countedSections(body: string): readonly CountedSection[] {
-  const structure = withoutCode(body);
+  const { structure, provenUntil } = maskProvenCode(body);
   const heads = [...structure.matchAll(SECTION)];
   return heads.flatMap((head, index) => {
     const counted = countOf(group(head, 1, body).trim());
@@ -183,19 +142,24 @@ function countedSections(body: string): readonly CountedSection[] {
         ...counted,
         text: body.slice(start, end),
         structure: structure.slice(start, end),
+        proven: provenUntil - start,
       },
     ];
   });
 }
 function threadlessOpenItems(section: CountedSection): readonly T.BodyFinding[] {
   const raw = section.text.split("\n");
-  const lines = section.structure
-    .split("\n")
-    .flatMap((line, index) =>
-      line.startsWith("- ") ? [{ line, text: raw[index] }] : []
-    );
+  let at = 0;
+  const lines = section.structure.split("\n").flatMap((line, index) => {
+    const text = raw[index];
+    const proven = at < section.proven;
+    at += text.length + 1;
+    return line.startsWith("- ") ? [{ text, proven }] : [];
+  });
   const loose = lines
-    .filter(({ line }) => !THREAD_LINK.test(line))
+    .filter(
+      ({ text, proven }) => !proven || !THREAD_LINK.test(text.replace(MAYBE_CODE_OR_TAG, blank))
+    )
     .map(({ text }) => ({
       section: section.name,
       title: stripTags(text.slice(2)),

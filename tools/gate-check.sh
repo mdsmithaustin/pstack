@@ -48,6 +48,7 @@ run test "promise unit tests" . "${py[@]}" -m unittest discover -s evals/promise
 run test "setup-pstack unit tests" . "${py[@]}" -m unittest discover -s tests/skills/setup-pstack/scripts -p 'test_*.py'
 run test "pstack-harness unit tests" . "${py[@]}" -m unittest discover -s tests/skills/pstack-harness/scripts -p 'test_*.py'
 run test "poteto-mode bun install" skills/poteto-mode/scripts bun install --frozen-lockfile
+run test "poteto-mode test bun install" tests/skills/poteto-mode/scripts bun install --frozen-lockfile
 run test "poteto-mode bun tests" skills/poteto-mode/scripts bun run test
 run test "poteto-mode typecheck" skills/poteto-mode/scripts bun run typecheck
 run test "pr-recap bun install" skills/pr-recap/scripts/sketch bun install --frozen-lockfile
