@@ -844,16 +844,21 @@
   },
   "commits-leave-out-credentials-and-local-files": {
    "check": "static",
-   "claim": "A playbook's commits leave out credential files such as `.env`, and notes or data the user did not ask to version.",
+   "claim": "A playbook's commits leave out credential files such as `.env`, and the user's own notes or data they did not ask to version.",
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Never commit credential files such as `.env`, or notes and data the user did not ask to version."
+     "quote": "Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version."
+    },
+    {
+     "file": "skills/poteto-mode/references/delegation.md",
+     "quote": "It names the branch off trunk to commit on, and it forbids committing credential files such as `.env` or the user's own notes and data they did not ask to version."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/SKILL.md"
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/references/delegation.md"
    ]
   },
   "config-read-at-next-run": {
