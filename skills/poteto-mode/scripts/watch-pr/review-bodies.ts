@@ -41,7 +41,7 @@ const RESOLVED = /^resolved\b/i;
 const OPEN = /^open\b/i;
 const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const MAYBE_CODE_OR_TAG =
-  /\\.|<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>|<!--.*?-->|<[A-Za-z/!?].*|(`+)(?:.*?(?<!`)\1(?!`))?/g;
+  /\\.|<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>|<!--.*?-->|<[A-Za-z/!?].*|(`+)(?:.*?(?<!`)\1(?!`)|.*)/g;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
 const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;

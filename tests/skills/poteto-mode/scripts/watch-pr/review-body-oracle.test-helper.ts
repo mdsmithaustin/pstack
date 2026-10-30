@@ -89,6 +89,7 @@ const OPEN_ITEMS = [
   "- a | `[x](#discussion_r1)`",
   "- [A `b`](#discussion_r5)",
   "- [x](#discussion_r1) `",
+  "- a ` [x](#discussion_r5)",
   '- <a title="[x](#discussion_r1)">t</a>',
   "  - nested [x](#discussion_r1)",
   "- Escape \\` then quote `[x](#discussion_r42)` here",
@@ -96,7 +97,7 @@ const OPEN_ITEMS = [
   "- a < b `c > [x](#discussion_r42)`",
   "- <!-- > [x](#discussion_r42) -->",
 ];
-const OPEN_CONTEXT = ["", "text", "```", "~~~", "    ```", "- ```", "  ```", "<div>", "<!--", "`", "<br>", "| a | b |"];
+const OPEN_CONTEXT = ["", "text", "```", "~~~", "    ```", "- ```", "  ```", "<div>", "<!--", "`", " `", "<br>", "| a | b |"];
 
 /** Open sections whose items mix thread links, quoted links, and code around them. */
 export function* openBodies(): Generator<string> {

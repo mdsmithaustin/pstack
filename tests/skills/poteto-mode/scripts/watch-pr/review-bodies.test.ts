@@ -803,6 +803,7 @@ describe("bodies in any format", () => {
       ]);
       for (const item of [
         "- Mention `[x](#discussion_r42)` next to |",
+        "- a ` [x](#discussion_r5)\n `",
         "- <picture>p</picture> Mention `[x](#discussion_r42)` here",
         '- See <a title="[x](#discussion_r42)">this</a>',
         "- Escape \\` then quote `[x](#discussion_r42)` here",
