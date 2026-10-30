@@ -2,9 +2,11 @@
 
 **You own the design. Plan, review, verify.** Delegate implementation. Stay in the lead.
 
-1. `how` over the affected subsystem. Use the **how** skill, and ask it to list the components, hooks, helpers, and UI patterns the repository already has for this job. Reuse them in the design and the step 4 brief. Extend a shared one only when every caller keeps its behavior. Give the reason for each new one.
+Run every step, or mark it `skipped: <reason>` with a reason that covers that step alone.
+
+1. `how` over the affected subsystem. Use the **how** skill, and ask it to list the components, hooks, helpers, and UI patterns the repository already has for this job. Reuse them in the design and the step 4 brief. Extend a shared one only when every caller keeps its behavior. Give the reason for each new one. In an empty or new project, run the step anyway and record `no existing code` as its outcome.
 2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes. Use the **architect** skill for it. A small, self-contained change keeps this step with `skipped: <reason>`.
-3. Write the throughput checkpoint as four items in the same worklist. A dimension that genuinely does not apply (single file, no fan-out) keeps its item with `skipped: <reason>` rather than being dropped:
+3. Write the throughput checkpoint as four items in the same worklist. A dimension that does not apply (single file, no fan-out) still gets its item, marked `skipped: <reason>`:
    - **Blocking first steps.** Gates run before fan-out.
    - **Independent workstreams.** Disjoint files, services, or layers parallelize. Shared writes serialize.
    - **Shared mutable state.** Default to splitting the target (the **separate-before-serializing-shared-state** principle skill). Serialize only for real invariants.
@@ -19,9 +21,9 @@
    - a show/hide or focus behavior that differs from what the replaced or neighboring UI did.
 
    Search the repository for each. An existing pattern records an earlier taste decision, so overruling one has to be visible.
-6. Rebase into small, ordered commits. Stack follow-ups.
+6. Rebase into small, ordered commits. Stack follow-ups. If the project has no git repository, run `git init` at the project root first.
    Use the **sequence-verifiable-units** principle skill, building, verifying, and committing each small unit before the next.
-7. If the design is contested, use the **interrogate** skill before shipping.
-8. Run **Opening a PR**.
+7. If the design is contested, use the **interrogate** skill before shipping. Otherwise mark this step `skipped: <reason>`.
+8. Run **Opening a PR**. If step 6 produced no commits, or the repository has no remote, mark this step `skipped: <reason>`.
 
 **Reply:** what you built, what you chose and why, the throughput checkpoint, open decisions, and **Departures from existing patterns**. For each departure, give the pattern it overrules, where that pattern lives, and why the change overrules it, or write None. Carry the same section into the PR body. Tables for design alternatives.

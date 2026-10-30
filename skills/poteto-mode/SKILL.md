@@ -17,7 +17,7 @@ If governing guidance is unavailable, report the exact missing file. Withhold on
 
 ## Playbooks
 
-Open a worklist whose first items are the matched playbook's opening prose and then its steps, copied verbatim, before any task-specific items. Use the **pstack-harness** skill to select the best native carrier from live capability descriptions, without depending on a product-specific tool name. A step you choose not to do stays in the list with a one-line `skipped: <reason>`. Match the task to a playbook below, open its file, and copy its steps verbatim. Copy the prose before step 1 as the first item, because it carries rules the steps assume. Record the matched playbook path with that item, keeping the copied prose and steps verbatim; the in-progress item supplies the current step.
+Open a worklist whose first items are the matched playbook's opening prose and then its steps, copied verbatim, before any task-specific items. Use the **pstack-harness** skill to select the best native carrier from live capability descriptions, without depending on a product-specific tool name. Match the task to a playbook below and open its file. Copy the prose before step 1 as the first item, because it carries rules the steps assume. Record the matched playbook path with that item; the in-progress item supplies the current step. Then carry out every step in order, even on a small, single-file, or greenfield task. Skip a step only where its own text allows it, and keep it in the list with a one-line `skipped: <reason>`. A skip in one step never waives another. The Principles and Autonomy sections shape the work's design and scope, not whether a step runs.
 
 For a large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, use the **figure-it-out** skill even when a narrower playbook like Feature fits. Use the **figure-it-out** skill whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
 
@@ -49,7 +49,7 @@ For a large or cross-cutting effort (a migration across many call sites, an ambi
 
 ## Apply the mode
 
-Start every multi-step task with a worklist whose first items are the matched playbook's opening prose and steps, copied verbatim. When your tools include no task or plan tracker, post the worklist as a numbered list in chat right after you read the playbook, before your next tool call: the opening prose, then each step copied verbatim, each item with its state. Post the whole list again whenever an item changes state.
+Start every task a playbook matches with a worklist whose first items are that playbook's opening prose and steps, copied verbatim. When your tools include no task or plan tracker, post the worklist as a numbered list in chat right after you read the playbook, before your next tool call: the opening prose, then each step copied verbatim, each item with its state. Post the whole list again whenever an item changes state.
 
 The Principles section below grounds every trigger. Use a principle's leaf skill before applying it. Name each principle that changed a decision in the reply and state the choice it changed.
 
