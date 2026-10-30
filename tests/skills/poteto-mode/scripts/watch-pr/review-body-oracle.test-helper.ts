@@ -38,7 +38,7 @@ const LINES = [
   "| a | b |", "|---|---|", "http://x`", "www.x`", "- text", "> text", "    text", "-",
   "- <pre>", "> <!--", "- <div>", "1) x", "-\t<pre>", "1. <pre>", "<script>", "<style>",
   "<textarea>", "<PRE>", "<pre x", "<pre></b>", "<!-- ->", "<?x>", "<![CDATA[ ]>", "```\t", "\u00a0",
-  "a `b", "~~", "   ~~~", "```\r\r",
+  "a `b", "~~", "   ~~~", "```\r\r", "[x`]: /u", "\ufeff~~~",
 ];
 const SUMMARY_LINES = [
   SUMMARY, ` ${SUMMARY}`, `    ${SUMMARY}`, `- ${SUMMARY}`, `> ${SUMMARY}`, `1. ${SUMMARY}`,
@@ -52,6 +52,7 @@ const SUMMARY_LINES = [
   `a:\`${SUMMARY}\``, `\`\` \` ${SUMMARY} \` \`\``, `  \`${SUMMARY}\``, `    \`${SUMMARY}\``,
   `\`\` ${SUMMARY} \`x\``, `\`x\`\` ${SUMMARY} \``, `\`${SUMMARY}\`\``,
   `[a](/u "\`") ${SUMMARY}\``, `[](\`)${SUMMARY}\``, `\`\u2028\`${SUMMARY}\``, `\`\` \`x\` \`${SUMMARY}\``,
+  `${"`".repeat(81)} ${SUMMARY} ${"`".repeat(81)}`, `[a][x\`] ${SUMMARY} \``,
 ];
 
 function* random(count: number, seed: number): Generator<string> {

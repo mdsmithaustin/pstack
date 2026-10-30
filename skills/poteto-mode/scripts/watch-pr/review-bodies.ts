@@ -42,7 +42,7 @@ const THREAD_LINK = /\]\([^)\s]*#discussion_r\d+\)/;
 const NESTED_ITEM =
   /<summary>(?!<strong>)([\s\S]*?)<\/summary>([\s\S]*?)(?=<summary>|$)/dg;
 const FENCE_OPENER = /^(?:`{3,}(?=[^`]*$)|~{3,})/;
-const CONTAINER = /^(?:[ \t*+\-\d.)]|\[\^[^\]]*\]:)*/;
+const CONTAINER = /^(?:[ \t*+\-\d.)\ufeff]|\[\^[^\]]*\]:)*/;
 const RAW_BLOCKS: readonly (readonly [start: RegExp, end: RegExp])[] = [
   [/^<(?:pre|script|style|textarea)(?:[ \t>]|$)/i, /<\/(?:pre|script|style|textarea)>/i],
   [/^<!--/, /-->/],
@@ -50,7 +50,7 @@ const RAW_BLOCKS: readonly (readonly [start: RegExp, end: RegExp])[] = [
   [/^<![A-Z]/, />/],
   [/^<!\[CDATA\[/, /\]\]>/],
 ];
-const INLINE = /\\.|(?:<|\]\().*|(`+)(?:.*?(?<!`)\1(?!`))?/g;
+const INLINE = /\\.|(?:<|\][(\[]).*|(`+)(?:.*?(?<!`)\1(?!`))?/g;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
 function maskSpans(line: string): { readonly text: string; readonly open: boolean } {
   let open = false;
@@ -58,7 +58,7 @@ function maskSpans(line: string): { readonly text: string; readonly open: boolea
     open ||=
       run === undefined
         ? token[0] !== "\\"
-        : token === run || /(?::|www\.)[^ \t]*$/i.test(line.slice(0, at));
+        : token === run || run.length > 80 || /(?::|www\.)[^ \t]*$/i.test(line.slice(0, at));
     return open || run === undefined ? token : blank(token);
   });
   return { text: line.includes("|") ? line : text, open };
