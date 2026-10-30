@@ -56,7 +56,7 @@ function maskSpans(line: string): { readonly text: string; readonly open: boolea
   let open = false;
   let raw = false;
   const text = line.replace(INLINE, (token: string, run: string | undefined, at: number) => {
-    const autolink = run !== undefined && token !== run && /(?::|www\.)\S*$/i.test(line.slice(0, at));
+    const autolink = run !== undefined && token !== run && /(?::|www\.)[^ \t]*$/i.test(line.slice(0, at));
     raw ||= token[0] === "<" || autolink;
     open ||= raw || token === run;
     return raw || token === run || run === undefined ? token : blank(token);

@@ -45,6 +45,10 @@ const SUMMARY_LINES = [
   `\t${SUMMARY}`, `\`${SUMMARY}\``, `x \`${SUMMARY}\` y`, `\`\`${SUMMARY}\`\``, `- \`${SUMMARY}\``,
   `> \`${SUMMARY}\``, `\`x ${SUMMARY}`, `${SUMMARY}\``, `\\\`${SUMMARY}\``, `\`\`x\` ${SUMMARY} \`y`,
   `| \`x | ${SUMMARY} | y\` |`, `http://x/\`${SUMMARY}\``, `www.x\`${SUMMARY}\``, `<br>\`${SUMMARY}\``,
+  `http://x\u00a0\`${SUMMARY}\``, `http://x\u2003\`${SUMMARY}\``, `http://x\f\`${SUMMARY}\``,
+  `http://x\v\`${SUMMARY}\``, `http://x\u2028\`${SUMMARY}\``,
+  `www.x\u00a0\`${SUMMARY}\``, `www.x\u2003\`${SUMMARY}\``, `www.x\f\`${SUMMARY}\``,
+  `www.x\v\`${SUMMARY}\``, `www.x\u2028\`${SUMMARY}\``,
   `a:\`${SUMMARY}\``, `\`\` \` ${SUMMARY} \` \`\``, `  \`${SUMMARY}\``, `    \`${SUMMARY}\``,
   `\`\` ${SUMMARY} \`x\``, `\`x\`\` ${SUMMARY} \``, `\`${SUMMARY}\`\``,
 ];
