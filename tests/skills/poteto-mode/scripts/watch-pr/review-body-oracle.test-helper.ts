@@ -51,6 +51,7 @@ const SUMMARY_LINES = [
   `www.x\v\`${SUMMARY}\``, `www.x\u2028\`${SUMMARY}\``,
   `a:\`${SUMMARY}\``, `\`\` \` ${SUMMARY} \` \`\``, `  \`${SUMMARY}\``, `    \`${SUMMARY}\``,
   `\`\` ${SUMMARY} \`x\``, `\`x\`\` ${SUMMARY} \``, `\`${SUMMARY}\`\``,
+  `[a](/u "\`") ${SUMMARY}\``, `[](\`)${SUMMARY}\``, `\`\u2028\`${SUMMARY}\``, `\`\` \`x\` \`${SUMMARY}\``,
 ];
 
 function* random(count: number, seed: number): Generator<string> {

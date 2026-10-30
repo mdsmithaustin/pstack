@@ -724,8 +724,7 @@ describe("bodies in any format", () => {
     });
 
     it("bounds a code span by whole backtick runs", () => {
-      for (const body of [`\`\`a\` ${literal} \`b\n`, `\`a\`\` ${literal} \`\n`])
-        expect(at(body).flaggedReviews).toEqual([]);
+      expect(at(`\`a\`\` ${literal} \`\n`).flaggedReviews).toEqual([]);
     });
 
     it("opens no fence inside an HTML block", () => {

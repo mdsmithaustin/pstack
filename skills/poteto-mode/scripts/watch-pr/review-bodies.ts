@@ -50,16 +50,16 @@ const RAW_BLOCKS: readonly (readonly [start: RegExp, end: RegExp])[] = [
   [/^<![A-Z]/, />/],
   [/^<!\[CDATA\[/, /\]\]>/],
 ];
-const INLINE = /\\.|<.*|(`+)(?:.*?(?<!`)\1(?!`))?/g;
+const INLINE = /\\.|(?:<|\]\().*|(`+)(?:.*?(?<!`)\1(?!`))?/gs;
 const blank = (code: string): string => code.replace(/[^\n]/g, " ");
 function maskSpans(line: string): { readonly text: string; readonly open: boolean } {
   let open = false;
-  let raw = false;
   const text = line.replace(INLINE, (token: string, run: string | undefined, at: number) => {
-    const autolink = run !== undefined && token !== run && /(?::|www\.)[^ \t]*$/i.test(line.slice(0, at));
-    raw ||= token[0] === "<" || autolink;
-    open ||= raw || token === run;
-    return raw || token === run || run === undefined ? token : blank(token);
+    open ||=
+      run === undefined
+        ? token[0] !== "\\"
+        : token === run || /(?::|www\.)[^ \t]*$/i.test(line.slice(0, at));
+    return open || run === undefined ? token : blank(token);
   });
   return { text: line.includes("|") ? line : text, open };
 }
