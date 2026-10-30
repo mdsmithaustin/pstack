@@ -262,11 +262,11 @@ def fixture_lock(fixture):
 
 
 def drive(module, run, authorization):
-    """Prepare the run and play its turns. Returns (login, detail) when a login died before or during a turn, else None."""
+    """Prepare the run and play its turns. Returns (login, detail, remedy) when a login died before or during a turn, else None."""
     try:
         module.prepare(run)
     except LoginRequired as expired:
-        return expired.login, expired.detail
+        return expired.login, expired.detail, expired.remedy
     login = getattr(module, "LOGIN", None)
     lock = fixture_lock(run.case["fixture"]) if module.SHARES_HOST_TMP and run.case.get("tmp_lock", True) else None
     try:
@@ -276,7 +276,7 @@ def drive(module, run, authorization):
             _write_record(authorization, meta(run))
             dead = login and auth_death(login, record)
             if dead:
-                return login, f"turn {i} exited {record['exit_code']} with {dead!r}"
+                return login, f"turn {i} exited {record['exit_code']} with {dead!r}", None
     finally:
         if lock:
             lock.close()
@@ -314,7 +314,7 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     pair = refusal = None
     try:
         died = drive(module, run, authorization)
-        error = died and death_record(*died)
+        error = died and death_record(*died[:2])
         if os.path.lexists(run.project):
             project = _Root.open(run.project)
             try:

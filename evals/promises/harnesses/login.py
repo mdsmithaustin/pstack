@@ -21,10 +21,12 @@ class Login:
 
 
 class LoginRequired(RuntimeError):
-    def __init__(self, login, detail):
-        super().__init__(f"{login.cli} login is not usable: {detail}. Run `{login.relogin}`, then start the wave again")
+    def __init__(self, login, detail, remedy=None):
+        advice = remedy or f"Run `{login.relogin}`, then start the wave again"
+        super().__init__(f"{login.cli} login is not usable: {detail}. {advice}")
         self.login = login
         self.detail = detail
+        self.remedy = remedy
 
 
 def check_status(login, argv, env=None):

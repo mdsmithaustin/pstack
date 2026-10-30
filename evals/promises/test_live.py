@@ -5,6 +5,7 @@ import json
 import io
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -644,6 +645,17 @@ class LoginPreflight(unittest.TestCase):
         for cause in causes:
             self.assertIn(cause, outcome[2])
 
+    def assertGrokNotRun(self, outcome, *causes):
+        code, run_case, stderr = outcome
+        self.assertEqual(code, 3)
+        run_case.assert_not_called()
+        self.assertEqual(list((self.tmp / "out").iterdir()), [])
+        for cause in causes:
+            self.assertIn(cause, stderr)
+        self.assertIn("grok login is not usable", stderr)
+        self.assertNotIn("Run `grok login`", stderr)
+        self.assertIn("Get `grok models` to run on the host, then start the wave again", stderr)
+
     def assertStopped(self, outcome, cli, command):
         code, run_case, stderr = outcome
         self.assertEqual(code, 3)
@@ -707,11 +719,25 @@ class LoginPreflight(unittest.TestCase):
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", 'echo "You are not authenticated."'))
         self.assertGrokStopped(outcome, "exited 0", "You are not authenticated.")
 
-    def test_grok_renewal_output_in_the_refusal_keeps_only_its_last_300_characters(self):
+    def test_grok_renewal_output_in_the_refusal_keeps_its_first_100_and_last_200_characters(self):
         output = "HEAD-OF-OUTPUT" + "0" * 400 + "TAIL-OF-OUTPUT"
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", f"printf '{output}'; exit 1"))
-        self.assertGrokStopped(outcome, "TAIL-OF-OUTPUT", output[-300:])
-        self.assertNotIn("HEAD-OF-OUTPUT", outcome[2])
+        self.assertGrokStopped(outcome, f"exited 1: {output[:100]} ... {output[-200:]}. Run")
+
+    def test_grok_renewal_exiting_zero_keeps_the_cause_line_ahead_of_a_long_model_list(self):
+        listing = "".join(f"\\ngrok-model-{n} (a catalog entry)" for n in range(30))
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", f"printf 'You are not authenticated.{listing}'"))
+        self.assertGrokStopped(outcome, "exited 0: You are not authenticated. grok-model-0")
+
+    def test_grok_renewal_output_in_the_refusal_puts_stdout_before_stderr_and_trims_the_edges(self):
+        script = "printf ' ERR-LINE\\n\\n' >&2; printf '  \\n OUT-LINE \\n'; exit 1"
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", script))
+        self.assertGrokStopped(outcome, "exited 1: OUT-LINE ERR-LINE. Run")
+
+    def test_grok_renewal_output_spanning_lines_stays_on_one_refusal_line(self):
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", "printf 'one\\ntwo\\n' >&2; printf 'three\\n'; exit 1"))
+        self.assertGrokStopped(outcome, "exited 1: three one two. Run")
+        self.assertEqual(len(outcome[2].splitlines()), 1)
 
     def test_grok_renewal_runs_without_the_debug_logging_the_host_turns_on(self):
         seen = self.tmp / "renewal-env"
@@ -730,9 +756,16 @@ class LoginPreflight(unittest.TestCase):
 
     def test_grok_renewal_that_hangs_stops_the_wave_as_not_finished(self):
         from harnesses import grok
+        run = subprocess.run
+
+        def shortened(argv, **kwargs):
+            if argv[-1] == "models" and kwargs.get("timeout") is not None:
+                kwargs["timeout"] = 0.5
+            return run(argv, **kwargs)
+
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", "exec sleep 3"),
-                            mock.patch.object(grok, "RENEWAL_TIMEOUT_S", 0.5))
-        self.assertGrokStopped(outcome, "did not finish", "TimeoutExpired")
+                            mock.patch.object(grok.subprocess, "run", shortened))
+        self.assertGrokNotRun(outcome, "did not finish", "TimeoutExpired")
 
     def test_grok_with_no_working_binary_stops_the_wave_saying_the_renewal_never_ran(self):
         from harnesses import grok
@@ -741,11 +774,53 @@ class LoginPreflight(unittest.TestCase):
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", version="exit 1"),
                             mock.patch.dict(os.environ, {"PATH": str(empty)}),
                             mock.patch.object(grok, "DEFAULT_BIN", self.tmp / "no-such-grok"))
-        self.assertGrokStopped(outcome, "no working grok binary", "never ran")
+        self.assertGrokNotRun(outcome, "no working grok binary", "never ran")
+
+    def test_grok_binary_path_the_host_cannot_search_stops_the_wave_saying_the_renewal_never_ran(self):
+        from harnesses import grok
+        locked = self.tmp / "locked"
+        locked.mkdir()
+        (locked / "grok").write_text("")
+        locked.chmod(0)
+        self.addCleanup(locked.chmod, 0o700)
+        empty = self.tmp / "empty-path"
+        empty.mkdir()
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z"),
+                            mock.patch.dict(os.environ, {"GROK_BIN": str(locked / "grok"), "PATH": str(empty)}),
+                            mock.patch.object(grok, "DEFAULT_BIN", self.tmp / "no-such-grok"))
+        self.assertGrokNotRun(outcome, "no working grok binary", "never ran")
+
+    def test_grok_binary_whose_version_output_is_undecodable_still_runs_the_wave(self):
+        code, run_case, _ = self.wave("grok", self.grok("2020-01-01T00:00:00Z", self.grok_renews("2999-01-01T00:00:00Z"),
+                                                        version="printf 'grok \\377 1'"))
+        self.assertEqual((code, [c.args[1] for c in run_case.call_args_list]), (0, ["a", "b"]))
+
+    def test_grok_binary_that_fails_its_version_probe_with_undecodable_output_stops_the_wave_as_never_ran(self):
+        from harnesses import grok
+        empty = self.tmp / "empty-path"
+        empty.mkdir()
+        outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", version="printf '\\377' >&2; exit 1"),
+                            mock.patch.dict(os.environ, {"PATH": str(empty)}),
+                            mock.patch.object(grok, "DEFAULT_BIN", self.tmp / "no-such-grok"))
+        self.assertGrokNotRun(outcome, "no working grok binary", "never ran")
 
     def test_grok_binary_that_vanishes_before_the_renewal_stops_the_wave_as_not_finished(self):
         outcome = self.wave("grok", self.grok("2020-01-01T00:00:00Z", version='echo grok 1; rm -f "$0"'))
-        self.assertGrokStopped(outcome, "did not finish", "FileNotFoundError")
+        self.assertGrokNotRun(outcome, "did not finish", "FileNotFoundError")
+
+    def test_grok_preparation_that_never_ran_the_renewal_hands_its_remedy_to_the_wave_stop(self):
+        from harnesses import grok
+        empty = self.tmp / "empty-path"
+        empty.mkdir()
+        run = live.Run(self.tmp / "run", "grok", {"id": "x", "fixture": "relay", "turns": ["one"]}, "0" * 40, 60)
+        run.root.mkdir()
+        self.enterContext(self.grok("2020-01-01T00:00:00Z", version="exit 1"))
+        with mock.patch.dict(os.environ, {"PATH": str(empty)}), mock.patch.object(grok, "DEFAULT_BIN", self.tmp / "no-such-grok"):
+            died = live.drive(grok, run, object())
+            self.assertIn("never ran", died[1])
+            refusal = str(LoginRequired(*died))
+        self.assertNotIn("Run `grok login`", refusal)
+        self.assertIn(grok.NOT_RUN_REMEDY, refusal)
 
     def test_a_valid_login_lets_every_case_run(self):
         script = 'case "$1" in --version) echo codex 1;; *) echo "Logged in using ChatGPT";; esac\n'
@@ -825,8 +900,8 @@ class AuthDeath(unittest.TestCase):
         module = mock.Mock(SHARES_HOST_TMP=False, LOGIN=claude_code.LOGIN, turn=turn)
         run = live.Run(self.tmp, "claude-code", {"id": "x", "fixture": "relay", "turns": ["one", "two"]}, "0" * 40, 60)
         with mock.patch.object(live, "_write_record"):
-            login, detail = live.drive(module, run, object())
-        self.assertEqual((login.cli, turns), ("claude", [0]))
+            login, detail, remedy = live.drive(module, run, object())
+        self.assertEqual((login.cli, turns, remedy), ("claude", [0], None))
         self.assertIn("turn 0 exited 1", detail)
         self.assertIn("Not logged in", detail)
 
@@ -834,7 +909,7 @@ class AuthDeath(unittest.TestCase):
         from harnesses import grok
         module = mock.Mock(SHARES_HOST_TMP=False, LOGIN=grok.LOGIN, prepare=mock.Mock(side_effect=LoginRequired(grok.LOGIN, "token expired")))
         run = live.Run(self.tmp, "grok", {"id": "x", "fixture": "relay", "turns": ["one"]}, "0" * 40, 60)
-        self.assertEqual(live.drive(module, run, object()), (grok.LOGIN, "token expired"))
+        self.assertEqual(live.drive(module, run, object()), (grok.LOGIN, "token expired", None))
         module.turn.assert_not_called()
 
 
@@ -990,6 +1065,24 @@ class ErrorRun(unittest.TestCase):
                     live.run_case("claude-code", case["id"], "HEAD", out, 0)
             written = sorted(p.name for p in out.rglob("*.json") if p.name in ("trace.json", "verdict.json"))
         self.assertEqual(written, [])
+
+    def test_a_grok_renewal_that_never_ran_in_preparation_stops_the_wave_without_login_advice(self):
+        from harnesses import grok
+        case = live.load_case("principle-steer-run")
+        case["tmp_lock"] = False
+        with tempfile.TemporaryDirectory(prefix="pstack-live-remedy-") as tmp, redirect_stdout(io.StringIO()):
+            out = Path(tmp).resolve()
+            home = out / "grok-home"
+            home.mkdir()
+            (home / "auth.json").write_text(json.dumps({"xai": {"key": "k", "expires_at": "2020-01-01T00:00:00Z"}}))
+            with mock.patch.object(live, "load_case", return_value=case), mock.patch.object(grok, "host_grok_home", return_value=home), \
+                    mock.patch.dict(os.environ, {"GROK_BIN": str(out / "no-such-grok"), "PATH": str(Path(shutil.which("git")).parent)}), \
+                    mock.patch.object(grok, "DEFAULT_BIN", out / "no-such-grok-either"):
+                with self.assertRaises(live.LoginRequired) as refused:
+                    live.run_case("grok", case["id"], "HEAD", out, 0)
+        self.assertIn("never ran", str(refused.exception))
+        self.assertNotIn("Run `grok login`", str(refused.exception))
+        self.assertIn(grok.NOT_RUN_REMEDY, str(refused.exception))
 
     def test_regrading_a_run_whose_login_died_before_any_turn_is_refused_and_keeps_its_verdict(self):
         from harnesses import codex

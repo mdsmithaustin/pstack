@@ -8,6 +8,7 @@ import subprocess
 import urllib.parse
 import uuid
 from pathlib import Path
+from typing import NamedTuple
 
 import live
 from grade_boundary import GradeRefused, copy_file
@@ -40,7 +41,7 @@ entry = next(v for v in json.load(open({auth!r})).values() if isinstance(v, dict
 expires = datetime.datetime.fromisoformat(entry["expires_at"].replace("Z", "+00:00"))
 ttl = int((expires - datetime.datetime.now(datetime.timezone.utc)).total_seconds())
 if ttl < 300:
-    sys.exit("host grok token expires in under 5 minutes; run `grok models` on the host to refresh it")
+    sys.exit("host grok token expires in under 5 minutes; run `GROK_AUTH_EARLY_INVALIDATION_SECS=300 grok models` on the host to refresh it")
 print(json.dumps({{"access_token": entry["key"], "expires_in": ttl}}))
 """
 
@@ -115,10 +116,13 @@ def resolve_binary(env):
                   ("default", str(DEFAULT_BIN))]
     rejected = []
     for source, path in candidates:
-        if not path or not Path(path).exists():
+        if not path:
             continue
         try:
-            probe = subprocess.run([path, "--version"], env=env, capture_output=True, text=True, timeout=60)
+            if not Path(path).exists():
+                continue
+            probe = subprocess.run([path, "--version"], env=env, capture_output=True, text=True, errors="replace",
+                                   timeout=60)
         except (OSError, subprocess.TimeoutExpired) as error:
             rejected.append({"source": source, "path": path, "error": repr(error)})
             continue
@@ -139,6 +143,14 @@ LOGIN = Login("grok", "grok login", re.compile(
     r"Invalid or expired credentials|sign-in helper could not renew", re.I))
 TOKEN_MARGIN = datetime.timedelta(minutes=5)
 RENEWAL_TIMEOUT_S = 120
+EXCERPT_HEAD = 100
+EXCERPT_TAIL = 200
+NOT_RUN_REMEDY = "Get `grok models` to run on the host, then start the wave again"
+
+
+class Renewal(NamedTuple):
+    cause: str
+    ran: bool
 
 
 def expiring(auth):
@@ -146,19 +158,25 @@ def expiring(auth):
     return expiry is not None and expiry <= datetime.datetime.now(datetime.timezone.utc) + TOKEN_MARGIN
 
 
+def excerpt(output):
+    """One line of grok's output. Grok prints the cause of an exit 0 first and the error of a failure last, so keep both ends."""
+    text = " ".join(output.split())
+    return text if len(text) <= EXCERPT_HEAD + EXCERPT_TAIL else f"{text[:EXCERPT_HEAD]} ... {text[-EXCERPT_TAIL:]}"
+
+
 def renew(env):
     try:
         argv = [resolve_binary(env)["path"], "models"]
     except RuntimeError as error:
-        return f"`grok models` never ran: {error}"
+        return Renewal(f"`grok models` never ran: {error}", False)
     command = " ".join(argv)
     try:
         done = subprocess.run(argv, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
                               errors="replace", timeout=RENEWAL_TIMEOUT_S)
     except (OSError, subprocess.TimeoutExpired) as error:
-        return f"`{command}` did not finish: {error!r}"
-    tail = (done.stdout + done.stderr).strip()[-300:]
-    return f"`{command}` exited {done.returncode}" + (f": {tail}" if tail else "")
+        return Renewal(f"`{command}` did not finish: {error!r}", False)
+    output = excerpt(done.stdout + done.stderr)
+    return Renewal(f"`{command}` exited {done.returncode}" + (f": {output}" if output else ""), True)
 
 
 def preflight():
@@ -168,17 +186,18 @@ def preflight():
     if not expiring(auth):
         return
     # grok renews a token only when it counts the token as expired, so match its early expiry to TOKEN_MARGIN.
-    # grok debug logs can carry token prefixes, and the refusal forwards the tail of the renewal's output.
+    # grok debug logs can carry token prefixes, and the refusal forwards an excerpt of the renewal's output.
     env = {**os.environ, "GROK_HOME": str(host_grok_home()),
            "GROK_AUTH_EARLY_INVALIDATION_SECS": str(int(TOKEN_MARGIN.total_seconds())), "RUST_LOG": "off"}
     env.pop("GROK_LOG_FILE", None)
-    cause = renew(env)
+    cause, ran = renew(env)
+    remedy = None if ran else NOT_RUN_REMEDY
     if not auth.is_file():
-        raise LoginRequired(LOGIN, f"grok removed the host login at {auth} during renewal, and {cause}")
+        raise LoginRequired(LOGIN, f"grok removed the host login at {auth} during renewal, and {cause}", remedy)
     if expiring(auth):
         expiry = host_token_expiry(auth)
         verb = "expired" if expiry <= datetime.datetime.now(datetime.timezone.utc) else "expires"
-        raise LoginRequired(LOGIN, f"the host token {verb} at {expiry:%Y-%m-%dT%H:%MZ}, and {cause}")
+        raise LoginRequired(LOGIN, f"the host token {verb} at {expiry:%Y-%m-%dT%H:%MZ}, and {cause}", remedy)
 
 
 def prepare(run):
