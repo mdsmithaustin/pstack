@@ -885,8 +885,8 @@ class AuthDeath(unittest.TestCase):
         module = mock.Mock(SHARES_HOST_TMP=False, LOGIN=claude_code.LOGIN, turn=turn)
         run = live.Run(self.tmp, "claude-code", {"id": "x", "fixture": "relay", "turns": ["one", "two"]}, "0" * 40, 60)
         with mock.patch.object(live, "_write_record"):
-            login, detail = live.drive(module, run, object())
-        self.assertEqual((login.cli, turns), ("claude", [0]))
+            login, detail, remedy = live.drive(module, run, object())
+        self.assertEqual((login.cli, turns, remedy), ("claude", [0], None))
         self.assertIn("turn 0 exited 1", detail)
         self.assertIn("Not logged in", detail)
 
@@ -894,7 +894,7 @@ class AuthDeath(unittest.TestCase):
         from harnesses import grok
         module = mock.Mock(SHARES_HOST_TMP=False, LOGIN=grok.LOGIN, prepare=mock.Mock(side_effect=LoginRequired(grok.LOGIN, "token expired")))
         run = live.Run(self.tmp, "grok", {"id": "x", "fixture": "relay", "turns": ["one"]}, "0" * 40, 60)
-        self.assertEqual(live.drive(module, run, object()), (grok.LOGIN, "token expired"))
+        self.assertEqual(live.drive(module, run, object()), (grok.LOGIN, "token expired", None))
         module.turn.assert_not_called()
 
 
@@ -1050,6 +1050,18 @@ class ErrorRun(unittest.TestCase):
                     live.run_case("claude-code", case["id"], "HEAD", out, 0)
             written = sorted(p.name for p in out.rglob("*.json") if p.name in ("trace.json", "verdict.json"))
         self.assertEqual(written, [])
+
+    def test_a_remedy_from_prepare_reaches_the_refusal_the_wave_stops_on(self):
+        from harnesses import grok
+        case = live.load_case("principle-steer-run")
+        case["tmp_lock"] = False
+        died = LoginRequired(grok.LOGIN, "the host token expired", grok.NOT_RUN_REMEDY)
+        with tempfile.TemporaryDirectory(prefix="pstack-live-remedy-") as tmp, redirect_stdout(io.StringIO()), \
+                mock.patch.object(live, "load_case", return_value=case), mock.patch.object(grok, "prepare", side_effect=died):
+            with self.assertRaises(live.LoginRequired) as refused:
+                live.run_case("grok", case["id"], "HEAD", Path(tmp).resolve(), 0)
+        self.assertNotIn("Run `grok login`", str(refused.exception))
+        self.assertIn(grok.NOT_RUN_REMEDY, str(refused.exception))
 
     def test_regrading_a_run_whose_login_died_before_any_turn_is_refused_and_keeps_its_verdict(self):
         from harnesses import codex
