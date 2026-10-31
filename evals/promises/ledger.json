@@ -2213,6 +2213,20 @@
     "skills/poteto-mode/playbooks/opening-a-pr.md"
    ]
   },
+  "opening-a-pr-gated-ask-user-relayed-when-attended": {
+   "check": "static",
+   "claim": "When the gate raises an ask-user finding in an attended run, the agent relays it to the user and never passes `--yes`.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "In an attended run, relay an `ask-user` finding verbatim to the user, or from a subagent to its parent. Never pass `--yes`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
   "opening-a-pr-gated-bypass-needs-the-user-word": {
    "check": "static",
    "claim": "In a gated repository the agent publishes around the gate only when the user said \"bypass no-mistakes\" in the current session.",
@@ -2262,6 +2276,20 @@
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
      "quote": "After a terminal outcome, or once the monitor has stopped, restack or retarget with `no-mistakes rerun --base-branch <new-base>`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
+  "opening-a-pr-gated-unattended-passes-yes": {
+   "check": "static",
+   "claim": "In an unattended run the agent passes `--yes` to the gate and lists each fixed ask-user finding in its final report.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "In an unattended run, as defined in [unattended runs](../references/unattended.md), pass `--yes` to `axi run` and `axi respond`. List each `ask-user` finding that the run fixed, verbatim, in the final report."
     }
    ],
    "harness_sensitive": false,
@@ -2656,6 +2684,24 @@
     "skills/poteto-mode/references/task-triggers.md",
     "skills/poteto-mode/playbooks/feature.md",
     "skills/poteto-mode/playbooks/bug-fix.md"
+   ]
+  },
+  "poteto-mode-unattended-run-triggers": {
+   "check": "static",
+   "claim": "A run is unattended when the user started Autopilot or Orchestrate, said they are stepping away, or launched a headless Claude Code session.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/unattended.md",
+     "quote": "The operator gave the go for Autopilot-full, Autopilot-stack, or Orchestrate."
+    },
+    {
+     "file": "skills/poteto-mode/references/unattended.md",
+     "quote": "The user said they are stepping away, said not to wait for them, or gave a grant that names no-mistakes."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/unattended.md"
    ]
   },
   "poteto-runs-documentation-impact-before-completion": {
@@ -4255,6 +4301,15 @@
    ],
    "text": "Ask for more candidates when the decision matters, fewer when it doesn't:"
   },
+  "075a42903f80": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "In an unattended run, the agent passes `--yes` instead, which fixes the finding, and lists each fixed finding in its final report."
+  },
   "075e08da9f67": {
    "class": "substituted",
    "file": "01-setup.md",
@@ -4401,6 +4456,15 @@
     "port"
    ],
    "text": "In this page you learn what a good prompt looks like, and how little of one you actually need."
+  },
+  "0e63f97408de": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "poteto-mode-unattended-run-triggers",
+   "sources": [
+    "port"
+   ],
+   "text": "A run is unattended when you started an Autopilot or Orchestrate run, said you're stepping away, or launched a headless Claude Code session with `claude --print`."
   },
   "0e6dabc4bee8": {
    "class": "context",
@@ -12890,6 +12954,15 @@
     "port"
    ],
    "text": "`/loop` is your CLI's wake mechanism, not a pstack skill. Claude Code has one built in; in a CLI without it, re-prompt on an interval or run a watcher subagent. The [Autonomous run playbook](../../skills/poteto-mode/playbooks/autonomous-run.md) uses it to re-check the finish condition on events or a heartbeat."
+  },
+  "f1ee79b509c2": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-ask-user-relayed-when-attended",
+   "sources": [
+    "port"
+   ],
+   "text": "When the gate raises an `ask-user` finding, the agent relays it to you."
   },
   "f29c18a93182": {
    "also": [
