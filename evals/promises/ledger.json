@@ -842,6 +842,44 @@
     "skills/pstack-harness/references/subagents/roles.json"
    ]
   },
+  "commits-go-on-a-branch-off-trunk": {
+   "check": "static",
+   "claim": "In an existing repository, a playbook's commits go on a branch off trunk, not on trunk.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "In an existing repository, commit on a branch off trunk."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "In an existing repository, commit on a branch off trunk, never on trunk itself."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/playbooks/feature.md"
+   ]
+  },
+  "commits-leave-out-credentials-and-local-files": {
+   "check": "static",
+   "claim": "A playbook's commits leave out credential files such as `.env`, and the user's own notes or data they did not ask to version.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version."
+    },
+    {
+     "file": "skills/poteto-mode/references/delegation.md",
+     "quote": "It names the branch off trunk to commit on, and it forbids committing credential files such as `.env` or the user's own notes and data they did not ask to version."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/references/delegation.md"
+   ]
+  },
   "config-read-at-next-run": {
    "check": "script",
    "claim": "Skills read the models config at spawn time through the resolver, so a change applies the next time a skill spawns, with no restart.",
@@ -2093,6 +2131,34 @@
    ],
    "scenario": "no-comments-run"
   },
+  "no-remote-skips-pr-step": {
+   "check": "static",
+   "claim": "In a repository with no remote, Feature and Bug fix still commit, and the PR step is recorded as skipped.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "Run the commit, push, and PR steps without being asked."
+    },
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "or the project lacks what it needs, such as a git remote, and keep it in the list with a one-line `skipped: <reason>`."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "If the task has no commits to propose, or the repository has no remote, mark this step `skipped: <reason>`."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/bug-fix.md",
+     "quote": "Stage the commits so the failing repro lands before the fix in git history."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/playbooks/bug-fix.md",
+    "skills/poteto-mode/playbooks/feature.md"
+   ]
+  },
   "open-pr-prompt-routes-to-opening-a-pr": {
    "check": "live",
    "claim": "An open-the-PR prompt runs the Opening a PR playbook.",
@@ -2640,6 +2706,20 @@
     "skills/poteto-teach/SKILL.md"
    ],
    "scenario": "teach-run"
+  },
+  "pr-steps-run-unasked": {
+   "check": "static",
+   "claim": "A playbook that ends in Opening a PR commits, pushes, and opens the PR without a separate request from the user.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "Run the commit, push, and PR steps without being asked."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/SKILL.md"
+   ]
   },
   "pre-answered-permission-not-asked": {
    "check": "live",
@@ -3692,6 +3772,20 @@
    ],
    "scenario": "unslop-run"
   },
+  "user-no-stops-commit-and-pr-steps": {
+   "check": "static",
+   "claim": "A user's \"no PR\" or \"don't commit\" skips the playbook steps it names.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "Skip a step only where its own text allows it, the user says no, or the project lacks what it needs, such as a git remote"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/SKILL.md"
+   ]
+  },
   "verification-skill-has-five-sections": {
    "check": "static",
    "claim": "create-verification-skill writes .agents/skills/verify-<app>/SKILL.md with Launch, Doctor, Drive, Evidence, and Cleanup sections plus a features/ map.",
@@ -4707,12 +4801,14 @@
    "text": "`/poteto-mode` is sticky."
   },
   "1865703ed86c": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "987157874aac"
+   ],
    "promise": "pre-answered-permission-not-asked",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "\"don't ask me before committing\" pre-answers the permission the agent would otherwise block on."
   },
@@ -7318,6 +7414,15 @@
    ],
    "text": "You don't write a spec."
   },
+  "6082a055d33e": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "commits-go-on-a-branch-off-trunk",
+   "sources": [
+    "port"
+   ],
+   "text": "In an existing repository, the commits go on a branch off your main branch, not on main."
+  },
   "615092f99f7f": {
    "class": "promise",
    "file": "07-overnight.md",
@@ -7785,6 +7890,18 @@
     "port"
    ],
    "text": "[`/swarm`](../../skills/swarm/SKILL.md) fans N workers across independent slices, coverage matrices, gauntlet lanes, exploration partitions, or declared race arms."
+  },
+  "6bcd34fc5a60": {
+   "also": [
+    "skipped-step-stays-in-worklist"
+   ],
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "no-remote-skips-pr-step",
+   "sources": [
+    "port"
+   ],
+   "text": "In a repository with no remote, Feature and Bug fix still commit and record the PR step as skipped."
   },
   "6becdca4aa3d": {
    "class": "promise",
@@ -8911,6 +9028,15 @@
    ],
    "text": "[Experience First](../../skills/principle-experience-first/SKILL.md) chooses the user's result over implementation convenience."
   },
+  "8bf14aedf5a5": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "user-no-stops-commit-and-pr-steps",
+   "sources": [
+    "port"
+   ],
+   "text": "Add \"no PR\" to the prompt to stop at local commits, as [Open the PR](./06-verify-and-ship.md#open-the-pr) explains."
+  },
   "8c0cc6508dd7": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -9263,6 +9389,18 @@
     "port"
    ],
    "text": "When the gate is broken, it stops and reports."
+  },
+  "987157874aac": {
+   "also": [
+    "pr-steps-run-unasked"
+   ],
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "pre-answered-permission-not-asked",
+   "sources": [
+    "port"
+   ],
+   "text": "\"don't ask me before committing\" pre-answers commit permission for the loop's per-iteration commits. A playbook that ends in a PR commits without asking anyway, as [Open the PR](./06-verify-and-ship.md#open-the-pr) explains."
   },
   "98be6a0a22ac": {
    "class": "promise",
@@ -9806,6 +9944,15 @@
    ],
    "text": "For a choice between options, it returns a recommendation with a trade-offs table."
   },
+  "a8dfcede98e8": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "You don't have to ask for the PR."
+  },
   "a92b1a2827cd": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -10073,6 +10220,24 @@
     "port"
    ],
    "text": "It's deliberately heavy machinery."
+  },
+  "adc441cd1549": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "In a repository with a remote, the run ends by pushing a branch and opening a PR."
+  },
+  "ade9c8f77734": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "commits-leave-out-credentials-and-local-files",
+   "sources": [
+    "port"
+   ],
+   "text": "Every commit leaves out credential files such as `.env`, and your own notes and data you did not ask to version."
   },
   "ae455157a458": {
    "class": "promise",
@@ -12453,6 +12618,15 @@
    ],
    "text": "Babysit reports documentation readiness alongside forge status."
   },
+  "ec61bc1a9190": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "A playbook that ends in Opening a PR, such as Feature or Bug fix, commits, pushes, and opens the PR as its last steps."
+  },
   "ec7e3a134a35": {
    "class": "context",
    "file": "04-design.md",
@@ -12905,6 +13079,15 @@
     "port"
    ],
    "text": "```text\n/poteto-mode turn this design into a plan. small verifiable PRs, each with its own verification steps.\n```"
+  },
+  "f990a63282b6": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "user-no-stops-commit-and-pr-steps",
+   "sources": [
+    "port"
+   ],
+   "text": "Say \"no PR\" or \"don't commit\" in the prompt to stop it earlier."
   },
   "f9b43d345e9f": {
    "class": "substituted",

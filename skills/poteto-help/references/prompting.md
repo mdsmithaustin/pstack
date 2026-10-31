@@ -40,7 +40,7 @@ A prompt states the intent and the check for done. The playbook supplies the ste
 - Say "im going to bed" or "im stepping away" so the agent stops asking.
 - Write done as checks every iteration can run, and give `/loop` that predicate.
 - Ask for a fresh worktree off a named base.
-- Pre-answer what the agent would stop for, such as "don't ask me before committing".
+- Pre-answer what the agent would stop for, such as "merge each PR once it is verified".
 - Ask for a decision log to audit later.
 - Give an exit: "if you're truly stuck after a few hours, stop and write up why".
 
