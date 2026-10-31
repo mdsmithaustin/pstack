@@ -8,6 +8,7 @@ Read this reference for the actions named by the mode entry, or when scope chang
 - Code crossing a function boundary → use the **architect** skill for parallel design exploration before implementing.
 - Parallel fan-out → use the **swarm** skill for coverage matrices, races, gauntlets, and exploration partitions. Use the **arena** skill for design or code bakeoffs with base selection and grafting.
 - Any subagent spawn → use the **pstack-harness** skill. Its **Spawn a role** section resolves the role's model and effort and maps them to this CLI. A structured question, when unsure how this CLI asks one → use the same skill.
+- About to wait for a human reply, or to answer a no-mistakes gate → read [unattended runs](unattended.md) first.
 - Contested design → use the **interrogate** skill (multi-model adversarial) before shipping.
 - Nontrivial multi-step → write the throughput checkpoint (Feature step 3).
 - Any prose surface, your reply to the user included → use the **unslop** skill. Write the reply per [writing](writing.md). Agent-facing prose also follows the authoring guidance in `../playbooks/authoring-a-skill.md`.
