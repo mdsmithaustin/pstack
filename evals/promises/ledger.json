@@ -2297,7 +2297,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "If one does, do not pass `--yes`, and report that decision as blocked."
+     "quote": "If none does, pass `--yes`. If one does, do not pass `--yes`, and report that decision as blocked."
     }
    ],
    "harness_sensitive": false,
