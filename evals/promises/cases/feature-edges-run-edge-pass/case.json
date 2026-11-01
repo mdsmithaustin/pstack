@@ -35,5 +35,5 @@
    "sha256": "e684ca0f7d0981d5737ff8d00976b7e09e6e729c014b9cb9500181e65a0f4112"
   }
  ],
- "note": "arm: skills at 19bd25de plus the Feature step 4 edge pass and its task-triggers line from fc418bee (fix/feature-spec-edge-probes); each overlaid file must match that commit's sha256"
+ "note": "arm: skills at 19bd25de plus the Feature step 4 edge pass and its task-triggers line from fc418bee, an unpublished pre-review state of fix/feature-spec-edge-probes that the overlays preserve; each overlaid file must match that commit's sha256"
 }

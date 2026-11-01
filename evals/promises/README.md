@@ -2,7 +2,7 @@
 
 The user guide in `docs/guide/` tells readers what pstack does. This directory checks that the port keeps those claims on Claude Code, Codex, Hermes, and Grok Build, and makes every upstream guide change visible at sync time.
 
-It also runs general live playbook evals independently of the external benchmark. These cases use the same runner and oracles, but their outcome checks do not need a guide claim in `ledger.json`. The ledger records guide promises. Passing cases do not guarantee model behavior on other tasks.
+It also runs general live playbook evals independently of any external benchmark. These cases use the same runner and oracles, but their outcome checks do not need a guide claim in `ledger.json`. The ledger records guide promises. Passing cases do not guarantee model behavior on other tasks.
 
 ## What the ledger holds
 
@@ -97,7 +97,7 @@ The routed-load oracles require a successful Skill tool load on Claude Code. For
 
 A turn whose text is `/compact` compacts the session. Claude Code sends it through `--resume` like any later turn. `codex exec` has no `/compact`, so the Codex adapter resumes the session with `model_auto_compact_token_limit=2000`, which compacts before that turn's prompt. Both adapters record each compaction in `x_compactions` with the turn it happened in. Grok rewrites its chat history on a compaction and marks the rewrite with `compaction_meta` records. The Grok adapter records one `x_compactions` entry per rewrite, with `source: chat_history` and the turn of the latest prompt the rewrite kept. Grok's `prompt_index` skips a `/compact` turn, and the adapter numbers later turns past it. For `read-only-phrase-pins-investigation`, a missing Investigation playbook read in the `new task` turn is `INCONCLUSIVE` when a `chat_history` compaction rewrote that turn. Observed edits or commits still fail the promise.
 
-Live runs spend model budget. Codex and Hermes draw on the same ChatGPT plan when Hermes uses the `openai-codex` provider. A Feature case takes about 5 minutes on Claude Code and over 20 minutes on Codex.
+Live runs spend model budget. Codex and Hermes draw on the same ChatGPT plan when Hermes uses the `openai-codex` provider. A Feature case takes about 5 minutes on Claude Code and 10 to 20 minutes on Codex.
 
 ### Feature spec edges
 
