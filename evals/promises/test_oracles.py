@@ -3184,6 +3184,19 @@ class StreaksTest(unittest.TestCase):
         self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
         self.assertEqual(result["measures"]["lead_catches"]["ties"], True)
 
+    def test_grok_file_tools_name_the_lead_test_files_and_its_skill_reads_count(self):
+        root = self.project()
+        test = root / "tests" / "test_streaks.py"
+        test.write_text(self.STREAKS_TEST)
+        probe = {"seq": 1, "kind": "tool_call", "name": "read_file", "input": {"target_file": "/w/.agents/skills/spec-probes/SKILL.md"}}
+        for name, given in (("write", {"file_path": str(test), "content": self.STREAKS_TEST}),
+                            ("search_replace", {"file_path": str(test), "old_string": "Zed", "new_string": "Zed"})):
+            with self.subTest(tool=name):
+                change = {"seq": 2, "kind": "tool_call", "name": name, "input": given}
+                result = grade("feature-delivers-spec-edges", minimal(events=[probe, change], harness="grok"), load_case("feature-edges-run"), root)
+                self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
+                self.assertEqual(result["measures"]["spec_probes_lead_loads"], [(1, "read")])
+
     def test_a_lead_test_file_written_in_a_worktree_counts_at_its_project_path(self):
         root = self.project()
         for args in (("init", "-q", "-b", "main"), ("add", "-A"), ("commit", "-qm", "initial import"),

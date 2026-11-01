@@ -63,7 +63,7 @@ SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file", "apply_patch",
               "edit_file", "create_file", "str_replace_editor", "str_replace_based_edit_tool",
-              "edit", "write", "insert", "create", "replace_in_file"}
+              "edit", "write", "insert", "create", "replace_in_file", "search_replace"}
 PATH_FIELDS = ("file_path", "path", "target_file", "target_path", "filename", "file", "notebook_path")
 SPAWN_TOOLS = {"Agent", "Task", "spawn_agent", "spawn_subagent", "delegate_task", "SubAgentActivity"}
 WAIT_TOOLS = {"get_command_or_subagent_output", "wait_agent", "TaskOutput"}
