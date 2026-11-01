@@ -3278,6 +3278,14 @@ class Optional(unittest.TestCase):
         self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
         self.assertEqual(result["measures"]["lead_catches"]["ties"], True)
 
+    def test_a_failed_codex_file_change_does_not_name_a_lead_test_file(self):
+        root = self.project()
+        (root / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)
+        change = {"seq": 2, "kind": "tool_call", "name": "FileChange",
+                  "input": {"changes": {str(root / "tests" / "test_streaks.py"): {"type": "update"}}, "status": "failed"}}
+        result = grade("feature-delivers-spec-edges", minimal(events=[change], harness="codex"), load_case("feature-edges-run"), root)
+        self.assertEqual(result["measures"]["lead_test_files"], [])
+
     def test_grok_file_tools_name_the_lead_test_files_and_its_skill_reads_count(self):
         root = self.project()
         test = root / "tests" / "test_streaks.py"
