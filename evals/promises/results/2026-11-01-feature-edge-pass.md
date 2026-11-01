@@ -27,13 +27,13 @@ The script also runs the project's own unittest suite against `reference/strides
 
 ## Pins and arms
 
-- The evaluator ran from `472f82bd` on `eval/feature-spec-edge-pass`. Both arms pin skills at `19bd25de`.
+- The evaluator ran from `6cebeeca` on `eval/feature-spec-edge-pass`. Both arms pin skills at `19bd25de`.
 - The control is `feature-edges-run`.
-- The edge-pass arm is `feature-edges-run-edge-pass`, the same case plus two `skill_overlays` that `make_arm.py` built from `fc418bee`. The overlaid `feature.md` and `task-triggers.md` match the branch files byte for byte (sha256 prefixes `bb29af17` and `e684ca0f`). As in the [2026-10-10 runs](2026-10-10-use-the-skill.md), these runs used a local arm case, kept in `.audit/feature-edge-pass-20261101/arm-cases/`. From `f87cda1c` the same overlays are in the committed case `feature-edges-run-edge-pass`.
+- The edge-pass arm is `feature-edges-run-edge-pass`, the same case plus two `skill_overlays` that `make_arm.py` built from `fc418bee`. The overlaid `feature.md` and `task-triggers.md` match the branch files byte for byte (sha256 prefixes `bb29af17` and `e684ca0f`). As in the [2026-10-10 runs](2026-10-10-use-the-skill.md), these runs used a local arm case, kept in `.audit/feature-edge-pass-20261101/arm-cases/`. From `759b57a5` the same overlays are in the committed case `feature-edges-run-edge-pass`.
 - Command per arm: `python3.14 evals/promises/live.py run --harness <h> --model <m> --effort high --skills-at 19bd25de59f3a338bc54e2069d0d1a42e4dc9631 --runs <n> --case <case> --out <dir>`. The arms ran in parallel, and the runs within an arm ran in sequence. No retries.
 - Claude Code used `claude-sonnet-5-5` at effort high, 3 runs per arm, with the TODO tools on.
 - Codex used `gpt-6.1-sol` at effort high on Codex 0.162.0, 2 runs per arm, inside the 2400 s cap. Codex runs of one fixture share a host lock, so its arms alternated rather than overlapped.
-- The grader copies `oracles.py` when it issues a run. Every run was graded with the oracle at `472f82bd`, except Codex `strides-nc1vz7fz`, which was issued after the change that `1061110a` commits. That change only adds Codex `FileChange` paths to the lead's test files. The held-out checks are the same in both versions.
+- The grader copies `oracles.py` when it issues a run. Every run was graded with the oracle at `6cebeeca`, except Codex `strides-nc1vz7fz`, which was issued after the change that `3a230c98` commits. That change only adds Codex `FileChange` paths to the lead's test files. The held-out checks are the same in both versions.
 - Durable copy: `.audit/feature-edge-pass-20261101/`, with `make_arm.py` and `tally.py`. Every count below comes from the `measures` in each run's `verdict.json`, except where the table says "by hand" and except the core checks, which come from the [regrade](#regrade-with-the-fixed-grader).
 
 ## Results
@@ -53,7 +53,7 @@ Each cell counts checks passed or edges caught. Edge checks and caught edges are
 | Codex | edge pass | `strides-tbbozanb` | 6 | 7 | 6 | 6 (by hand) | lead, seq 60 | 745 s | 9 |
 | Codex | edge pass | `strides-nc1vz7fz` | 6 | 7 | 6 | 6 | lead, seq 65 | 859 s | 10 |
 
-At `472f82bd` the oracle missed the Codex lead's test file, because Codex code mode writes it inside an `exec` call. For the three Codex runs graded at `472f82bd`, I ran the same `held_out.py --lead-tests tests/test_streaks.py` on a copy of each project, outside the grader. Those copies are in `.audit/feature-edge-pass-20261101/codex/lead-measure-copies/`. `1061110a` fixes the lookup.
+At `6cebeeca` the oracle missed the Codex lead's test file, because Codex code mode writes it inside an `exec` call. For the three Codex runs graded at `6cebeeca`, I ran the same `held_out.py --lead-tests tests/test_streaks.py` on a copy of each project, outside the grader. Those copies are in `.audit/feature-edge-pass-20261101/codex/lead-measure-copies/`. `3a230c98` fixes the lookup.
 
 Every run exited 0 inside its cap, and `feature-delivers-spec-edges` graded PASS in every run. On Claude Code, `poteto-mode-routes-to-playbook` graded INCONCLUSIVE in every run, because its reply check sent quoted commands to a judge. Its evidence shows `feature` as the first playbook read in every run.
 
@@ -85,7 +85,7 @@ The spec states each edge in its own sentence. A careful reader turns each sente
 
 `feature-edges-implied-run` sends the same turn to the same project, with the same worked example and the same held-out checks as `feature-edges-run`. Its spec names no edge. Each edge follows from a definition or a rule instead. The case reads `held_out.py` and `reference/` from `cases/feature-edges-run` through its new `references` field, and the grader copies that directory beside the case's own.
 
-From `f87cda1c` the `strides` fixture holds no spec. Each case adds `docs/streaks.md` in a history step, committed as `docs: describe the streaks command`, so no commit of an implied run holds the stated text. `test_no_commit_of_the_implied_project_holds_a_stated_edge_sentence` reads every file of every commit to check that. The stated-spec runs above had the spec in the fixture's initial commit.
+From `759b57a5` the `strides` fixture holds no spec. Each case adds `docs/streaks.md` in a history step, committed as `docs: describe the streaks command`, so no commit of an implied run holds the stated text. `test_no_commit_of_the_implied_project_holds_a_stated_edge_sentence` reads every file of every commit to check that. The stated-spec runs above had the spec in the fixture's initial commit.
 
 The case's `edge_sources` field names the sentence each edge follows from. `test_each_spec_holds_a_source_sentence_for_every_held_out_edge` checks that each sentence is in the spec.
 
@@ -100,12 +100,12 @@ The case's `edge_sources` field names the sentence each edge follows from. `test
 
 ### Pins and arms
 
-- The evaluator ran from `f87cda1c`. Skills are pinned at `19bd25de`, as in the stated-spec runs.
+- The evaluator ran from `759b57a5`. Skills are pinned at `19bd25de`, as in the stated-spec runs.
 - Both edge-pass arms are committed cases now, `feature-edges-run-edge-pass` and `feature-edges-implied-run-edge-pass`. Their overlays turn `feature.md` and `task-triggers.md` into the text of `fc418bee`. Each overlay carries the sha256 of the file it must produce, `bb29af17` and `e684ca0f`, and `live.py` refuses a run whose overlaid file differs. The overlays equal the ones in the local arm that the stated-spec runs used.
 - Claude Code ran `claude-sonnet-5-5` at effort high, 3 runs per arm. Codex ran `gpt-6.1-sol` at effort high on Codex 0.162.0, 2 runs per arm, with the 2400 s cap. Grok Build 1.0.70 ran its default model, which the traces record as `grok-4.7-build`, at the adapter's fixed effort high, with the 1800 s cap. The Grok adapter accepts no `--model` or `--effort`.
 - Arms ran in parallel, and the runs within an arm ran in sequence. Codex and Grok runs hold the host `strides` fixture lock, so they ran one at a time. Other sessions ran Codex and Grok cases on the same host during the wave. No retries.
 - Run directories had neutral names such as `club/ash`. The stated-spec runs had `edges-live/control` or `edges-live/edge-pass` in the path the candidate saw.
-- Each run was graded with the oracle copied when the run started, which was `f87cda1c` for every graded run. Codex `strides-iuvw2j6_` wrote its tests in `.worktrees/streaks-build/`, so that oracle returned an empty lead measure. `27d63ee8` fixes the lookup. For that run I ran `held_out.py --lead-tests tests/test_streaks.py` on a copy of the project, outside the grader.
+- Each run was graded with the oracle copied when the run started, which was `759b57a5` for every graded run. Codex `strides-iuvw2j6_` wrote its tests in `.worktrees/streaks-build/`, so that oracle returned an empty lead measure. `12e57db0` fixes the lookup. For that run I ran `held_out.py --lead-tests tests/test_streaks.py` on a copy of the project, outside the grader.
 - I stopped the second Grok run of each arm before its first turn, after the first run of each arm timed out without code. I did not start the four stated-spec Grok runs. Each would most likely have reached the same cap, and each would have held the fixture lock for up to 30 minutes.
 - Durable copy: `.audit/feature-edge-implied-20261101/`, with the run directories under `runs/`, `make_cases.py` and `tally.py` under `scripts/`, the run label map in `scripts/arms.json`, the judge packet and its raw output under `judge/`, and the judge's label map in `scripts/judge-map.json`.
 
@@ -160,7 +160,7 @@ Every Claude Code and Codex run passed all seven core checks in the [regrade](#r
 
 - Both runs timed out at 1800 s without adding `streaks` or any test to the project. Each lead spent its time reading skills, briefing a `how` explainer, and running an architect arena with three runner subagents. The edge-pass lead also ran a cross-judge, read `spec-probes/SKILL.md` at seq 73, and wrote its only test file to the host's `/tmp/test_streaks.py`, outside the project.
 - In edge pass `strides-bciqqa7l`, an architect runner subagent listed the host's processes. Its result held the evaluator's command lines, including `--case feature-edges-implied-run`. The lead's trace holds none of that text, and the run delivered nothing, so no count above depends on it. Run `strides-f7cdhp8g` shows no such text.
-- On these traces the oracle counted the `read_file` load of spec-probes and correctly found no lead test file in the project. Grok also edits with `search_replace`, which `View.edits()` missed until `a38c98cd`. Neither run used it.
+- On these traces the oracle counted the `read_file` load of spec-probes and correctly found no lead test file in the project. Grok also edits with `search_replace`, which `View.edits()` missed until `cfcebd5a`. Neither run used it.
 
 ### Blinded gap classification
 
@@ -179,7 +179,7 @@ No reply named `boundary`, `empty`, `ties`, `same-day`, or `out-of-order` as ope
 
 - **The case-folding edge is contested.** Three of six Claude Code leads treated it as open, and two of them delivered `lower()` because they read "differ only in capitalization" as excluding `ß` against `ss`. The held-out check also needs `jürgen weiss` to join `Jürgen Weiß`, which holds only through `JÜRGEN WEISS`. The two `casefold` failures therefore measure my wording as much as the edge pass.
 - **The samples are small.** The one own-test difference is 3 runs against 3 on one harness. Codex ran 2 runs per arm. Grok gave no edge data.
-- **The two specs ran under different setups.** The stated-spec runs ran from `472f82bd`, with the spec in the initial commit and the arm name in the candidate's path. The implied-spec runs ran from `f87cda1c`, with the spec in a second commit and neutral paths.
+- **The two specs ran under different setups.** The stated-spec runs ran from `6cebeeca`, with the spec in the initial commit and the arm name in the candidate's path. The implied-spec runs ran from `759b57a5`, with the spec in a second commit and neutral paths.
 - **One lead measure is by hand.** It ran the same `held_out.py` outside the grader's sandbox.
 - **The host was shared.** Other sessions ran Codex and Grok cases during the wave, which can change durations.
 
