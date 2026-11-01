@@ -1,19 +1,23 @@
 """Held-out checks for the strides streaks command, run after the session against the delivered project.
 
-`held_out.py PROJECT [--lead-tests REL,...]` prints one JSON object:
+`held_out.py PROJECT [--lead-tests REL,...] [--budget-s SECONDS]` prints one JSON object:
 - `checks`: each held-out check by id, with its kind (`edge` or `core`), `ok`, and a detail on failure.
 - `delivered`: the project's own unittest suite run against `reference/strides` and against each edge's mutant.
   A test that passes on the reference and fails or errors on an edge's mutant catches that edge. A skip, or a test the
   mutant run never reports, catches nothing.
 - `lead`: the same, limited to the test files the lead wrote, when `--lead-tests` names any.
+No suite runs past `--budget-s` seconds from the start, and an edge whose suites did not finish maps to null.
 """
 
+import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -122,28 +126,33 @@ def copy_project(project, dest):
                 shutil.copytree(folder, dest / PACKAGE / folder.name, ignore=shutil.ignore_patterns("__pycache__"), symlinks=True)
 
 
-def run_suite(project, scratch, label, mutant, names):
+def run_suite(project, scratch, label, mutant, names, deadline):
+    left = deadline - time.monotonic()
+    if left <= 0:
+        return None
     root = scratch / f"suite-{label}"
     copy_project(project, root)
     out = scratch / f"suite-{label}.json"
     argv = [sys.executable, "-B", str(Path(__file__).resolve()), "--suite", str(root), str(out), *names]
+    # Output goes to devnull because a process a test leaves running would hold a pipe open past the timeout.
     try:
-        subprocess.run(argv, cwd=root, env=child_env(STRIDES_MUTANT=mutant), capture_output=True,
-                       timeout=SUITE_TIMEOUT_S)
+        subprocess.run(argv, cwd=root, env=child_env(STRIDES_MUTANT=mutant), stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=min(SUITE_TIMEOUT_S, left))
     except subprocess.TimeoutExpired:
         return None
     return json.loads(out.read_text(encoding="utf-8")) if out.is_file() else None
 
 
-def catches(project, scratch, label, names):
+def catches(project, scratch, label, names, deadline):
     """Maps each edge to the project's tests that pass on the reference and fail or error on that edge's mutant."""
-    base = run_suite(project, scratch, f"{label}-reference", "", names)
+    base = run_suite(project, scratch, f"{label}-reference", "", names, deadline)
     if base is None:
-        return {"tests": 0, "passing_on_reference": 0, "caught": {}, "error": "suite did not finish on the reference"}
+        return {"tests": 0, "passing_on_reference": 0, "caught": dict.fromkeys(EDGES),
+                "error": "suite did not finish on the reference"}
     passing = sorted(t for t, outcome in base.items() if outcome == "pass")
     caught = {}
     for edge in EDGES:
-        outcomes = run_suite(project, scratch, f"{label}-{edge}", edge, names)
+        outcomes = run_suite(project, scratch, f"{label}-{edge}", edge, names, deadline)
         caught[edge] = None if outcomes is None else sorted(t for t in passing if outcomes.get(t) in ("fail", "error"))
     return {"tests": len(base), "passing_on_reference": len(passing), "caught": caught}
 
@@ -193,16 +202,19 @@ def main(argv):
     if argv[:1] == ["--suite"]:
         suite_main(Path(argv[1]), argv[2], argv[3:])
         return 0
-    project = Path(argv[0]).resolve()
-    lead = []
-    if argv[1:2] == ["--lead-tests"]:
-        lead = argv[2].split(",")
+    parser = argparse.ArgumentParser(prog="held_out.py")
+    parser.add_argument("project", type=Path)
+    parser.add_argument("--lead-tests", type=lambda value: value.split(","), default=[])
+    parser.add_argument("--budget-s", type=float, default=math.inf)
+    args = parser.parse_args(argv)
+    project, lead = args.project.resolve(), args.lead_tests
+    deadline = time.monotonic() + args.budget_s
     with tempfile.TemporaryDirectory(prefix="strides-held-") as tmp:
         scratch = Path(tmp)
         report = {"checks": {check[0]: run_check(project, scratch, check) for check in CHECKS},
-                  "delivered": catches(project, scratch, "delivered", []),
+                  "delivered": catches(project, scratch, "delivered", [], deadline),
                   "lead_files": lead,
-                  "lead": catches(project, scratch, "lead", [r[:-3].replace("/", ".") for r in lead]) if lead else None}
+                  "lead": catches(project, scratch, "lead", [r[:-3].replace("/", ".") for r in lead], deadline) if lead else None}
     print(json.dumps(report))
     return 0
 

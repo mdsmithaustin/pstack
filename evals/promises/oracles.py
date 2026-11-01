@@ -3931,6 +3931,8 @@ TEST_FILE = re.compile(r"(?:^|/)test[^/]*\.py$")
 GAP_LINE = re.compile(r"\b(?:gaps?|unspecified|not specified|unstated|ambiguous|ambiguity|open questions?)\b", re.I)
 SPEC_LOADS = ("skill-tool", "injection", "read", "read-whole", "read-part")
 HELD_OUT_TIMEOUT_S = 1200
+# The held-out script stops its diagnostic suites at this budget, so it reports its checks before the timeout kills it.
+HELD_OUT_BUDGET_S = 1080
 
 
 def lead_test_files(view):
@@ -3952,7 +3954,8 @@ def feature_delivers_spec_edges(view):
         return inconclusive("no project to run the held-out checks against")
     lead = lead_test_files(view)
     script = case_dir(view.case) / view.case["expect"]["held_out"]
-    argv = [sys.executable, "-I", "-B", str(script), str(view.project), *(["--lead-tests", ",".join(lead)] if lead else [])]
+    argv = [sys.executable, "-I", "-B", str(script), str(view.project), "--budget-s", str(HELD_OUT_BUDGET_S),
+            *(["--lead-tests", ",".join(lead)] if lead else [])]
     try:
         run = (_IO.check(view.project, shlex.join(argv), HELD_OUT_TIMEOUT_S) if _IO else
                subprocess.run(argv, cwd=view.project, capture_output=True, text=True, timeout=HELD_OUT_TIMEOUT_S))

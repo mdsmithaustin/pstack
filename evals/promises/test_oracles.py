@@ -3220,6 +3220,17 @@ class EmptyLogTest(unittest.TestCase):
         self.assertEqual(measures["delivered_catches"], want)
         self.assertEqual(measures["lead_catches"], want)
 
+    def test_tests_that_outlast_the_diagnostics_budget_leave_a_correct_delivery_passing(self):
+        root = self.project()
+        (root / "tests" / "test_slow.py").write_text(
+            "import time\nimport unittest\n\n\nclass SlowTest(unittest.TestCase):\n    def test_slow(self):\n        time.sleep(60)\n")
+        with mock.patch.multiple(oracles, HELD_OUT_TIMEOUT_S=20, HELD_OUT_BUDGET_S=5):
+            result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "strides/streaks.py")]),
+                           load_case("feature-edges-run"), root)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["measures"]["edges_passed"], 6)
+        self.assertEqual(result["measures"]["delivered_catches"], dict.fromkeys(self.held_out().EDGES))
+
     def test_codex_file_changes_name_the_lead_test_files(self):
         root = self.project()
         (root / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)
