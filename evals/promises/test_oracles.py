@@ -3205,6 +3205,21 @@ class EmptyLogTest(unittest.TestCase):
                              capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(run.stdout)["delivered"]["caught"]["empty"], ["tests.test_fails.EmptyLogTest.test_empty_log"])
 
+    def test_tests_nested_in_the_package_run_against_the_reference_with_their_support_files(self):
+        root = self.project()
+        nested = root / "strides" / "tests"
+        nested.mkdir()
+        (nested / "__init__.py").write_text("")
+        (nested / "support.py").write_text(self.CLI)
+        (nested / "test_streaks.py").write_text("import unittest\n\nfrom strides.tests.support import streaks\n\n\n" + self.CASES)
+        result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, str(nested / "test_streaks.py"))]),
+                       load_case("feature-edges-run"), root)
+        measures = result["measures"]
+        self.assertEqual(measures["lead_test_files"], ["strides/tests/test_streaks.py"])
+        want = {"boundary": True, "empty": False, "ties": True, "casefold": False, "same-day": False, "out-of-order": False}
+        self.assertEqual(measures["delivered_catches"], want)
+        self.assertEqual(measures["lead_catches"], want)
+
     def test_codex_file_changes_name_the_lead_test_files(self):
         root = self.project()
         (root / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)

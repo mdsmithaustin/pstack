@@ -106,7 +106,8 @@ def run_check(project, scratch, check):
 
 
 def copy_project(project, dest):
-    """Copies the delivered project, swaps its package for the reference, and keeps any test files the package held."""
+    """Copies the delivered project and swaps its package for the reference. Keeps the package's own test files, and each
+    folder in the package that holds a test file, whole, so a nested test package keeps its support files."""
     def ignore(folder, names):
         top = Path(folder) == project
         return {n for n in names if n == "__pycache__" or (top and (n in SKIP_TOP or n == PACKAGE))}
@@ -116,6 +117,9 @@ def copy_project(project, dest):
     if delivered.is_dir():
         for test in delivered.glob("test*.py"):
             shutil.copyfile(test, dest / PACKAGE / test.name)
+        for folder in delivered.iterdir():
+            if folder.is_dir() and any(folder.rglob("test*.py")):
+                shutil.copytree(folder, dest / PACKAGE / folder.name, ignore=shutil.ignore_patterns("__pycache__"), symlinks=True)
 
 
 def run_suite(project, scratch, label, mutant, names):
