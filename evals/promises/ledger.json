@@ -2947,7 +2947,7 @@
     },
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Redesign as if foundational. Keep behavior it does not change."
+     "quote": "Redesign as if foundational. Keep behavior it does not explicitly change."
     }
    ],
    "harness_sensitive": false,
