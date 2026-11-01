@@ -39,8 +39,23 @@ EXAMPLE = """\
 2026-03-07 07:00 4.0 Cleo Park
 """
 
-# (id, kind, command, log text, extra args, expected stdout lines). Each edge check exercises one edge and keeps
-# the rest of its log plain, so a mutant that breaks one edge fails only that check.
+# Both specs ask for `strides.streaks.longest_streaks(runs, min_days=3)` for the newsletter. This prints its pairs with
+# the default threshold, then with the threshold in its second argument.
+API_PROBE = """\
+import json
+import sys
+
+from strides.log import read_runs
+from strides.streaks import longest_streaks
+
+runs = read_runs(sys.argv[1])
+for pairs in (longest_streaks(runs), longest_streaks(runs, min_days=int(sys.argv[2]))):
+    print(json.dumps([list(pair) for pair in pairs]))
+"""
+
+# (id, kind, command, log text, extra args, expected stdout lines). The command is a strides subcommand, or
+# `longest_streaks` to run API_PROBE. Each edge check exercises one edge and keeps the rest of its log plain, so a
+# mutant that breaks one edge fails only that check.
 CHECKS = [
     ("example", "core", "streaks", EXAMPLE, ["--min-days", "2"], ["Ada Lim: 4", "Ben Okafor: 3"]),
     ("longest-stretch", "core", "streaks",
@@ -59,6 +74,10 @@ CHECKS = [
      ["--min-days", "1"], ["Ben Okafor: 3", "Ada Lim: 2"]),
     ("totals-unchanged", "core", "totals", EXAMPLE, [],
      ["Ada Lim: 20.4 km", "Ben Okafor: 9.3 km", "Cleo Park: 4.0 km"]),
+    ("api", "core", "longest_streaks",
+     "2026-03-01 06:00 5.0 Maya Chen\n2026-03-02 06:00 5.0 Maya Chen\n2026-03-02 07:00 4.0 Ada Lim\n"
+     "2026-03-03 06:00 5.0 Maya Chen\n2026-03-03 07:00 4.0 Ada Lim\n2026-03-04 06:00 5.0 Maya Chen\n", ["1"],
+     ['[["Maya Chen", 4]]', '[["Maya Chen", 4], ["Ada Lim", 2]]']),
     ("boundary", "edge", "streaks",
      "2026-03-02 06:00 5.0 Ada Lim\n2026-03-03 06:00 5.0 Ada Lim\n2026-03-04 06:00 5.0 Ada Lim\n"
      "2026-03-02 07:00 4.0 Ben Okafor\n2026-03-03 07:00 4.0 Ben Okafor\n", [], ["Ada Lim: 3"]),
@@ -95,7 +114,8 @@ def run_check(project, scratch, check):
     cid, kind, command, log, args, expected = check
     path = scratch / f"{cid}.log"
     path.write_text(log, encoding="utf-8")
-    argv = [sys.executable, "-B", "-m", PACKAGE, command, str(path), *args]
+    head = ["-c", API_PROBE] if command == "longest_streaks" else ["-m", PACKAGE, command]
+    argv = [sys.executable, "-B", *head, str(path), *args]
     try:
         proc = subprocess.run(argv, cwd=project, env=child_env(), capture_output=True, timeout=TIMEOUT_S)
     except subprocess.TimeoutExpired:

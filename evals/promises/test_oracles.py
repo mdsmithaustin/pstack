@@ -3160,7 +3160,7 @@ class StreaksTest(unittest.TestCase):
         result = grade("feature-delivers-spec-edges", minimal(events=events), load_case("feature-edges-run"), root)
         self.assertEqual(result["verdict"], PASS, result)
         measures = result["measures"]
-        self.assertEqual((measures["edges_passed"], measures["core_passed"]), (6, 6))
+        self.assertEqual((measures["edges_passed"], measures["core_passed"]), (6, 7))
         want = {"boundary": True, "empty": False, "ties": True, "casefold": False, "same-day": False, "out-of-order": False}
         self.assertEqual(measures["delivered_catches"], want)
         self.assertEqual(measures["lead_catches"], want)
@@ -3175,6 +3175,21 @@ class StreaksTest(unittest.TestCase):
         self.assertEqual([f.split(":")[0] for f in result["failures"]], ["held-out edge check casefold failed"])
         self.assertEqual(result["measures"]["edges_passed"], 5)
         self.assertIsNone(result["measures"]["lead_catches"])
+
+    def test_a_delivery_whose_cli_works_without_the_spec_api_fails_the_api_check(self):
+        renames = {"no longest_streaks": ("longest_streaks", "streak_table"),
+                   "min_days has no default": ("longest_streaks(runs, min_days=3)", "longest_streaks(runs, min_days)")}
+        for case, (old, new) in renames.items():
+            with self.subTest(case=case):
+                root = self.project()
+                for name in ("streaks.py", "__main__.py"):
+                    path = root / "strides" / name
+                    path.write_text(path.read_text().replace(old, new))
+                result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "strides/streaks.py")]),
+                               load_case("feature-edges-run"), root)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertEqual([f.split(":")[0] for f in result["failures"]], ["held-out core check api failed"])
+                self.assertEqual(result["measures"]["edges_passed"], 6)
 
     def test_a_test_catches_an_edge_only_when_it_fails_or_errors_on_that_mutant(self):
         root = self.project()
