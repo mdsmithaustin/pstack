@@ -3,7 +3,8 @@
 `held_out.py PROJECT [--lead-tests REL,...]` prints one JSON object:
 - `checks`: each held-out check by id, with its kind (`edge` or `core`), `ok`, and a detail on failure.
 - `delivered`: the project's own unittest suite run against `reference/strides` and against each edge's mutant.
-  A test that passes on the reference and fails on an edge's mutant catches that edge.
+  A test that passes on the reference and fails or errors on an edge's mutant catches that edge. A skip, or a test the
+  mutant run never reports, catches nothing.
 - `lead`: the same, limited to the test files the lead wrote, when `--lead-tests` names any.
 """
 
@@ -131,7 +132,7 @@ def run_suite(project, scratch, label, mutant, names):
 
 
 def catches(project, scratch, label, names):
-    """Maps each edge to the project's tests that pass on the reference and fail on that edge's mutant."""
+    """Maps each edge to the project's tests that pass on the reference and fail or error on that edge's mutant."""
     base = run_suite(project, scratch, f"{label}-reference", "", names)
     if base is None:
         return {"tests": 0, "passing_on_reference": 0, "caught": {}, "error": "suite did not finish on the reference"}
@@ -139,7 +140,7 @@ def catches(project, scratch, label, names):
     caught = {}
     for edge in EDGES:
         outcomes = run_suite(project, scratch, f"{label}-{edge}", edge, names)
-        caught[edge] = None if outcomes is None else sorted(t for t in passing if outcomes.get(t) != "pass")
+        caught[edge] = None if outcomes is None else sorted(t for t in passing if outcomes.get(t) in ("fail", "error"))
     return {"tests": len(base), "passing_on_reference": len(passing), "caught": caught}
 
 

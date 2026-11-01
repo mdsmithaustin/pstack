@@ -3081,7 +3081,7 @@ class SubshellWrites(unittest.TestCase):
 
 class HeldOutEdges(unittest.TestCase):
     CASE = CASES / "feature-edges-run"
-    STREAKS_TEST = """\
+    CLI = """\
 import io
 import tempfile
 import unittest
@@ -3099,8 +3099,8 @@ def streaks(log, *args):
         with redirect_stdout(out):
             main(["streaks", str(path), *args])
     return out.getvalue()
-
-
+"""
+    CASES = """\
 class StreaksTest(unittest.TestCase):
     def test_exactly_min_days_is_listed(self):
         log = "2026-03-02 06:00 5.0 Ada Lim\\n2026-03-03 06:00 5.0 Ada Lim\\n2026-03-04 06:00 5.0 Ada Lim\\n"
@@ -3114,6 +3114,7 @@ class StreaksTest(unittest.TestCase):
         from strides.streaks import fold_name
         self.assertEqual(fold_name("A"), "a")
 """
+    STREAKS_TEST = CLI + "\n\n" + CASES
 
     def project(self, mutant=""):
         tmp = tempfile.TemporaryDirectory()
@@ -3174,6 +3175,35 @@ class StreaksTest(unittest.TestCase):
         self.assertEqual([f.split(":")[0] for f in result["failures"]], ["held-out edge check casefold failed"])
         self.assertEqual(result["measures"]["edges_passed"], 5)
         self.assertIsNone(result["measures"]["lead_catches"])
+
+    def test_a_test_catches_an_edge_only_when_it_fails_or_errors_on_that_mutant(self):
+        root = self.project()
+        tests = root / "tests"
+        (tests / "support.py").write_text(self.CLI)
+        head = "import unittest\n\nfrom tests.support import streaks\n\n\n"
+        (tests / "test_fails.py").write_text(head + """\
+class EmptyLogTest(unittest.TestCase):
+    def test_empty_log(self):
+        self.assertEqual(streaks(""), "no streaks\\n")
+""")
+        (tests / "test_skips.py").write_text(head + """\
+class EmptyLogTest(unittest.TestCase):
+    def test_empty_log(self):
+        if not streaks(""):
+            self.skipTest("the empty log printed nothing")
+""")
+        (tests / "test_vanishes.py").write_text(head + """\
+if not streaks(""):
+    raise unittest.SkipTest("the empty log printed nothing")
+
+
+class EmptyLogTest(unittest.TestCase):
+    def test_empty_log(self):
+        self.assertEqual(streaks(""), "no streaks\\n")
+""")
+        run = subprocess.run([sys.executable, "-I", "-B", str(self.CASE / "held_out.py"), str(root)], cwd=root,
+                             capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(run.stdout)["delivered"]["caught"]["empty"], ["tests.test_fails.EmptyLogTest.test_empty_log"])
 
     def test_codex_file_changes_name_the_lead_test_files(self):
         root = self.project()
