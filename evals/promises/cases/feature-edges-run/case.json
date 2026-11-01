@@ -1,0 +1,10 @@
+{
+ "promises": ["feature-delivers-spec-edges", "poteto-mode-routes-to-playbook"],
+ "fixture": "strides",
+ "entry": "poteto-mode",
+ "turns": ["add the streaks command described in docs/streaks.md. verify it."],
+ "timeout_s": {"default": 1800, "codex": 2400},
+ "expect": {"playbook": "feature", "held_out": "held_out.py"},
+ "env": {"todo_tools": true},
+ "note": "docs/streaks.md settles six edges in prose and shows one example that exercises none of them. held_out.py checks each edge and the core behavior through the CLI after the session, and runs the project's own tests against reference/strides and one mutant per edge."
+}

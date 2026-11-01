@@ -4,6 +4,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -3919,3 +3920,58 @@ def deslop_hands_to_no_comments(view):
     if turn_finished(view):
         return failed("deslop finished without loading no-comments", *evidence)
     return inconclusive("run killed after deslop loaded and before it finished", *evidence)
+
+
+TEST_FILE = re.compile(r"(?:^|/)test[^/]*\.py$")
+GAP_LINE = re.compile(r"\b(?:gaps?|unspecified|not specified|unstated|ambiguous|ambiguity|open questions?)\b", re.I)
+SPEC_LOADS = ("skill-tool", "injection", "read", "read-whole", "read-part")
+HELD_OUT_TIMEOUT_S = 1200
+
+
+def lead_test_files(view):
+    rels = {view.project_rel(path) for _, path, _ in view.edits()}
+    return sorted(rel for rel in rels if TEST_FILE.search(rel) and not rel.startswith(("/", "..", *PRIVATE_PREFIXES))
+                  and _is_file(view.project / rel))
+
+
+@oracle("feature-delivers-spec-edges")
+def feature_delivers_spec_edges(view):
+    """Runs the case's held-out script against the delivered project. PASS needs every held-out check to pass.
+    `measures` holds the counts an arm tally reads, such as which edges the delivered code and its own tests handle."""
+    if not (view.project and _is_dir(view.project)):
+        return inconclusive("no project to run the held-out checks against")
+    lead = lead_test_files(view)
+    script = HERE / "cases" / view.case["id"] / view.case["expect"]["held_out"]
+    argv = [sys.executable, "-I", "-B", str(script), str(view.project), *(["--lead-tests", ",".join(lead)] if lead else [])]
+    try:
+        run = (_IO.check(view.project, shlex.join(argv), HELD_OUT_TIMEOUT_S) if _IO else
+               subprocess.run(argv, cwd=view.project, capture_output=True, text=True, timeout=HELD_OUT_TIMEOUT_S))
+    except subprocess.TimeoutExpired:
+        return inconclusive(f"held-out checks timed out after {HELD_OUT_TIMEOUT_S}s")
+    if run.returncode:
+        return inconclusive(f"held-out checks exited {run.returncode}: {run.stderr.strip().splitlines()[-1:]}")
+    report = json.loads(run.stdout)
+    checks = report["checks"]
+    by_kind = {kind: {cid: c["ok"] for cid, c in checks.items() if c["kind"] == kind} for kind in ("edge", "core")}
+
+    def caught(suite):
+        return None if suite is None else {edge: None if tests is None else bool(tests) for edge, tests in suite["caught"].items()}
+    loads = [(seq, how) for seq, how, ok, _ in load_attempts(view, "spec-probes") if ok is True and how in SPEC_LOADS]
+    delegate = child_skill_loaded(view, "spec-probes", -1) if view.harness == "claude-code" else None
+    delivered = report["delivered"]
+    measures = {"edges": by_kind["edge"], "core": by_kind["core"],
+                "edges_passed": sum(by_kind["edge"].values()), "edges_total": len(by_kind["edge"]),
+                "core_passed": sum(by_kind["core"].values()), "core_total": len(by_kind["core"]),
+                "delivered_tests": delivered["tests"], "delivered_passing_on_reference": delivered["passing_on_reference"],
+                "delivered_catches": caught(delivered), "lead_test_files": report["lead_files"],
+                "lead_catches": caught(report["lead"]), "spec_probes_lead_loads": loads, "spec_probes_delegate": delegate,
+                "killed": view.killed, "gap_lines": [line.strip()[:240] for line in view.final_reply.splitlines() if GAP_LINE.search(line)][:20]}
+    evidence = [f"edge checks passed: {measures['edges_passed']} of {measures['edges_total']}",
+                f"core checks passed: {measures['core_passed']} of {measures['core_total']}",
+                f"delivered tests passing on the reference: {delivered['passing_on_reference']} of {delivered['tests']}",
+                f"edges the delivered tests catch: {sorted(e for e, hit in measures['delivered_catches'].items() if hit)}",
+                f"spec-probes loaded by the lead: {loads}, by a delegate: {delegate}"]
+    failures = [f"held-out {c['kind']} check {cid} failed: {c.get('detail')}" for cid, c in checks.items() if not c["ok"]]
+    result = failed(failures, *evidence) if failures else passed(*evidence)
+    result["measures"] = measures
+    return result
