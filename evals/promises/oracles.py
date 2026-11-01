@@ -4,6 +4,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -41,6 +42,11 @@ def _files(path, pattern, recursive=False):
         return _IO.files(path, pattern, recursive)
     return path.rglob(pattern) if recursive else path.glob(pattern)
 
+
+def case_dir(case):
+    """The case directory that holds a case's reference files: the one its `references` names, else its own."""
+    return HERE / "cases" / case.get("references", case["id"])
+
 PLAYBOOK = re.compile(r"^poteto-mode/playbooks/([a-z0-9-]+)\.md$")
 SKILL_FILE = re.compile(r"^([a-z0-9-]+)/SKILL\.md$")
 SKILLS_SEGMENT = re.compile(r"(?:^|[\s/'\"=:(,])skills/([A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)*)")
@@ -57,7 +63,7 @@ SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file", "apply_patch",
               "edit_file", "create_file", "str_replace_editor", "str_replace_based_edit_tool",
-              "edit", "write", "insert", "create", "replace_in_file"}
+              "edit", "write", "insert", "create", "replace_in_file", "search_replace"}
 PATH_FIELDS = ("file_path", "path", "target_file", "target_path", "filename", "file", "notebook_path")
 SPAWN_TOOLS = {"Agent", "Task", "spawn_agent", "spawn_subagent", "delegate_task", "SubAgentActivity"}
 WAIT_TOOLS = {"get_command_or_subagent_output", "wait_agent", "TaskOutput"}
@@ -2104,7 +2110,7 @@ def deslop_cleans(view):
                if not _is_file(view.project / rel) or c not in _read_text(view.project / rel, errors="replace")]
     churn = [rel for rel, want in expect.get("expected", {}).items()
              if not _is_file(view.project / rel)
-             or _read_bytes(view.project / rel) != _read_bytes(HERE / "cases" / view.case["id"] / want)]
+             or _read_bytes(view.project / rel) != _read_bytes(case_dir(view.case) / want)]
     planted = {rel for rel in (view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()
                if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
     added = sorted(project_files(view) - planted)
@@ -3919,3 +3925,68 @@ def deslop_hands_to_no_comments(view):
     if turn_finished(view):
         return failed("deslop finished without loading no-comments", *evidence)
     return inconclusive("run killed after deslop loaded and before it finished", *evidence)
+
+
+TEST_FILE = re.compile(r"(?:^|/)test[^/]*\.py$")
+GAP_LINE = re.compile(r"\b(?:gaps?|unspecified|not specified|unstated|ambiguous|ambiguity|open questions?)\b", re.I)
+SPEC_LOADS = ("skill-tool", "injection", "read", "read-whole", "read-part")
+HELD_OUT_TIMEOUT_S = 1200
+# The held-out script stops its diagnostic suites at this budget, so it reports its checks before the timeout kills it.
+HELD_OUT_BUDGET_S = 1080
+
+
+def lead_test_files(view):
+    """The test files the lead's own tool calls wrote, relative to the project. A file written in a git worktree maps to
+    its path in the project, where the merged copy sits."""
+    rels = {view.tree_rel(path) for _, path, _ in view.edits()}
+    # Codex code mode applies patches inside an `exec` call, so only its FileChange events name the files. A failed patch
+    # establishes no authorship.
+    rels |= {view.tree_rel(path) for call in view.tool_calls if call.get("name") == "FileChange"
+             and (call.get("input") or {}).get("status") == "completed"
+             for path in (call.get("input") or {}).get("changes") or {}}
+    return sorted(rel for rel in rels if TEST_FILE.search(rel) and not rel.startswith(("/", "..", *PRIVATE_PREFIXES))
+                  and _is_file(view.project / rel))
+
+
+@oracle("feature-delivers-spec-edges")
+def feature_delivers_spec_edges(view):
+    """Runs the case's held-out script against the delivered project. PASS needs every held-out check to pass.
+    `measures` holds the counts an arm tally reads, such as which edges the delivered code and its own tests handle."""
+    if not (view.project and _is_dir(view.project)):
+        return inconclusive("no project to run the held-out checks against")
+    lead = lead_test_files(view)
+    script = case_dir(view.case) / view.case["expect"]["held_out"]
+    argv = [sys.executable, "-I", "-B", str(script), str(view.project), "--budget-s", str(HELD_OUT_BUDGET_S),
+            *(["--lead-tests", ",".join(lead)] if lead else [])]
+    try:
+        run = (_IO.check(view.project, shlex.join(argv), HELD_OUT_TIMEOUT_S) if _IO else
+               subprocess.run(argv, cwd=view.project, capture_output=True, text=True, timeout=HELD_OUT_TIMEOUT_S))
+    except subprocess.TimeoutExpired:
+        return inconclusive(f"held-out checks timed out after {HELD_OUT_TIMEOUT_S}s")
+    if run.returncode:
+        return inconclusive(f"held-out checks exited {run.returncode}: {run.stderr.strip().splitlines()[-1:]}")
+    report = json.loads(run.stdout)
+    checks = report["checks"]
+    by_kind = {kind: {cid: c["ok"] for cid, c in checks.items() if c["kind"] == kind} for kind in ("edge", "core")}
+
+    def caught(suite):
+        return None if suite is None else {edge: None if tests is None else bool(tests) for edge, tests in suite["caught"].items()}
+    loads = [(seq, how) for seq, how, ok, _ in load_attempts(view, "spec-probes") if ok is True and how in SPEC_LOADS]
+    delegate = child_skill_loaded(view, "spec-probes", -1) if view.harness == "claude-code" else None
+    delivered = report["delivered"]
+    measures = {"edges": by_kind["edge"], "core": by_kind["core"],
+                "edges_passed": sum(by_kind["edge"].values()), "edges_total": len(by_kind["edge"]),
+                "core_passed": sum(by_kind["core"].values()), "core_total": len(by_kind["core"]),
+                "delivered_tests": delivered["tests"], "delivered_passing_on_reference": delivered["passing_on_reference"],
+                "delivered_catches": caught(delivered), "lead_test_files": report["lead_files"],
+                "lead_catches": caught(report["lead"]), "spec_probes_lead_loads": loads, "spec_probes_delegate": delegate,
+                "killed": view.killed, "gap_lines": [line.strip()[:240] for line in view.final_reply.splitlines() if GAP_LINE.search(line)][:20]}
+    evidence = [f"edge checks passed: {measures['edges_passed']} of {measures['edges_total']}",
+                f"core checks passed: {measures['core_passed']} of {measures['core_total']}",
+                f"delivered tests passing on the reference: {delivered['passing_on_reference']} of {delivered['tests']}",
+                f"edges the delivered tests catch: {sorted(e for e, hit in measures['delivered_catches'].items() if hit)}",
+                f"spec-probes loaded by the lead: {loads}, by a delegate: {delegate}"]
+    failures = [f"held-out {c['kind']} check {cid} failed: {c.get('detail')}" for cid, c in checks.items() if not c["ok"]]
+    result = failed(failures, *evidence) if failures else passed(*evidence)
+    result["measures"] = measures
+    return result

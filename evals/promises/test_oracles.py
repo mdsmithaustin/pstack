@@ -1,4 +1,6 @@
+import importlib.util
 import json
+import shutil
 import sys
 import re
 import subprocess
@@ -3075,6 +3077,277 @@ class SubshellWrites(unittest.TestCase):
         self.assertEqual(grade("interrogate-read-only-when-asked", after, load_case("interrogate-run"), project)["verdict"], FAIL)
         self.assertEqual(oracles.python_writes("(cd /tmp/s && python3 - <<'EOF'\nopen('a.py','w').write('x')\nEOF\n)"), ["/tmp/s/a.py"])
         self.assertEqual(oracles.shell_writes("(cd /tmp/s && echo hi > a.txt)"), ["/tmp/s/a.txt"])
+
+
+class HeldOutEdges(unittest.TestCase):
+    CASE = CASES / "feature-edges-run"
+    CLI = """\
+import io
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+
+from strides.__main__ import main
+
+
+def streaks(log, *args):
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "club.log"
+        path.write_text(log, encoding="utf-8")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            main(["streaks", str(path), *args])
+    return out.getvalue()
+"""
+    CASES = """\
+class StreaksTest(unittest.TestCase):
+    def test_exactly_min_days_is_listed(self):
+        log = "2026-03-02 06:00 5.0 Ada Lim\\n2026-03-03 06:00 5.0 Ada Lim\\n2026-03-04 06:00 5.0 Ada Lim\\n"
+        self.assertEqual(streaks(log), "Ada Lim: 3\\n")
+
+    def test_equal_streaks_keep_log_order(self):
+        log = "2026-03-02 06:00 5.0 Zed Ray\\n2026-03-02 07:00 5.0 Amy Fox\\n2026-03-03 06:00 5.0 Zed Ray\\n2026-03-03 07:00 5.0 Amy Fox\\n"
+        self.assertEqual(streaks(log, "--min-days", "1"), "Zed Ray: 2\\nAmy Fox: 2\\n")
+
+    def test_a_helper_the_reference_lacks(self):
+        from strides.streaks import fold_name
+        self.assertEqual(fold_name("A"), "a")
+"""
+    STREAKS_TEST = CLI + "\n\n" + CASES
+
+    def project(self, mutant=""):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "strides"
+        shutil.copytree(FIXTURES / "strides", root)
+        shutil.rmtree(root / "strides")
+        shutil.copytree(self.CASE / "reference" / "strides", root / "strides")
+        if mutant:
+            streaks = root / "strides" / "streaks.py"
+            streaks.write_text(streaks.read_text().replace('os.environ.get("STRIDES_MUTANT", "")', repr(mutant)))
+        return root
+
+    def held_out(self):
+        spec = importlib.util.spec_from_file_location("held_out", self.CASE / "held_out.py")
+        module = importlib.util.module_from_spec(spec)
+        with mock.patch.object(sys, "dont_write_bytecode", True):
+            spec.loader.exec_module(module)
+        return module
+
+    def failing_checks(self, module, project):
+        with tempfile.TemporaryDirectory() as tmp:
+            return [c[0] for c in module.CHECKS if not module.run_check(project, Path(tmp), c)["ok"]]
+
+    def test_the_reference_passes_every_check_and_each_mutant_fails_only_its_own_edge(self):
+        module = self.held_out()
+        self.assertEqual(self.failing_checks(module, self.project()), [])
+        self.assertEqual(len(module.EDGES), 6)
+        for edge in module.EDGES:
+            with self.subTest(edge=edge):
+                self.assertEqual(self.failing_checks(module, self.project(edge)), [edge])
+
+    def test_the_reference_keeps_the_fixture_modules_byte_for_byte(self):
+        for name in ("__init__.py", "log.py", "totals.py"):
+            with self.subTest(module=name):
+                self.assertEqual((self.CASE / "reference" / "strides" / name).read_bytes(),
+                                 (FIXTURES / "strides" / "strides" / name).read_bytes())
+
+    def test_a_delivery_that_handles_every_edge_passes_and_credits_the_tests_that_catch_edges(self):
+        root = self.project()
+        (root / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)
+        events = skill_call(1, "spec-probes") + [edit(3, str(root / "tests" / "test_streaks.py"))]
+        result = grade("feature-delivers-spec-edges", minimal(events=events), load_case("feature-edges-run"), root)
+        self.assertEqual(result["verdict"], PASS, result)
+        measures = result["measures"]
+        self.assertEqual((measures["edges_passed"], measures["core_passed"]), (6, 7))
+        want = {"boundary": True, "empty": False, "ties": True, "casefold": False, "same-day": False, "out-of-order": False}
+        self.assertEqual(measures["delivered_catches"], want)
+        self.assertEqual(measures["lead_catches"], want)
+        self.assertEqual(measures["lead_test_files"], ["tests/test_streaks.py"])
+        self.assertEqual((measures["delivered_tests"], measures["delivered_passing_on_reference"]), (4, 3))
+        self.assertEqual(measures["spec_probes_lead_loads"], [(1, "skill-tool")])
+
+    def test_a_delivery_that_misses_one_edge_fails_on_that_edge_alone(self):
+        result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "strides/streaks.py")]),
+                       load_case("feature-edges-run"), self.project("casefold"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual([f.split(":")[0] for f in result["failures"]], ["held-out edge check casefold failed"])
+        self.assertEqual(result["measures"]["edges_passed"], 5)
+        self.assertIsNone(result["measures"]["lead_catches"])
+
+    def test_a_delivery_whose_cli_works_without_the_spec_api_fails_the_api_check(self):
+        renames = {"no longest_streaks": ("longest_streaks", "streak_table"),
+                   "min_days has no default": ("longest_streaks(runs, min_days=3)", "longest_streaks(runs, min_days)")}
+        for case, (old, new) in renames.items():
+            with self.subTest(case=case):
+                root = self.project()
+                for name in ("streaks.py", "__main__.py"):
+                    path = root / "strides" / name
+                    path.write_text(path.read_text().replace(old, new))
+                result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "strides/streaks.py")]),
+                               load_case("feature-edges-run"), root)
+                self.assertEqual(result["verdict"], FAIL, result)
+                self.assertEqual([f.split(":")[0] for f in result["failures"]], ["held-out core check api failed"])
+                self.assertEqual(result["measures"]["edges_passed"], 6)
+
+    def test_a_test_catches_an_edge_only_when_it_fails_or_errors_on_that_mutant(self):
+        root = self.project()
+        tests = root / "tests"
+        (tests / "support.py").write_text(self.CLI)
+        head = "import unittest\n\nfrom tests.support import streaks\n\n\n"
+        (tests / "test_fails.py").write_text(head + """\
+class EmptyLogTest(unittest.TestCase):
+    def test_empty_log(self):
+        self.assertEqual(streaks(""), "no streaks\\n")
+""")
+        (tests / "test_skips.py").write_text(head + """\
+class EmptyLogTest(unittest.TestCase):
+    def test_empty_log(self):
+        if not streaks(""):
+            self.skipTest("the empty log printed nothing")
+""")
+        (tests / "test_vanishes.py").write_text(head + """\
+if not streaks(""):
+    raise unittest.SkipTest("the empty log printed nothing")
+
+
+class EmptyLogTest(unittest.TestCase):
+    def test_empty_log(self):
+        self.assertEqual(streaks(""), "no streaks\\n")
+""")
+        run = subprocess.run([sys.executable, "-I", "-B", str(self.CASE / "held_out.py"), str(root)], cwd=root,
+                             capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(run.stdout)["delivered"]["caught"]["empty"], ["tests.test_fails.EmptyLogTest.test_empty_log"])
+
+    def test_tests_nested_in_the_package_run_against_the_reference_with_their_support_files(self):
+        root = self.project()
+        nested = root / "strides" / "tests"
+        nested.mkdir()
+        (nested / "__init__.py").write_text("")
+        (nested / "support.py").write_text(self.CLI)
+        (nested / "test_streaks.py").write_text("import unittest\n\nfrom strides.tests.support import streaks\n\n\n" + self.CASES)
+        result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, str(nested / "test_streaks.py"))]),
+                       load_case("feature-edges-run"), root)
+        measures = result["measures"]
+        self.assertEqual(measures["lead_test_files"], ["strides/tests/test_streaks.py"])
+        want = {"boundary": True, "empty": False, "ties": True, "casefold": False, "same-day": False, "out-of-order": False}
+        self.assertEqual(measures["delivered_catches"], want)
+        self.assertEqual(measures["lead_catches"], want)
+
+    def test_a_lead_module_skipping_at_import_keeps_other_lead_test_catches(self):
+        root = self.project()
+        tests = root / "tests"
+        (tests / "support.py").write_text(self.CLI)
+        head = "import unittest\nfrom tests.support import streaks\n"
+        (tests / "test_empty.py").write_text(head + """\
+class Empty(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual(streaks(""), "no streaks\\n")
+""")
+        (tests / "test_optional.py").write_text(head + """\
+if not streaks(""):
+    raise unittest.SkipTest("empty-log output unavailable")
+class Optional(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual(streaks(""), "no streaks\\n")
+""")
+        run = subprocess.run([sys.executable, "-I", "-B", str(self.CASE / "held_out.py"), str(root),
+                              "--lead-tests", "tests/test_empty.py,tests/test_optional.py"],
+                             capture_output=True, text=True, check=True)
+        report = json.loads(run.stdout)
+        self.assertEqual(report["lead"]["caught"]["empty"], ["tests.test_empty.Empty.test_empty"])
+
+    def test_tests_that_outlast_the_diagnostics_budget_leave_a_correct_delivery_passing(self):
+        root = self.project()
+        (root / "tests" / "test_slow.py").write_text(
+            "import time\nimport unittest\n\n\nclass SlowTest(unittest.TestCase):\n    def test_slow(self):\n        time.sleep(60)\n")
+        with mock.patch.multiple(oracles, HELD_OUT_TIMEOUT_S=20, HELD_OUT_BUDGET_S=5):
+            result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "strides/streaks.py")]),
+                           load_case("feature-edges-run"), root)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["measures"]["edges_passed"], 6)
+        self.assertEqual(result["measures"]["delivered_catches"], dict.fromkeys(self.held_out().EDGES))
+
+    def test_codex_file_changes_name_the_lead_test_files(self):
+        root = self.project()
+        (root / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)
+        change = {"seq": 2, "kind": "tool_call", "name": "FileChange",
+                  "input": {"changes": {str(root / "tests" / "test_streaks.py"): {"type": "add"}}, "status": "completed"}}
+        result = grade("feature-delivers-spec-edges", minimal(events=[change], harness="codex"), load_case("feature-edges-run"), root)
+        self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
+        self.assertEqual(result["measures"]["lead_catches"]["ties"], True)
+
+    def test_a_failed_codex_file_change_does_not_name_a_lead_test_file(self):
+        root = self.project()
+        (root / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)
+        change = {"seq": 2, "kind": "tool_call", "name": "FileChange",
+                  "input": {"changes": {str(root / "tests" / "test_streaks.py"): {"type": "update"}}, "status": "failed"}}
+        result = grade("feature-delivers-spec-edges", minimal(events=[change], harness="codex"), load_case("feature-edges-run"), root)
+        self.assertEqual(result["measures"]["lead_test_files"], [])
+
+    def test_grok_file_tools_name_the_lead_test_files_and_its_skill_reads_count(self):
+        root = self.project()
+        test = root / "tests" / "test_streaks.py"
+        test.write_text(self.STREAKS_TEST)
+        probe = {"seq": 1, "kind": "tool_call", "name": "read_file", "input": {"target_file": "/w/.agents/skills/spec-probes/SKILL.md"}}
+        for name, given in (("write", {"file_path": str(test), "content": self.STREAKS_TEST}),
+                            ("search_replace", {"file_path": str(test), "old_string": "Zed", "new_string": "Zed"})):
+            with self.subTest(tool=name):
+                change = {"seq": 2, "kind": "tool_call", "name": name, "input": given}
+                result = grade("feature-delivers-spec-edges", minimal(events=[probe, change], harness="grok"), load_case("feature-edges-run"), root)
+                self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
+                self.assertEqual(result["measures"]["spec_probes_lead_loads"], [(1, "read")])
+
+    def test_a_lead_test_file_written_in_a_worktree_counts_at_its_project_path(self):
+        root = self.project()
+        for args in (("init", "-q", "-b", "main"), ("add", "-A"), ("commit", "-qm", "initial import"),
+                     ("worktree", "add", "-q", "-b", "build", ".worktrees/build")):
+            live.git_run(root, *args)
+        for tree in (root, root / ".worktrees" / "build"):
+            (tree / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)
+        change = {"seq": 2, "kind": "tool_call", "name": "FileChange",
+                  "input": {"changes": {str(root / ".worktrees/build/tests/test_streaks.py"): {"type": "add"}}, "status": "completed"}}
+        result = grade("feature-delivers-spec-edges", minimal(events=[change], harness="codex"), load_case("feature-edges-run"), root)
+        self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
+        self.assertEqual(result["measures"]["lead_catches"]["ties"], True)
+
+    def test_no_project_is_inconclusive(self):
+        result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "x.py")]), load_case("feature-edges-run"), None)
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+
+    def test_a_case_that_references_another_runs_its_held_out_checks(self):
+        result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "strides/streaks.py")]),
+                       live.load_case("feature-edges-implied-run"), self.project("ties"))
+        self.assertEqual([f.split(":")[0] for f in result["failures"]], ["held-out edge check ties failed"])
+
+    def spec_project(self, case_id):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = Path(tmp.name) / "strides"
+        live.make_project(live.load_case(case_id), project)
+        return project
+
+    def test_each_spec_holds_a_source_sentence_for_every_held_out_edge(self):
+        edges = self.held_out().EDGES
+        for case_id in ("feature-edges-run", "feature-edges-implied-run"):
+            case = live.load_case(case_id)
+            spec = " ".join((self.spec_project(case_id) / "docs" / "streaks.md").read_text(encoding="utf-8").split())
+            self.assertEqual(sorted(case["edge_sources"]), sorted(edges))
+            for edge, sentence in case["edge_sources"].items():
+                with self.subTest(case=case_id, edge=edge):
+                    self.assertIn(sentence, spec)
+
+    def test_no_commit_of_the_implied_project_holds_a_stated_edge_sentence(self):
+        project = self.spec_project("feature-edges-implied-run")
+
+        def git(*args):
+            return live.git_run(project, *args, capture_output=True, text=True).stdout
+        texts = [" ".join(git("show", f"{commit}:{path}").split()) for commit in git("rev-list", "--all").split()
+                 for path in git("ls-tree", "-r", "--name-only", commit).splitlines()]
+        for edge, sentence in live.load_case("feature-edges-run")["edge_sources"].items():
+            with self.subTest(edge=edge):
+                self.assertFalse([t for t in texts if sentence in t])
 
 
 class CaseHygiene(unittest.TestCase):

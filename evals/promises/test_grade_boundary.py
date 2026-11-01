@@ -101,6 +101,13 @@ class BoundaryFixtures(unittest.TestCase):
 
 
 class ControllerBoundary(BoundaryFixtures):
+    def test_a_case_that_references_another_gets_both_case_directories(self):
+        self.repository()
+        authority = self.authority(live.load_case("feature-edges-implied-run"))
+        references = authority._controller.root.path / authority._id / "references" / "cases"
+        self.assertEqual(sorted(p.name for p in references.iterdir()), ["feature-edges-implied-run", "feature-edges-run"])
+        self.assertTrue((references / "feature-edges-run" / "held_out.py").is_file())
+
     def test_concurrent_first_initializers_preserve_both_registered_authorizations(self):
         script = self.assets / "initialize.py"
         script.write_text("import sys, time\nfrom pathlib import Path\n"
@@ -724,7 +731,7 @@ class NativeParentBoundary(BoundaryFixtures):
 
     def test_git_fsmonitor_helper_cannot_access_outside_bytes(self):
         helper = self.project / "helper.py"
-        helper.write_text(f"#!{Path(live.sys.executable).resolve()}\nimport pathlib\nresults=[]\n"
+        helper.write_text(f"#!{grade_boundary.PYTHON}\nimport pathlib\nresults=[]\n"
             f"for op in (lambda:pathlib.Path({str(self.read_marker)!r}).read_bytes(), lambda:pathlib.Path({str(self.write_marker)!r}).write_bytes(b'changed')):\n"
             " try: op(); results.append('escaped')\n except PermissionError: results.append('denied')\n"
             f"pathlib.Path({str(self.project / 'git-positive.txt')!r}).write_text(' '.join(results))\nprint('token\\0', end='')\n")

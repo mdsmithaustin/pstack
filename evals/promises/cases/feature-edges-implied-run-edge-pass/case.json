@@ -1,0 +1,39 @@
+{
+ "promises": [
+  "feature-delivers-spec-edges",
+  "poteto-mode-routes-to-playbook"
+ ],
+ "fixture": "strides",
+ "entry": "poteto-mode",
+ "turns": [
+  "add the streaks command described in docs/streaks.md. verify it."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "held_out": "held_out.py"
+ },
+ "env": {
+  "todo_tools": true
+ },
+ "history": "strides-implied-edges",
+ "references": "feature-edges-run",
+ "skill_overlays": [
+  {
+   "file": "poteto-mode/playbooks/feature.md",
+   "old": "4. Delegate code-writing to a subagent on the `feature` role with a specific scope (file paths, named data shape and its organizing structure per **principle-model-the-domain**, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic, and success criteria). Before the first spawn, write acceptance tests yourself from the spec's worked examples and stated formats, commit them on the branch so every delegate worktree starts with them, and name them in the brief as success criteria. When the user said not to commit, or the project has no repository yet, copy the tests into each delegate's worktree before it starts. A delegate never writes the only test of its own code. Use the **pstack-harness** skill's **Spawn a role** section to resolve the role. Carry the checkpoint's independent workstreams into the briefs. Disjoint file sets get one delegate each, spawned at this level in one message. Coupled work gets one owner whose brief names the split it may make. When the implementation admits multiple valid shapes (error handling, abstraction layer, test structure), use the **arena** skill to delegate instead, so the runners surface the alternatives and the cross-judge guards the pick. Mandatory: no skip-with-reason escape, and Laziness Protocol does not override it (the gain is review separation, not lines saved). A subagent forbidden to spawn satisfies this by owning the diff directly with the same review separation. No \"standing by\" reply that waits on a nested agent. Comments per **Comments**. Surgical edits, re-ground against the source for upstream-derived files. Port shared-primitive improvements to all consumers and verify each. Commit liberally, unless the user said not to commit. In an existing repository, commit on a branch off trunk, never on trunk itself. Put both instructions in the brief.\n",
+   "new": "4. Delegate code-writing to a subagent on the `feature` role with a specific scope (file paths, named data shape and its organizing structure per **principle-model-the-domain**, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic, and success criteria). Before the first spawn, settle the acceptance tests. When the spec gives worked examples or stated formats, write tests from them, yourself or through a test delegate whose brief holds only the source spec. Then use the **spec-probes** skill's edge pass on each new requirement. List the edges its data shape raises from that skill's table, such as boundary values, empty input, ordering, and encoding. Settle each edge from the spec text, or from the current code's behavior when the spec is silent, and add a test for it. Record each edge that neither settles as an open gap in the reply, not as a test. Copy the tests into each delegate's worktree before it starts, and name them in the brief as success criteria. Commit them with the code that passes them, so a pre-commit hook that runs the tests does not reject a commit of failing tests. A delegate never writes the only test of its own code. Use the **pstack-harness** skill's **Spawn a role** section to resolve the role. Carry the checkpoint's independent workstreams into the briefs. Disjoint file sets get one delegate each, spawned at this level in one message. Coupled work gets one owner whose brief names the split it may make. When the implementation admits multiple valid shapes (error handling, abstraction layer, test structure), use the **arena** skill to delegate instead, so the runners surface the alternatives and the cross-judge guards the pick. Mandatory: no skip-with-reason escape, and Laziness Protocol does not override it (the gain is review separation, not lines saved). A subagent forbidden to spawn satisfies this by owning the diff directly with the same review separation. No \"standing by\" reply that waits on a nested agent. Comments per **Comments**. Surgical edits, re-ground against the source for upstream-derived files. Port shared-primitive improvements to all consumers and verify each. Commit liberally, unless the user said not to commit. In an existing repository, commit on a branch off trunk, never on trunk itself. Put both instructions in the brief.\n",
+   "sha256": "bb29af17474be72cd6f1e6eae957811311083d177d0f6386904d67e6854510fb"
+  },
+  {
+   "file": "poteto-mode/references/task-triggers.md",
+   "old": "- Any code → name the data shape first. Use the **principle-model-the-domain** skill to choose its organizing structure.\n",
+   "new": "- Any code → name the data shape first. Use the **principle-model-the-domain** skill to choose its organizing structure.\n- Writing acceptance tests or criteria from a spec, issue, or plan → use the **spec-probes** skill's edge pass. List the edges each requirement's data shape raises, such as boundary values, empty input, ordering, and encoding. Settle each edge from the spec text, or from the current code's behavior when the spec is silent, and test it. Report each edge neither settles as an open gap, not a test.\n",
+   "sha256": "e684ca0f7d0981d5737ff8d00976b7e09e6e729c014b9cb9500181e65a0f4112"
+  }
+ ],
+ "note": "arm: skills at 19bd25de plus the Feature step 4 edge pass and its task-triggers line from fc418bee, an unpublished pre-review state of fix/feature-spec-edge-probes that the overlays preserve; each overlaid file must match that commit's sha256"
+}

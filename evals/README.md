@@ -9,8 +9,8 @@ For the separate pipeline exit study, follow its
 [study protocol](verify-commands/studies/pipeline-exit/README.md) instead of the
 generic screen and repeated-tuning examples below.
 
-`promises/` holds a separate suite that checks the user guide's promises on
-each harness. See `promises/README.md`.
+For guide-promise checks and general live playbook evals, see the
+[suite guide](promises/README.md).
 
 Model answers, traces, judge transcripts, raw execution reports, and unpublished
 cases stay outside Git. A committed case is tuning material, not sealed evidence.
@@ -31,7 +31,7 @@ Raw execution evidence stays outside Git.
 
 | Component | Maintained purpose |
 | --- | --- |
-| `promises/` | Documented instruction, script, installation, and native process regressions. Presence and observed compliance do not guarantee model behavior. |
+| `promises/` | [Guide-promise checks and general live playbook evals](promises/README.md). |
 | `verify-commands/` | Executable false-green controls and public development cases. |
 | `runtime-probes/`, `spec-probes/`, `unslop/` | Small development corpora. Findings, scope restraint, and preservation matter more than requested vocabulary or loading alone. |
 | `canon/` | Native application capture and supported outcome-grader controls. Historical screens and process census are in the [archive index](archive/README.md). |

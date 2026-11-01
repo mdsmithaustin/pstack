@@ -340,7 +340,7 @@ git diff --check
 
 Each command exits nonzero when its check fails.
 
-`evals/promises/` checks that the port keeps the user guide's promises on all four harnesses. Its README covers the ledger audit, the live runs, and how to classify a guide sentence that an upstream sync adds.
+For guide-promise checks and general live playbook evals, see the [suite guide](evals/promises/README.md).
 
 Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The same reasoning keeps tests out: they live under `tests/`, mirroring their path under `skills/` (`tests/skills/poteto-mode/scripts/`, `tests/skills/pstack-harness/scripts/`, and `tests/skills/setup-pstack/scripts/`), and the same test fails if a tracked file under `skills/` matches a test-file pattern. The Bun and typecheck scripts in `skills/poteto-mode/scripts/package.json` reach into `tests/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
 
