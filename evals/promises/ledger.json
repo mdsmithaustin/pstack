@@ -2285,7 +2285,7 @@
   },
   "opening-a-pr-gated-unattended-passes-yes": {
    "check": "static",
-   "claim": "In an unattended run the agent passes `--yes` to the gate and lists each fixed ask-user finding in its final report.",
+   "claim": "In an unattended run the agent passes `--yes` to the gate and lists each fixed ask-user finding in its final report, except at operator-reserved gates, where it omits `--yes` and reports the decision as blocked.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
@@ -2294,6 +2294,10 @@
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
      "quote": "List each `ask-user` finding that the run fixed, verbatim, in the final report."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "Then do not pass `--yes`, and report that decision as blocked."
     }
    ],
    "harness_sensitive": false,
@@ -4315,15 +4319,6 @@
    ],
    "text": "Ask for more candidates when the decision matters, fewer when it doesn't:"
   },
-  "075a42903f80": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-gated-unattended-passes-yes",
-   "sources": [
-    "port"
-   ],
-   "text": "In an unattended run, the agent passes `--yes` instead, which fixes the finding, and lists each fixed finding in its final report."
-  },
   "075e08da9f67": {
    "class": "substituted",
    "file": "01-setup.md",
@@ -4868,6 +4863,15 @@
     "port"
    ],
    "text": "`/poteto-mode` is sticky."
+  },
+  "1843e8c93eb6": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "In an unattended run, the agent passes `--yes` instead and lists each fixed `ask-user` finding in its final report."
   },
   "1865703ed86c": {
    "class": "substituted",
@@ -8639,15 +8643,6 @@
    ],
    "text": "Existing templates and explicit selections stay in place."
   },
-  "7e7d3d774879": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "poteto-mode-unattended-run-triggers",
-   "sources": [
-    "port"
-   ],
-   "text": "A run is unattended when you started an Autopilot or Orchestrate run, said you're stepping away or not to wait for you, gave a grant that names no-mistakes, or launched a headless Claude Code session with `claude --print`."
-  },
   "7f02f8b1458a": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -9382,6 +9377,15 @@
     "port"
    ],
    "text": "Either way, the comment comes out."
+  },
+  "934eccea06a4": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "If the playbook reserves a gate decision for the operator, the agent omits `--yes` and reports that decision as blocked, per [Opening a PR](../../skills/poteto-mode/playbooks/opening-a-pr.md)."
   },
   "951f7a84026f": {
    "class": "promise",
@@ -12544,6 +12548,15 @@
     "port"
    ],
    "text": "```text\n/recall catch me up on the export work from last week\n```"
+  },
+  "e8b0414d1ea6": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "poteto-mode-unattended-run-triggers",
+   "sources": [
+    "port"
+   ],
+   "text": "A run is unattended when you started an Autopilot or Orchestrate run, said you're stepping away or not to wait for you, gave a grant that names no-mistakes, or launched a headless Claude Code session with `claude -p` or `claude --print`."
   },
   "e932dae5763e": {
    "class": "context",
