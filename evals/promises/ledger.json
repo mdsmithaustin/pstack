@@ -2213,6 +2213,20 @@
     "skills/poteto-mode/playbooks/opening-a-pr.md"
    ]
   },
+  "opening-a-pr-gated-ask-user-relayed-when-attended": {
+   "check": "static",
+   "claim": "When the gate raises an ask-user finding in an attended run, the agent relays it to the user and never passes `--yes`.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "In an attended run, relay an `ask-user` finding verbatim to the user, or from a subagent to its parent. Never pass `--yes`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
   "opening-a-pr-gated-bypass-needs-the-user-word": {
    "check": "static",
    "claim": "In a gated repository the agent publishes around the gate only when the user said \"bypass no-mistakes\" in the current session.",
@@ -2262,6 +2276,28 @@
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
      "quote": "After a terminal outcome, or once the monitor has stopped, restack or retarget with `no-mistakes rerun --base-branch <new-base>`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
+  "opening-a-pr-gated-unattended-passes-yes": {
+   "check": "static",
+   "claim": "In an unattended run the agent checks for user or playbook reservations before each gate call, passes `--yes` when none applies, lists each fixed ask-user finding in its final report, and otherwise omits `--yes` and reports the reserved decision as blocked.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "In an unattended run, as defined in [unattended runs](../references/unattended.md), check before each `axi run` or `axi respond` whether the user or the matched playbook reserves a decision for the operator that the run could reach."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "List each `ask-user` finding that the run fixed, verbatim, in the final report."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "If none does, pass `--yes`. If one does, do not pass `--yes`, and report that decision as blocked."
     }
    ],
    "harness_sensitive": false,
@@ -2656,6 +2692,34 @@
     "skills/poteto-mode/references/task-triggers.md",
     "skills/poteto-mode/playbooks/feature.md",
     "skills/poteto-mode/playbooks/bug-fix.md"
+   ]
+  },
+  "poteto-mode-unattended-run-triggers": {
+   "check": "static",
+   "claim": "A run is unattended when the user started Autopilot or Orchestrate, said they are stepping away or not to wait, gave a grant that names no-mistakes, or launched a headless Claude Code session.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/unattended.md",
+     "quote": "The operator gave the go for Autopilot-full, Autopilot-stack, or Orchestrate."
+    },
+    {
+     "file": "skills/poteto-mode/references/unattended.md",
+     "quote": "The user said they are stepping away, said not to wait for them, or gave a grant that names no-mistakes."
+    },
+    {
+     "file": "skills/poteto-mode/references/unattended.md",
+     "quote": "The **pstack-harness** skill's `question` action shows that this top-level session cannot reach a human."
+    },
+    {
+     "file": "skills/pstack-harness/references/questions.md",
+     "quote": "In the top-level session, no human can answer when the `claude` process that runs your shell was started with `-p` or `--print`."
+    }
+   ],
+   "harness_sensitive": true,
+   "owners": [
+    "skills/poteto-mode/references/unattended.md",
+    "skills/pstack-harness/references/questions.md",
+    "skills/poteto-mode/references/task-triggers.md"
    ]
   },
   "poteto-runs-documentation-impact-before-completion": {
@@ -4800,6 +4864,15 @@
    ],
    "text": "`/poteto-mode` is sticky."
   },
+  "1843e8c93eb6": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "In an unattended run, the agent passes `--yes` instead and lists each fixed `ask-user` finding in its final report."
+  },
   "1865703ed86c": {
    "class": "substituted",
    "file": "07-overnight.md",
@@ -5939,6 +6012,15 @@
     "port"
    ],
    "text": "Read that section first, then the log rows it points at."
+  },
+  "35b0cf1711d0": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "For decisions reserved by you or the playbook, the agent follows [Opening a PR's operator-reservation rule](../../skills/poteto-mode/playbooks/opening-a-pr.md)."
   },
   "35cd3d035c39": {
    "class": "substituted",
@@ -12467,6 +12549,15 @@
    ],
    "text": "```text\n/recall catch me up on the export work from last week\n```"
   },
+  "e8b0414d1ea6": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "poteto-mode-unattended-run-triggers",
+   "sources": [
+    "port"
+   ],
+   "text": "A run is unattended when you started an Autopilot or Orchestrate run, said you're stepping away or not to wait for you, gave a grant that names no-mistakes, or launched a headless Claude Code session with `claude -p` or `claude --print`."
+  },
   "e932dae5763e": {
    "class": "context",
    "file": "03-understand.md",
@@ -12890,6 +12981,15 @@
     "port"
    ],
    "text": "`/loop` is your CLI's wake mechanism, not a pstack skill. Claude Code has one built in; in a CLI without it, re-prompt on an interval or run a watcher subagent. The [Autonomous run playbook](../../skills/poteto-mode/playbooks/autonomous-run.md) uses it to re-check the finish condition on events or a heartbeat."
+  },
+  "f1ee79b509c2": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-ask-user-relayed-when-attended",
+   "sources": [
+    "port"
+   ],
+   "text": "When the gate raises an `ask-user` finding, the agent relays it to you."
   },
   "f29c18a93182": {
    "also": [
