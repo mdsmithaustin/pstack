@@ -186,3 +186,5 @@ No reply named `boundary`, `empty`, `ties`, `same-day`, or `out-of-order` as ope
 ### What the data support about the Feature step 4 edge pass
 
 On both specs, the edge pass did not improve delivered code on any harness that delivered code. On the implied spec it changed three things on Claude Code. The lead's tests covered the empty log in 3 of 3 runs, against 0 of 3. The replies listed more unsettled questions. A run took about 90 s longer. On Codex it changed only the reply, which named unsettled questions where the control said there were none. No lead's tests caught the `lower()` mutant without a sentence naming case folding, so the edge pass did not close the gap that the implied spec opened. These runs do not support promoting the change as a correctness gain. The next run that could show one needs a `casefold` check that rests only on `JÜRGEN WEISS` being `Jürgen Weiß` in capitals, more runs per arm, and a Grok cap long enough to reach the code.
+
+The user chose to ship the edge pass in a separate PR despite these results.

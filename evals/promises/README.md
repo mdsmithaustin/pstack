@@ -1,6 +1,8 @@
-# Guide promises
+# Guide promises and live evals
 
 The user guide in `docs/guide/` tells readers what pstack does. This directory checks that the port keeps those claims on Claude Code, Codex, Hermes, and Grok Build, and makes every upstream guide change visible at sync time.
+
+It also runs general live playbook evals independently of the external benchmark. These cases use the same runner and oracles, but their outcome checks do not need a guide claim in `ledger.json`. The ledger records guide promises. Passing cases do not guarantee model behavior on other tasks.
 
 ## What the ledger holds
 
@@ -96,6 +98,16 @@ The routed-load oracles require a successful Skill tool load on Claude Code. For
 A turn whose text is `/compact` compacts the session. Claude Code sends it through `--resume` like any later turn. `codex exec` has no `/compact`, so the Codex adapter resumes the session with `model_auto_compact_token_limit=2000`, which compacts before that turn's prompt. Both adapters record each compaction in `x_compactions` with the turn it happened in. Grok rewrites its chat history on a compaction and marks the rewrite with `compaction_meta` records. The Grok adapter records one `x_compactions` entry per rewrite, with `source: chat_history` and the turn of the latest prompt the rewrite kept. Grok's `prompt_index` skips a `/compact` turn, and the adapter numbers later turns past it. For `read-only-phrase-pins-investigation`, a missing Investigation playbook read in the `new task` turn is `INCONCLUSIVE` when a `chat_history` compaction rewrote that turn. Observed edits or commits still fail the promise.
 
 Live runs spend model budget. Codex and Hermes draw on the same ChatGPT plan when Hermes uses the `openai-codex` provider. A Feature case takes about 5 minutes on Claude Code and over 20 minutes on Codex.
+
+### Feature spec edges
+
+`feature-edges-run` and `feature-edges-implied-run` measure whether Feature leads deliver a spec's edges on the `strides` running-log fixture. The first spec states the edges directly. The second leaves them to follow from definitions and rules. Each case adds its spec through a history step, so the implied case's git history contains no stated-edge spec. Their `-edge-pass` arm cases apply the proposed Feature step 4 and task-triggers edits through overlays with pinned file digests.
+
+Both variants use `feature-delivers-spec-edges` and share the held-out checks and reference implementation in `cases/feature-edges-run/`. The grader runs those checks after the session. They are outside the candidate project. The oracle requires every held-out edge and core check to pass for `PASS`.
+
+Read `promises.feature-delivers-spec-edges.measures` in each run's `verdict.json` for the per-edge results. `delivered_catches` and `lead_catches` separately report whether the delivered tests and the lead's tests catch each edge's mutant. These diagnostics do not affect `PASS`. Only tests that pass on the reference can catch a mutant. The lead measure uses project Python test files recorded as lead edits, including Codex `FileChange` events and edits in git worktrees mapped to their delivered project paths. `lead_catches` is null when no lead test files were identified.
+
+The [2026-11-01 comparison](results/2026-11-01-feature-edge-pass.md) owns the skills pin, harness options, results, and limits for reproducing that comparison. Use its skills pin for both arms, since the committed overlays require the exact resulting files. The implied spec's case-folding interpretation is contested, as that record explains.
 
 ## Known oracle gaps
 
