@@ -101,7 +101,7 @@ Live runs spend model budget. Codex and Hermes draw on the same ChatGPT plan whe
 
 ### Feature spec edges
 
-`feature-edges-run` and `feature-edges-implied-run` measure whether Feature leads deliver a spec's edges on the `strides` running-log fixture. The first spec states the edges directly. The second leaves them to follow from definitions and rules. Each case adds its spec through a history step, so the implied case's git history contains no stated-edge spec. Their `-edge-pass` arm cases apply the proposed Feature step 4 and task-triggers edits through overlays with pinned file digests.
+`feature-edges-run` and `feature-edges-implied-run` measure whether Feature leads deliver a spec's edges on the `strides` running-log fixture. The first spec states the edges directly. The second leaves them to follow from definitions and rules. Each case adds its spec through a history step, so the implied case's git history contains no stated-edge spec. Their `-edge-pass` arm cases apply the pre-review Feature step 4 and task-triggers text of `fc418bee` through overlays with pinned file digests.
 
 Both variants use `feature-delivers-spec-edges` and share the held-out checks and reference implementation in `cases/feature-edges-run/`. The grader runs those checks after the session. They are outside the candidate project. Every check but one runs the CLI. The `api` core check calls the `strides.streaks.longest_streaks(runs, min_days=3)` function that both specs ask for. The oracle requires every held-out edge and core check to pass for `PASS`.
 

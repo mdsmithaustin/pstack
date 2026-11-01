@@ -106,7 +106,7 @@ The case's `edge_sources` field names the sentence each edge follows from. `test
 - Arms ran in parallel, and the runs within an arm ran in sequence. Codex and Grok runs hold the host `strides` fixture lock, so they ran one at a time. Other sessions ran Codex and Grok cases on the same host during the wave. No retries.
 - Run directories had neutral names such as `club/ash`. The stated-spec runs had `edges-live/control` or `edges-live/edge-pass` in the path the candidate saw.
 - Each run was graded with the oracle copied when the run started, which was `759b57a5` for every graded run. Codex `strides-iuvw2j6_` wrote its tests in `.worktrees/streaks-build/`, so that oracle returned an empty lead measure. `12e57db0` fixes the lookup. For that run I ran `held_out.py --lead-tests tests/test_streaks.py` on a copy of the project, outside the grader.
-- I stopped the second Grok run of each arm before its first turn, after the first run of each arm timed out without code. I did not start the four stated-spec Grok runs. Each would most likely have reached the same cap, and each would have held the fixture lock for up to 30 minutes.
+- I stopped the second Grok run of each arm before its first turn, after the first run of each arm timed out without code in the project. I did not start the four stated-spec Grok runs. Each would most likely have reached the same cap, and each would have held the fixture lock for up to 30 minutes.
 - Durable copy: `.audit/feature-edge-implied-20261101/`, with the run directories under `runs/`, `make_cases.py` and `tally.py` under `scripts/`, the run label map in `scripts/arms.json`, the judge packet and its raw output under `judge/`, and the judge's label map in `scripts/judge-map.json`.
 
 ### Results
@@ -187,7 +187,7 @@ No reply named `boundary`, `empty`, `ties`, `same-day`, or `out-of-order` as ope
 
 On both specs, the edge pass did not improve delivered code on any harness that delivered code. On the implied spec it changed three things on Claude Code. The lead's tests covered the empty log in 3 of 3 runs, against 0 of 3. The replies listed more unsettled questions. A run took about 90 s longer. On Codex it changed only the reply, which named unsettled questions where the control said there were none. No lead's tests caught the `lower()` mutant without a sentence naming case folding, so the edge pass did not close the gap that the implied spec opened. These runs do not support promoting the change as a correctness gain. The next run that could show one needs a `casefold` check that rests only on `JÜRGEN WEISS` being `Jürgen Weiß` in capitals, more runs per arm, and a Grok cap long enough to reach the code.
 
-The user chose to ship the edge pass in a separate PR despite these results. That PR rewords step 4 after review, so the shipped text differs from the tested `fc418bee` text.
+The user chose to ship the edge pass anyway, from branch `fix/feature-spec-edge-probes`. After review, that branch rewords both Feature step 4 and the task-triggers line, so the text it ships differs from the tested `fc418bee` text.
 
 ## Regrade with the fixed grader
 
