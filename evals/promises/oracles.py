@@ -3934,9 +3934,11 @@ HELD_OUT_TIMEOUT_S = 1200
 
 
 def lead_test_files(view):
-    rels = {view.project_rel(path) for _, path, _ in view.edits()}
+    """The test files the lead's own tool calls wrote, relative to the project. A file written in a git worktree maps to
+    its path in the project, where the merged copy sits."""
+    rels = {view.tree_rel(path) for _, path, _ in view.edits()}
     # Codex code mode applies patches inside an `exec` call, so only its FileChange events name the files.
-    rels |= {view.project_rel(path) for call in view.tool_calls if call.get("name") == "FileChange"
+    rels |= {view.tree_rel(path) for call in view.tool_calls if call.get("name") == "FileChange"
              for path in (call.get("input") or {}).get("changes") or {}}
     return sorted(rel for rel in rels if TEST_FILE.search(rel) and not rel.startswith(("/", "..", *PRIVATE_PREFIXES))
                   and _is_file(view.project / rel))

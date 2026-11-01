@@ -3184,6 +3184,19 @@ class StreaksTest(unittest.TestCase):
         self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
         self.assertEqual(result["measures"]["lead_catches"]["ties"], True)
 
+    def test_a_lead_test_file_written_in_a_worktree_counts_at_its_project_path(self):
+        root = self.project()
+        for args in (("init", "-q", "-b", "main"), ("add", "-A"), ("commit", "-qm", "initial import"),
+                     ("worktree", "add", "-q", "-b", "build", ".worktrees/build")):
+            live.git_run(root, *args)
+        for tree in (root, root / ".worktrees" / "build"):
+            (tree / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)
+        change = {"seq": 2, "kind": "tool_call", "name": "FileChange",
+                  "input": {"changes": {str(root / ".worktrees/build/tests/test_streaks.py"): {"type": "add"}}, "status": "completed"}}
+        result = grade("feature-delivers-spec-edges", minimal(events=[change], harness="codex"), load_case("feature-edges-run"), root)
+        self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
+        self.assertEqual(result["measures"]["lead_catches"]["ties"], True)
+
     def test_no_project_is_inconclusive(self):
         result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "x.py")]), load_case("feature-edges-run"), None)
         self.assertEqual(result["verdict"], INCONCLUSIVE)
