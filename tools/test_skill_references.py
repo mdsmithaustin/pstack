@@ -27,6 +27,28 @@ class SkillReferenceSpelling(unittest.TestCase):
                          'write "Use the **name** skill." as its own sentence or step; a passage that quotes the '
                          "user or text shown to the user goes in USER_FACING in tools/skill-references.py")
 
+    def test_model_facing_text_names_only_skills_that_exist(self):
+        self.assertEqual(skill_references.unresolved_names(), [],
+                         "write the skill's full directory name, such as **principle-prove-it-works**")
+
+    def test_a_principle_named_without_its_prefix_is_unresolved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/principle-prove-it-works/SKILL.md": "Prove it.\n",
+                "skills/demo/SKILL.md": "Use the **prove-it-works** principle skill.\nPer (**prove-it-works**).\n"
+                                        "Use the **principle-prove-it-works** skill.\n",
+            })
+            self.assertEqual(skill_references.unresolved_names(root),
+                             ["skills/demo/SKILL.md:1: **prove-it-works**", "skills/demo/SKILL.md:2: **prove-it-works**"])
+
+    def test_a_bold_name_before_skill_must_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "Use the **demo** skill.\nUse the **missing** skill.\n"
+                                        "**Use** the skill.\nA **bold-phrase** here, then a skill.\n",
+            })
+            self.assertEqual(skill_references.unresolved_names(root), ["skills/demo/SKILL.md:2: **missing**"])
+
     def test_every_exempt_passage_still_matches(self):
         self.assertEqual(skill_references.stale_exemptions(), [],
                          "remove USER_FACING or MODE_REMINDERS passages in tools/skill-references.py that no "
