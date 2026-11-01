@@ -1,0 +1,10 @@
+{
+  "fixture": "strides",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "docs: describe the streaks command",
+      "delete": []
+    }
+  ]
+}

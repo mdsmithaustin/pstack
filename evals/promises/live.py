@@ -2,6 +2,7 @@
 
 import argparse
 import fcntl
+import hashlib
 import importlib
 import importlib.util
 import json
@@ -87,6 +88,9 @@ def preflight(harness):
 def load_case(case_id):
     case = json.loads((CASES / case_id / "case.json").read_text(encoding="utf-8"))
     case["id"] = case_id
+    references = case.get("references")
+    if references is not None and (Path(references).name != references or not (CASES / references / "case.json").is_file()):
+        raise ValueError(f"{case_id}: references names no case directory: {references!r}")
     return case
 
 
@@ -191,7 +195,8 @@ GIT_IDENTITY = ["-c", "user.name=dev", "-c", "user.email=dev@example.com", "-c",
 
 def apply_overlays(case, skills):
     """Rewrite installed skill text for an arm case. Each `old` must occur exactly once, so an arm never runs on text
-    that moved under it."""
+    that moved under it. An overlay's `sha256` pins the whole file after that overlay, so the arm runs a branch's
+    exact text."""
     for overlay in case.get("skill_overlays", []):
         rel = Path(overlay["file"])
         if rel.is_absolute() or ".." in rel.parts:
@@ -201,7 +206,10 @@ def apply_overlays(case, skills):
         found = text.count(overlay["old"])
         if found != 1:
             raise ValueError(f"{case['id']}: overlay text occurs {found} times in {rel}, expected exactly once")
-        path.write_text(text.replace(overlay["old"], overlay["new"]), encoding="utf-8")
+        text = text.replace(overlay["old"], overlay["new"])
+        if "sha256" in overlay and hashlib.sha256(text.encode("utf-8")).hexdigest() != overlay["sha256"]:
+            raise ValueError(f"{case['id']}: {rel} after its overlay does not match the pinned sha256")
+        path.write_text(text, encoding="utf-8")
 
 
 def git_run(dest, *args, **kwargs):

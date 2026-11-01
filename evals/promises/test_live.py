@@ -537,11 +537,33 @@ class SkillOverlays(unittest.TestCase):
                     live.apply_overlays(case, skills)
                 self.assertEqual((skills / "deslop" / "SKILL.md").read_text(), text)
 
+    def test_a_pinned_overlay_runs_only_the_pinned_file(self):
+        new = "Use the **no-comments** skill."
+        pinned = hashlib.sha256(f"5. Hand off. {new}\n".encode()).hexdigest()
+        case = {"id": "arm", "skill_overlays": [{"file": "deslop/SKILL.md", "old": DESLOP_STEP_5, "new": new, "sha256": pinned}]}
+        skills = self.tree(f"5. Hand off. {DESLOP_STEP_5}\n")
+        live.apply_overlays(case, skills)
+        self.assertEqual((skills / "deslop" / "SKILL.md").read_text(), f"5. Hand off. {new}\n")
+        skills = self.tree(f"4. Read. 5. Hand off. {DESLOP_STEP_5}\n")
+        with self.assertRaisesRegex(ValueError, "deslop/SKILL.md after its overlay does not match the pinned sha256"):
+            live.apply_overlays(case, skills)
+        self.assertEqual((skills / "deslop" / "SKILL.md").read_text(), f"4. Read. 5. Hand off. {DESLOP_STEP_5}\n")
+
     def test_an_overlay_path_outside_the_skill_tree_refuses(self):
         skills = self.tree(DESLOP_STEP_5)
         for rel in ("../deslop/SKILL.md", "/etc/hosts"):
             with self.subTest(rel=rel), self.assertRaisesRegex(ValueError, "leaves the skill tree"):
                 live.apply_overlays({"id": "arm", "skill_overlays": [{"file": rel, "old": "a", "new": "b"}]}, skills)
+
+
+class CaseReferences(unittest.TestCase):
+    def test_references_must_name_another_case_directory(self):
+        for references in ("no-such-case", "../cases/arm", "."):
+            with self.subTest(references=references), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / "arm").mkdir()
+                (Path(tmp) / "arm" / "case.json").write_text(json.dumps({"references": references}))
+                with mock.patch.object(live, "CASES", Path(tmp)), self.assertRaisesRegex(ValueError, "references names no case directory"):
+                    live.load_case("arm")
 
 
 class RunOverrides(unittest.TestCase):

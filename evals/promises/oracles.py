@@ -42,6 +42,11 @@ def _files(path, pattern, recursive=False):
         return _IO.files(path, pattern, recursive)
     return path.rglob(pattern) if recursive else path.glob(pattern)
 
+
+def case_dir(case):
+    """The case directory that holds a case's reference files: the one its `references` names, else its own."""
+    return HERE / "cases" / case.get("references", case["id"])
+
 PLAYBOOK = re.compile(r"^poteto-mode/playbooks/([a-z0-9-]+)\.md$")
 SKILL_FILE = re.compile(r"^([a-z0-9-]+)/SKILL\.md$")
 SKILLS_SEGMENT = re.compile(r"(?:^|[\s/'\"=:(,])skills/([A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)*)")
@@ -2105,7 +2110,7 @@ def deslop_cleans(view):
                if not _is_file(view.project / rel) or c not in _read_text(view.project / rel, errors="replace")]
     churn = [rel for rel, want in expect.get("expected", {}).items()
              if not _is_file(view.project / rel)
-             or _read_bytes(view.project / rel) != _read_bytes(HERE / "cases" / view.case["id"] / want)]
+             or _read_bytes(view.project / rel) != _read_bytes(case_dir(view.case) / want)]
     planted = {rel for rel in (view.git("ls-tree", "-r", "--name-only", base[-1]) or "").split()
                if not rel.startswith(PRIVATE_PREFIXES) and not CACHE_PATH.search(rel)}
     added = sorted(project_files(view) - planted)
@@ -3944,7 +3949,7 @@ def feature_delivers_spec_edges(view):
     if not (view.project and _is_dir(view.project)):
         return inconclusive("no project to run the held-out checks against")
     lead = lead_test_files(view)
-    script = HERE / "cases" / view.case["id"] / view.case["expect"]["held_out"]
+    script = case_dir(view.case) / view.case["expect"]["held_out"]
     argv = [sys.executable, "-I", "-B", str(script), str(view.project), *(["--lead-tests", ",".join(lead)] if lead else [])]
     try:
         run = (_IO.check(view.project, shlex.join(argv), HELD_OUT_TIMEOUT_S) if _IO else

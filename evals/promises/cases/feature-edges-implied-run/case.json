@@ -1,0 +1,33 @@
+{
+ "promises": [
+  "feature-delivers-spec-edges",
+  "poteto-mode-routes-to-playbook"
+ ],
+ "fixture": "strides",
+ "entry": "poteto-mode",
+ "turns": [
+  "add the streaks command described in docs/streaks.md. verify it."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "held_out": "held_out.py"
+ },
+ "env": {
+  "todo_tools": true
+ },
+ "history": "strides-implied-edges",
+ "references": "feature-edges-run",
+ "edge_sources": {
+  "boundary": "`--min-days N` sets the shortest streak that makes the list, 3 by default.",
+  "empty": "When nobody makes the list, print `no streaks`.",
+  "ties": "Members appear in the order of their first line in the log, except that a longer streak always comes before a shorter one.",
+  "casefold": "Two names belong to the same member when they differ only in capitalization.",
+  "same-day": "A streak is a stretch of consecutive calendar days on which a member logged at least one run",
+  "out-of-order": "Members who forget to log a run can add it on a later visit, dated the day they ran."
+ },
+ "note": "Same project, example, and held-out checks as feature-edges-run, but no sentence names an edge; each follows from the edge_sources sentence. boundary: a streak of exactly N is the shortest that makes the list. empty: an empty log lists nobody. ties: equal streaks fall under no exception, so first-line order stands. casefold: Unicode uppercases ß to SS, so JÜRGEN WEISS is Jürgen Weiß in capitals, and caseless matching is case folding. same-day: a streak counts days, not runs. out-of-order: the README says the tablet appends one line per run, so a run logged late follows lines with later dates. The fixture holds no spec, so the stated text never enters this run's git history."
+}

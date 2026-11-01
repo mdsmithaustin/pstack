@@ -407,7 +407,8 @@ class _Controller:
         run_id = uuid.uuid4().hex
         private = self.root.path / run_id
         private.mkdir(mode=0o700)
-        _copy_tree(HERE / "cases" / case["id"], private / "references" / "cases" / case["id"])
+        for name in dict.fromkeys((case["id"], case.get("references", case["id"]))):
+            _copy_tree(HERE / "cases" / name, private / "references" / "cases" / name)
         if case.get("history"):
             _copy_tree(HERE / "histories" / case["history"], private / "references" / "histories" / case["history"])
         else:

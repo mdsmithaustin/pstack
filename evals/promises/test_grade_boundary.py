@@ -101,6 +101,13 @@ class BoundaryFixtures(unittest.TestCase):
 
 
 class ControllerBoundary(BoundaryFixtures):
+    def test_a_case_that_references_another_gets_both_case_directories(self):
+        self.repository()
+        authority = self.authority(live.load_case("feature-edges-implied-run"))
+        references = authority._controller.root.path / authority._id / "references" / "cases"
+        self.assertEqual(sorted(p.name for p in references.iterdir()), ["feature-edges-implied-run", "feature-edges-run"])
+        self.assertTrue((references / "feature-edges-run" / "held_out.py").is_file())
+
     def test_concurrent_first_initializers_preserve_both_registered_authorizations(self):
         script = self.assets / "initialize.py"
         script.write_text("import sys, time\nfrom pathlib import Path\n"

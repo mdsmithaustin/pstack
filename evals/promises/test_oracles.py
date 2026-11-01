@@ -3188,6 +3188,39 @@ class StreaksTest(unittest.TestCase):
         result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "x.py")]), load_case("feature-edges-run"), None)
         self.assertEqual(result["verdict"], INCONCLUSIVE)
 
+    def test_a_case_that_references_another_runs_its_held_out_checks(self):
+        result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "strides/streaks.py")]),
+                       live.load_case("feature-edges-implied-run"), self.project("ties"))
+        self.assertEqual([f.split(":")[0] for f in result["failures"]], ["held-out edge check ties failed"])
+
+    def spec_project(self, case_id):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = Path(tmp.name) / "strides"
+        live.make_project(live.load_case(case_id), project)
+        return project
+
+    def test_each_spec_holds_a_source_sentence_for_every_held_out_edge(self):
+        edges = self.held_out().EDGES
+        for case_id in ("feature-edges-run", "feature-edges-implied-run"):
+            case = live.load_case(case_id)
+            spec = " ".join((self.spec_project(case_id) / "docs" / "streaks.md").read_text(encoding="utf-8").split())
+            self.assertEqual(sorted(case["edge_sources"]), sorted(edges))
+            for edge, sentence in case["edge_sources"].items():
+                with self.subTest(case=case_id, edge=edge):
+                    self.assertIn(sentence, spec)
+
+    def test_no_commit_of_the_implied_project_holds_a_stated_edge_sentence(self):
+        project = self.spec_project("feature-edges-implied-run")
+
+        def git(*args):
+            return live.git_run(project, *args, capture_output=True, text=True).stdout
+        texts = [" ".join(git("show", f"{commit}:{path}").split()) for commit in git("rev-list", "--all").split()
+                 for path in git("ls-tree", "-r", "--name-only", commit).splitlines()]
+        for edge, sentence in live.load_case("feature-edges-run")["edge_sources"].items():
+            with self.subTest(edge=edge):
+                self.assertFalse([t for t in texts if sentence in t])
+
 
 class CaseHygiene(unittest.TestCase):
     def words(self, text):

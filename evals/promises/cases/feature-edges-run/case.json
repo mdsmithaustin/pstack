@@ -1,10 +1,32 @@
 {
- "promises": ["feature-delivers-spec-edges", "poteto-mode-routes-to-playbook"],
+ "promises": [
+  "feature-delivers-spec-edges",
+  "poteto-mode-routes-to-playbook"
+ ],
  "fixture": "strides",
  "entry": "poteto-mode",
- "turns": ["add the streaks command described in docs/streaks.md. verify it."],
- "timeout_s": {"default": 1800, "codex": 2400},
- "expect": {"playbook": "feature", "held_out": "held_out.py"},
- "env": {"todo_tools": true},
- "note": "docs/streaks.md settles six edges in prose and shows one example that exercises none of them. held_out.py checks each edge and the core behavior through the CLI after the session, and runs the project's own tests against reference/strides and one mutant per edge."
+ "turns": [
+  "add the streaks command described in docs/streaks.md. verify it."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "held_out": "held_out.py"
+ },
+ "env": {
+  "todo_tools": true
+ },
+ "history": "strides-stated-edges",
+ "edge_sources": {
+  "boundary": "List the members whose streak is at least N days",
+  "empty": "When nobody is listed, including when the log is empty, print `no streaks`.",
+  "ties": "Members with equal streaks keep the order of their first line in the log.",
+  "casefold": "Two names belong to the same member when they are equal under Unicode case folding.",
+  "same-day": "A day counts once however many runs the member logged on it.",
+  "out-of-order": "Late entries get appended to the end of the file, so the log is not always in date order."
+ },
+ "note": "The history adds docs/streaks.md, which states each of six edges in its own sentence (edge_sources) and shows one example that exercises none of them. held_out.py checks each edge and the core behavior through the CLI after the session, and runs the project's own tests against reference/strides and one mutant per edge."
 }
