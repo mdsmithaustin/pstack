@@ -9,7 +9,7 @@ Be scientific. Every shipped line traces to runtime evidence. Belt-and-suspender
 3. Plan the fix. If it crosses a function boundary, use the **architect** skill first. Delegate implementation to a subagent on the `bug-fix` role with a specific scope. Use the **pstack-harness** skill's **Spawn a role** section to resolve the role. Disjoint file sets get one delegate each in one message. A follow-up after review is a fresh delegate with consolidated scope, never a resume.
 4. Verify on the same surface. The original repro now passes. "Inconclusive" or wrong-surface is not a pass. Flag it. Unit tests show branch behavior, not bug absence.
 5. Stage the commits so the failing repro lands before the fix in git history. When the bug has a cheap local test path, use the **poteto-tdd** skill for the failing-test-first cadence. Skip it when the test would be expensive, integration-heavy, or unclear.
-   This is the canonical **sequence-verifiable-units** principle skill, the failing test first and the fix on top.
+   This is the canonical **principle-sequence-verifiable-units** skill, the failing test first and the fix on top.
 6. Run **Opening a PR**.
 
 **Reply:** what was broken, root cause, fix, how you verified. Paste failing-then-passing repro output verbatim.

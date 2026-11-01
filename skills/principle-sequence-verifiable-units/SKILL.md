@@ -15,4 +15,4 @@ When later work depends on unproven assumptions, start with the one whose failur
 
 **Delivery.** Stack commits and PRs in the order that proves the work. The canonical shape is the failing test first, then the fix on top. Other story orders are a subtraction before the reshape, a baseline capture before the treatment, the scaffold before the feature. Each commit lands on its own and the sequence reads as an argument.
 
-The sequencing complement to the **prove-it-works** principle skill, which keeps each check real, and the **build-the-lever** principle skill, which makes the per-unit check cheap.
+The sequencing complement to the **principle-prove-it-works** skill, which keeps each check real, and the **principle-build-the-lever** skill, which makes the per-unit check cheap.

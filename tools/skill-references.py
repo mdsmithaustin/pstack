@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail on a slash or dollar skill spelling in model-facing text that no exemption covers.
+"""Fail on a slash or dollar skill spelling that no exemption covers, or a bold skill name that no skill defines, in model-facing text.
 
 The scan covers tracked markdown under skills/ that is still present on disk, so deleted
 files, an installed node_modules, or another untracked file never fail it. Root agents/*.md
@@ -112,15 +112,35 @@ def stale_exemptions(root: Path = ROOT) -> list[str]:
             if not any(hit.file == rel and hit.spelling in passage and passage in hit.text for hit in hits)]
 
 
+BOLD_SKILL = re.compile(r"\*\*([a-z0-9][a-z0-9-]*)\*\*(?=(?:\s+[a-z-]+){0,2}\s+skill\b)")
+BOLD_NAME = re.compile(r"\*\*([a-z0-9]+(?:-[a-z0-9]+)+)\*\*")
+
+
+def unresolved_names(root: Path = ROOT) -> list[str]:
+    """Bold skill names that no skills/<name>/SKILL.md defines, including a principle named without its prefix."""
+    names = set(skill_names(root))
+    rows = []
+    for path in model_facing_files(root):
+        rel = path.relative_to(root).as_posix()
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            named = set(BOLD_SKILL.findall(line))
+            named |= {name for name in BOLD_NAME.findall(line) if f"principle-{name}" in names}
+            rows += [f"{rel}:{number}: **{name}**" for name in sorted(named - names)]
+    return rows
+
+
 def main() -> int:
     argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args()
     found = violations()
     stale = stale_exemptions()
+    unresolved = unresolved_names()
     for row in found:
         print(f"{row}: write \"Use the **name** skill.\" as its own sentence or step")
     for row in stale:
         print(f"{row}: stale exemption, remove it")
-    return 1 if found or stale else 0
+    for row in unresolved:
+        print(f"{row}: no skill has this name; write the full name, such as **principle-prove-it-works**")
+    return 1 if found or stale or unresolved else 0
 
 
 if __name__ == "__main__":
