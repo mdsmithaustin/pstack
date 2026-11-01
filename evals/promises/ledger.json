@@ -2518,6 +2518,20 @@
     "skills/poteto-mode/SKILL.md"
    ]
   },
+  "perf-issue-keeps-output-while-optimizing": {
+   "check": "static",
+   "claim": "A Perf issue run records a green test run before its first change, reruns the tests after each fix, and reverts a faster result that changes output.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/perf-issue.md",
+     "quote": "Before the first change, record a green run of the tests that must keep passing. Rerun them after each fix, and revert a faster result that changes output."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/perf-issue.md"
+   ]
+  },
   "perf-playbooks-run-benchmark-checklist": {
    "check": "static",
    "claim": "Perf issue vets its baseline and every later number with benchmark-checklist, and Hillclimb vets its harness with it before freezing the harness.",
@@ -2930,12 +2944,17 @@
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
      "quote": "The current code's behavior is the spec for everything the task does not explicitly change, per the **principle-redesign-from-first-principles** skill. Keep that behavior, and say so in the step 4 brief."
+    },
+    {
+     "file": "skills/poteto-mode/SKILL.md",
+     "quote": "Redesign as if foundational. Keep behavior it does not change."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/principle-redesign-from-first-principles/SKILL.md",
-    "skills/poteto-mode/playbooks/feature.md"
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/playbooks/feature.md",
+    "skills/principle-redesign-from-first-principles/SKILL.md"
    ]
   },
   "refactoring-prompt-routes-to-refactoring": {
@@ -6964,6 +6983,15 @@
     "port"
    ],
    "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
+  },
+  "4c970a05778a": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "perf-issue-keeps-output-while-optimizing",
+   "sources": [
+    "port"
+   ],
+   "text": "A Perf issue run records a green test run before its first change, reruns the tests after each fix, and reverts a faster result that changes output."
   },
   "4d1f50b5fd58": {
    "class": "context",
