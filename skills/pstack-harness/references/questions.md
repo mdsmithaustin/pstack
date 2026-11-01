@@ -4,7 +4,7 @@
 
 **Detect a session that cannot reach a human.** Some harnesses show this through the tools they offer:
 
-- **Claude Code.** `AskUserQuestion` is missing from your tools only in a non-interactive run (`claude --print`). When it is missing, no human can answer.
+- **Claude Code.** A subagent never has `AskUserQuestion`, so a subagent takes this from its brief and never from its own tools. In the top-level session, `AskUserQuestion` is missing only in a non-interactive run (`claude --print`). When it is missing there, no human can answer.
 - **Codex.** `request_user_input` is offered only in some collaboration modes, so its absence proves nothing.
 - **Grok Build, Hermes, other.** No verified signal.
 

@@ -2688,7 +2688,7 @@
   },
   "poteto-mode-unattended-run-triggers": {
    "check": "static",
-   "claim": "A run is unattended when the user started Autopilot or Orchestrate, said they are stepping away, or launched a headless Claude Code session.",
+   "claim": "A run is unattended when the user started Autopilot or Orchestrate, said they are stepping away or not to wait, gave a grant that names no-mistakes, or launched a headless Claude Code session.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/unattended.md",
@@ -2697,6 +2697,10 @@
     {
      "file": "skills/poteto-mode/references/unattended.md",
      "quote": "The user said they are stepping away, said not to wait for them, or gave a grant that names no-mistakes."
+    },
+    {
+     "file": "skills/poteto-mode/references/unattended.md",
+     "quote": "The **pstack-harness** skill's `question` action shows that this top-level session cannot reach a human."
     }
    ],
    "harness_sensitive": false,
@@ -4456,15 +4460,6 @@
     "port"
    ],
    "text": "In this page you learn what a good prompt looks like, and how little of one you actually need."
-  },
-  "0e63f97408de": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "poteto-mode-unattended-run-triggers",
-   "sources": [
-    "port"
-   ],
-   "text": "A run is unattended when you started an Autopilot or Orchestrate run, said you're stepping away, or launched a headless Claude Code session with `claude --print`."
   },
   "0e6dabc4bee8": {
    "class": "context",
@@ -8633,6 +8628,15 @@
     "port"
    ],
    "text": "Existing templates and explicit selections stay in place."
+  },
+  "7e7d3d774879": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "poteto-mode-unattended-run-triggers",
+   "sources": [
+    "port"
+   ],
+   "text": "A run is unattended when you started an Autopilot or Orchestrate run, said you're stepping away or not to wait for you, gave a grant that names no-mistakes, or launched a headless Claude Code session with `claude --print`."
   },
   "7f02f8b1458a": {
    "class": "context",
