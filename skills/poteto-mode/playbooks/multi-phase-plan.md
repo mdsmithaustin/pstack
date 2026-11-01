@@ -155,7 +155,7 @@ Each live lane runs in its own isolated worktree at the PR head. Drive through t
 
 ## Appendix D. Links and reading list
 
-<Docs to read before editing. Which PRs get `"$PSTACK_SKILLS_ROOT/how/SKILL.md"` and `"$PSTACK_SKILLS_ROOT/interrogate/SKILL.md"`. The trail per `"$PSTACK_SKILLS_ROOT/show-me-your-work/SKILL.md"`.>
+<The source spec, issue, or task text by path. Every owner brief points at it, not at this plan's summary of it. Docs to read before editing. Which PRs get `"$PSTACK_SKILLS_ROOT/how/SKILL.md"` and `"$PSTACK_SKILLS_ROOT/interrogate/SKILL.md"`. The trail per `"$PSTACK_SKILLS_ROOT/show-me-your-work/SKILL.md"`.>
 ````
 
 **Reply:** the plan path, the PR ids with their dependencies and the review-gated set, what the prototypes proved and what stays unproven, and the check script's output. When step 1 decided to skip the plan, end the turn with a reply that says why the change needs no plan and names the playbook that fits it, such as Feature or Bug fix. Implement nothing. That playbook starts on the operator's go.

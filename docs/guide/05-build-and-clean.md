@@ -32,6 +32,8 @@ Each of these routes to its playbook ([Bug fix](../../skills/poteto-mode/playboo
 
 When the agent adds a requirement to existing code, it keeps every behavior that your prompt, or the spec or issue it points to, does not explicitly change.
 
+A Perf issue run records a green test run before its first change, reruns the tests after each fix, and reverts a faster result that changes output.
+
 For sustained improvement of one number, there's the [Hillclimb playbook](../../skills/poteto-mode/playbooks/hillclimb.md). Give it the metric, a target, and a floor on attempts, and it loops one hypothesis at a time with a frozen measurement harness. It keeps wins and reverts everything else.
 
 Both perf playbooks run [`/benchmark-checklist`](../../skills/benchmark-checklist/SKILL.md) on their numbers. Perf issue vets its baseline and every number after it, and Hillclimb vets its harness before freezing it. [Verify and ship](./06-verify-and-ship.md#vet-a-measured-number-with-benchmark-checklist) shows when to type it yourself.

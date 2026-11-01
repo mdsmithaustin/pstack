@@ -17,7 +17,7 @@ For sustained improvement against a metric rather than a one-off fix, use the Hi
    7. Do it cheaper. Add an indirection hop only when it removes more from the critical path than it adds.
 
    When an earlier mantra meets the target, stop.
-3. Plan the fix from the trace. If it crosses a function boundary, use the **architect** skill first. Delegate implementation to a subagent on the `perf-issue` role. Use the **pstack-harness** skill's **Spawn a role** section to resolve the role. Review the diff. Capture a post-fix trace.
+3. Plan the fix from the trace. Before the first change, record a green run of the tests that must keep passing. Rerun them after each fix, and revert a faster result that changes output. If the fix crosses a function boundary, use the **architect** skill first. Delegate implementation to a subagent on the `perf-issue` role. Use the **pstack-harness** skill's **Spawn a role** section to resolve the role. Review the diff. Capture a post-fix trace.
    Use the **principle-sequence-verifiable-units** skill. Verify each attempt before trying the next.
 4. Parse and compare the artifacts (JSON to sqlite, diff). "Inconclusive" or wrong-surface is not a pass. Flag it.
 5. Run **Opening a PR**. Cite the measurement in the PR.
